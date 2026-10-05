@@ -1,13 +1,13 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 
-const root = getRouteApi("__root__");
+const loggedIn = getRouteApi("/_app");
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_app/")({
   component: Home,
 });
 
 function Home() {
-  const workspaces = root.useLoaderData();
+  const workspaces = loggedIn.useLoaderData();
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
 

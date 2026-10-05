@@ -1,9 +1,9 @@
 import { type ContextFile, WorkspaceDetail } from "@courtyard/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Problem } from "../problems.tsx";
-import { fromWorker } from "../worker.ts";
+import { Problem } from "../../problems.tsx";
+import { fromWorker } from "../../worker.ts";
 
-export const Route = createFileRoute("/workspaces/$workspaceId")({
+export const Route = createFileRoute("/_app/workspaces/$workspaceId")({
   loader: ({ params }) =>
     fromWorker(`/workspaces/${encodeURIComponent(params.workspaceId)}`, WorkspaceDetail),
   component: Workspace,

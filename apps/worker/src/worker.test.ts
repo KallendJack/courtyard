@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, Health } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { asOwner } from "./testing.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
 let root: string;
@@ -131,7 +132,7 @@ describe("the web app", () => {
   });
 
   it("answers an unknown API path with a JSON 404, not the page", async () => {
-    const response = await startWithWebApp().app.request("/api/nothing-here");
+    const response = await (await asOwner(startWithWebApp().app))("/api/nothing-here");
 
     expect(response.status).toBe(404);
     expect(ApiError.parse(await response.json())).toEqual({ error: "Not found" });

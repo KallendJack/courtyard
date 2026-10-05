@@ -15,6 +15,11 @@ _Avoid_: hub, platform, system, dashboard
 The one person a Courtyard belongs to, and the only person who can log in to it.
 _Avoid_: user, admin, account
 
+**Device login**:
+One device's login to Courtyard, kept in a cookie until that device logs out. Each device has its
+own, so logging out on one leaves the others logged in.
+_Avoid_: session (that's a conversation), token, account
+
 **Worker**:
 The part that does all the work: it holds the context folder, runs sessions, talks to providers and checks the owner's
 login.
