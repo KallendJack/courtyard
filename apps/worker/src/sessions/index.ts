@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  endsTurn,
   type FailureReason,
   type ModelRef,
   type NewMessage,
   SessionEvent,
   SessionId,
   type SessionSummary,
+  type StopRequest,
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -66,15 +68,28 @@ const STORAGE_ERROR: SessionError = {
 };
 
 /** What the worker keeps in memory about a session it has touched since it started. */
+/**
+ * Where a session's current turn stands in this worker. A stop handle exists from the moment the
+ * turn starts, and only while it can still be stopped: once the provider has finished, the turn
+ * is ending and how it ended is already decided.
+ */
+type TurnState =
+  | { readonly kind: "idle" }
+  | {
+      readonly kind: "running";
+      readonly stopper: AbortController;
+      /** The owner message's event number, once recorded: what a stop request must name. */
+      turn: number | undefined;
+    }
+  | { readonly kind: "ending" };
+
 type RunningSession = {
-  busy: boolean;
+  turn: TurnState;
   /** The next event's number, once known. */
   nextSeq: number | undefined;
   listeners: Set<(event: SessionEvent) => void>;
   /** Appends and subscriptions run one at a time, so events are gapless and none is missed. */
   queue: Promise<unknown>;
-  /** Stops the running turn, while there is one. */
-  stopper: AbortController | undefined;
 };
 
 /**
@@ -97,8 +112,7 @@ export const createSessions = (options: {
     const existing = running.get(id);
     if (existing) return existing;
     const created: RunningSession = {
-      busy: false,
-      stopper: undefined,
+      turn: { kind: "idle" },
       nextSeq: undefined,
       listeners: new Set(),
       queue: Promise.resolve(),
@@ -208,12 +222,7 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     const last = events.value.at(-1);
-    const lastTurnEnded =
-      last === undefined ||
-      last.type === "turn-completed" ||
-      last.type === "turn-failed" ||
-      last.type === "turn-stopped";
-    if (lastTurnEnded) return;
+    if (last === undefined || endsTurn(last)) return;
     const ended = await writeEvent({
       id,
       session,
@@ -248,13 +257,16 @@ export const createSessions = (options: {
   /** Runs one turn to the end, recording everything; nobody waits on it. */
   const runTurn = async (turn: {
     id: SessionId;
+    stopper: AbortController;
     workspaceId: WorkspaceId;
     provider: Provider;
     model: ModelRef["model"];
   }) => {
     const session = runningSession(turn.id);
-    const stopper = new AbortController();
-    session.stopper = stopper;
+    const stopper = turn.stopper;
+    const stoppedByOwner = new Promise<"stopped">((resolve) => {
+      stopper.signal.addEventListener("abort", () => resolve("stopped"), { once: true });
+    });
     let failure: FailureReason | undefined;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
@@ -268,23 +280,28 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: "This session's workspace can't be read." };
       } else {
-        const result = await turn.provider.runTurn({
-          model: turn.model,
-          lines: linesOf(events.value),
-          workspace: workspace.value,
-          emit: async (text) => {
-            if (recordingLost) return;
-            const recorded = await append(turn.id, { type: "text-delta", text });
-            if (!recorded.ok) recordingLost = true;
-          },
-          report: async (activity) => {
-            if (recordingLost) return;
-            const recorded = await append(turn.id, { type: "activity", activity });
-            if (!recorded.ok) recordingLost = true;
-          },
-          signal: stopper.signal,
-        });
-        if (!result.ok) failure = result.error;
+        // Raced against the stop, so a provider that ignores it can't keep the session busy.
+        const outcome = await Promise.race([
+          turn.provider.runTurn({
+            model: turn.model,
+            lines: linesOf(events.value),
+            workspace: workspace.value,
+            emit: async (text) => {
+              // Anything a provider writes after the owner stopped the turn is dropped.
+              if (recordingLost || stopper.signal.aborted) return;
+              const recorded = await append(turn.id, { type: "text-delta", text });
+              if (!recorded.ok) recordingLost = true;
+            },
+            report: async (activity) => {
+              if (recordingLost || stopper.signal.aborted) return;
+              const recorded = await append(turn.id, { type: "activity", activity });
+              if (!recorded.ok) recordingLost = true;
+            },
+            signal: stopper.signal,
+          }),
+          stoppedByOwner,
+        ]);
+        if (outcome !== "stopped" && !outcome.ok) failure = outcome.error;
       }
     } catch (error) {
       // A provider throwing is a bug in its adapter: the details go to the worker's log, and the
@@ -299,13 +316,16 @@ export const createSessions = (options: {
       };
     }
 
+    // How the turn ended is decided now: a stop arriving from here on finds nothing to stop, so
+    // it can't turn a completed or failed turn into a stopped one.
+    const stopped = stopper.signal.aborted;
+    session.turn = { kind: "ending" };
+
     // The session is idle and up to date before anyone hears the turn ended. Freeing it and
     // queueing the last event happen together, so a new message can't land between them.
     await markUpdated(turn.id);
-    session.busy = false;
-    session.stopper = undefined;
-    // A turn the owner stopped is recorded as stopped, whatever the provider said on the way out.
-    const ending: NewEvent = stopper.signal.aborted
+    session.turn = { kind: "idle" };
+    const ending: NewEvent = stopped
       ? { type: "turn-stopped" }
       : failure
         ? { type: "turn-failed", reason: failure }
@@ -321,8 +341,14 @@ export const createSessions = (options: {
     message: NewMessage;
   }): Promise<Result<null, SessionError>> => {
     const session = runningSession(start.id);
-    if (session.busy) return err({ kind: "busy" });
-    session.busy = true;
+    if (session.turn.kind !== "idle") return err({ kind: "busy" });
+    // Stoppable from the very start, so a Stop pressed the moment it appears is never lost.
+    const starting: TurnState = {
+      kind: "running",
+      stopper: new AbortController(),
+      turn: undefined,
+    };
+    session.turn = starting;
 
     const recorded = await append(start.id, {
       type: "owner-message",
@@ -330,12 +356,14 @@ export const createSessions = (options: {
       model: start.message.model,
     });
     if (!recorded.ok) {
-      session.busy = false;
+      session.turn = { kind: "idle" };
       return recorded;
     }
+    starting.turn = recorded.value.seq;
     await markUpdated(start.id);
     runTurn({
       id: start.id,
+      stopper: starting.stopper,
       workspaceId: start.workspaceId,
       provider: start.provider,
       model: start.message.model.model,
@@ -345,7 +373,7 @@ export const createSessions = (options: {
 
   const summaryOf = (file: SessionFile): SessionSummary => ({
     ...file,
-    busy: running.get(file.id)?.busy ?? false,
+    busy: (running.get(file.id)?.turn.kind ?? "idle") !== "idle",
   });
 
   const findSession = async (rawId: string): Promise<Result<SessionFile, SessionError>> => {
@@ -406,12 +434,15 @@ export const createSessions = (options: {
     },
 
     /** Stops the session's running turn. Whatever it wrote so far stays. */
-    stop: async (rawId: string): Promise<Result<null, SessionError>> => {
+    stop: async (rawId: string, request: StopRequest): Promise<Result<null, SessionError>> => {
       const session = await findSession(rawId);
       if (!session.ok) return session;
-      const stopper = running.get(session.value.id)?.stopper;
-      if (!stopper) return err({ kind: "nothing-running" });
-      stopper.abort();
+      const current = running.get(session.value.id)?.turn;
+      // Only the turn the owner meant: a late stop for a turn that already ended stops nothing.
+      if (current?.kind !== "running" || current.turn !== request.turn) {
+        return err({ kind: "nothing-running" });
+      }
+      current.stopper.abort();
       return ok(null);
     },
 

@@ -4,6 +4,7 @@ export { Health } from "./lib/health.ts";
 export {
   Activity,
   Capabilities,
+  endsTurn,
   FailureReason,
   MAX_MESSAGE_LENGTH,
   ModelId,
@@ -17,6 +18,7 @@ export {
   SessionId,
   SessionList,
   SessionSummary,
+  StopRequest,
 } from "./lib/session.ts";
 export {
   ContextFile,

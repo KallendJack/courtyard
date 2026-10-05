@@ -104,3 +104,14 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
+
+/** Whether an event ends its turn: completed, stopped by the owner, or failed. */
+export const endsTurn = (event: SessionEvent) =>
+  event.type === "turn-completed" || event.type === "turn-stopped" || event.type === "turn-failed";
+
+/**
+ * What a stop request names: the turn to stop, by its owner message's event number, so a stop
+ * that arrives late can never stop the turn after it.
+ */
+export const StopRequest = z.object({ turn: z.number().int().positive() });
+export type StopRequest = z.infer<typeof StopRequest>;

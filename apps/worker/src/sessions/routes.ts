@@ -3,6 +3,7 @@ import {
   type ProviderList,
   type SessionList,
   type SessionSummary,
+  StopRequest,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -97,7 +98,10 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/stop", async (c) => {
-    const stopped = await sessions.stop(c.req.param("id"));
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const request = StopRequest.safeParse(body);
+    if (!request.success) return apiError(c, { status: 400, error: "Say which turn to stop" });
+    const stopped = await sessions.stop(c.req.param("id"), request.data);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
   });

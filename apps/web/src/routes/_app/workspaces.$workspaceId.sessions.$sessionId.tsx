@@ -52,15 +52,16 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
     },
     [session.id],
   );
+  const runningTurn = running ? last?.seq : undefined;
   const stop = useCallback(async () => {
-    const stopped = await stopTurn(session.id);
-    // Already finished is fine: the turn ended on its own just before the stop arrived.
+    if (runningTurn === undefined) return;
+    const stopped = await stopTurn(session.id, runningTurn);
+    // "Nothing is running" (409) is fine: the turn ended on its own just before the stop arrived.
+    const finishedAnyway = stopped.kind === "failed" && stopped.status === 409;
     setSendProblem(
-      stopped.kind === "loaded" || stopped.kind === "failed"
-        ? undefined
-        : describeProblem(stopped).body,
+      stopped.kind === "loaded" || finishedAnyway ? undefined : describeProblem(stopped).body,
     );
-  }, [session.id]);
+  }, [session.id, runningTurn]);
   const retry = useCallback(
     async (turn: Turn) => {
       const sent = await sendMessage(session.id, { text: turn.text, model: turn.model });

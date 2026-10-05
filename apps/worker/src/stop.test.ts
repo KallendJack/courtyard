@@ -35,8 +35,9 @@ const start = async (providers: Provider[]) => {
   return asOwner(worker.value.app);
 };
 
-const stop = (request: Requester, sessionId: string) =>
-  postJson(request, `/api/sessions/${sessionId}/stop`, {});
+/** Stops a turn, named by its owner message's event number (the first turn's is 1). */
+const stop = (request: Requester, sessionId: string, turn = 1) =>
+  postJson(request, `/api/sessions/${sessionId}/stop`, { turn });
 
 const answerOf = (events: readonly SessionEvent[]) =>
   events.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
@@ -116,5 +117,54 @@ describe("stopping a turn", () => {
     const request = await start([createFakeProvider({ delayMs: 0 })]);
 
     expect((await stop(request, "not-a-session")).status).toBe(404);
+  });
+});
+
+describe("stopping safely", () => {
+  it("refuses a late stop for an earlier turn, leaving the next one running", async () => {
+    const gated = gatedProvider();
+    const request = await start([gated.provider]);
+    const session = await startSession(request, "First");
+    gated.release();
+    const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "Second",
+      model: FAKE_MODEL,
+    });
+    const stale = await stop(request, session.id, 1);
+    const second = await followSession(request, {
+      sessionId: session.id,
+      until: "turn-completed",
+      after: first.length,
+    });
+
+    expect(stale.status).toBe(409);
+    expect(second.some((e) => e.type === "turn-stopped")).toBe(false);
+  });
+
+  it("ends the turn as stopped even when the provider ignores the stop", async () => {
+    let lateEmit: (() => Promise<void>) | undefined;
+    const stubborn: Provider = {
+      ...createFakeProvider({ delayMs: 0 }),
+      // Never returns, never looks at the signal, and writes after being stopped.
+      runTurn: (input) =>
+        new Promise(() => {
+          lateEmit = () => input.emit("written after the stop");
+        }),
+    };
+    const request = await start([stubborn]);
+    const session = await startSession(request, "Ignore me");
+
+    expect((await stop(request, session.id)).status).toBe(202);
+    const events = await followSession(request, { sessionId: session.id, until: "turn-stopped" });
+    await lateEmit?.();
+    const next = await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "Hello again",
+      model: FAKE_MODEL,
+    });
+
+    expect(events.map((e) => e.type)).toEqual(["owner-message", "turn-stopped"]);
+    expect(next.status).toBe(202);
   });
 });

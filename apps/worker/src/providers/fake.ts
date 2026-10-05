@@ -1,3 +1,4 @@
+import { setTimeout as wait } from "node:timers/promises";
 import { ModelId, ProviderId } from "@courtyard/contract";
 import { err, ok } from "../result.ts";
 import type { Provider } from "./index.ts";
@@ -6,13 +7,7 @@ const id = ProviderId.parse("fake");
 
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+  wait(ms, undefined, { signal }).catch(() => undefined);
 
 /**
  * A scripted provider, so everything runs end to end with no models installed and no usage

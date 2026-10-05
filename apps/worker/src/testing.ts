@@ -112,7 +112,9 @@ export const gatedProvider = () => {
   const heldUntilReleased = (signal: AbortSignal) =>
     Promise.race([
       gate,
-      new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve())),
+      new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true }),
+      ),
     ]);
   return { provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }), release };
 };
