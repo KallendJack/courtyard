@@ -1,4 +1,6 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
+import { Page, PageTitle } from "@/components/page";
+import { WorkspaceDot, workspaceColours } from "@/components/workspace-colour";
 import { LogOutOthers } from "../../log-out-others.tsx";
 
 const loggedIn = getRouteApi("/_app");
@@ -11,29 +13,33 @@ function Home() {
   const workspaces = loggedIn.useLoaderData();
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
+  const colours = workspaceColours(list);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-semibold">Workspaces</h1>
+    <Page>
+      <PageTitle>Workspaces</PageTitle>
       {list.length === 0 ? (
-        <p className="mt-4 text-neutral-600">
+        <p className="mt-4 text-muted-foreground">
           No workspaces yet. Add a folder to your context folder to make one.
         </p>
       ) : (
-        <ul className="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200">
+        <ul className="mt-6 divide-y">
           {list.map((workspace) => (
             <li key={workspace.id}>
               <Link
                 to="/workspaces/$workspaceId"
                 params={{ workspaceId: workspace.id }}
-                className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-neutral-50"
+                className="-mx-2 flex items-center justify-between gap-4 rounded-md px-2 py-3.5 hover:bg-muted/60"
               >
-                <span className="font-medium">{workspace.name}</span>
-                <span className="flex gap-2 text-xs text-neutral-500">
+                <span className="flex items-center gap-3 font-medium">
+                  <WorkspaceDot colour={colours.get(workspace.id) ?? "heather"} />
+                  {workspace.name}
+                </span>
+                <span className="flex gap-2 text-[13px] text-muted-foreground">
                   {workspace.mode === "code" && <span>Code</span>}
                   {!workspace.hasContextFile && <span>No context file yet</span>}
                   {workspace.configProblem !== undefined && (
-                    <span className="text-amber-700">Config ignored</span>
+                    <span className="text-destructive-text">Config ignored</span>
                   )}
                 </span>
               </Link>
@@ -42,6 +48,6 @@ function Home() {
         </ul>
       )}
       <LogOutOthers />
-    </main>
+    </Page>
   );
 }

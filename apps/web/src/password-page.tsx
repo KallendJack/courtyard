@@ -1,5 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { CourtyardMark } from "@/components/courtyard-mark";
+import { PillButton } from "@/components/pill-button";
+import { Input } from "@/components/ui/input";
 import { describeProblem } from "./problems.tsx";
 import { sendPassword } from "./worker.ts";
 
@@ -21,6 +24,8 @@ export function PasswordPage(props: {
   const [repeated, setRepeated] = useState("");
   const [error, setError] = useState<string>();
   const [sending, setSending] = useState(false);
+  const passwordId = useId();
+  const repeatedId = useId();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -42,45 +47,52 @@ export function PasswordPage(props: {
   };
 
   return (
-    <main className="mx-auto max-w-sm px-4 py-12">
-      <h1 className="text-2xl font-semibold">{props.title}</h1>
-      <div className="mt-2 text-neutral-600">{props.intro}</div>
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <label className="block">
-          <span className="text-sm font-medium">Password</span>
-          <input
-            type="password"
-            autoComplete={props.autoComplete}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2"
-          />
-        </label>
-        {props.confirm && (
-          <label className="block">
-            <span className="text-sm font-medium">Password again</span>
-            <input
+    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm rounded-lg border bg-card p-6 md:p-8">
+        <CourtyardMark size={40} />
+        <h1 className="mt-5 font-display text-[26px]/[31px] font-medium tracking-[-0.02em]">
+          {props.title}
+        </h1>
+        <div className="mt-2 text-[15px]/[23px] text-muted-foreground">{props.intro}</div>
+        <form onSubmit={submit} className="mt-6 space-y-4">
+          <div>
+            <label htmlFor={passwordId} className="text-sm font-medium">
+              Password
+            </label>
+            <Input
+              id={passwordId}
               type="password"
-              autoComplete="new-password"
-              value={repeated}
-              onChange={(event) => setRepeated(event.target.value)}
-              className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2"
+              autoComplete={props.autoComplete}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="mt-1.5 h-11 bg-field text-base"
             />
-          </label>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={sending}
-          className="w-full rounded-md bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-50"
-        >
-          {props.submitLabel}
-        </button>
-      </form>
+          </div>
+          {props.confirm && (
+            <div>
+              <label htmlFor={repeatedId} className="text-sm font-medium">
+                Password again
+              </label>
+              <Input
+                id={repeatedId}
+                type="password"
+                autoComplete="new-password"
+                value={repeated}
+                onChange={(event) => setRepeated(event.target.value)}
+                className="mt-1.5 h-11 bg-field text-base"
+              />
+            </div>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-destructive-text">
+              {error}
+            </p>
+          )}
+          <PillButton type="submit" disabled={sending} className="h-11 w-full">
+            {props.submitLabel}
+          </PillButton>
+        </form>
+      </div>
     </main>
   );
 }

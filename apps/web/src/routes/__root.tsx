@@ -43,9 +43,13 @@ function Root() {
   });
 
   return (
-    <div className="min-h-dvh bg-white text-neutral-900">
+    <div className="min-h-dvh">
       {reachability === "down" && auth.kind === "loaded" && (
-        <p role="status" className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
+        <p
+          role="status"
+          className="flex items-center justify-center gap-2 bg-accent px-4 py-2 text-center text-sm font-medium"
+        >
+          <span aria-hidden className="size-2 rounded-full bg-workspace-bracken" />
           Can't reach Courtyard's worker. Retrying…
         </p>
       )}

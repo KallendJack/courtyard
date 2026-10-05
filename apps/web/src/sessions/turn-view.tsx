@@ -1,5 +1,7 @@
 import type { Activity, FailureReason } from "@courtyard/contract";
 import { memo } from "react";
+import { PillButton } from "@/components/pill-button";
+import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 
 /** What a model did, in a few words. */
@@ -36,14 +38,14 @@ export const TurnView = memo(function TurnView(props: {
   const { turn, onRetry } = props;
 
   return (
-    <div className="space-y-3">
-      <p className="ml-auto max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-neutral-900 px-4 py-2 text-white">
+    <div className="space-y-4">
+      <p className="ml-auto w-fit max-w-[85%] rounded-[14px] rounded-br-sm bg-accent px-4 py-2.5 text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere text-accent-foreground md:text-base/[25px]">
         {turn.text}
       </p>
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
-          className="space-y-0.5 wrap-anywhere text-xs text-neutral-500"
+          className="space-y-0.5 text-[13px] wrap-anywhere text-muted-foreground"
         >
           {turn.activities.map((activity, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
@@ -52,31 +54,37 @@ export const TurnView = memo(function TurnView(props: {
         </ul>
       )}
       {(turn.answer !== "" || turn.state.kind === "running") && (
-        <p
-          className="max-w-[85%] whitespace-pre-wrap wrap-anywhere text-neutral-900"
-          aria-live="polite"
-        >
-          {turn.answer}
-          {turn.state.kind === "running" && <span className="animate-pulse"> ▍</span>}
-        </p>
+        <div aria-live="polite">
+          <Answer text={turn.answer} />
+          {turn.state.kind === "running" && (
+            <span
+              aria-hidden
+              className="mt-1 inline-block h-5 w-2 animate-pulse rounded-xs bg-primary-text"
+            />
+          )}
+        </div>
       )}
       {turn.state.kind === "stopped" && (
-        <p className="text-sm text-neutral-500">You stopped this turn.</p>
+        <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>
       )}
       {turn.state.kind === "failed" && (
         <div
           role="alert"
-          className="max-w-[85%] rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
+          className="flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text"
         >
-          <p>{describeFailure(turn.state.reason)}</p>
+          <div>
+            <p className="font-semibold">This turn didn't finish</p>
+            <p>{describeFailure(turn.state.reason)}</p>
+          </div>
           {onRetry && (
-            <button
+            <PillButton
               type="button"
+              variant="outline"
               onClick={() => onRetry(turn)}
-              className="mt-1 font-medium underline"
+              className="h-8 bg-field px-3.5 text-foreground"
             >
               Retry
-            </button>
+            </PillButton>
           )}
         </div>
       )}

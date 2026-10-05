@@ -1,0 +1,7 @@
+/**
+ * Joins class names, skipping the ones switched off. For components on the first load: unlike
+ * shadcn's `cn` it doesn't merge conflicting Tailwind classes, which keeps its code out of the
+ * first load, so these components take explicit options instead of overriding classes.
+ */
+export const classes = (...names: readonly (string | false | undefined)[]) =>
+  names.filter(Boolean).join(" ");

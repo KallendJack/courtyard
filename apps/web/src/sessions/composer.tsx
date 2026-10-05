@@ -1,5 +1,7 @@
 import type { ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
+import { ArrowUp, Square } from "lucide-react";
 import { type FormEvent, memo, useState } from "react";
+import { PillButton } from "@/components/pill-button";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
 
@@ -52,7 +54,10 @@ export const Composer = memo(function Composer(props: {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-2">
+    <form
+      onSubmit={submit}
+      className="space-y-2 rounded-lg border bg-field px-3 pt-2.5 pb-2 shadow-xs focus-within:border-primary-text/60 md:px-4 md:pt-3.5 md:pb-3"
+    >
       <textarea
         aria-label="Message"
         value={text}
@@ -64,15 +69,16 @@ export const Composer = memo(function Composer(props: {
           }
         }}
         placeholder={props.placeholder}
-        rows={2}
-        className="block w-full resize-none rounded-md border border-neutral-300 px-3 py-2"
+        rows={1}
+        // One line to start, growing with what's typed, so the keyboard keeps its room.
+        className="block max-h-48 min-h-6 w-full resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
       />
       <div className="flex items-center gap-2">
         <select
           aria-label="Model"
           value={modelKey}
           onChange={(event) => setChosenKey(event.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+          className="min-w-0 max-w-56 truncate rounded-full bg-background px-3 py-1.5 text-[13px] font-medium text-muted-foreground"
         >
           {models.length === 0 && <option value="">No models available</option>}
           {models.map((m) => (
@@ -81,35 +87,30 @@ export const Composer = memo(function Composer(props: {
             </option>
           ))}
         </select>
+        <span className="flex-1" />
         {props.stop ? (
-          <button
-            type="button"
-            onClick={props.stop}
-            className="shrink-0 rounded-md border border-neutral-900 px-4 py-1.5 font-medium text-neutral-900"
-          >
+          <PillButton type="button" variant="outline" onClick={props.stop}>
+            <Square className="fill-current" />
             Stop
-          </button>
+          </PillButton>
         ) : (
-          <button
-            type="submit"
-            disabled={sending || props.disabled || models.length === 0}
-            className="shrink-0 rounded-md bg-neutral-900 px-4 py-1.5 font-medium text-white disabled:opacity-50"
-          >
+          <PillButton type="submit" disabled={sending || props.disabled || models.length === 0}>
+            <ArrowUp className="md:hidden" />
             Send
-          </button>
+          </PillButton>
         )}
       </div>
       {props.providers.flatMap((provider) =>
         provider.available
           ? []
           : [
-              <p key={provider.id} className="text-xs text-amber-800">
+              <p key={provider.id} className="text-[13px] text-muted-foreground">
                 {provider.label} isn't available: {provider.reason}
               </p>,
             ],
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-destructive-text">
           {error}
         </p>
       )}

@@ -24,7 +24,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(session.getByRole("alert")).toHaveCount(2);
 
-  await page.getByRole("link", { name: "← Back to the workspace" }).click();
+  await page.getByRole("link", { name: "Back to Garage gym" }).click();
   await expect(page.getByRole("region", { name: "Sessions" })).toContainText(
     "Where should the rack go?",
   );
