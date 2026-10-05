@@ -214,10 +214,12 @@ describe("a session", () => {
     expect(busy.status).toBe(409);
     expect(ApiError.parse(await busy.json()).error).toMatch(/already/i);
     gated.release();
-    await readEvents(api, session.id, { until: "turn-completed" });
+    const first = await readEvents(api, session.id, { until: "turn-completed" });
     expect(
       (await api.post(`/api/sessions/${session.id}/messages`, { text: "Now", model: FAKE })).status,
     ).toBe(202);
+    // Let the second turn finish before the test's folder is removed.
+    await readEvents(api, session.id, { until: "turn-completed", after: first.length });
   });
 
   it("records a failed turn with its reason in plain words", async () => {
