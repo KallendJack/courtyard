@@ -1,0 +1,28 @@
+{
+  "name": "courtyard",
+  "private": true,
+  "description": "Self-hosted planning and coding with AI models, one workspace per area of your life",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "start": "pnpm --filter @courtyard/worker start",
+    "check": "biome check --error-on-warnings .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r typecheck && tsc -p e2e",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "e2e": "playwright test",
+    "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm build && pnpm e2e"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.19.1",
+    "typescript": "7.0.2"
+  }
+}

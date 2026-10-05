@@ -1,0 +1,14 @@
+{
+  "name": "@courtyard/contract",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}
