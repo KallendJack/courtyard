@@ -5,6 +5,7 @@ import {
   ProviderList,
   type SessionId,
   SessionSummary,
+  type StopRequest,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -14,7 +15,7 @@ export type FromWorker<T> =
   | { readonly kind: "loaded"; readonly data: T }
   | { readonly kind: "not-found" }
   | { readonly kind: "logged-out" }
-  | { readonly kind: "failed"; readonly message: string }
+  | { readonly kind: "failed"; readonly status: number; readonly message: string }
   | { readonly kind: "offline" };
 
 /**
@@ -37,7 +38,7 @@ const readResponse = async <T>(read: {
   if (!error.success) return { kind: "offline" };
   return response.status === 401 && unauthorised === "logged-out"
     ? { kind: "logged-out" }
-    : { kind: "failed", message: error.data.error };
+    : { kind: "failed", status: response.status, message: error.data.error };
 };
 
 /**
@@ -93,6 +94,15 @@ export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
     path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
     body: message,
     schema: SessionSummary,
+  });
+
+/** Stops the turn running in a session. */
+/** Stops a session's running turn, named by its owner message's event number. */
+export const stopTurn = (sessionId: SessionId, turn: number) =>
+  post({
+    path: `/sessions/${encodeURIComponent(sessionId)}/stop`,
+    body: { turn } satisfies StopRequest,
+    schema: z.unknown(),
   });
 
 /** Sends the next message in a session. */

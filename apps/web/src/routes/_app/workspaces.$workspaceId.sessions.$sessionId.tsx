@@ -5,7 +5,7 @@ import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { TurnView } from "../../sessions/turn-view.tsx";
-import { fromWorker, loadProviders, sendMessage } from "../../worker.ts";
+import { fromWorker, loadProviders, sendMessage, stopTurn } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
@@ -52,6 +52,16 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
     },
     [session.id],
   );
+  const runningTurn = running ? last?.seq : undefined;
+  const stop = useCallback(async () => {
+    if (runningTurn === undefined) return;
+    const stopped = await stopTurn(session.id, runningTurn);
+    // "Nothing is running" (409) is fine: the turn ended on its own just before the stop arrived.
+    const finishedAnyway = stopped.kind === "failed" && stopped.status === 409;
+    setSendProblem(
+      stopped.kind === "loaded" || finishedAnyway ? undefined : describeProblem(stopped).body,
+    );
+  }, [session.id, runningTurn]);
   const retry = useCallback(
     async (turn: Turn) => {
       const sent = await sendMessage(session.id, { text: turn.text, model: turn.model });
@@ -104,6 +114,7 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
           disabled={running || problem !== undefined}
+          {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}
           send={send}
         />

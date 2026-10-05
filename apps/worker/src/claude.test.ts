@@ -61,6 +61,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
     report: async (activity) => {
       activities.push(activity);
     },
+    signal: new AbortController().signal,
     ...overrides,
   });
   return { result, emitted, activities };
@@ -438,5 +439,38 @@ describe("after the security review", () => {
 
     const system = String(runs[0]?.options.systemPrompt);
     expect(system.match(/<\/context_file>/g)).toHaveLength(1);
+  });
+});
+
+describe("stopping a Claude turn", () => {
+  it("stops Claude Code promptly when the owner stops the turn, keeping what it wrote", async () => {
+    const stop = new AbortController();
+    let givenToClaudeCode: AbortController | undefined;
+    const claudeCode: ClaudeCode = {
+      check: async () => ({ account: {}, models: [] }),
+      run: ({ options }) =>
+        (async function* () {
+          givenToClaudeCode = options.abortController;
+          yield textDelta("Half an answer");
+          // Claude Code keeps going until it's aborted, then stops with an error.
+          await new Promise<void>((resolve) => {
+            options.abortController?.signal.addEventListener("abort", () => resolve());
+          });
+          throw new Error("Claude Code process aborted by user");
+        })(),
+    };
+    const emitted: string[] = [];
+
+    const { result } = await runTurn(claudeCode, {
+      signal: stop.signal,
+      emit: async (text) => {
+        emitted.push(text);
+        stop.abort();
+      },
+    });
+
+    expect(givenToClaudeCode?.signal.aborted).toBe(true);
+    expect(emitted).toEqual(["Half an answer"]);
+    expect(result).toEqual({ ok: true, value: null });
   });
 });

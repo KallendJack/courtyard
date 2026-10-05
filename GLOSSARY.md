@@ -102,6 +102,11 @@ _Avoid_: request, run, completion
 One recorded thing that happened in a session.
 _Avoid_: message, chunk, log line
 
+**Stop**:
+The owner ending a running turn early. Whatever the model wrote so far stays, and the turn is
+recorded as stopped, apart from failures.
+_Avoid_: cancel, abort, interrupt (that's the worker stopping mid-turn)
+
 **Event log**:
 The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript

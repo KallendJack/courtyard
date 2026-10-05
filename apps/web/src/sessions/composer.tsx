@@ -22,6 +22,8 @@ export const Composer = memo(function Composer(props: {
   providers: ProviderList["providers"];
   initialModel?: ModelRef;
   disabled?: boolean;
+  /** While a turn runs: stops it, shown in place of Send. */
+  stop?: () => void;
   placeholder: string;
   send: (message: NewMessage) => Promise<string | undefined>;
 }) {
@@ -79,13 +81,23 @@ export const Composer = memo(function Composer(props: {
             </option>
           ))}
         </select>
-        <button
-          type="submit"
-          disabled={sending || props.disabled || models.length === 0}
-          className="shrink-0 rounded-md bg-neutral-900 px-4 py-1.5 font-medium text-white disabled:opacity-50"
-        >
-          Send
-        </button>
+        {props.stop ? (
+          <button
+            type="button"
+            onClick={props.stop}
+            className="shrink-0 rounded-md border border-neutral-900 px-4 py-1.5 font-medium text-neutral-900"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={sending || props.disabled || models.length === 0}
+            className="shrink-0 rounded-md bg-neutral-900 px-4 py-1.5 font-medium text-white disabled:opacity-50"
+          >
+            Send
+          </button>
+        )}
       </div>
       {props.providers.flatMap((provider) =>
         provider.available

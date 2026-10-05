@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 import {
   type HookCallback,
   type Options,
@@ -33,6 +34,8 @@ const CHECK_TIMEOUT_MS = 15_000;
 /** How long a status answer is reused, so listing providers doesn't start Claude Code each time. */
 const STATUS_TTL_MS = 60_000;
 const MAX_TURNS = 30;
+/** The longest a stopped turn waits for Claude Code to finish before moving on. */
+const WIND_DOWN_MS = 2000;
 
 /**
  * The environment Claude Code runs with: the worker's own, without Courtyard's settings, and with
@@ -281,6 +284,37 @@ const confineTo =
     }
   };
 
+/**
+ * The messages, until the turn is stopped: then it ends at once, even if Claude Code is still
+ * waiting on something, and tells Claude Code to finish up.
+ */
+async function* untilStopped(messages: AsyncIterable<unknown>, signal: AbortSignal) {
+  const iterator = messages[Symbol.asyncIterator]();
+  // One listener for the whole turn: it settles whichever wait is current when the stop comes.
+  let settleCurrentWait: (() => void) | undefined;
+  const onStop = () => settleCurrentWait?.();
+  signal.addEventListener("abort", onStop, { once: true });
+  try {
+    while (!signal.aborted) {
+      const stopped = new Promise<"stopped">((resolve) => {
+        settleCurrentWait = () => resolve("stopped");
+      });
+      const next = await Promise.race([iterator.next(), stopped]);
+      if (next === "stopped" || next.done) break;
+      yield next.value;
+    }
+  } finally {
+    signal.removeEventListener("abort", onStop);
+    if (signal.aborted) {
+      // Give Claude Code a moment to wind down, so the next turn never runs alongside it.
+      await Promise.race([
+        Promise.resolve(iterator.return?.()).catch(() => undefined),
+        wait(WIND_DOWN_MS),
+      ]);
+    }
+  }
+}
+
 /** Stops text from the workspace closing the tag that marks where it ends. */
 const contained = (text: string) => text.replaceAll("</context_file>", "<\\/context_file>");
 
@@ -389,6 +423,11 @@ export const createClaudeProvider = (
       let resetAt: string | undefined;
       let failure: FailureReason | undefined;
       let resultArrived = false;
+      // The owner stopping the turn stops Claude Code itself.
+      const stop = new AbortController();
+      const stopClaudeCode = () => stop.abort();
+      if (input.signal.aborted) stop.abort();
+      input.signal.addEventListener("abort", stopClaudeCode);
 
       try {
         const messages = claudeCode.run({
@@ -404,10 +443,11 @@ export const createClaudeProvider = (
             hooks: { PreToolUse: [{ hooks: [confineTo(folder, input.report)] }] },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,
+            abortController: stop,
           },
         });
 
-        for await (const message of messages) {
+        for await (const message of untilStopped(messages, stop.signal)) {
           const delta = TextDelta.safeParse(message);
           if (delta.success) {
             if (!delta.data.parent_tool_use_id) await input.emit(delta.data.event.delta.text);
@@ -433,15 +473,20 @@ export const createClaudeProvider = (
           }
         }
       } catch (error) {
-        // Claude Code itself failed (it couldn't start, or stopped). Only the kind of error goes to
+        // Stopping can make Claude Code end with an error; that's the stop working, not a failure,
+        // and it's handled below. Otherwise Claude Code itself failed (it couldn't start, or stopped). Only the kind of error goes to
         // the worker's log, never its text; the session gets plain words.
-        console.error("Claude Code stopped:", error instanceof Error ? error.name : typeof error);
+        if (!input.signal.aborted) {
+          console.error("Claude Code stopped:", error instanceof Error ? error.name : typeof error);
+        }
         failure ??= {
           kind: "provider-unavailable",
           message: "Claude Code stopped unexpectedly on the worker machine.",
         };
+      } finally {
+        input.signal.removeEventListener("abort", stopClaudeCode);
       }
-
+      if (input.signal.aborted) return ok(null);
       if (!failure && !resultArrived) failure = failureFor("unknown", resetAt);
       return failure ? err(failure) : ok(null);
     },

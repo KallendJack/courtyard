@@ -31,6 +31,8 @@ export type TurnInput = {
   readonly emit: (text: string) => Promise<void>;
   /** Says what the model is doing, such as reading a file. */
   readonly report: (activity: Activity) => Promise<void>;
+  /** Aborted when the owner stops the turn: the provider stops working as soon as it can. */
+  readonly signal: AbortSignal;
 };
 
 /**
