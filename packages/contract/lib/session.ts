@@ -79,6 +79,8 @@ export const FailureReason = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("rate-limited"), resetAt: z.iso.datetime().optional() }),
   z.object({ kind: z.literal("provider-unavailable"), message: z.string() }),
   z.object({ kind: z.literal("unknown"), message: z.string() }),
+  /** The worker stopped while the turn was running. */
+  z.object({ kind: z.literal("interrupted") }),
 ]);
 export type FailureReason = z.infer<typeof FailureReason>;
 

@@ -9,6 +9,8 @@ export const describeFailure = (reason: FailureReason) => {
       return reason.resetAt
         ? `You've hit this model's usage limit. It resets at ${new Date(reason.resetAt).toLocaleString()}.`
         : "You've hit this model's usage limit.";
+    case "interrupted":
+      return "Courtyard's worker stopped before this turn finished.";
     case "provider-unavailable":
     case "unknown":
       return reason.message;

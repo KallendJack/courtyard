@@ -97,6 +97,9 @@ export const createSessions = (options: {
       queue: Promise.resolve(),
     };
     running.set(id, created);
+    // The first time this worker touches a session, before anything else can: a turn the log
+    // shows as still running belongs to a worker that stopped, because this one hasn't started any.
+    created.queue = recordInterruptedTurn(id, created).catch(() => undefined);
     return created;
   };
 
@@ -132,27 +135,46 @@ export const createSessions = (options: {
     return ok(events);
   };
 
-  /** Numbers an event, puts it on disk, and only then tells subscribers. */
+  /**
+   * Numbers an event, puts it on disk, and only then tells subscribers. Only ever called from
+   * inside the session's queue.
+   */
+  const writeEvent = async (
+    id: SessionId,
+    session: RunningSession,
+    event: NewEvent,
+  ): Promise<Result<SessionEvent, SessionError>> => {
+    if (session.nextSeq === undefined) {
+      const existing = await readEvents(id);
+      if (!existing.ok) return existing;
+      session.nextSeq = existing.value.length + 1;
+    }
+    const numbered = SessionEvent.safeParse({ ...event, seq: session.nextSeq, at: stamp() });
+    if (!numbered.success) return err(STORAGE_ERROR);
+    try {
+      await appendFile(join(folderOf(id), "events.jsonl"), `${JSON.stringify(numbered.data)}\n`);
+    } catch {
+      return err(STORAGE_ERROR);
+    }
+    session.nextSeq += 1;
+    for (const listener of session.listeners) listener(numbered.data);
+    return ok(numbered.data);
+  };
+
   const append = (id: SessionId, event: NewEvent) => {
     const session = runningSession(id);
-    return inOrder(session, async (): Promise<Result<SessionEvent, SessionError>> => {
-      if (session.nextSeq === undefined) {
-        const existing = await readEvents(id);
-        if (!existing.ok) return existing;
-        session.nextSeq = existing.value.length + 1;
-      }
-      const numbered = SessionEvent.safeParse({ ...event, seq: session.nextSeq, at: stamp() });
-      if (!numbered.success) return err(STORAGE_ERROR);
-      try {
-        await appendFile(join(folderOf(id), "events.jsonl"), `${JSON.stringify(numbered.data)}\n`);
-      } catch {
-        return err(STORAGE_ERROR);
-      }
-      session.nextSeq += 1;
-      for (const listener of session.listeners) listener(numbered.data);
-      return ok(numbered.data);
-    });
+    return inOrder(session, () => writeEvent(id, session, event));
   };
+
+  /** Ends a turn that a stopped worker left running, so the session is usable again. */
+  async function recordInterruptedTurn(id: SessionId, session: RunningSession) {
+    const events = await readEvents(id);
+    if (!events.ok) return;
+    const last = events.value.at(-1);
+    if (last?.type === "owner-message" || last?.type === "text-delta") {
+      await writeEvent(id, session, { type: "turn-failed", reason: { kind: "interrupted" } });
+    }
+  }
 
   const markUpdated = async (id: SessionId) => {
     const file = await readJsonFile(sessionFilePath(id), SessionFile);

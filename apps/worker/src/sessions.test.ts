@@ -12,7 +12,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
-import { asOwner } from "./testing.ts";
+import { asOwner, readEvents as readEventsFrom } from "./testing.ts";
 import { createWorker } from "./worker.ts";
 
 const FAKE = { provider: "fake", model: "echo" };
@@ -55,40 +55,11 @@ const startSession = async (api: Api, text: string, model = FAKE) => {
   return SessionSummary.parse(await response.json());
 };
 
-/** Reads a session's server-sent events until one of type `until` arrives. */
-const readEvents = async (
+const readEvents = (
   api: Api,
   sessionId: string,
   options: { until: SessionEvent["type"]; after?: number; onEvent?: (e: SessionEvent) => void },
-) => {
-  const response = await api.request(
-    `/api/sessions/${sessionId}/events?after=${options.after ?? 0}`,
-  );
-  expect(response.headers.get("content-type")).toContain("text/event-stream");
-  const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
-  if (!reader) throw new Error("no event stream");
-
-  const events: SessionEvent[] = [];
-  let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) throw new Error(`stream ended before ${options.until}`);
-    buffer += value;
-    const messages = buffer.split("\n\n");
-    buffer = messages.pop() ?? "";
-    for (const message of messages) {
-      const data = message.split("\n").find((line) => line.startsWith("data: "));
-      if (!data) continue;
-      const event = SessionEvent.parse(JSON.parse(data.slice("data: ".length)));
-      options.onEvent?.(event);
-      events.push(event);
-      if (event.type === options.until) {
-        await reader.cancel();
-        return events;
-      }
-    }
-  }
-};
+) => readEventsFrom(api.request, { sessionId, ...options });
 
 /** A fake provider that holds each turn open until the test lets it finish. */
 const gatedProvider = () => {

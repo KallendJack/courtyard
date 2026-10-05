@@ -69,15 +69,19 @@ const parseJson = (text: string): unknown => {
 
 /**
  * Follows a session's events: its whole event log first, then live as the worker records them.
- * Also returns the worker's reason when the stream can't start at all.
+ * Also says when it's reconnecting, and the worker's reason when the stream can't start at all.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
   const [log, dispatch] = useReducer(applyEvent, { lastSeq: 0, turns: [] });
   const [problem, setProblem] = useState<string>();
+  const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
     // The browser reconnects by itself, sending the last event id it saw (ADR 0006).
     const source = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/events?after=0`);
+    // While the worker is unreachable the browser keeps retrying; say so until it's back.
+    source.onopen = () => setReconnecting(false);
+    source.onerror = () => setReconnecting(source.readyState === EventSource.CONNECTING);
     source.onmessage = (message) => {
       const event = SessionEvent.safeParse(parseJson(message.data));
       if (event.success) dispatch(event.data);
@@ -90,5 +94,5 @@ export const useSessionTurns = (sessionId: SessionId) => {
     return () => source.close();
   }, [sessionId]);
 
-  return { turns: log.turns, problem };
+  return { turns: log.turns, problem, reconnecting };
 };

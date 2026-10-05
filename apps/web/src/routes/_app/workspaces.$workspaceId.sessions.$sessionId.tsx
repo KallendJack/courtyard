@@ -33,7 +33,7 @@ function SessionPage() {
 
 function Session(props: { session: SessionSummary; providers: ProviderList["providers"] }) {
   const { session } = props;
-  const { turns, problem } = useSessionTurns(session.id);
+  const { turns, problem, reconnecting } = useSessionTurns(session.id);
   const [sendProblem, setSendProblem] = useState<string>();
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
@@ -70,6 +70,11 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
         ← Back to the workspace
       </Link>
       <h1 className="mt-2 truncate text-xl font-semibold">{session.title}</h1>
+      {reconnecting && (
+        <p role="status" className="mt-2 text-sm text-amber-700">
+          Reconnecting to the worker… The session carries on where it left off.
+        </p>
+      )}
 
       {problem ? (
         <p role="alert" className="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
