@@ -15,7 +15,9 @@ function LoggedIn() {
 
   const logOut = async () => {
     await logOutOnWorker();
-    await router.invalidate();
+    // Go to login explicitly rather than waiting for a re-check to redirect, which another load
+    // already in flight can swallow.
+    await router.navigate({ to: "/login" });
   };
 
   return (

@@ -1,7 +1,11 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import type { FromWorker } from "./worker.ts";
+import { useWorkerWatch } from "./worker-watch.ts";
 
 type NoData = Exclude<FromWorker<unknown>, { kind: "loaded" }>;
+
+/** How often an offline page asks whether the worker is back. */
+const CHECK_EVERY_MS = 3000;
 
 /** A short title and an explanation for each reason the worker gave no data. */
 export const describeProblem = (problem: NoData): { title: string; body: string } => {
@@ -20,8 +24,40 @@ export const describeProblem = (problem: NoData): { title: string; body: string 
   }
 };
 
+function WorkerOffline(props: { onBack: () => void }) {
+  const reachability = useWorkerWatch({
+    watching: true,
+    everyMs: CHECK_EVERY_MS,
+    onBack: props.onBack,
+  });
+  const { title, body } = describeProblem({ kind: "offline" });
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-8">
+      <h1 className="text-xl font-semibold">{title}</h1>
+      {reachability === "up" ? (
+        // The worker answers its health check, so the problem is something else, most likely an
+        // app version the worker no longer understands.
+        <p className="mt-2 text-neutral-600">
+          Courtyard's worker is running but answered unexpectedly. Reload the page to update the
+          app.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-neutral-600">{body}</p>
+          <p className="mt-2 text-sm text-neutral-500">
+            This page will carry on by itself when it's back.
+          </p>
+        </>
+      )}
+    </main>
+  );
+}
+
 /** What to show instead of a page when the worker gave no data. */
 export function Problem({ result }: { result: NoData }) {
+  const router = useRouter();
+  if (result.kind === "offline") return <WorkerOffline onBack={() => void router.invalidate()} />;
   const { title, body } = describeProblem(result);
 
   return (
@@ -35,4 +71,13 @@ export function Problem({ result }: { result: NoData }) {
       )}
     </main>
   );
+}
+
+/**
+ * The router's last resort, for when a page's own code can't even be fetched (the worker serves
+ * it, so this is the worker being down). The fetch can't be retried in place, so the app reloads
+ * itself when the worker is back.
+ */
+export function AppError() {
+  return <WorkerOffline onBack={() => window.location.reload()} />;
 }

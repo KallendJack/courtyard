@@ -34,7 +34,8 @@ export function PasswordPage(props: {
     setSending(false);
     if (result.kind === "loaded") {
       setError(undefined);
-      await router.invalidate();
+      // In: go to the workspaces explicitly rather than waiting for a re-check to redirect.
+      await router.navigate({ to: "/" });
       return;
     }
     setError(describeProblem(result).body);
