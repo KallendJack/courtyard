@@ -1,4 +1,12 @@
-import { ApiError, type PasswordForm } from "@courtyard/contract";
+import {
+  ApiError,
+  type NewMessage,
+  type PasswordForm,
+  ProviderList,
+  type SessionId,
+  SessionSummary,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { z } from "zod";
 
 /** What came back from the worker: the data, or why there isn't any. */
@@ -13,11 +21,12 @@ export type FromWorker<T> =
  * Turns a response into one of the kinds above, parsing its body with the contract's schema. A 401
  * means the device isn't logged in, except from the password forms, where it means a wrong password.
  */
-const readResponse = async <T>(
-  response: Response,
-  schema: z.ZodType<T>,
-  unauthorised: "logged-out" | "failed" = "logged-out",
-): Promise<FromWorker<T>> => {
+const readResponse = async <T>(read: {
+  response: Response;
+  schema: z.ZodType<T>;
+  unauthorised: "logged-out" | "failed";
+}): Promise<FromWorker<T>> => {
+  const { response, schema, unauthorised } = read;
   const body: unknown = await response.json().catch(() => null);
   if (response.ok) {
     const parsed = schema.safeParse(body);
@@ -38,34 +47,58 @@ const readResponse = async <T>(
  */
 export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise<FromWorker<T>> => {
   try {
-    return await readResponse(await fetch(`/api${path}`), schema);
+    const response = await fetch(`/api${path}`);
+    return await readResponse({ response, schema, unauthorised: "logged-out" });
   } catch {
     return { kind: "offline" };
   }
 };
 
-/** What the web app sends to the worker, by path. */
-type Sent = {
-  "/setup": PasswordForm;
-  "/login": PasswordForm;
-  "/logout": Record<string, never>;
-  "/logout-others": Record<string, never>;
-};
-
-/** Sends a change to the worker's API as JSON. Success carries no data. */
-export const toWorker = async <P extends keyof Sent>(
-  path: P,
-  body: Sent[P],
-): Promise<FromWorker<unknown>> => {
+/** Posts JSON to the worker's API and reads the answer with `schema`. */
+const post = async <T>(request: {
+  path: string;
+  body: unknown;
+  schema: z.ZodType<T>;
+  unauthorised?: "logged-out" | "failed";
+}): Promise<FromWorker<T>> => {
   try {
-    const response = await fetch(`/api${path}`, {
+    const response = await fetch(`/api${request.path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(request.body),
     });
-    const passwordForm = path === "/setup" || path === "/login";
-    return await readResponse(response, z.unknown(), passwordForm ? "failed" : "logged-out");
+    return await readResponse({
+      response,
+      schema: request.schema,
+      unauthorised: request.unauthorised ?? "logged-out",
+    });
   } catch {
     return { kind: "offline" };
   }
 };
+
+/** Setup and login: a 401 here means a wrong password, so it carries the worker's message. */
+export const sendPassword = (path: "/setup" | "/login", form: PasswordForm) =>
+  post({ path, body: form, schema: z.unknown(), unauthorised: "failed" });
+
+export const logOut = () => post({ path: "/logout", body: {}, schema: z.unknown() });
+export const logOutOthers = () => post({ path: "/logout-others", body: {}, schema: z.unknown() });
+
+/** The providers and their models, for the model picker. */
+export const loadProviders = () => fromWorker("/providers", ProviderList);
+
+/** Starts a session in a workspace with the owner's first message. */
+export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
+  post({
+    path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
+    body: message,
+    schema: SessionSummary,
+  });
+
+/** Sends the next message in a session. */
+export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
+  post({
+    path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
+    body: message,
+    schema: z.unknown(),
+  });

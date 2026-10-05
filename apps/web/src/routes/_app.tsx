@@ -1,7 +1,7 @@
 import { WorkspaceList } from "@courtyard/contract";
 import { createFileRoute, Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Problem } from "../problems.tsx";
-import { fromWorker, toWorker } from "../worker.ts";
+import { fromWorker, logOut as logOutOnWorker } from "../worker.ts";
 
 /** Every page behind the owner's login: the workspace switcher, then the page. */
 export const Route = createFileRoute("/_app")({
@@ -14,7 +14,7 @@ function LoggedIn() {
   const router = useRouter();
 
   const logOut = async () => {
-    await toWorker("/logout", {});
+    await logOutOnWorker();
     await router.invalidate();
   };
 
