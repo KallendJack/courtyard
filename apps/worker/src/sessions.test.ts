@@ -196,6 +196,22 @@ describe("a session", () => {
     });
   });
 
+  it("records what the model did, such as a file it read, in the event log", async () => {
+    const api = await start();
+
+    const session = await startSession(api.request, "please read the context file");
+    const events = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+
+    const activity = events.find((e) => e.type === "activity");
+    expect(activity).toMatchObject({ activity: { kind: "read-file", path: "CONTEXT.md" } });
+    expect(events.findIndex((e) => e.type === "activity")).toBeLessThan(
+      events.findIndex((e) => e.type === "text-delta"),
+    );
+  });
+
   it("records a failed turn with its reason in plain words", async () => {
     const api = await start();
 

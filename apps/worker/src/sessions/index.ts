@@ -12,8 +12,9 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
-import type { Provider, SessionLine } from "../providers/index.ts";
+import type { Provider, SessionLine, TurnWorkspace } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
+import { getWorkspace } from "../workspaces/index.ts";
 
 export type SessionError =
   | { readonly kind: "not-found" }
@@ -81,6 +82,8 @@ type RunningSession = {
 export const createSessions = (options: {
   dataDir: string;
   providers: readonly Provider[];
+  /** The context folder, where each turn finds its workspace. */
+  contextDir: string;
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
@@ -223,24 +226,50 @@ export const createSessions = (options: {
     return status.available && status.models.some((m) => m.id === ref.model) ? provider : undefined;
   };
 
+  /** What a turn needs from its workspace: its name, its folder, and its context file as written. */
+  const turnWorkspaceOf = async (
+    workspaceId: WorkspaceId,
+  ): Promise<Result<TurnWorkspace, null>> => {
+    const workspace = await getWorkspace(options.contextDir, workspaceId);
+    if (!workspace.ok) return err(null);
+    const { summary, folder, contextMarkdown } = workspace.value;
+    return ok({ name: summary.name, folder, contextFile: contextMarkdown });
+  };
+
   /** Runs one turn to the end, recording everything; nobody waits on it. */
-  const runTurn = async (turn: { id: SessionId; provider: Provider; model: ModelRef["model"] }) => {
+  const runTurn = async (turn: {
+    id: SessionId;
+    workspaceId: WorkspaceId;
+    provider: Provider;
+    model: ModelRef["model"];
+  }) => {
     const session = runningSession(turn.id);
     let failure: FailureReason | undefined;
-    /** Set when an answer's text couldn't be recorded, so the turn can't count as complete. */
-    let textLost = false;
+    /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
+    let recordingLost = false;
     try {
-      const events = await readEvents(turn.id);
+      const [events, workspace] = await Promise.all([
+        readEvents(turn.id),
+        turnWorkspaceOf(turn.workspaceId),
+      ]);
       if (!events.ok) {
         failure = { kind: "unknown", message: "The session's event log can't be read." };
+      } else if (!workspace.ok) {
+        failure = { kind: "unknown", message: "This session's workspace can't be read." };
       } else {
         const result = await turn.provider.runTurn({
           model: turn.model,
           lines: linesOf(events.value),
+          workspace: workspace.value,
           emit: async (text) => {
-            if (textLost) return;
+            if (recordingLost) return;
             const recorded = await append(turn.id, { type: "text-delta", text });
-            if (!recorded.ok) textLost = true;
+            if (!recorded.ok) recordingLost = true;
+          },
+          report: async (activity) => {
+            if (recordingLost) return;
+            const recorded = await append(turn.id, { type: "activity", activity });
+            if (!recorded.ok) recordingLost = true;
           },
         });
         if (!result.ok) failure = result.error;
@@ -251,7 +280,7 @@ export const createSessions = (options: {
       console.error(`Session ${turn.id}: the provider threw`, error);
       failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
     }
-    if (!failure && textLost) {
+    if (!failure && recordingLost) {
       failure = {
         kind: "unknown",
         message: "Part of the answer couldn't be saved, so it stopped.",
@@ -271,6 +300,7 @@ export const createSessions = (options: {
 
   const startTurn = async (start: {
     id: SessionId;
+    workspaceId: WorkspaceId;
     provider: Provider;
     message: NewMessage;
   }): Promise<Result<null, SessionError>> => {
@@ -288,9 +318,12 @@ export const createSessions = (options: {
       return recorded;
     }
     await markUpdated(start.id);
-    runTurn({ id: start.id, provider: start.provider, model: start.message.model.model }).catch(
-      (error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error),
-    );
+    runTurn({
+      id: start.id,
+      workspaceId: start.workspaceId,
+      provider: start.provider,
+      model: start.message.model.model,
+    }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
   };
 
@@ -331,7 +364,7 @@ export const createSessions = (options: {
       }
       const written = await writeJsonFile(sessionFilePath(id), file);
       const started = written.ok
-        ? await startTurn({ id, provider, message: start.message })
+        ? await startTurn({ id, workspaceId: start.workspaceId, provider, message: start.message })
         : err(STORAGE_ERROR);
       if (!started.ok) {
         // Never leave a session behind without its first message.
@@ -348,7 +381,12 @@ export const createSessions = (options: {
       if (!session.ok) return session;
       const provider = await providerFor(message.model);
       if (!provider) return err({ kind: "model-unavailable" });
-      return startTurn({ id: session.value.id, provider, message });
+      return startTurn({
+        id: session.value.id,
+        workspaceId: session.value.workspaceId,
+        provider,
+        message,
+      });
     },
 
     get: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {

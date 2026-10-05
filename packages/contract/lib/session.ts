@@ -84,12 +84,20 @@ export const FailureReason = z.discriminatedUnion("kind", [
 ]);
 export type FailureReason = z.infer<typeof FailureReason>;
 
+/** What a model is doing during a turn, shown to the owner as it happens. */
+export const Activity = z.discriminatedUnion("kind", [
+  /** A file it read, as a path inside the workspace folder. */
+  z.object({ kind: z.literal("read-file"), path: z.string() }),
+]);
+export type Activity = z.infer<typeof Activity>;
+
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
 export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("owner-message"), text: z.string(), model: ModelRef }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
+  z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
 ]);

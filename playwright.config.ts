@@ -29,6 +29,8 @@ export default defineConfig({
       COURTYARD_CONTEXT_DIR: "e2e/fixtures/context",
       COURTYARD_DATA_DIR: "test-results/e2e/data",
       COURTYARD_FAKE_PROVIDER: "1",
+      // The browser tests never start the real Claude Code.
+      COURTYARD_CLAUDE_PROVIDER: "0",
     },
   },
 });

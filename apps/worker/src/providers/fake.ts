@@ -7,7 +7,8 @@ const id = ProviderId.parse("fake");
 /**
  * A scripted provider, so everything runs end to end with no models installed and no usage
  * (story 90). It answers "You said: …" a word at a time, and fails on purpose when a message asks
- * it to ("please fail"), so failures can be seen and tested.
+ * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
+ * context file, so activity can be too.
  */
 export const createFakeProvider = (
   options: {
@@ -29,9 +30,10 @@ export const createFakeProvider = (
       capabilities: { readsFiles: false, codes: false, usesTools: false },
     }),
 
-    runTurn: async ({ lines, emit }) => {
+    runTurn: async ({ lines, emit, report }) => {
       await options.beforeReply?.();
       const last = lines.at(-1)?.text ?? "";
+      if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
       if (/please fail/i.test(last)) {
         return err({
           kind: "unknown",

@@ -33,7 +33,14 @@ type Config =
   | { readonly kind: "read"; readonly name?: string; readonly mode: WorkspaceMode }
   | { readonly kind: "ignored"; readonly problem: string };
 
-type Workspace = { readonly summary: WorkspaceSummary; readonly contextFile: ContextFile | null };
+type Workspace = {
+  readonly summary: WorkspaceSummary;
+  readonly contextFile: ContextFile | null;
+  /** The workspace's folder on the worker machine. */
+  readonly folder: string;
+  /** The context file exactly as written, for models to read. */
+  readonly contextMarkdown: string | null;
+};
 
 /** Why a workspace couldn't be read. */
 export type WorkspaceError =
@@ -98,6 +105,8 @@ const readWorkspace = async (
       ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
     contextFile,
+    folder,
+    contextMarkdown: markdown.value ?? null,
   });
 };
 

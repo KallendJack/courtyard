@@ -7,7 +7,7 @@ import { bodyLimit } from "hono/body-limit";
 import { apiError } from "./http.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
-import { createFakeProvider, type Provider } from "./providers/index.ts";
+import { createClaudeProvider, createFakeProvider, type Provider } from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
@@ -37,11 +37,15 @@ export const createWorker = (options: {
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
-  const { port, contextDir, dataDir, webDir, fakeProvider } = settings.value;
+  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
-  const providers = options.providers ?? (fakeProvider ? [createFakeProvider()] : []);
-  const sessions = createSessions({ dataDir, providers, now });
+  // Claude first, so it's the default model wherever it's available.
+  const providers = options.providers ?? [
+    ...(claudeProvider ? [createClaudeProvider()] : []),
+    ...(fakeProvider ? [createFakeProvider()] : []),
+  ];
+  const sessions = createSessions({ dataDir, providers, contextDir, now });
 
   const api = new Hono();
   api.use(
