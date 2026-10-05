@@ -5,6 +5,7 @@ export {
   Capabilities,
   FailureReason,
   MAX_MESSAGE_LENGTH,
+  ModelId,
   ModelInfo,
   ModelRef,
   NewMessage,

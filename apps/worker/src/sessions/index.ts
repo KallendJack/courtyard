@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type FailureReason,
@@ -12,7 +12,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
-import type { ConversationLine, Provider } from "../providers/index.ts";
+import type { Provider, SessionLine } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 export type SessionError =
@@ -41,23 +41,30 @@ const titleFrom = (text: string) => {
   return firstLine.length > TITLE_LENGTH ? `${firstLine.slice(0, TITLE_LENGTH - 1)}…` : firstLine;
 };
 
-/** The conversation so far, as providers see it: owner messages and the answers between them. */
-const conversationOf = (events: readonly SessionEvent[]): ConversationLine[] => {
-  const lines: ConversationLine[] = [];
+/** What has been said so far, as providers see it: owner messages and the answers between them. */
+const linesOf = (events: readonly SessionEvent[]): SessionLine[] => {
+  const lines: SessionLine[] = [];
   for (const event of events) {
-    if (event.type === "user-message") lines.push({ role: "owner", text: event.text });
+    if (event.type === "owner-message") lines.push({ speaker: "owner", text: event.text });
     if (event.type === "text-delta") {
       const last = lines.at(-1);
-      if (last?.role === "model")
-        lines[lines.length - 1] = { role: "model", text: last.text + event.text };
-      else lines.push({ role: "model", text: event.text });
+      if (last?.speaker === "model") {
+        lines[lines.length - 1] = { speaker: "model", text: last.text + event.text };
+      } else {
+        lines.push({ speaker: "model", text: event.text });
+      }
     }
   }
   return lines;
 };
 
-/** What the worker keeps in memory about a session while it runs. */
-type Live = {
+const STORAGE_ERROR: SessionError = {
+  kind: "storage",
+  message: "A session's files in Courtyard's data folder can't be read or written.",
+};
+
+/** What the worker keeps in memory about a session it has touched since it started. */
+type RunningSession = {
   busy: boolean;
   /** The next event's number, once known. */
   nextSeq: number | undefined;
@@ -77,41 +84,37 @@ export const createSessions = (options: {
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
-  const live = new Map<SessionId, Live>();
-  const storage = (): SessionError => ({
-    kind: "storage",
-    message: "A session's files in Courtyard's data folder can't be read or written.",
-  });
+  const running = new Map<SessionId, RunningSession>();
+  const stamp = () => new Date(options.now()).toISOString();
 
-  const liveOf = (id: SessionId): Live => {
-    const existing = live.get(id);
+  const runningSession = (id: SessionId): RunningSession => {
+    const existing = running.get(id);
     if (existing) return existing;
-    const created: Live = {
+    const created: RunningSession = {
       busy: false,
       nextSeq: undefined,
       listeners: new Set(),
       queue: Promise.resolve(),
     };
-    live.set(id, created);
+    running.set(id, created);
     return created;
   };
 
-  const inOrder = <T>(state: Live, step: () => Promise<T>): Promise<T> => {
-    const run = state.queue.then(step, step);
-    state.queue = run.catch(() => undefined);
+  const inOrder = <T>(session: RunningSession, step: () => Promise<T>): Promise<T> => {
+    const run = session.queue.then(step, step);
+    session.queue = run.catch(() => undefined);
     return run;
   };
 
   const folderOf = (id: SessionId) => join(sessionsDir, id);
-  const readSessionFile = (id: SessionId) =>
-    readJsonFile(join(folderOf(id), "session.json"), SessionFile);
+  const sessionFilePath = (id: SessionId) => join(folderOf(id), "session.json");
 
   const readEvents = async (id: SessionId): Promise<Result<SessionEvent[], SessionError>> => {
     let text: string;
     try {
       text = await readFile(join(folderOf(id), "events.jsonl"), "utf8");
     } catch (error) {
-      return hasCode(error, "ENOENT") ? ok([]) : err(storage());
+      return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
     }
     const events: SessionEvent[] = [];
     for (const line of text.split("\n")) {
@@ -120,10 +123,10 @@ export const createSessions = (options: {
       try {
         json = JSON.parse(line);
       } catch {
-        return err(storage());
+        return err(STORAGE_ERROR);
       }
       const parsed = SessionEvent.safeParse(json);
-      if (!parsed.success) return err(storage());
+      if (!parsed.success) return err(STORAGE_ERROR);
       events.push(parsed.data);
     }
     return ok(events);
@@ -131,36 +134,30 @@ export const createSessions = (options: {
 
   /** Numbers an event, puts it on disk, and only then tells subscribers. */
   const append = (id: SessionId, event: NewEvent) => {
-    const state = liveOf(id);
-    return inOrder(state, async (): Promise<Result<SessionEvent, SessionError>> => {
-      if (state.nextSeq === undefined) {
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<SessionEvent, SessionError>> => {
+      if (session.nextSeq === undefined) {
         const existing = await readEvents(id);
         if (!existing.ok) return existing;
-        state.nextSeq = existing.value.length + 1;
+        session.nextSeq = existing.value.length + 1;
       }
-      const numbered = SessionEvent.parse({
-        ...event,
-        seq: state.nextSeq,
-        at: new Date(options.now()).toISOString(),
-      });
+      const numbered = SessionEvent.safeParse({ ...event, seq: session.nextSeq, at: stamp() });
+      if (!numbered.success) return err(STORAGE_ERROR);
       try {
-        await appendFile(join(folderOf(id), "events.jsonl"), `${JSON.stringify(numbered)}\n`);
+        await appendFile(join(folderOf(id), "events.jsonl"), `${JSON.stringify(numbered.data)}\n`);
       } catch {
-        return err(storage());
+        return err(STORAGE_ERROR);
       }
-      state.nextSeq += 1;
-      for (const listener of state.listeners) listener(numbered);
-      return ok(numbered);
+      session.nextSeq += 1;
+      for (const listener of session.listeners) listener(numbered.data);
+      return ok(numbered.data);
     });
   };
 
-  const touch = async (id: SessionId) => {
-    const file = await readSessionFile(id);
+  const markUpdated = async (id: SessionId) => {
+    const file = await readJsonFile(sessionFilePath(id), SessionFile);
     if (!file.ok || !file.value) return;
-    await writeJsonFile(join(folderOf(id), "session.json"), {
-      ...file.value,
-      updatedAt: new Date(options.now()).toISOString(),
-    });
+    await writeJsonFile(sessionFilePath(id), { ...file.value, updatedAt: stamp() });
   };
 
   const providerFor = async (ref: ModelRef) => {
@@ -171,102 +168,121 @@ export const createSessions = (options: {
   };
 
   /** Runs one turn to the end, recording everything; nobody waits on it. */
-  const runTurn = async (id: SessionId, provider: Provider, model: string) => {
-    const state = liveOf(id);
+  const runTurn = async (turn: { id: SessionId; provider: Provider; model: ModelRef["model"] }) => {
+    const session = runningSession(turn.id);
     let failure: FailureReason | undefined;
+    /** Set when an answer's text couldn't be recorded, so the turn can't count as complete. */
+    let textLost = false;
     try {
-      const events = await readEvents(id);
+      const events = await readEvents(turn.id);
       if (!events.ok) {
-        failure = { kind: "unknown", message: "The session's history can't be read." };
+        failure = { kind: "unknown", message: "The session's event log can't be read." };
       } else {
-        const result = await provider.runTurn({
-          model,
-          conversation: conversationOf(events.value),
+        const result = await turn.provider.runTurn({
+          model: turn.model,
+          lines: linesOf(events.value),
           emit: async (text) => {
-            await append(id, { type: "text-delta", text });
+            if (textLost) return;
+            const recorded = await append(turn.id, { type: "text-delta", text });
+            if (!recorded.ok) textLost = true;
           },
         });
         if (!result.ok) failure = result.error;
       }
     } catch (error) {
-      // A provider throwing is a bug in its adapter; the session still records why it stopped.
+      // A provider throwing is a bug in its adapter: the details go to the worker's log, and the
+      // session records the turn's end in plain words.
+      console.error(`Session ${turn.id}: the provider threw`, error);
+      failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
+    }
+    if (!failure && textLost) {
       failure = {
         kind: "unknown",
-        message: `The model connection broke: ${error instanceof Error ? error.message : String(error)}`,
+        message: "Part of the answer couldn't be saved, so it stopped.",
       };
     }
+
     // The session is idle and up to date before anyone hears the turn ended. Freeing it and
     // queueing the last event happen together, so a new message can't land between them.
-    await touch(id);
-    state.busy = false;
-    await append(
-      id,
+    await markUpdated(turn.id);
+    session.busy = false;
+    const ended = await append(
+      turn.id,
       failure ? { type: "turn-failed", reason: failure } : { type: "turn-completed" },
     );
+    if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
   };
 
-  const startTurn = async (
-    id: SessionId,
-    message: NewMessage,
-  ): Promise<Result<null, SessionError>> => {
-    const provider = await providerFor(message.model);
-    if (!provider) return err({ kind: "model-unavailable" });
-    const state = liveOf(id);
-    if (state.busy) return err({ kind: "busy" });
-    state.busy = true;
+  const startTurn = async (start: {
+    id: SessionId;
+    provider: Provider;
+    message: NewMessage;
+  }): Promise<Result<null, SessionError>> => {
+    const session = runningSession(start.id);
+    if (session.busy) return err({ kind: "busy" });
+    session.busy = true;
 
-    const recorded = await append(id, {
-      type: "user-message",
-      text: message.text,
-      model: message.model,
+    const recorded = await append(start.id, {
+      type: "owner-message",
+      text: start.message.text,
+      model: start.message.model,
     });
     if (!recorded.ok) {
-      state.busy = false;
+      session.busy = false;
       return recorded;
     }
-    await touch(id);
-    void runTurn(id, provider, message.model.model);
+    await markUpdated(start.id);
+    runTurn({ id: start.id, provider: start.provider, model: start.message.model.model }).catch(
+      (error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error),
+    );
     return ok(null);
   };
 
   const summaryOf = (file: SessionFile): SessionSummary => ({
     ...file,
-    busy: live.get(file.id)?.busy ?? false,
+    busy: running.get(file.id)?.busy ?? false,
   });
 
   const findSession = async (rawId: string): Promise<Result<SessionFile, SessionError>> => {
     const id = SessionId.safeParse(rawId);
     if (!id.success) return err({ kind: "not-found" });
-    const file = await readSessionFile(id.data);
-    if (!file.ok) return err(storage());
+    const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
+    if (!file.ok) return err(STORAGE_ERROR);
     return file.value ? ok(file.value) : err({ kind: "not-found" });
   };
 
   return {
     /** Starts a session with the owner's first message, so there are never empty ones. */
-    create: async (
-      workspaceId: WorkspaceId,
-      message: NewMessage,
-    ): Promise<Result<SessionSummary, SessionError>> => {
-      if (!(await providerFor(message.model))) return err({ kind: "model-unavailable" });
+    create: async (start: {
+      workspaceId: WorkspaceId;
+      message: NewMessage;
+    }): Promise<Result<SessionSummary, SessionError>> => {
+      const provider = await providerFor(start.message.model);
+      if (!provider) return err({ kind: "model-unavailable" });
       const id = SessionId.parse(randomUUID());
-      const at = new Date(options.now()).toISOString();
+      const at = stamp();
       const file: SessionFile = {
         id,
-        workspaceId,
-        title: titleFrom(message.text),
+        workspaceId: start.workspaceId,
+        title: titleFrom(start.message.text),
         createdAt: at,
         updatedAt: at,
       };
       try {
         await mkdir(folderOf(id), { recursive: true });
       } catch {
-        return err(storage());
+        return err(STORAGE_ERROR);
       }
-      const written = await writeJsonFile(join(folderOf(id), "session.json"), file);
-      if (!written.ok) return err(storage());
-      const started = await startTurn(id, message);
-      if (!started.ok) return started;
+      const written = await writeJsonFile(sessionFilePath(id), file);
+      const started = written.ok
+        ? await startTurn({ id, provider, message: start.message })
+        : err(STORAGE_ERROR);
+      if (!started.ok) {
+        // Never leave a session behind without its first message.
+        await rm(folderOf(id), { recursive: true, force: true });
+        running.delete(id);
+        return started;
+      }
       return ok(summaryOf(file));
     },
 
@@ -274,7 +290,9 @@ export const createSessions = (options: {
     send: async (rawId: string, message: NewMessage): Promise<Result<null, SessionError>> => {
       const session = await findSession(rawId);
       if (!session.ok) return session;
-      return startTurn(session.value.id, message);
+      const provider = await providerFor(message.model);
+      if (!provider) return err({ kind: "model-unavailable" });
+      return startTurn({ id: session.value.id, provider, message });
     },
 
     get: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
@@ -282,20 +300,20 @@ export const createSessions = (options: {
       return session.ok ? ok(summaryOf(session.value)) : session;
     },
 
-    /** A workspace's sessions, newest first. */
+    /** A workspace's sessions, most recently active first. */
     list: async (workspaceId: WorkspaceId): Promise<Result<SessionSummary[], SessionError>> => {
       let folders: string[];
       try {
         folders = await readdir(sessionsDir);
       } catch (error) {
-        return hasCode(error, "ENOENT") ? ok([]) : err(storage());
+        return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
       }
       const summaries: SessionSummary[] = [];
       for (const folder of folders) {
         const id = SessionId.safeParse(folder);
         if (!id.success) continue;
-        const file = await readSessionFile(id.data);
-        if (!file.ok) return err(storage());
+        const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
+        if (!file.ok) return err(STORAGE_ERROR);
         if (file.value?.workspaceId === workspaceId) summaries.push(summaryOf(file.value));
       }
       return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
@@ -305,21 +323,21 @@ export const createSessions = (options: {
      * Replays a session's events after `after`, then follows it live. Runs in the session's queue,
      * so no event can slip between the replay and the live ones. Returns a way to stop.
      */
-    subscribe: async (
-      rawId: string,
-      after: number,
-      onEvent: (event: SessionEvent) => void,
-    ): Promise<Result<() => void, SessionError>> => {
-      const session = await findSession(rawId);
-      if (!session.ok) return session;
-      const state = liveOf(session.value.id);
-      return inOrder(state, async () => {
-        const events = await readEvents(session.value.id);
+    subscribe: (subscription: {
+      sessionId: SessionId;
+      after: number;
+      onEvent: (event: SessionEvent) => void;
+    }): Promise<Result<() => void, SessionError>> => {
+      const session = runningSession(subscription.sessionId);
+      return inOrder(session, async () => {
+        const events = await readEvents(subscription.sessionId);
         if (!events.ok) return events;
-        for (const event of events.value) if (event.seq > after) onEvent(event);
-        state.listeners.add(onEvent);
+        for (const event of events.value) {
+          if (event.seq > subscription.after) subscription.onEvent(event);
+        }
+        session.listeners.add(subscription.onEvent);
         return ok(() => {
-          state.listeners.delete(onEvent);
+          session.listeners.delete(subscription.onEvent);
         });
       });
     },

@@ -1,14 +1,14 @@
-import type { FailureReason, ProviderId, ProviderStatus } from "@courtyard/contract";
+import type { FailureReason, ModelId, ProviderId, ProviderStatus } from "@courtyard/contract";
 import type { Result } from "../result.ts";
 
-/** One line of a session's conversation so far, as a provider sees it. */
-export type ConversationLine = { readonly role: "owner" | "model"; readonly text: string };
+/** One thing said in the session so far, as a provider sees it. */
+export type SessionLine = { readonly speaker: "owner" | "model"; readonly text: string };
 
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
-  readonly model: string;
+  readonly model: ModelId;
   /** Everything said so far, ending with the owner's new message. */
-  readonly conversation: readonly ConversationLine[];
+  readonly lines: readonly SessionLine[];
   /** Hands over the next piece of the answer as it's written. */
   readonly emit: (text: string) => Promise<void>;
 };
@@ -22,3 +22,5 @@ export type Provider = {
   readonly status: () => Promise<ProviderStatus>;
   readonly runTurn: (input: TurnInput) => Promise<Result<null, FailureReason>>;
 };
+
+export { createFakeProvider } from "./fake.ts";

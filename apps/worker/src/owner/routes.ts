@@ -1,11 +1,7 @@
-import {
-  type ApiError,
-  type AuthState,
-  MIN_PASSWORD_LENGTH,
-  PasswordForm,
-} from "@courtyard/contract";
+import { type AuthState, MIN_PASSWORD_LENGTH, PasswordForm } from "@courtyard/contract";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { apiError } from "../http.ts";
 import { LoginSecret, type Owner, type StorageError } from "./index.ts";
 
 const LOGIN_COOKIE = "courtyard_login";
@@ -14,10 +10,8 @@ const LOGIN_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 /** API paths that work without a login. */
 const PUBLIC_PATHS = new Set(["/api/health", "/api/auth", "/api/setup", "/api/login"]);
 
-type ErrorStatus = 400 | 401 | 403 | 409 | 415 | 429 | 500;
-const apiError = (c: Context, error: string, status: ErrorStatus) =>
-  c.json({ error } satisfies ApiError, status);
-const storageError = (c: Context, error: StorageError) => apiError(c, error.message, 500);
+const storageError = (c: Context, error: StorageError) =>
+  apiError(c, { status: 500, error: error.message });
 
 /** The device's login secret from its cookie, if it sent a well-formed one. */
 const secretFrom = (c: Context) => {
@@ -54,10 +48,10 @@ export const sameSiteJsonOnly: MiddlewareHandler = async (c, next) => {
   if (c.req.method === "GET" || c.req.method === "HEAD") return next();
   const origin = c.req.header("origin");
   if (origin !== undefined && origin !== new URL(c.req.url).origin) {
-    return apiError(c, "Requests must come from Courtyard itself", 403);
+    return apiError(c, { status: 403, error: "Requests must come from Courtyard itself" });
   }
   if (!c.req.header("content-type")?.startsWith("application/json")) {
-    return apiError(c, "Send JSON", 415);
+    return apiError(c, { status: 415, error: "Send JSON" });
   }
   return next();
 };
@@ -69,7 +63,9 @@ export const requireLogin =
     if (PUBLIC_PATHS.has(c.req.path)) return next();
     const state = await owner.state(secretFrom(c));
     if (!state.ok) return storageError(c, state.error);
-    return state.value === "logged-in" ? next() : apiError(c, "Log in first", 401);
+    return state.value === "logged-in"
+      ? next()
+      : apiError(c, { status: 401, error: "Log in first" });
   };
 
 /** Setup, login and logout, mounted under `/api`. */
@@ -87,14 +83,18 @@ export const loginRoutes = (owner: Owner) => {
 
   routes.post("/setup", async (c) => {
     const form = await readPasswordForm(c);
-    if (!form) return apiError(c, "Send a password of up to 1,024 characters", 400);
+    if (!form)
+      return apiError(c, { status: 400, error: "Send a password of up to 1,024 characters" });
     const secret = await owner.setUp(form.password);
     if (!secret.ok) {
       switch (secret.error.kind) {
         case "too-short":
-          return apiError(c, `Use at least ${MIN_PASSWORD_LENGTH} characters`, 400);
+          return apiError(c, {
+            status: 400,
+            error: `Use at least ${MIN_PASSWORD_LENGTH} characters`,
+          });
         case "already-set-up":
-          return apiError(c, "Courtyard is already set up", 409);
+          return apiError(c, { status: 409, error: "Courtyard is already set up" });
         case "storage":
           return storageError(c, secret.error);
       }
@@ -105,17 +105,21 @@ export const loginRoutes = (owner: Owner) => {
 
   routes.post("/login", async (c) => {
     const form = await readPasswordForm(c);
-    if (!form) return apiError(c, "Send a password of up to 1,024 characters", 400);
+    if (!form)
+      return apiError(c, { status: 400, error: "Send a password of up to 1,024 characters" });
     const secret = await owner.logIn(form.password);
     if (!secret.ok) {
       switch (secret.error.kind) {
         case "not-set-up":
-          return apiError(c, "Courtyard isn't set up yet", 409);
+          return apiError(c, { status: 409, error: "Courtyard isn't set up yet" });
         case "wrong-password":
-          return apiError(c, "Wrong password", 401);
+          return apiError(c, { status: 401, error: "Wrong password" });
         case "locked":
           c.header("Retry-After", String(secret.error.retryAfterSeconds));
-          return apiError(c, "Too many wrong passwords. Wait a moment and try again.", 429);
+          return apiError(c, {
+            status: 429,
+            error: "Too many wrong passwords. Wait a moment and try again.",
+          });
         case "storage":
           return storageError(c, secret.error);
       }
@@ -136,7 +140,7 @@ export const loginRoutes = (owner: Owner) => {
 
   routes.post("/logout-others", async (c) => {
     const secret = secretFrom(c);
-    if (!secret) return apiError(c, "Log in first", 401);
+    if (!secret) return apiError(c, { status: 401, error: "Log in first" });
     const done = await owner.logOutOthers(secret);
     if (!done.ok) return storageError(c, done.error);
     return c.body(null, 204);

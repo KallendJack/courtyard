@@ -1,6 +1,5 @@
 import {
   type ContextFile,
-  ProviderList,
   SessionList,
   type SessionSummary,
   WorkspaceDetail,
@@ -8,7 +7,7 @@ import {
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
-import { fromWorker, startSession } from "../../worker.ts";
+import { fromWorker, loadProviders, startSession } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
@@ -16,7 +15,7 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
     const [detail, sessions, providers] = await Promise.all([
       fromWorker(`/workspaces/${id}`, WorkspaceDetail),
       fromWorker(`/workspaces/${id}/sessions`, SessionList),
-      fromWorker("/providers", ProviderList),
+      loadProviders(),
     ]);
     return { detail, sessions, providers };
   },

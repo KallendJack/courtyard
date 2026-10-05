@@ -1,4 +1,4 @@
-import { ProviderId } from "@courtyard/contract";
+import { ModelId, ProviderId } from "@courtyard/contract";
 import { err, ok } from "../result.ts";
 import type { Provider } from "./index.ts";
 
@@ -25,13 +25,13 @@ export const createFakeProvider = (
       id,
       label: "Fake",
       available: true,
-      models: [{ id: "echo", label: "Fake (echoes you)" }],
+      models: [{ id: ModelId.parse("echo"), label: "Fake (echoes you)" }],
       capabilities: { readsFiles: false, codes: false, usesTools: false },
     }),
 
-    runTurn: async ({ conversation, emit }) => {
+    runTurn: async ({ lines, emit }) => {
       await options.beforeReply?.();
-      const last = conversation.at(-1)?.text ?? "";
+      const last = lines.at(-1)?.text ?? "";
       if (/please fail/i.test(last)) {
         return err({
           kind: "unknown",

@@ -1,5 +1,5 @@
 import type { ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, memo, useState } from "react";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
 
@@ -14,8 +14,11 @@ export const availableModels = (providers: ProviderList["providers"]) =>
       : [],
   );
 
-/** A message box with a model picker. `send` returns an error to show, or nothing on success. */
-export function Composer(props: {
+/**
+ * A message box with a model picker. `send` returns an error to show, or nothing on success.
+ * Memoised: it doesn't re-render while an answer streams in above it.
+ */
+export const Composer = memo(function Composer(props: {
   providers: ProviderList["providers"];
   initialModel?: ModelRef;
   disabled?: boolean;
@@ -23,10 +26,13 @@ export function Composer(props: {
   send: (message: NewMessage) => Promise<string | undefined>;
 }) {
   const models = availableModels(props.providers);
-  const startingModel =
-    models.find((m) => props.initialModel && keyOf(m.ref) === keyOf(props.initialModel)) ??
-    models[0];
-  const [modelKey, setModelKey] = useState(startingModel ? keyOf(startingModel.ref) : "");
+  // Until the owner picks one, follow the session's last model (it arrives once the event log
+  // has replayed), else the first available.
+  const [chosenKey, setChosenKey] = useState<string>();
+  const followed = props.initialModel ? keyOf(props.initialModel) : undefined;
+  const firstKey = models[0] ? keyOf(models[0].ref) : "";
+  const followedKey = models.some((m) => keyOf(m.ref) === followed) ? followed : undefined;
+  const modelKey = chosenKey ?? followedKey ?? firstKey;
   const [text, setText] = useState("");
   const [error, setError] = useState<string>();
   const [sending, setSending] = useState(false);
@@ -63,7 +69,7 @@ export function Composer(props: {
         <select
           aria-label="Model"
           value={modelKey}
-          onChange={(event) => setModelKey(event.target.value)}
+          onChange={(event) => setChosenKey(event.target.value)}
           className="min-w-0 flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
         >
           {models.length === 0 && <option value="">No models available</option>}
@@ -88,4 +94,4 @@ export function Composer(props: {
       )}
     </form>
   );
-}
+});

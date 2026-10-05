@@ -129,7 +129,7 @@ describe("a session", () => {
     });
     expect(events[0]).toMatchObject({
       seq: 1,
-      type: "user-message",
+      type: "owner-message",
       text: "Where should the rack go?",
     });
     const text = events.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
@@ -148,7 +148,9 @@ describe("a session", () => {
       onEvent: (event) => {
         // Checked synchronously as each event arrives, before anything else can write.
         const lines = readFileSync(eventsFile, "utf8").trim().split("\n");
-        onDiskWhenSent.push(lines.some((line: string) => JSON.parse(line).seq === event.seq));
+        onDiskWhenSent.push(
+          lines.some((line) => SessionEvent.parse(JSON.parse(line)).seq === event.seq),
+        );
       },
     });
 
@@ -161,11 +163,16 @@ describe("a session", () => {
     await readEvents(api, session.id, { until: "turn-completed" });
 
     const folder = join(root, "data", "sessions", session.id);
-    const meta = JSON.parse(await readFile(join(folder, "session.json"), "utf8"));
+    const meta = SessionSummary.omit({ busy: true }).parse(
+      JSON.parse(await readFile(join(folder, "session.json"), "utf8")),
+    );
     const lines = (await readFile(join(folder, "events.jsonl"), "utf8")).trim().split("\n");
 
     expect(meta).toMatchObject({ id: session.id, workspaceId: "garage-gym" });
-    expect(JSON.parse(lines[0] ?? "")).toMatchObject({ seq: 1, type: "user-message" });
+    expect(SessionEvent.parse(JSON.parse(lines[0] ?? ""))).toMatchObject({
+      seq: 1,
+      type: "owner-message",
+    });
   });
 
   it("continues with later messages, numbering events without gaps", async () => {
@@ -185,13 +192,13 @@ describe("a session", () => {
 
     expect(second[0]).toMatchObject({
       seq: first.length + 1,
-      type: "user-message",
+      type: "owner-message",
       text: "Second",
     });
     expect(second.map((e) => e.seq)).toEqual(second.map((_, i) => first.length + i + 1));
   });
 
-  it("replays the whole history to anyone who opens it later", async () => {
+  it("replays the whole event log to anyone who opens it later", async () => {
     const api = await start();
     const session = await startSession(api, "First");
     const live = await readEvents(api, session.id, { until: "turn-completed" });
@@ -259,6 +266,23 @@ describe("a session", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("an event stream that can't start", () => {
+  it("says why, instead of an empty stream the browser would retry forever", async () => {
+    const api = await start();
+    const session = await startSession(api, "Hello");
+    await readEvents(api, session.id, { until: "turn-completed" });
+    const eventsFile = join(root, "data", "sessions", session.id, "events.jsonl");
+    await rm(eventsFile);
+    await mkdir(eventsFile);
+
+    const response = await api.request(`/api/sessions/${session.id}/events`);
+    const text = await response.text();
+
+    expect(text).toContain("event: problem");
+    expect(text).toContain("can't be read");
   });
 });
 

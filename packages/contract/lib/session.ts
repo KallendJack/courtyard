@@ -7,11 +7,15 @@ export const ProviderId = z
   .brand<"ProviderId">();
 export type ProviderId = z.infer<typeof ProviderId>;
 
+/** A model's id within its provider, such as 'echo'. */
+export const ModelId = z.string().min(1).brand<"ModelId">();
+export type ModelId = z.infer<typeof ModelId>;
+
 /** One model of one provider: what a message asks to answer it. */
-export const ModelRef = z.object({ provider: ProviderId, model: z.string().min(1) });
+export const ModelRef = z.object({ provider: ProviderId, model: ModelId });
 export type ModelRef = z.infer<typeof ModelRef>;
 
-export const ModelInfo = z.object({ id: z.string(), label: z.string() });
+export const ModelInfo = z.object({ id: ModelId, label: z.string() });
 export type ModelInfo = z.infer<typeof ModelInfo>;
 
 /** What a provider can do. These drive the rules, not provider names. */
@@ -82,7 +86,7 @@ const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
 export const SessionEvent = z.discriminatedUnion("type", [
-  z.object({ ...eventBase, type: z.literal("user-message"), text: z.string(), model: ModelRef }),
+  z.object({ ...eventBase, type: z.literal("owner-message"), text: z.string(), model: ModelRef }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),

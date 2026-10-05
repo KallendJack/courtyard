@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ApiError, Health, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
+import type { Health, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { apiError } from "./http.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { createFakeProvider, type Provider } from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
@@ -23,9 +23,6 @@ export type Worker = {
 
 /** The largest request body the API reads; nothing it accepts comes close. */
 const MAX_BODY_BYTES = 16 * 1024;
-
-const apiError = (c: Context, error: string, status: 404 | 413 | 500) =>
-  c.json({ error } satisfies ApiError, status);
 
 /**
  * Builds the worker from its settings, or returns a message naming what's wrong with them.
@@ -49,7 +46,10 @@ export const createWorker = (options: {
   const api = new Hono();
   api.use(
     "*",
-    bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => apiError(c, "Request too large", 413) }),
+    bodyLimit({
+      maxSize: MAX_BODY_BYTES,
+      onError: (c) => apiError(c, { status: 413, error: "Request too large" }),
+    }),
   );
   api.use("*", sameSiteJsonOnly);
   api.use("*", requireLogin(owner));
@@ -60,8 +60,8 @@ export const createWorker = (options: {
 
   const workspaceError = (c: Context, error: WorkspaceError) =>
     error.kind === "not-found"
-      ? apiError(c, "No such workspace", 404)
-      : apiError(c, error.message, 500);
+      ? apiError(c, { status: 404, error: "No such workspace" })
+      : apiError(c, { status: 500, error: error.message });
 
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);
@@ -76,7 +76,7 @@ export const createWorker = (options: {
       contextFile: workspace.value.contextFile,
     } satisfies WorkspaceDetail);
   });
-  api.all("*", (c) => apiError(c, "Not found", 404));
+  api.all("*", (c) => apiError(c, { status: 404, error: "Not found" }));
 
   const app = new Hono();
   app.route("/api", api);
