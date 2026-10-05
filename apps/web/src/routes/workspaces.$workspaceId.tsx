@@ -1,5 +1,6 @@
 import { type ContextFile, WorkspaceDetail } from "@courtyard/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Problem } from "../problems.tsx";
 import { fromWorker } from "../worker.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({
@@ -21,8 +22,8 @@ function Workspace() {
       </main>
     );
   }
-  if (detail.kind === "offline") return null;
-  const { workspace, context } = detail.data;
+  if (detail.kind !== "loaded") return <Problem result={detail} />;
+  const { workspace, contextFile } = detail.data;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -32,30 +33,30 @@ function Workspace() {
           Treated as a planning workspace. {workspace.configProblem}
         </p>
       )}
-      {context === null ? (
+      {contextFile === null ? (
         <p className="mt-4 text-neutral-600">
           No context file yet. Add a <code>CONTEXT.md</code> to this workspace's folder so every
           model starts out knowing its facts, plans and ideas.
         </p>
       ) : (
-        <Context context={context} />
+        <ContextFileSections contextFile={contextFile} />
       )}
     </main>
   );
 }
 
-function Context({ context }: { context: ContextFile }) {
+function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
   return (
     <div className="mt-4 space-y-6">
-      {context.intro !== "" && (
-        <p className="whitespace-pre-wrap text-neutral-700">{context.intro}</p>
+      {contextFile.intro !== "" && (
+        <p className="whitespace-pre-wrap text-neutral-700">{contextFile.intro}</p>
       )}
-      <Section title="Facts" hint="True now" lines={context.facts} />
-      <Section title="Plans" hint="Decided, not done" lines={context.plans} />
-      <Section title="Ideas" hint="Being considered" lines={context.ideas} />
-      {context.other !== "" && (
+      <Section title="Facts" hint="True now" lines={contextFile.facts} />
+      <Section title="Plans" hint="Decided, not done" lines={contextFile.plans} />
+      <Section title="Ideas" hint="Being considered" lines={contextFile.ideas} />
+      {contextFile.other !== "" && (
         <pre className="whitespace-pre-wrap font-sans text-sm text-neutral-600">
-          {context.other}
+          {contextFile.other}
         </pre>
       )}
     </div>

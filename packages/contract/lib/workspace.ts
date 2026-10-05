@@ -39,6 +39,6 @@ export type ContextFile = z.infer<typeof ContextFile>;
 export const WorkspaceDetail = z.object({
   workspace: WorkspaceSummary,
   /** Absent when the workspace has no context file yet. */
-  context: ContextFile.nullable(),
+  contextFile: ContextFile.nullable(),
 });
 export type WorkspaceDetail = z.infer<typeof WorkspaceDetail>;

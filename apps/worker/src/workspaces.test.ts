@@ -144,10 +144,10 @@ describe("opening a workspace", () => {
       ].join("\n"),
     });
 
-    const { workspace: summary, context } = await openWorkspace("garage-gym");
+    const { workspace: summary, contextFile } = await openWorkspace("garage-gym");
 
     expect(summary).toMatchObject({ id: "garage-gym", name: "Garage gym", hasContextFile: true });
-    expect(context).toEqual({
+    expect(contextFile).toEqual({
       title: "Garage gym",
       intro: "Single garage, shared with the bikes.",
       facts: ["The garage isn't cleared out yet.", "Budget is £1,200."],
@@ -160,46 +160,88 @@ describe("opening a workspace", () => {
   it("treats missing sections as empty", async () => {
     await workspace("office", { "CONTEXT.md": "## Ideas\n\n- A standing desk.\n" });
 
-    const { context } = await openWorkspace("office");
+    const { contextFile } = await openWorkspace("office");
 
-    expect(context).toMatchObject({ facts: [], plans: [], ideas: ["A standing desk."] });
-    expect(context?.title).toBeUndefined();
+    expect(contextFile).toMatchObject({ facts: [], plans: [], ideas: ["A standing desk."] });
+    expect(contextFile?.title).toBeUndefined();
   });
 
   it("joins an item's wrapped lines, keeps plain lines, and keeps other sections as written", async () => {
-    await workspace("homelab", {
+    await workspace("allotment", {
       "CONTEXT.md": [
         "## Facts",
-        "- The NAS has two 10 TB drives",
-        "  in RAID 1.",
-        "Backups run nightly.",
+        "- The plot is ten metres long",
+        "  and faces south.",
+        "The shed has one window.",
         "",
         "## Links",
         "",
-        "See the stacks repo.",
+        "See the seed catalogue.",
         "",
         "## plans (decided, not done)",
-        "1. Add a UPS.",
+        "1. Build two raised beds.",
       ].join("\r\n"),
     });
 
-    const { context } = await openWorkspace("homelab");
+    const { contextFile } = await openWorkspace("allotment");
 
-    expect(context?.facts).toEqual([
-      "The NAS has two 10 TB drives in RAID 1.",
-      "Backups run nightly.",
+    expect(contextFile?.facts).toEqual([
+      "The plot is ten metres long and faces south.",
+      "The shed has one window.",
     ]);
-    expect(context?.plans).toEqual(["Add a UPS."]);
-    expect(context?.other).toBe("## Links\n\nSee the stacks repo.");
+    expect(contextFile?.plans).toEqual(["Build two raised beds."]);
+    expect(contextFile?.other).toBe("## Links\n\nSee the seed catalogue.");
+  });
+
+  it("recognises sections at any heading level, and skips subheadings inside them", async () => {
+    await workspace("office", {
+      "CONTEXT.md": [
+        "# Office",
+        "# Facts",
+        "### Desk",
+        "- The desk is 140 cm wide.",
+        "### Plans",
+        "- Move the desk under the window.",
+      ].join("\n"),
+    });
+
+    const { contextFile } = await openWorkspace("office");
+
+    expect(contextFile).toMatchObject({
+      title: "Office",
+      facts: ["The desk is 140 cm wide."],
+      plans: ["Move the desk under the window."],
+    });
   });
 
   it("says when a workspace has no context file yet", async () => {
     await workspace("office");
 
-    const { workspace: summary, context } = await openWorkspace("office");
+    const { workspace: summary, contextFile } = await openWorkspace("office");
 
     expect(summary.hasContextFile).toBe(false);
-    expect(context).toBeNull();
+    expect(contextFile).toBeNull();
+  });
+
+  it("reports a context file that can't be read, rather than calling it missing", async () => {
+    await workspace("office");
+    await mkdir(join(contextDir, "office", "CONTEXT.md"));
+
+    for (const path of ["/api/workspaces", "/api/workspaces/office"]) {
+      const response = await request(path);
+      expect(response.status).toBe(500);
+      expect(ApiError.parse(await response.json()).error).toContain("office");
+    }
+  });
+
+  it("ignores a workspace config that can't be read, and says why", async () => {
+    await workspace("office");
+    await mkdir(join(contextDir, "office", "workspace.json"));
+
+    const { workspace: summary } = await openWorkspace("office");
+
+    expect(summary.mode).toBe("planning");
+    expect(summary.configProblem).toContain("workspace.json");
   });
 
   it("answers 404 for a workspace that doesn't exist or isn't a valid id", async () => {

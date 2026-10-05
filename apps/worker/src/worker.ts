@@ -2,10 +2,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ApiError, Health, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { ok, type Result } from "./result.ts";
 import { type Environment, readSettings } from "./settings.ts";
-import { getWorkspace, listWorkspaces } from "./workspaces/index.ts";
+import { getWorkspace, listWorkspaces, type WorkspaceError } from "./workspaces/index.ts";
 
 export type { Environment };
 
@@ -25,17 +25,22 @@ export const createWorker = (options: { env: Environment }): Result<Worker, stri
 
   const api = new Hono();
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
+  const workspaceError = (c: Context, error: WorkspaceError) =>
+    error.kind === "not-found"
+      ? c.json({ error: "No such workspace" } satisfies ApiError, 404)
+      : c.json({ error: error.message } satisfies ApiError, 500);
+
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);
-    if (!workspaces.ok) return c.json({ error: workspaces.error } satisfies ApiError, 500);
+    if (!workspaces.ok) return workspaceError(c, workspaces.error);
     return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
   });
   api.get("/workspaces/:id", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace) return c.json({ error: "No such workspace" } satisfies ApiError, 404);
+    if (!workspace.ok) return workspaceError(c, workspace.error);
     return c.json({
-      workspace: workspace.summary,
-      context: workspace.context,
+      workspace: workspace.value.summary,
+      contextFile: workspace.value.contextFile,
     } satisfies WorkspaceDetail);
   });
   api.all("*", (c) => c.json({ error: "Not found" } satisfies ApiError, 404));

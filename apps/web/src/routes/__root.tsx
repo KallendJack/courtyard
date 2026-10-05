@@ -1,5 +1,6 @@
 import { WorkspaceList } from "@courtyard/contract";
 import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { Problem } from "../problems.tsx";
 import { fromWorker } from "../worker.ts";
 
 export const Route = createRootRoute({
@@ -34,18 +35,7 @@ function Root() {
           )}
         </div>
       </header>
-      {workspaces.kind === "offline" ? <WorkerOffline /> : <Outlet />}
+      {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
     </div>
-  );
-}
-
-function WorkerOffline() {
-  return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-xl font-semibold">Worker offline</h1>
-      <p className="mt-2 text-neutral-600">
-        Courtyard can't reach its worker. Check that the machine it runs on is switched on.
-      </p>
-    </main>
   );
 }

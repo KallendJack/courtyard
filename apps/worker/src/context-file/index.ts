@@ -1,0 +1,90 @@
+import type { ContextFile } from "@courtyard/contract";
+
+type ListSection = "facts" | "plans" | "ideas";
+type Section = ListSection | "other";
+
+const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
+const CONTINUATION = /^\s+\S/;
+
+const listSectionNamed = (heading: string): ListSection | undefined => {
+  const word = /^(facts|plans|ideas)\b/i.exec(heading)?.[1]?.toLowerCase();
+  return word === "facts" || word === "plans" || word === "ideas" ? word : undefined;
+};
+
+/**
+ * Reads a context file's Markdown into its sections (ADR 0005). A heading at any level that starts
+ * with Facts, Plans or Ideas begins that section. Each list item there is one line; a plain line
+ * counts as one too, and an indented line carries on the item above it. Text above the first
+ * section is the intro, a first-level heading at the top is the title, and any other section is
+ * kept as written. Nothing in a context file is an error: missing sections are just empty.
+ */
+export const parseContextFile = (markdown: string): ContextFile => {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const entries: Record<ListSection, string[]> = { facts: [], plans: [], ideas: [] };
+  const intro: string[] = [];
+  const other: string[] = [];
+  let title: string | undefined;
+  let section: Section | undefined;
+  let continuing = false;
+
+  for (const line of lines) {
+    const heading = HEADING.exec(line);
+    const level = heading?.[1]?.length ?? 0;
+    const text = heading?.[2];
+
+    if (text !== undefined) {
+      const named = listSectionNamed(text);
+      if (named) {
+        section = named;
+        continuing = false;
+        continue;
+      }
+      if (section === undefined && level === 1 && title === undefined && intro.join("") === "") {
+        title = text;
+        continue;
+      }
+      // A subheading inside Facts, Plans or Ideas only groups lines; it isn't a line itself.
+      if (section !== undefined && section !== "other" && level >= 3) {
+        continuing = false;
+        continue;
+      }
+      if (section !== undefined) {
+        section = "other";
+        other.push(line);
+        continue;
+      }
+    }
+
+    if (section === undefined) {
+      intro.push(line);
+      continue;
+    }
+
+    if (section === "other") {
+      other.push(line);
+      continue;
+    }
+
+    const list = entries[section];
+    const item = LIST_ITEM.exec(line);
+    if (item?.[1] !== undefined) {
+      list.push(item[1].trim());
+      continuing = true;
+    } else if (line.trim() === "") {
+      continuing = false;
+    } else if (continuing && CONTINUATION.test(line) && list.length > 0) {
+      list[list.length - 1] = `${list[list.length - 1]} ${line.trim()}`;
+    } else {
+      list.push(line.trim());
+      continuing = true;
+    }
+  }
+
+  return {
+    ...(title === undefined ? {} : { title }),
+    intro: intro.join("\n").trim(),
+    ...entries,
+    other: other.join("\n").trim(),
+  };
+};

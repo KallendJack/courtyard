@@ -4,11 +4,11 @@ import { join } from "node:path";
 import {
   type ContextFile,
   WorkspaceId,
-  type WorkspaceMode,
+  WorkspaceMode,
   type WorkspaceSummary,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { parseContextFile } from "../context/index.ts";
+import { parseContextFile } from "../context-file/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
@@ -18,72 +18,89 @@ const CONFIG_FILE = "workspace.json";
 const WorkspaceConfig = z
   .object({
     name: z.string().trim().min(1).optional(),
-    mode: z.enum(["planning", "code"]).default("planning"),
+    mode: WorkspaceMode.default("planning"),
     /** The git repository a code workspace works on, on the worker machine. */
     repoPath: z.string().min(1).optional(),
-    /** Commands that run without an approval in a code workspace (ADR 0007). */
-    allowedCommands: z.array(z.string().min(1)).default([]),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
     message: "is required for a code workspace",
     path: ["repoPath"],
   });
 
-type Config = { name?: string; mode: WorkspaceMode; problem?: string };
+type Config =
+  | { readonly kind: "absent" }
+  | { readonly kind: "read"; readonly name?: string; readonly mode: WorkspaceMode }
+  | { readonly kind: "ignored"; readonly problem: string };
 
-const readOptional = async (path: string): Promise<string | undefined> => {
+type Workspace = { readonly summary: WorkspaceSummary; readonly contextFile: ContextFile | null };
+
+/** Why a workspace couldn't be read. */
+export type WorkspaceError =
+  | { readonly kind: "not-found" }
+  | { readonly kind: "unreadable"; readonly message: string };
+
+const isMissing = (error: unknown) =>
+  error instanceof Error && "code" in error && error.code === "ENOENT";
+
+/** A file's text, `undefined` when it doesn't exist, or an error when it exists but can't be read. */
+const readIfPresent = async (path: string): Promise<Result<string | undefined, unknown>> => {
   try {
-    return await readFile(path, "utf8");
-  } catch {
-    return undefined;
+    return ok(await readFile(path, "utf8"));
+  } catch (error) {
+    return isMissing(error) ? ok(undefined) : err(error);
   }
 };
 
 const readConfig = async (folder: string): Promise<Config> => {
-  const text = await readOptional(join(folder, CONFIG_FILE));
-  if (text === undefined) return { mode: "planning" };
+  const text = await readIfPresent(join(folder, CONFIG_FILE));
+  if (!text.ok)
+    return { kind: "ignored", problem: `${CONFIG_FILE} can't be read, so it was ignored.` };
+  if (text.value === undefined) return { kind: "absent" };
 
   let json: unknown;
   try {
-    json = JSON.parse(text);
+    json = JSON.parse(text.value);
   } catch {
-    return { mode: "planning", problem: `${CONFIG_FILE} isn't valid JSON, so it was ignored.` };
+    return { kind: "ignored", problem: `${CONFIG_FILE} isn't valid JSON, so it was ignored.` };
   }
 
   const parsed = WorkspaceConfig.safeParse(json);
   if (!parsed.success) {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
-    return {
-      mode: "planning",
-      problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.`,
-    };
+    return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  return {
-    mode: parsed.data.mode,
-    ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
-  };
+  const { name, mode } = parsed.data;
+  return { kind: "read", mode, ...(name === undefined ? {} : { name }) };
 };
 
-type Workspace = { summary: WorkspaceSummary; context: ContextFile | null };
-
-const readWorkspace = async (contextDir: string, id: WorkspaceId): Promise<Workspace> => {
+const readWorkspace = async (
+  contextDir: string,
+  id: WorkspaceId,
+): Promise<Result<Workspace, WorkspaceError>> => {
   const folder = join(contextDir, id);
   const [config, markdown] = await Promise.all([
     readConfig(folder),
-    readOptional(join(folder, CONTEXT_FILE)),
+    readIfPresent(join(folder, CONTEXT_FILE)),
   ]);
-  const context = markdown === undefined ? null : parseContextFile(markdown);
+  if (!markdown.ok) {
+    return err({
+      kind: "unreadable",
+      message: `The ${id} workspace's ${CONTEXT_FILE} can't be read.`,
+    });
+  }
+  const contextFile = markdown.value === undefined ? null : parseContextFile(markdown.value);
+  const configName = config.kind === "read" ? config.name : undefined;
 
-  return {
+  return ok({
     summary: {
       id,
-      name: config.name ?? context?.title ?? id,
-      mode: config.mode,
-      hasContextFile: context !== null,
-      ...(config.problem === undefined ? {} : { configProblem: config.problem }),
+      name: configName ?? contextFile?.title ?? id,
+      mode: config.kind === "read" ? config.mode : "planning",
+      hasContextFile: contextFile !== null,
+      ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
-    context,
-  };
+    contextFile,
+  });
 };
 
 const byName = (a: WorkspaceSummary, b: WorkspaceSummary) =>
@@ -95,30 +112,41 @@ const byName = (a: WorkspaceSummary, b: WorkspaceSummary) =>
  */
 export const listWorkspaces = async (
   contextDir: string,
-): Promise<Result<WorkspaceSummary[], string>> => {
+): Promise<Result<WorkspaceSummary[], WorkspaceError>> => {
   let entries: Dirent[];
   try {
     entries = await readdir(contextDir, { withFileTypes: true });
   } catch {
-    return err("The context folder can't be read.");
+    return err({ kind: "unreadable", message: "The context folder can't be read." });
   }
 
   const ids = entries.flatMap((entry) => {
     const id = WorkspaceId.safeParse(entry.name);
     return entry.isDirectory() && id.success ? [id.data] : [];
   });
-  const workspaces = await Promise.all(ids.map((id) => readWorkspace(contextDir, id)));
-  return ok(workspaces.map((w) => w.summary).sort(byName));
+  const summaries: WorkspaceSummary[] = [];
+  for (const workspace of await Promise.all(ids.map((id) => readWorkspace(contextDir, id)))) {
+    if (!workspace.ok) return workspace;
+    summaries.push(workspace.value.summary);
+  }
+  return ok(summaries.sort(byName));
 };
 
-/** One workspace with its context file, or `undefined` when there's no such workspace. */
+/** One workspace with its context file. */
 export const getWorkspace = async (
   contextDir: string,
   id: string,
-): Promise<Workspace | undefined> => {
+): Promise<Result<Workspace, WorkspaceError>> => {
   const parsed = WorkspaceId.safeParse(id);
-  if (!parsed.success) return undefined;
-  const folder = await stat(join(contextDir, parsed.data)).catch(() => undefined);
-  if (!folder?.isDirectory()) return undefined;
+  if (!parsed.success) return err({ kind: "not-found" });
+
+  let folder: Awaited<ReturnType<typeof stat>> | undefined;
+  try {
+    folder = await stat(join(contextDir, parsed.data));
+  } catch (error) {
+    if (!isMissing(error))
+      return err({ kind: "unreadable", message: "The context folder can't be read." });
+  }
+  if (!folder?.isDirectory()) return err({ kind: "not-found" });
   return readWorkspace(contextDir, parsed.data);
 };
