@@ -36,12 +36,15 @@ export const TurnView = memo(function TurnView(props: {
   const { turn, onRetry } = props;
 
   return (
-    <li className="space-y-3">
-      <p className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-4 py-2 text-white">
+    <div className="space-y-3">
+      <p className="ml-auto max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-neutral-900 px-4 py-2 text-white">
         {turn.text}
       </p>
       {turn.activities.length > 0 && (
-        <ul aria-label="What the model did" className="space-y-0.5 text-xs text-neutral-500">
+        <ul
+          aria-label="What the model did"
+          className="space-y-0.5 wrap-anywhere text-xs text-neutral-500"
+        >
           {turn.activities.map((activity, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
             <li key={index}>{describeActivity(activity)}</li>
@@ -49,7 +52,10 @@ export const TurnView = memo(function TurnView(props: {
         </ul>
       )}
       {(turn.answer !== "" || turn.state.kind === "running") && (
-        <p className="max-w-[85%] whitespace-pre-wrap text-neutral-900" aria-live="polite">
+        <p
+          className="max-w-[85%] whitespace-pre-wrap wrap-anywhere text-neutral-900"
+          aria-live="polite"
+        >
           {turn.answer}
           {turn.state.kind === "running" && <span className="animate-pulse"> ▍</span>}
         </p>
@@ -74,6 +80,6 @@ export const TurnView = memo(function TurnView(props: {
           )}
         </div>
       )}
-    </li>
+    </div>
   );
 });

@@ -4,7 +4,8 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": ["node"],
+    "lib": ["es2024", "dom", "dom.iterable"]
   },
   "include": [".", "../playwright.config.ts"]
 }
