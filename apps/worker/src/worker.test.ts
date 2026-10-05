@@ -1,22 +1,35 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Health } from "@courtyard/contract";
+import { ApiError, Health } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createWorker } from "./worker.ts";
+import { createWorker, type Environment } from "./worker.ts";
 
-const settings = {
-  COURTYARD_CONTEXT_DIR: "/path/to/context",
-  COURTYARD_DATA_DIR: "/path/to/data",
-};
+let root: string;
+let settings: Environment;
 
-const startWorker = (env: Record<string, string | undefined> = settings) => {
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "courtyard-"));
+  await mkdir(join(root, "context"));
+  await mkdir(join(root, "data"));
+  settings = {
+    COURTYARD_CONTEXT_DIR: join(root, "context"),
+    COURTYARD_DATA_DIR: join(root, "data"),
+  };
+});
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+const startWorker = (env: Environment = settings) => {
   const result = createWorker({ env });
   if (!result.ok) throw new Error(`expected the worker to start: ${result.error}`);
   return result.value;
 };
 
-const startupError = (env: Record<string, string | undefined>) => {
+const startupError = (env: Environment) => {
   const result = createWorker({ env });
   if (result.ok) throw new Error("expected the worker to refuse these settings");
   return result.error;
@@ -41,6 +54,34 @@ describe("settings", () => {
     expect(startWorker().port).toBe(8787);
     expect(startWorker({ ...settings, COURTYARD_PORT: "9100" }).port).toBe(9100);
   });
+
+  it("refuses a context folder that doesn't exist", () => {
+    const error = startupError({ ...settings, COURTYARD_CONTEXT_DIR: join(root, "missing") });
+
+    expect(error).toContain("COURTYARD_CONTEXT_DIR");
+  });
+
+  it("refuses a context folder that is a file", async () => {
+    await writeFile(join(root, "a-file"), "");
+
+    const error = startupError({ ...settings, COURTYARD_CONTEXT_DIR: join(root, "a-file") });
+
+    expect(error).toContain("COURTYARD_CONTEXT_DIR");
+  });
+
+  it("creates its data folder when it doesn't exist yet", () => {
+    const dataDir = join(root, "new-data");
+
+    startWorker({ ...settings, COURTYARD_DATA_DIR: dataDir });
+
+    expect(existsSync(dataDir)).toBe(true);
+  });
+
+  it("refuses a web app folder that was set but doesn't exist", () => {
+    const error = startupError({ ...settings, COURTYARD_WEB_DIR: join(root, "no-build") });
+
+    expect(error).toContain("COURTYARD_WEB_DIR");
+  });
 });
 
 describe("health check", () => {
@@ -55,20 +96,14 @@ describe("health check", () => {
 });
 
 describe("the web app", () => {
-  let root: string;
   let webDir: string;
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "courtyard-"));
     webDir = join(root, "web");
     await mkdir(join(webDir, "assets"), { recursive: true });
     await writeFile(join(webDir, "index.html"), "<h1>Courtyard page</h1>");
     await writeFile(join(webDir, "assets", "app.js"), "console.log('app')");
     await writeFile(join(root, "secret.txt"), "outside the web folder");
-  });
-
-  afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
   });
 
   const startWithWebApp = () => startWorker({ ...settings, COURTYARD_WEB_DIR: webDir });
@@ -99,7 +134,7 @@ describe("the web app", () => {
     const response = await startWithWebApp().app.request("/api/nothing-here");
 
     expect(response.status).toBe(404);
-    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(ApiError.parse(await response.json())).toEqual({ error: "Not found" });
   });
 
   it("never serves a file from outside the web folder", async () => {

@@ -228,8 +228,10 @@ personal, so anyone can run their own.
   the built files at first, and later the owner's reverse proxy serves them and forwards `/api`. In development, Vite
   proxies `/api`. No cross-origin requests and no shared secret.
 - **The worker's settings** are environment variables plus one Zod-validated settings file for structured entries
-  (tool connections, notification keys path), both outside the repo. The context folder path, the data folder path and
-  the port are required; every provider is optional.
+  (tool connections, notification keys path), both outside the repo. The context folder path and the data folder path
+  are required (the context folder must exist; the worker creates the data folder); the port
+  defaults to 8787; an optional web app folder overrides where the built web app is served from;
+  every provider is optional.
 
 ### Worker modules
 

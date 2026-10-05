@@ -14,10 +14,11 @@ export default defineConfig({
   webServer: {
     command: "node apps/worker/src/main.ts",
     url: `http://localhost:${port}/api/health`,
-    reuseExistingServer: !process.env.CI,
+    // Always a fresh worker, so the tests never run against a stale one left on the port.
+    reuseExistingServer: false,
     env: {
       COURTYARD_PORT: String(port),
-      COURTYARD_CONTEXT_DIR: "test-results/e2e/context",
+      COURTYARD_CONTEXT_DIR: "e2e/fixtures/context",
       COURTYARD_DATA_DIR: "test-results/e2e/data",
     },
   },

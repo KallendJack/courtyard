@@ -6,6 +6,7 @@ import "./styles.css";
 
 const router = createRouter({ routeTree });
 
+// An `interface`, not a `type`: TanStack Router registers the router through declaration merging.
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
