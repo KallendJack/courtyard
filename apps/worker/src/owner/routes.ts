@@ -19,13 +19,27 @@ const secretFrom = (c: Context) => {
   return parsed.success ? parsed.data : undefined;
 };
 
+/**
+ * Whether the browser reached this worker over HTTPS. Behind an HTTPS reverse proxy the worker
+ * itself is reached over plain HTTP, and the proxy says what the browser used in
+ * X-Forwarded-Proto. Another site can't set that header on a browser request without the worker
+ * agreeing first, which it never does.
+ */
+const browserUsedHttps = (c: Context) =>
+  new URL(c.req.url).protocol === "https:" || c.req.header("x-forwarded-proto") === "https";
+
+/** The address the browser used to reach this worker. */
+const ownOrigin = (c: Context) => {
+  const url = new URL(c.req.url);
+  if (browserUsedHttps(c)) url.protocol = "https:";
+  return url.origin;
+};
+
 const setLoginCookie = (c: Context, secret: LoginSecret) => {
-  const https =
-    new URL(c.req.url).protocol === "https:" || c.req.header("x-forwarded-proto") === "https";
   setCookie(c, LOGIN_COOKIE, secret, {
     httpOnly: true,
     sameSite: "Strict",
-    secure: https,
+    secure: browserUsedHttps(c),
     path: "/",
     maxAge: LOGIN_MAX_AGE_SECONDS,
   });
@@ -47,7 +61,7 @@ const readPasswordForm = async (c: Context) => {
 export const sameSiteJsonOnly: MiddlewareHandler = async (c, next) => {
   if (c.req.method === "GET" || c.req.method === "HEAD") return next();
   const origin = c.req.header("origin");
-  if (origin !== undefined && origin !== new URL(c.req.url).origin) {
+  if (origin !== undefined && origin !== ownOrigin(c)) {
     return apiError(c, { status: 403, error: "Requests must come from Courtyard itself" });
   }
   if (!c.req.header("content-type")?.startsWith("application/json")) {

@@ -214,6 +214,23 @@ describe("review fixes", () => {
     expect(await authState()).toBe("setup-needed");
   });
 
+  it("accepts a setup through an HTTPS reverse proxy, and still refuses other sites", async () => {
+    // The proxy answers HTTPS and forwards plain HTTP, saying so in X-Forwarded-Proto.
+    const through = (origin: string) =>
+      startWorker().request("http://courtyard.example/api/setup", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-proto": "https", origin },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+
+    expect((await through("https://elsewhere.example")).status).toBe(403);
+    expect((await through("http://courtyard.example")).status).toBe(403);
+    const fromItself = await through("https://courtyard.example");
+
+    expect(fromItself.status).toBe(201);
+    expect(fromItself.headers.get("set-cookie")).toMatch(/; Secure/);
+  });
+
   it("refuses a password longer than 1,024 characters", async () => {
     expect((await post("/api/setup", { password: "x".repeat(1025) })).status).toBe(400);
   });
