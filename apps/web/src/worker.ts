@@ -1,4 +1,11 @@
-import { ApiError, type PasswordForm } from "@courtyard/contract";
+import {
+  ApiError,
+  type NewMessage,
+  type PasswordForm,
+  type SessionId,
+  SessionSummary,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { z } from "zod";
 
 /** What came back from the worker: the data, or why there isn't any. */
@@ -44,28 +51,36 @@ export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise
   }
 };
 
-/** What the web app sends to the worker, by path. */
-type Sent = {
-  "/setup": PasswordForm;
-  "/login": PasswordForm;
-  "/logout": Record<string, never>;
-  "/logout-others": Record<string, never>;
-};
-
-/** Sends a change to the worker's API as JSON. Success carries no data. */
-export const toWorker = async <P extends keyof Sent>(
-  path: P,
-  body: Sent[P],
-): Promise<FromWorker<unknown>> => {
+/** Posts JSON to the worker's API and reads the answer with `schema`. */
+const post = async <T>(
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>,
+  unauthorised: "logged-out" | "failed" = "logged-out",
+): Promise<FromWorker<T>> => {
   try {
     const response = await fetch(`/api${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    const passwordForm = path === "/setup" || path === "/login";
-    return await readResponse(response, z.unknown(), passwordForm ? "failed" : "logged-out");
+    return await readResponse(response, schema, unauthorised);
   } catch {
     return { kind: "offline" };
   }
 };
+
+/** Setup and login: a 401 here means a wrong password, so it carries the worker's message. */
+export const sendPassword = (path: "/setup" | "/login", form: PasswordForm) =>
+  post(path, form, z.unknown(), "failed");
+
+export const logOut = () => post("/logout", {}, z.unknown());
+export const logOutOthers = () => post("/logout-others", {}, z.unknown());
+
+/** Starts a session in a workspace with the owner's first message. */
+export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
+  post(`/workspaces/${encodeURIComponent(workspaceId)}/sessions`, message, SessionSummary);
+
+/** Sends the next message in a session. */
+export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
+  post(`/sessions/${encodeURIComponent(sessionId)}/messages`, message, z.unknown());

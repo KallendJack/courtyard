@@ -19,5 +19,6 @@ export const asOwner = async (app: Hono) => {
     body: JSON.stringify({ password: "test password" }),
   });
   const cookie = loginCookie(setup);
-  return (path: string) => app.request(path, { headers: { cookie } });
+  return (path: string, init: RequestInit = {}) =>
+    app.request(path, { ...init, headers: { ...init.headers, cookie } });
 };

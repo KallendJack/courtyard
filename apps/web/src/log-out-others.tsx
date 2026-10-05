@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { describeProblem } from "./problems.tsx";
-import { toWorker } from "./worker.ts";
+import { logOutOthers as logOutOthersOnWorker } from "./worker.ts";
 
 /** Ends every other device's login, for when a phone or laptop is lost. */
 export function LogOutOthers() {
   const [message, setMessage] = useState<string>();
 
   const logOutOthers = async () => {
-    const result = await toWorker("/logout-others", {});
+    const result = await logOutOthersOnWorker();
     setMessage(
       result.kind === "loaded" ? "Every other device is logged out." : describeProblem(result).body,
     );

@@ -1,0 +1,58 @@
+import type { FailureReason } from "@courtyard/contract";
+import { memo } from "react";
+import type { Turn } from "./events.ts";
+
+/** A failure's reason in plain words. */
+export const describeFailure = (reason: FailureReason) => {
+  switch (reason.kind) {
+    case "rate-limited":
+      return reason.resetAt
+        ? `You've hit this model's usage limit. It resets at ${new Date(reason.resetAt).toLocaleString()}.`
+        : "You've hit this model's usage limit.";
+    case "provider-unavailable":
+    case "unknown":
+      return reason.message;
+  }
+};
+
+/**
+ * One turn: the owner's message and the answer. Memoised, and the turns before the last never
+ * change identity, so streaming text only re-renders the turn it belongs to.
+ */
+export const TurnView = memo(function TurnView(props: {
+  turn: Turn;
+  onRetry?: (turn: Turn) => void;
+}) {
+  const { turn, onRetry } = props;
+
+  return (
+    <li className="space-y-3">
+      <p className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-4 py-2 text-white">
+        {turn.text}
+      </p>
+      {(turn.answer !== "" || turn.state.kind === "running") && (
+        <p className="max-w-[85%] whitespace-pre-wrap text-neutral-900" aria-live="polite">
+          {turn.answer}
+          {turn.state.kind === "running" && <span className="animate-pulse"> ▍</span>}
+        </p>
+      )}
+      {turn.state.kind === "failed" && (
+        <div
+          role="alert"
+          className="max-w-[85%] rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
+        >
+          <p>{describeFailure(turn.state.reason)}</p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={() => onRetry(turn)}
+              className="mt-1 font-medium underline"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+});

@@ -1,7 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { describeProblem } from "./problems.tsx";
-import { toWorker } from "./worker.ts";
+import { sendPassword } from "./worker.ts";
 
 /**
  * The setup and login pages share one shape: a title, a password form, and on success the router
@@ -30,7 +30,7 @@ export function PasswordPage(props: {
     if (refusal) return setError(refusal);
 
     setSending(true);
-    const result = await toWorker(props.endpoint, { password });
+    const result = await sendPassword(props.endpoint, { password });
     setSending(false);
     if (result.kind === "loaded") {
       setError(undefined);
