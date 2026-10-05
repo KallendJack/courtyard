@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type FailureReason,
@@ -97,9 +97,8 @@ export const createSessions = (options: {
       queue: Promise.resolve(),
     };
     running.set(id, created);
-    // The first time this worker touches a session, before anything else can: a turn the log
-    // shows as still running belongs to a worker that stopped, because this one hasn't started any.
-    created.queue = recordInterruptedTurn(id, created).catch(() => undefined);
+    // The first step in the queue of every session this worker touches, before anything else.
+    void inOrder(created, () => recover(id, created));
     return created;
   };
 
@@ -109,13 +108,17 @@ export const createSessions = (options: {
     return run;
   };
 
+  /** Resolves once anything already queued for the session, such as its recovery, has run. */
+  const settled = (id: SessionId) => inOrder(runningSession(id), async () => undefined);
+
   const folderOf = (id: SessionId) => join(sessionsDir, id);
   const sessionFilePath = (id: SessionId) => join(folderOf(id), "session.json");
+  const eventsPath = (id: SessionId) => join(folderOf(id), "events.jsonl");
 
   const readEvents = async (id: SessionId): Promise<Result<SessionEvent[], SessionError>> => {
     let text: string;
     try {
-      text = await readFile(join(folderOf(id), "events.jsonl"), "utf8");
+      text = await readFile(eventsPath(id), "utf8");
     } catch (error) {
       return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
     }
@@ -139,11 +142,12 @@ export const createSessions = (options: {
    * Numbers an event, puts it on disk, and only then tells subscribers. Only ever called from
    * inside the session's queue.
    */
-  const writeEvent = async (
-    id: SessionId,
-    session: RunningSession,
-    event: NewEvent,
-  ): Promise<Result<SessionEvent, SessionError>> => {
+  const writeEvent = async (write: {
+    id: SessionId;
+    session: RunningSession;
+    event: NewEvent;
+  }): Promise<Result<SessionEvent, SessionError>> => {
+    const { id, session, event } = write;
     if (session.nextSeq === undefined) {
       const existing = await readEvents(id);
       if (!existing.ok) return existing;
@@ -152,7 +156,7 @@ export const createSessions = (options: {
     const numbered = SessionEvent.safeParse({ ...event, seq: session.nextSeq, at: stamp() });
     if (!numbered.success) return err(STORAGE_ERROR);
     try {
-      await appendFile(join(folderOf(id), "events.jsonl"), `${JSON.stringify(numbered.data)}\n`);
+      await appendFile(eventsPath(id), `${JSON.stringify(numbered.data)}\n`);
     } catch {
       return err(STORAGE_ERROR);
     }
@@ -163,18 +167,48 @@ export const createSessions = (options: {
 
   const append = (id: SessionId, event: NewEvent) => {
     const session = runningSession(id);
-    return inOrder(session, () => writeEvent(id, session, event));
+    return inOrder(session, () => writeEvent({ id, session, event }));
   };
 
-  /** Ends a turn that a stopped worker left running, so the session is usable again. */
-  async function recordInterruptedTurn(id: SessionId, session: RunningSession) {
-    const events = await readEvents(id);
-    if (!events.ok) return;
-    const last = events.value.at(-1);
-    if (last?.type === "owner-message" || last?.type === "text-delta") {
-      await writeEvent(id, session, { type: "turn-failed", reason: { kind: "interrupted" } });
+  /**
+   * Puts right what a stopped worker left behind, the first time this worker touches a session.
+   * A crash mid-write leaves a last line with no newline: it's cut off. A turn the log shows as
+   * still open belonged to the stopped worker (this one hasn't started any), so it's recorded as
+   * interrupted and the session is usable again.
+   */
+  const recover = async (id: SessionId, session: RunningSession) => {
+    let text: string;
+    try {
+      text = await readFile(eventsPath(id), "utf8");
+    } catch (error) {
+      if (!hasCode(error, "ENOENT")) console.error(`Session ${id}: its event log can't be read`);
+      return;
     }
-  }
+    if (text !== "" && !text.endsWith("\n")) {
+      const whole = text.slice(0, text.lastIndexOf("\n") + 1);
+      try {
+        await truncate(eventsPath(id), Buffer.byteLength(whole));
+      } catch {
+        console.error(`Session ${id}: a half-written event couldn't be removed`);
+        return;
+      }
+    }
+
+    const events = await readEvents(id);
+    if (!events.ok) {
+      console.error(`Session ${id}: its event log can't be read`);
+      return;
+    }
+    session.nextSeq = events.value.length + 1;
+    const last = events.value.at(-1);
+    if (last === undefined || last.type === "turn-completed" || last.type === "turn-failed") return;
+    const ended = await writeEvent({
+      id,
+      session,
+      event: { type: "turn-failed", reason: { kind: "interrupted" } },
+    });
+    if (!ended.ok) console.error(`Session ${id}: an interrupted turn couldn't be recorded`);
+  };
 
   const markUpdated = async (id: SessionId) => {
     const file = await readJsonFile(sessionFilePath(id), SessionFile);
@@ -319,7 +353,10 @@ export const createSessions = (options: {
 
     get: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
       const session = await findSession(rawId);
-      return session.ok ? ok(summaryOf(session.value)) : session;
+      if (!session.ok) return session;
+      // Loading a session puts right anything a stopped worker left behind first.
+      await settled(session.value.id);
+      return ok(summaryOf(session.value));
     },
 
     /** A workspace's sessions, most recently active first. */
@@ -336,7 +373,9 @@ export const createSessions = (options: {
         if (!id.success) continue;
         const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
         if (!file.ok) return err(STORAGE_ERROR);
-        if (file.value?.workspaceId === workspaceId) summaries.push(summaryOf(file.value));
+        if (file.value?.workspaceId !== workspaceId) continue;
+        await settled(file.value.id);
+        summaries.push(summaryOf(file.value));
       }
       return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
     },

@@ -5,7 +5,7 @@ import {
   SessionEvent,
   type SessionId,
 } from "@courtyard/contract";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
@@ -67,6 +67,9 @@ const parseJson = (text: string): unknown => {
   }
 };
 
+/** How long to wait before opening a stream again after the browser gave up on one. */
+const RECONNECT_MS = 3000;
+
 /**
  * Follows a session's events: its whole event log first, then live as the worker records them.
  * Also says when it's reconnecting, and the worker's reason when the stream can't start at all.
@@ -75,23 +78,47 @@ export const useSessionTurns = (sessionId: SessionId) => {
   const [log, dispatch] = useReducer(applyEvent, { lastSeq: 0, turns: [] });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
+  const lastSeen = useRef(0);
 
   useEffect(() => {
-    // The browser reconnects by itself, sending the last event id it saw (ADR 0006).
-    const source = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/events?after=0`);
-    // While the worker is unreachable the browser keeps retrying; say so until it's back.
-    source.onopen = () => setReconnecting(false);
-    source.onerror = () => setReconnecting(source.readyState === EventSource.CONNECTING);
-    source.onmessage = (message) => {
-      const event = SessionEvent.safeParse(parseJson(message.data));
-      if (event.success) dispatch(event.data);
+    let source: EventSource | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+
+    const connect = () => {
+      // Starts after the last event seen, so a new connection carries on where the old one ended.
+      const url = `/api/sessions/${encodeURIComponent(sessionId)}/events?after=${lastSeen.current}`;
+      const opened = new EventSource(url);
+      source = opened;
+      opened.onopen = () => setReconnecting(false);
+      opened.onmessage = (message) => {
+        const event = SessionEvent.safeParse(parseJson(message.data));
+        if (!event.success) return;
+        lastSeen.current = Math.max(lastSeen.current, event.data.seq);
+        dispatch(event.data);
+      };
+      opened.addEventListener("problem", (message) => {
+        const error = ApiError.safeParse(parseJson(message.data));
+        setProblem(error.success ? error.data.error : "This session can't be opened.");
+        stopped = true;
+        opened.close();
+      });
+      opened.onerror = () => {
+        if (stopped) return;
+        setReconnecting(true);
+        // After a dropped connection the browser retries by itself (sending the last event id it
+        // saw, ADR 0006). After an error answer, such as a proxy's 502 while the worker is down,
+        // it gives up for good, so start again by hand.
+        if (opened.readyState === EventSource.CLOSED) retry = setTimeout(connect, RECONNECT_MS);
+      };
     };
-    source.addEventListener("problem", (message) => {
-      const error = ApiError.safeParse(parseJson(message.data));
-      setProblem(error.success ? error.data.error : "This session can't be opened.");
-      source.close();
-    });
-    return () => source.close();
+    connect();
+
+    return () => {
+      stopped = true;
+      clearTimeout(retry);
+      source?.close();
+    };
   }, [sessionId]);
 
   return { turns: log.turns, problem, reconnecting };

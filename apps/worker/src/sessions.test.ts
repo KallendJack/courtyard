@@ -12,10 +12,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
-import { asOwner, readEvents as readEventsFrom } from "./testing.ts";
+import { asOwner, FAKE_MODEL, followSession, gatedProvider, startSession } from "./testing.ts";
 import { createWorker } from "./worker.ts";
-
-const FAKE = { provider: "fake", model: "echo" };
 
 let root: string;
 let now: number;
@@ -47,30 +45,6 @@ const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })
   return { request, post };
 };
 
-type Api = Awaited<ReturnType<typeof start>>;
-
-const startSession = async (api: Api, text: string, model = FAKE) => {
-  const response = await api.post("/api/workspaces/garage-gym/sessions", { text, model });
-  expect(response.status).toBe(201);
-  return SessionSummary.parse(await response.json());
-};
-
-const readEvents = (
-  api: Api,
-  sessionId: string,
-  options: { until: SessionEvent["type"]; after?: number; onEvent?: (e: SessionEvent) => void },
-) => readEventsFrom(api.request, { sessionId, ...options });
-
-/** A fake provider that holds each turn open until the test lets it finish. */
-const gatedProvider = () => {
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const provider = createFakeProvider({ delayMs: 0, beforeReply: () => gate });
-  return { provider, release: () => release() };
-};
-
 describe("providers", () => {
   it("lists the fake provider with its models", async () => {
     const api = await start();
@@ -91,8 +65,11 @@ describe("a session", () => {
   it("starts with the owner's message, returns at once, and streams the answer", async () => {
     const api = await start();
 
-    const session = await startSession(api, "Where should the rack go?");
-    const events = await readEvents(api, session.id, { until: "turn-completed" });
+    const session = await startSession(api.request, "Where should the rack go?");
+    const events = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
 
     expect(session).toMatchObject({
       workspaceId: "garage-gym",
@@ -110,11 +87,12 @@ describe("a session", () => {
 
   it("sends each event only after it's on disk", async () => {
     const api = await start();
-    const session = await startSession(api, "Hello");
+    const session = await startSession(api.request, "Hello");
     const eventsFile = join(root, "data", "sessions", session.id, "events.jsonl");
     const onDiskWhenSent: boolean[] = [];
 
-    await readEvents(api, session.id, {
+    await followSession(api.request, {
+      sessionId: session.id,
       until: "turn-completed",
       onEvent: (event) => {
         // Checked synchronously as each event arrives, before anything else can write.
@@ -130,8 +108,8 @@ describe("a session", () => {
 
   it("keeps the session as plain files, one folder per session", async () => {
     const api = await start();
-    const session = await startSession(api, "Hello");
-    await readEvents(api, session.id, { until: "turn-completed" });
+    const session = await startSession(api.request, "Hello");
+    await followSession(api.request, { sessionId: session.id, until: "turn-completed" });
 
     const folder = join(root, "data", "sessions", session.id);
     const meta = SessionSummary.omit({ busy: true }).parse(
@@ -148,15 +126,19 @@ describe("a session", () => {
 
   it("continues with later messages, numbering events without gaps", async () => {
     const api = await start();
-    const session = await startSession(api, "First");
-    const first = await readEvents(api, session.id, { until: "turn-completed" });
+    const session = await startSession(api.request, "First");
+    const first = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
 
     const sent = await api.post(`/api/sessions/${session.id}/messages`, {
       text: "Second",
-      model: FAKE,
+      model: FAKE_MODEL,
     });
     expect(sent.status).toBe(202);
-    const second = await readEvents(api, session.id, {
+    const second = await followSession(api.request, {
+      sessionId: session.id,
       until: "turn-completed",
       after: first.length,
     });
@@ -171,10 +153,16 @@ describe("a session", () => {
 
   it("replays the whole event log to anyone who opens it later", async () => {
     const api = await start();
-    const session = await startSession(api, "First");
-    const live = await readEvents(api, session.id, { until: "turn-completed" });
+    const session = await startSession(api.request, "First");
+    const live = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
 
-    const replayed = await readEvents(api, session.id, { until: "turn-completed" });
+    const replayed = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
 
     expect(replayed).toEqual(live);
   });
@@ -182,29 +170,40 @@ describe("a session", () => {
   it("refuses a message while a turn is running", async () => {
     const gated = gatedProvider();
     const api = await start([gated.provider]);
-    const session = await startSession(api, "Take your time");
+    const session = await startSession(api.request, "Take your time");
 
     const busy = await api.post(`/api/sessions/${session.id}/messages`, {
       text: "Hurry",
-      model: FAKE,
+      model: FAKE_MODEL,
     });
 
     expect(busy.status).toBe(409);
     expect(ApiError.parse(await busy.json()).error).toMatch(/already/i);
     gated.release();
-    const first = await readEvents(api, session.id, { until: "turn-completed" });
+    const first = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
     expect(
-      (await api.post(`/api/sessions/${session.id}/messages`, { text: "Now", model: FAKE })).status,
+      (await api.post(`/api/sessions/${session.id}/messages`, { text: "Now", model: FAKE_MODEL }))
+        .status,
     ).toBe(202);
     // Let the second turn finish before the test's folder is removed.
-    await readEvents(api, session.id, { until: "turn-completed", after: first.length });
+    await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+      after: first.length,
+    });
   });
 
   it("records a failed turn with its reason in plain words", async () => {
     const api = await start();
 
-    const session = await startSession(api, "please fail");
-    const events = await readEvents(api, session.id, { until: "turn-failed" });
+    const session = await startSession(api.request, "please fail");
+    const events = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-failed",
+    });
 
     expect(events.at(-1)).toMatchObject({
       type: "turn-failed",
@@ -221,7 +220,7 @@ describe("a session", () => {
     });
     const empty = await api.post("/api/workspaces/garage-gym/sessions", {
       text: "  ",
-      model: FAKE,
+      model: FAKE_MODEL,
     });
 
     expect(noModel.status).toBe(400);
@@ -233,7 +232,7 @@ describe("a session", () => {
 
     const response = await api.post("/api/workspaces/no-such-place/sessions", {
       text: "Hi",
-      model: FAKE,
+      model: FAKE_MODEL,
     });
 
     expect(response.status).toBe(404);
@@ -243,8 +242,8 @@ describe("a session", () => {
 describe("an event stream that can't start", () => {
   it("says why, instead of an empty stream the browser would retry forever", async () => {
     const api = await start();
-    const session = await startSession(api, "Hello");
-    await readEvents(api, session.id, { until: "turn-completed" });
+    const session = await startSession(api.request, "Hello");
+    await followSession(api.request, { sessionId: session.id, until: "turn-completed" });
     const eventsFile = join(root, "data", "sessions", session.id, "events.jsonl");
     await rm(eventsFile);
     await mkdir(eventsFile);
@@ -260,11 +259,11 @@ describe("an event stream that can't start", () => {
 describe("a workspace's sessions", () => {
   it("are listed newest first", async () => {
     const api = await start();
-    const older = await startSession(api, "Older");
-    await readEvents(api, older.id, { until: "turn-completed" });
+    const older = await startSession(api.request, "Older");
+    await followSession(api.request, { sessionId: older.id, until: "turn-completed" });
     now += 60_000;
-    const newer = await startSession(api, "Newer");
-    await readEvents(api, newer.id, { until: "turn-completed" });
+    const newer = await startSession(api.request, "Newer");
+    await followSession(api.request, { sessionId: newer.id, until: "turn-completed" });
 
     const response = await api.request("/api/workspaces/garage-gym/sessions");
     const { sessions } = SessionList.parse(await response.json());

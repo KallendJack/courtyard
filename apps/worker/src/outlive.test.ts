@@ -1,13 +1,19 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider, type Provider } from "./providers/index.ts";
-import { type Requester, readEvents, requesterFor, setUpOwner } from "./testing.ts";
+import {
+  FAKE_MODEL,
+  followSession,
+  gatedProvider,
+  postJson,
+  requesterFor,
+  setUpOwner,
+  startSession,
+} from "./testing.ts";
 import { createWorker } from "./worker.ts";
-
-const FAKE = { provider: "fake", model: "echo" };
 
 let root: string;
 let cookie: string | undefined;
@@ -36,31 +42,6 @@ const startWorker = async (providers: Provider[] = [createFakeProvider({ delayMs
   return requesterFor(worker.value.app, cookie);
 };
 
-const post = (request: Requester, path: string, body: unknown) =>
-  request(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-const startSession = async (request: Requester, text: string) => {
-  const response = await post(request, "/api/workspaces/garage-gym/sessions", {
-    text,
-    model: FAKE,
-  });
-  expect(response.status).toBe(201);
-  return SessionSummary.parse(await response.json());
-};
-
-/** A provider that holds each turn open until the test lets it go, if ever. */
-const gatedProvider = () => {
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { provider: createFakeProvider({ delayMs: 0, beforeReply: () => gate }), release };
-};
-
 const answerOf = (events: readonly SessionEvent[]) =>
   events.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
 
@@ -71,22 +52,22 @@ describe("a session outlives the tab", () => {
     const session = await startSession(request, "Keep going without me");
 
     // The tab reads the owner's message, then closes.
-    await readEvents(request, { sessionId: session.id, until: "owner-message" });
+    await followSession(request, { sessionId: session.id, until: "owner-message" });
     gated.release();
 
-    const later = await readEvents(request, { sessionId: session.id, until: "turn-completed" });
+    const later = await followSession(request, { sessionId: session.id, until: "turn-completed" });
     expect(answerOf(later)).toBe("You said: Keep going without me");
   });
 
   it("resumes from the last event a reconnecting browser saw, with nothing missing or repeated", async () => {
     const request = await startWorker();
     const session = await startSession(request, "One two three four");
-    const everything = await readEvents(request, {
+    const everything = await followSession(request, {
       sessionId: session.id,
       until: "turn-completed",
     });
 
-    const resumed = await readEvents(request, {
+    const resumed = await followSession(request, {
       sessionId: session.id,
       until: "turn-completed",
       lastEventId: 3,
@@ -100,8 +81,8 @@ describe("a session outlives the tab", () => {
     const request = await startWorker([gated.provider]);
     const session = await startSession(request, "Seen on two devices");
 
-    const laptop = readEvents(request, { sessionId: session.id, until: "turn-completed" });
-    const phone = readEvents(request, { sessionId: session.id, until: "turn-completed" });
+    const laptop = followSession(request, { sessionId: session.id, until: "turn-completed" });
+    const phone = followSession(request, { sessionId: session.id, until: "turn-completed" });
     gated.release();
 
     const [onLaptop, onPhone] = await Promise.all([laptop, phone]);
@@ -114,7 +95,7 @@ describe("a session outlives the worker", () => {
   it("is still listed and replayed in full after a restart", async () => {
     const beforeRestart = await startWorker();
     const session = await startSession(beforeRestart, "Remember this");
-    const recorded = await readEvents(beforeRestart, {
+    const recorded = await followSession(beforeRestart, {
       sessionId: session.id,
       until: "turn-completed",
     });
@@ -123,7 +104,7 @@ describe("a session outlives the worker", () => {
     const list = SessionList.parse(
       await (await afterRestart("/api/workspaces/garage-gym/sessions")).json(),
     );
-    const replayed = await readEvents(afterRestart, {
+    const replayed = await followSession(afterRestart, {
       sessionId: session.id,
       until: "turn-completed",
     });
@@ -138,7 +119,10 @@ describe("a session outlives the worker", () => {
     const session = await startSession(beforeRestart, "This answer never arrives");
 
     const afterRestart = await startWorker();
-    const events = await readEvents(afterRestart, { sessionId: session.id, until: "turn-failed" });
+    const events = await followSession(afterRestart, {
+      sessionId: session.id,
+      until: "turn-failed",
+    });
 
     expect(events.map((e) => e.type)).toEqual(["owner-message", "turn-failed"]);
     expect(events.at(-1)).toMatchObject({ seq: 2, reason: { kind: "interrupted" } });
@@ -146,12 +130,12 @@ describe("a session outlives the worker", () => {
       await (await afterRestart(`/api/sessions/${session.id}`)).json(),
     );
     expect(summary.busy).toBe(false);
-    const again = await post(afterRestart, `/api/sessions/${session.id}/messages`, {
+    const again = await postJson(afterRestart, `/api/sessions/${session.id}/messages`, {
       text: "Again",
-      model: FAKE,
+      model: FAKE_MODEL,
     });
     expect(again.status).toBe(202);
-    await readEvents(afterRestart, { sessionId: session.id, until: "turn-completed", after: 2 });
+    await followSession(afterRestart, { sessionId: session.id, until: "turn-completed", after: 2 });
   });
 
   it("records the interruption once, however many devices open the session", async () => {
@@ -161,11 +145,77 @@ describe("a session outlives the worker", () => {
 
     const afterRestart = await startWorker();
     const [one, two] = await Promise.all([
-      readEvents(afterRestart, { sessionId: session.id, until: "turn-failed" }),
-      readEvents(afterRestart, { sessionId: session.id, until: "turn-failed" }),
+      followSession(afterRestart, { sessionId: session.id, until: "turn-failed" }),
+      followSession(afterRestart, { sessionId: session.id, until: "turn-failed" }),
     ]);
 
     expect(one).toEqual(two);
     expect(one.filter((e) => e.type === "turn-failed")).toHaveLength(1);
+  });
+});
+
+describe("a crash mid-write", () => {
+  const eventsFile = (sessionId: string) =>
+    join(root, "data", "sessions", sessionId, "events.jsonl");
+
+  it("drops a half-written last line instead of breaking the session for good", async () => {
+    const beforeRestart = await startWorker();
+    const session = await startSession(beforeRestart, "Finished before the crash");
+    const recorded = await followSession(beforeRestart, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+    await appendFile(eventsFile(session.id), '{"seq":99,"type":"text-de');
+
+    const afterRestart = await startWorker();
+    const replayed = await followSession(afterRestart, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+    const again = await postJson(afterRestart, `/api/sessions/${session.id}/messages`, {
+      text: "Still works",
+      model: FAKE_MODEL,
+    });
+    const next = await followSession(afterRestart, {
+      sessionId: session.id,
+      until: "turn-completed",
+      after: recorded.length,
+    });
+
+    expect(replayed).toEqual(recorded);
+    expect(again.status).toBe(202);
+    expect(next[0]).toMatchObject({ seq: recorded.length + 1, type: "owner-message" });
+  });
+
+  it("records the turn a torn write cut off as interrupted", async () => {
+    const stuck = gatedProvider();
+    const beforeRestart = await startWorker([stuck.provider]);
+    const session = await startSession(beforeRestart, "Crashed mid-answer");
+    await appendFile(eventsFile(session.id), '{"seq":2,"type":"text-delta","te');
+
+    const afterRestart = await startWorker();
+    const events = await followSession(afterRestart, {
+      sessionId: session.id,
+      until: "turn-failed",
+    });
+
+    expect(events.map((e) => [e.seq, e.type])).toEqual([
+      [1, "owner-message"],
+      [2, "turn-failed"],
+    ]);
+  });
+});
+
+describe("loading a session after a restart", () => {
+  it("records an interrupted turn as soon as the session list is opened", async () => {
+    const stuck = gatedProvider();
+    const beforeRestart = await startWorker([stuck.provider]);
+    const session = await startSession(beforeRestart, "Cut off");
+
+    const afterRestart = await startWorker();
+    await afterRestart("/api/workspaces/garage-gym/sessions");
+
+    const log = await readFile(join(root, "data", "sessions", session.id, "events.jsonl"), "utf8");
+    expect(log).toContain('"interrupted"');
   });
 });

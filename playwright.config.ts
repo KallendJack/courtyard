@@ -10,7 +10,7 @@ const port = 8799;
 export default defineConfig({
   testDir: "e2e",
   forbidOnly: Boolean(process.env.CI),
-  use: { baseURL: `http://localhost:${port}` },
+  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /\.setup\.ts$/ },
     {

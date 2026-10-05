@@ -1,5 +1,6 @@
-import { SessionEvent } from "@courtyard/contract";
+import { SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
+import { createFakeProvider } from "./providers/index.ts";
 
 /** For tests: a request function, like `app.request`. */
 export type Requester = (path: string, init?: RequestInit) => Response | Promise<Response>;
@@ -39,7 +40,7 @@ export const asOwner = async (app: Hono) => requesterFor(app, await setUpOwner(a
  * up, like a browser tab closing. Starts after `after`, or after `lastEventId` sent the way a
  * reconnecting browser sends it.
  */
-export const readEvents = async (
+export const followSession = async (
   request: Requester,
   read: {
     sessionId: string;
@@ -81,4 +82,31 @@ export const readEvents = async (
       }
     }
   }
+};
+
+/** For tests: the scripted fake provider's model. */
+export const FAKE_MODEL = { provider: "fake", model: "echo" };
+
+/** For tests: sends JSON, the way the web app does. */
+export const postJson = (request: Requester, path: string, body: unknown) =>
+  request(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** For tests: starts a session in the garage-gym workspace with the owner's first message. */
+export const startSession = async (request: Requester, text: string, model = FAKE_MODEL) => {
+  const response = await postJson(request, "/api/workspaces/garage-gym/sessions", { text, model });
+  if (response.status !== 201) throw new Error(`starting a session failed with ${response.status}`);
+  return SessionSummary.parse(await response.json());
+};
+
+/** For tests: a fake provider that holds each turn open until the test lets it go, if ever. */
+export const gatedProvider = () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { provider: createFakeProvider({ delayMs: 0, beforeReply: () => gate }), release };
 };
