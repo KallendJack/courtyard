@@ -1,1 +1,168 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/figtree";
+
+/*
+ * Moorland: Courtyard's theme, from the Paper design chosen in issue #2. Every colour, font and
+ * radius the app uses is defined here once; components use the names, never the values.
+ * Dark mode follows the device's own setting.
+ */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-heading: var(--font-display);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-text: var(--destructive-text);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-field: var(--field);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-workspace-bracken: var(--workspace-bracken);
+  --color-workspace-heather: var(--workspace-heather);
+  --color-workspace-slate: var(--workspace-slate);
+  --color-workspace-moss: var(--workspace-moss);
+  --color-workspace-peat: var(--workspace-peat);
+
+  /* The design's type sizes (Paper tokens): labels 13, interface 14, body 16, headings 20+. */
+  --text-xs: 13px;
+  --text-xs--line-height: 18px;
+
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-bubble: 14px; /* the owner's message */
+  --radius-lg: 16px;
+
+  --container-reading: 680px;
+}
+
+:root {
+  --radius: 10px;
+
+  --background: #f3f0ec; /* mist: the page ground */
+  --foreground: #231f22;
+  --card: #fcfaf8; /* the raised session panel */
+  --card-foreground: #231f22;
+  --popover: #ffffff;
+  --popover-foreground: #231f22;
+  --primary: #6a3f6e; /* heather: the one accent */
+  --primary-foreground: #ffffff;
+  --primary-text: #6a3f6e; /* heather as text and dots */
+  --secondary: #e9e3e3;
+  --secondary-foreground: #231f22;
+  --muted: #e9e3e3; /* the selected workspace */
+  --muted-foreground: #625a60;
+  --placeholder: #938a90;
+  --accent: #eee6ee; /* a heather wash: the owner's messages */
+  --accent-foreground: #231f22;
+  --destructive: #9b2c2c;
+  --destructive-soft: #f6e9e9;
+  --destructive-text: #5e2424;
+  --border: #e3dcdc;
+  --input: #e3dcdc;
+  --field: #ffffff; /* inside inputs and the message box */
+  --ring: #6a3f6e;
+  --warning: #b08a55; /* bracken: something being handled, such as reconnecting */
+
+  /* The mark is the same in both modes, so it's always recognisable. */
+  --mark-tile: #6a3f6e;
+  --mark-walls: #f3f0ec;
+  --mark-tree: #c9a26b;
+
+  --workspace-bracken: #b08a55;
+  --workspace-heather: #6a3f6e;
+  --workspace-slate: #5e6e7e;
+  --workspace-moss: #7c8f5a;
+  --workspace-peat: #7a6556;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1b181a;
+    --foreground: #eee8eb;
+    --card: #231f22;
+    --card-foreground: #eee8eb;
+    --popover: #2a2529;
+    --popover-foreground: #eee8eb;
+    --primary: #8e5e93;
+    --primary-foreground: #ffffff;
+    --primary-text: #c99bcb;
+    --secondary: #342d32;
+    --secondary-foreground: #eee8eb;
+    --muted: #342d32;
+    --muted-foreground: #a79ea4;
+    --placeholder: #7d747a;
+    --accent: #3d2c3f;
+    --accent-foreground: #eee8eb;
+    /* The design has no dark failure colours; these keep its red readable on the dark ground. */
+    --destructive: #e88a8a;
+    --destructive-soft: #3a2224;
+    --destructive-text: #f0c4c4;
+    --border: #352f33;
+    --input: #3a3337;
+    --field: #2a2529;
+    --ring: #c99bcb;
+    --warning: #c9a26b;
+
+    --workspace-bracken: #c9a26b;
+    --workspace-heather: #c99bcb;
+    --workspace-slate: #8a9bac;
+    --workspace-moss: #9db07a;
+    --workspace-peat: #a48e7e;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::placeholder {
+    color: var(--placeholder);
+  }
+  /* Every control shows where the keyboard is, in heather. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Motion only where it explains something, and none at all for anyone who has asked for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    /* biome-ignore lint/complexity/noImportantStyles: it has to win over every component's own animation */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above, for transitions */
+    transition-duration: 0.01ms !important;
+  }
+}

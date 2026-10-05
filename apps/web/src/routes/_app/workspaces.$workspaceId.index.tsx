@@ -5,8 +5,12 @@ import {
   WorkspaceDetail,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { EmptyState, Notice } from "@/components/notice";
+import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
+import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
+import { describeWhen } from "../../when.ts";
 import { fromWorker, loadProviders, startSession } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
@@ -25,34 +29,51 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
 function Workspace() {
   const { detail, sessions, providers } = Route.useLoaderData();
   const navigate = useNavigate();
+  const colourOf = useWorkspaceColours();
 
   if (detail.kind === "not-found") {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-xl font-semibold">No such workspace</h1>
-        <Link to="/" className="mt-2 inline-block text-neutral-600 underline">
+      <Page>
+        <PageTitle>No such workspace</PageTitle>
+        <Link to="/" className="mt-3 w-fit text-muted-foreground underline">
           All workspaces
         </Link>
-      </main>
+      </Page>
     );
   }
   if (detail.kind !== "loaded") return <Problem result={detail} />;
   const { workspace, contextFile } = detail.data;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-semibold">{workspace.name}</h1>
-      {workspace.configProblem !== undefined && (
-        <p role="alert" className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Treated as a planning workspace. {workspace.configProblem}
+    <Page>
+      <PageTitle
+        above={
+          <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
+            <WorkspaceDot colour={colourOf(workspace.id)} small />
+            {workspace.mode === "code" ? "Code workspace" : "Workspace"}
+          </span>
+        }
+      >
+        {workspace.name}
+      </PageTitle>
+      {contextFile !== null && contextFile.intro !== "" && (
+        // One line, as a reminder; the whole file is further down.
+        <p className="mt-2 line-clamp-1 text-[15px]/[23px] text-muted-foreground">
+          {contextFile.intro}
         </p>
       )}
+      {workspace.configProblem !== undefined && (
+        <div className="mt-4">
+          <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
+        </div>
+      )}
 
-      <section aria-label="Sessions" className="mt-6">
+      <section aria-label="Sessions" className="mt-8">
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
-            placeholder={`Start a session in ${workspace.name}…`}
+            placeholder="Start a new session…"
+            submitLabel="Start"
             send={async (message) => {
               const session = await startSession(workspace.id, message);
               if (session.kind !== "loaded") return describeProblem(session).body;
@@ -64,59 +85,60 @@ function Workspace() {
             }}
           />
         ) : (
-          <p className="text-sm text-neutral-600">{describeProblem(providers).body}</p>
+          <p className="text-sm text-muted-foreground">{describeProblem(providers).body}</p>
         )}
         {sessions.kind === "loaded" && <SessionLinks sessions={sessions.data.sessions} />}
       </section>
 
-      <h2 className="mt-10 text-sm font-medium uppercase tracking-wide text-neutral-500">
-        Context file
-      </h2>
+      <div className="mt-12">
+        <SectionTitle>Context file</SectionTitle>
+      </div>
       {contextFile === null ? (
-        <p className="mt-2 text-neutral-600">
+        <EmptyState>
           No context file yet. Add a <code>CONTEXT.md</code> to this workspace's folder so every
           model starts out knowing its facts, plans and ideas.
-        </p>
+        </EmptyState>
       ) : (
         <ContextFileSections contextFile={contextFile} />
       )}
-    </main>
+    </Page>
   );
 }
 
 function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
   if (sessions.length === 0) return null;
   return (
-    <ul className="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200">
-      {sessions.map((session) => (
-        <li key={session.id}>
-          <Link
-            to="/workspaces/$workspaceId/sessions/$sessionId"
-            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-            className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-neutral-50"
-          >
-            <span className="truncate">{session.title}</span>
-            <span className="shrink-0 text-xs text-neutral-500">
-              {session.busy ? "Running…" : new Date(session.updatedAt).toLocaleString()}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-10">
+      <SectionTitle>Sessions</SectionTitle>
+      <ul className="mt-2 divide-y">
+        {sessions.map((session) => (
+          <li key={session.id}>
+            <Link
+              to="/workspaces/$workspaceId/sessions/$sessionId"
+              params={{ workspaceId: session.workspaceId, sessionId: session.id }}
+              className={LIST_ROW}
+            >
+              <span className="truncate font-medium">{session.title}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {session.busy ? "Running…" : describeWhen(session.updatedAt)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
+/** The context file's sections. Its intro is shown under the workspace's title instead. */
 function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
   return (
     <div className="mt-4 space-y-6">
-      {contextFile.intro !== "" && (
-        <p className="whitespace-pre-wrap text-neutral-700">{contextFile.intro}</p>
-      )}
       <Section title="Facts" hint="True now" lines={contextFile.facts} />
       <Section title="Plans" hint="Decided, not done" lines={contextFile.plans} />
       <Section title="Ideas" hint="Being considered" lines={contextFile.ideas} />
       {contextFile.other !== "" && (
-        <pre className="whitespace-pre-wrap font-sans text-sm text-neutral-600">
+        <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
           {contextFile.other}
         </pre>
       )}
@@ -127,13 +149,13 @@ function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
 function Section({ title, hint, lines }: { title: string; hint: string; lines: string[] }) {
   return (
     <section aria-label={title}>
-      <h2 className="text-lg font-semibold">
-        {title} <span className="text-sm font-normal text-neutral-500">{hint}</span>
-      </h2>
+      <h3 className="flex items-baseline gap-2 font-semibold">
+        {title} <span className="text-xs font-normal text-muted-foreground">{hint}</span>
+      </h3>
       {lines.length === 0 ? (
-        <p className="mt-1 text-sm text-neutral-500">Nothing yet.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Nothing yet.</p>
       ) : (
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1.5 pl-5 marker:text-primary-text">
           {lines.map((line, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a line's position is its identity here
             <li key={`${index}-${line}`}>{line}</li>

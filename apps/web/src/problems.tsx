@@ -1,4 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
+import { Page, PageTitle } from "@/components/page";
 import type { FromWorker } from "./worker.ts";
 import { useWorkerWatch } from "./worker-watch.ts";
 
@@ -33,24 +34,26 @@ function WorkerOffline(props: { onBack: () => void }) {
   const { title, body } = describeProblem({ kind: "offline" });
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      {reachability === "up" ? (
-        // The worker answers its health check, so the problem is something else, most likely an
-        // app version the worker no longer understands.
-        <p className="mt-2 text-neutral-600">
-          Courtyard's worker is running but answered unexpectedly. Reload the page to update the
-          app.
-        </p>
-      ) : (
-        <>
-          <p className="mt-2 text-neutral-600">{body}</p>
-          <p className="mt-2 text-sm text-neutral-500">
-            This page will carry on by itself when it's back.
+    <Page>
+      <div className="rounded-lg border bg-card p-6">
+        <PageTitle>{title}</PageTitle>
+        {reachability === "up" ? (
+          // The worker answers its health check, so the problem is something else, most likely an
+          // app version the worker no longer understands.
+          <p className="mt-2 text-muted-foreground">
+            Courtyard's worker is running but answered unexpectedly. Reload the page to update the
+            app.
           </p>
-        </>
-      )}
-    </main>
+        ) : (
+          <>
+            <p className="mt-2 text-muted-foreground">{body}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This page will carry on by itself when it's back.
+            </p>
+          </>
+        )}
+      </div>
+    </Page>
   );
 }
 
@@ -61,15 +64,15 @@ export function Problem({ result }: { result: NoData }) {
   const { title, body } = describeProblem(result);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-2 text-neutral-600">{body}</p>
+    <Page>
+      <PageTitle>{title}</PageTitle>
+      <p className="mt-2 text-muted-foreground">{body}</p>
       {result.kind === "logged-out" && (
-        <Link to="/login" className="mt-3 inline-block underline">
+        <Link to="/login" className="mt-3 w-fit font-medium text-primary-text underline">
           Log in again
         </Link>
       )}
-    </main>
+    </Page>
   );
 }
 

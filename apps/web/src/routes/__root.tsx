@@ -1,5 +1,6 @@
 import { AuthState } from "@courtyard/contract";
 import { createRootRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
+import { StatusPill } from "@/components/notice";
 import { Problem } from "../problems.tsx";
 import { fromWorker } from "../worker.ts";
 import { useWorkerWatch } from "../worker-watch.ts";
@@ -43,11 +44,11 @@ function Root() {
   });
 
   return (
-    <div className="min-h-dvh bg-white text-neutral-900">
+    <div className="min-h-dvh">
       {reachability === "down" && auth.kind === "loaded" && (
-        <p role="status" className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
-          Can't reach Courtyard's worker. Retrying…
-        </p>
+        <div className="flex justify-center px-4 pt-3">
+          <StatusPill>Can't reach Courtyard's worker. Retrying…</StatusPill>
+        </div>
       )}
       {auth.kind === "loaded" ? <Outlet /> : <Problem result={auth} />}
     </div>

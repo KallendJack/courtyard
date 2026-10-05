@@ -15,6 +15,11 @@ its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. Wha
   when two real implementations exist. Side effects that tests must observe (sending a notification, the clock) are
   passed in as dependencies.
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
+- **The web app's look comes from one theme**, Moorland, in `apps/web/src/styles.css` (the Paper design chosen in
+  issue #2). Colours, fonts and radii are used by name, never by value. `components/ui/` is shadcn's generated code:
+  change it by re-adding a component or through the theme (`biome.json` relaxes two rules for it). `components/` holds
+  Courtyard's shared pieces; feature folders (`sessions/`) keep their own. Components on the first load join classes
+  with `lib/classes.ts` rather than `cn`, which keeps the class-merging code off the first load.
 
 ## TypeScript
 

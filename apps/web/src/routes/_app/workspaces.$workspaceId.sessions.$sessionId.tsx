@@ -1,11 +1,21 @@
-import { type NewMessage, type ProviderList, SessionSummary } from "@courtyard/contract";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import {
+  type NewMessage,
+  type ProviderList,
+  SessionSummary,
+  type WorkspaceId,
+} from "@courtyard/contract";
+import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
+import { Notice, StatusPill } from "@/components/notice";
+import { Page, PageTitle } from "@/components/page";
+import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import { fromWorker, loadProviders, sendMessage, stopTurn } from "../../worker.ts";
+
+const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
@@ -64,44 +74,61 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
   );
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col px-4 py-6">
-      <Link
-        to="/workspaces/$workspaceId"
-        params={{ workspaceId: session.workspaceId }}
-        className="text-sm text-neutral-600 hover:text-neutral-900"
-      >
-        ← Back to the workspace
-      </Link>
-      <h1 className="mt-2 truncate text-xl font-semibold">{session.title}</h1>
+    <Page flushBottom>
+      <PageTitle above={<WorkspaceChip workspaceId={session.workspaceId} />}>
+        {session.title}
+      </PageTitle>
       {reconnecting && (
-        <p role="status" className="mt-2 text-sm text-amber-700">
-          Reconnecting to the worker… The session carries on where it left off.
-        </p>
+        <div className="mt-4">
+          <StatusPill>
+            Reconnecting to the worker… The session carries on where it left off.
+          </StatusPill>
+        </div>
       )}
 
       {problem ? (
-        <p role="alert" className="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
-          {problem}
-        </p>
+        <div className="mt-6">
+          <Notice>{problem}</Notice>
+        </div>
       ) : (
         <SessionTurns turns={turns} onRetry={retry} />
       )}
       {sendProblem && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-3 text-sm text-destructive-text">
           {sendProblem}
         </p>
       )}
 
-      <div className="sticky bottom-0 mt-6 bg-white pb-4 pt-2">
+      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">
         <Composer
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
           disabled={running || problem !== undefined}
           {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}
+          compactOnNarrow
           send={send}
         />
       </div>
-    </main>
+    </Page>
+  );
+}
+
+/** The session's workspace, in its colour: also the way back to it. */
+function WorkspaceChip(props: { workspaceId: WorkspaceId }) {
+  const workspaces = loggedIn.useLoaderData();
+  const colourOf = useWorkspaceColours();
+  const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
+  const name = list.find((w) => w.id === props.workspaceId)?.name ?? props.workspaceId;
+  return (
+    <Link
+      to="/workspaces/$workspaceId"
+      params={{ workspaceId: props.workspaceId }}
+      aria-label={`Back to ${name}`}
+      className="flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline"
+    >
+      <WorkspaceDot colour={colourOf(props.workspaceId)} small />
+      {name}
+    </Link>
   );
 }

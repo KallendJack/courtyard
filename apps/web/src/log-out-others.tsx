@@ -14,12 +14,17 @@ export function LogOutOthers() {
   };
 
   return (
-    <div className="mt-10 border-t border-neutral-200 pt-4 text-sm text-neutral-600">
-      <button type="button" onClick={logOutOthers} className="underline hover:text-neutral-900">
+    <div className="mt-12 border-t pt-6 text-sm text-muted-foreground">
+      {/* A plain button: shadcn's Button would put its class-merging code on the first load. */}
+      <button
+        type="button"
+        onClick={logOutOthers}
+        className="h-9 rounded-full bg-destructive/10 px-5 text-sm font-semibold text-destructive-text hover:bg-destructive/20"
+      >
         Log out all other devices
       </button>
       {message && (
-        <p role="status" className="mt-2">
+        <p role="status" className="mt-3">
           {message}
         </p>
       )}
