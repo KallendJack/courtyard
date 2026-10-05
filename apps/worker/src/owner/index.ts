@@ -1,32 +1,50 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type AuthState, MIN_PASSWORD_LENGTH } from "@courtyard/contract";
 import { z } from "zod";
+import { readJsonFile, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
-type ScryptCost = { N: number; r: number; p: number; maxmem: number };
-
-const scryptAsync = (password: string, salt: Buffer, keyLength: number, cost: ScryptCost) =>
-  new Promise<Buffer>((resolve, reject) => {
-    scrypt(password, salt, keyLength, cost, (error, key) => (error ? reject(error) : resolve(key)));
-  });
+/** The secret in a device login's cookie. Only its hash is ever stored. */
+export const LoginSecret = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{20,100}$/)
+  .brand<"LoginSecret">();
+export type LoginSecret = z.infer<typeof LoginSecret>;
 
 /** scrypt's cost settings: about 16 MB of memory per hash, so guessing in bulk is expensive. */
-const COST = { N: 2 ** 14, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const COST = { N: 2 ** 14, r: 8, p: 1 };
+const MAX_MEMORY = 64 * 1024 * 1024;
 const KEY_LENGTH = 32;
 
 /** Wrong passwords in a row that cost nothing; after these, each one locks login for longer. */
 const FREE_GUESSES = 3;
 const MAX_LOCK_MS = 15 * 60 * 1000;
+/** Wrong passwords older than this are forgotten, so an old typo never adds to a lock. */
+const FORGET_AFTER_MS = 60 * 60 * 1000;
 
-const OwnerFile = z.object({ passwordHash: z.string() });
-const DeviceLogins = z.object({
-  logins: z.array(z.object({ tokenHash: z.string(), createdAt: z.string() })),
+const StoredPassword = z.object({
+  scheme: z.literal("scrypt"),
+  N: z.number().int().positive(),
+  r: z.number().int().positive(),
+  p: z.number().int().positive(),
+  salt: z.base64(),
+  hash: z.base64(),
 });
-const Guard = z.object({ failures: z.number().int().min(0), lockedUntil: z.number() });
-type Guard = z.infer<typeof Guard>;
+type StoredPassword = z.infer<typeof StoredPassword>;
+const OwnerFile = z.object({ password: StoredPassword });
+const DeviceLoginsFile = z.object({
+  logins: z.array(z.object({ secretHash: z.string(), createdAt: z.iso.datetime() })),
+});
+const FailedLoginsFile = z.object({
+  count: z.number().int().min(0),
+  lastAt: z.number(),
+  lockedUntil: z.number(),
+});
+type FailedLogins = z.infer<typeof FailedLoginsFile>;
 
+/** The data folder couldn't be read or written. */
+export type StorageError = { readonly kind: "storage"; readonly message: string };
 export type SetUpError = { readonly kind: "already-set-up" } | { readonly kind: "too-short" };
 export type LogInError =
   | { readonly kind: "not-set-up" }
@@ -35,131 +53,168 @@ export type LogInError =
 
 /** The owner's login: one password, and a login per device (ADR 0002). */
 export type Owner = {
-  /** Where this device stands, given its login token (if it sent one). */
-  readonly state: (token: string | undefined) => Promise<AuthState["state"]>;
-  /** Creates the owner, once, and returns a login token for this device. */
-  readonly setUp: (password: string) => Promise<Result<string, SetUpError>>;
-  /** Checks the password and returns a new login token for this device. */
-  readonly logIn: (password: string) => Promise<Result<string, LogInError>>;
+  /** Where this device stands, given the secret from its cookie (if it sent one). */
+  readonly state: (
+    secret: LoginSecret | undefined,
+  ) => Promise<Result<AuthState["state"], StorageError>>;
+  /** Creates the owner, once, and logs this device in. */
+  readonly setUp: (password: string) => Promise<Result<LoginSecret, SetUpError | StorageError>>;
+  /** Checks the password and logs this device in. */
+  readonly logIn: (password: string) => Promise<Result<LoginSecret, LogInError | StorageError>>;
   /** Ends this device's login only. */
-  readonly logOut: (token: string) => Promise<void>;
+  readonly logOut: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
+  /** Ends every device login except this one, so a lost device can be cut off. */
+  readonly logOutOthers: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
 };
 
-const hashPassword = async (password: string) => {
-  const salt = randomBytes(16);
-  const key = await scryptAsync(password, salt, KEY_LENGTH, COST);
-  return ["scrypt", COST.N, COST.r, COST.p, salt.toString("base64"), key.toString("base64")].join(
-    "$",
-  );
-};
-
-const passwordMatches = async (password: string, stored: string) => {
-  const [scheme, n, r, p, salt, key] = stored.split("$");
-  if (scheme !== "scrypt" || !salt || !key) return false;
-  const expected = Buffer.from(key, "base64");
-  const actual = await scryptAsync(password, Buffer.from(salt, "base64"), expected.length, {
-    N: Number(n),
-    r: Number(r),
-    p: Number(p),
-    maxmem: COST.maxmem,
+const scryptKey = (password: string, salt: Buffer, cost: { N: number; r: number; p: number }) =>
+  new Promise<Buffer>((resolve, reject) => {
+    scrypt(password, salt, KEY_LENGTH, { ...cost, maxmem: MAX_MEMORY }, (error, key) =>
+      error ? reject(error) : resolve(key),
+    );
   });
-  return timingSafeEqual(actual, expected);
-};
 
-/** Only a hash of each token is stored, so the data folder alone can't log anyone in. */
-const hashToken = (token: string) => createHash("sha256").update(token).digest("base64url");
+const hashSecret = (secret: string) => createHash("sha256").update(secret).digest("base64url");
 
-const hasCode = (error: unknown, code: string) =>
-  error instanceof Error && "code" in error && error.code === code;
+const storage = (message: string): StorageError => ({ kind: "storage", message });
 
 export const createOwner = (options: { dataDir: string; now: () => number }): Owner => {
   const ownerPath = join(options.dataDir, "owner.json");
   const loginsPath = join(options.dataDir, "device-logins.json");
-  const guardPath = join(options.dataDir, "login-guard.json");
+  const failuresPath = join(options.dataDir, "failed-logins.json");
 
-  const readJson = async <T>(path: string, schema: z.ZodType<T>, empty: T): Promise<T> => {
-    try {
-      return schema.parse(JSON.parse(await readFile(path, "utf8")));
-    } catch (error) {
-      if (hasCode(error, "ENOENT")) return empty;
-      throw error;
-    }
+  /**
+   * Runs changes one at a time. Without this, guesses sent together would all read the same
+   * failure count and skip the slow-down, and a login and a logout could undo each other.
+   */
+  let queue: Promise<unknown> = Promise.resolve();
+  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
+    const run = queue.then(change, change);
+    queue = run.catch(() => undefined);
+    return run;
   };
 
-  /** Writes to a temporary file first, so a crash mid-write never leaves half a file. */
-  const writeJson = async (path: string, value: unknown) => {
-    await writeFile(`${path}.tmp`, JSON.stringify(value, null, 2));
-    await rename(`${path}.tmp`, path);
+  const read = async <T>(path: string, schema: z.ZodType<T>) => {
+    const file = await readJsonFile(path, schema);
+    return file.ok ? file : err(storage("A file in Courtyard's data folder can't be read."));
+  };
+  const write = async (path: string, value: unknown) => {
+    const written = await writeJsonFile(path, value);
+    return written.ok
+      ? ok(null)
+      : err(storage("A file in Courtyard's data folder can't be written."));
   };
 
-  const readOwner = () => readJson(ownerPath, OwnerFile.nullable(), null);
-  const readLogins = () => readJson(loginsPath, DeviceLogins, { logins: [] });
-  const readGuard = () => readJson(guardPath, Guard, { failures: 0, lockedUntil: 0 });
-
-  const newLogin = async () => {
-    const token = randomBytes(32).toString("base64url");
-    const { logins } = await readLogins();
-    logins.push({ tokenHash: hashToken(token), createdAt: new Date(options.now()).toISOString() });
-    await writeJson(loginsPath, { logins });
-    return token;
+  const newLogin = async (): Promise<Result<LoginSecret, StorageError>> => {
+    const secret = LoginSecret.parse(randomBytes(32).toString("base64url"));
+    const file = await read(loginsPath, DeviceLoginsFile);
+    if (!file.ok) return file;
+    const logins = file.value?.logins ?? [];
+    const createdAt = new Date(options.now()).toISOString();
+    const written = await write(loginsPath, {
+      logins: [...logins, { secretHash: hashSecret(secret), createdAt }],
+    });
+    return written.ok ? ok(secret) : written;
   };
 
-  const isLoggedIn = async (token: string | undefined) => {
-    if (!token) return false;
-    const tokenHash = hashToken(token);
-    return (await readLogins()).logins.some((login) => login.tokenHash === tokenHash);
+  /** Keeps only the device logins whose secret hash `keep` says yes to. */
+  const keepLogins = (keep: (secretHash: string) => boolean) =>
+    oneAtATime(async (): Promise<Result<null, StorageError>> => {
+      const file = await read(loginsPath, DeviceLoginsFile);
+      if (!file.ok) return file;
+      const logins = (file.value?.logins ?? []).filter((login) => keep(login.secretHash));
+      return write(loginsPath, { logins });
+    });
+
+  const currentFailures = async (): Promise<Result<FailedLogins, StorageError>> => {
+    const file = await read(failuresPath, FailedLoginsFile);
+    if (!file.ok) return file;
+    const failures = file.value ?? { count: 0, lastAt: 0, lockedUntil: 0 };
+    const forgotten = options.now() - failures.lastAt > FORGET_AFTER_MS;
+    return ok(forgotten ? { ...failures, count: 0 } : failures);
   };
 
-  const recordFailure = async (guard: Guard) => {
-    const failures = guard.failures + 1;
+  const passwordMatches = async (password: string, stored: StoredPassword) => {
+    const expected = Buffer.from(stored.hash, "base64");
+    const actual = await scryptKey(password, Buffer.from(stored.salt, "base64"), stored);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  };
+
+  const recordFailure = (count: number) => {
     const lockMs =
-      failures > FREE_GUESSES
-        ? Math.min(1000 * 2 ** (failures - FREE_GUESSES - 1), MAX_LOCK_MS)
-        : 0;
-    await writeJson(guardPath, { failures, lockedUntil: options.now() + lockMs });
+      count > FREE_GUESSES ? Math.min(1000 * 2 ** (count - FREE_GUESSES - 1), MAX_LOCK_MS) : 0;
+    const now = options.now();
+    return write(failuresPath, { count, lastAt: now, lockedUntil: now + lockMs });
   };
 
   return {
-    state: async (token) => {
-      if ((await readOwner()) === null) return "setup-needed";
-      return (await isLoggedIn(token)) ? "logged-in" : "logged-out";
+    state: async (secret) => {
+      const owner = await read(ownerPath, OwnerFile);
+      if (!owner.ok) return owner;
+      if (owner.value === undefined) return ok("setup-needed");
+      if (secret === undefined) return ok("logged-out");
+      const logins = await read(loginsPath, DeviceLoginsFile);
+      if (!logins.ok) return logins;
+      const secretHash = hashSecret(secret);
+      const found = (logins.value?.logins ?? []).some((login) => login.secretHash === secretHash);
+      return ok(found ? "logged-in" : "logged-out");
     },
 
-    setUp: async (password) => {
-      if (password.length < MIN_PASSWORD_LENGTH) return err({ kind: "too-short" });
-      const owner = { passwordHash: await hashPassword(password) };
-      try {
-        // `wx` fails if the file exists, so two setups racing can't both win.
-        await writeFile(ownerPath, JSON.stringify(owner, null, 2), { flag: "wx" });
-      } catch (error) {
-        if (hasCode(error, "EEXIST")) {
-          return err({ kind: "already-set-up" });
+    setUp: (password) =>
+      oneAtATime(async (): Promise<Result<LoginSecret, SetUpError | StorageError>> => {
+        if (password.length < MIN_PASSWORD_LENGTH) return err({ kind: "too-short" });
+        // Checked before hashing, so asking again after setup costs nothing.
+        const existing = await read(ownerPath, OwnerFile);
+        if (!existing.ok) return existing;
+        if (existing.value !== undefined) return err({ kind: "already-set-up" });
+
+        const salt = randomBytes(16);
+        const hash = await scryptKey(password, salt, COST);
+        const stored: StoredPassword = {
+          scheme: "scrypt",
+          ...COST,
+          salt: salt.toString("base64"),
+          hash: hash.toString("base64"),
+        };
+        const created = await writeJsonFile(ownerPath, { password: stored }, { exclusive: true });
+        if (!created.ok) {
+          return created.error === "exists"
+            ? err({ kind: "already-set-up" })
+            : err(storage("A file in Courtyard's data folder can't be written."));
         }
-        throw error;
-      }
-      return ok(await newLogin());
+        return newLogin();
+      }),
+
+    logIn: (password) =>
+      oneAtATime(async (): Promise<Result<LoginSecret, LogInError | StorageError>> => {
+        const owner = await read(ownerPath, OwnerFile);
+        if (!owner.ok) return owner;
+        if (owner.value === undefined) return err({ kind: "not-set-up" });
+
+        const failures = await currentFailures();
+        if (!failures.ok) return failures;
+        const waitMs = failures.value.lockedUntil - options.now();
+        if (waitMs > 0) return err({ kind: "locked", retryAfterSeconds: Math.ceil(waitMs / 1000) });
+
+        if (!(await passwordMatches(password, owner.value.password))) {
+          const recorded = await recordFailure(failures.value.count + 1);
+          return recorded.ok ? err({ kind: "wrong-password" }) : recorded;
+        }
+        if (failures.value.count > 0) {
+          const reset = await write(failuresPath, { count: 0, lastAt: 0, lockedUntil: 0 });
+          if (!reset.ok) return reset;
+        }
+        return newLogin();
+      }),
+
+    logOut: (secret) => {
+      const secretHash = hashSecret(secret);
+      return keepLogins((hash) => hash !== secretHash);
     },
 
-    logIn: async (password) => {
-      const owner = await readOwner();
-      if (owner === null) return err({ kind: "not-set-up" });
-
-      const guard = await readGuard();
-      const waitMs = guard.lockedUntil - options.now();
-      if (waitMs > 0) return err({ kind: "locked", retryAfterSeconds: Math.ceil(waitMs / 1000) });
-
-      if (!(await passwordMatches(password, owner.passwordHash))) {
-        await recordFailure(guard);
-        return err({ kind: "wrong-password" });
-      }
-      if (guard.failures > 0) await writeJson(guardPath, { failures: 0, lockedUntil: 0 });
-      return ok(await newLogin());
-    },
-
-    logOut: async (token) => {
-      const tokenHash = hashToken(token);
-      const { logins } = await readLogins();
-      await writeJson(loginsPath, { logins: logins.filter((l) => l.tokenHash !== tokenHash) });
+    logOutOthers: (secret) => {
+      const secretHash = hashSecret(secret);
+      return keepLogins((hash) => hash === secretHash);
     },
   };
 };

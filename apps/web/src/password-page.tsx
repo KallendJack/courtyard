@@ -1,5 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { describeProblem } from "./problems.tsx";
 import { toWorker } from "./worker.ts";
 
 /**
@@ -36,13 +37,7 @@ export function PasswordPage(props: {
       await router.invalidate();
       return;
     }
-    setError(
-      result.kind === "failed"
-        ? result.message
-        : result.kind === "logged-out"
-          ? "Wrong password."
-          : "Courtyard can't reach its worker.",
-    );
+    setError(describeProblem(result).body);
   };
 
   return (

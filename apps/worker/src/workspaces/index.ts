@@ -9,6 +9,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { parseContextFile } from "../context-file/index.ts";
+import { hasCode } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
@@ -39,15 +40,12 @@ export type WorkspaceError =
   | { readonly kind: "not-found" }
   | { readonly kind: "unreadable"; readonly message: string };
 
-const isMissing = (error: unknown) =>
-  error instanceof Error && "code" in error && error.code === "ENOENT";
-
 /** A file's text, `undefined` when it doesn't exist, or an error when it exists but can't be read. */
 const readIfPresent = async (path: string): Promise<Result<string | undefined, unknown>> => {
   try {
     return ok(await readFile(path, "utf8"));
   } catch (error) {
-    return isMissing(error) ? ok(undefined) : err(error);
+    return hasCode(error, "ENOENT") ? ok(undefined) : err(error);
   }
 };
 
@@ -144,7 +142,7 @@ export const getWorkspace = async (
   try {
     folder = await stat(join(contextDir, parsed.data));
   } catch (error) {
-    if (!isMissing(error))
+    if (!hasCode(error, "ENOENT"))
       return err({ kind: "unreadable", message: "The context folder can't be read." });
   }
   if (!folder?.isDirectory()) return err({ kind: "not-found" });

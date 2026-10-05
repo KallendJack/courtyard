@@ -12,13 +12,13 @@ test("a logged-out device is sent to login, gets in with the password, and can l
 
   await page.getByLabel("Password").fill("not the password");
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Wrong password.");
+  await expect(page.getByRole("alert")).toHaveText("Wrong password");
 
   await page.getByLabel("Password").fill(OWNER_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByRole("heading", { name: "Workspaces" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Log out" }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
 

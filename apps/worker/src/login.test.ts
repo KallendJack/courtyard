@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, AuthState } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loginCookie } from "./testing.ts";
 import { createWorker } from "./worker.ts";
 
 const PASSWORD = "correct horse battery";
@@ -39,14 +40,6 @@ const post = (path: string, body: unknown, cookie?: string) =>
 
 const get = (path: string, cookie?: string) =>
   startWorker().request(path, cookie ? { headers: { cookie } } : {});
-
-/** The `name=value` part of the login cookie a response set. */
-const loginCookie = (response: Response) => {
-  const header = response.headers.get("set-cookie") ?? "";
-  const match = /(courtyard_login=[^;]+)/.exec(header);
-  if (!match?.[1]) throw new Error(`no login cookie in: ${header}`);
-  return match[1];
-};
 
 const authState = async (cookie?: string) =>
   AuthState.parse(await (await get("/api/auth", cookie)).json()).state;
@@ -175,5 +168,86 @@ describe("logging out", () => {
     expect(response.status).toBe(204);
     expect(await authState(first)).toBe("logged-out");
     expect(await authState(second)).toBe("logged-in");
+  });
+});
+
+describe("review fixes", () => {
+  it("slows down wrong passwords sent all at once", async () => {
+    const app = startWorker();
+    await setUp();
+    const guess = (password: string) =>
+      app.request("/api/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+    await Promise.all(Array.from({ length: 6 }, () => guess("wrong password")));
+
+    expect((await guess(PASSWORD)).status).toBe(429);
+  });
+
+  it("forgets wrong passwords after an hour", async () => {
+    await setUp();
+    for (let i = 0; i < 3; i++) await post("/api/login", { password: "wrong password" });
+
+    now += 61 * 60 * 1000;
+    for (let i = 0; i < 3; i++) await post("/api/login", { password: "wrong password" });
+
+    expect((await post("/api/login", { password: PASSWORD })).status).toBe(200);
+  });
+
+  it("refuses a setup sent from another site", async () => {
+    const asText = await startWorker().request("/api/setup", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ password: PASSWORD }),
+    });
+    const fromElsewhere = await startWorker().request("/api/setup", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://elsewhere.example" },
+      body: JSON.stringify({ password: PASSWORD }),
+    });
+
+    expect(asText.status).toBe(415);
+    expect(fromElsewhere.status).toBe(403);
+    expect(await authState()).toBe("setup-needed");
+  });
+
+  it("refuses a password longer than 1,024 characters", async () => {
+    expect((await post("/api/setup", { password: "x".repeat(1025) })).status).toBe(400);
+  });
+
+  it("logs out every other device, so a lost one can be cut off", async () => {
+    const first = await setUp();
+    const second = loginCookie(await post("/api/login", { password: PASSWORD }));
+    const third = loginCookie(await post("/api/login", { password: PASSWORD }));
+
+    expect((await post("/api/logout-others", {}, second)).status).toBe(204);
+
+    expect(await authState(first)).toBe("logged-out");
+    expect(await authState(third)).toBe("logged-out");
+    expect(await authState(second)).toBe("logged-in");
+  });
+
+  it("renews a device's cookie whenever it checks in, so a device in use never drops out", async () => {
+    const cookie = await setUp();
+
+    const response = await get("/api/auth", cookie);
+
+    expect(response.headers.get("set-cookie")).toMatch(/Max-Age=34560000/);
+  });
+
+  it("reports a damaged owner file instead of crashing", async () => {
+    await setUp();
+    await writeFile(join(root, "data", "owner.json"), "{ damaged");
+
+    for (const response of [
+      await get("/api/auth"),
+      await post("/api/login", { password: PASSWORD }),
+    ]) {
+      expect(response.status).toBe(500);
+      expect(ApiError.safeParse(await response.json()).success).toBe(true);
+    }
   });
 });

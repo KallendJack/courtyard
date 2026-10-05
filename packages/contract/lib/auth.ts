@@ -6,9 +6,11 @@ export const AuthState = z.object({
 });
 export type AuthState = z.infer<typeof AuthState>;
 
-/** What the setup and login forms send. */
-export const PasswordForm = z.object({ password: z.string() });
-export type PasswordForm = z.infer<typeof PasswordForm>;
-
 /** The shortest password setup accepts. */
 export const MIN_PASSWORD_LENGTH = 8;
+/** The longest password accepted, so a huge one can't tie up the worker hashing it. */
+export const MAX_PASSWORD_LENGTH = 1024;
+
+/** What the setup and login forms send. */
+export const PasswordForm = z.object({ password: z.string().max(MAX_PASSWORD_LENGTH) });
+export type PasswordForm = z.infer<typeof PasswordForm>;

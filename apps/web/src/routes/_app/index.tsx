@@ -1,4 +1,5 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
+import { LogOutOthers } from "../../log-out-others.tsx";
 
 const loggedIn = getRouteApi("/_app");
 
@@ -40,6 +41,7 @@ function Home() {
           ))}
         </ul>
       )}
+      <LogOutOthers />
     </main>
   );
 }

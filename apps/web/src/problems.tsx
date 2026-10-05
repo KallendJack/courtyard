@@ -1,19 +1,28 @@
 import { Link } from "@tanstack/react-router";
 import type { FromWorker } from "./worker.ts";
 
+type NoData = Exclude<FromWorker<unknown>, { kind: "loaded" }>;
+
+/** A short title and an explanation for each reason the worker gave no data. */
+export const describeProblem = (problem: NoData): { title: string; body: string } => {
+  switch (problem.kind) {
+    case "offline":
+      return {
+        title: "Worker offline",
+        body: "Courtyard can't reach its worker. Check that the machine it runs on is switched on.",
+      };
+    case "logged-out":
+      return { title: "Logged out", body: "This device's login has ended." };
+    case "failed":
+      return { title: "Something went wrong", body: problem.message };
+    case "not-found":
+      return { title: "Not found", body: "There's nothing here." };
+  }
+};
+
 /** What to show instead of a page when the worker gave no data. */
-export function Problem({ result }: { result: Exclude<FromWorker<unknown>, { kind: "loaded" }> }) {
-  const [title, body] =
-    result.kind === "offline"
-      ? [
-          "Worker offline",
-          "Courtyard can't reach its worker. Check that the machine it runs on is switched on.",
-        ]
-      : result.kind === "logged-out"
-        ? ["Logged out", "This device's login has ended."]
-        : result.kind === "failed"
-          ? ["Something went wrong", result.message]
-          : ["Not found", "There's nothing here."];
+export function Problem({ result }: { result: NoData }) {
+  const { title, body } = describeProblem(result);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
