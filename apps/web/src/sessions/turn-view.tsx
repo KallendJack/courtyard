@@ -54,6 +54,9 @@ export const TurnView = memo(function TurnView(props: {
           {turn.state.kind === "running" && <span className="animate-pulse"> ▍</span>}
         </p>
       )}
+      {turn.state.kind === "stopped" && (
+        <p className="text-sm text-neutral-500">You stopped this turn.</p>
+      )}
       {turn.state.kind === "failed" && (
         <div
           role="alert"

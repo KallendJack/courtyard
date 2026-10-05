@@ -19,6 +19,7 @@ export type Turn = {
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
+    | { readonly kind: "stopped" }
     | { readonly kind: "failed"; readonly reason: FailureReason };
 };
 
@@ -66,6 +67,11 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
       });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
+    case "turn-stopped":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, state: { kind: "stopped" } }),
+      });
     case "turn-failed":
       return withLastTurn(log, {
         seq,

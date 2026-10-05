@@ -281,6 +281,27 @@ const confineTo =
     }
   };
 
+/**
+ * The messages, until the turn is stopped: then it ends at once, even if Claude Code is still
+ * waiting on something, and tells Claude Code to finish up.
+ */
+async function* untilStopped(messages: AsyncIterable<unknown>, signal: AbortSignal) {
+  const iterator = messages[Symbol.asyncIterator]();
+  const stopped = new Promise<"stopped">((resolve) => {
+    if (signal.aborted) resolve("stopped");
+    signal.addEventListener("abort", () => resolve("stopped"));
+  });
+  while (true) {
+    const next = await Promise.race([iterator.next(), stopped]);
+    if (next === "stopped") {
+      void iterator.return?.()?.catch(() => undefined);
+      return;
+    }
+    if (next.done) return;
+    yield next.value;
+  }
+}
+
 /** Stops text from the workspace closing the tag that marks where it ends. */
 const contained = (text: string) => text.replaceAll("</context_file>", "<\\/context_file>");
 
@@ -389,6 +410,11 @@ export const createClaudeProvider = (
       let resetAt: string | undefined;
       let failure: FailureReason | undefined;
       let resultArrived = false;
+      // The owner stopping the turn stops Claude Code itself.
+      const stop = new AbortController();
+      const stopClaudeCode = () => stop.abort();
+      if (input.signal.aborted) stop.abort();
+      input.signal.addEventListener("abort", stopClaudeCode);
 
       try {
         const messages = claudeCode.run({
@@ -404,10 +430,11 @@ export const createClaudeProvider = (
             hooks: { PreToolUse: [{ hooks: [confineTo(folder, input.report)] }] },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,
+            abortController: stop,
           },
         });
 
-        for await (const message of messages) {
+        for await (const message of untilStopped(messages, stop.signal)) {
           const delta = TextDelta.safeParse(message);
           if (delta.success) {
             if (!delta.data.parent_tool_use_id) await input.emit(delta.data.event.delta.text);
@@ -433,6 +460,8 @@ export const createClaudeProvider = (
           }
         }
       } catch (error) {
+        // Stopping makes Claude Code end with an error; that's the stop working, not a failure.
+        if (input.signal.aborted) return ok(null);
         // Claude Code itself failed (it couldn't start, or stopped). Only the kind of error goes to
         // the worker's log, never its text; the session gets plain words.
         console.error("Claude Code stopped:", error instanceof Error ? error.name : typeof error);
@@ -440,8 +469,10 @@ export const createClaudeProvider = (
           kind: "provider-unavailable",
           message: "Claude Code stopped unexpectedly on the worker machine.",
         };
+      } finally {
+        input.signal.removeEventListener("abort", stopClaudeCode);
       }
-
+      if (input.signal.aborted) return ok(null);
       if (!failure && !resultArrived) failure = failureFor("unknown", resetAt);
       return failure ? err(failure) : ok(null);
     },

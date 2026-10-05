@@ -19,6 +19,7 @@ import { getWorkspace } from "../workspaces/index.ts";
 export type SessionError =
   | { readonly kind: "not-found" }
   | { readonly kind: "busy" }
+  | { readonly kind: "nothing-running" }
   | { readonly kind: "model-unavailable" }
   | { readonly kind: "storage"; readonly message: string };
 
@@ -72,6 +73,8 @@ type RunningSession = {
   listeners: Set<(event: SessionEvent) => void>;
   /** Appends and subscriptions run one at a time, so events are gapless and none is missed. */
   queue: Promise<unknown>;
+  /** Stops the running turn, while there is one. */
+  stopper: AbortController | undefined;
 };
 
 /**
@@ -95,6 +98,7 @@ export const createSessions = (options: {
     if (existing) return existing;
     const created: RunningSession = {
       busy: false,
+      stopper: undefined,
       nextSeq: undefined,
       listeners: new Set(),
       queue: Promise.resolve(),
@@ -204,7 +208,12 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     const last = events.value.at(-1);
-    if (last === undefined || last.type === "turn-completed" || last.type === "turn-failed") return;
+    const lastTurnEnded =
+      last === undefined ||
+      last.type === "turn-completed" ||
+      last.type === "turn-failed" ||
+      last.type === "turn-stopped";
+    if (lastTurnEnded) return;
     const ended = await writeEvent({
       id,
       session,
@@ -244,6 +253,8 @@ export const createSessions = (options: {
     model: ModelRef["model"];
   }) => {
     const session = runningSession(turn.id);
+    const stopper = new AbortController();
+    session.stopper = stopper;
     let failure: FailureReason | undefined;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
@@ -271,6 +282,7 @@ export const createSessions = (options: {
             const recorded = await append(turn.id, { type: "activity", activity });
             if (!recorded.ok) recordingLost = true;
           },
+          signal: stopper.signal,
         });
         if (!result.ok) failure = result.error;
       }
@@ -291,10 +303,14 @@ export const createSessions = (options: {
     // queueing the last event happen together, so a new message can't land between them.
     await markUpdated(turn.id);
     session.busy = false;
-    const ended = await append(
-      turn.id,
-      failure ? { type: "turn-failed", reason: failure } : { type: "turn-completed" },
-    );
+    session.stopper = undefined;
+    // A turn the owner stopped is recorded as stopped, whatever the provider said on the way out.
+    const ending: NewEvent = stopper.signal.aborted
+      ? { type: "turn-stopped" }
+      : failure
+        ? { type: "turn-failed", reason: failure }
+        : { type: "turn-completed" };
+    const ended = await append(turn.id, ending);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
   };
 
@@ -387,6 +403,16 @@ export const createSessions = (options: {
         provider,
         message,
       });
+    },
+
+    /** Stops the session's running turn. Whatever it wrote so far stays. */
+    stop: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const session = await findSession(rawId);
+      if (!session.ok) return session;
+      const stopper = running.get(session.value.id)?.stopper;
+      if (!stopper) return err({ kind: "nothing-running" });
+      stopper.abort();
+      return ok(null);
     },
 
     get: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {

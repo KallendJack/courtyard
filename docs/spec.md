@@ -277,9 +277,10 @@ Deep modules, each with a small interface at its root and its implementation pri
 
 ### Events
 
-User message, text delta, activity (file read, command run, tool connection used), approval requested (a command, or a
-tool connection action with its arguments), approval answered, model changed, turn completed, and turn failed with a
-reason: rate limited (with reset time if known), provider unavailable, stopped by the owner, interrupted, or unknown.
+Owner message, text delta, activity (file read, command run, tool connection used), approval requested (a command, or a
+tool connection action with its arguments), approval answered, model changed, turn completed, turn stopped (by the
+owner, recorded apart from failures, with the text written so far kept), and turn failed with a reason: rate limited
+(with reset time if known), provider unavailable, interrupted, or unknown.
 
 ### Overflow
 

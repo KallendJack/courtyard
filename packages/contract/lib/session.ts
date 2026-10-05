@@ -99,6 +99,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),
+  /** The owner stopped the turn; whatever was written before stays. */
+  z.object({ ...eventBase, type: z.literal("turn-stopped") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;

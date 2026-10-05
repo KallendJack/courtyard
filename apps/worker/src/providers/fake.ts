@@ -4,6 +4,16 @@ import type { Provider } from "./index.ts";
 
 const id = ProviderId.parse("fake");
 
+/** Waits `ms`, or less if the turn is stopped first. */
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+
 /**
  * A scripted provider, so everything runs end to end with no models installed and no usage
  * (story 90). It answers "You said: …" a word at a time, and fails on purpose when a message asks
@@ -15,7 +25,7 @@ export const createFakeProvider = (
     /** Pause between words, so streaming is visible. */
     delayMs?: number;
     /** Awaited before answering; tests use it to hold a turn open. */
-    beforeReply?: () => Promise<void>;
+    beforeReply?: (signal: AbortSignal) => Promise<void>;
   } = {},
 ): Provider => {
   const delayMs = options.delayMs ?? 40;
@@ -30,8 +40,9 @@ export const createFakeProvider = (
       capabilities: { readsFiles: false, codes: false, usesTools: false },
     }),
 
-    runTurn: async ({ lines, emit, report }) => {
-      await options.beforeReply?.();
+    runTurn: async ({ lines, emit, report, signal }) => {
+      await options.beforeReply?.(signal);
+      if (signal.aborted) return ok(null);
       const last = lines.at(-1)?.text ?? "";
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
       if (/please fail/i.test(last)) {
@@ -41,7 +52,8 @@ export const createFakeProvider = (
         });
       }
       for (const word of `You said: ${last}`.split(/(?<= )/)) {
-        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (delayMs > 0) await pause(delayMs, signal);
+        if (signal.aborted) return ok(null);
         await emit(word);
       }
       return ok(null);

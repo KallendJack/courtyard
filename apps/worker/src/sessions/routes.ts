@@ -28,6 +28,8 @@ const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "A turn is already running in this session. Wait for it to finish.",
       });
+    case "nothing-running":
+      return apiError(c, { status: 409, error: "Nothing is running in this session." });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
     case "storage":
@@ -91,6 +93,12 @@ export const sessionRoutes = (options: {
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
     const sent = await sessions.send(c.req.param("id"), message.value);
     if (!sent.ok) return sessionError(c, sent.error);
+    return c.body(null, 202);
+  });
+
+  routes.post("/sessions/:id/stop", async (c) => {
+    const stopped = await sessions.stop(c.req.param("id"));
+    if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
   });
 

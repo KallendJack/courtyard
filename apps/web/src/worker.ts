@@ -95,6 +95,10 @@ export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
     schema: SessionSummary,
   });
 
+/** Stops the turn running in a session. */
+export const stopTurn = (sessionId: SessionId) =>
+  post({ path: `/sessions/${encodeURIComponent(sessionId)}/stop`, body: {}, schema: z.unknown() });
+
 /** Sends the next message in a session. */
 export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
   post({
