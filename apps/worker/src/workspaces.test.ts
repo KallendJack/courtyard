@@ -3,15 +3,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { asOwner } from "./testing.ts";
 import { createWorker } from "./worker.ts";
 
 let root: string;
 let contextDir: string;
+let request: (path: string) => Response | Promise<Response>;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
   contextDir = join(root, "context");
   await mkdir(contextDir);
+  const worker = createWorker({
+    env: { COURTYARD_CONTEXT_DIR: contextDir, COURTYARD_DATA_DIR: join(root, "data") },
+  });
+  if (!worker.ok) throw new Error(worker.error);
+  request = await asOwner(worker.value.app);
 });
 
 afterEach(async () => {
@@ -24,14 +31,6 @@ const workspace = async (id: string, files: Record<string, string> = {}) => {
   for (const [name, content] of Object.entries(files)) {
     await writeFile(join(contextDir, id, name), content);
   }
-};
-
-const request = async (path: string) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: contextDir, COURTYARD_DATA_DIR: join(root, "data") },
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  return worker.value.app.request(path);
 };
 
 const listWorkspaces = async () => {

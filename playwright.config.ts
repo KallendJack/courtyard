@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { OWNER_LOGIN } from "./e2e/owner.ts";
 
 const port = 8799;
 
@@ -10,9 +11,16 @@ export default defineConfig({
   testDir: "e2e",
   forbidOnly: Boolean(process.env.CI),
   use: { baseURL: `http://localhost:${port}` },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "setup", testMatch: /\.setup\.ts$/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: OWNER_LOGIN },
+      dependencies: ["setup"],
+    },
+  ],
   webServer: {
-    command: "node apps/worker/src/main.ts",
+    command: "node e2e/start-worker.mjs",
     url: `http://localhost:${port}/api/health`,
     // Always a fresh worker, so the tests never run against a stale one left on the port.
     reuseExistingServer: false,

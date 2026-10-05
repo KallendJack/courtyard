@@ -1,41 +1,38 @@
-import { WorkspaceList } from "@courtyard/contract";
-import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { AuthState } from "@courtyard/contract";
+import { createRootRoute, Outlet, redirect } from "@tanstack/react-router";
 import { Problem } from "../problems.tsx";
 import { fromWorker } from "../worker.ts";
 
 export const Route = createRootRoute({
-  loader: () => fromWorker("/workspaces", WorkspaceList),
+  // Before every page: send the device to setup or login when it isn't in, and away from them
+  // once it is (ADR 0002). Throwing `redirect` is how TanStack Router changes page here.
+  beforeLoad: async ({ location }) => {
+    const auth = await fromWorker("/auth", AuthState);
+    if (auth.kind !== "loaded") return { auth };
+
+    const path = location.pathname;
+    switch (auth.data.state) {
+      case "setup-needed":
+        if (path !== "/setup") throw redirect({ to: "/setup" });
+        break;
+      case "logged-out":
+        if (path !== "/login") throw redirect({ to: "/login" });
+        break;
+      case "logged-in":
+        if (path === "/setup" || path === "/login") throw redirect({ to: "/" });
+        break;
+    }
+    return { auth };
+  },
   component: Root,
 });
 
 function Root() {
-  const workspaces = Route.useLoaderData();
+  const { auth } = Route.useRouteContext();
 
   return (
     <div className="min-h-dvh bg-white text-neutral-900">
-      <header className="border-b border-neutral-200">
-        <div className="mx-auto flex max-w-3xl items-center gap-4 px-4 py-3">
-          <Link to="/" className="shrink-0 font-semibold">
-            Courtyard
-          </Link>
-          {workspaces.kind === "loaded" && (
-            <nav aria-label="Workspaces" className="-mx-1 flex gap-1 overflow-x-auto">
-              {workspaces.data.workspaces.map((workspace) => (
-                <Link
-                  key={workspace.id}
-                  to="/workspaces/$workspaceId"
-                  params={{ workspaceId: workspace.id }}
-                  className="shrink-0 rounded-full px-3 py-1 text-sm text-neutral-600 hover:bg-neutral-100"
-                  activeProps={{ className: "bg-neutral-900 text-white hover:bg-neutral-900" }}
-                >
-                  {workspace.name}
-                </Link>
-              ))}
-            </nav>
-          )}
-        </div>
-      </header>
-      {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
+      {auth.kind === "loaded" ? <Outlet /> : <Problem result={auth} />}
     </div>
   );
 }
