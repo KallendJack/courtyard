@@ -2,7 +2,7 @@ import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
 import { CourtyardMark } from "./courtyard-mark.tsx";
-import { type WorkspaceColour, WorkspaceDot } from "./workspace-colour.tsx";
+import { type ColourOf, WorkspaceDot } from "./workspace-colour.tsx";
 
 /**
  * The workspace switcher on a narrow screen (a folded phone): one row across the top that
@@ -10,7 +10,7 @@ import { type WorkspaceColour, WorkspaceDot } from "./workspace-colour.tsx";
  */
 export function WorkspaceStrip(props: {
   workspaces: readonly WorkspaceSummary[];
-  colours: ReadonlyMap<string, WorkspaceColour>;
+  colourOf: ColourOf;
   onLogOut: () => void;
 }) {
   return (
@@ -26,7 +26,7 @@ export function WorkspaceStrip(props: {
             params={{ workspaceId: workspace.id }}
             className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm data-[status=active]:bg-muted data-[status=active]:font-semibold"
           >
-            <WorkspaceDot colour={props.colours.get(workspace.id) ?? "heather"} small />
+            <WorkspaceDot colour={props.colourOf(workspace.id)} small />
             {workspace.name}
           </Link>
         ))}

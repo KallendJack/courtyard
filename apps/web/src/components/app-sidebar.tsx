@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { fromWorker } from "../worker.ts";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
-import { type WorkspaceColour, WorkspaceDot } from "./workspace-colour.tsx";
+import { type ColourOf, WorkspaceDot } from "./workspace-colour.tsx";
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;
@@ -19,6 +19,14 @@ const wasCollapsed = () => {
     return false;
   }
 };
+
+/** Whether the keyboard is in something that takes text, where Ctrl+B belongs to it. */
+const typingIn = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+/** The sidebar only shows from tablet width up; below that the workspace strip takes over. */
+const SHOWN = "(min-width: 768px)";
 
 const remember = (collapsed: boolean) => {
   try {
@@ -34,20 +42,18 @@ const remember = (collapsed: boolean) => {
  */
 export function AppSidebar(props: {
   workspaces: readonly WorkspaceSummary[];
-  colours: ReadonlyMap<string, WorkspaceColour>;
+  colourOf: ColourOf;
   onLogOut: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(wasCollapsed);
-  const toggle = useCallback(() => {
-    setCollapsed((was) => {
-      remember(!was);
-      return !was;
-    });
-  }, []);
+  const toggle = useCallback(() => setCollapsed((was) => !was), []);
+
+  useEffect(() => remember(collapsed), [collapsed]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "b" && (event.ctrlKey || event.metaKey)) {
+      const shortcut = event.key === "b" && (event.ctrlKey || event.metaKey);
+      if (shortcut && !typingIn(event.target) && window.matchMedia(SHOWN).matches) {
         event.preventDefault();
         toggle();
       }
@@ -61,7 +67,7 @@ export function AppSidebar(props: {
       data-collapsed={collapsed}
       className={classes(
         "group/sidebar sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-200 ease-out md:block",
-        collapsed ? "w-16" : "w-56",
+        collapsed ? "w-16" : "w-[212px] xl:w-62",
       )}
     >
       <nav aria-label="Workspaces" className="flex h-full flex-col gap-6 overflow-y-auto px-2 py-4">
@@ -90,7 +96,7 @@ export function AppSidebar(props: {
                 title={collapsed ? workspace.name : undefined}
                 className="flex h-9 items-center gap-3 rounded-md px-3 text-[15px] hover:bg-muted/60 data-[status=active]:bg-muted data-[status=active]:font-semibold group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
               >
-                <WorkspaceDot colour={props.colours.get(workspace.id) ?? "heather"} />
+                <WorkspaceDot colour={props.colourOf(workspace.id)} />
                 <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
                   {workspace.name}
                 </span>
@@ -122,7 +128,8 @@ function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: pathname is the trigger: moving between pages (starting a session, say) refreshes the list
   useEffect(() => {
-    if (workspaceId === undefined) return setSessions([]);
+    setSessions([]);
+    if (workspaceId === undefined) return;
     let current = true;
     void fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/sessions`, SessionList).then(
       (result) => {
@@ -140,7 +147,7 @@ function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
       aria-label={`Recent in ${workspace.name}`}
       className="flex flex-col group-data-[collapsed=true]/sidebar:hidden"
     >
-      <h2 className="px-3 pb-1.5 text-[13px] font-medium text-muted-foreground">
+      <h2 className="px-3 pb-1.5 text-xs font-medium text-muted-foreground">
         Recent in {workspace.name}
       </h2>
       <ul>

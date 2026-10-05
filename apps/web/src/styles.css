@@ -39,24 +39,21 @@
   --color-input: var(--input);
   --color-field: var(--field);
   --color-ring: var(--ring);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-warning: var(--warning);
   --color-workspace-bracken: var(--workspace-bracken);
   --color-workspace-heather: var(--workspace-heather);
   --color-workspace-slate: var(--workspace-slate);
   --color-workspace-moss: var(--workspace-moss);
   --color-workspace-peat: var(--workspace-peat);
 
+  /* The design's type sizes (Paper tokens): labels 13, interface 14, body 16, headings 20+. */
+  --text-xs: 13px;
+  --text-xs--line-height: 18px;
+
   --radius-sm: 4px;
   --radius-md: 10px;
+  --radius-bubble: 14px; /* the owner's message */
   --radius-lg: 16px;
-  --radius-xl: 20px;
 
   --container-reading: 680px;
 }
@@ -82,20 +79,17 @@
   --accent-foreground: #231f22;
   --destructive: #9b2c2c;
   --destructive-soft: #f6e9e9;
-  --destructive-text: #7a2424;
+  --destructive-text: #5e2424;
   --border: #e3dcdc;
   --input: #e3dcdc;
   --field: #ffffff; /* inside inputs and the message box */
   --ring: #6a3f6e;
+  --warning: #b08a55; /* bracken: something being handled, such as reconnecting */
 
-  --sidebar: #f3f0ec;
-  --sidebar-foreground: #231f22;
-  --sidebar-primary: #6a3f6e;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e9e3e3;
-  --sidebar-accent-foreground: #231f22;
-  --sidebar-border: #e3dcdc;
-  --sidebar-ring: #6a3f6e;
+  /* The mark is the same in both modes, so it's always recognisable. */
+  --mark-tile: #6a3f6e;
+  --mark-walls: #f3f0ec;
+  --mark-tree: #c9a26b;
 
   --workspace-bracken: #b08a55;
   --workspace-heather: #6a3f6e;
@@ -122,22 +116,15 @@
     --placeholder: #7d747a;
     --accent: #3d2c3f;
     --accent-foreground: #eee8eb;
-    --destructive: #b54848;
+    /* The design has no dark failure colours; these keep its red readable on the dark ground. */
+    --destructive: #e88a8a;
     --destructive-soft: #3a2224;
-    --destructive-text: #f0b4b4;
+    --destructive-text: #f0c4c4;
     --border: #352f33;
     --input: #3a3337;
     --field: #2a2529;
     --ring: #c99bcb;
-
-    --sidebar: #1b181a;
-    --sidebar-foreground: #eee8eb;
-    --sidebar-primary: #8e5e93;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #342d32;
-    --sidebar-accent-foreground: #eee8eb;
-    --sidebar-border: #352f33;
-    --sidebar-ring: #c99bcb;
+    --warning: #c9a26b;
 
     --workspace-bracken: #c9a26b;
     --workspace-heather: #c99bcb;
@@ -160,6 +147,11 @@
   }
   ::placeholder {
     color: var(--placeholder);
+  }
+  /* Every control shows where the keyboard is, in heather. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 

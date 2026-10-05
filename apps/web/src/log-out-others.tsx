@@ -15,12 +15,11 @@ export function LogOutOthers() {
 
   return (
     <div className="mt-12 border-t pt-6 text-sm text-muted-foreground">
-      <p>Lost a phone or laptop? This ends every login except this device's.</p>
       {/* A plain button: shadcn's Button would put its class-merging code on the first load. */}
       <button
         type="button"
         onClick={logOutOthers}
-        className="mt-3 h-9 rounded-full bg-destructive/10 px-5 text-sm font-semibold text-destructive-text hover:bg-destructive/20"
+        className="h-9 rounded-full bg-destructive/10 px-5 text-sm font-semibold text-destructive-text hover:bg-destructive/20"
       >
         Log out all other devices
       </button>

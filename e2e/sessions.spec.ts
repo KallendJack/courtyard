@@ -6,7 +6,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await page.goto("/workspaces/garage-gym");
 
   await page.getByLabel("Message").fill("Where should the rack go?");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
@@ -33,7 +33,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
 test("the owner sees which files the model read", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   await page.getByLabel("Message").fill("please read the context file first");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page.getByRole("list", { name: "What the model did" })).toHaveText(
     "Read CONTEXT.md",

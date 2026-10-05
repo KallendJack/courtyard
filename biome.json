@@ -31,9 +31,6 @@
       "includes": ["apps/web/src/components/ui/**"],
       "linter": {
         "rules": {
-          "suspicious": {
-            "noDocumentCookie": "off"
-          },
           "correctness": {
             "useExhaustiveDependencies": "off"
           }

@@ -4,15 +4,14 @@ import {
   type SessionSummary,
   WorkspaceDetail,
 } from "@courtyard/contract";
-import { createFileRoute, getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { Page, PageTitle, SectionTitle } from "@/components/page";
-import { WorkspaceDot, workspaceColours } from "@/components/workspace-colour";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { EmptyState, Notice } from "@/components/notice";
+import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
+import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { describeWhen } from "../../when.ts";
 import { fromWorker, loadProviders, startSession } from "../../worker.ts";
-
-const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
@@ -30,7 +29,7 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
 function Workspace() {
   const { detail, sessions, providers } = Route.useLoaderData();
   const navigate = useNavigate();
-  const workspaces = loggedIn.useLoaderData();
+  const colourOf = useWorkspaceColours();
 
   if (detail.kind === "not-found") {
     return (
@@ -44,17 +43,13 @@ function Workspace() {
   }
   if (detail.kind !== "loaded") return <Problem result={detail} />;
   const { workspace, contextFile } = detail.data;
-  const colour =
-    workspaces.kind === "loaded"
-      ? (workspaceColours(workspaces.data.workspaces).get(workspace.id) ?? "heather")
-      : "heather";
 
   return (
     <Page>
       <PageTitle
         above={
-          <span className="flex items-center gap-2 text-[13px] font-medium text-primary-text">
-            <WorkspaceDot colour={colour} small />
+          <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
+            <WorkspaceDot colour={colourOf(workspace.id)} small />
             {workspace.mode === "code" ? "Code workspace" : "Workspace"}
           </span>
         }
@@ -62,24 +57,23 @@ function Workspace() {
         {workspace.name}
       </PageTitle>
       {contextFile !== null && contextFile.intro !== "" && (
-        <p className="mt-2 text-[15px]/[23px] whitespace-pre-wrap text-muted-foreground">
+        // One line, as a reminder; the whole file is further down.
+        <p className="mt-2 line-clamp-1 text-[15px]/[23px] text-muted-foreground">
           {contextFile.intro}
         </p>
       )}
       {workspace.configProblem !== undefined && (
-        <p
-          role="alert"
-          className="mt-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm text-destructive-text"
-        >
-          Treated as a planning workspace. {workspace.configProblem}
-        </p>
+        <div className="mt-4">
+          <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
+        </div>
       )}
 
       <section aria-label="Sessions" className="mt-8">
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
-            placeholder={`Start a session in ${workspace.name}…`}
+            placeholder="Start a new session…"
+            submitLabel="Start"
             send={async (message) => {
               const session = await startSession(workspace.id, message);
               if (session.kind !== "loaded") return describeProblem(session).body;
@@ -100,10 +94,10 @@ function Workspace() {
         <SectionTitle>Context file</SectionTitle>
       </div>
       {contextFile === null ? (
-        <p className="mt-2 text-muted-foreground">
+        <EmptyState>
           No context file yet. Add a <code>CONTEXT.md</code> to this workspace's folder so every
           model starts out knowing its facts, plans and ideas.
-        </p>
+        </EmptyState>
       ) : (
         <ContextFileSections contextFile={contextFile} />
       )}
@@ -122,10 +116,10 @@ function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
             <Link
               to="/workspaces/$workspaceId/sessions/$sessionId"
               params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-              className="-mx-2 flex items-baseline justify-between gap-4 rounded-md px-2 py-3.5 hover:bg-muted/60"
+              className={LIST_ROW}
             >
               <span className="truncate font-medium">{session.title}</span>
-              <span className="shrink-0 text-[13px] text-muted-foreground">
+              <span className="shrink-0 text-xs text-muted-foreground">
                 {session.busy ? "Running…" : describeWhen(session.updatedAt)}
               </span>
             </Link>
@@ -156,7 +150,7 @@ function Section({ title, hint, lines }: { title: string; hint: string; lines: s
   return (
     <section aria-label={title}>
       <h3 className="flex items-baseline gap-2 font-semibold">
-        {title} <span className="text-[13px] font-normal text-muted-foreground">{hint}</span>
+        {title} <span className="text-xs font-normal text-muted-foreground">{hint}</span>
       </h3>
       {lines.length === 0 ? (
         <p className="mt-1 text-sm text-muted-foreground">Nothing yet.</p>

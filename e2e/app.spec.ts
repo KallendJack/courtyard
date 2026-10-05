@@ -79,7 +79,7 @@ test.describe("on the cover screen", () => {
   test("never pushes the page sideways with a long word", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
     await page.getByLabel("Message").fill(`https://example.com/${"a".repeat(300)}`);
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 

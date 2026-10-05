@@ -65,7 +65,7 @@ export function PasswordPage(props: {
               autoComplete={props.autoComplete}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-1.5 h-11 bg-field text-base"
+              className="mt-1.5 h-11 bg-field text-base focus-visible:border-primary focus-visible:ring-accent"
             />
           </div>
           {props.confirm && (
@@ -79,7 +79,7 @@ export function PasswordPage(props: {
                 autoComplete="new-password"
                 value={repeated}
                 onChange={(event) => setRepeated(event.target.value)}
-                className="mt-1.5 h-11 bg-field text-base"
+                className="mt-1.5 h-11 bg-field text-base focus-visible:border-primary focus-visible:ring-accent"
               />
             </div>
           )}

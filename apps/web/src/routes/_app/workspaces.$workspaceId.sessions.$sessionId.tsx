@@ -1,8 +1,14 @@
-import { type NewMessage, type ProviderList, SessionSummary } from "@courtyard/contract";
+import {
+  type NewMessage,
+  type ProviderList,
+  SessionSummary,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
+import { Notice, StatusPill } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
-import { WorkspaceDot, workspaceColours } from "@/components/workspace-colour";
+import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
@@ -73,22 +79,17 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
         {session.title}
       </PageTitle>
       {reconnecting && (
-        <p
-          role="status"
-          className="mt-4 flex w-fit items-center gap-2 rounded-full bg-accent px-3.5 py-1.5 text-sm font-medium"
-        >
-          <span aria-hidden className="size-2 rounded-full bg-workspace-bracken" />
-          Reconnecting to the worker… The session carries on where it left off.
-        </p>
+        <div className="mt-4">
+          <StatusPill>
+            Reconnecting to the worker… The session carries on where it left off.
+          </StatusPill>
+        </div>
       )}
 
       {problem ? (
-        <p
-          role="alert"
-          className="mt-6 rounded-md bg-destructive-soft px-3.5 py-3 text-sm text-destructive-text"
-        >
-          {problem}
-        </p>
+        <div className="mt-6">
+          <Notice>{problem}</Notice>
+        </div>
       ) : (
         <SessionTurns turns={turns} onRetry={retry} />
       )}
@@ -105,6 +106,7 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
           disabled={running || problem !== undefined}
           {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}
+          compactOnNarrow
           send={send}
         />
       </div>
@@ -113,8 +115,9 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
 }
 
 /** The session's workspace, in its colour: also the way back to it. */
-function WorkspaceChip(props: { workspaceId: string }) {
+function WorkspaceChip(props: { workspaceId: WorkspaceId }) {
   const workspaces = loggedIn.useLoaderData();
+  const colourOf = useWorkspaceColours();
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
   const name = list.find((w) => w.id === props.workspaceId)?.name ?? props.workspaceId;
   return (
@@ -122,9 +125,9 @@ function WorkspaceChip(props: { workspaceId: string }) {
       to="/workspaces/$workspaceId"
       params={{ workspaceId: props.workspaceId }}
       aria-label={`Back to ${name}`}
-      className="flex w-fit items-center gap-2 text-[13px] font-medium text-primary-text hover:underline"
+      className="flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline"
     >
-      <WorkspaceDot colour={workspaceColours(list).get(props.workspaceId) ?? "heather"} small />
+      <WorkspaceDot colour={colourOf(props.workspaceId)} small />
       {name}
     </Link>
   );

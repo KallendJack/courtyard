@@ -20,7 +20,7 @@ function LoggedIn() {
   const workspaces = Route.useLoaderData();
   const router = useRouter();
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
-  const colours = workspaceColours(list);
+  const colourOf = workspaceColours(list);
 
   const logOut = async () => {
     await logOutOnWorker();
@@ -31,9 +31,9 @@ function LoggedIn() {
 
   return (
     <div className="flex min-h-dvh">
-      <AppSidebar workspaces={list} colours={colours} onLogOut={logOut} />
+      <AppSidebar workspaces={list} colourOf={colourOf} onLogOut={logOut} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <WorkspaceStrip workspaces={list} colours={colours} onLogOut={logOut} />
+        <WorkspaceStrip workspaces={list} colourOf={colourOf} onLogOut={logOut} />
         <div className="min-w-0 flex-1 rounded-t-lg border border-b-0 bg-card md:my-3 md:mr-3 md:rounded-lg md:border-b">
           {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
         </div>
