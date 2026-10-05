@@ -252,6 +252,23 @@ describe("a Claude turn", () => {
     expect(runs[0]?.options.includePartialMessages).toBe(true);
   });
 
+  it("completes a turn whose answer arrives as ordinary assistant messages", async () => {
+    // The real Claude Code sends whole assistant messages as well as the streamed pieces; one
+    // with no error must not count as a failure.
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        textDelta("The rack fits."),
+        { type: "assistant", message: { content: [{ type: "text", text: "The rack fits." }] } },
+        success,
+      ],
+    });
+
+    const { result, emitted } = await runTurn(claudeCode);
+
+    expect(result).toEqual({ ok: true, value: null });
+    expect(emitted).toEqual(["The rack fits."]);
+  });
+
   it("turns a usage limit into a rate-limited failure with the reset time", async () => {
     const resetsAt = Date.parse("2026-10-05T17:00:00Z") / 1000;
     const { claudeCode } = stubClaudeCode({

@@ -122,7 +122,14 @@ const AnswerError = z
   ])
   .catch("unknown");
 type AnswerError = z.infer<typeof AnswerError>;
-const AssistantError = z.object({ type: z.literal("assistant"), error: AnswerError });
+/**
+ * An assistant message that failed. Ordinary assistant messages have no `error` at all; the field
+ * has to be there before its value is read, or every answer would count as a failure.
+ */
+const AssistantError = z.object({
+  type: z.literal("assistant"),
+  error: z.string().pipe(AnswerError),
+});
 const ResultMessage = z.object({ type: z.literal("result"), is_error: z.boolean().optional() });
 
 const SIGNED_OUT =
