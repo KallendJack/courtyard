@@ -5,6 +5,7 @@ import type {
   ProviderId,
   ProviderStatus,
 } from "@courtyard/contract";
+import type { Framing } from "../prompts/index.ts";
 import type { Result } from "../result.ts";
 
 export type { Activity };
@@ -27,6 +28,8 @@ export type TurnInput = {
   /** Everything said so far, ending with the owner's new message. */
   readonly lines: readonly SessionLine[];
   readonly workspace: TurnWorkspace;
+  /** What the model is told, built once by the prompts module: delivered as given, never rewritten. */
+  readonly framing: Framing;
   /** Hands over the next piece of the answer as it's written. */
   readonly emit: (text: string) => Promise<void>;
   /** Says what the model is doing, such as reading a file. */

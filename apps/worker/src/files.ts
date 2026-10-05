@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { link, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { setTimeout as wait } from "node:timers/promises";
 import type { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
 
@@ -27,6 +28,27 @@ export const readJsonFile = async <T>(
 };
 
 /**
+ * How long to wait before each new try at replacing a file Windows says is busy. It refuses for a
+ * moment while something else has the file open (another request reading it, say, or a virus
+ * scanner); about a second of patience covers it.
+ */
+const BUSY_RETRY_DELAYS_MS = [10, 20, 40, 80, 160, 320, 640];
+const BUSY_CODES = ["EPERM", "EACCES", "EBUSY"];
+
+/** Moves `from` over `to`, waiting out the moments Windows says the file is busy. */
+const replace = async (from: string, to: string) => {
+  for (const delay of [...BUSY_RETRY_DELAYS_MS, undefined]) {
+    try {
+      return await rename(from, to);
+    } catch (error) {
+      const busy = BUSY_CODES.some((code) => hasCode(error, code));
+      if (!busy || delay === undefined) throw error;
+      await wait(delay);
+    }
+  }
+};
+
+/**
  * Writes JSON readable only by the worker's user. It goes to a temporary file first, so a crash
  * mid-write never leaves half a file. With `exclusive`, it fails with `exists` rather than
  * replacing a file that's already there.
@@ -41,9 +63,10 @@ export const writeJsonFile = async (
     await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
     // A hard link fails if the target exists, which makes the exclusive case one atomic step.
     if (options.exclusive) await link(temporary, path);
-    else await rename(temporary, path);
+    else await replace(temporary, path);
     return ok(null);
   } catch (error) {
+    await rm(temporary, { force: true });
     return err(hasCode(error, "EEXIST") ? "exists" : "unwritable");
   } finally {
     if (options.exclusive) await rm(temporary, { force: true });

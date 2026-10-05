@@ -21,6 +21,7 @@ export {
   StopRequest,
 } from "./lib/session.ts";
 export {
+  CONTEXT_FILE_LONG_CHARACTERS,
   ContextFile,
   WorkspaceDetail,
   WorkspaceId,

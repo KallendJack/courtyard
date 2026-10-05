@@ -153,7 +153,16 @@ describe("opening a workspace", () => {
       plans: ["Squat rack on the left wall."],
       ideas: ["Rubber flooring."],
       other: "",
+      characters: expect.any(Number),
     });
+  });
+
+  it("says how long its context file is, since the whole file goes with every message", async () => {
+    await workspace("office", { "CONTEXT.md": "## Ideas\n\n- A standing desk.\n" });
+
+    const { contextFile } = await openWorkspace("office");
+
+    expect(contextFile?.characters).toBe(29);
   });
 
   it("treats missing sections as empty", async () => {

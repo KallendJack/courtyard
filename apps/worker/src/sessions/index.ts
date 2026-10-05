@@ -14,6 +14,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
+import { framingFor } from "../prompts/index.ts";
 import type { Provider, SessionLine, TurnWorkspace } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { getWorkspace } from "../workspaces/index.ts";
@@ -280,12 +281,14 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: "This session's workspace can't be read." };
       } else {
+        const lines = linesOf(events.value);
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
-            lines: linesOf(events.value),
+            lines,
             workspace: workspace.value,
+            framing: framingFor({ workspace: workspace.value, lines }),
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
               if (recordingLost || stopper.signal.aborted) return;
