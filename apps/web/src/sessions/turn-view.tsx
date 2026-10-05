@@ -32,11 +32,20 @@ export const describeFailure = (reason: FailureReason) => {
 export const TurnView = memo(function TurnView(props: {
   turn: Turn;
   onRetry?: (turn: Turn) => void;
+  /** Where it sits in the session, for the list that only draws turns near the screen. */
+  index: number;
+  offset: number;
+  measure: (element: HTMLElement | null) => void;
 }) {
   const { turn, onRetry } = props;
 
   return (
-    <li className="space-y-3">
+    <li
+      ref={props.measure}
+      data-index={props.index}
+      className="absolute top-0 left-0 w-full space-y-3 pb-6"
+      style={{ transform: `translateY(${props.offset}px)` }}
+    >
       <p className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-4 py-2 text-white">
         {turn.text}
       </p>

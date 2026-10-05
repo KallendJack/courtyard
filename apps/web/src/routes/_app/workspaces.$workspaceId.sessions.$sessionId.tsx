@@ -1,10 +1,10 @@
 import { type NewMessage, type ProviderList, SessionSummary } from "@courtyard/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
-import { TurnView } from "../../sessions/turn-view.tsx";
+import { SessionTurns } from "../../sessions/session-turns.tsx";
 import { fromWorker, loadProviders, sendMessage, stopTurn } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
@@ -37,13 +37,6 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
   const [sendProblem, setSendProblem] = useState<string>();
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
-  const end = useRef<HTMLDivElement>(null);
-
-  // Keep the newest text in view as it streams in.
-  const answerLength = last?.answer.length ?? 0;
-  useEffect(() => {
-    if (answerLength >= 0) end.current?.scrollIntoView({ block: "end" });
-  }, [answerLength]);
 
   const send = useCallback(
     async (message: NewMessage) => {
@@ -91,23 +84,13 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
           {problem}
         </p>
       ) : (
-        <ol aria-label="Session" className="mt-6 space-y-6">
-          {turns.map((turn) => (
-            <TurnView
-              key={turn.seq}
-              turn={turn}
-              // Only the last turn can be retried, so only it gets the handler.
-              {...(turn === last ? { onRetry: retry } : {})}
-            />
-          ))}
-        </ol>
+        <SessionTurns turns={turns} onRetry={retry} />
       )}
       {sendProblem && (
         <p role="alert" className="mt-3 text-sm text-red-700">
           {sendProblem}
         </p>
       )}
-      <div ref={end} />
 
       <div className="sticky bottom-0 mt-6 bg-white pb-4 pt-2">
         <Composer

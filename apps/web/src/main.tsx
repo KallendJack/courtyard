@@ -22,3 +22,9 @@ createRoot(root).render(
     <RouterProvider router={router} />
   </StrictMode>,
 );
+
+// Installed on the home screen, the app opens from these kept files (only in a build: during
+// development Vite serves fresh files and nothing should be kept).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/sw.js");
+}
