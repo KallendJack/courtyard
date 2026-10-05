@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ApiError, Health } from "@courtyard/contract";
+import type { ApiError, Health, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { ok, type Result } from "./result.ts";
 import { type Environment, readSettings } from "./settings.ts";
+import { getWorkspace, listWorkspaces } from "./workspaces/index.ts";
 
 export type { Environment };
 
@@ -20,10 +21,23 @@ export type Worker = {
 export const createWorker = (options: { env: Environment }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
-  const { port, webDir } = settings.value;
+  const { port, contextDir, webDir } = settings.value;
 
   const api = new Hono();
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
+  api.get("/workspaces", async (c) => {
+    const workspaces = await listWorkspaces(contextDir);
+    if (!workspaces.ok) return c.json({ error: workspaces.error } satisfies ApiError, 500);
+    return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
+  });
+  api.get("/workspaces/:id", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace) return c.json({ error: "No such workspace" } satisfies ApiError, 404);
+    return c.json({
+      workspace: workspace.summary,
+      context: workspace.context,
+    } satisfies WorkspaceDetail);
+  });
   api.all("*", (c) => c.json({ error: "Not found" } satisfies ApiError, 404));
 
   const app = new Hono();
