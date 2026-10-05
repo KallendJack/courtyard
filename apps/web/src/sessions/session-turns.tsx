@@ -1,5 +1,5 @@
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
 
@@ -18,18 +18,34 @@ const atTheEnd = () =>
  * stays smooth. Each drawn turn is measured, so turns of any height (or one still streaming) sit
  * in the right place. Opens at the end, and follows new text only while already at the end, so
  * reading back up isn't interrupted.
+ *
+ * Turns not drawn can't be found with the browser's Find, and screen readers only see the drawn
+ * ones (each says where it sits, "turn 180 of 200"): the price of a long session staying smooth.
  */
 export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Turn) => void }) {
   const { turns, onRetry } = props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
+  // How far down the page the list starts. Measured once it's on screen, and again whenever the
+  // page above it changes height (the "reconnecting" banner appearing, say).
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const measure = () => setScrollMargin(element.getBoundingClientRect().top + window.scrollY);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    return () => observer.disconnect();
+  }, []);
 
   const virtualizer = useWindowVirtualizer({
     count: turns.length,
     estimateSize: () => ESTIMATED_TURN_HEIGHT,
     overscan: OVERSCAN,
-    scrollMargin: list.current?.offsetTop ?? 0,
+    scrollMargin,
     getItemKey: (index) => turns[index]?.seq ?? index,
   });
 
@@ -43,7 +59,8 @@ export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Tu
 
   const last = turns.at(-1);
   const lastLength = (last?.answer.length ?? 0) + (last?.activities.length ?? 0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength is the trigger, so the end stays in view while text streams in
+  const lastState = last?.state.kind;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength and lastState are the triggers, so the end stays in view while text streams in or a turn fails
   useLayoutEffect(() => {
     if (turns.length === 0) return;
     if (!opened.current || following.current) {
@@ -51,9 +68,8 @@ export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Tu
       virtualizer.scrollToIndex(turns.length - 1, { align: "end" });
       requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
     }
-  }, [turns.length, lastLength, virtualizer]);
+  }, [turns.length, lastLength, lastState, virtualizer]);
 
-  const scrollMargin = virtualizer.options.scrollMargin;
   return (
     <ol
       ref={list}
@@ -65,15 +81,21 @@ export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Tu
         const turn = turns[item.index];
         if (!turn) return null;
         return (
-          <TurnView
+          <li
             key={item.key}
-            turn={turn}
-            index={item.index}
-            offset={item.start - scrollMargin}
-            measure={virtualizer.measureElement}
-            // Only the last turn can be retried, so only it gets the handler.
-            {...(turn === last ? { onRetry } : {})}
-          />
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            aria-posinset={item.index + 1}
+            aria-setsize={turns.length}
+            className="absolute top-0 left-0 w-full pb-6"
+            style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
+          >
+            <TurnView
+              turn={turn}
+              // Only the last turn can be retried, so only it gets the handler.
+              {...(turn === last ? { onRetry } : {})}
+            />
+          </li>
         );
       })}
     </ol>
