@@ -1,6 +1,14 @@
-import type { FailureReason } from "@courtyard/contract";
+import type { Activity, FailureReason } from "@courtyard/contract";
 import { memo } from "react";
 import type { Turn } from "./events.ts";
+
+/** What a model did, in a few words. */
+const describeActivity = (activity: Activity) => {
+  switch (activity.kind) {
+    case "read-file":
+      return `Read ${activity.path}`;
+  }
+};
 
 /** A failure's reason in plain words. */
 export const describeFailure = (reason: FailureReason) => {
@@ -32,6 +40,14 @@ export const TurnView = memo(function TurnView(props: {
       <p className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-4 py-2 text-white">
         {turn.text}
       </p>
+      {turn.activities.length > 0 && (
+        <ul aria-label="What the model did" className="space-y-0.5 text-xs text-neutral-500">
+          {turn.activities.map((activity, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
+            <li key={index}>{describeActivity(activity)}</li>
+          ))}
+        </ul>
+      )}
       {(turn.answer !== "" || turn.state.kind === "running") && (
         <p className="max-w-[85%] whitespace-pre-wrap text-neutral-900" aria-live="polite">
           {turn.answer}

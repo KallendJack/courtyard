@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 import { parseContextFile } from "../context-file/index.ts";
 import { hasCode } from "../files.ts";
+import type { TurnWorkspace } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
@@ -33,7 +34,14 @@ type Config =
   | { readonly kind: "read"; readonly name?: string; readonly mode: WorkspaceMode }
   | { readonly kind: "ignored"; readonly problem: string };
 
-type Workspace = { readonly summary: WorkspaceSummary; readonly contextFile: ContextFile | null };
+type Workspace = {
+  readonly summary: WorkspaceSummary;
+  readonly contextFile: ContextFile | null;
+  /** The workspace's folder on the worker machine. */
+  readonly folder: string;
+  /** The context file exactly as written, for models to read. */
+  readonly contextMarkdown: string | null;
+};
 
 /** Why a workspace couldn't be read. */
 export type WorkspaceError =
@@ -98,6 +106,8 @@ const readWorkspace = async (
       ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
     contextFile,
+    folder,
+    contextMarkdown: markdown.value ?? null,
   });
 };
 
@@ -147,4 +157,15 @@ export const getWorkspace = async (
   }
   if (!folder?.isDirectory()) return err({ kind: "not-found" });
   return readWorkspace(contextDir, parsed.data);
+};
+
+/** What a turn needs from its workspace: its name, its folder, and its context file as written. */
+export const turnWorkspaceOf = async (
+  contextDir: string,
+  id: string,
+): Promise<Result<TurnWorkspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, id);
+  if (!workspace.ok) return workspace;
+  const { summary, folder, contextMarkdown } = workspace.value;
+  return ok({ name: summary.name, folder, contextFile: contextMarkdown });
 };

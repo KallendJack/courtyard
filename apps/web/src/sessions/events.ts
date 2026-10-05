@@ -1,4 +1,5 @@
 import {
+  type Activity,
   ApiError,
   type FailureReason,
   type ModelRef,
@@ -13,6 +14,8 @@ export type Turn = {
   readonly text: string;
   readonly model: ModelRef;
   readonly answer: string;
+  /** What the model did along the way, such as files it read. */
+  readonly activities: readonly Activity[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -41,13 +44,25 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
         lastSeq: seq,
         turns: [
           ...log.turns,
-          { seq, text: event.text, model: event.model, answer: "", state: { kind: "running" } },
+          {
+            seq,
+            text: event.text,
+            model: event.model,
+            answer: "",
+            activities: [],
+            state: { kind: "running" },
+          },
         ],
       };
     case "text-delta":
       return withLastTurn(log, {
         seq,
         change: (turn) => ({ ...turn, answer: turn.answer + event.text }),
+      });
+    case "activity":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, activities: [...turn.activities, event.activity] }),
       });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });

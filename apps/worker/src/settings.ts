@@ -35,6 +35,10 @@ const Env = z.object({
   ),
   COURTYARD_CONTEXT_DIR: required.refine(isFolder, "must be an existing folder"),
   COURTYARD_DATA_DIR: required.refine(ensureFolder, "must be a folder the worker can create"),
+  COURTYARD_CLAUDE_PROVIDER: z.preprocess(
+    unsetIfEmpty,
+    z.enum(["0", "1"], { error: "must be 1 or 0" }).default("1"),
+  ),
   COURTYARD_FAKE_PROVIDER: z.preprocess(
     unsetIfEmpty,
     z.enum(["0", "1"], { error: "must be 1 or 0" }).default("0"),
@@ -54,6 +58,8 @@ export type Settings = {
   readonly dataDir: string;
   /** The web app's built files, served on the same origin as the API. */
   readonly webDir: string;
+  /** Whether to offer Claude, through the worker machine's Claude Code (on unless turned off). */
+  readonly claudeProvider: boolean;
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
 };
@@ -75,6 +81,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     contextDir: resolve(parsed.data.COURTYARD_CONTEXT_DIR),
     dataDir: resolve(parsed.data.COURTYARD_DATA_DIR),
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
+    claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER === "1",
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER === "1",
   });
 };

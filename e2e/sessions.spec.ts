@@ -29,3 +29,13 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
     "Where should the rack go?",
   );
 });
+
+test("the owner sees which files the model read", async ({ page }) => {
+  await page.goto("/workspaces/garage-gym");
+  await page.getByLabel("Message").fill("please read the context file first");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page.getByRole("list", { name: "What the model did" })).toHaveText(
+    "Read CONTEXT.md",
+  );
+});
