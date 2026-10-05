@@ -361,6 +361,19 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | 5     | Tool connections (homelab first, then Paper) and floor plans                                                 | Paper running on the worker machine                |
 | 6     | The web app served from the NAS, then wake-on-LAN for the worker machine                                    | A wired network connection to the worker machine   |
 
+### A check after phase 2
+
+After phase 2, the owner uses Courtyard for three weeks before phase 3 starts. The question: on most days, did they
+open Courtyard rather than the Claude app? If yes, the later phases go ahead one at a time, each when it's wanted, and
+phase 3 is weighed against what Claude Code itself offers by then. If no, building stops at phase 2: Courtyard stays
+a working hub and a portfolio piece, and the context folder stays useful on its own.
+
+### Ideas for later
+
+- **The context reaches other apps.** The context folder is plain files in git, not locked inside Courtyard. A small
+  tool connection could let Claude Code in any repository, or the Claude desktop app with Blender, read a workspace's
+  context. Courtyard stays where context is curated, but not the only place it's used.
+
 ### Checks before relying on things outside our control
 
 - Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 3 (ADR 0003).
