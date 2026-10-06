@@ -119,8 +119,9 @@ function Workspace() {
           confirm={async () => {
             const archived = await archiveWorkspace(workspace.id);
             if (archived.kind !== "loaded") return describeProblem(archived).body;
-            await router.invalidate();
+            // Away first, so this page doesn't reload its now-archived workspace.
             await navigate({ to: "/" });
+            await router.invalidate();
             return undefined;
           }}
         >

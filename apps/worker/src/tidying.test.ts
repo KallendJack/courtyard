@@ -70,8 +70,10 @@ describe("renaming a session", () => {
 
     expect(response.status).toBe(200);
     expect(SessionSummary.parse(await response.json()).title).toBe("Rack position");
-    const file = JSON.parse(
-      await readFile(join(root, "data", "sessions", session.id, "session.json"), "utf8"),
+    const file = SessionSummary.omit({ busy: true }).parse(
+      JSON.parse(
+        await readFile(join(root, "data", "sessions", session.id, "session.json"), "utf8"),
+      ),
     );
     expect(file.title).toBe("Rack position");
     expect((await listSessions(request)).map((s) => s.title)).toEqual(["Rack position"]);

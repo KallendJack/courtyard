@@ -4,7 +4,8 @@ import { PillButton } from "@/components/pill-button";
 /**
  * The step between asking to archive or delete something and doing it: it names what's about to
  * go and what happens to it, so a mis-tap is never final. `confirm` returns an error to show, or
- * nothing once it's done.
+ * nothing once it's done. Not an approval: those are the owner's yes or no to what a model wants
+ * to do; this is the owner checking their own tap.
  */
 export function ConfirmStep(props: {
   /** The question, naming the thing: "Archive Garage gym?" */

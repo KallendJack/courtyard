@@ -13,7 +13,7 @@ import { z } from "zod";
 import { apiError, readBody } from "../http.ts";
 import type { Provider } from "../providers/index.ts";
 import { err, ok } from "../result.ts";
-import { getWorkspace } from "../workspaces/index.ts";
+import { getWorkspace, isArchived } from "../workspaces/index.ts";
 import type { SessionError, Sessions } from "./index.ts";
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
@@ -33,7 +33,7 @@ const sessionError = (c: Context, error: SessionError) => {
       });
     case "nothing-running":
       return apiError(c, { status: 409, error: "Nothing is running in this session." });
-    case "running":
+    case "delete-while-running":
       return apiError(c, {
         status: 409,
         error: "A turn is running in this session. Stop it first, then delete the session.",
@@ -98,8 +98,7 @@ export const sessionRoutes = (options: {
   routes.get("/sessions/:id", async (c) => {
     const session = await sessions.get(c.req.param("id"));
     if (!session.ok) return sessionError(c, session.error);
-    const workspace = await getWorkspace(contextDir, session.value.workspaceId);
-    const workspaceArchived = !workspace.ok && workspace.error.kind === "archived";
+    const workspaceArchived = await isArchived(contextDir, session.value.workspaceId);
     return c.json({ ...session.value, workspaceArchived } satisfies SessionDetail);
   });
 

@@ -258,6 +258,12 @@ export const getWorkspace = async (
   return listed ? ok(listed.workspace) : err({ kind: "not-found" });
 };
 
+/** Whether a workspace is archived: its folder is in the archived folder, not the context folder. */
+export const isArchived = async (contextDir: string, id: WorkspaceId) => {
+  const workspace = await getWorkspace(contextDir, id);
+  return !workspace.ok && workspace.error.kind === "archived";
+};
+
 /** Keeps a name or colour in a workspace's config, alongside whatever else is there. */
 const keepInConfig = async (
   workspace: Workspace,

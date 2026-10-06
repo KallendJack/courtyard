@@ -7,6 +7,7 @@ import {
   type OwnerContextDetail,
   WorkspaceChange,
   type WorkspaceDetail,
+  WorkspaceId,
   type WorkspaceList,
   type WorkspaceSummary,
 } from "@courtyard/contract";
@@ -145,19 +146,19 @@ export const createWorker = (options: {
     return c.json(workspace.value satisfies WorkspaceSummary);
   });
   api.post("/workspaces/:id/archive", async (c) => {
-    const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace.ok) return contextError(c, workspace.error);
+    const id = WorkspaceId.safeParse(c.req.param("id"));
+    if (!id.success) return contextError(c, { kind: "not-found" });
     // Its folder can't move while a model is working in it.
-    const list = await sessions.list(workspace.value.summary.id);
-    if (!list.ok) return apiError(c, { status: 500, error: "Its sessions can't be read." });
-    if (list.value.some((session) => session.busy)) {
+    const running = await sessions.anyRunning(id.data);
+    if (!running.ok) return apiError(c, { status: 500, error: "Its sessions can't be read." });
+    if (running.value) {
       return apiError(c, {
         status: 409,
         error:
           "A turn is running in one of this workspace's sessions. Stop it first, then archive the workspace.",
       });
     }
-    const archived = await archiveWorkspace(contextDir, workspace.value.summary.id);
+    const archived = await archiveWorkspace(contextDir, id.data);
     if (!archived.ok) return contextError(c, archived.error);
     return c.body(null, 204);
   });
