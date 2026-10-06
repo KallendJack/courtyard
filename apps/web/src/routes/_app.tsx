@@ -1,7 +1,6 @@
 import { WorkspaceList } from "@courtyard/contract";
 import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
-import { workspaceColours } from "@/components/workspace-colour";
 import { WorkspaceStrip } from "@/components/workspace-strip";
 import { Problem } from "../problems.tsx";
 import { fromWorker, logOut as logOutOnWorker } from "../worker.ts";
@@ -20,7 +19,6 @@ function LoggedIn() {
   const workspaces = Route.useLoaderData();
   const router = useRouter();
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
-  const colourOf = workspaceColours(list);
 
   const logOut = async () => {
     await logOutOnWorker();
@@ -31,9 +29,9 @@ function LoggedIn() {
 
   return (
     <div className="flex min-h-dvh">
-      <AppSidebar workspaces={list} colourOf={colourOf} onLogOut={logOut} />
+      <AppSidebar workspaces={list} onLogOut={logOut} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <WorkspaceStrip workspaces={list} colourOf={colourOf} onLogOut={logOut} />
+        <WorkspaceStrip workspaces={list} onLogOut={logOut} />
         <div className="min-w-0 flex-1 rounded-t-lg border border-b-0 bg-card md:my-3 md:mr-3 md:rounded-lg md:border-b">
           {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
         </div>

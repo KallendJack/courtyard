@@ -1,12 +1,15 @@
 import {
   ApiError,
   type NewMessage,
+  type NewWorkspace,
   type PasswordForm,
   ProviderList,
   type SessionId,
   SessionSummary,
   type StopRequest,
+  type WorkspaceChange,
   type WorkspaceId,
+  WorkspaceSummary,
 } from "@courtyard/contract";
 import { z } from "zod";
 
@@ -55,16 +58,17 @@ export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise
   }
 };
 
-/** Posts JSON to the worker's API and reads the answer with `schema`. */
-const post = async <T>(request: {
+/** Sends JSON to the worker's API (a POST unless `method` says) and reads the answer with `schema`. */
+const sendJson = async <T>(request: {
   path: string;
+  method?: "POST" | "PATCH";
   body: unknown;
   schema: z.ZodType<T>;
   unauthorised?: "logged-out" | "failed";
 }): Promise<FromWorker<T>> => {
   try {
     const response = await fetch(`/api${request.path}`, {
-      method: "POST",
+      method: request.method ?? "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request.body),
     });
@@ -80,26 +84,39 @@ const post = async <T>(request: {
 
 /** Setup and login: a 401 here means a wrong password, so it carries the worker's message. */
 export const sendPassword = (path: "/setup" | "/login", form: PasswordForm) =>
-  post({ path, body: form, schema: z.unknown(), unauthorised: "failed" });
+  sendJson({ path, body: form, schema: z.unknown(), unauthorised: "failed" });
 
-export const logOut = () => post({ path: "/logout", body: {}, schema: z.unknown() });
-export const logOutOthers = () => post({ path: "/logout-others", body: {}, schema: z.unknown() });
+export const logOut = () => sendJson({ path: "/logout", body: {}, schema: z.unknown() });
+export const logOutOthers = () =>
+  sendJson({ path: "/logout-others", body: {}, schema: z.unknown() });
 
 /** The providers and their models, for the model picker. */
 export const loadProviders = () => fromWorker("/providers", ProviderList);
 
+/** Adds a workspace: its folder, a starter context file and a colour. */
+export const addWorkspace = (workspace: NewWorkspace) =>
+  sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
+
+/** Changes a workspace's colour. */
+export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>
+  sendJson({
+    path: `/workspaces/${encodeURIComponent(id)}`,
+    method: "PATCH",
+    body: change,
+    schema: WorkspaceSummary,
+  });
+
 /** Starts a session in a workspace with the owner's first message. */
 export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
-  post({
+  sendJson({
     path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
     body: message,
     schema: SessionSummary,
   });
 
-/** Stops the turn running in a session. */
 /** Stops a session's running turn, named by its owner message's event number. */
 export const stopTurn = (sessionId: SessionId, turn: number) =>
-  post({
+  sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/stop`,
     body: { turn } satisfies StopRequest,
     schema: z.unknown(),
@@ -107,7 +124,7 @@ export const stopTurn = (sessionId: SessionId, turn: number) =>
 
 /** Sends the next message in a session. */
 export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
-  post({
+  sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
     body: message,
     schema: z.unknown(),

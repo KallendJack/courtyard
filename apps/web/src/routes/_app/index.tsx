@@ -1,7 +1,9 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle } from "@/components/page";
-import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
+import { WorkspaceDot } from "@/components/workspace-colour";
+import { classes } from "@/lib/classes";
 import { LogOutOthers } from "../../log-out-others.tsx";
 
 const loggedIn = getRouteApi("/_app");
@@ -12,7 +14,6 @@ export const Route = createFileRoute("/_app/")({
 
 function Home() {
   const workspaces = loggedIn.useLoaderData();
-  const colourOf = useWorkspaceColours();
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
 
@@ -20,7 +21,13 @@ function Home() {
     <Page>
       <PageTitle>Workspaces</PageTitle>
       {list.length === 0 ? (
-        <EmptyState>No workspaces yet. Add a folder to your context folder to make one.</EmptyState>
+        <EmptyState>
+          No workspaces yet.{" "}
+          <Link to="/new-workspace" className="text-foreground underline">
+            Add your first
+          </Link>{" "}
+          for one area of your life.
+        </EmptyState>
       ) : (
         <ul className="mt-6 divide-y">
           {list.map((workspace) => (
@@ -31,7 +38,7 @@ function Home() {
                 className={LIST_ROW}
               >
                 <span className="flex items-center gap-3 font-medium">
-                  <WorkspaceDot colour={colourOf(workspace.id)} />
+                  <WorkspaceDot colour={workspace.colour} />
                   {workspace.name}
                 </span>
                 <span className="flex gap-2 text-xs text-muted-foreground">
@@ -44,6 +51,15 @@ function Home() {
               </Link>
             </li>
           ))}
+          <li>
+            <Link to="/new-workspace" className={classes(LIST_ROW, "text-muted-foreground")}>
+              <span className="flex items-center gap-3">
+                {/* As wide as a dot, so the names line up. */}
+                <Plus className="-mx-[3px] size-4 shrink-0" aria-hidden />
+                New workspace
+              </span>
+            </Link>
+          </li>
         </ul>
       )}
       <LogOutOthers />

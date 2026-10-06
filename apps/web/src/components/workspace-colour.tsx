@@ -1,12 +1,6 @@
-import type { WorkspaceId, WorkspaceSummary } from "@courtyard/contract";
-import { getRouteApi } from "@tanstack/react-router";
+import { WorkspaceColour } from "@courtyard/contract";
+import { useId, useState } from "react";
 import { classes } from "@/lib/classes";
-
-/** The five workspace colours, in the order they're handed out (the theme defines each). */
-const WORKSPACE_COLOURS = ["heather", "bracken", "slate", "moss", "peat"] as const;
-export type WorkspaceColour = (typeof WORKSPACE_COLOURS)[number];
-/** A workspace's colour, by its id. */
-export type ColourOf = (id: WorkspaceId) => WorkspaceColour;
 
 const DOT_CLASS: Record<WorkspaceColour, string> = {
   heather: "bg-workspace-heather",
@@ -16,22 +10,12 @@ const DOT_CLASS: Record<WorkspaceColour, string> = {
   peat: "bg-workspace-peat",
 };
 
-/**
- * Each workspace's colour: in folder-name order, the workspaces take the colours in turn, so the
- * first five never share one. A colour holds until a workspace whose name sorts earlier is added,
- * which moves the ones after it on; #24 lets the owner choose and keeps the choice.
- */
-export const workspaceColours = (workspaces: readonly WorkspaceSummary[]): ColourOf => {
-  const ids = workspaces.map((workspace) => workspace.id).sort();
-  return (id) => WORKSPACE_COLOURS[ids.indexOf(id) % WORKSPACE_COLOURS.length] ?? "heather";
-};
-
-const loggedIn = getRouteApi("/_app");
-
-/** The workspace colours, inside the logged-in pages. */
-export const useWorkspaceColours = (): ColourOf => {
-  const workspaces = loggedIn.useLoaderData();
-  return workspaceColours(workspaces.kind === "loaded" ? workspaces.data.workspaces : []);
+const LABEL: Record<WorkspaceColour, string> = {
+  heather: "Heather",
+  bracken: "Bracken",
+  slate: "Slate",
+  moss: "Moss",
+  peat: "Peat",
 };
 
 /** A workspace's colour dot. */
@@ -46,5 +30,70 @@ export function WorkspaceDot(props: { colour: WorkspaceColour; small?: boolean }
         DOT_CLASS[props.colour],
       )}
     />
+  );
+}
+
+/**
+ * A workspace's dot, which opens the five colours to choose from. `choose` returns an error to
+ * show, or nothing once the colour is kept.
+ */
+export function ColourChooser(props: {
+  colour: WorkspaceColour;
+  choose: (colour: WorkspaceColour) => Promise<string | undefined>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const name = useId();
+
+  const choose = async (colour: WorkspaceColour) => {
+    setSaving(true);
+    const problem = await props.choose(colour);
+    setSaving(false);
+    setError(problem);
+    if (!problem) setOpen(false);
+  };
+
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        aria-label="Change colour"
+        aria-expanded={open}
+        title="Change colour"
+        onClick={() => setOpen((was) => !was)}
+        className="-m-1.5 flex size-5 items-center justify-center rounded-full hover:bg-muted"
+      >
+        <WorkspaceDot colour={props.colour} small />
+      </button>
+      {open && (
+        <fieldset disabled={saving} className="flex items-center gap-1">
+          <legend className="sr-only">Colour</legend>
+          {WorkspaceColour.options.map((colour) => (
+            <label
+              key={colour}
+              title={LABEL[colour]}
+              className="flex size-6 cursor-pointer items-center justify-center rounded-full has-checked:ring-2 has-checked:ring-ring has-focus-visible:outline-2 has-focus-visible:outline-primary-text"
+            >
+              <input
+                type="radio"
+                name={name}
+                value={colour}
+                aria-label={LABEL[colour]}
+                checked={colour === props.colour}
+                onChange={() => void choose(colour)}
+                className="sr-only"
+              />
+              <WorkspaceDot colour={colour} />
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {error && (
+        <span role="alert" className="basis-full text-sm font-normal text-destructive-text">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }

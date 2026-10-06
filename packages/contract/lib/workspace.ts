@@ -10,10 +10,15 @@ export type WorkspaceId = z.infer<typeof WorkspaceId>;
 export const WorkspaceMode = z.enum(["planning", "code"]);
 export type WorkspaceMode = z.infer<typeof WorkspaceMode>;
 
+/** The five workspace colours, in the order new workspaces take them (the theme defines each). */
+export const WorkspaceColour = z.enum(["bracken", "heather", "slate", "moss", "peat"]);
+export type WorkspaceColour = z.infer<typeof WorkspaceColour>;
+
 export const WorkspaceSummary = z.object({
   id: WorkspaceId,
   name: z.string(),
   mode: WorkspaceMode,
+  colour: WorkspaceColour,
   hasContextFile: z.boolean(),
   /** Why the workspace's config was ignored, when it was. */
   configProblem: z.string().optional(),
@@ -22,6 +27,23 @@ export type WorkspaceSummary = z.infer<typeof WorkspaceSummary>;
 
 export const WorkspaceList = z.object({ workspaces: z.array(WorkspaceSummary) });
 export type WorkspaceList = z.infer<typeof WorkspaceList>;
+
+/** The longest name a new workspace can have. */
+export const WORKSPACE_NAME_MAX_LENGTH = 60;
+
+/** Adding a workspace from the app. Its folder name comes from its name. */
+export const NewWorkspace = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the workspace a name.")
+    .max(WORKSPACE_NAME_MAX_LENGTH, `Keep the name to ${WORKSPACE_NAME_MAX_LENGTH} characters.`),
+});
+export type NewWorkspace = z.infer<typeof NewWorkspace>;
+
+/** Changing a workspace from the app. */
+export const WorkspaceChange = z.object({ colour: WorkspaceColour });
+export type WorkspaceChange = z.infer<typeof WorkspaceChange>;
 
 /**
  * Past this many characters (about 1,500 words) the workspace page warns that the context file

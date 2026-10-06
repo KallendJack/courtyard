@@ -8,7 +8,7 @@ import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import { Notice, StatusPill } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
-import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
+import { WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
@@ -117,9 +117,9 @@ function Session(props: { session: SessionSummary; providers: ProviderList["prov
 /** The session's workspace, in its colour: also the way back to it. */
 function WorkspaceChip(props: { workspaceId: WorkspaceId }) {
   const workspaces = loggedIn.useLoaderData();
-  const colourOf = useWorkspaceColours();
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
-  const name = list.find((w) => w.id === props.workspaceId)?.name ?? props.workspaceId;
+  const workspace = list.find((w) => w.id === props.workspaceId);
+  const name = workspace?.name ?? props.workspaceId;
   return (
     <Link
       to="/workspaces/$workspaceId"
@@ -127,7 +127,7 @@ function WorkspaceChip(props: { workspaceId: WorkspaceId }) {
       aria-label={`Back to ${name}`}
       className="flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline"
     >
-      <WorkspaceDot colour={colourOf(props.workspaceId)} small />
+      {workspace && <WorkspaceDot colour={workspace.colour} small />}
       {name}
     </Link>
   );

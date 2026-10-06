@@ -1,18 +1,32 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Health, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
+import {
+  type Health,
+  NewWorkspace,
+  WorkspaceChange,
+  type WorkspaceDetail,
+  type WorkspaceList,
+  type WorkspaceSummary,
+} from "@courtyard/contract";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import type { z } from "zod";
 import { apiError } from "./http.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { createClaudeProvider, createFakeProvider, type Provider } from "./providers/index.ts";
-import { ok, type Result } from "./result.ts";
+import { err, ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
-import { getWorkspace, listWorkspaces, type WorkspaceError } from "./workspaces/index.ts";
+import {
+  createWorkspace,
+  getWorkspace,
+  listWorkspaces,
+  setWorkspaceColour,
+  type WorkspaceError,
+} from "./workspaces/index.ts";
 
 export type { Environment };
 
@@ -62,15 +76,46 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
 
-  const workspaceError = (c: Context, error: WorkspaceError) =>
-    error.kind === "not-found"
-      ? apiError(c, { status: 404, error: "No such workspace" })
-      : apiError(c, { status: 500, error: error.message });
+  const workspaceError = (c: Context, error: WorkspaceError) => {
+    switch (error.kind) {
+      case "not-found":
+        return apiError(c, { status: 404, error: "No such workspace" });
+      case "invalid":
+        return apiError(c, { status: 400, error: error.message });
+      case "conflict":
+        return apiError(c, { status: 409, error: error.message });
+      case "storage":
+        return apiError(c, { status: 500, error: error.message });
+    }
+  };
+
+  /** The body a request sent, parsed with `schema`, or the first reason it doesn't fit. */
+  const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Result<T, string>> => {
+    const parsed = schema.safeParse(await c.req.json().catch(() => undefined));
+    return parsed.success ? ok(parsed.data) : err(parsed.error.issues[0]?.message ?? "Bad request");
+  };
 
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);
     if (!workspaces.ok) return workspaceError(c, workspaces.error);
     return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
+  });
+  api.post("/workspaces", async (c) => {
+    const body = await readBody(c, NewWorkspace);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const workspace = await createWorkspace(contextDir, body.value.name);
+    if (!workspace.ok) return workspaceError(c, workspace.error);
+    return c.json(workspace.value satisfies WorkspaceSummary, 201);
+  });
+  api.patch("/workspaces/:id", async (c) => {
+    const body = await readBody(c, WorkspaceChange);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const workspace = await setWorkspaceColour(contextDir, {
+      id: c.req.param("id"),
+      colour: body.value.colour,
+    });
+    if (!workspace.ok) return workspaceError(c, workspace.error);
+    return c.json(workspace.value satisfies WorkspaceSummary);
   });
   api.get("/workspaces/:id", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
