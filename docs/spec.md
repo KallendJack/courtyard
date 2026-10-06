@@ -22,13 +22,13 @@ and a side project, keep my context true and current, and have a model actually 
 ## Solution
 
 Courtyard: a self-hosted app I open on any device. I pick a workspace (one per area of life or project), pick a model,
-and talk. Each workspace keeps a short context file split into facts, plans and ideas, so every model starts out
-knowing the right things, and it only changes when I tick a model's suggestion. Models can look at the workspace's
-files and images. In code workspaces, Claude works on its own branch while I'm away and asks before doing anything
-risky; I review and merge from my phone. When Claude's usage limit hits, I carry on in the same session with Codex.
-Workspaces can use tools such as my homelab's status server or a design app, but only the workspaces I allow, and
-anything that changes things asks me first. It runs on my own machine with my own logins, and the code holds nothing
-personal, so anyone can run their own.
+and talk. Each workspace keeps a short context file split into facts, plans and ideas, so every model starts out knowing
+the right things, and models keep it current as we talk: I see every change and undo any that's wrong. Models can look
+at the workspace's files and images. In code workspaces, Claude works on its own branch while I'm away and asks before
+doing anything risky; I review and merge from my phone. When Claude's usage limit hits, I carry on in the same session
+with Codex. Workspaces can use tools such as my homelab's status server or a design app, but only the workspaces I
+allow, and anything that changes things asks me first. It runs on my own machine with my own logins, and the code holds
+nothing personal, so anyone can run their own.
 
 ## User Stories
 
@@ -72,21 +72,29 @@ personal, so anyone can run their own.
 
 ### Keeping context true
 
-21. As the owner, I want to say "remember that" or tap Save to context, so that a model suggests changes to the
-    context file from the conversation.
-22. As the owner, I want each suggestion labelled as a fact, plan or idea, so that a plan can't sneak in as a fact.
-23. As the owner, I want to tick the suggestions that are right and drop the rest, so that nothing I haven't approved
-    gets in.
-24. As the owner, I want to correct a suggestion's wording or section before ticking it, so that a nearly right
-    suggestion doesn't have to be dropped.
-25. As the owner, I want a suggestion to be able to change or remove an existing line, so that a plan becomes a fact
-    once I've done it, and stale lines go.
-26. As the owner, I want every applied change committed to the context folder's git repository, so that any change can
-    be undone.
-27. As the owner, I want those commits pushed to my context folder's remote, so that my context is backed up and
-    available to another machine.
-28. As the owner, I want to see when a push has failed and have it retried, so that my backup never silently falls
-    behind.
+21. As the owner, I want a model to save context as it comes up in a chat, so that my context stays current without
+    my stopping to approve it (ADR 0013).
+22. As the owner, I want each save labelled as a fact, plan or idea, so that a plan sneaking in as a fact shows.
+23. As the owner, I want a note in the chat for every save, with Undo, so that I catch a wrong one where it happened.
+24. As the owner, I want to edit a save's wording, section or place, so that a nearly right save doesn't have to go.
+25. As the owner, I want a save to be able to change or remove an existing line, so that a plan becomes a fact once
+    I've done it, and stale lines go.
+26. As the owner, I want to say "remember that", so that something is saved the moment I want it kept.
+27. As the owner, I want the owner context to save too, so that something true across my life, or how I like answers,
+    is said once.
+28. As the owner, I want models to save only what I've said, not their own suggestions or what's in a file unless I
+    ask, so that my context is mine.
+89. As the owner, I want a model not to save again what I've undone, so that I don't undo the same thing twice.
+90. As the owner, I want a list of recent changes on each workspace's page (and the owner context's on the home page),
+    each with Undo, so that I can fix a change after I've left its session.
+91. As the owner, I want my own edits to the files picked up as changes too, so that the list and Undo stay right.
+92. As the owner, I want Get to know this workspace on an empty workspace, so that a model asks me what it needs and
+    saves my answers.
+93. As the owner, I want to tidy a long context file by ticking a model's proposed changes, so that it stays short
+    without losing a line I care about.
+94. As the owner, I want every change committed to the context folder's git repository and pushed to my backup, so
+    that any change can be undone and nothing is lost.
+95. As the owner, I want to see when the backup is behind, and have it retried, so that it never silently falls behind.
 
 ### Models
 
@@ -244,9 +252,11 @@ Deep modules, each with a small interface at its root and its implementation pri
   context file exists, the repository path and command allowlist for code workspaces, and the tool connections named.
   An invalid workspace config falls back to a planning workspace with the reason shown.
 - **Context:** reads a context file into its Facts, Plans and Ideas sections (tolerating missing sections and text
-  above them); asks the session's provider for suggestions as structured output validated with Zod (each suggestion: a
-  section, the text, and optionally the existing line it replaces or removes); applies ticked suggestions; commits with
-  a message listing them; pushes to the remote, retrying and reporting push failures. Models never write context files.
+  above them); labels each line for a model to read; checks a save (validated with Zod: its place, section, text, and
+  optionally the label of the line it changes or removes) and refuses it with a reason; applies saves, undos, edits and
+  ticked tidy changes one at a time, each as a commit; commits hand edits first; lists recent changes from the git
+  history; makes the folder a git repository on first start; pushes to the backup, retrying and reporting failures.
+  Models never write context files (ADRs 0013, 0014).
 - **Providers:** the one seam. A provider reports its status (available, with models and capabilities, or unavailable
   with a reason) and runs one turn as a stream of events, returning a failure as a value, never a throw. Capabilities
   (reads files, can code, uses tools) drive the rules, not provider names. Adapters: Claude (Agent SDK), Codex (Codex
@@ -260,7 +270,7 @@ Deep modules, each with a small interface at its root and its implementation pri
   classifies each action as safe or needing approval.
 - **Notifications** (phase 4): web push with keys generated on first run; stores each device's subscription; sends on
   approval requested and on a long turn finishing or failing. The sender is passed in, so tests can read what was sent.
-- **HTTP:** the API mirroring the session interface, plus login, workspaces, context and suggestions, providers and
+- **HTTP:** the API mirroring the session interface, plus login, workspaces, context and its changes, providers and
   notifications; events streamed as server-sent events resuming from the last event id; everything except a health
   check requires the owner's login.
 
@@ -270,8 +280,9 @@ Deep modules, each with a small interface at its root and its implementation pri
 - Isolation, every turn: no setting sources, auto memory disabled, claude.ai connectors disabled, and only the MCP
   servers for the workspace's tool connections. The working directory is the workspace folder (planning) or the
   session branch's worktree (code), and file access outside it is denied.
-- Planning workspaces get read-only tools only. Code workspaces get edit and command tools, with every command and
-  every unsafe tool action routed through the SDK's permission callback to an approval event.
+- Planning workspaces get read-only tools, plus the worker's save tool (ADR 0013). Code workspaces get edit and command
+  tools and the save tool, with every command and every unsafe tool action routed through the SDK's permission
+  callback to an approval event.
 - The context file is added to the system prompt on every turn.
 - A usage-limit error becomes a rate-limited failure carrying the reset time when the SDK gives one.
 
@@ -317,15 +328,20 @@ picks and adjusts one; its colours, type and spacing become the shadcn theme's t
   (a context folder that is a real git repository with a real bare remote, a data folder) and the fake provider:
   login and its refusals, the workspace catalog, a whole turn over server-sent events, resume from the last event id,
   persistence across a restart, interrupted turns, stop, busy sessions, approvals, model changes and overflow,
-  suggestions applied, committed and pushed, push failures, and (phase 4) session branches, allowlist matching, diff,
+  saves, refusals, undos, edits and tidies committed and pushed, hand edits, push failures, and (phase 4) session
+  branches, allowlist matching, diff,
   merge and discard against real temporary repositories.
 - **The provider seam.** The Claude adapter, and later Codex, tested with its SDK stubbed: the isolation options are
   set on every turn, planning workspaces get read-only tools, permission requests become approval events, usage-limit
   errors become rate-limited failures, and credentials never appear in events. A short manual checklist covers each
   adapter against a real login.
 - **The browser, end to end.** Playwright against the built web app and a real worker running the fake provider: log
-  in, switch workspaces, send a message and watch it stream, close and reopen mid-turn, answer an approval, tick
-  suggestions, and the compact and two-pane layouts. Edge cases stay in the API tests, so these stay few.
+  in, switch workspaces, send a message and watch it stream, close and reopen mid-turn, answer an approval, undo a
+  save, and the compact and two-pane layouts. Edge cases stay in the API tests, so these stay few.
+- **The eval set, outside the three seams.** Whether a real model saves the right things can't be tested with the fake.
+  `pnpm eval:context` runs invented conversations (a made-up owner, nothing real) against the real model and scores
+  the saves each should make: plan or idea, plan becoming fact, workspace or owner context, nothing saved from small
+  talk. It runs on demand, never in CI, before any change to what gets saved merges (`docs/ai-conduct.md`).
 - **Observable side effects** go through dependencies passed in: the notification sender and the clock.
 - Prior art: homelab-mcp's in-process HTTP tests and Zod-parsed edges, and the session-service tests in an earlier
   scaffold of this idea, kept outside this repo (fake provider plus temporary folders).
@@ -338,7 +354,6 @@ picks and adjusts one; its colours, type and spacing become the shadcn theme's t
 - Models writing context files or planning workspace files directly.
 - Automatic model switching or routing.
 - Local models and Gemini (ADR 0004). The provider seam leaves room for them.
-- Suggestions offered automatically at the end of a session (a likely later addition).
 - 3D views and photo mock-ups of rooms. 3D can arrive later as a tool connection.
 - Email, calendar and drive tool connections, until the approval flow is proven on the homelab and the design app.
 - A container per coding session.
@@ -355,7 +370,7 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | ----- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | 0     | The design in Paper and the shadcn theme from it                                                             | Install Paper; name apps whose look you like        |
 | 1     | Login, workspaces, context files and the owner context, Claude sessions that stream and outlive the tab, the installable app, a live worker that starts by itself and updates when asked (ADR 0011) | A proxy route and fixed address for the worker; a live copy and its start task (one-off scripts) |
-| 2     | Context that keeps itself current: changes to context files as they come up in a chat, committed and pushed. How they're saved is decided when phase 2 is designed (proposed: saved as you chat, with Undo, replacing ADR 0005's ticking) | A git repository on the NAS for the context folder |
+| 2     | Context that keeps itself current (ADRs 0013, 0014), built in this order: the git repository and backup; saves with a note and Undo in the chat; the eval set; owner context saves; recent changes; Get to know this workspace; Tidy | File sharing on the NAS and a `courtyard` shared folder (a wizard walks through it) |
 | 3     | Codex as a second provider, and overflow, before code workspaces because coding uses up Claude fastest       | A ChatGPT plan                                      |
 | 4     | Code workspaces and the board: the repo's GitHub issues as a board, Start on a card for a session on its own branch, approvals, review, a pull request to finish; notifications; code workspaces grouped apart in the sidebar | None                                                |
 | 5     | Tool connections (homelab first, then Paper and Blender) and floor plans                                     | Paper and Blender running on the worker machine    |

@@ -55,7 +55,8 @@ This repo is public, and the app runs models that can change files on a real mac
 - **A workspace is a boundary.** A session sees only its own workspace folder (and, in a code workspace, its session
   branch's worktree) and only the tool connections that workspace names. Nothing from the worker machine's own Claude
   Code setup leaks in (ADR 0003).
-- **Anything that changes things outside a session branch needs an approval** (ADRs 0005, 0007, 0008).
+- **Anything that changes things outside a session branch needs an approval** (ADRs 0007, 0008). The one exception
+  is a save to context, which the worker checks and writes, and the owner can undo (ADR 0013).
 - **Credentials never reach the browser, the event log or the context folder.**
 
 ## Process
