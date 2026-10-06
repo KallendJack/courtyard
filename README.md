@@ -70,6 +70,51 @@ A NAS at `192.0.2.2` runs Caddy and Tailscale, and the worker runs on a PC at `1
   Get-NetFirewallApplicationFilter | Where-Object Program -like "*node.exe" | Get-NetFirewallRule | Where-Object { $_.Direction -eq "Inbound" -and $_.Action -eq "Allow" -and $_.Enabled -eq "True" } | Select-Object DisplayName, Profile
   ```
 
+## Running it day to day (Windows)
+
+Run the everyday Courtyard from its own clone of `main`, the **live copy**, not from a checkout
+you develop in, so switching branches never changes the live app (ADR 0011). The scripts in
+`scripts/live/` start it when you log on and update it when you choose.
+
+1. **Clone `main`** somewhere that isn't your development checkout, and build it:
+
+   ```powershell
+   git clone https://github.com/<you>/courtyard <live copy>
+   cd <live copy>
+   pnpm install --frozen-lockfile
+   pnpm build
+   ```
+
+2. **Write its settings:** copy `.env.example` to `.env` in the live copy and fill it in. Keep
+   your context and data folders outside the live copy.
+3. **Set it to start by itself.** This needs no administrator window:
+
+   ```powershell
+   & <live copy>\scripts\live\install-task.ps1
+   ```
+
+   It registers a task named "Courtyard worker" that runs the worker as you, with no window,
+   whenever you log on, and starts it now. It runs as you so it can use your Claude Code login.
+   If the worker stops, it starts again by itself. Its output goes to `worker.log` in the data
+   folder (the previous one is kept as `worker.log.old`).
+
+**To update** to the newest `main`:
+
+```powershell
+& <live copy>\scripts\live\update.ps1
+```
+
+- **It refuses** if the live copy has changes of its own, isn't on `main`, or `main`'s newest
+  commit isn't passing CI.
+- **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
+  and builds, then starts the worker and waits for it to answer. It shuts the worker down first
+  because Windows can refuse to replace files a running worker has open. A turn running at that
+  moment is recorded as interrupted.
+- **If any step fails,** it puts the previous version back and starts that instead.
+- **Only one update runs at a time.** If something other than the worker answers on its port,
+  the update stops without changing anything.
+- **The result** is written to `live-update.json` in the data folder.
+
 ## Claude
 
 Courtyard talks to Claude through Claude Code on the machine its worker runs on (the Agent SDK),

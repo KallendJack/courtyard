@@ -25,6 +25,11 @@ The part that does all the work: it holds the context folder, runs sessions, tal
 login.
 _Avoid_: backend, server, API, compute node
 
+**Live copy**:
+The clone of `main` the everyday Courtyard runs from, separate from any copy it's developed in, and
+updated only when the owner chooses (ADR 0011).
+_Avoid_: production, prod, deployment, release
+
 **Web app**:
 The part the owner opens in a browser. Static files that show things and call the worker; it does no model work and
 stores nothing.
