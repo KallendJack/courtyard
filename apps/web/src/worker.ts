@@ -6,6 +6,7 @@ import {
   OwnerContextDetail,
   type PasswordForm,
   ProviderList,
+  type SessionChange,
   type SessionId,
   SessionSummary,
   type StopRequest,
@@ -63,7 +64,7 @@ export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise
 /** Sends JSON to the worker's API (a POST unless `method` says) and reads the answer with `schema`. */
 const sendJson = async <T>(request: {
   path: string;
-  method?: "POST" | "PATCH";
+  method?: "POST" | "PATCH" | "DELETE";
   body: unknown;
   schema: z.ZodType<T>;
   unauthorised?: "logged-out" | "failed";
@@ -113,13 +114,39 @@ export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextD
 export const startOwnerContext = () =>
   sendJson({ path: "/owner-context", body: {}, schema: OwnerContextDetail });
 
-/** Changes a workspace's colour. */
+/** Renames a workspace or changes its colour. Its folder stays as it is. */
 export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>
   sendJson({
     path: `/workspaces/${encodeURIComponent(id)}`,
     method: "PATCH",
     body: change,
     schema: WorkspaceSummary,
+  });
+
+/** Archives a workspace: it leaves every list, and its folder moves to the archived folder. */
+export const archiveWorkspace = (id: WorkspaceId) =>
+  sendJson({
+    path: `/workspaces/${encodeURIComponent(id)}/archive`,
+    body: {},
+    schema: z.unknown(),
+  });
+
+/** Renames a session. */
+export const renameSession = (id: SessionId, change: SessionChange) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(id)}`,
+    method: "PATCH",
+    body: change,
+    schema: SessionSummary,
+  });
+
+/** Deletes a session and its event log. */
+export const deleteSession = (id: SessionId) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(id)}`,
+    method: "DELETE",
+    body: {},
+    schema: z.unknown(),
   });
 
 /** Starts a session in a workspace with the owner's first message. */
