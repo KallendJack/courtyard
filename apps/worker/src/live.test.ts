@@ -231,7 +231,7 @@ describe("a result file that can't be read", () => {
 });
 
 describe("asking the remote", () => {
-  it("asks again soon after it couldn't reach the remote, rather than in hours", async () => {
+  it("waits five minutes before asking again after it couldn't reach the remote", async () => {
     const reachable = (await git(liveCopy, "remote", "get-url", "origin")).stdout.trim();
     await git(liveCopy, "remote", "set-url", "origin", join(root, "nowhere.git"));
     const request = await workerFor();
@@ -239,8 +239,9 @@ describe("asking the remote", () => {
     await git(liveCopy, "remote", "set-url", "origin", reachable);
     await merge("A change made while it couldn't reach the remote");
 
-    now += 6 * 60 * 1000;
-
+    now += 2 * MINUTES;
+    expect(await statusOf(request)).toMatchObject({ newest: null });
+    now += 4 * MINUTES;
     expect(await statusOf(request)).toMatchObject({ newerOnMain: true });
   });
 
