@@ -13,9 +13,12 @@ export {
   ModelInfo,
   ModelRef,
   NewMessage,
+  PlacedLine,
   ProviderId,
   ProviderList,
   ProviderStatus,
+  Save,
+  SaveEdit,
   SESSION_TITLE_MAX_LENGTH,
   SessionChange,
   SessionDetail,
@@ -27,7 +30,10 @@ export {
 } from "./lib/session.ts";
 export {
   CONTEXT_FILE_LONG_CHARACTERS,
+  CONTEXT_LINE_MAX_CHARACTERS,
   ContextFile,
+  ContextLine,
+  ContextSection,
   NewWorkspace,
   OWNER_CONTEXT_LONG_CHARACTERS,
   OwnerContext,

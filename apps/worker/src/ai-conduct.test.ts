@@ -11,7 +11,15 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
-import { asOwner, followSession, postJson, type Requester, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  followSession,
+  postJson,
+  type Requester,
+  SAVING_MODEL,
+  savingProvider,
+  testWorker,
+} from "./testing.ts";
 
 // What every turn hands a model, seen at the provider seam: the rules in docs/ai-conduct.md.
 
@@ -29,7 +37,12 @@ afterEach(async () => {
 const contextFile = (markdown: string) =>
   writeFile(join(root, "context", "garage-gym", "CONTEXT.md"), markdown);
 
-const READS_FILES: Capabilities = { readsFiles: true, codes: false, usesTools: false };
+const READS_FILES: Capabilities = {
+  readsFiles: true,
+  codes: false,
+  usesTools: false,
+  savesContext: false,
+};
 const MODEL = { provider: "recorder", model: "one" };
 const FAIL = Symbol("fail");
 
@@ -111,7 +124,9 @@ describe("what every turn tells a model", () => {
 
     const { framing } = await firstTurn();
 
-    expect(framing.instructions).toContain("- Single garage.");
+    // Each line with its label, so a save can name it (ADR 0013).
+    expect(framing.instructions).toContain("- [F1] Single garage.");
+    expect(framing.instructions).toContain("- [P1] A rack.");
     expect(framing.instructions).toMatch(/Facts are true now/);
     expect(framing.instructions).toMatch(/Plans are decided but not done/);
     expect(framing.instructions).toMatch(/Ideas are only being considered/);
@@ -279,5 +294,113 @@ describe("an owner context with nothing in it yet", () => {
     const { instructions } = (await firstTurn()).framing;
 
     expect(instructions).not.toMatch(/owner_context|owner context|One line each/i);
+  });
+});
+
+describe("saving context as a model answers (ADR 0013)", () => {
+  /** The first turn a provider gets in garage-gym, on a worker whose clock says `now`. */
+  const turnOn = async (provider: Provider, now?: number) => {
+    const request = await asOwner(
+      testWorker({ root, providers: [provider], ...(now === undefined ? {} : { now: () => now }) }),
+    );
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "I've booked padel lessons for Tuesdays.",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    return {
+      request,
+      sessionId,
+      events: await followSession(request, { sessionId, until: "turn-completed" }),
+    };
+  };
+
+  it("tells every model today's date", async () => {
+    const saver = savingProvider([[]]);
+    await turnOn(saver.provider, Date.parse("2026-10-06T12:00:00Z"));
+
+    expect(saver.framings[0]?.instructions).toMatch(/Today is Tuesday,? 6 October 2026./);
+  });
+
+  it("offers the save tool on a planning turn, with the rules for what to save", async () => {
+    const saver = savingProvider([[]]);
+    await turnOn(saver.provider);
+
+    const framing = saver.framings[0];
+    expect(framing?.saveTool?.name).toBe("save_to_context");
+    expect(framing?.instructions).toMatch(
+      /keep this workspace's context file current yourself, with the save_to_context tool/,
+    );
+    expect(framing?.instructions).toMatch(/A label names the line to change or remove/);
+    expect(framing?.instructions).toMatch(/save your own suggestions once the owner agrees/i);
+    expect(framing?.instructions).toMatch(/"Remember that" means save it now/);
+    expect(framing?.instructions).toMatch(
+      /Save from the workspace's files only when the owner asks/,
+    );
+    expect(framing?.instructions).toMatch(/ask in your answer and save once the owner says/);
+    expect(framing?.instructions).toMatch(/your answer stays about their question/);
+  });
+
+  it("offers no save tool to a provider that can't save", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    await (await sessionOn(provider)).say("Where should the rack go?");
+
+    expect(turns[0]?.framing.saveTool).toBeNull();
+    expect(turns[0]?.framing.instructions).not.toMatch(/save_to_context/);
+  });
+
+  it("offers no save tool in a code workspace", async () => {
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const saver = savingProvider([[]]);
+    await turnOn(saver.provider);
+
+    expect(saver.framings[0]?.saveTool).toBeNull();
+    expect(saver.framings[0]?.instructions).not.toMatch(/save_to_context/);
+  });
+
+  it("shows each earlier answer's saves and what the owner did with them", async () => {
+    await contextFile("# Garage gym\n\n## Facts\n\n- Single garage.\n");
+    const saver = savingProvider([
+      [
+        { section: "facts", action: "add", text: "Padel lessons on Tuesdays." },
+        { section: "plans", action: "add", text: "Gym on Monday and Thursday." },
+        { section: "ideas", action: "add", text: "A rowing machine." },
+      ],
+      [],
+    ]);
+    const { request, sessionId, events } = await turnOn(saver.provider);
+    const [padel, gym] = events.flatMap((e) => (e.type === "context-saved" ? [e.seq] : []));
+    await postJson(request, `/api/sessions/${sessionId}/saves/${padel}/undo`, {});
+    await postJson(request, `/api/sessions/${sessionId}/saves/${gym}/edit`, {
+      section: "plans",
+      line: "Gym on Monday and Thursday evenings.",
+    });
+
+    await postJson(request, `/api/sessions/${sessionId}/messages`, {
+      text: "Thanks.",
+      model: SAVING_MODEL,
+    });
+    await followSession(request, {
+      sessionId,
+      until: "turn-completed",
+      after: events.at(-1)?.seq ?? 0,
+    });
+
+    const message = saver.framings[1]?.message ?? "";
+    expect(message).toContain("Your saves in this answer:");
+    expect(message).toContain(
+      '- Added to Facts: "Padel lessons on Tuesdays." (the owner undid this)',
+    );
+    expect(message).toContain(
+      '- Added to Plans: "Gym on Monday and Thursday." (the owner edited it to Plans: "Gym on Monday and Thursday evenings.")',
+    );
+    expect(message).toContain('- Added to Ideas: "A rowing machine." (kept)');
+    expect(message.indexOf("Your saves")).toBeLessThan(message.indexOf("</conversation>"));
+    expect(saver.framings[1]?.instructions).toMatch(
+      /A save the owner undid was wrong: save it again only if the owner brings it up/,
+    );
   });
 });

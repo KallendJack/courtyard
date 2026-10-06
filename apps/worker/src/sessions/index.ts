@@ -6,6 +6,7 @@ import {
   type FailureReason,
   type ModelRef,
   type NewMessage,
+  type PlacedLine,
   SessionEvent,
   SessionId,
   type SessionSummary,
@@ -13,11 +14,20 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
+import type { ContextFolder } from "../context-folder/index.ts";
 import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
-import { type FramingWorkspace, framingFor } from "../prompts/index.ts";
-import type { Provider } from "../providers/index.ts";
+import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
+import type { Provider, SaveReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
+import {
+  createTurnSaves,
+  editSave,
+  type NoteRefusal,
+  type SaveState,
+  type SaveTarget,
+  undoSave,
+} from "../saves/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 export type SessionError =
@@ -28,6 +38,10 @@ export type SessionError =
   | { readonly kind: "delete-while-running" }
   | { readonly kind: "workspace-archived" }
   | { readonly kind: "model-unavailable" }
+  /** No save in the session has that event number. */
+  | { readonly kind: "save-not-found" }
+  /** The owner's Undo or Edit of a save couldn't be done. */
+  | { readonly kind: "note-refused"; readonly refusal: NoteRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
 /** A session's own file, beside its event log. */
@@ -55,7 +69,22 @@ const STORAGE_ERROR: SessionError = {
   message: "A session's files in Courtyard's data folder can't be read or written.",
 };
 
-/** What the worker keeps in memory about a session it has touched since it started. */
+/**
+ * A save as it stands now, from the session's events: what it did, its line after the owner's
+ * edits, and whether they undid it. `undefined` when no save has that event number.
+ */
+const saveStateOf = (events: readonly SessionEvent[], seq: number): SaveState | undefined => {
+  const saved = events.find((event) => event.seq === seq);
+  if (saved?.type !== "context-saved") return undefined;
+  let current = saved.save.action === "remove" ? undefined : saved.save.saved;
+  let undone = false;
+  for (const event of events) {
+    if (event.type === "context-edited" && event.save === seq) current = event.now;
+    if (event.type === "context-undone" && event.save === seq) undone = true;
+  }
+  return { save: saved.save, current, undone };
+};
+
 /**
  * Where a session's current turn stands in this worker. A stop handle exists from the moment the
  * turn starts, and only while it can still be stopped: once the provider has finished, the turn
@@ -92,6 +121,8 @@ export const createSessions = (options: {
   providers: readonly Provider[];
   /** The context folder, where each turn finds its workspace. */
   contextDir: string;
+  /** Where saves are written, one change at a time. */
+  contextFolder: ContextFolder;
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
@@ -204,7 +235,11 @@ export const createSessions = (options: {
       return;
     }
     session.nextSeq = events.value.length + 1;
-    const last = events.value.at(-1);
+    // The owner's Undo and Edit can come after a turn ends, so it's the last turn's own events
+    // that say whether it was left open.
+    const last = events.value.findLast(
+      (event) => event.type === "owner-message" || endsTurn(event),
+    );
     if (last === undefined || endsTurn(last)) return;
     const ended = await writeEvent({
       id,
@@ -260,6 +295,14 @@ export const createSessions = (options: {
     });
   };
 
+  /** Where a session's saves go: its workspace's context file, as changes naming the session. */
+  const targetOf = (session: { id: SessionId; workspaceId: WorkspaceId }): SaveTarget => ({
+    contextFolder: options.contextFolder,
+    contextDir: options.contextDir,
+    workspaceId: session.workspaceId,
+    sessionId: session.id,
+  });
+
   /** Runs one turn to the end, recording everything; nobody waits on it. */
   const runTurn = async (turn: {
     id: SessionId;
@@ -276,6 +319,8 @@ export const createSessions = (options: {
     let failure: FailureReason | undefined;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
+    /** Saves still being written, which finish (and are recorded) before the turn ends. */
+    const savesUnderway = new Set<Promise<unknown>>();
     try {
       const [events, workspace] = await Promise.all([
         readEvents(turn.id),
@@ -286,16 +331,45 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
       } else {
+        const framing = framingFor({
+          workspace: workspace.value,
+          capabilities: turn.provider.capabilities,
+          events: events.value,
+          now: options.now(),
+        });
+        const turnSaves = createTurnSaves({
+          ...targetOf(turn),
+          shown: workspace.value.contextFile,
+        });
+        /** Whether the last save was refused, so this one is its retry. */
+        let retrying = false;
+        const save = async (input: unknown): Promise<SaveReply> => {
+          // A provider winding down after a stop saves nothing more; one already saving finishes.
+          if (stopper.signal.aborted || recordingLost) {
+            return saveReply(err({ kind: "stopped" }), true);
+          }
+          if (framing.saveTool === null) return saveReply(err({ kind: "not-offered" }), true);
+          const saved = await turnSaves(input);
+          if (saved.ok) {
+            const recorded = await append(turn.id, { type: "context-saved", save: saved.value });
+            if (!recorded.ok) recordingLost = true;
+          }
+          const reply = saveReply(saved, retrying);
+          retrying = !saved.ok && !retrying;
+          return reply;
+        };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
             folder: workspace.value.folder,
-            framing: framingFor({
-              workspace: workspace.value,
-              capabilities: turn.provider.capabilities,
-              events: events.value,
-            }),
+            framing,
+            save: (input) => {
+              const saving = save(input);
+              savesUnderway.add(saving);
+              void saving.finally(() => savesUnderway.delete(saving));
+              return saving;
+            },
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
               if (recordingLost || stopper.signal.aborted) return;
@@ -319,6 +393,8 @@ export const createSessions = (options: {
       console.error(`Session ${turn.id}: the provider threw`, error);
       failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
     }
+    // A save already being written stays, whatever happens to the turn (ADR 0013).
+    await Promise.allSettled(savesUnderway);
     if (!failure && recordingLost) {
       failure = {
         kind: "unknown",
@@ -414,7 +490,50 @@ export const createSessions = (options: {
     return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   };
 
+  /**
+   * Acts on one of a session's saves, by its event number, and records what was done. In the
+   * session's queue, so two acts on the same save happen one after the other, each seeing the
+   * other's result.
+   */
+  const actOnSave = async (act: {
+    rawId: string;
+    save: number;
+    change: (target: SaveTarget, state: SaveState) => Promise<Result<null, NoteRefusal>>;
+    recorded: NewEvent;
+  }): Promise<Result<null, SessionError>> => {
+    const found = await findSession(act.rawId);
+    if (!found.ok) return found;
+    const file = found.value;
+    if (await isArchived(options.contextDir, file.workspaceId)) {
+      return err({ kind: "workspace-archived" });
+    }
+    const session = runningSession(file.id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const events = await readEvents(file.id);
+      if (!events.ok) return events;
+      const state = saveStateOf(events.value, act.save);
+      if (state === undefined) return err({ kind: "save-not-found" });
+      const changed = await act.change(targetOf(file), state);
+      if (!changed.ok) return err({ kind: "note-refused", refusal: changed.error });
+      const recorded = await writeEvent({ id: file.id, session, event: act.recorded });
+      return recorded.ok ? ok(null) : recorded;
+    });
+  };
+
   return {
+    /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
+    undoSave: (rawId: string, save: number) =>
+      actOnSave({ rawId, save, change: undoSave, recorded: { type: "context-undone", save } }),
+
+    /** Edits one of the session's saved lines: its wording, its section, or both. */
+    editSave: (rawId: string, save: number, now: PlacedLine) =>
+      actOnSave({
+        rawId,
+        save,
+        change: (target, state) => editSave(target, state, now),
+        recorded: { type: "context-edited", save, now },
+      }),
+
     /** Starts a session with the owner's first message, so there are never empty ones. */
     create: async (start: {
       workspaceId: WorkspaceId;

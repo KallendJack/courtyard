@@ -6,6 +6,7 @@ import type {
   ProviderId,
   ProviderStatus,
 } from "@courtyard/contract";
+import type { z } from "zod";
 import type { Result } from "../result.ts";
 
 export type { Activity };
@@ -18,7 +19,20 @@ export type Framing = {
   readonly message: string;
   /** The owner's new message on its own, for a provider that needs only that (the fake). */
   readonly newMessage: string;
+  /** The save tool to offer, or `null` when this turn has none (ADR 0013). */
+  readonly saveTool: SaveTool | null;
 };
+
+/** The save tool as a model is told about it: its name, what it's for, and each input. */
+export type SaveTool = {
+  readonly name: string;
+  readonly description: string;
+  /** Each input by name, with what it means as its description. */
+  readonly input: Readonly<Record<string, z.ZodType>>;
+};
+
+/** What the worker made of a save: whether it saved, and what to tell the model. */
+export type SaveReply = { readonly saved: boolean; readonly reply: string };
 
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
@@ -31,6 +45,11 @@ export type TurnInput = {
   readonly emit: (text: string) => Promise<void>;
   /** Says what the model is doing, such as reading a file. */
   readonly report: (activity: Activity) => Promise<void>;
+  /**
+   * Hands a save to the worker, its input exactly as the model sent it. The worker checks it,
+   * writes it, and says what to tell the model. Only for a framing with a save tool.
+   */
+  readonly save: (input: unknown) => Promise<SaveReply>;
   /** Aborted when the owner stops the turn: the provider stops working as soon as it can. */
   readonly signal: AbortSignal;
 };

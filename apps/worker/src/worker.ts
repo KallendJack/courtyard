@@ -104,7 +104,8 @@ export const createWorker = (options: {
     ...(claudeProvider ? [createClaudeProvider()] : []),
     ...(fakeProvider ? [createFakeProvider()] : []),
   ];
-  const sessions = createSessions({ dataDir, providers, contextDir, now });
+  const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
+  const sessions = createSessions({ dataDir, providers, contextDir, contextFolder, now });
   const live = createLive({
     liveCopy,
     updateTask,
@@ -112,7 +113,6 @@ export const createWorker = (options: {
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
   });
-  const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
   (options.repeat ?? repeatForever)(KEEP_UP_EVERY_MS, contextFolder.keepUp);
 
   const api = new Hono();
