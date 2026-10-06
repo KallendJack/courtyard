@@ -18,9 +18,14 @@ const VARIANTS = {
   /** Archiving, deleting, logging out. */
   destructive:
     "border-transparent bg-destructive/10 text-destructive-text hover:bg-destructive/20 focus-visible:ring-destructive/20",
+  /** A small action beside text that shouldn't draw the eye, such as Undo on a save's note. */
+  quiet:
+    "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
 } as const;
 
 const SIZES = {
+  /** A quiet action in a line of text: a full-size tap target on a phone. */
+  xs: "h-9 px-3 text-sm md:h-7 md:px-2",
   /** Beside text or in a box (a notice, a form in a list). */
   sm: "h-8 px-4 text-sm",
   md: "h-9 px-5 text-sm",

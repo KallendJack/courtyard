@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkspaceId } from "./workspace.ts";
+import { ContextLine, ContextSection, WorkspaceId } from "./workspace.ts";
 
 export const ProviderId = z
   .string()
@@ -23,6 +23,8 @@ export const Capabilities = z.object({
   readsFiles: z.boolean(),
   codes: z.boolean(),
   usesTools: z.boolean(),
+  /** Offers the save tool, so it can save to context as it answers (ADR 0013). */
+  savesContext: z.boolean(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 
@@ -111,6 +113,25 @@ export const Activity = z.discriminatedUnion("kind", [
 ]);
 export type Activity = z.infer<typeof Activity>;
 
+/** A line of a context file in its section. */
+export const PlacedLine = z.object({ section: ContextSection, line: z.string() });
+export type PlacedLine = z.infer<typeof PlacedLine>;
+
+/**
+ * What one save did to the workspace's context file (ADR 0013): a line added, a line changed (and
+ * perhaps moved to another section, as a plan becomes a fact), or a line removed.
+ */
+export const Save = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("add"), saved: PlacedLine }),
+  z.object({ action: z.literal("change"), saved: PlacedLine, replaced: PlacedLine }),
+  z.object({ action: z.literal("remove"), replaced: PlacedLine }),
+]);
+export type Save = z.infer<typeof Save>;
+
+/** The owner editing a saved line from its note: its new wording and section. */
+export const SaveEdit = z.object({ section: ContextSection, line: ContextLine });
+export type SaveEdit = z.infer<typeof SaveEdit>;
+
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
@@ -122,6 +143,17 @@ export const SessionEvent = z.discriminatedUnion("type", [
   /** The owner stopped the turn; whatever was written before stays. */
   z.object({ ...eventBase, type: z.literal("turn-stopped") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
+  /** A save the model made during the turn, already in the context file. */
+  z.object({ ...eventBase, type: z.literal("context-saved"), save: Save }),
+  /** The owner undid the save numbered `save`, whenever and from wherever they did it. */
+  z.object({ ...eventBase, type: z.literal("context-undone"), save: z.number().int().positive() }),
+  /** The owner edited the save numbered `save`: its line is now `now`. */
+  z.object({
+    ...eventBase,
+    type: z.literal("context-edited"),
+    save: z.number().int().positive(),
+    now: PlacedLine,
+  }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 

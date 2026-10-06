@@ -1,6 +1,7 @@
 import {
   NewMessage,
   type ProviderList,
+  SaveEdit,
   SessionChange,
   type SessionDetail,
   type SessionList,
@@ -12,14 +13,33 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { apiError, contextError, readBody } from "../http.ts";
 import type { Provider } from "../providers/index.ts";
+import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
-import type { SessionError, Sessions } from "./index.ts";
+import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
 const KEEP_ALIVE_MS = 25_000;
 
 /** Where a subscriber wants to start: after this event number. Anything odd means the start. */
 const Position = z.coerce.number().int().min(0).catch(0);
+
+/** Why the owner's Undo or Edit of a save didn't happen, in their words. */
+const noteRefused = (refusal: NoteRefusal, act: NoteAct) => {
+  switch (refusal.kind) {
+    case "changed-since":
+      return act === "undo"
+        ? "That line has changed since, so Undo would lose the newer wording. Edit it instead."
+        : "That line has changed since, so it can't be edited from here.";
+    case "already-undone":
+      return "This save is already undone.";
+    case "already-back":
+      return "That line is back in the context file already.";
+    case "nothing-to-edit":
+      return "A removed line has nothing to edit.";
+    case "storage":
+      return refusal.message;
+  }
+};
 
 const sessionError = (c: Context, error: SessionError) => {
   switch (error.kind) {
@@ -44,10 +64,20 @@ const sessionError = (c: Context, error: SessionError) => {
       });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
+    case "save-not-found":
+      return apiError(c, { status: 404, error: "No such save in this session." });
+    case "note-refused":
+      return apiError(c, {
+        status: error.refusal.kind === "storage" ? 500 : 409,
+        error: noteRefused(error.refusal, error.act),
+      });
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
 };
+
+/** A save's event number in a path; anything else names no save. */
+const SaveNumber = z.coerce.number().int().positive().catch(0);
 
 /** Providers, sessions and their event streams, mounted under `/api`. */
 export const sessionRoutes = (options: {
@@ -120,6 +150,24 @@ export const sessionRoutes = (options: {
     const stopped = await sessions.stop(c.req.param("id"), request.value);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
+  });
+
+  routes.post("/sessions/:id/saves/:save/undo", async (c) => {
+    const undone = await sessions.undoSave({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
+    return c.body(null, 204);
+  });
+
+  routes.post("/sessions/:id/saves/:save/edit", async (c) => {
+    const body = await readBody(c, SaveEdit);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const save = SaveNumber.parse(c.req.param("save"));
+    const edited = await sessions.editSave({ rawId: c.req.param("id"), save, now: body.value });
+    if (!edited.ok) return sessionError(c, edited.error);
+    return c.body(null, 204);
   });
 
   // Replays everything after a position, then follows live (ADR 0006). A browser that reconnects

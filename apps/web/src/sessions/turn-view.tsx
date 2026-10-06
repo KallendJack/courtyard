@@ -1,9 +1,10 @@
-import type { Activity, FailureReason } from "@courtyard/contract";
+import type { Activity, FailureReason, SessionId } from "@courtyard/contract";
 import { memo } from "react";
 import { Button } from "@/components/button";
 import { Notice } from "@/components/notice";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
+import { SaveNote } from "./save-note.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -29,14 +30,16 @@ export const describeFailure = (reason: FailureReason) => {
 };
 
 /**
- * One turn: the owner's message and the answer. Memoised, and the turns before the last never
- * change identity, so streaming text only re-renders the turn it belongs to.
+ * One turn: the owner's message, the answer, and a note for each save it made. Memoised, and a
+ * turn's object only changes when an event belongs to it, so streaming text (or an Undo) only
+ * re-renders that turn.
  */
 export const TurnView = memo(function TurnView(props: {
+  sessionId: SessionId;
   turn: Turn;
   onRetry?: (turn: Turn) => void;
 }) {
-  const { turn, onRetry } = props;
+  const { sessionId, turn, onRetry } = props;
 
   return (
     <div className="space-y-4">
@@ -65,6 +68,13 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.notes.length > 0 && (
+        <ul aria-label="Saved to context" className="space-y-1.5">
+          {turn.notes.map((note) => (
+            <SaveNote key={note.seq} sessionId={sessionId} note={note} />
+          ))}
+        </ul>
       )}
       {turn.state.kind === "stopped" && (
         <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>

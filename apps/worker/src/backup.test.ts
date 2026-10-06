@@ -3,20 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContextBackup } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, gitIn, postJson, type Requester, testWorker } from "./testing.ts";
+import { asOwner, changesIn, gitIn, postJson, type Requester, testWorker } from "./testing.ts";
 
-/** The context folder's commits, newest first: each one's title and trailers. */
-const changes = async () => {
-  const log = await gitIn(contextDir, "log", "--format=%s%x1f%b%x1e");
-  return log
-    .split("\x1e")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== "")
-    .map((entry) => {
-      const [title = "", body = ""] = entry.split("\x1f");
-      return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
-    });
-};
+/** The context folder's changes, newest first. */
+const changes = () => changesIn(contextDir);
 
 const backup = async () => {
   const response = await request("/api/backup");

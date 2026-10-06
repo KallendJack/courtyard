@@ -2,11 +2,13 @@ import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
+  createSdkMcpServer,
   type HookCallback,
   type Options,
   query,
   type SDKUserMessage,
   type SyncHookJSONOutput,
+  tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   type Capabilities,
@@ -17,11 +19,16 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok } from "../result.ts";
-import type { Provider, TurnInput } from "./index.ts";
+import type { Provider, SaveTool, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");
-/** Claude reads the workspace's files; coding and tools come in later phases. */
-const CAPABILITIES: Capabilities = { readsFiles: true, codes: false, usesTools: false };
+/** Claude reads the workspace's files and saves to context; coding and tools come later. */
+const CAPABILITIES: Capabilities = {
+  readsFiles: true,
+  codes: false,
+  usesTools: false,
+  savesContext: true,
+};
 const LABEL = "Claude";
 
 /**
@@ -37,6 +44,33 @@ export type ClaudeCode = {
 
 /** The tools a planning workspace gets: looking at its files, never changing them (ADR 0003). */
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
+/** The in-process MCP server Courtyard's own tools are offered through. */
+const COURTYARD_SERVER = "courtyard";
+
+/** A tool from Courtyard's server, by the name Claude Code calls it. */
+const courtyardTool = (name: string) => `mcp__${COURTYARD_SERVER}__${name}`;
+
+/**
+ * The save tool as an in-process tool (ADR 0013). Its input goes to the worker as Claude sent it,
+ * and the worker's reply comes back as the tool's result.
+ */
+const saveServer = (saveTool: SaveTool, save: TurnInput["save"]) =>
+  createSdkMcpServer({
+    name: COURTYARD_SERVER,
+    tools: [
+      tool(
+        saveTool.name,
+        saveTool.description,
+        saveTool.input,
+        async (input) => {
+          const { saved, reply } = await save(input);
+          return { content: [{ type: "text", text: reply }], isError: !saved };
+        },
+        { alwaysLoad: true },
+      ),
+    ],
+  });
+
 /** How long a status check may take before Claude counts as unavailable. */
 const CHECK_TIMEOUT_MS = 15_000;
 /** How long a status answer is reused, so listing providers doesn't start Claude Code each time. */
@@ -284,13 +318,21 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
 /**
  * Checked before every tool call, and the only way one is allowed: none are pre-approved, so
  * anything this doesn't allow is refused, including when it fails. Only the planning tools, only
- * inside the workspace folder once symlinks are followed. Each file read is reported.
+ * inside the workspace folder once symlinks are followed, and Courtyard's own tools offered this
+ * turn, which touch nothing themselves. Each file read is reported.
  */
 const confineTo =
-  (folder: string, report: TurnInput["report"]): HookCallback =>
+  (confine: {
+    folder: string;
+    report: TurnInput["report"];
+    /** Courtyard's own tools offered this turn, by the names Claude Code calls them. */
+    courtyardTools: readonly string[];
+  }): HookCallback =>
   async (input) => {
+    const { folder, report, courtyardTools } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
+      if (courtyardTools.includes(input.tool_name)) return decision(true);
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
 
@@ -430,6 +472,8 @@ export const createClaudeProvider = (
       if (input.signal.aborted) stop.abort();
       input.signal.addEventListener("abort", stopClaudeCode);
 
+      const { saveTool } = input.framing;
+      const courtyardTools = saveTool === null ? [] : [courtyardTool(saveTool.name)];
       try {
         const messages = claudeCode.run({
           prompt: input.framing.message,
@@ -441,7 +485,14 @@ export const createClaudeProvider = (
             tools: PLANNING_TOOLS,
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
-            hooks: { PreToolUse: [{ hooks: [confineTo(folder, input.report)] }] },
+            ...(saveTool === null
+              ? {}
+              : { mcpServers: { [COURTYARD_SERVER]: saveServer(saveTool, input.save) } }),
+            hooks: {
+              PreToolUse: [
+                { hooks: [confineTo({ folder, report: input.report, courtyardTools })] },
+              ],
+            },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,
             abortController: stop,

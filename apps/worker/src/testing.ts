@@ -1,8 +1,14 @@
 import { join } from "node:path";
-import { ApiError, SessionEvent, SessionSummary } from "@courtyard/contract";
+import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
-import { createFakeProvider } from "./providers/index.ts";
+import {
+  createFakeProvider,
+  type Framing,
+  type Provider,
+  type SaveReply,
+} from "./providers/index.ts";
+import { ok } from "./result.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
 /**
@@ -149,4 +155,68 @@ export const gatedProvider = () => {
       ),
     ]);
   return { provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }), release };
+};
+
+/** For tests: one step of a scripted turn, a save the model asks for or something to do mid-turn. */
+export type ScriptedStep = Readonly<Record<string, unknown>> | (() => Promise<void>);
+
+/** For tests: the model the saving provider offers. */
+export const SAVING_MODEL = { provider: "saver", model: "one" };
+
+/**
+ * For tests: a provider that, in each turn, hands the worker the saves scripted for that turn in
+ * order (running any function steps between them), keeps the worker's replies, and answers
+ * "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
+ */
+export const savingProvider = (
+  turns: readonly (readonly ScriptedStep[])[],
+  options: { holdAfterSaves?: boolean } = {},
+) => {
+  const replies: SaveReply[][] = [];
+  const framings: Framing[] = [];
+  const id = ProviderId.parse("saver");
+  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Saver",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One" }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const turnReplies: SaveReply[] = [];
+      const steps = turns[replies.length] ?? [];
+      replies.push(turnReplies);
+      framings.push(input.framing);
+      for (const step of steps) {
+        if (typeof step === "function") await step();
+        else turnReplies.push(await input.save(step));
+      }
+      if (options.holdAfterSaves) {
+        await new Promise((resolve) =>
+          input.signal.addEventListener("abort", resolve, { once: true }),
+        );
+        return ok(null);
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, replies, framings };
+};
+
+/** For tests: the context folder's changes, newest first: each one's title and trailers. */
+export const changesIn = async (contextDir: string) => {
+  const log = await gitIn(contextDir, "log", "--format=%s%x1f%b%x1e");
+  return log
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "")
+    .map((entry) => {
+      const [title = "", body = ""] = entry.split("\x1f");
+      return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
+    });
 };

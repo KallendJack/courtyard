@@ -20,7 +20,7 @@ import {
 } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
-const CONTEXT_FILE = "CONTEXT.md";
+export const CONTEXT_FILE = "CONTEXT.md";
 const CONFIG_FILE = "workspace.json";
 /**
  * The folder in the context folder that archived workspaces move to. Named like a workspace, so
@@ -385,7 +385,7 @@ const nextColour = (every: readonly Listed[]) => {
  * A new workspace's context file: its title, then empty Facts, Plans and Ideas, with a line on
  * how to fill them in (docs/ai-conduct.md, "Starter context file").
  */
-const starterContextFile = (name: string) =>
+export const starterContextFile = (name: string) =>
   [
     `# ${name}`,
     "",

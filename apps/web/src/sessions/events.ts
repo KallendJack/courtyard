@@ -3,10 +3,26 @@ import {
   ApiError,
   type FailureReason,
   type ModelRef,
+  type PlacedLine,
+  type Save,
   SessionEvent,
   type SessionId,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
+
+/**
+ * A save the model made, shown as a note under its answer, and what the owner has done with it
+ * since: kept, undone, or edited to a new line.
+ */
+export type Note = {
+  /** The save's event number, which Undo and Edit name it by. */
+  readonly seq: number;
+  readonly save: Save;
+  readonly state:
+    | { readonly kind: "kept" }
+    | { readonly kind: "undone" }
+    | { readonly kind: "edited"; readonly now: PlacedLine };
+};
 
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
@@ -16,6 +32,8 @@ export type Turn = {
   readonly answer: string;
   /** What the model did along the way, such as files it read. */
   readonly activities: readonly Activity[];
+  /** The saves it made, in order. */
+  readonly notes: readonly Note[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -33,8 +51,27 @@ const withLastTurn = (log: Log, update: { seq: number; change: (turn: Turn) => T
 };
 
 /**
+ * Swaps in a new version of the turn holding the note numbered `save`, which can be any turn: the
+ * owner undoes and edits saves whenever they like. Every other turn object stays as it was.
+ */
+const withNote = (
+  log: Log,
+  update: { seq: number; save: number; change: (note: Note) => Note },
+): Log => ({
+  lastSeq: update.seq,
+  turns: log.turns.map((turn) =>
+    turn.notes.some((note) => note.seq === update.save)
+      ? {
+          ...turn,
+          notes: turn.notes.map((note) => (note.seq === update.save ? update.change(note) : note)),
+        }
+      : turn,
+  ),
+});
+
+/**
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
- * repeats one changes nothing. Only the last turn's object changes, so the rest don't re-render.
+ * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
  */
 export const applyEvent = (log: Log, event: SessionEvent): Log => {
   if (event.seq <= log.lastSeq) return log;
@@ -51,6 +88,7 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
             model: event.model,
             answer: "",
             activities: [],
+            notes: [],
             state: { kind: "running" },
           },
         ],
@@ -76,6 +114,26 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
       return withLastTurn(log, {
         seq,
         change: (turn) => ({ ...turn, state: { kind: "failed", reason: event.reason } }),
+      });
+    case "context-saved":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          notes: [...turn.notes, { seq, save: event.save, state: { kind: "kept" } }],
+        }),
+      });
+    case "context-undone":
+      return withNote(log, {
+        seq,
+        save: event.save,
+        change: (note) => ({ ...note, state: { kind: "undone" } }),
+      });
+    case "context-edited":
+      return withNote(log, {
+        seq,
+        save: event.save,
+        change: (note) => ({ ...note, state: { kind: "edited", now: event.now } }),
       });
   }
 };

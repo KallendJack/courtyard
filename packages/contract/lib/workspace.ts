@@ -56,6 +56,31 @@ export type WorkspaceChange = z.infer<typeof WorkspaceChange>;
  */
 export const CONTEXT_FILE_LONG_CHARACTERS = 8000;
 
+/** A line longer than this is more than one fact (docs/ai-conduct.md, Context lines). */
+export const CONTEXT_LINE_MAX_CHARACTERS = 250;
+
+/** The three sections of a context file that hold its lines. */
+export const ContextSection = z.enum(["facts", "plans", "ideas"]);
+export type ContextSection = z.infer<typeof ContextSection>;
+
+/** Each section's name, as its heading and the app write it. */
+export const CONTEXT_SECTION_NAMES: Record<ContextSection, string> = {
+  facts: "Facts",
+  plans: "Plans",
+  ideas: "Ideas",
+};
+
+/** One line of a context file, as the owner writes it in the app. */
+export const ContextLine = z
+  .string()
+  .trim()
+  .min(1, "Write the line first.")
+  .max(
+    CONTEXT_LINE_MAX_CHARACTERS,
+    `Keep the line to ${CONTEXT_LINE_MAX_CHARACTERS} characters: longer is more than one fact.`,
+  )
+  .refine((line) => !/[\r\n]/.test(line), "Keep it to one line.");
+
 /** A context file, read into its sections. Each fact, plan or idea is one line. */
 export const ContextFile = z.object({
   title: z.string().optional(),

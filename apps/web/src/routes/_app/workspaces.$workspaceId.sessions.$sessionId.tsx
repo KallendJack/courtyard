@@ -179,7 +179,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           <Notice>{problem}</Notice>
         </div>
       ) : (
-        <SessionTurns turns={turns} onRetry={retry} />
+        <SessionTurns sessionId={session.id} turns={turns} onRetry={retry} />
       )}
       {sendProblem && (
         <div className="mt-3">

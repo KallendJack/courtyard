@@ -3,9 +3,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { ModelId } from "@courtyard/contract";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
-import type { Activity, TurnInput } from "./providers/index.ts";
+import type { Activity, SaveTool, TurnInput } from "./providers/index.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
@@ -54,7 +57,9 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      saveTool: null,
     },
+    save: async () => ({ saved: false, reply: "No saves in this test." }),
     emit: async (text) => {
       emitted.push(text);
     },
@@ -93,7 +98,12 @@ describe("Claude's status", () => {
     expect(status).toMatchObject({ id: "claude", available: true });
     if (!status.available) throw new Error("expected available");
     expect(status.models.map((m) => m.id)).toEqual(["default", "opus", "sonnet"]);
-    expect(status.capabilities).toEqual({ readsFiles: true, codes: false, usesTools: false });
+    expect(status.capabilities).toEqual({
+      readsFiles: true,
+      codes: false,
+      usesTools: false,
+      savesContext: true,
+    });
   });
 
   it("says which model Default is, from Claude Code's description of it", async () => {
@@ -243,6 +253,7 @@ describe("a Claude turn", () => {
         instructions: "Exactly these instructions.",
         message: "Exactly this message.",
         newMessage: "This message.",
+        saveTool: null,
       },
     });
 
@@ -438,6 +449,78 @@ describe("after the security review", () => {
 
     expect(status).toMatchObject({ available: false, reason: expect.stringMatching(/answer/) });
     expect(stopped).toBe(true);
+  });
+});
+
+const SAVE_TOOL: SaveTool = {
+  name: "save_to_context",
+  description: "Saves one line to the context file.",
+  input: {
+    action: z.enum(["add", "change", "remove"]),
+    section: z.enum(["facts", "plans", "ideas"]),
+    text: z.string().optional(),
+  },
+};
+
+const framingWith = (saveTool: SaveTool | null) => ({
+  instructions: "The turn's instructions.",
+  message: "I've booked padel lessons for Tuesdays.",
+  newMessage: "I've booked padel lessons for Tuesdays.",
+  saveTool,
+});
+
+describe("the save tool on a Claude turn", () => {
+  it("is offered as Courtyard's own tool, allowed through, and hands its input to the worker unchanged", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+
+    await runTurn(claudeCode, {
+      framing: framingWith(SAVE_TOOL),
+      save: async (input) => {
+        handed.push(input);
+        return { saved: false, reply: "That line is too long." };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__save_to_context", input: {} }),
+    ).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "allow" },
+    });
+
+    // Called the way Claude Code calls it: over MCP.
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["save_to_context"]);
+    const input = { action: "add", section: "facts", text: "Padel lessons on Tuesdays." };
+    const result = await client.callTool({ name: "save_to_context", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([input]);
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: "That line is too long." }],
+    });
+  });
+
+  it("isn't offered, or allowed, on a turn whose framing has none", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    await runTurn(claudeCode, { framing: framingWith(null) });
+
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no run");
+    expect(options.mcpServers).toEqual({});
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__save_to_context", input: {} }),
+    ).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "deny" },
+    });
   });
 });
 

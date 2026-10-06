@@ -33,18 +33,20 @@ gives the score and each miss.
 
 ## Every turn
 
-Built in phase 1. The instructions, in order:
+Built in phase 1, with today's date, line labels and saving added in #47. The instructions, in order:
 
 1. The workspace, by name, as one area of the owner's life.
 2. Access. With `readsFiles`: read and search the workspace's folder (images included) and read files when they help;
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
    file and the owner.
-3. Say so and ask rather than guess, and answer in Markdown.
-4. How to read Facts, Plans and Ideas, when there's a context file or the workspace gets all of the owner context.
-5. The owner context between its markers, when there is one and the workspace gets some of it: answer the way it
+3. Today's date.
+4. Say so and ask rather than guess, and answer in Markdown.
+5. How to read Facts, Plans and Ideas, when there's a context file or the workspace gets all of the owner context.
+6. The owner context between its markers, when there is one and the workspace gets some of it: answer the way it
    asks; otherwise it's information.
-6. The context file between its markers, saying it wins where it differs from the owner context, or a line saying
-   there isn't one yet.
+7. The context file between its markers, each line with its label, saying it wins where it differs from the owner
+   context, or a line saying there isn't one yet.
+8. When the turn offers the save tool: the saving rules (Saving context lines, below).
 
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
 conversation markers, then the new message. Earlier answers say how their turn ended:
@@ -80,17 +82,20 @@ a context file's threshold, since it goes with every message in every workspace.
 
 ## Saving context lines
 
-To build in phase 2 (ADR 0013). A model saves context itself, during its answer, through the worker's save tool. The
-worker checks each save and writes it; the owner sees it as a note in the chat and undoes or edits what's wrong.
+Built with #47 for the workspace's context file; saves to the owner context come with #49 (ADR 0013). A model saves
+context itself, during its answer, through the worker's save tool. The worker checks each save and writes it; the
+owner sees it as a note in the chat and undoes or edits what's wrong.
 
 ### What a model is told, every turn
 
 Added to the instructions in Every turn:
 
 - **Today's date,** so a model can tell a stale line and date the lines that need one.
-- **Line labels.** Each line of the context file and the owner context comes with its label (`[F3]` for the third
-  fact, `[P1]`, `[I2]`, `[A1]` for How to answer me). A save names a line by its label to change or remove it.
-- **The save tool,** what it's for, and the rules below. A provider that can't offer the tool isn't told about it.
+- **Line labels.** Each line of the context file comes with its label (`[F3]` for the third fact, `[P1]`, `[I2]`),
+  and with #49 the owner context's lines too (`[A1]` for How to answer me). A save names a line by its label to
+  change or remove it, and a change can move a line to another section, as a plan becomes a fact.
+- **The save tool,** what it's for, and the rules below, on a turn in a planning workspace whose provider offers it
+  (its `savesContext` capability). Otherwise a model isn't told about it.
 
 ### What to save
 
@@ -116,9 +121,20 @@ Added to the instructions in Every turn:
 
 ### When a save is refused
 
-The worker refuses a save, and tells the model why, when its labels are out of date, it repeats a line already there,
-its line is too long, or it puts About me facts in from a code workspace. The model may put it right once in the same
-turn; after that it carries on without it. A refused save shows nothing to the owner.
+The worker refuses a save, and tells the model why, when:
+
+- **its label is out of date:** the labelled line has changed since the model was shown it. The refusal gives the lines
+  as they are now, and their labels count from then on;
+- **it repeats a line already there,** compared without case, spacing or a closing full stop;
+- **its line is too long,** or more than one line;
+- **it's missing something,** such as the label a change needs, or names a label that doesn't exist;
+- **it puts About me facts in from a code workspace** (with #49).
+
+The model may put a refused save right once: the save after a refusal counts as its retry, and if that's refused too
+the model is told to carry on without it (the save after that starts afresh). A label that's out of date only
+refuses saves naming that line, so a model can save several times in one turn, its own saves included. A
+refused save shows nothing to the owner. A workspace with no context file gets one from the starter (Starter context
+file, above) before its first save.
 
 ### What the owner did with earlier saves
 

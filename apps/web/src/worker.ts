@@ -7,6 +7,7 @@ import {
   OwnerContextDetail,
   type PasswordForm,
   ProviderList,
+  type SaveEdit,
   type SessionChange,
   type SessionId,
   SessionSummary,
@@ -174,5 +175,21 @@ export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
     body: message,
+    schema: z.unknown(),
+  });
+
+/** Undoes one of a session's saves, named by its event number. */
+export const undoSave = ({ sessionId, save }: { sessionId: SessionId; save: number }) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/saves/${save}/undo`,
+    body: {},
+    schema: z.unknown(),
+  });
+
+/** Edits one of a session's saved lines: its wording, its section, or both. */
+export const editSave = (change: { sessionId: SessionId; save: number; edit: SaveEdit }) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(change.sessionId)}/saves/${change.save}/edit`,
+    body: change.edit,
     schema: z.unknown(),
   });

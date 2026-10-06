@@ -99,6 +99,26 @@ export const move = async (from: string, to: string) => {
 };
 
 /**
+ * Writes a text file through a temporary file beside it, so a crash mid-write never leaves half a
+ * file.
+ */
+export const writeTextFile = async (
+  path: string,
+  text: string,
+): Promise<Result<null, "unwritable">> => {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, text);
+    await move(temporary, path);
+    return ok(null);
+  } catch {
+    return err("unwritable");
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+};
+
+/**
  * Writes JSON readable only by the worker's user. It goes to a temporary file first, so a crash
  * mid-write never leaves half a file. With `exclusive`, it fails with `exists` rather than
  * replacing a file that's already there.

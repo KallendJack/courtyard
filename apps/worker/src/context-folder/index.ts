@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type ContextBackup, WorkspaceId } from "@courtyard/contract";
+import { type ContextBackup, type SessionId, WorkspaceId } from "@courtyard/contract";
 import { exists } from "../files.ts";
 import { git, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
@@ -8,10 +8,17 @@ import { ARCHIVED_FOLDER } from "../workspaces/index.ts";
 
 /**
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
- * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, or
- * the owner context started from the app.
+ * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
+ * owner context started from the app, or a model's save and the owner undoing or editing one.
  */
-export type ChangeKind = "setup" | "hand-edit" | "workspace" | "owner-context";
+export type ChangeKind =
+  | "setup"
+  | "hand-edit"
+  | "workspace"
+  | "owner-context"
+  | "save"
+  | "undo"
+  | "edit";
 
 /** Where a change was made: a workspace, or the owner context. */
 export type Place =
@@ -23,6 +30,8 @@ export type ChangeNote = {
   readonly kind: ChangeKind;
   readonly title: string;
   readonly places: readonly Place[];
+  /** The session it came from, for a save and what the owner did with it. */
+  readonly session?: SessionId;
 };
 
 /** A workspace made, renamed, recoloured or archived in the app. */
@@ -75,7 +84,11 @@ const commitMessageArgs = (note: ChangeNote) => [
   "-m",
   note.title,
   "-m",
-  [`Courtyard-Change: ${note.kind}`, ...note.places.map(placeTrailer)].join("\n"),
+  [
+    `Courtyard-Change: ${note.kind}`,
+    ...note.places.map(placeTrailer),
+    ...(note.session === undefined ? [] : [`Courtyard-Session: ${note.session}`]),
+  ].join("\n"),
 ];
 
 export type ContextFolder = {
