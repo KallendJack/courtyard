@@ -104,8 +104,7 @@ function Workspace() {
           {contextFile.characters > CONTEXT_FILE_LONG_CHARACTERS && (
             <div className="mt-3">
               <StatusPill>
-                This context file is getting long ({contextFile.characters.toLocaleString()}{" "}
-                characters). It goes with every message, so keep it to what matters.
+                Getting long: it goes with every message, so keep it to what matters.
               </StatusPill>
             </div>
           )}

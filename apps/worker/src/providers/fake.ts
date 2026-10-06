@@ -1,9 +1,11 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { ModelId, ProviderId } from "@courtyard/contract";
+import { type Capabilities, ModelId, ProviderId } from "@courtyard/contract";
 import { err, ok } from "../result.ts";
 import type { Provider } from "./index.ts";
 
 const id = ProviderId.parse("fake");
+/** The fake reads nothing; it only echoes. */
+const CAPABILITIES: Capabilities = { readsFiles: false, codes: false, usesTools: false };
 
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
@@ -27,18 +29,19 @@ export const createFakeProvider = (
 
   return {
     id,
+    capabilities: CAPABILITIES,
     status: async () => ({
       id,
       label: "Fake",
       available: true,
       models: [{ id: ModelId.parse("echo"), label: "Fake (echoes you)" }],
-      capabilities: { readsFiles: false, codes: false, usesTools: false },
+      capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ lines, emit, report, signal }) => {
+    runTurn: async ({ framing, emit, report, signal }) => {
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
-      const last = lines.at(-1)?.text ?? "";
+      const last = framing.newMessage;
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
       if (/please fail/i.test(last)) {
         return err({

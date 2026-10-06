@@ -15,9 +15,7 @@ its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. Wha
   when two real implementations exist. Side effects that tests must observe (sending a notification, the clock) are
   passed in as dependencies.
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
-- **Everything a model reads follows `docs/ai-conduct.md`** and is built in the worker's prompts module
-  (`apps/worker/src/prompts/`). Providers deliver it unchanged. Change the guide first, then the module, then the
-  provider-seam tests in `apps/worker/src/ai-conduct.test.ts`.
+- **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, Moorland, in `apps/web/src/styles.css` (the Paper design chosen in
   issue #2). Colours, fonts and radii are used by name, never by value. `components/ui/` is shadcn's generated code:
   change it by re-adding a component or through the theme (`biome.json` relaxes two rules for it). `components/` holds

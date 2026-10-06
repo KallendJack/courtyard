@@ -24,8 +24,8 @@ export const WorkspaceList = z.object({ workspaces: z.array(WorkspaceSummary) })
 export type WorkspaceList = z.infer<typeof WorkspaceList>;
 
 /**
- * Past this many characters (about 2,000 words) the workspace page warns that the context file
- * is long: it's sent with every message (docs/ai-conduct.md).
+ * Past this many characters (about 1,500 words) the workspace page warns that the context file
+ * is long, since it goes with every message (docs/ai-conduct.md).
  */
 export const CONTEXT_FILE_LONG_CHARACTERS = 8000;
 

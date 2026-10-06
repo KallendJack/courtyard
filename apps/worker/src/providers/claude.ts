@@ -8,12 +8,20 @@ import {
   type SDKUserMessage,
   type SyncHookJSONOutput,
 } from "@anthropic-ai/claude-agent-sdk";
-import { type FailureReason, ModelId, ProviderId, type ProviderStatus } from "@courtyard/contract";
+import {
+  type Capabilities,
+  type FailureReason,
+  ModelId,
+  ProviderId,
+  type ProviderStatus,
+} from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok } from "../result.ts";
 import type { Provider, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");
+/** Claude reads the workspace's files; coding and tools come in later phases. */
+const CAPABILITIES: Capabilities = { readsFiles: true, codes: false, usesTools: false };
 const LABEL = "Claude";
 
 /**
@@ -375,12 +383,13 @@ export const createClaudeProvider = (
       label: LABEL,
       available: true,
       models: offered,
-      capabilities: { readsFiles: true, codes: false, usesTools: false },
+      capabilities: CAPABILITIES,
     };
   };
 
   return {
     id,
+    capabilities: CAPABILITIES,
 
     status: async () => {
       if (cached && now() - cached.at < STATUS_TTL_MS) return cached.status;
@@ -393,7 +402,7 @@ export const createClaudeProvider = (
     },
 
     runTurn: async (input) => {
-      const folder = resolve(input.workspace.folder);
+      const folder = resolve(input.folder);
       let resetAt: string | undefined;
       let failure: FailureReason | undefined;
       let resultArrived = false;

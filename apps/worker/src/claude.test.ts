@@ -49,13 +49,12 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
   const activities: Activity[] = [];
   const result = await provider.runTurn({
     model: ModelId.parse("sonnet"),
-    lines: [{ speaker: "owner", text: "Where should the rack go?" }],
-    workspace: {
-      name: "Garage gym",
-      folder,
-      contextFile: "# Garage gym\n\n## Facts\n- Single garage.",
+    folder,
+    framing: {
+      instructions: "The turn's instructions.",
+      message: "Where should the rack go?",
+      newMessage: "Where should the rack go?",
     },
-    framing: { instructions: "The turn's instructions.", message: "Where should the rack go?" },
     emit: async (text) => {
       emitted.push(text);
     },
@@ -209,7 +208,11 @@ describe("a Claude turn", () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
 
     await runTurn(claudeCode, {
-      framing: { instructions: "Exactly these instructions.", message: "Exactly this message." },
+      framing: {
+        instructions: "Exactly these instructions.",
+        message: "Exactly this message.",
+        newMessage: "This message.",
+      },
     });
 
     expect(runs[0]?.options.systemPrompt).toBe("Exactly these instructions.");
@@ -322,7 +325,7 @@ describe("after the security review", () => {
       await writeFile(join(workspace, "plan.md"), "the plan");
       await symlink(outside, join(workspace, "linked"), "junction");
       const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
-      await runTurn(claudeCode, { workspace: { name: "W", folder: workspace, contextFile: null } });
+      await runTurn(claudeCode, { folder: workspace });
       const options = runs[0]?.options;
       if (!options) throw new Error("no turn ran");
 
