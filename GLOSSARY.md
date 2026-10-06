@@ -45,6 +45,12 @@ _Avoid_: project, space, room, context (on its own)
 A workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first.
 _Avoid_: system prompt, memory, notes
 
+**Owner context**:
+`OWNER.md` at the top of the context folder: what's true across the owner's whole life (About me) and how they like
+answers (How to answer me). Every model reads it before the workspace's context file, except that a code workspace's
+models read only How to answer me (ADR 0010).
+_Avoid_: profile, global context, memory, system prompt, about me (that's one of its sections)
+
 **Fact**:
 A line in a context file's Facts section: something true now.
 _Avoid_: truth, state
