@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type Health,
   NewWorkspace,
+  type OwnerContextDetail,
   WorkspaceChange,
   type WorkspaceDetail,
   type WorkspaceList,
@@ -14,6 +15,8 @@ import { bodyLimit } from "hono/body-limit";
 import { apiError, readBody } from "./http.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
+import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
+import { sharedOwnerContext } from "./prompts/index.ts";
 import { createClaudeProvider, createFakeProvider, type Provider } from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
@@ -111,12 +114,31 @@ export const createWorker = (options: {
     return c.json(workspace.value satisfies WorkspaceSummary);
   });
   api.get("/workspaces/:id", async (c) => {
-    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    const [workspace, ownerContext] = await Promise.all([
+      getWorkspace(contextDir, c.req.param("id")),
+      readOwnerContext(contextDir),
+    ]);
     if (!workspace.ok) return workspaceError(c, workspace.error);
+    if (!ownerContext.ok) return workspaceError(c, ownerContext.error);
+    const { shared } = sharedOwnerContext({
+      mode: workspace.value.summary.mode,
+      ownerContext: ownerContext.value,
+    });
     return c.json({
       workspace: workspace.value.summary,
       contextFile: workspace.value.contextFile,
+      ownerContextShared: shared,
     } satisfies WorkspaceDetail);
+  });
+  api.get("/owner-context", async (c) => {
+    const read = await readOwnerContext(contextDir);
+    if (!read.ok) return workspaceError(c, read.error);
+    return c.json({ ownerContext: read.value?.ownerContext ?? null } satisfies OwnerContextDetail);
+  });
+  api.post("/owner-context", async (c) => {
+    const started = await startOwnerContext(contextDir);
+    if (!started.ok) return workspaceError(c, started.error);
+    return c.json({ ownerContext: started.value.ownerContext } satisfies OwnerContextDetail, 201);
   });
   api.all("*", (c) => apiError(c, { status: 404, error: "Not found" }));
 

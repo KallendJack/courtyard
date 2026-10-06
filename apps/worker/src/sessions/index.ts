@@ -14,7 +14,8 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
-import { framingFor } from "../prompts/index.ts";
+import { readOwnerContext } from "../owner-context/index.ts";
+import { type FramingWorkspace, framingFor } from "../prompts/index.ts";
 import type { Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { getWorkspace } from "../workspaces/index.ts";
@@ -228,14 +229,27 @@ export const createSessions = (options: {
     return status.available && status.models.some((m) => m.id === ref.model) ? provider : undefined;
   };
 
-  /** What a turn needs from its workspace: its name, its folder, and its context file as written. */
+  /**
+   * What a turn needs from its workspace: its name, mode and folder, its context file as written,
+   * and the owner context.
+   */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<{ name: string; folder: string; contextFile: string | null }, null>> => {
-    const workspace = await getWorkspace(options.contextDir, workspaceId);
-    if (!workspace.ok) return err(null);
+  ): Promise<Result<FramingWorkspace & { folder: string }, string>> => {
+    const [workspace, ownerContext] = await Promise.all([
+      getWorkspace(options.contextDir, workspaceId),
+      readOwnerContext(options.contextDir),
+    ]);
+    if (!workspace.ok) return err("This session's workspace can't be read.");
+    if (!ownerContext.ok) return err(ownerContext.error.message);
     const { summary, folder, contextMarkdown } = workspace.value;
-    return ok({ name: summary.name, folder, contextFile: contextMarkdown });
+    return ok({
+      name: summary.name,
+      mode: summary.mode,
+      folder,
+      contextFile: contextMarkdown,
+      ownerContext: ownerContext.value,
+    });
   };
 
   /** Runs one turn to the end, recording everything; nobody waits on it. */
@@ -262,7 +276,7 @@ export const createSessions = (options: {
       if (!events.ok) {
         failure = { kind: "unknown", message: "The session's event log can't be read." };
       } else if (!workspace.ok) {
-        failure = { kind: "unknown", message: "This session's workspace can't be read." };
+        failure = { kind: "unknown", message: workspace.error };
       } else {
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([

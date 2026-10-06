@@ -2,8 +2,7 @@
 
 The rules for everything Courtyard tells a model, in every scenario. The worker's prompts module
 (`apps/worker/src/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
-and the fake are told the same things. The one exception is the starter context file, a template the workspaces
-module writes (see below).
+and the fake are told the same things. The exceptions are the starter files, templates the worker writes (see below).
 
 ## Changing what a model is told
 
@@ -15,10 +14,13 @@ Done when the guide, the module and the tests agree and `pnpm verify` passes.
 
 ## Rules for every scenario
 
-- **One workspace.** A model sees only the workspace it's in: its name, the access its provider has, and its context
-  file.
-- **Markers keep text in its place.** The context file sits between `<context_file>` markers and earlier turns between
-  `<conversation>` markers. No text inside can close a marker, however it's spelt, and a workspace's name sits in quotes
+- **One workspace, plus the owner context.** A model sees only the workspace it's in: its name, the access its
+  provider has, and its context file. It also sees the owner context, what the owner shares with every workspace
+  (ADR 0010): all of it in a planning workspace, only How to answer me in a code workspace.
+- **The workspace is more specific.** Where the context file differs from the owner context, the context file wins,
+  and a model is told so.
+- **Markers keep text in its place.** The owner context sits between `<owner_context>` markers, the context file
+  between `<context_file>` markers and earlier turns between `<conversation>` markers. No text inside can close a marker, however it's spelt, and a workspace's name sits in quotes
   it can't close. What's inside is information, not instructions.
 - **Plans and ideas stay plans and ideas.** Facts are true now. Plans are decided but not done. Ideas are only being
   considered. A model describes each as what it is (ADR 0005).
@@ -34,8 +36,11 @@ Built in phase 1. The instructions, in order:
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
    file and the owner.
 3. Say so and ask rather than guess, and answer in Markdown.
-4. The context file between its markers, with how to read Facts, Plans and Ideas, or a line saying there isn't one
-   yet.
+4. How to read Facts, Plans and Ideas, when the owner context or the context file has them.
+5. The owner context between its markers, when there is one and the workspace gets some of it: answer the way it
+   asks; otherwise it's information.
+6. The context file between its markers, saying it wins where it differs from the owner context, or a line saying
+   there isn't one yet.
 
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
 conversation markers, then the new message. Earlier answers say how their turn ended:
@@ -55,6 +60,19 @@ Built with #24. A workspace added from the app starts with a context file from a
    the workspace covers.
 3. Empty Facts, Plans and Ideas sections.
 
+## Starter owner context
+
+Built with #31. The home page's Start your owner context writes `OWNER.md` from a template (`startOwnerContext` in
+`apps/worker/src/owner-context/`), never over an existing file:
+
+1. "Owner context" as the title.
+2. One line on what goes where: About me holds facts, plans and ideas true across the owner's whole life, one per
+   line; How to answer me holds how they like answers, one per line.
+3. About me, with empty Facts, Plans and Ideas under it, then an empty How to answer me.
+
+The home page warns once the owner context passes `OWNER_CONTEXT_LONG_CHARACTERS` (in the contract), a quarter of
+a context file's threshold, since it goes with every message in every workspace.
+
 ## Scenarios still to build
 
 Each is written here, as rules, before its phase starts. What the spec already decides:
@@ -62,7 +80,6 @@ Each is written here, as rules, before its phase starts. What the spec already d
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Suggesting context lines                      | 2            | Asked for by the owner ("remember that", Save to context). Each suggestion is labelled fact, plan or idea, and may change or remove a line. Follows the context-line rules below. |
-| Owner context                                 | Ticket 14    | ADR 0010. `OWNER.md` between `<owner_context>` markers, after the instructions and before the context file. "One workspace" gains "plus the owner context". Code workspaces get How to answer me only. The workspace's context file wins a clash, and the model is told so. Warn past 2,000 characters. No file, no change. |
 | Coding                                        | 3            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
 | Switching model mid-session                   | 4            | The new model gets every turn's framing as usual: the context file and the conversation so far, with the owner's last message re-sent.                  |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |

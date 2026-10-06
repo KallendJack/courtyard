@@ -6,6 +6,7 @@ import {
   WorkspaceDetail,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { ColourChooser } from "@/components/workspace-colour";
@@ -43,7 +44,7 @@ function Workspace() {
     );
   }
   if (detail.kind !== "loaded") return <Problem result={detail} />;
-  const { workspace, contextFile } = detail.data;
+  const { workspace, contextFile, ownerContextShared } = detail.data;
 
   return (
     <Page>
@@ -120,6 +121,17 @@ function Workspace() {
           <ContextFileSections contextFile={contextFile} />
         </>
       )}
+      {ownerContextShared !== "none" && (
+        <p className="mt-8 text-sm text-muted-foreground">
+          Also reads{" "}
+          <Link to="/" className="text-foreground underline">
+            {ownerContextShared === "all"
+              ? "your owner context"
+              : "how you like answers (from your owner context)"}
+          </Link>
+          .
+        </p>
+      )}
     </Page>
   );
 }
@@ -153,34 +165,12 @@ function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
 function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
   return (
     <div className="mt-4 space-y-6">
-      <Section title="Facts" hint="True now" lines={contextFile.facts} />
-      <Section title="Plans" hint="Decided, not done" lines={contextFile.plans} />
-      <Section title="Ideas" hint="Being considered" lines={contextFile.ideas} />
+      <FactsPlansIdeas {...contextFile} />
       {contextFile.other !== "" && (
         <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
           {contextFile.other}
         </pre>
       )}
     </div>
-  );
-}
-
-function Section({ title, hint, lines }: { title: string; hint: string; lines: string[] }) {
-  return (
-    <section aria-label={title}>
-      <h3 className="flex items-baseline gap-2 font-semibold">
-        {title} <span className="text-xs font-normal text-muted-foreground">{hint}</span>
-      </h3>
-      {lines.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">Nothing yet.</p>
-      ) : (
-        <ul className="mt-2 list-disc space-y-1.5 pl-5 marker:text-primary-text">
-          {lines.map((line, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a line's position is its identity here
-            <li key={`${index}-${line}`}>{line}</li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

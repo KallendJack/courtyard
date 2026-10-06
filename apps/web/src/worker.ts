@@ -2,6 +2,7 @@ import {
   ApiError,
   type NewMessage,
   type NewWorkspace,
+  OwnerContextDetail,
   type PasswordForm,
   ProviderList,
   type SessionId,
@@ -96,6 +97,13 @@ export const loadProviders = () => fromWorker("/providers", ProviderList);
 /** Adds a workspace: its folder, a starter context file and a colour. */
 export const addWorkspace = (workspace: NewWorkspace) =>
   sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
+
+/** The owner context, or `null` when there isn't one yet. */
+export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextDetail);
+
+/** Starts the owner context from the worker's starter file. */
+export const startOwnerContext = () =>
+  sendJson({ path: "/owner-context", body: {}, schema: OwnerContextDetail });
 
 /** Changes a workspace's colour. */
 export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>

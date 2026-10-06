@@ -66,9 +66,41 @@ export const ContextFile = z.object({
 });
 export type ContextFile = z.infer<typeof ContextFile>;
 
+/**
+ * Past this many characters (about 400 words) the home page warns that the owner context is long,
+ * since it goes with every message in every workspace (ADR 0010).
+ */
+export const OWNER_CONTEXT_LONG_CHARACTERS = 2000;
+
+/** The owner context (`OWNER.md`), read into its sections. Each line is one fact, plan, idea or preference. */
+export const OwnerContext = z.object({
+  /** Text above About me. */
+  intro: z.string(),
+  /** About me. */
+  facts: z.array(z.string()),
+  plans: z.array(z.string()),
+  ideas: z.array(z.string()),
+  /** How to answer me. */
+  answers: z.array(z.string()),
+  /** The whole file's length. */
+  characters: z.number().int().nonnegative(),
+});
+export type OwnerContext = z.infer<typeof OwnerContext>;
+
+export const OwnerContextDetail = z.object({
+  /** Absent until the owner starts one. */
+  ownerContext: OwnerContext.nullable(),
+});
+export type OwnerContextDetail = z.infer<typeof OwnerContextDetail>;
+
+/** What of the owner context a workspace's models read: all of it, How to answer me, or nothing. */
+export const OwnerContextShared = z.enum(["all", "answers", "none"]);
+export type OwnerContextShared = z.infer<typeof OwnerContextShared>;
+
 export const WorkspaceDetail = z.object({
   workspace: WorkspaceSummary,
   /** Absent when the workspace has no context file yet. */
   contextFile: ContextFile.nullable(),
+  ownerContextShared: OwnerContextShared,
 });
 export type WorkspaceDetail = z.infer<typeof WorkspaceDetail>;
