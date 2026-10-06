@@ -354,7 +354,7 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | Phase | Delivers                                                                                                     | Owner setup                                         |
 | ----- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | 0     | The design in Paper and the shadcn theme from it                                                             | Install Paper; name apps whose look you like        |
-| 1     | Login, workspaces, context files and the owner context, Claude sessions that stream and outlive the tab, the installable app | A proxy route and fixed address for the worker     |
+| 1     | Login, workspaces, context files and the owner context, Claude sessions that stream and outlive the tab, the installable app, a live worker that starts by itself and updates when asked (ADR 0011) | A proxy route and fixed address for the worker; a live copy and its start task (one-off scripts) |
 | 2     | Suggestions ticked into context files, committed and pushed                                                  | A git repository on the NAS for the context folder |
 | 3     | Code workspaces: session branches, the command allowlist, approvals, review and merge; notifications        | None                                                |
 | 4     | Codex as a second provider, and overflow                                                                     | A ChatGPT plan                                      |
