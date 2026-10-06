@@ -11,12 +11,11 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import type { z } from "zod";
-import { apiError } from "./http.ts";
+import { apiError, readBody } from "./http.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { createClaudeProvider, createFakeProvider, type Provider } from "./providers/index.ts";
-import { err, ok, type Result } from "./result.ts";
+import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
@@ -87,12 +86,6 @@ export const createWorker = (options: {
       case "storage":
         return apiError(c, { status: 500, error: error.message });
     }
-  };
-
-  /** The body a request sent, parsed with `schema`, or the first reason it doesn't fit. */
-  const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Result<T, string>> => {
-    const parsed = schema.safeParse(await c.req.json().catch(() => undefined));
-    return parsed.success ? ok(parsed.data) : err(parsed.error.issues[0]?.message ?? "Bad request");
   };
 
   api.get("/workspaces", async (c) => {

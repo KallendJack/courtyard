@@ -301,10 +301,16 @@ describe("adding a workspace", () => {
   it("makes a folder name from the name, keeping the name as written", async () => {
     const birthday = await added("  Nan's 80th Birthday!  ");
     const cafe = await added("Café plans");
+    const shed = await added("Søren's Straße shed");
 
     expect([birthday.id, birthday.name]).toEqual(["nans-80th-birthday", "Nan's 80th Birthday!"]);
     expect([cafe.id, cafe.name]).toEqual(["cafe-plans", "Café plans"]);
-    expect((await listWorkspaces()).map((w) => w.id)).toEqual(["cafe-plans", "nans-80th-birthday"]);
+    expect(shed.id).toBe("sorens-strasse-shed");
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual([
+      "cafe-plans",
+      "nans-80th-birthday",
+      "sorens-strasse-shed",
+    ]);
   });
 
   it("refuses a name that clashes with a workspace's folder or its name", async () => {
@@ -371,6 +377,34 @@ describe("changing a workspace's colour", () => {
     });
     const { workspace: reopened } = await openWorkspace("side-project");
     expect(reopened).toMatchObject({ colour: "moss", mode: "code" });
+  });
+
+  it("never changes another workspace's colour, even one that wasn't kept yet", async () => {
+    await workspace("office");
+    await workspace("studio");
+    await workspace("workshop");
+    const before = (await listWorkspaces()).map((w) => [w.id, w.colour]);
+
+    expect((await changeColour("office", "moss")).status).toBe(200);
+
+    expect(before).toEqual([
+      ["office", "bracken"],
+      ["studio", "heather"],
+      ["workshop", "slate"],
+    ]);
+    expect((await listWorkspaces()).map((w) => [w.id, w.colour])).toEqual([
+      ["office", "moss"],
+      ["studio", "heather"],
+      ["workshop", "slate"],
+    ]);
+    // Kept now, so a folder added by hand later can't move them either.
+    await workspace("attic");
+    expect((await listWorkspaces()).map((w) => w.colour)).toEqual([
+      "bracken",
+      "moss",
+      "heather",
+      "slate",
+    ]);
   });
 
   it("refuses a colour that isn't one of the five, or a workspace that doesn't exist", async () => {

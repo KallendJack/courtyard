@@ -50,12 +50,15 @@ type Workspace = {
   readonly contextMarkdown: string | null;
 };
 
-/** A workspace as read from its folder, before it has a colour for sure. */
-type Read = Omit<Workspace, "summary"> & {
+/** A workspace as read from its folder, before its colour is settled. */
+type Uncoloured = Omit<Workspace, "summary"> & {
   readonly summary: Omit<WorkspaceSummary, "colour">;
-  /** The colour its config gives it, if any. */
-  readonly colour: WorkspaceColour | undefined;
+  /** The colour its config keeps, if any. */
+  readonly keptColour: WorkspaceColour | undefined;
 };
+
+/** A workspace in the list, and whether its config keeps its colour. */
+type Listed = { readonly workspace: Workspace; readonly colourKept: boolean };
 
 /** Why a workspace couldn't be read, added or changed. */
 export type WorkspaceError =
@@ -110,7 +113,7 @@ const readConfig = async (folder: string): Promise<Config> => {
 const readWorkspace = async (
   contextDir: string,
   id: WorkspaceId,
-): Promise<Result<Read, WorkspaceError>> => {
+): Promise<Result<Uncoloured, WorkspaceError>> => {
   const folder = join(contextDir, id);
   const [config, markdown] = await Promise.all([
     readConfig(folder),
@@ -123,17 +126,17 @@ const readWorkspace = async (
     });
   }
   const contextFile = markdown.value === undefined ? null : parseContextFile(markdown.value);
-  const read = config.kind === "read" ? config : undefined;
+  const valid = config.kind === "read" ? config : undefined;
 
   return ok({
     summary: {
       id,
-      name: read?.name ?? contextFile?.title ?? id,
-      mode: read?.mode ?? "planning",
+      name: valid?.name ?? contextFile?.title ?? id,
+      mode: valid?.mode ?? "planning",
       hasContextFile: contextFile !== null,
       ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
-    colour: read?.colour,
+    keptColour: valid?.colour,
     contextFile,
     folder,
     contextMarkdown: markdown.value ?? null,
@@ -157,28 +160,35 @@ const workspaceIds = async (contextDir: string): Promise<Result<WorkspaceId[], W
 };
 
 /**
- * Each workspace's colour. A workspace keeps the colour its config gives it. One without (made by
- * hand, or before colours were kept) takes the colours in turn, in folder-name order among the
- * others without one, so adding a workspace from the app never moves anyone's colour.
+ * Settles each workspace's colour. A workspace has the colour its config keeps. One without (made
+ * by hand, or before colours were kept) takes the colours in turn, in folder-name order among the
+ * others without one, until adding or changing a workspace keeps it (see `keepColours`).
  */
-const coloursOf = (
-  workspaces: readonly { readonly id: WorkspaceId; readonly colour: WorkspaceColour | undefined }[],
-) => {
-  const uncoloured = workspaces.flatMap((w) => (w.colour === undefined ? [w.id] : [])).sort();
-  return new Map(
-    workspaces.map((w) => [
-      w.id,
-      w.colour ?? COLOURS[uncoloured.indexOf(w.id) % COLOURS.length] ?? "bracken",
-    ]),
-  );
+const withColours = (workspaces: readonly Uncoloured[]): Listed[] => {
+  const uncoloured = workspaces.flatMap((w) => (w.keptColour === undefined ? [w.summary.id] : []));
+  uncoloured.sort();
+  return workspaces.map(({ keptColour, summary, ...rest }) => {
+    const turn = COLOURS[uncoloured.indexOf(summary.id) % COLOURS.length];
+    return {
+      workspace: { ...rest, summary: { ...summary, colour: keptColour ?? turn ?? "bracken" } },
+      colourKept: keptColour !== undefined,
+    };
+  });
 };
 
-const withColour = (read: Read, colours: Map<WorkspaceId, WorkspaceColour>): Workspace => ({
-  summary: { ...read.summary, colour: colours.get(read.summary.id) ?? "bracken" },
-  contextFile: read.contextFile,
-  folder: read.folder,
-  contextMarkdown: read.contextMarkdown,
-});
+/** Every workspace in the context folder, in folder order. */
+const readEveryWorkspace = async (
+  contextDir: string,
+): Promise<Result<Listed[], WorkspaceError>> => {
+  const ids = await workspaceIds(contextDir);
+  if (!ids.ok) return ids;
+  const workspaces: Uncoloured[] = [];
+  for (const workspace of await Promise.all(ids.value.map((id) => readWorkspace(contextDir, id)))) {
+    if (!workspace.ok) return workspace;
+    workspaces.push(workspace.value);
+  }
+  return ok(withColours(workspaces));
+};
 
 /** Compares names the way the owner reads them: "Garage gym" and "garage Gym" are the same. */
 const compareNames = (a: string, b: string) =>
@@ -190,15 +200,9 @@ const byName = (a: WorkspaceSummary, b: WorkspaceSummary) => compareNames(a.name
 export const listWorkspaces = async (
   contextDir: string,
 ): Promise<Result<WorkspaceSummary[], WorkspaceError>> => {
-  const ids = await workspaceIds(contextDir);
-  if (!ids.ok) return ids;
-  const reads: Read[] = [];
-  for (const workspace of await Promise.all(ids.value.map((id) => readWorkspace(contextDir, id)))) {
-    if (!workspace.ok) return workspace;
-    reads.push(workspace.value);
-  }
-  const colours = coloursOf(reads.map((read) => ({ id: read.summary.id, colour: read.colour })));
-  return ok(reads.map((read) => withColour(read, colours).summary).sort(byName));
+  const every = await readEveryWorkspace(contextDir);
+  if (!every.ok) return every;
+  return ok(every.value.map((listed) => listed.workspace.summary).sort(byName));
 };
 
 /** One workspace with its context file. */
@@ -218,25 +222,59 @@ export const getWorkspace = async (
   if (!folder?.isDirectory()) return err({ kind: "not-found" });
   const read = await readWorkspace(contextDir, parsed.data);
   if (!read.ok) return read;
-  if (read.value.colour !== undefined) {
-    return ok(withColour(read.value, new Map([[parsed.data, read.value.colour]])));
-  }
+  const [own] = withColours([read.value]);
+  if (own?.colourKept) return ok(own.workspace);
 
-  // Without its own colour, a workspace's colour depends on which others have one.
-  const ids = await workspaceIds(contextDir);
-  if (!ids.ok) return ids;
-  const configs = await Promise.all(ids.value.map((other) => readConfig(join(contextDir, other))));
-  const colours = coloursOf(
-    ids.value.map((other, index) => {
-      const config = configs[index];
-      return { id: other, colour: config?.kind === "read" ? config.colour : undefined };
-    }),
-  );
-  return ok(withColour(read.value, colours));
+  // Without a kept colour, a workspace's colour depends on which others have one.
+  const every = await readEveryWorkspace(contextDir);
+  if (!every.ok) return every;
+  const listed = every.value.find((w) => w.workspace.summary.id === parsed.data);
+  return listed ? ok(listed.workspace) : err({ kind: "not-found" });
+};
+
+/** Keeps a colour in a workspace's config, alongside whatever else is there. */
+const keepColour = async (
+  workspace: Workspace,
+  colour: WorkspaceColour,
+): Promise<Result<null, WorkspaceError>> => {
+  // Read as it is on disk, so fields the worker doesn't know about are kept too.
+  const path = join(workspace.folder, CONFIG_FILE);
+  const config = await readJsonFile(path, z.record(z.string(), z.unknown()));
+  const written = config.ok ? await writeJsonFile(path, { ...config.value, colour }) : config;
+  return written.ok
+    ? ok(null)
+    : err({
+        kind: "storage",
+        message: `The ${workspace.summary.id} workspace's ${CONFIG_FILE} can't be saved.`,
+      });
+};
+
+/**
+ * Keeps the colour each workspace has now, for those whose config doesn't yet, so adding or
+ * changing a workspace never moves another's. A config that was ignored is left for the owner.
+ */
+const keepColours = async (every: readonly Listed[]): Promise<Result<null, WorkspaceError>> => {
+  for (const { workspace, colourKept } of every) {
+    if (colourKept || workspace.summary.configProblem !== undefined) continue;
+    const kept = await keepColour(workspace, workspace.summary.colour);
+    if (!kept.ok) return kept;
+  }
+  return ok(null);
 };
 
 /** Names Windows keeps for devices, which can't be folder names there. */
 const RESERVED_ON_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+
+/** Letters with no plain form once accents are taken off. */
+const PLAIN_LETTERS: Record<string, string> = {
+  ß: "ss",
+  æ: "ae",
+  œ: "oe",
+  ø: "o",
+  đ: "d",
+  ł: "l",
+  þ: "th",
+};
 
 /**
  * The folder name for a workspace called `name`: its letters and digits, lowercase and without
@@ -247,6 +285,7 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
+    .replace(/[ßæœøđłþ]/g, (letter) => PLAIN_LETTERS[letter] ?? letter)
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
@@ -268,8 +307,9 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
 };
 
 /** The colour the fewest workspaces have, earliest in the list on a tie. */
-const nextColour = (workspaces: readonly WorkspaceSummary[]) => {
-  const uses = (colour: WorkspaceColour) => workspaces.filter((w) => w.colour === colour).length;
+const nextColour = (every: readonly Listed[]) => {
+  const uses = (colour: WorkspaceColour) =>
+    every.filter((w) => w.workspace.summary.colour === colour).length;
   return COLOURS.reduce((fewest, colour) => (uses(colour) < uses(fewest) ? colour : fewest));
 };
 
@@ -291,6 +331,25 @@ const starterContextFile = (name: string) =>
     "",
   ].join("\n");
 
+/** Writes a new workspace's context file and config into its empty folder. */
+const writeStarterFiles = async (
+  folder: string,
+  starter: { name: string; colour: WorkspaceColour },
+): Promise<Result<null, WorkspaceError>> => {
+  const problem: WorkspaceError = {
+    kind: "storage",
+    message: "The new workspace couldn't be saved.",
+  };
+  try {
+    await writeFile(join(folder, CONTEXT_FILE), starterContextFile(starter.name), { flag: "wx" });
+  } catch {
+    return err(problem);
+  }
+  const config = { colour: starter.colour };
+  const written = await writeJsonFile(join(folder, CONFIG_FILE), config, { exclusive: true });
+  return written.ok ? ok(null) : err(problem);
+};
+
 /**
  * Adds a workspace called `name`: its folder, a starter context file, and the next colour, kept
  * in its config. Refuses a name that can't be a folder name or that another workspace has.
@@ -301,11 +360,14 @@ export const createWorkspace = async (
 ): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
   const id = folderNameFor(name);
   if (!id.ok) return id;
-  const existing = await listWorkspaces(contextDir);
-  if (!existing.ok) return existing;
-  const clash = existing.value.find((w) => w.id === id.value || compareNames(w.name, name) === 0);
+  const every = await readEveryWorkspace(contextDir);
+  if (!every.ok) return every;
+  const clash = every.value.find(({ workspace: { summary } }) => {
+    return summary.id === id.value || compareNames(summary.name, name) === 0;
+  });
   if (clash) {
-    return err({ kind: "conflict", message: `There's already a workspace called ${clash.name}.` });
+    const message = `There's already a workspace called ${clash.workspace.summary.name}.`;
+    return err({ kind: "conflict", message });
   }
 
   const folder = join(contextDir, id.value);
@@ -321,32 +383,32 @@ export const createWorkspace = async (
       : err({ kind: "storage", message: "The context folder can't be written to." });
   }
 
-  const colour = nextColour(existing.value);
-  try {
-    await writeFile(join(folder, CONTEXT_FILE), starterContextFile(name), { flag: "wx" });
-    const config = await writeJsonFile(join(folder, CONFIG_FILE), { colour }, { exclusive: true });
-    if (!config.ok) throw new Error(config.error);
-  } catch {
+  const saved = await writeStarterFiles(folder, { name, colour: nextColour(every.value) });
+  if (!saved.ok) {
     // Half a workspace would just confuse things later.
     await rm(folder, { recursive: true, force: true }).catch(() => undefined);
-    return err({ kind: "storage", message: "The new workspace couldn't be saved." });
+    return saved;
   }
+  const kept = await keepColours(every.value);
+  if (!kept.ok) return kept;
 
   const created = await getWorkspace(contextDir, id.value);
   return created.ok ? ok(created.value.summary) : created;
 };
 
 /**
- * Gives a workspace a new colour, kept in its config alongside whatever else is there. A config
- * that was ignored is left for the owner to fix rather than overwritten.
+ * Gives a workspace a new colour, kept in its config. A config that was ignored is left for the
+ * owner to fix rather than overwritten.
  */
 export const setWorkspaceColour = async (
   contextDir: string,
   change: { id: string; colour: WorkspaceColour },
 ): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
-  const workspace = await getWorkspace(contextDir, change.id);
-  if (!workspace.ok) return workspace;
-  const { summary, folder } = workspace.value;
+  const every = await readEveryWorkspace(contextDir);
+  if (!every.ok) return every;
+  const listed = every.value.find((w) => w.workspace.summary.id === change.id);
+  if (!listed) return err({ kind: "not-found" });
+  const { summary } = listed.workspace;
   if (summary.configProblem !== undefined) {
     return err({
       kind: "conflict",
@@ -354,13 +416,8 @@ export const setWorkspaceColour = async (
     });
   }
 
-  // Read as it is on disk, so fields the worker doesn't know about are kept too.
-  const path = join(folder, CONFIG_FILE);
-  const config = await readJsonFile(path, z.record(z.string(), z.unknown()));
-  // It read cleanly a moment ago, so this only fails if it changed since.
-  if (!config.ok) return err({ kind: "conflict", message: `${CONFIG_FILE} changed. Try again.` });
-
-  const written = await writeJsonFile(path, { ...config.value, colour: change.colour });
-  if (!written.ok) return err({ kind: "storage", message: `${CONFIG_FILE} can't be saved.` });
-  return ok({ ...summary, colour: change.colour });
+  const others = await keepColours(every.value.filter((w) => w !== listed));
+  if (!others.ok) return others;
+  const kept = await keepColour(listed.workspace, change.colour);
+  return kept.ok ? ok({ ...summary, colour: change.colour }) : kept;
 };

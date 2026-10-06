@@ -2,7 +2,8 @@
 
 The rules for everything Courtyard tells a model, in every scenario. The worker's prompts module
 (`apps/worker/src/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
-and the fake are told the same things.
+and the fake are told the same things. The one exception is the starter context file, a template the workspaces
+module writes (see below).
 
 ## Changing what a model is told
 
