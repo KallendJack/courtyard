@@ -1,19 +1,20 @@
 import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiError, SessionDetail, SessionList, SessionSummary } from "@courtyard/contract";
+import { SessionDetail, SessionList, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider, type Provider } from "./providers/index.ts";
 import {
   asOwner,
+  errorOf,
   FAKE_MODEL,
   followSession,
   gatedProvider,
   postJson,
   type Requester,
   startSession,
+  testWorker,
 } from "./testing.ts";
-import { createWorker } from "./worker.ts";
 
 let root: string;
 
@@ -27,12 +28,7 @@ afterEach(async () => {
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    providers,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  return asOwner(worker.value.app);
+  return asOwner(testWorker({ root, providers }));
 };
 
 /** Starts a session and waits for its first turn to finish. */
@@ -58,8 +54,6 @@ const deleteSession = (request: Requester, id: string) =>
 
 const listSessions = async (request: Requester) =>
   SessionList.parse(await (await request("/api/workspaces/garage-gym/sessions")).json()).sessions;
-
-const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
 
 describe("renaming a session", () => {
   it("keeps the new title in its session.json, so every list shows it", async () => {
@@ -155,6 +149,22 @@ describe("a session whose workspace is archived", () => {
     expect(sent.status).toBe(409);
     expect(await errorOf(sent)).toContain("archived");
     expect(await readdir(join(root, "data", "sessions"))).toEqual([session.id]);
+  });
+
+  it("can't be listed or joined by a new one, and says why", async () => {
+    const request = await start();
+    await finishedSession(request, "Hello");
+    expect((await postJson(request, "/api/workspaces/garage-gym/archive", {})).status).toBe(204);
+
+    const listed = await request("/api/workspaces/garage-gym/sessions");
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Hi",
+      model: FAKE_MODEL,
+    });
+
+    expect(listed.status).toBe(410);
+    expect(await errorOf(listed)).toContain("archived");
+    expect(started.status).toBe(410);
   });
 
   it("isn't archived while its workspace is open", async () => {

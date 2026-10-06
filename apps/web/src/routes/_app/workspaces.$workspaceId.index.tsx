@@ -9,10 +9,11 @@ import {
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { useState } from "react";
+import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
-import { LIST_ROW, Page, PageTitle, SectionTitle, TitleAction } from "@/components/page";
+import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
@@ -67,10 +68,10 @@ function Workspace() {
     return undefined;
   };
   const above = (
-    <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
+    <div className="flex items-center gap-2 text-xs font-medium text-primary-text">
       <ColourChooser colour={workspace.colour} choose={(colour) => change({ colour })} />
       {workspace.mode === "code" ? "Code workspace" : "Workspace"}
-    </span>
+    </div>
   );
   const toggle = (what: "rename" | "archive") =>
     setTidying((was) => (was === what ? undefined : what));
@@ -94,15 +95,16 @@ function Workspace() {
           above={above}
           actions={
             <>
-              <TitleAction
+              <IconButton
                 label="Rename workspace"
                 icon={<Pencil />}
                 onClick={() => toggle("rename")}
               />
-              <TitleAction
+              <IconButton
                 label="Archive workspace"
                 icon={<Archive />}
                 expanded={tidying === "archive"}
+                active={tidying === "archive"}
                 onClick={() => toggle("archive")}
               />
             </>
@@ -112,23 +114,25 @@ function Workspace() {
         </PageTitle>
       )}
       {tidying === "archive" && (
-        <ConfirmStep
-          question={`Archive ${workspace.name}?`}
-          confirmLabel="Archive workspace"
-          onCancel={() => setTidying(undefined)}
-          confirm={async () => {
-            const archived = await archiveWorkspace(workspace.id);
-            if (archived.kind !== "loaded") return describeProblem(archived).body;
-            // Away first, so this page doesn't reload its now-archived workspace.
-            await navigate({ to: "/" });
-            await router.invalidate();
-            return undefined;
-          }}
-        >
-          It leaves every list, and its folder moves to the <code>archived</code> folder in your
-          context folder, so nothing in it is lost. Its sessions are kept, to read but not carry on.
-          Move the folder back to bring it back.
-        </ConfirmStep>
+        <div className="mt-4">
+          <ConfirmStep
+            question={`Archive ${workspace.name}?`}
+            confirmLabel="Archive workspace"
+            onCancel={() => setTidying(undefined)}
+            confirm={async () => {
+              const archived = await archiveWorkspace(workspace.id);
+              if (archived.kind !== "loaded") return describeProblem(archived).body;
+              // Away first, so this page doesn't reload its now-archived workspace.
+              await navigate({ to: "/" });
+              await router.invalidate();
+              return undefined;
+            }}
+          >
+            It leaves every list, and its folder moves to the <code>archived</code> folder in your
+            context folder, so nothing in it is lost. Its sessions are kept, to read but not carry
+            on. Move the folder back to bring it back.
+          </ConfirmStep>
+        </div>
       )}
       {contextFile !== null && contextFile.intro !== "" && (
         // One line, as a reminder; the whole file is further down.

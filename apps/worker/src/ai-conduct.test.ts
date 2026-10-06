@@ -11,8 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
-import { asOwner, followSession, postJson, type Requester } from "./testing.ts";
-import { createWorker } from "./worker.ts";
+import { asOwner, followSession, postJson, type Requester, testWorker } from "./testing.ts";
 
 // What every turn hands a model, seen at the provider seam: the rules in docs/ai-conduct.md.
 
@@ -61,12 +60,7 @@ const recorder = (capabilities: Capabilities, replies: readonly (string | typeof
 
 /** A session in garage-gym on `provider`: `say` sends a message and waits for its turn to end. */
 const sessionOn = async (provider: Provider) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    providers: [provider],
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  const request: Requester = await asOwner(worker.value.app);
+  const request: Requester = await asOwner(testWorker({ root, providers: [provider] }));
   let sessionId: string | undefined;
   let lastSeq = 0;
 

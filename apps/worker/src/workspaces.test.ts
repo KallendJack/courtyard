@@ -3,8 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, WorkspaceDetail, WorkspaceList, WorkspaceSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, postJson, type Requester } from "./testing.ts";
-import { createWorker } from "./worker.ts";
+import { asOwner, errorOf, postJson, type Requester, testWorker } from "./testing.ts";
 
 let root: string;
 let contextDir: string;
@@ -14,11 +13,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
   contextDir = join(root, "context");
   await mkdir(contextDir);
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: contextDir, COURTYARD_DATA_DIR: join(root, "data") },
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  request = await asOwner(worker.value.app);
+  request = await asOwner(testWorker({ root }));
 });
 
 afterEach(async () => {
@@ -238,7 +233,7 @@ describe("opening a workspace", () => {
     for (const path of ["/api/workspaces", "/api/workspaces/office"]) {
       const response = await request(path);
       expect(response.status).toBe(500);
-      expect(ApiError.parse(await response.json()).error).toContain("office");
+      expect(await errorOf(response)).toContain("office");
     }
   });
 
@@ -281,8 +276,6 @@ const changeWorkspace = (id: string, change: unknown) =>
 const changeColour = (id: string, colour: unknown) => changeWorkspace(id, { colour });
 const renameWorkspace = (id: string, name: unknown) => changeWorkspace(id, { name });
 const archive = (id: string) => postJson(request, `/api/workspaces/${id}/archive`, {});
-
-const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
 
 describe("adding a workspace", () => {
   it("makes its folder and a starter context file with empty facts, plans and ideas", async () => {

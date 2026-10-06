@@ -1,9 +1,11 @@
 import { OWNER_CONTEXT_LONG_CHARACTERS, type OwnerContextDetail } from "@courtyard/contract";
 import { useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { Button } from "@/components/button";
 import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
+import { FormError } from "@/components/form-error";
 import { StatusPill } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
+import { useAction } from "@/lib/use-action";
 import { describeProblem } from "./problems.tsx";
 import { type FromWorker, startOwnerContext } from "./worker.ts";
 
@@ -13,17 +15,12 @@ import { type FromWorker, startOwnerContext } from "./worker.ts";
  */
 export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail> }) {
   const router = useRouter();
-  const [error, setError] = useState<string>();
-  const [starting, setStarting] = useState(false);
-
-  const start = async () => {
-    setStarting(true);
+  const start = useAction(async () => {
     const started = await startOwnerContext();
-    setStarting(false);
-    if (started.kind !== "loaded") return setError(describeProblem(started).body);
-    setError(undefined);
+    if (started.kind !== "loaded") return describeProblem(started).body;
     await router.invalidate();
-  };
+    return undefined;
+  });
 
   const { result } = props;
   const ownerContext = result.kind === "loaded" ? result.data.ownerContext : undefined;
@@ -35,7 +32,9 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
         What every workspace knows about you. Code workspaces get only how you like answers.
       </p>
       {result.kind !== "loaded" && (
-        <p className="mt-4 text-sm text-destructive-text">{describeProblem(result).body}</p>
+        <div className="mt-4">
+          <FormError message={describeProblem(result).body} />
+        </div>
       )}
       {ownerContext === null && (
         <div className="mt-4 space-y-3">
@@ -43,20 +42,10 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
             Write down once what's true across your life, such as where you live and how you like
             answers, so no workspace needs telling.
           </p>
-          {/* A plain button: shadcn's Button would put its class-merging code on the first load. */}
-          <button
-            type="button"
-            onClick={start}
-            disabled={starting}
-            className="h-9 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button onClick={() => void start.run()} disabled={start.busy}>
             Start your owner context
-          </button>
-          {error && (
-            <p role="alert" className="text-sm text-destructive-text">
-              {error}
-            </p>
-          )}
+          </Button>
+          <FormError message={start.error} />
         </div>
       )}
       {ownerContext && (

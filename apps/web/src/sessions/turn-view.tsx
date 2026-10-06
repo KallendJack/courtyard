@@ -1,7 +1,7 @@
 import type { Activity, FailureReason } from "@courtyard/contract";
 import { memo } from "react";
+import { Button } from "@/components/button";
 import { Notice } from "@/components/notice";
-import { PillButton } from "@/components/pill-button";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 
@@ -75,14 +75,9 @@ export const TurnView = memo(function TurnView(props: {
           {...(onRetry
             ? {
                 action: (
-                  <PillButton
-                    type="button"
-                    variant="outline"
-                    onClick={() => onRetry(turn)}
-                    className="h-8 bg-field px-3.5 text-foreground"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => onRetry(turn)}>
                     Retry
-                  </PillButton>
+                  </Button>
                 ),
               }
             : {})}

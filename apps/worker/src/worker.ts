@@ -12,9 +12,9 @@ import {
   type WorkspaceSummary,
 } from "@courtyard/contract";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { apiError, readBody } from "./http.ts";
+import { apiError, contextError, readBody } from "./http.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
@@ -31,7 +31,6 @@ import {
   createWorkspace,
   getWorkspace,
   listWorkspaces,
-  type WorkspaceError,
 } from "./workspaces/index.ts";
 
 export type { Environment, UpdateCommand };
@@ -105,26 +104,6 @@ export const createWorker = (options: {
         return apiError(c, { status: 500, error: started.error.message });
     }
   });
-
-  /** An error reading or changing the context folder, as an answer. */
-  const contextError = (c: Context, error: WorkspaceError) => {
-    switch (error.kind) {
-      case "not-found":
-        return apiError(c, { status: 404, error: "No such workspace" });
-      case "archived":
-        return apiError(c, {
-          status: 410,
-          error:
-            "This workspace is archived. Move its folder out of the archived folder to bring it back.",
-        });
-      case "invalid":
-        return apiError(c, { status: 400, error: error.message });
-      case "conflict":
-        return apiError(c, { status: 409, error: error.message });
-      case "storage":
-        return apiError(c, { status: 500, error: error.message });
-    }
-  };
 
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);

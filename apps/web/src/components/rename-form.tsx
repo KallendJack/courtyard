@@ -1,10 +1,11 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { classes } from "@/lib/classes";
+import { useAction } from "@/lib/use-action";
+import { Button } from "./button.tsx";
+import { TextField } from "./text-field.tsx";
 
 /**
  * A name changed in place: Enter or Save keeps it, Escape or Cancel leaves it as it was. `save`
- * returns an error to show, or nothing once the name is kept. Plain elements rather than shadcn's,
- * since the sidebar puts it on the first load.
+ * returns an error to show, or nothing once the name is kept.
  */
 export function RenameForm(props: {
   /** What's being named, for screen readers: "Workspace name", say. */
@@ -17,8 +18,7 @@ export function RenameForm(props: {
   large?: boolean;
 }) {
   const [value, setValue] = useState(props.value);
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
+  const save = useAction(props.save);
   const box = useRef<HTMLInputElement>(null);
 
   // Opened by the owner to type a name, so the box takes the keyboard with the old name selected.
@@ -29,19 +29,17 @@ export function RenameForm(props: {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (value.trim() === props.value) return props.onDone();
-    setSaving(true);
-    const problem = await props.save(value);
-    setSaving(false);
-    if (problem) return setError(problem);
-    props.onDone();
+    if (value.trim() === props.value || (await save.run(value))) props.onDone();
   };
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
-      <input
+      <TextField
         ref={box}
-        aria-label={props.label}
+        label={props.label}
+        hideLabel
+        size={props.large ? "title" : "sm"}
+        error={save.error}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
@@ -50,34 +48,15 @@ export function RenameForm(props: {
         maxLength={props.maxLength}
         required
         autoComplete="off"
-        className={classes(
-          "w-full rounded-md border bg-field outline-none focus:border-primary focus:ring-3 focus:ring-accent",
-          props.large
-            ? "h-12 px-3 font-display text-2xl font-medium tracking-[-0.02em]"
-            : "h-9 px-2.5 text-sm",
-        )}
       />
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="h-8 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
-        >
+        <Button type="submit" size="sm" disabled={save.busy}>
           Save
-        </button>
-        <button
-          type="button"
-          onClick={props.onDone}
-          className="h-8 rounded-full border bg-background px-4 text-sm font-semibold hover:bg-muted"
-        >
+        </Button>
+        <Button variant="outline" size="sm" onClick={props.onDone}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive-text">
-          {error}
-        </p>
-      )}
     </form>
   );
 }

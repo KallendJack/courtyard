@@ -1,8 +1,10 @@
 import type { ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
 import { ArrowUp, Square } from "lucide-react";
 import { type FormEvent, memo, useState } from "react";
-import { PillButton } from "@/components/pill-button";
+import { Button } from "@/components/button";
+import { FormError } from "@/components/form-error";
 import { classes } from "@/lib/classes";
+import { useAction } from "@/lib/use-action";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
 
@@ -43,19 +45,14 @@ export const Composer = memo(function Composer(props: {
   const followedKey = models.some((m) => keyOf(m.ref) === followed) ? followed : undefined;
   const modelKey = chosenKey ?? followedKey ?? firstKey;
   const [text, setText] = useState("");
-  const [error, setError] = useState<string>();
-  const [sending, setSending] = useState(false);
+  const send = useAction(props.send);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const model = models.find((m) => keyOf(m.ref) === modelKey)?.ref;
-    if (!model) return setError("No model is available. Check the providers' settings.");
+    if (!model) return send.setError("No model is available. Check the providers' settings.");
     if (text.trim() === "") return;
-    setSending(true);
-    const problem = await props.send({ text, model });
-    setSending(false);
-    setError(problem);
-    if (!problem) setText("");
+    if (await send.run({ text, model })) setText("");
   };
 
   const label = props.stop ? "Stop" : (props.submitLabel ?? "Send");
@@ -106,19 +103,17 @@ export const Composer = memo(function Composer(props: {
             ))}
           </select>
           <span className={classes("flex-1", compact && "max-md:hidden")} />
-          <PillButton
+          <Button
             {...(props.stop
-              ? { type: "button", variant: "outline", onClick: props.stop }
-              : { type: "submit", disabled: sending || props.disabled || models.length === 0 })}
-            className={classes(compact && "max-md:size-9 max-md:px-0")}
+              ? { variant: "outline", onClick: props.stop }
+              : { type: "submit", disabled: send.busy || props.disabled || models.length === 0 })}
+            {...(compact
+              ? { narrowIcon: props.stop ? <Square className="fill-current" /> : <ArrowUp /> }
+              : {})}
           >
-            {props.stop ? (
-              <Square className="fill-current" />
-            ) : (
-              <ArrowUp className={compact ? "md:hidden" : "hidden"} />
-            )}
-            <span className={classes(compact && "max-md:sr-only")}>{label}</span>
-          </PillButton>
+            {props.stop && <Square className="fill-current" />}
+            {label}
+          </Button>
         </div>
       </form>
       {props.providers.flatMap((provider) =>
@@ -130,11 +125,7 @@ export const Composer = memo(function Composer(props: {
               </p>,
             ],
       )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive-text">
-          {error}
-        </p>
-      )}
+      <FormError message={send.error} />
     </div>
   );
 });

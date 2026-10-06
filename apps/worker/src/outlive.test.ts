@@ -12,8 +12,8 @@ import {
   requesterFor,
   setUpOwner,
   startSession,
+  testWorker,
 } from "./testing.ts";
-import { createWorker } from "./worker.ts";
 
 let root: string;
 let cookie: string | undefined;
@@ -33,13 +33,9 @@ afterEach(async () => {
  * can tell, so a second call is a restart. The owner is set up once and stays logged in.
  */
 const startWorker = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    providers,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  cookie ??= await setUpOwner(worker.value.app);
-  return requesterFor(worker.value.app, cookie);
+  const app = testWorker({ root, providers });
+  cookie ??= await setUpOwner(app);
+  return requesterFor(app, cookie);
 };
 
 const answerOf = (events: readonly SessionEvent[]) =>

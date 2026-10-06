@@ -6,13 +6,18 @@ import {
 } from "@courtyard/contract";
 import { Link, useLocation, useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { LogOut, PanelLeft, Pencil, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { fromWorker, renameSession } from "../worker.ts";
+import { IconButton } from "./button.tsx";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
-import { RenameForm } from "./rename-form.tsx";
 import { WorkspaceDot } from "./workspace-colour.tsx";
+
+/** Loaded when the owner first renames from the sidebar, so it stays off the first load. */
+const RenameForm = lazy(() =>
+  import("./rename-form.tsx").then((module) => ({ default: module.RenameForm })),
+);
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;
@@ -31,6 +36,15 @@ const wasCollapsed = () => {
 const typingIn = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+/** A row in the sidebar: one height, one hover, centred once the sidebar is a rail. */
+const ROW =
+  "flex h-9 items-center gap-3 rounded-md px-3 hover:bg-muted/60 group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0";
+/** A workspace's row (and New workspace's), marked while its page is open. */
+const WORKSPACE_ROW = classes(
+  ROW,
+  "text-[15px] data-[status=active]:bg-muted data-[status=active]:font-semibold",
+);
 
 /** The sidebar only shows from tablet width up; below that the workspace strip takes over. */
 const SHOWN = "(min-width: 768px)";
@@ -81,16 +95,14 @@ export function AppSidebar(props: {
           <Link to="/" className="group-data-[collapsed=true]/sidebar:hidden">
             <CourtyardLockup />
           </Link>
-          <button
-            type="button"
+          <IconButton
+            label="Toggle sidebar"
+            hint="Ctrl+B"
+            icon={<PanelLeft />}
+            square
+            expanded={!collapsed}
             onClick={toggle}
-            aria-label="Toggle sidebar"
-            aria-expanded={!collapsed}
-            title="Toggle sidebar (Ctrl+B)"
-            className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-          >
-            <PanelLeft className="size-[18px]" />
-          </button>
+          />
         </div>
         <ul className="flex flex-col gap-0.5">
           {props.workspaces.map((workspace) => (
@@ -100,7 +112,7 @@ export function AppSidebar(props: {
                 params={{ workspaceId: workspace.id }}
                 aria-label={workspace.name}
                 title={collapsed ? workspace.name : undefined}
-                className="flex h-9 items-center gap-3 rounded-md px-3 text-[15px] hover:bg-muted/60 data-[status=active]:bg-muted data-[status=active]:font-semibold group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+                className={WORKSPACE_ROW}
               >
                 <WorkspaceDot colour={workspace.colour} />
                 <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
@@ -114,7 +126,10 @@ export function AppSidebar(props: {
               to="/new-workspace"
               aria-label="New workspace"
               title={collapsed ? "New workspace" : undefined}
-              className="flex h-9 items-center gap-3 rounded-md px-3 text-[15px] text-muted-foreground hover:bg-muted/60 data-[status=active]:bg-muted data-[status=active]:font-semibold data-[status=active]:text-foreground group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+              className={classes(
+                WORKSPACE_ROW,
+                "text-muted-foreground data-[status=active]:text-foreground",
+              )}
             >
               {/* As wide as a dot's slot, so the names line up. */}
               <Plus className="-mx-[3px] size-4 shrink-0" aria-hidden />
@@ -129,7 +144,7 @@ export function AppSidebar(props: {
           type="button"
           onClick={props.onLogOut}
           title={collapsed ? "Log out" : undefined}
-          className="mt-auto flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/60 group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+          className={classes(ROW, "mt-auto text-sm text-muted-foreground")}
         >
           <LogOut className="size-4 shrink-0" aria-hidden />
           <span className="group-data-[collapsed=true]/sidebar:sr-only">Log out</span>
@@ -185,21 +200,29 @@ function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
         {sessions.slice(0, RECENT_SESSIONS).map((session) =>
           renaming === session.id ? (
             <li key={session.id} className="px-1 py-1">
-              <RenameForm
-                label="Session title"
-                value={session.title}
-                maxLength={SESSION_TITLE_MAX_LENGTH}
-                save={async (title) => {
-                  const renamed = await renameSession(session.id, { title });
-                  if (renamed.kind !== "loaded") return describeProblem(renamed).body;
-                  const others = sessions.map((s) => (s.id === session.id ? renamed.data : s));
-                  setListed({ workspaceId: session.workspaceId, sessions: others });
-                  // The session's own page, if it's open, shows the new title too.
-                  await router.invalidate();
-                  return undefined;
-                }}
-                onDone={() => setRenaming(undefined)}
-              />
+              <Suspense
+                fallback={
+                  <span className="block truncate px-2 py-1.5 text-sm text-muted-foreground">
+                    {session.title}
+                  </span>
+                }
+              >
+                <RenameForm
+                  label="Session title"
+                  value={session.title}
+                  maxLength={SESSION_TITLE_MAX_LENGTH}
+                  save={async (title) => {
+                    const renamed = await renameSession(session.id, { title });
+                    if (renamed.kind !== "loaded") return describeProblem(renamed).body;
+                    const others = sessions.map((s) => (s.id === session.id ? renamed.data : s));
+                    setListed({ workspaceId: session.workspaceId, sessions: others });
+                    // The session's own page, if it's open, shows the new title too.
+                    await router.invalidate();
+                    return undefined;
+                  }}
+                  onDone={() => setRenaming(undefined)}
+                />
+              </Suspense>
             </li>
           ) : (
             <li key={session.id} className="group/row relative">
@@ -210,16 +233,16 @@ function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
               >
                 {session.title}
               </Link>
-              <button
-                type="button"
-                aria-label={`Rename ${session.title}`}
-                title="Rename"
-                onClick={() => setRenaming(session.id)}
-                // Shown on hover or focus with a mouse; always on a touch screen, which can't hover.
-                className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 pointer-coarse:opacity-100"
-              >
-                <Pencil className="size-3.5" aria-hidden />
-              </button>
+              {/* Shown on hover or focus with a mouse; always on a touch screen, which can't hover. */}
+              <span className="absolute top-1/2 right-1 flex -translate-y-1/2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+                <IconButton
+                  label={`Rename ${session.title}`}
+                  icon={<Pencil />}
+                  size="sm"
+                  square
+                  onClick={() => setRenaming(session.id)}
+                />
+              </span>
             </li>
           ),
         )}

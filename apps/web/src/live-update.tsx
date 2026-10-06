@@ -1,5 +1,7 @@
 import type { LiveStatus, LiveUpdateResult } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
+import { Button } from "@/components/button";
+import { FormError } from "@/components/form-error";
 import { describeProblem } from "./problems.tsx";
 import { type FromWorker, loadLive, startLiveUpdate } from "./worker.ts";
 
@@ -27,17 +29,13 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
     <>
       <span>{props.result.message}</span>
       {props.offerReload && props.result.outcome === "updated" && (
-        <button type="button" onClick={() => window.location.reload()} className={BUTTON}>
+        <Button size="sm" onClick={() => window.location.reload()}>
           Reload
-        </button>
+        </Button>
       )}
     </>
   );
 }
-
-/** A plain button: shadcn's Button would put its class-merging code on the first load. */
-const BUTTON =
-  "h-8 shrink-0 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 
 /**
  * Updating the live app from the app (ADR 0011): a quiet notice when main has moved on, Update,
@@ -102,14 +100,14 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
   } else if (following.kind === "lost") {
     content = <span>No word from the update yet. Check back in a few minutes.</span>;
   } else if (following.kind === "problem") {
-    content = <span role="alert">{following.message}</span>;
+    content = <FormError message={following.message} />;
   } else if (live.newerOnMain && live.newest) {
     content = (
       <>
         <span>A new version is ready: {live.newest.title}</span>
-        <button type="button" onClick={update} className={BUTTON}>
+        <Button size="sm" onClick={update}>
           Update
-        </button>
+        </Button>
       </>
     );
   } else if (

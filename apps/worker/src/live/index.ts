@@ -1,9 +1,8 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type LiveStatus, LiveUpdateResult, type LiveVersion } from "@courtyard/contract";
-import { hasCode } from "../files.ts";
+import { readTextFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /** How often the worker asks the live copy's remote whether main has moved on. */
@@ -109,16 +108,12 @@ export const createLive = (options: {
   };
 
   const lastUpdate = async (): Promise<Result<LiveUpdateResult | null, LiveError>> => {
-    let text: string;
-    try {
-      text = await readFile(resultFile, "utf8");
-    } catch (error) {
-      if (hasCode(error, "ENOENT")) return ok(null);
-      return err({ kind: "not-started", message: "live-update.json can't be read." });
-    }
+    const text = await readTextFile(resultFile);
+    if (!text.ok) return err({ kind: "not-started", message: "live-update.json can't be read." });
+    if (text.value === undefined) return ok(null);
     let json: unknown;
     try {
-      json = JSON.parse(text.replace(/^﻿/, ""));
+      json = JSON.parse(text.value.replace(/^﻿/, ""));
     } catch {
       // Half written, or edited by hand: no result to show, and nothing to stop an update.
       return ok(null);

@@ -1,19 +1,20 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiError, type SessionEvent } from "@courtyard/contract";
+import type { SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider, type Provider } from "./providers/index.ts";
 import {
   asOwner,
+  errorOf,
   FAKE_MODEL,
   followSession,
   gatedProvider,
   postJson,
   type Requester,
   startSession,
+  testWorker,
 } from "./testing.ts";
-import { createWorker } from "./worker.ts";
 
 let root: string;
 
@@ -27,12 +28,7 @@ afterEach(async () => {
 });
 
 const start = async (providers: Provider[]) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    providers,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  return asOwner(worker.value.app);
+  return asOwner(testWorker({ root, providers }));
 };
 
 /** Stops a turn, named by its owner message's event number (the first turn's is 1). */
@@ -110,7 +106,7 @@ describe("stopping a turn", () => {
     const response = await stop(request, session.id);
 
     expect(response.status).toBe(409);
-    expect(ApiError.parse(await response.json()).error).toMatch(/nothing/i);
+    expect(await errorOf(response)).toMatch(/nothing/i);
   });
 
   it("answers 404 for a session that doesn't exist", async () => {

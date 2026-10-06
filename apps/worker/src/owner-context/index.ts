@@ -1,7 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseOwnerContext, type ReadOwnerContext } from "../context-file/index.ts";
-import { hasCode } from "../files.ts";
+import { hasCode, readTextFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { WorkspaceError } from "../workspaces/index.ts";
 
@@ -15,13 +15,9 @@ const ownerFile = (contextDir: string) => join(contextDir, "OWNER.md");
 export const readOwnerContext = async (
   contextDir: string,
 ): Promise<Result<ReadOwnerContext | null, OwnerContextError>> => {
-  try {
-    return ok(parseOwnerContext(await readFile(ownerFile(contextDir), "utf8")));
-  } catch (error) {
-    return hasCode(error, "ENOENT")
-      ? ok(null)
-      : err({ kind: "storage", message: "OWNER.md can't be read." });
-  }
+  const text = await readTextFile(ownerFile(contextDir));
+  if (!text.ok) return err({ kind: "storage", message: "OWNER.md can't be read." });
+  return ok(text.value === undefined ? null : parseOwnerContext(text.value));
 };
 
 /** A new owner context: a line on what goes where, then both sections, empty (docs/ai-conduct.md). */

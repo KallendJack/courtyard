@@ -10,9 +10,8 @@ import {
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { apiError, readBody } from "../http.ts";
+import { apiError, contextError, readBody } from "../http.ts";
 import type { Provider } from "../providers/index.ts";
-import { err, ok } from "../result.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 import type { SessionError, Sessions } from "./index.ts";
 
@@ -50,15 +49,6 @@ const sessionError = (c: Context, error: SessionError) => {
   }
 };
 
-/** The message a request sent, or the reason it isn't one. */
-const readMessage = async (c: Context) => {
-  const body: unknown = await c.req.json().catch(() => undefined);
-  const parsed = NewMessage.safeParse(body);
-  return parsed.success
-    ? ok(parsed.data)
-    : err(parsed.error.issues[0]?.message ?? "Send a message");
-};
-
 /** Providers, sessions and their event streams, mounted under `/api`. */
 export const sessionRoutes = (options: {
   sessions: Sessions;
@@ -76,7 +66,7 @@ export const sessionRoutes = (options: {
 
   routes.get("/workspaces/:id/sessions", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace.ok) return apiError(c, { status: 404, error: "No such workspace" });
+    if (!workspace.ok) return contextError(c, workspace.error);
     const list = await sessions.list(workspace.value.summary.id);
     if (!list.ok) return sessionError(c, list.error);
     return c.json({ sessions: list.value } satisfies SessionList);
@@ -84,8 +74,8 @@ export const sessionRoutes = (options: {
 
   routes.post("/workspaces/:id/sessions", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace.ok) return apiError(c, { status: 404, error: "No such workspace" });
-    const message = await readMessage(c);
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const message = await readBody(c, NewMessage);
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
     const session = await sessions.create({
       workspaceId: workspace.value.summary.id,
@@ -117,7 +107,7 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/messages", async (c) => {
-    const message = await readMessage(c);
+    const message = await readBody(c, NewMessage);
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
     const sent = await sessions.send(c.req.param("id"), message.value);
     if (!sent.ok) return sessionError(c, sent.error);
@@ -125,10 +115,9 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/stop", async (c) => {
-    const body: unknown = await c.req.json().catch(() => undefined);
-    const request = StopRequest.safeParse(body);
-    if (!request.success) return apiError(c, { status: 400, error: "Say which turn to stop" });
-    const stopped = await sessions.stop(c.req.param("id"), request.data);
+    const request = await readBody(c, StopRequest);
+    if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to stop" });
+    const stopped = await sessions.stop(c.req.param("id"), request.value);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
   });

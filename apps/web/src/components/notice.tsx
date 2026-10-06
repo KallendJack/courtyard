@@ -1,18 +1,40 @@
 import type { ReactNode } from "react";
 
-/** Something that went wrong, said plainly, with an optional way to act on it. */
-export function Notice(props: { title?: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div
-      role="alert"
-      className="flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text"
-    >
+/**
+ * Something that went wrong or is about to, said plainly, with an optional way to act on it:
+ * one action beside it (Retry), or a row of them underneath (a confirm step's buttons).
+ */
+export function Notice(props: {
+  title?: string;
+  children: ReactNode;
+  action?: ReactNode;
+  footer?: ReactNode;
+  /**
+   * A region named by its title rather than an alert, for a box the owner opened themselves (a
+   * confirm step), which shouldn't be announced as if something had gone wrong.
+   */
+  region?: boolean;
+}) {
+  const box =
+    "flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text";
+  const content = (
+    <>
       <div>
         {props.title && <p className="font-semibold text-destructive">{props.title}</p>}
         <div>{props.children}</div>
+        {props.footer && <div className="mt-3 space-y-2">{props.footer}</div>}
       </div>
       {props.action}
+    </>
+  );
+  return !props.region ? (
+    <div role="alert" className={box}>
+      {content}
     </div>
+  ) : (
+    <section aria-label={props.title} className={box}>
+      {content}
+    </section>
   );
 }
 
