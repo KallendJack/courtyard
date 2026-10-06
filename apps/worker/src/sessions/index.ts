@@ -14,7 +14,8 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
-import type { Provider, SessionLine, TurnWorkspace } from "../providers/index.ts";
+import { framingFor } from "../prompts/index.ts";
+import type { Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { getWorkspace } from "../workspaces/index.ts";
 
@@ -43,23 +44,6 @@ const TITLE_LENGTH = 60;
 const titleFrom = (text: string) => {
   const firstLine = text.split("\n")[0]?.trim() ?? "";
   return firstLine.length > TITLE_LENGTH ? `${firstLine.slice(0, TITLE_LENGTH - 1)}…` : firstLine;
-};
-
-/** What has been said so far, as providers see it: owner messages and the answers between them. */
-const linesOf = (events: readonly SessionEvent[]): SessionLine[] => {
-  const lines: SessionLine[] = [];
-  for (const event of events) {
-    if (event.type === "owner-message") lines.push({ speaker: "owner", text: event.text });
-    if (event.type === "text-delta") {
-      const last = lines.at(-1);
-      if (last?.speaker === "model") {
-        lines[lines.length - 1] = { speaker: "model", text: last.text + event.text };
-      } else {
-        lines.push({ speaker: "model", text: event.text });
-      }
-    }
-  }
-  return lines;
 };
 
 const STORAGE_ERROR: SessionError = {
@@ -247,7 +231,7 @@ export const createSessions = (options: {
   /** What a turn needs from its workspace: its name, its folder, and its context file as written. */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<TurnWorkspace, null>> => {
+  ): Promise<Result<{ name: string; folder: string; contextFile: string | null }, null>> => {
     const workspace = await getWorkspace(options.contextDir, workspaceId);
     if (!workspace.ok) return err(null);
     const { summary, folder, contextMarkdown } = workspace.value;
@@ -284,8 +268,12 @@ export const createSessions = (options: {
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
-            lines: linesOf(events.value),
-            workspace: workspace.value,
+            folder: workspace.value.folder,
+            framing: framingFor({
+              workspace: workspace.value,
+              capabilities: turn.provider.capabilities,
+              events: events.value,
+            }),
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
               if (recordingLost || stopper.signal.aborted) return;

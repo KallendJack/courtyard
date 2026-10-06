@@ -27,3 +27,12 @@ test("a workspace's address loads it directly", async ({ page }) => {
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
 });
+
+test("warns when a context file grows long enough to crowd every message", async ({ page }) => {
+  await page.goto("/workspaces/reading-list");
+  await expect(page.getByRole("status")).toContainText("long");
+
+  await page.goto("/workspaces/garage-gym");
+  await expect(page.getByRole("region", { name: "Facts" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});

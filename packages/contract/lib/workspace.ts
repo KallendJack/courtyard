@@ -23,6 +23,12 @@ export type WorkspaceSummary = z.infer<typeof WorkspaceSummary>;
 export const WorkspaceList = z.object({ workspaces: z.array(WorkspaceSummary) });
 export type WorkspaceList = z.infer<typeof WorkspaceList>;
 
+/**
+ * Past this many characters (about 1,500 words) the workspace page warns that the context file
+ * is long, since it goes with every message (docs/ai-conduct.md).
+ */
+export const CONTEXT_FILE_LONG_CHARACTERS = 8000;
+
 /** A context file, read into its sections. Each fact, plan or idea is one line. */
 export const ContextFile = z.object({
   title: z.string().optional(),
@@ -33,6 +39,8 @@ export const ContextFile = z.object({
   ideas: z.array(z.string()),
   /** Any other sections, exactly as written. */
   other: z.string(),
+  /** The whole file's length, as sent to a model. */
+  characters: z.number().int().nonnegative(),
 });
 export type ContextFile = z.infer<typeof ContextFile>;
 

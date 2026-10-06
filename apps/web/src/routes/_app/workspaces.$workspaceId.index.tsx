@@ -1,11 +1,12 @@
 import {
+  CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
   SessionList,
   type SessionSummary,
   WorkspaceDetail,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { EmptyState, Notice } from "@/components/notice";
+import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
@@ -99,7 +100,16 @@ function Workspace() {
           model starts out knowing its facts, plans and ideas.
         </EmptyState>
       ) : (
-        <ContextFileSections contextFile={contextFile} />
+        <>
+          {contextFile.characters > CONTEXT_FILE_LONG_CHARACTERS && (
+            <div className="mt-3">
+              <StatusPill>
+                Getting long: it goes with every message, so keep it to what matters.
+              </StatusPill>
+            </div>
+          )}
+          <ContextFileSections contextFile={contextFile} />
+        </>
       )}
     </Page>
   );

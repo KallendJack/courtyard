@@ -86,5 +86,6 @@ export const parseContextFile = (markdown: string): ContextFile => {
     intro: intro.join("\n").trim(),
     ...entries,
     other: other.join("\n").trim(),
+    characters: markdown.length,
   };
 };
