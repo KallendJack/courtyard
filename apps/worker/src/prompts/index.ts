@@ -19,23 +19,28 @@ export type FramingWorkspace = {
   /** The context file as written, or `null` when there isn't one yet. */
   readonly contextFile: string | null;
   /** The owner's, or `null` when they haven't started one. */
-  readonly ownerContext: Pick<ReadOwnerContext, "markdown" | "answersMarkdown"> | null;
+  readonly ownerContext: ReadOwnerContext | null;
 };
 
 /**
- * What of the owner context a workspace's models read, and its text (ADR 0010). A code workspace
- * gets How to answer me only: its models write into repositories that may be public, so they
- * aren't given personal facts.
+ * What of the owner context a workspace's models read, and its text (ADR 0010). Only lines count:
+ * one with no facts, plans, ideas or preferences yet (the untouched starter, say) shares nothing.
+ * A code workspace gets How to answer me only: its models write into repositories that may be
+ * public, so they aren't given personal facts.
  */
 export const sharedOwnerContext = (
   workspace: Pick<FramingWorkspace, "mode" | "ownerContext">,
 ): { readonly shared: OwnerContextShared; readonly text: string | null } => {
-  const owner = workspace.ownerContext;
-  if (owner === null) return { shared: "none", text: null };
-  if (workspace.mode === "planning") return { shared: "all", text: owner.markdown.trim() };
-  return owner.answersMarkdown === null
-    ? { shared: "none", text: null }
-    : { shared: "answers", text: owner.answersMarkdown };
+  const read = workspace.ownerContext;
+  if (read === null) return { shared: "none", text: null };
+  if (workspace.mode === "code") {
+    return read.answersMarkdown === null
+      ? { shared: "none", text: null }
+      : { shared: "answers", text: read.answersMarkdown };
+  }
+  const { facts, plans, ideas, answers } = read.ownerContext;
+  const hasLines = [facts, plans, ideas, answers].some((lines) => lines.length > 0);
+  return hasLines ? { shared: "all", text: read.markdown.trim() } : { shared: "none", text: null };
 };
 
 /** The markers that keep the owner's, the workspace's and the session's text apart from the instructions. */
@@ -85,18 +90,18 @@ const contextFilePart = (
 };
 
 const instructionsFor = (workspace: FramingWorkspace, capabilities: Capabilities) => {
-  const owner = sharedOwnerContext(workspace);
+  const fromOwner = sharedOwnerContext(workspace);
   // Facts, Plans and Ideas come in the context file, and in all of the owner context.
-  const hasLines = workspace.contextFile !== null || owner.shared === "all";
+  const hasSections = workspace.contextFile !== null || fromOwner.shared === "all";
   return [
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
     accessFor(capabilities),
     "When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. Answer in Markdown.",
-    ...(hasLines ? [READING_LINES] : []),
-    ...(owner.text === null ? [] : [ownerContextPart(owner.shared, owner.text)]),
+    ...(hasSections ? [READING_LINES] : []),
+    ...(fromOwner.text === null ? [] : [ownerContextPart(fromOwner.shared, fromOwner.text)]),
     contextFilePart(workspace, {
       readsFiles: capabilities.readsFiles,
-      ownerContext: owner.text !== null,
+      ownerContext: fromOwner.text !== null,
     }),
   ].join("\n\n");
 };

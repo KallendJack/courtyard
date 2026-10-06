@@ -145,4 +145,23 @@ describe("what a workspace's models read of it", () => {
     expect(await sharedWith("garage-gym")).toBe("all");
     expect(await sharedWith("side-project")).toBe("none");
   });
+
+  it("is nothing while it has no lines, such as the untouched starter", async () => {
+    expect((await startOwnerContext()).status).toBe(201);
+
+    expect(await sharedWith("garage-gym")).toBe("none");
+    expect(await sharedWith("side-project")).toBe("none");
+  });
+
+  it("finds How to answer me under a heading at any level", async () => {
+    await writeFile(
+      OWNER_FILE(),
+      ["# Me", "### About me", "#### Facts", "- UK.", "### How to answer me", "- Briefly."].join(
+        "\n",
+      ),
+    );
+
+    expect(await readOwnerContext()).toMatchObject({ facts: ["UK."], answers: ["Briefly."] });
+    expect(await sharedWith("side-project")).toBe("answers");
+  });
 });

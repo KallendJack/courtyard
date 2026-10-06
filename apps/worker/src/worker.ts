@@ -78,7 +78,8 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
 
-  const workspaceError = (c: Context, error: WorkspaceError) => {
+  /** An error reading or changing the context folder, as an answer. */
+  const contextError = (c: Context, error: WorkspaceError) => {
     switch (error.kind) {
       case "not-found":
         return apiError(c, { status: 404, error: "No such workspace" });
@@ -93,14 +94,14 @@ export const createWorker = (options: {
 
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);
-    if (!workspaces.ok) return workspaceError(c, workspaces.error);
+    if (!workspaces.ok) return contextError(c, workspaces.error);
     return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
   });
   api.post("/workspaces", async (c) => {
     const body = await readBody(c, NewWorkspace);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const workspace = await createWorkspace(contextDir, body.value.name);
-    if (!workspace.ok) return workspaceError(c, workspace.error);
+    if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary, 201);
   });
   api.patch("/workspaces/:id", async (c) => {
@@ -110,7 +111,7 @@ export const createWorker = (options: {
       id: c.req.param("id"),
       colour: body.value.colour,
     });
-    if (!workspace.ok) return workspaceError(c, workspace.error);
+    if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary);
   });
   api.get("/workspaces/:id", async (c) => {
@@ -118,8 +119,8 @@ export const createWorker = (options: {
       getWorkspace(contextDir, c.req.param("id")),
       readOwnerContext(contextDir),
     ]);
-    if (!workspace.ok) return workspaceError(c, workspace.error);
-    if (!ownerContext.ok) return workspaceError(c, ownerContext.error);
+    if (!workspace.ok) return contextError(c, workspace.error);
+    if (!ownerContext.ok) return contextError(c, ownerContext.error);
     const { shared } = sharedOwnerContext({
       mode: workspace.value.summary.mode,
       ownerContext: ownerContext.value,
@@ -132,12 +133,12 @@ export const createWorker = (options: {
   });
   api.get("/owner-context", async (c) => {
     const read = await readOwnerContext(contextDir);
-    if (!read.ok) return workspaceError(c, read.error);
+    if (!read.ok) return contextError(c, read.error);
     return c.json({ ownerContext: read.value?.ownerContext ?? null } satisfies OwnerContextDetail);
   });
   api.post("/owner-context", async (c) => {
     const started = await startOwnerContext(contextDir);
-    if (!started.ok) return workspaceError(c, started.error);
+    if (!started.ok) return contextError(c, started.error);
     return c.json({ ownerContext: started.value.ownerContext } satisfies OwnerContextDetail, 201);
   });
   api.all("*", (c) => apiError(c, { status: 404, error: "Not found" }));

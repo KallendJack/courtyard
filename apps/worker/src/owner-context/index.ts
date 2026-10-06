@@ -3,12 +3,10 @@ import { join } from "node:path";
 import { parseOwnerContext, type ReadOwnerContext } from "../context-file/index.ts";
 import { hasCode } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
+import type { WorkspaceError } from "../workspaces/index.ts";
 
-/** Why the owner context couldn't be read or started. */
-export type OwnerContextError =
-  /** There's one already. */
-  | { readonly kind: "conflict"; readonly message: string }
-  | { readonly kind: "storage"; readonly message: string };
+/** Why the owner context couldn't be read or started: there's one already, or storage. */
+export type OwnerContextError = Extract<WorkspaceError, { kind: "conflict" | "storage" }>;
 
 /** The owner context lives at the top of the context folder, outside every workspace (ADR 0010). */
 const ownerFile = (contextDir: string) => join(contextDir, "OWNER.md");

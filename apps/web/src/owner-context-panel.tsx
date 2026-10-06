@@ -26,7 +26,7 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
   };
 
   const { result } = props;
-  const owner = result.kind === "loaded" ? result.data.ownerContext : undefined;
+  const ownerContext = result.kind === "loaded" ? result.data.ownerContext : undefined;
 
   return (
     <section aria-label="Owner context" className="mt-6 rounded-lg border px-4 py-5 md:px-5">
@@ -37,7 +37,7 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
       {result.kind !== "loaded" && (
         <p className="mt-4 text-sm text-destructive-text">{describeProblem(result).body}</p>
       )}
-      {owner === null && (
+      {ownerContext === null && (
         <div className="mt-4 space-y-3">
           <p className="text-[15px]/[23px]">
             Write down once what's true across your life, such as where you live and how you like
@@ -59,9 +59,9 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
           )}
         </div>
       )}
-      {owner && (
+      {ownerContext && (
         <>
-          {owner.characters > OWNER_CONTEXT_LONG_CHARACTERS && (
+          {ownerContext.characters > OWNER_CONTEXT_LONG_CHARACTERS && (
             <div className="mt-3">
               <StatusPill>
                 Getting long: it goes with every message in every workspace, so keep it to what's
@@ -69,12 +69,19 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
               </StatusPill>
             </div>
           )}
+          {ownerContext.intro !== "" && (
+            <p className="mt-4 text-[15px]/[23px] whitespace-pre-line">{ownerContext.intro}</p>
+          )}
           <div className="mt-5 space-y-6">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               About me
             </p>
-            <FactsPlansIdeas {...owner} />
-            <ContextLines title="How to answer me" hint="Every workspace" lines={owner.answers} />
+            <FactsPlansIdeas {...ownerContext} />
+            <ContextLines
+              title="How to answer me"
+              hint="Every workspace"
+              lines={ownerContext.answers}
+            />
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
             Edit it in <code>OWNER.md</code>, at the top of your context folder.

@@ -16,12 +16,14 @@ Done when the guide, the module and the tests agree and `pnpm verify` passes.
 
 - **One workspace, plus the owner context.** A model sees only the workspace it's in: its name, the access its
   provider has, and its context file. It also sees the owner context, what the owner shares with every workspace
-  (ADR 0010): all of it in a planning workspace, only How to answer me in a code workspace.
+  (ADR 0010): all of it in a planning workspace, only How to answer me in a code workspace. Only lines count: an
+  owner context with no facts, plans, ideas or preferences yet (the untouched starter) is sent nowhere.
 - **The workspace is more specific.** Where the context file differs from the owner context, the context file wins,
   and a model is told so.
 - **Markers keep text in its place.** The owner context sits between `<owner_context>` markers, the context file
-  between `<context_file>` markers and earlier turns between `<conversation>` markers. No text inside can close a marker, however it's spelt, and a workspace's name sits in quotes
-  it can't close. What's inside is information, not instructions.
+  between `<context_file>` markers and earlier turns between `<conversation>` markers. No text inside can close a
+  marker, however it's spelt, and a workspace's name sits in quotes it can't close. What's inside is information, not
+  instructions.
 - **Plans and ideas stay plans and ideas.** Facts are true now. Plans are decided but not done. Ideas are only being
   considered. A model describes each as what it is (ADR 0005).
 - **Honest about gaps.** When a model doesn't know something about the owner's life, it says so and asks.
@@ -36,7 +38,7 @@ Built in phase 1. The instructions, in order:
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
    file and the owner.
 3. Say so and ask rather than guess, and answer in Markdown.
-4. How to read Facts, Plans and Ideas, when the owner context or the context file has them.
+4. How to read Facts, Plans and Ideas, when there's a context file or the workspace gets all of the owner context.
 5. The owner context between its markers, when there is one and the workspace gets some of it: answer the way it
    asks; otherwise it's information.
 6. The context file between its markers, saying it wins where it differs from the owner context, or a line saying
@@ -67,7 +69,8 @@ Built with #31. The home page's Start your owner context writes `OWNER.md` from 
 
 1. "Owner context" as the title.
 2. One line on what goes where: About me holds facts, plans and ideas true across the owner's whole life, one per
-   line; How to answer me holds how they like answers, one per line.
+   line; How to answer me holds how they like answers, one per line. It sits above both sections, not inside them,
+   because any line inside a section counts as one of its lines.
 3. About me, with empty Facts, Plans and Ideas under it, then an empty How to answer me.
 
 The home page warns once the owner context passes `OWNER_CONTEXT_LONG_CHARACTERS` (in the contract), a quarter of

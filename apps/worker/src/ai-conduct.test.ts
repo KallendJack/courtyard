@@ -275,3 +275,15 @@ describe("the owner context every turn carries (ADR 0010)", () => {
     expect(instructions.indexOf("New rule")).toBeLessThan(instructions.indexOf("</owner_context>"));
   });
 });
+
+describe("an owner context with nothing in it yet", () => {
+  it("changes nothing, so the starter's hints never reach a model", async () => {
+    await ownerContext(
+      "# Owner context\n\nOne line each.\n\n## About me\n\n### Facts\n\n## How to answer me\n",
+    );
+
+    const { instructions } = (await firstTurn()).framing;
+
+    expect(instructions).not.toMatch(/owner_context|owner context|One line each/i);
+  });
+});

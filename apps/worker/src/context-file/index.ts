@@ -117,8 +117,9 @@ export type ReadOwnerContext = {
 };
 
 /**
- * Reads the owner context's Markdown. A first- or second-level heading starting About me or How
- * to answer me begins that part; any other one begins a part that's kept but not read. About me
+ * Reads the owner context's Markdown. A heading at any level starting About me or How to answer
+ * me begins that part; any other first- or second-level heading begins a part that's kept but
+ * not read, and deeper ones (Facts, say) stay in the part they're in. About me
  * reads like a context file (Facts, Plans and Ideas under it); How to answer me is one preference
  * per line, by the same line rules. A first-level heading at the top is the title.
  */
@@ -132,13 +133,16 @@ export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
     const heading = HEADING.exec(line);
     const level = heading?.[1]?.length ?? 0;
     const text = heading?.[2];
-    if (text !== undefined && level <= 2) {
+    const named = text === undefined ? undefined : ownerPartNamed(text);
+    if (named === "aboutMe" || named === "answers") {
+      part = named;
+    } else if (named === "other" && level <= 2) {
       const atTop = part === "intro" && parts.intro.join("").trim() === "";
-      if (level === 1 && atTop && !titled && ownerPartNamed(text) === "other") {
+      if (level === 1 && atTop && !titled) {
         titled = true;
         continue;
       }
-      part = ownerPartNamed(text);
+      part = "other";
     }
     parts[part].push(line);
   }
