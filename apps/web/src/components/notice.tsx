@@ -10,10 +10,10 @@ export function Notice(props: {
   action?: ReactNode;
   footer?: ReactNode;
   /**
-   * A named region rather than an alert, for a box the owner opened themselves (a confirm step),
-   * which shouldn't be announced as if something had gone wrong.
+   * A region named by its title rather than an alert, for a box the owner opened themselves (a
+   * confirm step), which shouldn't be announced as if something had gone wrong.
    */
-  region?: string;
+  region?: boolean;
 }) {
   const box =
     "flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text";
@@ -27,12 +27,12 @@ export function Notice(props: {
       {props.action}
     </>
   );
-  return props.region === undefined ? (
+  return !props.region ? (
     <div role="alert" className={box}>
       {content}
     </div>
   ) : (
-    <section aria-label={props.region} className={box}>
+    <section aria-label={props.title} className={box}>
       {content}
     </section>
   );

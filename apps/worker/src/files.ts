@@ -44,6 +44,16 @@ export const isFolder = async (path: string): Promise<Result<boolean, "unreadabl
   }
 };
 
+/** The folders inside a folder, by name; an error when it can't be read, or doesn't exist. */
+export const listSubfolders = async (path: string): Promise<Result<string[], "unreadable">> => {
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+    return ok(entries.flatMap((entry) => (entry.isDirectory() ? [entry.name] : [])));
+  } catch {
+    return err("unreadable");
+  }
+};
+
 /** The names in a folder; none when the folder doesn't exist yet. */
 export const listFolder = async (path: string): Promise<Result<string[], "unreadable">> => {
   try {

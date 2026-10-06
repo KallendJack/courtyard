@@ -1,5 +1,4 @@
-import type { Dirent } from "node:fs";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ContextFile,
@@ -10,7 +9,15 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { parseContextFile } from "../context-file/index.ts";
-import { hasCode, isFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
+import {
+  hasCode,
+  isFolder,
+  listSubfolders,
+  move,
+  readJsonFile,
+  readTextFile,
+  writeJsonFile,
+} from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
@@ -149,16 +156,12 @@ const workspaceIdFrom = (name: string): WorkspaceId | undefined => {
 
 /** The workspace ids in the context folder: folders named like one, not files. */
 const workspaceIds = async (contextDir: string): Promise<Result<WorkspaceId[], WorkspaceError>> => {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(contextDir, { withFileTypes: true });
-  } catch {
-    return err(CONTEXT_FOLDER_UNREADABLE);
-  }
+  const folders = await listSubfolders(contextDir);
+  if (!folders.ok) return err(CONTEXT_FOLDER_UNREADABLE);
   return ok(
-    entries.flatMap((entry) => {
-      const id = workspaceIdFrom(entry.name);
-      return entry.isDirectory() && id !== undefined ? [id] : [];
+    folders.value.flatMap((name) => {
+      const id = workspaceIdFrom(name);
+      return id === undefined ? [] : [id];
     }),
   );
 };

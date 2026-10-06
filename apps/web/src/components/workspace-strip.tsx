@@ -1,9 +1,13 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { LogOut, Plus } from "lucide-react";
+import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import { WorkspaceDot } from "./workspace-colour.tsx";
+
+/** A link in the strip: a pill, marked while its page is open. */
+const STRIP_LINK = "flex shrink-0 items-center rounded-full data-[status=active]:bg-muted";
 
 /**
  * The workspace switcher on a narrow screen (a folded phone): one row across the top that
@@ -24,7 +28,10 @@ export function WorkspaceStrip(props: {
             key={workspace.id}
             to="/workspaces/$workspaceId"
             params={{ workspaceId: workspace.id }}
-            className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm data-[status=active]:bg-muted data-[status=active]:font-semibold"
+            className={classes(
+              STRIP_LINK,
+              "gap-2 px-3 py-1.5 text-sm data-[status=active]:font-semibold",
+            )}
           >
             <WorkspaceDot colour={workspace.colour} small />
             {workspace.name}
@@ -33,12 +40,15 @@ export function WorkspaceStrip(props: {
         <Link
           to="/new-workspace"
           aria-label="New workspace"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
+          className={classes(
+            STRIP_LINK,
+            "size-8 justify-center text-muted-foreground data-[status=active]:text-foreground",
+          )}
         >
           <Plus className="size-4" />
         </Link>
       </nav>
-      <IconButton label="Log out" icon={<LogOut className="size-4" />} onClick={props.onLogOut} />
+      <IconButton label="Log out" icon={<LogOut />} onClick={props.onLogOut} />
     </header>
   );
 }

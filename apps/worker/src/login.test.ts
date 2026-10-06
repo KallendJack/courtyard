@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, AuthState } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loginCookie, testWorker } from "./testing.ts";
+import { errorOf, loginCookie, testWorker } from "./testing.ts";
 
 const PASSWORD = "correct horse battery";
 
@@ -67,7 +67,7 @@ describe("first-run setup", () => {
     const response = await post("/api/setup", { password: "short" });
 
     expect(response.status).toBe(400);
-    expect(ApiError.parse(await response.json()).error).toContain("8");
+    expect(await errorOf(response)).toContain("8");
     expect(await authState()).toBe("setup-needed");
   });
 

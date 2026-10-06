@@ -13,7 +13,8 @@ const VARIANTS = {
   /** The main action. */
   primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
   /** Any other action, such as Cancel. */
-  outline: "border-border bg-background text-foreground hover:bg-muted",
+  outline:
+    "border-border bg-background text-foreground hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
   /** Archiving, deleting, logging out. */
   destructive:
     "border-transparent bg-destructive/10 text-destructive-text hover:bg-destructive/20 focus-visible:ring-destructive/20",

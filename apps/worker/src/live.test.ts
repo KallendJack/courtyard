@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { ApiError, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, type Requester, testWorker } from "./testing.ts";
+import { asOwner, errorOf, type Requester, testWorker } from "./testing.ts";
 import type { UpdateCommand } from "./worker.ts";
 
 // Updating the live copy from the app (ADR 0011, #35), against real git in temporary folders: a
@@ -189,7 +189,7 @@ describe("updating from the app", () => {
     const response = await startUpdate(request);
 
     expect(response.status).toBe(409);
-    expect(ApiError.parse(await response.json()).error).toMatch(/already/i);
+    expect(await errorOf(response)).toMatch(/already/i);
     expect(started).toEqual([]);
   });
 

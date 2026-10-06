@@ -13,10 +13,13 @@ export const useAction = <A extends unknown[]>(
 
   const run = async (...args: A) => {
     setBusy(true);
-    const problem = await action(...args);
-    setBusy(false);
-    setError(problem);
-    return problem === undefined;
+    try {
+      const problem = await action(...args);
+      setError(problem);
+      return problem === undefined;
+    } finally {
+      setBusy(false);
+    }
   };
 
   return { run, busy, error, setError };

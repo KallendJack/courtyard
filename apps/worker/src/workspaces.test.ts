@@ -233,7 +233,7 @@ describe("opening a workspace", () => {
     for (const path of ["/api/workspaces", "/api/workspaces/office"]) {
       const response = await request(path);
       expect(response.status).toBe(500);
-      expect(ApiError.parse(await response.json()).error).toContain("office");
+      expect(await errorOf(response)).toContain("office");
     }
   });
 

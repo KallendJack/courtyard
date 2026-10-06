@@ -2,18 +2,13 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  ApiError,
-  ProviderList,
-  SessionEvent,
-  SessionList,
-  SessionSummary,
-} from "@courtyard/contract";
+import { ProviderList, SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
 import {
   asOwner,
+  errorOf,
   FAKE_MODEL,
   followSession,
   gatedProvider,
@@ -174,7 +169,7 @@ describe("a session", () => {
     });
 
     expect(busy.status).toBe(409);
-    expect(ApiError.parse(await busy.json()).error).toMatch(/already/i);
+    expect(await errorOf(busy)).toMatch(/already/i);
     gated.release();
     const first = await followSession(api.request, {
       sessionId: session.id,

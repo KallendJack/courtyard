@@ -24,7 +24,7 @@ export function ConfirmStep(props: {
 
   return (
     <Notice
-      region={props.question}
+      region
       title={props.question}
       footer={
         <>

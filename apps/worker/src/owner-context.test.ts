@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiError, OwnerContextDetail, WorkspaceDetail } from "@courtyard/contract";
+import { OwnerContextDetail, WorkspaceDetail } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, postJson, type Requester, testWorker } from "./testing.ts";
+import { asOwner, errorOf, postJson, type Requester, testWorker } from "./testing.ts";
 
 let root: string;
 let contextDir: string;
@@ -101,7 +101,7 @@ describe("starting the owner context", () => {
     const response = await startOwnerContext();
 
     expect(response.status).toBe(409);
-    expect(ApiError.parse(await response.json()).error).toMatch(/already/i);
+    expect(await errorOf(response)).toMatch(/already/i);
     expect(await readFile(OWNER_FILE(), "utf8")).toBe("## How to answer me\n- Briefly.\n");
   });
 });

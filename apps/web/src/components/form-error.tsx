@@ -1,4 +1,7 @@
-/** What went wrong with something the owner just did, said plainly. Nothing when there's no message. */
+/**
+ * What went wrong, said plainly, where it happened: something the owner just did, or a part of the
+ * page that couldn't load. Nothing when there's no message.
+ */
 export function FormError(props: { message: string | undefined; id?: string }) {
   if (!props.message) return null;
   return (

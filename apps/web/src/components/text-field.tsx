@@ -5,7 +5,8 @@ import { FormError } from "./form-error.tsx";
 const SIZES = {
   /** In a list row (the sidebar). */
   sm: "h-9 px-2.5 text-sm",
-  md: "h-11 px-2.5 text-base",
+  /** 16px on a phone, so focusing it doesn't zoom the page; 14px from tablet width. */
+  md: "h-11 px-2.5 text-base md:text-sm",
   /** Renaming a page's title, in the title's own type. */
   title: "h-12 px-3 font-display text-2xl font-medium tracking-[-0.02em]",
 } as const;

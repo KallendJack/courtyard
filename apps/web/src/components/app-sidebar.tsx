@@ -200,7 +200,13 @@ function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
         {sessions.slice(0, RECENT_SESSIONS).map((session) =>
           renaming === session.id ? (
             <li key={session.id} className="px-1 py-1">
-              <Suspense>
+              <Suspense
+                fallback={
+                  <span className="block truncate px-2 py-1.5 text-sm text-muted-foreground">
+                    {session.title}
+                  </span>
+                }
+              >
                 <RenameForm
                   label="Session title"
                   value={session.title}
