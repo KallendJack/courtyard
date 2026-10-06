@@ -38,8 +38,8 @@ _Avoid_: frontend, client, UI server
 ### Context
 
 **Context folder**:
-The git repository on the worker machine that holds every workspace. Its main copy lives on a git remote the owner
-chooses.
+The git repository on the worker machine that holds every workspace and the owner context. Its backup lives on a git
+remote the owner chooses.
 _Avoid_: knowledge base, vault, RAG store
 
 **Workspace**:
@@ -68,10 +68,35 @@ _Avoid_: decision, todo, goal
 A line in a context file's Ideas section: something being considered.
 _Avoid_: maybe, wish
 
-**Suggestion**:
-A change to a context file that a model proposes when the owner asks, labelled as a fact, plan or idea. It is applied
-only if the owner ticks it.
-_Avoid_: memory, update, edit
+**Save**:
+A model adding, changing or removing one line of a context file or the owner context during a turn, through the
+worker. It names its section (fact, plan or idea, or a preference) and is committed at once; the owner undoes or
+edits it afterwards (ADR 0013).
+_Avoid_: suggestion (that was ADR 0005's tick-first way), memory, update, write
+
+**Line label**:
+The short tag (`F3`, `P1`) the worker puts before each line when a model reads a context file or the owner context,
+so a save can name the line it changes or removes. Never stored in the file.
+_Avoid_: line number, id, index
+
+**Change**:
+One committed difference to the context folder: a save, an undo, an edit, a hand edit or a tidy. The owner can undo
+any one of them.
+_Avoid_: commit (that's how it's kept), revision, update
+
+**Recent changes**:
+The list of changes on a workspace's page (and the owner context's on the home page), newest first, each with Undo.
+_Avoid_: history, log, activity (that's a model's doing in a session)
+
+**Tidy**:
+The owner asking a model for a shorter context file. Unlike a save, it's proposed first: each change it proposes is
+ticked by default, and the owner unticks any they don't want.
+_Avoid_: compact, clean up, summarise
+
+**Backup**:
+The context folder's copy on its git remote, pushed after every change: for the owner, a shared folder on the NAS
+(ADR 0014). The home page says when it's behind.
+_Avoid_: sync, mirror, remote (on its own)
 
 **Planning workspace**:
 A workspace whose files models may read but not change.

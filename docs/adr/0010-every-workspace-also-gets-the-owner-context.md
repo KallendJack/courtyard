@@ -1,5 +1,7 @@
 # Every workspace also gets the owner context
 
+Changed by ADR 0013: the owner context also changes through models' saves, not only by hand.
+
 Each workspace knows only its own context file, so anything true about the owner across their whole life (where they
 live, units and currency, how they like answers) had to be repeated in every workspace, and the copies drifted. So the
 context folder gets one more file, `OWNER.md` at its top: the owner context. It has two sections, About me (facts,
@@ -20,7 +22,7 @@ what the owner chose to share everywhere".
 
 - **Text only, read-only.** The owner context reaches a model as text between `<owner_context>` markers, contained like
   the context file's. `OWNER.md` sits outside every workspace folder, so no model can open or change it; it changes only
-  when the owner edits it or ticks a suggestion (ADR 0005).
+  when the owner edits it or ticks a suggestion (ADR 0005; now also through saves, ADR 0013).
 - **Code workspaces get How to answer me only.** A model there edits files and commits in a repository that may be
   public, so it isn't given personal facts it could write into one. A fact a code workspace needs goes in its own context
   file. This is the choice most likely to be revisited.

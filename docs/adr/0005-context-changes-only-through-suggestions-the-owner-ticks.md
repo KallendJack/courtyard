@@ -1,5 +1,7 @@
 # Context files change only through suggestions the owner ticks, sorted into facts, plans and ideas
 
+Replaced by ADR 0013: models now save context as they chat, and the owner undoes what's wrong.
+
 The point of Courtyard is not re-explaining, so context files have to stay current, and they have to stay true. Models
 are bad at the second: an assistant that hears about a planned home gym will later say the gym exists. So a context
 file has three sections (Facts: true now; Plans: decided, not done; Ideas: being considered), a model never writes a

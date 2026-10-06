@@ -1,5 +1,8 @@
 # The context folder is a git repository, worked on locally, with its main copy on a remote
 
+Changed by ADR 0014: the remote is a shared folder on the NAS, not SSH, and every change is a commit, not only
+applied suggestions.
+
 The worker reads the context folder constantly, so its working copy is on the worker machine's own disk. Its main copy
 is a git remote the owner chooses: for the owner, a repository on their always-on NAS reached over SSH, so nothing
 personal leaves the house and it is covered by the NAS's backups. Every applied suggestion is a commit, pushed after
