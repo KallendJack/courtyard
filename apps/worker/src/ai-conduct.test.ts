@@ -338,7 +338,9 @@ describe("saving context as a model answers (ADR 0013)", () => {
       /Save from the workspace's files only when the owner asks/,
     );
     expect(framing?.instructions).toMatch(/ask in your answer and save once the owner says/);
-    expect(framing?.instructions).toMatch(/your answer leaves saves unmentioned and stays about their question/);
+    expect(framing?.instructions).toMatch(
+      /your answer leaves saves unmentioned and stays about their question/,
+    );
   });
 
   it("offers no save tool to a provider that can't save", async () => {
