@@ -83,8 +83,8 @@ Each is written here, as rules, before its phase starts. What the spec already d
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Suggesting context lines                      | 2            | Asked for by the owner ("remember that", Save to context). Each suggestion is labelled fact, plan or idea, and may change or remove a line. Follows the context-line rules below. |
-| Coding                                        | 3            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
-| Switching model mid-session                   | 4            | The new model gets every turn's framing as usual: the context file and the conversation so far, with the owner's last message re-sent.                  |
+| Coding                                        | 4            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
+| Switching model mid-session                   | 3            | The new model gets every turn's framing as usual: the context file and the conversation so far, with the owner's last message re-sent.                  |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |
 | Floor plans                                   | 5            | Drawn as SVG in the answer, to scale with dimensions; the web app sanitises and renders it. Saving one is the owner's action, never the model's.          |
 
