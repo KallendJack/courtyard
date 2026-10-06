@@ -322,8 +322,14 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
  * turn, which touch nothing themselves. Each file read is reported.
  */
 const confineTo =
-  (folder: string, report: TurnInput["report"], courtyardTools: readonly string[]): HookCallback =>
+  (confine: {
+    folder: string;
+    report: TurnInput["report"];
+    /** Courtyard's own tools offered this turn, by the names Claude Code calls them. */
+    courtyardTools: readonly string[];
+  }): HookCallback =>
   async (input) => {
+    const { folder, report, courtyardTools } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (courtyardTools.includes(input.tool_name)) return decision(true);
@@ -482,7 +488,11 @@ export const createClaudeProvider = (
             ...(saveTool === null
               ? {}
               : { mcpServers: { [COURTYARD_SERVER]: saveServer(saveTool, input.save) } }),
-            hooks: { PreToolUse: [{ hooks: [confineTo(folder, input.report, courtyardTools)] }] },
+            hooks: {
+              PreToolUse: [
+                { hooks: [confineTo({ folder, report: input.report, courtyardTools })] },
+              ],
+            },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,
             abortController: stop,

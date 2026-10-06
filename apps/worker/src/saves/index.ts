@@ -132,11 +132,13 @@ const changeContextFile = <T, E>(
   );
 
 /** The save a request makes to a file, or why it can't. */
-const applySave = (
-  markdown: string,
-  request: SaveRequest,
-  shown: ReadonlyMap<string, PlacedLine>,
-): Result<{ markdown: string; value: Save }, SaveRefusal> => {
+const applySave = (apply: {
+  markdown: string;
+  request: SaveRequest;
+  /** The lines the model was shown, by label. */
+  shown: ReadonlyMap<string, PlacedLine>;
+}): Result<{ markdown: string; value: Save }, SaveRefusal> => {
+  const { markdown, request, shown } = apply;
   const lines = labelledLines(markdown);
   const repeats = (line: string, except?: PlacedLine) =>
     lines.find(
@@ -172,7 +174,7 @@ const applySave = (
   const repeated = repeats(line.value, replaced);
   if (repeated) return err({ kind: "duplicate", line: repeated.line });
   const saved = { section: request.section, line: line.value };
-  const changed = replaceContextLine(markdown, replaced, saved);
+  const changed = replaceContextLine(markdown, { was: replaced, now: saved });
   return changed === undefined
     ? err(stale)
     : ok({ markdown: changed, value: { action: "change", saved, replaced } });
@@ -218,7 +220,7 @@ export const createTurnSaves = (
       kind: "save",
       title: titleOf,
       storage: { kind: "storage" },
-      change: (markdown) => applySave(markdown, request.data, shown),
+      change: (markdown) => applySave({ markdown, request: request.data, shown }),
     });
     if (!saved.ok && saved.error.kind === "stale") shown = labelsOf(saved.error.markdown);
     return saved;
@@ -230,8 +232,8 @@ const NOTE_STORAGE: NoteRefusal = {
   message: "The workspace's context file can't be read or written.",
 };
 
-/** What undoing a save does to the file now, or `undefined` when it can't. */
-const undone = (markdown: string, state: SaveState) => {
+/** The file with a save undone, or `undefined` when it can't be. */
+const undoneMarkdown = (markdown: string, state: SaveState) => {
   const { save, current } = state;
   if (save.action === "remove") {
     return hasContextLine(markdown, save.replaced)
@@ -241,7 +243,7 @@ const undone = (markdown: string, state: SaveState) => {
   if (current === undefined) return undefined;
   return save.action === "add"
     ? removeContextLine(markdown, current)
-    : replaceContextLine(markdown, current, save.replaced);
+    : replaceContextLine(markdown, { was: current, now: save.replaced });
 };
 
 /**
@@ -258,7 +260,7 @@ export const undoSave = async (
     title: () => `Undo: ${titleOf(state.save)}`,
     storage: NOTE_STORAGE,
     change: (markdown) => {
-      const after = undone(markdown, state);
+      const after = undoneMarkdown(markdown, state);
       if (after !== undefined) return ok({ markdown: after, value: null });
       return err({ kind: state.save.action === "remove" ? "already-back" : "changed-since" });
     },
@@ -268,9 +270,9 @@ export const undoSave = async (
 /** Edits a saved line's wording or section, in place, as a change of its own. */
 export const editSave = async (
   target: SaveTarget,
-  state: SaveState,
-  now: PlacedLine,
+  edit: { readonly state: SaveState; readonly now: PlacedLine },
 ): Promise<Result<null, NoteRefusal>> => {
+  const { state, now } = edit;
   const { current } = state;
   if (state.undone) return err({ kind: "already-undone" });
   if (current === undefined) return err({ kind: "nothing-to-edit" });
@@ -279,7 +281,7 @@ export const editSave = async (
     title: () => `Edit in ${now.section}: ${now.line}`,
     storage: NOTE_STORAGE,
     change: (markdown) => {
-      const edited = replaceContextLine(markdown, current, now);
+      const edited = replaceContextLine(markdown, { was: current, now });
       return edited === undefined
         ? err({ kind: "changed-since" })
         : ok({ markdown: edited, value: null });

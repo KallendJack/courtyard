@@ -179,7 +179,7 @@ export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
   });
 
 /** Undoes one of a session's saves, named by its event number. */
-export const undoSave = (sessionId: SessionId, save: number) =>
+export const undoSave = ({ sessionId, save }: { sessionId: SessionId; save: number }) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/saves/${save}/undo`,
     body: {},
@@ -187,9 +187,9 @@ export const undoSave = (sessionId: SessionId, save: number) =>
   });
 
 /** Edits one of a session's saved lines: its wording, its section, or both. */
-export const editSave = (sessionId: SessionId, save: number, edit: SaveEdit) =>
+export const editSave = (change: { sessionId: SessionId; save: number; edit: SaveEdit }) =>
   sendJson({
-    path: `/sessions/${encodeURIComponent(sessionId)}/saves/${save}/edit`,
-    body: edit,
+    path: `/sessions/${encodeURIComponent(change.sessionId)}/saves/${change.save}/edit`,
+    body: change.edit,
     schema: z.unknown(),
   });

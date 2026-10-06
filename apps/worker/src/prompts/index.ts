@@ -1,6 +1,7 @@
 import {
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
+  CONTEXT_SECTION_NAMES,
   ContextSection,
   type OwnerContextShared,
   type PlacedLine,
@@ -174,7 +175,10 @@ const instructionsFor = (turn: {
 /** A save in the conversation, and what the owner has done with it since. */
 type SaidSave = {
   readonly save: Save;
-  outcome: { readonly kind: "kept" } | { readonly kind: "undone" } | PlacedLine;
+  outcome:
+    | { readonly kind: "kept" }
+    | { readonly kind: "undone" }
+    | { readonly kind: "edited"; readonly now: PlacedLine };
 };
 
 /** One thing said in a session, and for an answer, how its turn ended and what it saved. */
@@ -232,7 +236,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       }
       case "context-edited": {
         const saved = saves.get(event.save);
-        if (saved) saved.outcome = event.now;
+        if (saved) saved.outcome = { kind: "edited", now: event.now };
         break;
       }
       case "activity":
@@ -242,12 +246,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   return said;
 };
 
-const SECTION_NAMES: Record<PlacedLine["section"], string> = {
-  facts: "Facts",
-  plans: "Plans",
-  ideas: "Ideas",
-};
-const placed = (line: PlacedLine) => `${SECTION_NAMES[line.section]}: "${line.line}"`;
+const placed = (line: PlacedLine) => `${CONTEXT_SECTION_NAMES[line.section]}: "${line.line}"`;
 
 /** A save as the model reads it in the conversation, with what the owner did with it. */
 const saveLine = ({ save, outcome }: SaidSave) => {
@@ -258,11 +257,11 @@ const saveLine = ({ save, outcome }: SaidSave) => {
         ? `Changed ${placed(save.replaced)} to ${placed(save.saved)}`
         : `Removed from ${placed(save.replaced)}`;
   const since =
-    "kind" in outcome
-      ? outcome.kind === "kept"
-        ? "kept"
-        : "the owner undid this"
-      : `the owner edited it to ${placed(outcome)}`;
+    outcome.kind === "kept"
+      ? "kept"
+      : outcome.kind === "undone"
+        ? "the owner undid this"
+        : `the owner edited it to ${placed(outcome.now)}`;
   return `- ${what} (${since})`;
 };
 

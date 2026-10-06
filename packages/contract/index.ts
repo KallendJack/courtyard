@@ -31,6 +31,7 @@ export {
 export {
   CONTEXT_FILE_LONG_CHARACTERS,
   CONTEXT_LINE_MAX_CHARACTERS,
+  CONTEXT_SECTION_NAMES,
   ContextFile,
   ContextLine,
   ContextSection,

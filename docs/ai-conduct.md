@@ -130,7 +130,9 @@ The worker refuses a save, and tells the model why, when:
 - **it's missing something,** such as the label a change needs, or names a label that doesn't exist;
 - **it puts About me facts in from a code workspace** (with #49).
 
-The model may put a refused save right once: after a second refusal in a row it's told to carry on without it. A
+The model may put a refused save right once: the save after a refusal counts as its retry, and if that's refused too
+the model is told to carry on without it (the save after that starts afresh). A label that's out of date only
+refuses saves naming that line, so a model can save several times in one turn, its own saves included. A
 refused save shows nothing to the owner. A workspace with no context file gets one from the starter (Starter context
 file, above) before its first save.
 

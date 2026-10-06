@@ -63,6 +63,13 @@ export const CONTEXT_LINE_MAX_CHARACTERS = 250;
 export const ContextSection = z.enum(["facts", "plans", "ideas"]);
 export type ContextSection = z.infer<typeof ContextSection>;
 
+/** Each section's name, as its heading and the app write it. */
+export const CONTEXT_SECTION_NAMES: Record<ContextSection, string> = {
+  facts: "Facts",
+  plans: "Plans",
+  ideas: "Ideas",
+};
+
 /** One line of a context file, as the owner writes it in the app. */
 export const ContextLine = z
   .string()

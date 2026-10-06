@@ -30,6 +30,9 @@ import {
 } from "../saves/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
+/** What the owner did to a save from its note. */
+export type NoteAct = "undo" | "edit";
+
 export type SessionError =
   | { readonly kind: "not-found" }
   | { readonly kind: "busy" }
@@ -41,7 +44,7 @@ export type SessionError =
   /** No save in the session has that event number. */
   | { readonly kind: "save-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
-  | { readonly kind: "note-refused"; readonly refusal: NoteRefusal }
+  | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
 /** A session's own file, beside its event log. */
@@ -498,6 +501,7 @@ export const createSessions = (options: {
   const actOnSave = async (act: {
     rawId: string;
     save: number;
+    kind: NoteAct;
     change: (target: SaveTarget, state: SaveState) => Promise<Result<null, NoteRefusal>>;
     recorded: NewEvent;
   }): Promise<Result<null, SessionError>> => {
@@ -514,7 +518,7 @@ export const createSessions = (options: {
       const state = saveStateOf(events.value, act.save);
       if (state === undefined) return err({ kind: "save-not-found" });
       const changed = await act.change(targetOf(file), state);
-      if (!changed.ok) return err({ kind: "note-refused", refusal: changed.error });
+      if (!changed.ok) return err({ kind: "note-refused", act: act.kind, refusal: changed.error });
       const recorded = await writeEvent({ id: file.id, session, event: act.recorded });
       return recorded.ok ? ok(null) : recorded;
     });
@@ -522,15 +526,22 @@ export const createSessions = (options: {
 
   return {
     /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
-    undoSave: (rawId: string, save: number) =>
-      actOnSave({ rawId, save, change: undoSave, recorded: { type: "context-undone", save } }),
-
-    /** Edits one of the session's saved lines: its wording, its section, or both. */
-    editSave: (rawId: string, save: number, now: PlacedLine) =>
+    undoSave: ({ rawId, save }: { rawId: string; save: number }) =>
       actOnSave({
         rawId,
         save,
-        change: (target, state) => editSave(target, state, now),
+        kind: "undo",
+        change: undoSave,
+        recorded: { type: "context-undone", save },
+      }),
+
+    /** Edits one of the session's saved lines: its wording, its section, or both. */
+    editSave: ({ rawId, save, now }: { rawId: string; save: number; now: PlacedLine }) =>
+      actOnSave({
+        rawId,
+        save,
+        kind: "edit",
+        change: (target, state) => editSave(target, { state, now }),
         recorded: { type: "context-edited", save, now },
       }),
 

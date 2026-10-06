@@ -15,7 +15,7 @@ import { apiError, contextError, readBody } from "../http.ts";
 import type { Provider } from "../providers/index.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
-import type { SessionError, Sessions } from "./index.ts";
+import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
 const KEEP_ALIVE_MS = 25_000;
@@ -24,7 +24,7 @@ const KEEP_ALIVE_MS = 25_000;
 const Position = z.coerce.number().int().min(0).catch(0);
 
 /** Why the owner's Undo or Edit of a save didn't happen, in their words. */
-const noteRefused = (refusal: NoteRefusal, act: "undo" | "edit") => {
+const noteRefused = (refusal: NoteRefusal, act: NoteAct) => {
   switch (refusal.kind) {
     case "changed-since":
       return act === "undo"
@@ -41,7 +41,7 @@ const noteRefused = (refusal: NoteRefusal, act: "undo" | "edit") => {
   }
 };
 
-const sessionError = (c: Context, error: SessionError, act: "undo" | "edit" = "undo") => {
+const sessionError = (c: Context, error: SessionError) => {
   switch (error.kind) {
     case "not-found":
       return apiError(c, { status: 404, error: "No such session" });
@@ -69,7 +69,7 @@ const sessionError = (c: Context, error: SessionError, act: "undo" | "edit" = "u
     case "note-refused":
       return apiError(c, {
         status: error.refusal.kind === "storage" ? 500 : 409,
-        error: noteRefused(error.refusal, act),
+        error: noteRefused(error.refusal, error.act),
       });
     case "storage":
       return apiError(c, { status: 500, error: error.message });
@@ -153,11 +153,11 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/saves/:save/undo", async (c) => {
-    const undone = await sessions.undoSave(
-      c.req.param("id"),
-      SaveNumber.parse(c.req.param("save")),
-    );
-    if (!undone.ok) return sessionError(c, undone.error, "undo");
+    const undone = await sessions.undoSave({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
     return c.body(null, 204);
   });
 
@@ -165,8 +165,8 @@ export const sessionRoutes = (options: {
     const body = await readBody(c, SaveEdit);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const save = SaveNumber.parse(c.req.param("save"));
-    const edited = await sessions.editSave(c.req.param("id"), save, body.value);
-    if (!edited.ok) return sessionError(c, edited.error, "edit");
+    const edited = await sessions.editSave({ rawId: c.req.param("id"), save, now: body.value });
+    if (!edited.ok) return sessionError(c, edited.error);
     return c.body(null, 204);
   });
 

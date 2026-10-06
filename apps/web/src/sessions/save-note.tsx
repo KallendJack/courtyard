@@ -1,6 +1,7 @@
 import {
   CONTEXT_LINE_MAX_CHARACTERS,
-  type ContextSection,
+  CONTEXT_SECTION_NAMES,
+  ContextSection,
   type PlacedLine,
   type SessionId,
 } from "@courtyard/contract";
@@ -16,14 +17,12 @@ import { describeProblem } from "../problems.tsx";
 import { editSave, undoSave } from "../worker.ts";
 import type { Note } from "./events.ts";
 
-const SECTIONS = [
-  { value: "facts", label: "Facts" },
-  { value: "plans", label: "Plans" },
-  { value: "ideas", label: "Ideas" },
-] as const satisfies readonly { value: ContextSection; label: string }[];
+const SECTIONS = ContextSection.options.map((value) => ({
+  value,
+  label: CONTEXT_SECTION_NAMES[value],
+}));
 
-const sectionName = (section: ContextSection) =>
-  SECTIONS.find((option) => option.value === section)?.label ?? section;
+const sectionName = (section: ContextSection) => CONTEXT_SECTION_NAMES[section];
 
 /** What a note says: its label ("Saved to Facts"), its line, and what that line replaced. */
 const wordsFor = (note: Note) => {
@@ -116,7 +115,7 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
   const { sessionId, note } = props;
   const [editing, setEditing] = useState(false);
   const undo = useAction(async () => {
-    const undone = await undoSave(sessionId, note.seq);
+    const undone = await undoSave({ sessionId, save: note.seq });
     return undone.kind === "loaded" ? undefined : describeProblem(undone).body;
   });
   const undone = note.state.kind === "undone";
@@ -129,7 +128,7 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
         <EditForm
           line={line}
           save={async (now) => {
-            const edited = await editSave(sessionId, note.seq, now);
+            const edited = await editSave({ sessionId, save: note.seq, edit: now });
             return edited.kind === "loaded" ? undefined : describeProblem(edited).body;
           }}
           onDone={() => setEditing(false)}

@@ -1,4 +1,10 @@
-import type { ContextFile, ContextSection, OwnerContext, PlacedLine } from "@courtyard/contract";
+import {
+  CONTEXT_SECTION_NAMES,
+  type ContextFile,
+  type ContextSection,
+  type OwnerContext,
+  type PlacedLine,
+} from "@courtyard/contract";
 
 type Section = ContextSection | "other";
 
@@ -9,7 +15,6 @@ const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const CONTINUATION = /^\s+\S/;
 
 const SECTIONS = ["facts", "plans", "ideas"] as const satisfies readonly ContextSection[];
-const HEADINGS: Record<ContextSection, string> = { facts: "Facts", plans: "Plans", ideas: "Ideas" };
 const LABEL_LETTERS: Record<ContextSection, string> = { facts: "F", plans: "P", ideas: "I" };
 
 const sectionNamed = (heading: string): ContextSection | undefined => {
@@ -200,7 +205,13 @@ export const addContextLine = (markdown: string, placed: PlacedLine) => {
     lines.splice(at, 0, ...inserted);
   } else {
     while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
-    lines.push(...(lines.length > 0 ? [""] : []), `## ${HEADINGS[placed.section]}`, "", item, "");
+    lines.push(
+      ...(lines.length > 0 ? [""] : []),
+      `## ${CONTEXT_SECTION_NAMES[placed.section]}`,
+      "",
+      item,
+      "",
+    );
   }
   return joined(markdown, lines);
 };
@@ -219,7 +230,11 @@ export const removeContextLine = (markdown: string, placed: PlacedLine) => {
  * Rewords a line where it is, or moves it to the end of another section, or `undefined` when it
  * isn't there as worded.
  */
-export const replaceContextLine = (markdown: string, was: PlacedLine, now: PlacedLine) => {
+export const replaceContextLine = (
+  markdown: string,
+  change: { readonly was: PlacedLine; readonly now: PlacedLine },
+) => {
+  const { was, now } = change;
   if (was.section !== now.section) {
     const removed = removeContextLine(markdown, was);
     return removed === undefined ? undefined : addContextLine(removed, now);
