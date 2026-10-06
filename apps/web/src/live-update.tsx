@@ -2,6 +2,7 @@ import type { LiveStatus, LiveUpdateResult } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { InfoBox } from "@/components/notice";
 import { describeProblem } from "./problems.tsx";
 import { type FromWorker, loadLive, startLiveUpdate } from "./worker.ts";
 
@@ -119,13 +120,5 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
   }
   if (content === null) return null;
 
-  return (
-    <section
-      aria-label="Updates"
-      aria-live="polite"
-      className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-accent px-4 py-3 text-sm text-accent-foreground"
-    >
-      {content}
-    </section>
-  );
+  return <InfoBox label="Updates">{content}</InfoBox>;
 }

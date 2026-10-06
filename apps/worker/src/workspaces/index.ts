@@ -26,7 +26,7 @@ const CONFIG_FILE = "workspace.json";
  * The folder in the context folder that archived workspaces move to. Named like a workspace, so
  * it's kept out of the list by name, and no workspace can be called that.
  */
-const ARCHIVED_FOLDER = "archived";
+export const ARCHIVED_FOLDER = "archived";
 const COLOURS = WorkspaceColour.options;
 
 /** A workspace's optional `workspace.json`. Without one, a workspace is a planning workspace. */

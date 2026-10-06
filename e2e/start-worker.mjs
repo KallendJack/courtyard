@@ -101,7 +101,11 @@ const standInUpdate = () => {
 };
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
+// A context backup that isn't there, so the home page says the backup is behind and why.
+const missingBackup = join(dataDir, "..", "missing-backup.git");
+rmSync(missingBackup, { recursive: true, force: true });
+
 startWorker({
-  env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy },
+  env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
   startUpdate: standInUpdate,
 });

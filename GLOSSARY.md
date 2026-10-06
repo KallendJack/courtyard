@@ -80,8 +80,8 @@ so a save can name the line it changes or removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:
-One committed difference to the context folder: a save, an undo, an edit, a hand edit or a tidy. The owner can undo
-any one of them.
+One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, or a workspace added,
+renamed or archived in the app. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:

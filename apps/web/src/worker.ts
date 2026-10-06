@@ -1,5 +1,6 @@
 import {
   ApiError,
+  ContextBackup,
   LiveStatus,
   type NewMessage,
   type NewWorkspace,
@@ -99,6 +100,9 @@ export const loadProviders = () => fromWorker("/providers", ProviderList);
 /** Adds a workspace: its folder, a starter context file and a colour. */
 export const addWorkspace = (workspace: NewWorkspace) =>
   sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
+
+/** Whether the context folder's backup has every change. */
+export const loadBackup = () => fromWorker("/backup", ContextBackup);
 
 /** Whether this worker can update itself from the app, and what's newer. */
 export const loadLive = () => fromWorker("/live", LiveStatus);

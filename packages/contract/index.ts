@@ -1,5 +1,6 @@
 export { ApiError } from "./lib/api-error.ts";
 export { AuthState, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
+export { ContextBackup } from "./lib/backup.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
 export {

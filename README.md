@@ -4,7 +4,8 @@ A self-hosted place to plan projects and write code with AI models, where every 
 context, so you never re-explain your space, your constraints or your stack.
 
 - **Workspaces are folders.** One per project or area, each with a short `CONTEXT.md` split into facts, plans and ideas.
-- **Context stays true.** Models suggest changes when you ask; only the ones you tick get in, and each is a git commit.
+- **Context stays true.** Models save context as you chat; you see every change and can undo it, and each is a git
+  commit, backed up wherever you choose.
 - **Your subscriptions, not per-token billing.** Claude through your own Claude Code login, with Codex on a ChatGPT plan
   for when Claude's usage limit hits.
 - **Real coding.** In a code workspace, Claude works on its own branch while you're away, asks before anything risky,
@@ -121,6 +122,20 @@ is ready (it checks every few hours), or run:
   the update stops without changing anything.
 - **The result** is written to `live-update.json` in the data folder, and the home page shows it.
   From the button, the update's output goes to `live-update.log` there too.
+
+## Your context's history and backup
+
+The worker makes your context folder a git repository the first time it starts, and commits every
+change to it: a workspace added, renamed or archived in the app, and anything you edit by hand,
+which it commits as "Edited by hand" before its next change (and every ten minutes). Commits are
+Courtyard's own, not your git identity.
+
+**To back it up,** set `COURTYARD_CONTEXT_REMOTE` to any git remote. Nothing needs to run there:
+a bare repository in a shared folder on a NAS works (`git init --bare` in the folder, then
+`//nas.example/courtyard/context.git`, signed in to once from the worker machine). The worker
+pushes after every change. When a push fails, the change is still kept, the home page says how
+long the backup has been behind and why, and the worker tries again after the next change and
+every ten minutes. Without a remote, the home page says the context isn't backed up.
 
 ## Archived workspaces
 

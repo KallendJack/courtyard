@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type ContextBackup,
   type Health,
   type LiveStatus,
   NewWorkspace,
@@ -14,6 +15,7 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { createContextFolder } from "./context-folder/index.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
@@ -43,6 +45,30 @@ export type Worker = {
 /** The largest request body the API reads; nothing it accepts comes close. */
 const MAX_BODY_BYTES = 16 * 1024;
 
+/** How often the context folder's hand edits are committed and a failed backup retried. */
+const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
+
+/** Runs a job now and every `everyMs`, never overlapping itself. */
+export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
+
+const repeatForever: Repeat = (everyMs, job) => {
+  let busy = false;
+  const once = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await job();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      busy = false;
+    }
+  };
+  void once();
+  // Never keeps the process alive on its own.
+  setInterval(() => void once(), everyMs).unref();
+};
+
 /**
  * Builds the worker from its settings, or returns a message naming what's wrong with them.
  * The API lives under `/api`; everything else is the web app, on the same origin (ADR 0001).
@@ -55,11 +81,22 @@ export const createWorker = (options: {
   providers?: readonly Provider[];
   /** Starts an update of the live copy. Tests watch it; otherwise Task Scheduler runs it. */
   startUpdate?: (command: UpdateCommand) => void | Promise<void>;
+  /** Runs a job now and every `everyMs`. Tests run it themselves when they want it. */
+  repeat?: Repeat;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
-  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider, liveCopy, updateTask } =
-    settings.value;
+  const {
+    port,
+    contextDir,
+    contextRemote,
+    dataDir,
+    webDir,
+    claudeProvider,
+    fakeProvider,
+    liveCopy,
+    updateTask,
+  } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
   // Claude first, so it's the default model wherever it's available.
@@ -75,6 +112,8 @@ export const createWorker = (options: {
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
   });
+  const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
+  (options.repeat ?? repeatForever)(KEEP_UP_EVERY_MS, contextFolder.keepUp);
 
   const api = new Hono();
   api.use(
@@ -91,6 +130,7 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
 
+  api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));
   api.post("/live/update", async (c) => {
     const started = await live.update();
@@ -113,14 +153,28 @@ export const createWorker = (options: {
   api.post("/workspaces", async (c) => {
     const body = await readBody(c, NewWorkspace);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const workspace = await createWorkspace(contextDir, body.value.name);
+    const workspace = await contextFolder.change(
+      () => createWorkspace(contextDir, body.value.name),
+      (made) => ({
+        kind: "workspace",
+        title: `New workspace: ${made.name}`,
+        places: [{ workspace: made.id }],
+      }),
+    );
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary, 201);
   });
   api.patch("/workspaces/:id", async (c) => {
     const body = await readBody(c, WorkspaceChange);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const workspace = await changeWorkspace(contextDir, { id: c.req.param("id"), ...body.value });
+    const workspace = await contextFolder.change(
+      () => changeWorkspace(contextDir, { id: c.req.param("id"), ...body.value }),
+      (made) => ({
+        kind: "workspace",
+        title: `Change the workspace ${made.name}`,
+        places: [{ workspace: made.id }],
+      }),
+    );
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary);
   });
@@ -137,7 +191,14 @@ export const createWorker = (options: {
           "A turn is running in one of this workspace's sessions. Stop it first, then archive the workspace.",
       });
     }
-    const archived = await archiveWorkspace(contextDir, id.data);
+    const archived = await contextFolder.change(
+      () => archiveWorkspace(contextDir, id.data),
+      () => ({
+        kind: "workspace",
+        title: `Archive the workspace ${id.data}`,
+        places: [{ workspace: id.data }],
+      }),
+    );
     if (!archived.ok) return contextError(c, archived.error);
     return c.body(null, 204);
   });
@@ -164,7 +225,14 @@ export const createWorker = (options: {
     return c.json({ ownerContext: read.value?.ownerContext ?? null } satisfies OwnerContextDetail);
   });
   api.post("/owner-context", async (c) => {
-    const started = await startOwnerContext(contextDir);
+    const started = await contextFolder.change(
+      () => startOwnerContext(contextDir),
+      () => ({
+        kind: "owner-context",
+        title: "Start the owner context",
+        places: ["owner-context"],
+      }),
+    );
     if (!started.ok) return contextError(c, started.error);
     return c.json({ ownerContext: started.value.ownerContext } satisfies OwnerContextDetail, 201);
   });

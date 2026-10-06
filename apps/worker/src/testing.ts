@@ -13,6 +13,8 @@ export const testWorker = (
 ) => {
   const { root, env, ...rest } = options;
   const worker = createWorker({
+    // Nothing runs in the background unless a test asks for the job.
+    repeat: () => {},
     ...rest,
     env: {
       COURTYARD_CONTEXT_DIR: join(root, "context"),

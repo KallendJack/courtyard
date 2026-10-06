@@ -9,7 +9,8 @@ import type { WorkspaceError } from "../workspaces/index.ts";
 export type OwnerContextError = Extract<WorkspaceError, { kind: "conflict" | "storage" }>;
 
 /** The owner context lives at the top of the context folder, outside every workspace (ADR 0010). */
-const ownerFile = (contextDir: string) => join(contextDir, "OWNER.md");
+export const OWNER_FILE = "OWNER.md";
+const ownerFile = (contextDir: string) => join(contextDir, OWNER_FILE);
 
 /** The owner context, or `null` when the owner hasn't started one. */
 export const readOwnerContext = async (
