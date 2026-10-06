@@ -6,9 +6,15 @@ import { readTextFile } from "../files.ts";
 import { gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
-/** How often the worker asks the live copy's remote whether main has moved on. */
-const CHECK_EVERY_MS = 3 * 60 * 60 * 1000;
-/** After the remote couldn't be reached, how soon to ask again. */
+/**
+ * How long an answer from the live copy's remote is reused. The worker only asks when a page asks
+ * for the live status, so a merge shows the next time the home page opens after this.
+ */
+const ANSWER_REUSED_FOR_MS = 60 * 1000;
+/**
+ * After the remote couldn't be reached, how soon to ask again: longer than an answer is reused,
+ * so a worker that's offline doesn't try a fetch every time the home page opens.
+ */
 const RECHECK_AFTER_FAILURE_MS = 5 * 60 * 1000;
 /**
  * An update still "running" after this long ended without saying how it went. Longer than the
@@ -80,7 +86,7 @@ export const createLive = (options: {
   };
 
   /**
-   * Main's newest commit, asking the remote at most every few hours, or again in a few minutes
+   * Main's newest commit, asking the remote at most once a minute, or again in a few minutes
    * when it couldn't be reached. Pages loading at once share one question.
    */
   const newestOnMain = () => {
@@ -90,7 +96,7 @@ export const createLive = (options: {
       check = { newest, until: asked + RECHECK_AFTER_FAILURE_MS };
       void newest.then((commit) => {
         if (commit !== undefined && check?.newest === newest) {
-          check = { newest, until: asked + CHECK_EVERY_MS };
+          check = { newest, until: asked + ANSWER_REUSED_FOR_MS };
         }
       });
     }

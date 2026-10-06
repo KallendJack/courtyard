@@ -188,6 +188,29 @@ test("opens offline and says the worker can't be reached", async ({ page, contex
   await expect(page.getByRole("heading", { name: "Worker offline" })).toBeVisible();
 });
 
+test("the home page shows straight away, and offers the update once the worker has asked", async ({
+  page,
+}) => {
+  // The live status held back, as if the worker were still asking GitHub whether main moved on.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/live", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/");
+  const updates = page.getByRole("region", { name: "Updates" });
+
+  await expect(page.getByRole("heading", { level: 1, name: "Workspaces" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Garage gym" }).first()).toBeVisible();
+  await expect(updates).toHaveCount(0);
+
+  release();
+  await expect(updates).toContainText("A new version is ready");
+});
+
 test("the owner updates the live app from the app, and sees how it went", async ({ page }) => {
   await page.goto("/");
   const updates = page.getByRole("region", { name: "Updates" });
