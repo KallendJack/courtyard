@@ -1,15 +1,27 @@
 import type { ContextBackup } from "@courtyard/contract";
+import { useEffect, useState } from "react";
 import { InfoBox, Notice } from "@/components/notice";
 import { describeWhen } from "./when.ts";
-import type { FromWorker } from "./worker.ts";
+import { loadBackup } from "./worker.ts";
 
 /**
- * Whether the context folder's backup has every change (ADR 0014), on the home page. Nothing at
- * all while it's up to date, or when the worker couldn't say.
+ * Whether the context folder's backup has every change (ADR 0014), on the home page. Asked for
+ * once the page is showing, since the worker may be partway through a push: the page never waits
+ * for the backup. Nothing at all while it's up to date, or when the worker couldn't say.
  */
-export function BackupStatus(props: { result: FromWorker<ContextBackup> }) {
-  if (props.result.kind !== "loaded") return null;
-  const backup = props.result.data;
+export function BackupStatus() {
+  const [backup, setBackup] = useState<ContextBackup>();
+  useEffect(() => {
+    let current = true;
+    void loadBackup().then((result) => {
+      if (current && result.kind === "loaded") setBackup(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  if (backup === undefined) return null;
   switch (backup.kind) {
     case "up-to-date":
       return null;

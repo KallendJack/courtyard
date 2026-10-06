@@ -55,13 +55,19 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
   await expect(switcher.getByRole("link", { name })).toBeVisible();
 
-  // Its colour can change, and the change stays.
+  // Its colour can change, and the change stays. A colour it hasn't got, so the test can't pass
+  // by doing nothing, chosen by clicking its dot as a person would: the radio itself is hidden.
   await page.getByRole("button", { name: "Change colour" }).click();
-  await page.getByRole("radio", { name: "Moss" }).check();
+  const colours = page.getByRole("group", { name: "Colour" });
+  const other = colours.getByRole("radio", { checked: false }).first();
+  const colour = await other.getAttribute("value");
+  // Each dot's tooltip is its colour's name, the same as its radio's.
+  await colours.getByTitle((await other.getAttribute("aria-label")) ?? "", { exact: true }).click();
+  await expect(colours).toBeHidden();
   await page.reload();
   await expect(
     switcher.getByRole("link", { name }).locator("[data-workspace-colour]"),
-  ).toHaveAttribute("data-workspace-colour", "moss");
+  ).toHaveAttribute("data-workspace-colour", colour ?? "");
 });
 
 test("a name another workspace has gets a clear message", async ({ page }) => {

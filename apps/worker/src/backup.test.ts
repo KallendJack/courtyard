@@ -1,17 +1,9 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { ContextBackup } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, postJson, type Requester, testWorker } from "./testing.ts";
-
-const run = promisify(execFile);
-
-/** Git in `folder`, for looking at what the worker did. */
-const gitIn = async (folder: string, ...args: string[]) =>
-  (await run("git", args, { cwd: folder })).stdout.trim();
+import { asOwner, gitIn, postJson, type Requester, testWorker } from "./testing.ts";
 
 /** The context folder's commits, newest first: each one's title and trailers. */
 const changes = async () => {
@@ -71,6 +63,31 @@ describe("the context folder's repository", () => {
     expect(await gitIn(contextDir, "log", "--format=%s%n%b")).toContain("Courtyard-Change: setup");
     expect(await gitIn(contextDir, "ls-files")).toBe("garage-gym/CONTEXT.md");
     expect(await gitIn(contextDir, "log", "-1", "--format=%an")).toBe("Courtyard");
+  });
+
+  it("keeps the history of a folder that's already a repository", async () => {
+    await gitIn(root, "init", "--quiet", contextDir);
+    await writeFile(join(contextDir, "OWNER.md"), "# Owner context\n");
+    await gitIn(contextDir, "add", "--all");
+    await gitIn(contextDir, "commit", "-qm", "Mine");
+    await startWorker();
+
+    await keepUp();
+    await keepUp();
+
+    expect((await changes()).map((change) => change.title)).toEqual(["Mine"]);
+  });
+
+  it("starts a repository with no commits yet from what's there", async () => {
+    await gitIn(root, "init", "--quiet", contextDir);
+    await writeFile(join(contextDir, "OWNER.md"), "# Owner context\n");
+    await startWorker();
+
+    await keepUp();
+
+    expect(await changes()).toEqual([
+      { title: "Start keeping the context folder in git", trailers: ["Courtyard-Change: setup"] },
+    ]);
   });
 
   it("gets one change for each change made in the app, saying what and where", async () => {
@@ -173,7 +190,7 @@ describe("the backup", () => {
 
   it("gets each change pushed to it", async () => {
     const remote = join(root, "backup.git");
-    await run("git", ["init", "--quiet", "--bare", remote]);
+    await gitIn(root, "init", "--quiet", "--bare", remote);
     await startWorker({ COURTYARD_CONTEXT_REMOTE: remote });
 
     await postJson(request, "/api/workspaces", { name: "Garage gym" });
@@ -199,7 +216,7 @@ describe("the backup", () => {
     );
     expect((await changes()).map((change) => change.title)).toContain("New workspace: Bike shed");
 
-    await run("git", ["init", "--quiet", "--bare", remote]);
+    await gitIn(root, "init", "--quiet", "--bare", remote);
     await keepUp();
 
     expect(await backup()).toEqual({ kind: "up-to-date" });
@@ -209,6 +226,43 @@ describe("the backup", () => {
         "New workspace: Garage gym",
         "Start keeping the context folder in git",
       ].join("\n"),
+    );
+  });
+
+  it("gets everything it missed with the next change", async () => {
+    const remote = join(root, "backup.git");
+    await startWorker({ COURTYARD_CONTEXT_REMOTE: remote });
+    await postJson(request, "/api/workspaces", { name: "Garage gym" });
+    await gitIn(root, "init", "--quiet", "--bare", remote);
+
+    await postJson(request, "/api/workspaces", { name: "Bike shed" });
+
+    expect(await backup()).toEqual({ kind: "up-to-date" });
+    expect(await gitIn(remote, "log", "--format=%s", "main")).toContain(
+      "New workspace: Garage gym",
+    );
+  });
+
+  it("starts again from nothing when the setting moves it somewhere new", async () => {
+    const first = join(root, "first.git");
+    await gitIn(root, "init", "--quiet", "--bare", first);
+    await startWorker({ COURTYARD_CONTEXT_REMOTE: first });
+    await postJson(request, "/api/workspaces", { name: "Garage gym" });
+    expect(await backup()).toEqual({ kind: "up-to-date" });
+
+    const second = join(root, "second.git");
+    await gitIn(root, "init", "--quiet", "--bare", second);
+    // A restart with the new setting (and a fresh data folder, so the owner is set up again).
+    await startWorker({
+      COURTYARD_CONTEXT_REMOTE: second,
+      COURTYARD_DATA_DIR: join(root, "data2"),
+    });
+    expect(await backup()).toMatchObject({ kind: "behind" });
+    await keepUp();
+
+    expect(await backup()).toEqual({ kind: "up-to-date" });
+    expect(await gitIn(second, "log", "-1", "--format=%s", "main")).toBe(
+      "New workspace: Garage gym",
     );
   });
 });

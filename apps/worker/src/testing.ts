@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { ApiError, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
+import { git } from "./git.ts";
 import { createFakeProvider } from "./providers/index.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -25,6 +26,10 @@ export const testWorker = (
   if (!worker.ok) throw new Error(worker.error);
   return worker.value.app;
 };
+
+/** For tests: git in `folder`, as a test person, for setting things up and looking at them. */
+export const gitIn = (folder: string, ...args: string[]) =>
+  git(folder, args, { config: ["user.name=Test", "user.email=test@example.com"] });
 
 /** For tests: the message an error answer carries. */
 export const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;

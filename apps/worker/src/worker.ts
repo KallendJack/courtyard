@@ -15,7 +15,7 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { createContextFolder } from "./context-folder/index.ts";
+import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
@@ -155,11 +155,7 @@ export const createWorker = (options: {
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const workspace = await contextFolder.change(
       () => createWorkspace(contextDir, body.value.name),
-      (made) => ({
-        kind: "workspace",
-        title: `New workspace: ${made.name}`,
-        places: [{ workspace: made.id }],
-      }),
+      (made) => workspaceChange(`New workspace: ${made.name}`, made.id),
     );
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary, 201);
@@ -169,11 +165,7 @@ export const createWorker = (options: {
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const workspace = await contextFolder.change(
       () => changeWorkspace(contextDir, { id: c.req.param("id"), ...body.value }),
-      (made) => ({
-        kind: "workspace",
-        title: `Change the workspace ${made.name}`,
-        places: [{ workspace: made.id }],
-      }),
+      (made) => workspaceChange(`Change the workspace ${made.name}`, made.id),
     );
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary);
@@ -193,11 +185,7 @@ export const createWorker = (options: {
     }
     const archived = await contextFolder.change(
       () => archiveWorkspace(contextDir, id.data),
-      () => ({
-        kind: "workspace",
-        title: `Archive the workspace ${id.data}`,
-        places: [{ workspace: id.data }],
-      }),
+      () => workspaceChange(`Archive the workspace ${id.data}`, id.data),
     );
     if (!archived.ok) return contextError(c, archived.error);
     return c.body(null, 204);
@@ -230,7 +218,7 @@ export const createWorker = (options: {
       () => ({
         kind: "owner-context",
         title: "Start the owner context",
-        places: ["owner-context"],
+        places: [{ kind: "owner-context" }],
       }),
     );
     if (!started.ok) return contextError(c, started.error);

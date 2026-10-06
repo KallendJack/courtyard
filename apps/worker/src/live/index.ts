@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { type LiveStatus, LiveUpdateResult, type LiveVersion } from "@courtyard/contract";
 import { readTextFile } from "../files.ts";
+import { gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /** How often the worker asks the live copy's remote whether main has moved on. */
@@ -42,17 +43,6 @@ export const runUpdateTask = async (command: UpdateCommand) => {
   await run("schtasks.exe", ["/run", "/tn", command.task], { windowsHide: true });
 };
 
-/** Runs git in the live copy, returning what it prints, or nothing if it fails. */
-const gitIn =
-  (folder: string) =>
-  async (...args: string[]): Promise<string | undefined> => {
-    try {
-      return (await run("git", args, { cwd: folder })).stdout.trim();
-    } catch {
-      return undefined;
-    }
-  };
-
 /** Updating the live copy from the app, or "off" when this worker isn't running from one. */
 export const createLive = (options: {
   /** The live copy this worker runs from, if it does. */
@@ -71,7 +61,7 @@ export const createLive = (options: {
     };
   }
 
-  const git = gitIn(liveCopy);
+  const git = (...args: string[]) => gitOrNothing(liveCopy, args);
   const resultFile = join(dataDir, "live-update.json");
   /** The last answer from the remote, and when to ask again. */
   let check: { readonly newest: Promise<string | undefined>; readonly until: number } | undefined;

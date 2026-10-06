@@ -8,25 +8,21 @@ import { BackupStatus } from "../../backup-status.tsx";
 import { LiveUpdate } from "../../live-update.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
 import { OwnerContextPanel } from "../../owner-context-panel.tsx";
-import { loadBackup, loadLive, loadOwnerContext } from "../../worker.ts";
+import { loadLive, loadOwnerContext } from "../../worker.ts";
 
 const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/")({
   loader: async () => {
-    const [ownerContext, live, backup] = await Promise.all([
-      loadOwnerContext(),
-      loadLive(),
-      loadBackup(),
-    ]);
-    return { ownerContext, live, backup };
+    const [ownerContext, live] = await Promise.all([loadOwnerContext(), loadLive()]);
+    return { ownerContext, live };
   },
   component: Home,
 });
 
 function Home() {
   const workspaces = loggedIn.useLoaderData();
-  const { ownerContext, live, backup } = Route.useLoaderData();
+  const { ownerContext, live } = Route.useLoaderData();
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
 
@@ -34,7 +30,7 @@ function Home() {
     <Page>
       <PageTitle>Workspaces</PageTitle>
       <LiveUpdate result={live} />
-      <BackupStatus result={backup} />
+      <BackupStatus />
       <OwnerContextPanel result={ownerContext} />
       {list.length === 0 ? (
         <EmptyState>
