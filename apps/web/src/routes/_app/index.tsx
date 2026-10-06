@@ -4,26 +4,31 @@ import { EmptyState } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle } from "@/components/page";
 import { WorkspaceDot } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
+import { LiveUpdate } from "../../live-update.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
 import { OwnerContextPanel } from "../../owner-context-panel.tsx";
-import { loadOwnerContext } from "../../worker.ts";
+import { loadLive, loadOwnerContext } from "../../worker.ts";
 
 const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/")({
-  loader: loadOwnerContext,
+  loader: async () => {
+    const [ownerContext, live] = await Promise.all([loadOwnerContext(), loadLive()]);
+    return { ownerContext, live };
+  },
   component: Home,
 });
 
 function Home() {
   const workspaces = loggedIn.useLoaderData();
-  const ownerContext = Route.useLoaderData();
+  const { ownerContext, live } = Route.useLoaderData();
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
 
   return (
     <Page>
       <PageTitle>Workspaces</PageTitle>
+      <LiveUpdate result={live} />
       <OwnerContextPanel result={ownerContext} />
       {list.length === 0 ? (
         <EmptyState>

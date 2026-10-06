@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Health,
+  type LiveStatus,
   NewWorkspace,
   type OwnerContextDetail,
   WorkspaceChange,
@@ -13,6 +14,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { apiError, readBody } from "./http.ts";
+import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
@@ -30,7 +32,7 @@ import {
   type WorkspaceError,
 } from "./workspaces/index.ts";
 
-export type { Environment };
+export type { Environment, UpdateCommand };
 
 export type Worker = {
   readonly app: Hono;
@@ -50,10 +52,13 @@ export const createWorker = (options: {
   now?: () => number;
   /** The providers to offer. Tests pass their own; otherwise the settings decide. */
   providers?: readonly Provider[];
+  /** Starts an update of the live copy. Tests watch it; otherwise Task Scheduler runs it. */
+  startUpdate?: (command: UpdateCommand) => void | Promise<void>;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
-  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider } = settings.value;
+  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider, liveCopy } =
+    settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
   // Claude first, so it's the default model wherever it's available.
@@ -62,6 +67,12 @@ export const createWorker = (options: {
     ...(fakeProvider ? [createFakeProvider()] : []),
   ];
   const sessions = createSessions({ dataDir, providers, contextDir, now });
+  const live = createLive({
+    liveCopy,
+    dataDir,
+    now,
+    startUpdate: options.startUpdate ?? runUpdateTask,
+  });
 
   const api = new Hono();
   api.use(
@@ -77,6 +88,20 @@ export const createWorker = (options: {
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
+
+  api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));
+  api.post("/live/update", async (c) => {
+    const started = await live.update();
+    if (started.ok) return c.body(null, 202);
+    switch (started.error.kind) {
+      case "off":
+        return apiError(c, { status: 404, error: "Updates from the app are off on this worker." });
+      case "running":
+        return apiError(c, { status: 409, error: "An update is already running." });
+      case "storage":
+        return apiError(c, { status: 500, error: started.error.message });
+    }
+  });
 
   /** An error reading or changing the context folder, as an answer. */
   const contextError = (c: Context, error: WorkspaceError) => {

@@ -9,6 +9,13 @@ function Resolve-TaskName([string]$Name) {
   return "Courtyard worker"
 }
 
+# The scheduled task that runs update.ps1 when the app asks: "Courtyard update" next to the real
+# worker's task, which is the name the worker asks for.
+function Get-UpdateTaskName([string]$WorkerTask) {
+  if ($WorkerTask -eq (Resolve-TaskName "")) { return "Courtyard update" }
+  return "$WorkerTask update"
+}
+
 # The live copy: the clone of main these scripts sit in.
 function Get-LiveRoot {
   return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

@@ -1,5 +1,6 @@
 import {
   ApiError,
+  LiveStatus,
   type NewMessage,
   type NewWorkspace,
   OwnerContextDetail,
@@ -97,6 +98,13 @@ export const loadProviders = () => fromWorker("/providers", ProviderList);
 /** Adds a workspace: its folder, a starter context file and a colour. */
 export const addWorkspace = (workspace: NewWorkspace) =>
   sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
+
+/** Whether this worker can update itself from the app, and what's newer. */
+export const loadLive = () => fromWorker("/live", LiveStatus);
+
+/** Starts updating the live copy; the worker restarts partway through. */
+export const startLiveUpdate = () =>
+  sendJson({ path: "/live/update", body: {}, schema: z.unknown() });
 
 /** The owner context, or `null` when there isn't one yet. */
 export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextDetail);

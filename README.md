@@ -86,7 +86,8 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
    ```
 
 2. **Write its settings:** copy `.env.example` to `.env` in the live copy and fill it in. Keep
-   your context and data folders outside the live copy.
+   your context and data folders outside the live copy, and set `COURTYARD_LIVE_COPY` to the
+   live copy's own folder, which turns on updating from the app.
 3. **Set it to start by itself.** This needs no administrator window:
 
    ```powershell
@@ -96,9 +97,11 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
    It registers a task named "Courtyard worker" that runs the worker as you, with no window,
    whenever you log on, and starts it now. It runs as you so it can use your Claude Code login.
    If the worker stops, it starts again by itself. Its output goes to `worker.log` in the data
-   folder (the previous one is kept as `worker.log.old`).
+   folder (the previous one is kept as `worker.log.old`). A second task, "Courtyard update", has
+   no trigger: the app runs it when you press Update.
 
-**To update** to the newest `main`:
+**To update** to the newest `main`, press **Update** on the home page when it says a new version
+is ready (it checks every few hours), or run:
 
 ```powershell
 & <live copy>\scripts\live\update.ps1
@@ -113,7 +116,8 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
 - **If any step fails,** it puts the previous version back and starts that instead.
 - **Only one update runs at a time.** If something other than the worker answers on its port,
   the update stops without changing anything.
-- **The result** is written to `live-update.json` in the data folder.
+- **The result** is written to `live-update.json` in the data folder, and the home page shows it.
+  From the button, the update's output goes to `live-update.log` there too.
 
 ## Claude
 

@@ -47,6 +47,10 @@ const Env = z.object({
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
+  COURTYARD_LIVE_COPY: z.preprocess(
+    unsetIfEmpty,
+    z.string().refine(isFolder, "must be an existing folder").optional(),
+  ),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -62,6 +66,11 @@ export type Settings = {
   readonly claudeProvider: boolean;
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
+  /**
+   * The live copy this worker runs from (ADR 0011), which the owner can update from the app.
+   * `null` everywhere else, so development and tests never update themselves.
+   */
+  readonly liveCopy: string | null;
 };
 
 /**
@@ -83,5 +92,9 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
     claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER === "1",
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER === "1",
+    liveCopy:
+      parsed.data.COURTYARD_LIVE_COPY === undefined
+        ? null
+        : resolve(parsed.data.COURTYARD_LIVE_COPY),
   });
 };

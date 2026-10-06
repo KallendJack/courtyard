@@ -187,3 +187,16 @@ test("opens offline and says the worker can't be reached", async ({ page, contex
   // The app itself opens, and says the worker can't be reached, rather than a browser error.
   await expect(page.getByRole("heading", { name: "Worker offline" })).toBeVisible();
 });
+
+test("the owner updates the live app from the app, and sees how it went", async ({ page }) => {
+  await page.goto("/");
+  const updates = page.getByRole("region", { name: "Updates" });
+
+  await expect(updates).toContainText("A new version is ready");
+  await expect(updates).toContainText("A newer version");
+  await updates.getByRole("button", { name: "Update" }).click();
+
+  await expect(updates).toContainText("Updating");
+  await expect(updates).toContainText("Updated to", { timeout: 15_000 });
+  await expect(updates.getByRole("button", { name: "Reload" })).toBeVisible();
+});
