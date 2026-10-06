@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, WorkspaceDetail, WorkspaceList, WorkspaceSummary } from "@courtyard/contract";
@@ -271,12 +271,16 @@ const added = async (name: string) => {
   return WorkspaceSummary.parse(await response.json());
 };
 
-const changeColour = (id: string, colour: unknown) =>
+const changeWorkspace = (id: string, change: unknown) =>
   request(`/api/workspaces/${id}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ colour }),
+    body: JSON.stringify(change),
   });
+
+const changeColour = (id: string, colour: unknown) => changeWorkspace(id, { colour });
+const renameWorkspace = (id: string, name: unknown) => changeWorkspace(id, { name });
+const archive = (id: string) => postJson(request, `/api/workspaces/${id}/archive`, {});
 
 const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
 
@@ -422,5 +426,116 @@ describe("changing a workspace's colour", () => {
     expect(response.status).toBe(409);
     expect(await errorOf(response)).toContain("workspace.json");
     expect(await readFile(join(contextDir, "office", "workspace.json"), "utf8")).toBe("{ not json");
+  });
+});
+
+describe("renaming a workspace", () => {
+  it("keeps the new name in its config, alongside the rest, and leaves its folder alone", async () => {
+    await workspace("side-project", {
+      "CONTEXT.md": "# Side project\n",
+      "workspace.json": '{ "mode": "code", "repoPath": "/path/to/repo", "colour": "moss" }',
+    });
+
+    const response = await renameWorkspace("side-project", "  Courtyard  ");
+
+    expect(response.status).toBe(200);
+    expect(WorkspaceSummary.parse(await response.json())).toMatchObject({
+      id: "side-project",
+      name: "Courtyard",
+    });
+    const config = JSON.parse(
+      await readFile(join(contextDir, "side-project", "workspace.json"), "utf8"),
+    );
+    expect(config).toEqual({
+      mode: "code",
+      repoPath: "/path/to/repo",
+      colour: "moss",
+      name: "Courtyard",
+    });
+    expect((await listWorkspaces()).map((w) => [w.id, w.name, w.colour])).toEqual([
+      ["side-project", "Courtyard", "moss"],
+    ]);
+  });
+
+  it("refuses a name another workspace has, but not a new spelling of its own", async () => {
+    await workspace("garage-gym", { "CONTEXT.md": "# Garage gym\n" });
+    await workspace("office");
+
+    const clash = await renameWorkspace("office", "garage GYM");
+    const ownName = await renameWorkspace("garage-gym", "Garage Gym");
+
+    expect(clash.status).toBe(409);
+    expect(await errorOf(clash)).toContain("already a workspace called Garage gym");
+    expect(ownName.status).toBe(200);
+    expect((await listWorkspaces()).map((w) => w.name)).toEqual(["Garage Gym", "office"]);
+  });
+
+  it("refuses an empty or overlong name, and a workspace that doesn't exist", async () => {
+    await workspace("office");
+
+    for (const name of ["", "   ", "x".repeat(61), 42]) {
+      expect((await renameWorkspace("office", name)).status, String(name)).toBe(400);
+    }
+    expect((await changeWorkspace("office", {})).status).toBe(400);
+    expect((await renameWorkspace("nope", "Studio")).status).toBe(404);
+  });
+
+  it("won't overwrite a config it had to ignore", async () => {
+    await workspace("office", { "workspace.json": "{ not json" });
+
+    const response = await renameWorkspace("office", "Studio");
+
+    expect(response.status).toBe(409);
+    expect(await readFile(join(contextDir, "office", "workspace.json"), "utf8")).toBe("{ not json");
+  });
+});
+
+describe("archiving a workspace", () => {
+  it("takes it out of the list and moves its folder, files and all, to the archived folder", async () => {
+    await workspace("garage-gym", { "CONTEXT.md": "# Garage gym\n" });
+    await workspace("office");
+
+    const response = await archive("garage-gym");
+
+    expect(response.status).toBe(204);
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual(["office"]);
+    expect(await readdir(join(contextDir, "archived"))).toEqual(["garage-gym"]);
+    expect(await readFile(join(contextDir, "archived", "garage-gym", "CONTEXT.md"), "utf8")).toBe(
+      "# Garage gym\n",
+    );
+  });
+
+  it("says a workspace is archived when it's opened, and comes back when its folder is moved back", async () => {
+    await workspace("garage-gym", { "CONTEXT.md": "# Garage gym\n" });
+    await archive("garage-gym");
+
+    const opened = await request("/api/workspaces/garage-gym");
+
+    expect(opened.status).toBe(410);
+    expect(await errorOf(opened)).toContain("archived");
+    await rename(join(contextDir, "archived", "garage-gym"), join(contextDir, "garage-gym"));
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual(["garage-gym"]);
+  });
+
+  it("refuses a new workspace whose folder an archived one has, saying how to bring it back", async () => {
+    await workspace("garage-gym");
+    await archive("garage-gym");
+
+    const response = await addWorkspace("Garage gym");
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toContain("archived");
+  });
+
+  it("never lists the archived folder as a workspace, or lets one be called that", async () => {
+    await mkdir(join(contextDir, "archived"));
+
+    expect(await listWorkspaces()).toEqual([]);
+    expect((await addWorkspace("Archived")).status).toBe(400);
+    expect((await archive("archived")).status).toBe(404);
+  });
+
+  it("answers 404 for a workspace that doesn't exist", async () => {
+    expect((await archive("nope")).status).toBe(404);
   });
 });

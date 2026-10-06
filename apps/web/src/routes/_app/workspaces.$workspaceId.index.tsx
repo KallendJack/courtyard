@@ -3,17 +3,28 @@ import {
   type ContextFile,
   SessionList,
   type SessionSummary,
+  WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceDetail,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { Archive, Pencil } from "lucide-react";
+import { useState } from "react";
+import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
-import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
+import { LIST_ROW, Page, PageTitle, SectionTitle, TitleAction } from "@/components/page";
+import { RenameForm } from "@/components/rename-form";
 import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { describeWhen } from "../../when.ts";
-import { changeWorkspace, fromWorker, loadProviders, startSession } from "../../worker.ts";
+import {
+  archiveWorkspace,
+  changeWorkspace,
+  fromWorker,
+  loadProviders,
+  startSession,
+} from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
@@ -32,6 +43,8 @@ function Workspace() {
   const { detail, sessions, providers } = Route.useLoaderData();
   const navigate = useNavigate();
   const router = useRouter();
+  /** What the owner is doing to the workspace itself, if anything. */
+  const [tidying, setTidying] = useState<"rename" | "archive">();
 
   if (detail.kind === "not-found") {
     return (
@@ -46,27 +59,77 @@ function Workspace() {
   if (detail.kind !== "loaded") return <Problem result={detail} />;
   const { workspace, contextFile, ownerContextShared } = detail.data;
 
+  const change = async (wanted: { name: string } | { colour: typeof workspace.colour }) => {
+    const changed = await changeWorkspace(workspace.id, wanted);
+    if (changed.kind !== "loaded") return describeProblem(changed).body;
+    // Every list of workspaces shows the change.
+    await router.invalidate();
+    return undefined;
+  };
+  const above = (
+    <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
+      <ColourChooser colour={workspace.colour} choose={(colour) => change({ colour })} />
+      {workspace.mode === "code" ? "Code workspace" : "Workspace"}
+    </span>
+  );
+  const toggle = (what: "rename" | "archive") =>
+    setTidying((was) => (was === what ? undefined : what));
+
   return (
     <Page>
-      <PageTitle
-        above={
-          <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
-            <ColourChooser
-              colour={workspace.colour}
-              choose={async (colour) => {
-                const changed = await changeWorkspace(workspace.id, { colour });
-                if (changed.kind !== "loaded") return describeProblem(changed).body;
-                // Every list of workspaces shows the new colour.
-                await router.invalidate();
-                return undefined;
-              }}
-            />
-            {workspace.mode === "code" ? "Code workspace" : "Workspace"}
-          </span>
-        }
-      >
-        {workspace.name}
-      </PageTitle>
+      {tidying === "rename" ? (
+        <div className="flex flex-col gap-2">
+          {above}
+          <RenameForm
+            label="Workspace name"
+            value={workspace.name}
+            maxLength={WORKSPACE_NAME_MAX_LENGTH}
+            large
+            save={(name) => change({ name })}
+            onDone={() => setTidying(undefined)}
+          />
+        </div>
+      ) : (
+        <PageTitle
+          above={above}
+          actions={
+            <>
+              <TitleAction
+                label="Rename workspace"
+                icon={<Pencil />}
+                onClick={() => toggle("rename")}
+              />
+              <TitleAction
+                label="Archive workspace"
+                icon={<Archive />}
+                expanded={tidying === "archive"}
+                onClick={() => toggle("archive")}
+              />
+            </>
+          }
+        >
+          {workspace.name}
+        </PageTitle>
+      )}
+      {tidying === "archive" && (
+        <ConfirmStep
+          question={`Archive ${workspace.name}?`}
+          confirmLabel="Archive workspace"
+          onCancel={() => setTidying(undefined)}
+          confirm={async () => {
+            const archived = await archiveWorkspace(workspace.id);
+            if (archived.kind !== "loaded") return describeProblem(archived).body;
+            // Away first, so this page doesn't reload its now-archived workspace.
+            await navigate({ to: "/" });
+            await router.invalidate();
+            return undefined;
+          }}
+        >
+          It leaves every list, and its folder moves to the <code>archived</code> folder in your
+          context folder, so nothing in it is lost. Its sessions are kept, to read but not carry on.
+          Move the folder back to bring it back.
+        </ConfirmStep>
+      )}
       {contextFile !== null && contextFile.intro !== "" && (
         // One line, as a reminder; the whole file is further down.
         <p className="mt-2 line-clamp-1 text-[15px]/[23px] text-muted-foreground">

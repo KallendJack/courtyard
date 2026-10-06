@@ -31,18 +31,23 @@ export type WorkspaceList = z.infer<typeof WorkspaceList>;
 /** The longest name a new workspace can have. */
 export const WORKSPACE_NAME_MAX_LENGTH = 60;
 
+/** A workspace's name, as the owner gives it in the app. */
+const WorkspaceName = z
+  .string()
+  .trim()
+  .min(1, "Give the workspace a name.")
+  .max(WORKSPACE_NAME_MAX_LENGTH, `Keep the name to ${WORKSPACE_NAME_MAX_LENGTH} characters.`);
+
 /** Adding a workspace from the app. Its folder name comes from its name. */
-export const NewWorkspace = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Give the workspace a name.")
-    .max(WORKSPACE_NAME_MAX_LENGTH, `Keep the name to ${WORKSPACE_NAME_MAX_LENGTH} characters.`),
-});
+export const NewWorkspace = z.object({ name: WorkspaceName });
 export type NewWorkspace = z.infer<typeof NewWorkspace>;
 
-/** Changing a workspace from the app. */
-export const WorkspaceChange = z.object({ colour: WorkspaceColour });
+/** Changing a workspace from the app: its name, its colour, or both. Its folder stays as it is. */
+export const WorkspaceChange = z
+  .object({ name: WorkspaceName.optional(), colour: WorkspaceColour.optional() })
+  .refine((change) => change.name !== undefined || change.colour !== undefined, {
+    message: "Say what to change.",
+  });
 export type WorkspaceChange = z.infer<typeof WorkspaceChange>;
 
 /**

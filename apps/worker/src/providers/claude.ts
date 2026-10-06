@@ -97,6 +97,12 @@ const realClaudeCode: ClaudeCode = {
   run: ({ prompt, options }) => query({ prompt, options }),
 };
 
+const ClaudeModel = z.object({
+  value: z.string(),
+  displayName: z.string(),
+  description: z.string().catch(""),
+});
+
 const CheckAnswer = z.object({
   account: z.object({
     email: z.string().optional(),
@@ -104,8 +110,20 @@ const CheckAnswer = z.object({
     tokenSource: z.string().optional(),
     apiKeySource: z.string().optional(),
   }),
-  models: z.array(z.object({ value: z.string(), displayName: z.string() })),
+  models: z.array(ClaudeModel),
 });
+
+/**
+ * A model's label in the picker. Claude Code's "Default" doesn't say which model it is, but its
+ * description starts with that model's name ("Opus 5.5 · Best for…"), so the label borrows it.
+ */
+const labelFor = (model: z.infer<typeof ClaudeModel>) => {
+  const [first, ...rest] = model.description.split(" · ");
+  const named = rest.length > 0 ? first?.trim() : undefined;
+  return model.value === "default" && named
+    ? `${LABEL} · Default (${named})`
+    : `${LABEL} · ${model.displayName}`;
+};
 
 const TextDelta = z.object({
   type: z.literal("stream_event"),
@@ -375,7 +393,7 @@ export const createClaudeProvider = (
     const offered = models.flatMap((m) => {
       const modelId = ModelId.safeParse(m.value);
       return modelId.success && !m.value.startsWith("claude-")
-        ? [{ id: modelId.data, label: `Claude · ${m.displayName}` }]
+        ? [{ id: modelId.data, label: labelFor(m) }]
         : [];
     });
     return {

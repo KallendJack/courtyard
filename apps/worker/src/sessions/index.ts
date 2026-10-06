@@ -18,12 +18,15 @@ import { readOwnerContext } from "../owner-context/index.ts";
 import { type FramingWorkspace, framingFor } from "../prompts/index.ts";
 import type { Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { getWorkspace } from "../workspaces/index.ts";
+import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 export type SessionError =
   | { readonly kind: "not-found" }
   | { readonly kind: "busy" }
   | { readonly kind: "nothing-running" }
+  /** A turn is running, so the session can't be deleted until it's stopped. */
+  | { readonly kind: "delete-while-running" }
+  | { readonly kind: "workspace-archived" }
   | { readonly kind: "model-unavailable" }
   | { readonly kind: "storage"; readonly message: string };
 
@@ -66,7 +69,9 @@ type TurnState =
       /** The owner message's event number, once recorded: what a stop request must name. */
       turn: number | undefined;
     }
-  | { readonly kind: "ending" };
+  | { readonly kind: "ending" }
+  /** Its folder is being deleted, so nothing new can start in it. */
+  | { readonly kind: "deleting" };
 
 type RunningSession = {
   turn: TurnState;
@@ -216,11 +221,21 @@ export const createSessions = (options: {
     if (!ended.ok) console.error(`Session ${id}: an interrupted turn couldn't be recorded`);
   };
 
-  const markUpdated = async (id: SessionId) => {
-    const file = await readJsonFile(sessionFilePath(id), SessionFile);
-    if (!file.ok || !file.value) return;
-    await writeJsonFile(sessionFilePath(id), { ...file.value, updatedAt: stamp() });
-  };
+  /**
+   * Changes a session's own file. Runs in the session's queue, so two changes (a turn ending and
+   * the owner renaming it, say) can't each read the file before the other writes it.
+   */
+  const updateFile = (id: SessionId, change: Partial<Pick<SessionFile, "title" | "updatedAt">>) =>
+    inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!file.ok) return err(STORAGE_ERROR);
+      if (!file.value) return err({ kind: "not-found" });
+      const changed = { ...file.value, ...change };
+      const written = await writeJsonFile(sessionFilePath(id), changed);
+      return written.ok ? ok(changed) : err(STORAGE_ERROR);
+    });
+
+  const markUpdated = (id: SessionId) => updateFile(id, { updatedAt: stamp() });
 
   const providerFor = async (ref: ModelRef) => {
     const provider = options.providers.find((p) => p.id === ref.provider);
@@ -343,6 +358,7 @@ export const createSessions = (options: {
     message: NewMessage;
   }): Promise<Result<null, SessionError>> => {
     const session = runningSession(start.id);
+    if (session.turn.kind === "deleting") return err({ kind: "not-found" });
     if (session.turn.kind !== "idle") return err({ kind: "busy" });
     // Stoppable from the very start, so a Stop pressed the moment it appears is never lost.
     const starting: TurnState = {
@@ -386,6 +402,29 @@ export const createSessions = (options: {
     return file.value ? ok(file.value) : err({ kind: "not-found" });
   };
 
+  /** A workspace's sessions, most recently active first. */
+  const sessionsOf = async (
+    workspaceId: WorkspaceId,
+  ): Promise<Result<SessionSummary[], SessionError>> => {
+    let folders: string[];
+    try {
+      folders = await readdir(sessionsDir);
+    } catch (error) {
+      return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
+    }
+    const summaries: SessionSummary[] = [];
+    for (const folder of folders) {
+      const id = SessionId.safeParse(folder);
+      if (!id.success) continue;
+      const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
+      if (!file.ok) return err(STORAGE_ERROR);
+      if (file.value?.workspaceId !== workspaceId) continue;
+      await settled(file.value.id);
+      summaries.push(summaryOf(file.value));
+    }
+    return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+  };
+
   return {
     /** Starts a session with the owner's first message, so there are never empty ones. */
     create: async (start: {
@@ -425,6 +464,9 @@ export const createSessions = (options: {
     send: async (rawId: string, message: NewMessage): Promise<Result<null, SessionError>> => {
       const session = await findSession(rawId);
       if (!session.ok) return session;
+      if (await isArchived(options.contextDir, session.value.workspaceId)) {
+        return err({ kind: "workspace-archived" });
+      }
       const provider = await providerFor(message.model);
       if (!provider) return err({ kind: "model-unavailable" });
       return startTurn({
@@ -456,26 +498,44 @@ export const createSessions = (options: {
       return ok(summaryOf(session.value));
     },
 
-    /** A workspace's sessions, most recently active first. */
-    list: async (workspaceId: WorkspaceId): Promise<Result<SessionSummary[], SessionError>> => {
-      let folders: string[];
-      try {
-        folders = await readdir(sessionsDir);
-      } catch (error) {
-        return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
-      }
-      const summaries: SessionSummary[] = [];
-      for (const folder of folders) {
-        const id = SessionId.safeParse(folder);
-        if (!id.success) continue;
-        const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
-        if (!file.ok) return err(STORAGE_ERROR);
-        if (file.value?.workspaceId !== workspaceId) continue;
-        await settled(file.value.id);
-        summaries.push(summaryOf(file.value));
-      }
-      return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    /** Gives a session a new title, kept in its `session.json`. */
+    rename: async (rawId: string, title: string): Promise<Result<SessionSummary, SessionError>> => {
+      const session = await findSession(rawId);
+      if (!session.ok) return session;
+      const renamed = await updateFile(session.value.id, { title });
+      return renamed.ok ? ok(summaryOf(renamed.value)) : renamed;
     },
+
+    /** Deletes a session's folder, event log and all. Refused while a turn is running. */
+    remove: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      // In the session's queue, so nothing is being written to it as its folder goes.
+      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+        if (session.turn.kind !== "idle") return err({ kind: "delete-while-running" });
+        // A message from another device can't start a turn while the folder goes.
+        session.turn = { kind: "deleting" };
+        try {
+          await rm(folderOf(id), { recursive: true, force: true, maxRetries: 5 });
+        } catch {
+          session.turn = { kind: "idle" };
+          return err(STORAGE_ERROR);
+        }
+        running.delete(id);
+        return ok(null);
+      });
+    },
+
+    /** Whether a turn is running in any of a workspace's sessions. */
+    anyRunning: async (workspaceId: WorkspaceId): Promise<Result<boolean, SessionError>> => {
+      const list = await sessionsOf(workspaceId);
+      return list.ok ? ok(list.value.some((session) => session.busy)) : list;
+    },
+
+    /** A workspace's sessions, most recently active first. */
+    list: sessionsOf,
 
     /**
      * Replays a session's events after `after`, then follows it live. Runs in the session's queue,

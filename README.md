@@ -122,6 +122,14 @@ is ready (it checks every few hours), or run:
 - **The result** is written to `live-update.json` in the data folder, and the home page shows it.
   From the button, the update's output goes to `live-update.log` there too.
 
+## Archived workspaces
+
+Archiving a workspace in the app moves its folder into an `archived` folder in your context folder,
+so it leaves every list but nothing in it is lost. Its sessions stay in the data folder, to read
+but not carry on. **To bring one back,** move its folder out of `archived`, back into the context
+folder: it reappears in the app with its sessions. No workspace can be called "archived", and a
+new one can't take an archived one's folder name.
+
 ## Claude
 
 Courtyard talks to Claude through Claude Code on the machine its worker runs on (the Agent SDK),

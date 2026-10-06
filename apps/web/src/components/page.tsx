@@ -19,15 +19,42 @@ export function Page(props: {
   );
 }
 
-/** A page's title, with an optional line above it (a workspace chip, say). */
-export function PageTitle(props: { children: ReactNode; above?: ReactNode }) {
+/**
+ * A page's title, with an optional line above it (a workspace chip, say) and buttons beside it
+ * (rename, say).
+ */
+export function PageTitle(props: { children: ReactNode; above?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
       {props.above}
-      <h1 className="font-display text-[26px]/[31px] font-medium tracking-[-0.02em] wrap-anywhere md:text-[30px]/[36px] xl:text-4xl/[42px]">
-        {props.children}
-      </h1>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="font-display text-[26px]/[31px] font-medium tracking-[-0.02em] wrap-anywhere md:text-[30px]/[36px] xl:text-4xl/[42px]">
+          {props.children}
+        </h1>
+        {props.actions && <div className="flex shrink-0 gap-1 md:pt-1">{props.actions}</div>}
+      </div>
     </div>
+  );
+}
+
+/** A quiet round button beside a page title, named for screen readers by its `label`. */
+export function TitleAction(props: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  expanded?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={props.label}
+      title={props.label}
+      {...(props.expanded === undefined ? {} : { "aria-expanded": props.expanded })}
+      onClick={props.onClick}
+      className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground [&_svg]:size-[18px]"
+    >
+      {props.icon}
+    </button>
   );
 }
 
