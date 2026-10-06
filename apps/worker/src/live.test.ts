@@ -15,7 +15,8 @@ const run = promisify(execFile);
 const git = (cwd: string, ...args: string[]) =>
   run("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { cwd });
 
-const HOURS = 60 * 60 * 1000;
+const SECONDS = 1000;
+const MINUTES = 60 * SECONDS;
 
 let root: string;
 let remote: string;
@@ -137,17 +138,26 @@ describe("what the live copy runs, and whether main is newer", () => {
     if (status.kind === "live") expect(status.newest?.commit).toBe(status.running.commit);
   });
 
-  it("asks the remote at most every few hours", async () => {
+  it("sees a merge the next time a page asks, a couple of minutes later", async () => {
     const request = await workerFor();
     await statusOf(request);
     await merge("A later change");
 
-    const soon = await statusOf(request);
-    now += 3 * HOURS;
+    now += 2 * MINUTES;
     const later = await statusOf(request);
 
-    expect(soon).toMatchObject({ newerOnMain: false });
     expect(later).toMatchObject({ newerOnMain: true });
+  });
+
+  it("asks the remote once for pages asking within the same minute", async () => {
+    const request = await workerFor();
+    await statusOf(request);
+    await merge("A later change");
+
+    now += 30 * SECONDS;
+    const soon = await statusOf(request);
+
+    expect(soon).toMatchObject({ newerOnMain: false });
   });
 
   it("still says what's running when the remote can't be reached", async () => {

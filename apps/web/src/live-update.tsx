@@ -41,16 +41,28 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
 /**
  * Updating the live app from the app (ADR 0011): a quiet notice when main has moved on, Update,
  * then how it went once the worker is back. Nothing at all on a worker that isn't a live copy.
+ * Asked for once the page is showing, since the worker may be asking GitHub whether main has
+ * moved on: the page never waits for that.
  */
-export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
-  const [status, setStatus] = useState(props.result);
-  const [following, setFollowing] = useState<Following>(() => {
-    const live = props.result.kind === "loaded" ? props.result.data : undefined;
-    // Started from another device, or before this page was opened.
-    return live?.kind === "live" && live.lastUpdate?.outcome === "running"
-      ? { kind: "updating", since: null, at: Date.now() }
-      : { kind: "idle" };
-  });
+export function LiveUpdate() {
+  const [status, setStatus] = useState<FromWorker<LiveStatus>>();
+  const [following, setFollowing] = useState<Following>({ kind: "idle" });
+
+  useEffect(() => {
+    let current = true;
+    void loadLive().then((result) => {
+      if (!current) return;
+      setStatus(result);
+      const live = result.kind === "loaded" ? result.data : undefined;
+      // Started from another device, or before this page was opened.
+      if (live?.kind === "live" && live.lastUpdate?.outcome === "running") {
+        setFollowing({ kind: "updating", since: null, at: Date.now() });
+      }
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (following.kind !== "updating") return;
@@ -78,7 +90,7 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
     };
   }, [following]);
 
-  if (status.kind !== "loaded" || status.data.kind !== "live") return null;
+  if (status?.kind !== "loaded" || status.data.kind !== "live") return null;
   const live = status.data;
 
   const update = async () => {

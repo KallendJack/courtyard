@@ -6,8 +6,11 @@ import { readTextFile } from "../files.ts";
 import { gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
-/** How often the worker asks the live copy's remote whether main has moved on. */
-const CHECK_EVERY_MS = 3 * 60 * 60 * 1000;
+/**
+ * How long an answer from the live copy's remote is reused. The worker only asks when a page asks
+ * for the live status, so a merge shows the next time the home page opens after this.
+ */
+const CHECK_EVERY_MS = 60 * 1000;
 /** After the remote couldn't be reached, how soon to ask again. */
 const RECHECK_AFTER_FAILURE_MS = 5 * 60 * 1000;
 /**
@@ -80,7 +83,7 @@ export const createLive = (options: {
   };
 
   /**
-   * Main's newest commit, asking the remote at most every few hours, or again in a few minutes
+   * Main's newest commit, asking the remote at most once a minute, or again in a few minutes
    * when it couldn't be reached. Pages loading at once share one question.
    */
   const newestOnMain = () => {
