@@ -1,8 +1,10 @@
 import { useRouter } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { Button } from "@/components/button";
 import { CourtyardMark } from "@/components/courtyard-mark";
-import { PillButton } from "@/components/pill-button";
-import { Input } from "@/components/ui/input";
+import { FormError } from "@/components/form-error";
+import { TextField } from "@/components/text-field";
+import { useAction } from "@/lib/use-action";
 import { describeProblem } from "./problems.tsx";
 import { sendPassword } from "./worker.ts";
 
@@ -22,28 +24,21 @@ export function PasswordPage(props: {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [repeated, setRepeated] = useState("");
-  const [error, setError] = useState<string>();
-  const [sending, setSending] = useState(false);
-  const passwordId = useId();
-  const repeatedId = useId();
+  const send = useAction(async () => {
+    const result = await sendPassword(props.endpoint, { password });
+    if (result.kind !== "loaded") return describeProblem(result).body;
+    // In: go to the workspaces explicitly rather than waiting for a re-check to redirect.
+    await router.navigate({ to: "/" });
+    return undefined;
+  });
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
     const refusal =
       props.check?.(password) ??
       (props.confirm && password !== repeated ? "The two passwords don't match." : undefined);
-    if (refusal) return setError(refusal);
-
-    setSending(true);
-    const result = await sendPassword(props.endpoint, { password });
-    setSending(false);
-    if (result.kind === "loaded") {
-      setError(undefined);
-      // In: go to the workspaces explicitly rather than waiting for a re-check to redirect.
-      await router.navigate({ to: "/" });
-      return;
-    }
-    setError(describeProblem(result).body);
+    if (refusal) return send.setError(refusal);
+    void send.run();
   };
 
   return (
@@ -55,42 +50,26 @@ export function PasswordPage(props: {
         </h1>
         <div className="mt-2 text-[15px]/[23px] text-muted-foreground">{props.intro}</div>
         <form onSubmit={submit} className="mt-6 space-y-4">
-          <div>
-            <label htmlFor={passwordId} className="text-sm font-medium">
-              Password
-            </label>
-            <Input
-              id={passwordId}
-              type="password"
-              autoComplete={props.autoComplete}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-1.5 h-11 bg-field text-base focus-visible:border-primary focus-visible:ring-accent"
-            />
-          </div>
+          <TextField
+            label="Password"
+            type="password"
+            autoComplete={props.autoComplete}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
           {props.confirm && (
-            <div>
-              <label htmlFor={repeatedId} className="text-sm font-medium">
-                Password again
-              </label>
-              <Input
-                id={repeatedId}
-                type="password"
-                autoComplete="new-password"
-                value={repeated}
-                onChange={(event) => setRepeated(event.target.value)}
-                className="mt-1.5 h-11 bg-field text-base focus-visible:border-primary focus-visible:ring-accent"
-              />
-            </div>
+            <TextField
+              label="Password again"
+              type="password"
+              autoComplete="new-password"
+              value={repeated}
+              onChange={(event) => setRepeated(event.target.value)}
+            />
           )}
-          {error && (
-            <p role="alert" className="text-sm text-destructive-text">
-              {error}
-            </p>
-          )}
-          <PillButton type="submit" disabled={sending} className="h-11 w-full">
+          <FormError message={send.error} />
+          <Button type="submit" size="lg" fullWidth disabled={send.busy}>
             {props.submitLabel}
-          </PillButton>
+          </Button>
         </form>
       </div>
     </main>

@@ -8,9 +8,11 @@ import {
 import { createFileRoute, getRouteApi, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
+import { FormError } from "@/components/form-error";
 import { Notice, StatusPill } from "@/components/notice";
-import { Page, PageTitle, TitleAction } from "@/components/page";
+import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
@@ -117,15 +119,16 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           above={above}
           actions={
             <>
-              <TitleAction
+              <IconButton
                 label="Rename session"
                 icon={<Pencil />}
                 onClick={() => toggle("rename")}
               />
-              <TitleAction
+              <IconButton
                 label="Delete session"
                 icon={<Trash2 />}
                 expanded={tidying === "delete"}
+                active={tidying === "delete"}
                 onClick={() => toggle("delete")}
               />
             </>
@@ -135,22 +138,24 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
         </PageTitle>
       )}
       {tidying === "delete" && (
-        <ConfirmStep
-          question={`Delete “${session.title}”?`}
-          confirmLabel="Delete session"
-          onCancel={() => setTidying(undefined)}
-          confirm={async () => {
-            const deleted = await deleteSession(session.id);
-            if (deleted.kind !== "loaded") return describeProblem(deleted).body;
-            await navigate({
-              to: "/workspaces/$workspaceId",
-              params: { workspaceId: session.workspaceId },
-            });
-            return undefined;
-          }}
-        >
-          Everything it recorded goes from Courtyard's data folder. This can't be undone.
-        </ConfirmStep>
+        <div className="mt-4">
+          <ConfirmStep
+            question={`Delete “${session.title}”?`}
+            confirmLabel="Delete session"
+            onCancel={() => setTidying(undefined)}
+            confirm={async () => {
+              const deleted = await deleteSession(session.id);
+              if (deleted.kind !== "loaded") return describeProblem(deleted).body;
+              await navigate({
+                to: "/workspaces/$workspaceId",
+                params: { workspaceId: session.workspaceId },
+              });
+              return undefined;
+            }}
+          >
+            Everything it recorded goes from Courtyard's data folder. This can't be undone.
+          </ConfirmStep>
+        </div>
       )}
       {session.workspaceArchived && (
         <div className="mt-4">
@@ -177,9 +182,9 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
         <SessionTurns turns={turns} onRetry={retry} />
       )}
       {sendProblem && (
-        <p role="alert" className="mt-3 text-sm text-destructive-text">
-          {sendProblem}
-        </p>
+        <div className="mt-3">
+          <FormError message={sendProblem} />
+        </div>
       )}
 
       <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">

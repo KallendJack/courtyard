@@ -37,27 +37,6 @@ export function PageTitle(props: { children: ReactNode; above?: ReactNode; actio
   );
 }
 
-/** A quiet round button beside a page title, named for screen readers by its `label`. */
-export function TitleAction(props: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-  expanded?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={props.label}
-      title={props.label}
-      {...(props.expanded === undefined ? {} : { "aria-expanded": props.expanded })}
-      onClick={props.onClick}
-      className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground [&_svg]:size-[18px]"
-    >
-      {props.icon}
-    </button>
-  );
-}
-
 /** A section heading inside a page. */
 export function SectionTitle(props: { children: ReactNode }) {
   return <h2 className="font-display text-xl/7 font-semibold">{props.children}</h2>;

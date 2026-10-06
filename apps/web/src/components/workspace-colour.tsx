@@ -1,6 +1,9 @@
 import { WorkspaceColour } from "@courtyard/contract";
 import { useId, useState } from "react";
 import { classes } from "@/lib/classes";
+import { useAction } from "@/lib/use-action";
+import { IconButton } from "./button.tsx";
+import { FormError } from "./form-error.tsx";
 
 const DOT_CLASS: Record<WorkspaceColour, string> = {
   heather: "bg-workspace-heather",
@@ -42,32 +45,26 @@ export function ColourChooser(props: {
   choose: (colour: WorkspaceColour) => Promise<string | undefined>;
 }) {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
+  const save = useAction(props.choose);
   const name = useId();
 
   const choose = async (colour: WorkspaceColour) => {
-    setSaving(true);
-    const problem = await props.choose(colour);
-    setSaving(false);
-    setError(problem);
-    if (!problem) setOpen(false);
+    if (await save.run(colour)) setOpen(false);
   };
 
   return (
-    <span className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        aria-label="Change colour"
-        aria-expanded={open}
-        title="Change colour"
-        onClick={() => setOpen((was) => !was)}
-        className="-m-1.5 flex size-5 items-center justify-center rounded-full hover:bg-muted"
-      >
-        <WorkspaceDot colour={props.colour} small />
-      </button>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="-m-1.5 flex">
+        <IconButton
+          label="Change colour"
+          size="xs"
+          expanded={open}
+          onClick={() => setOpen((was) => !was)}
+          icon={<WorkspaceDot colour={props.colour} small />}
+        />
+      </span>
       {open && (
-        <fieldset disabled={saving} className="flex items-center gap-1">
+        <fieldset disabled={save.busy} className="flex items-center gap-1">
           <legend className="sr-only">Colour</legend>
           {WorkspaceColour.options.map((colour) => (
             <label
@@ -89,11 +86,11 @@ export function ColourChooser(props: {
           ))}
         </fieldset>
       )}
-      {error && (
-        <span role="alert" className="basis-full text-sm font-normal text-destructive-text">
-          {error}
-        </span>
+      {save.error && (
+        <div className="basis-full">
+          <FormError message={save.error} />
+        </div>
       )}
-    </span>
+    </div>
   );
 }

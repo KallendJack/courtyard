@@ -1,5 +1,8 @@
-import { type ReactNode, useState } from "react";
-import { PillButton } from "@/components/pill-button";
+import type { ReactNode } from "react";
+import { useAction } from "@/lib/use-action";
+import { Button } from "./button.tsx";
+import { FormError } from "./form-error.tsx";
+import { Notice } from "./notice.tsx";
 
 /**
  * The step between asking to archive or delete something and doing it: it names what's about to
@@ -17,36 +20,31 @@ export function ConfirmStep(props: {
   confirm: () => Promise<string | undefined>;
   onCancel: () => void;
 }) {
-  const [error, setError] = useState<string>();
-  const [working, setWorking] = useState(false);
-
-  const confirm = async () => {
-    setWorking(true);
-    const problem = await props.confirm();
-    setWorking(false);
-    setError(problem);
-  };
+  const confirm = useAction(props.confirm);
 
   return (
-    <section
-      aria-label={props.question}
-      className="mt-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text"
+    <Notice
+      region={props.question}
+      title={props.question}
+      footer={
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              onClick={() => void confirm.run()}
+              disabled={confirm.busy}
+            >
+              {props.confirmLabel}
+            </Button>
+            <Button variant="outline" onClick={props.onCancel}>
+              Cancel
+            </Button>
+          </div>
+          <FormError message={confirm.error} />
+        </>
+      }
     >
-      <p className="font-semibold text-destructive">{props.question}</p>
-      <div className="mt-1">{props.children}</div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <PillButton variant="destructive" onClick={confirm} disabled={working}>
-          {props.confirmLabel}
-        </PillButton>
-        <PillButton variant="outline" onClick={props.onCancel}>
-          Cancel
-        </PillButton>
-      </div>
-      {error && (
-        <p role="alert" className="mt-2">
-          {error}
-        </p>
-      )}
-    </section>
+      {props.children}
+    </Notice>
   );
 }
