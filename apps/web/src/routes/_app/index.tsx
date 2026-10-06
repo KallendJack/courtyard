@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle } from "@/components/page";
 import { WorkspaceDot } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
+import { BackupStatus } from "../../backup-status.tsx";
 import { LiveUpdate } from "../../live-update.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
 import { OwnerContextPanel } from "../../owner-context-panel.tsx";
@@ -29,6 +30,7 @@ function Home() {
     <Page>
       <PageTitle>Workspaces</PageTitle>
       <LiveUpdate result={live} />
+      <BackupStatus />
       <OwnerContextPanel result={ownerContext} />
       {list.length === 0 ? (
         <EmptyState>

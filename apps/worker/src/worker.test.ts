@@ -25,13 +25,13 @@ afterEach(async () => {
 });
 
 const startWorker = (env: Environment = settings) => {
-  const result = createWorker({ env });
+  const result = createWorker({ env, repeat: () => {} });
   if (!result.ok) throw new Error(`expected the worker to start: ${result.error}`);
   return result.value;
 };
 
 const startupError = (env: Environment) => {
-  const result = createWorker({ env });
+  const result = createWorker({ env, repeat: () => {} });
   if (result.ok) throw new Error("expected the worker to refuse these settings");
   return result.error;
 };

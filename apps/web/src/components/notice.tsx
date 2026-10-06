@@ -38,6 +38,22 @@ export function Notice(props: {
   );
 }
 
+/**
+ * Something worth knowing on a page, quieter than a `Notice`: a new version, a backup that's
+ * behind. Named by `label`, and read out when it changes.
+ */
+export function InfoBox(props: { label: string; children: ReactNode }) {
+  return (
+    <section
+      aria-label={props.label}
+      aria-live="polite"
+      className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-accent px-4 py-3 text-sm text-accent-foreground"
+    >
+      {props.children}
+    </section>
+  );
+}
+
 /** Something to know about that's being handled (the worker reconnecting, say). */
 export function StatusPill(props: { children: ReactNode }) {
   return (

@@ -44,6 +44,16 @@ export const isFolder = async (path: string): Promise<Result<boolean, "unreadabl
   }
 };
 
+/** Whether anything (a file or a folder) is at `path`, or an error when that can't be told. */
+export const exists = async (path: string): Promise<Result<boolean, "unreadable">> => {
+  try {
+    await stat(path);
+    return ok(true);
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(false) : err("unreadable");
+  }
+};
+
 /** The folders inside a folder, by name; an error when it can't be read, or doesn't exist. */
 export const listSubfolders = async (path: string): Promise<Result<string[], "unreadable">> => {
   try {
