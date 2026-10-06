@@ -254,11 +254,11 @@ Deep modules, each with a small interface at its root and its implementation pri
 - **Sessions:** create, send a message (starts a turn and returns at once), subscribe from a position, answer an
   approval, stop a turn, get and list. One turn at a time per session. Events are numbered from 1 with no gaps and are
   visible only once written. The model may change between turns.
-- **Code** (phase 3): creates the session branch and its worktree in the data folder, matches commands against the
+- **Code** (phase 4): creates the session branch and its worktree in the data folder, matches commands against the
   allowlist exactly (anything able to chain a command is never a match), produces the diff, and merges or discards.
 - **Tools** (phase 5): resolves a workspace's tool connection names to MCP server definitions from the settings, and
   classifies each action as safe or needing approval.
-- **Notifications** (phase 3): web push with keys generated on first run; stores each device's subscription; sends on
+- **Notifications** (phase 4): web push with keys generated on first run; stores each device's subscription; sends on
   approval requested and on a long turn finishing or failing. The sender is passed in, so tests can read what was sent.
 - **HTTP:** the API mirroring the session interface, plus login, workspaces, context and suggestions, providers and
   notifications; events streamed as server-sent events resuming from the last event id; everything except a health
@@ -317,7 +317,7 @@ picks and adjusts one; its colours, type and spacing become the shadcn theme's t
   (a context folder that is a real git repository with a real bare remote, a data folder) and the fake provider:
   login and its refusals, the workspace catalog, a whole turn over server-sent events, resume from the last event id,
   persistence across a restart, interrupted turns, stop, busy sessions, approvals, model changes and overflow,
-  suggestions applied, committed and pushed, push failures, and (phase 3) session branches, allowlist matching, diff,
+  suggestions applied, committed and pushed, push failures, and (phase 4) session branches, allowlist matching, diff,
   merge and discard against real temporary repositories.
 - **The provider seam.** The Claude adapter, and later Codex, tested with its SDK stubbed: the isolation options are
   set on every turn, planning workspaces get read-only tools, permission requests become approval events, usage-limit
@@ -355,18 +355,18 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | ----- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | 0     | The design in Paper and the shadcn theme from it                                                             | Install Paper; name apps whose look you like        |
 | 1     | Login, workspaces, context files and the owner context, Claude sessions that stream and outlive the tab, the installable app, a live worker that starts by itself and updates when asked (ADR 0011) | A proxy route and fixed address for the worker; a live copy and its start task (one-off scripts) |
-| 2     | Suggestions ticked into context files, committed and pushed                                                  | A git repository on the NAS for the context folder |
-| 3     | Code workspaces: session branches, the command allowlist, approvals, review and merge; notifications        | None                                                |
-| 4     | Codex as a second provider, and overflow                                                                     | A ChatGPT plan                                      |
-| 5     | Tool connections (homelab first, then Paper) and floor plans                                                 | Paper running on the worker machine                |
+| 2     | Context that keeps itself current: changes to context files as they come up in a chat, committed and pushed. How they're saved is decided when phase 2 is designed (proposed: saved as you chat, with Undo, replacing ADR 0005's ticking) | A git repository on the NAS for the context folder |
+| 3     | Codex as a second provider, and overflow, before code workspaces because coding uses up Claude fastest       | A ChatGPT plan                                      |
+| 4     | Code workspaces and the board: the repo's GitHub issues as a board, Start on a card for a session on its own branch, approvals, review, a pull request to finish; notifications; code workspaces grouped apart in the sidebar | None                                                |
+| 5     | Tool connections (homelab first, then Paper and Blender) and floor plans                                     | Paper and Blender running on the worker machine    |
 | 6     | The web app served from the NAS, then wake-on-LAN for the worker machine                                    | A wired network connection to the worker machine   |
 
-### A check after phase 2
+### The order of the phases
 
-After phase 2, the owner uses Courtyard for three weeks before phase 3 starts. The question: on most days, did they
-open Courtyard rather than the Claude app? If yes, the later phases go ahead one at a time, each when it's wanted, and
-phase 3 is weighed against what Claude Code itself offers by then. If no, building stops at phase 2: Courtyard stays
-a working hub and a portfolio piece, and the context folder stays useful on its own.
+Each phase follows the last, without a pause to decide whether to carry on: the owner builds Courtyard to use it and
+because it's fun, and its value is in the later phases (Codex when Claude runs out, coding from a phone, the homelab
+and design tools). Each phase is designed before it's built, one decision at a time, with an ADR for anything that
+changes an earlier one. The directions in the phase table are proposals until then.
 
 ### Ideas for later
 
@@ -376,7 +376,7 @@ a working hub and a portfolio piece, and the context folder stays useful on its 
 
 ### Checks before relying on things outside our control
 
-- Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 3 (ADR 0003).
+- Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 4 (ADR 0003).
 - Paper's free plan allows 100 MCP calls a week; Pro raises it. Phase 0 may need a month of Pro.
 - Wake-on-LAN rarely works over USB Wi-Fi adapters, hence the wired connection in phase 6.
 - Node does not trust a private certificate authority by default; the worker needs it added to reach a tool connection
