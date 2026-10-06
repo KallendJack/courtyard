@@ -122,7 +122,7 @@ const SAVING = [
   ].join("\n"),
   "Saves are the owner's word: save your own suggestions once the owner agrees to them. Leave out one-off requests, passing chat, and what the context file already says. Save from the workspace's files only when the owner asks about that file or asks you to save it. When it's unclear whether something is a plan or an idea, or whether it's true, ask in your answer and save once the owner says.",
   `Each line is one fact, plan or idea, stated plainly ("The ceiling is 2.3 m"), under ${CONTEXT_LINE_MAX_CHARACTERS} characters, with a date only where time matters ("The quote is valid until Nov 2026"). A line that would repeat one already there changes that line instead.`,
-  "The owner sees each save as a note under your answer, so your answer stays about their question. The tool says when it refuses a save and why: put it right once, or carry on without it.",
+  "The owner sees each save as a note under your answer, so your answer leaves saves unmentioned and stays about their question. The tool says when it refuses a save and why: put it right once, or carry on without it.",
   "The conversation lists the saves you made in each earlier answer and what the owner did with them. A save the owner undid was wrong: save it again only if the owner brings it up. An edit shows how the owner wants such lines written.",
 ].join("\n\n");
 
