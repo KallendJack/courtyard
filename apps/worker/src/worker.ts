@@ -25,10 +25,11 @@ import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
 import {
+  archiveWorkspace,
+  changeWorkspace,
   createWorkspace,
   getWorkspace,
   listWorkspaces,
-  setWorkspaceColour,
   type WorkspaceError,
 } from "./workspaces/index.ts";
 
@@ -109,6 +110,12 @@ export const createWorker = (options: {
     switch (error.kind) {
       case "not-found":
         return apiError(c, { status: 404, error: "No such workspace" });
+      case "archived":
+        return apiError(c, {
+          status: 410,
+          error:
+            "This workspace is archived. Move its folder out of the archived folder to bring it back.",
+        });
       case "invalid":
         return apiError(c, { status: 400, error: error.message });
       case "conflict":
@@ -133,12 +140,26 @@ export const createWorker = (options: {
   api.patch("/workspaces/:id", async (c) => {
     const body = await readBody(c, WorkspaceChange);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const workspace = await setWorkspaceColour(contextDir, {
-      id: c.req.param("id"),
-      colour: body.value.colour,
-    });
+    const workspace = await changeWorkspace(contextDir, { id: c.req.param("id"), ...body.value });
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary);
+  });
+  api.post("/workspaces/:id/archive", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    // Its folder can't move while a model is working in it.
+    const list = await sessions.list(workspace.value.summary.id);
+    if (!list.ok) return apiError(c, { status: 500, error: "Its sessions can't be read." });
+    if (list.value.some((session) => session.busy)) {
+      return apiError(c, {
+        status: 409,
+        error:
+          "A turn is running in one of this workspace's sessions. Stop it first, then archive the workspace.",
+      });
+    }
+    const archived = await archiveWorkspace(contextDir, workspace.value.summary.id);
+    if (!archived.ok) return contextError(c, archived.error);
+    return c.body(null, 204);
   });
   api.get("/workspaces/:id", async (c) => {
     const [workspace, ownerContext] = await Promise.all([

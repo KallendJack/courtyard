@@ -10,11 +10,16 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { parseContextFile } from "../context-file/index.ts";
-import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
+import { hasCode, move, readJsonFile, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
 const CONFIG_FILE = "workspace.json";
+/**
+ * The folder in the context folder that archived workspaces move to. Named like a workspace, so
+ * it's kept out of the list by name, and no workspace can be called that.
+ */
+const ARCHIVED_FOLDER = "archived";
 const COLOURS = WorkspaceColour.options;
 
 /** A workspace's optional `workspace.json`. Without one, a workspace is a planning workspace. */
@@ -63,6 +68,8 @@ type Listed = { readonly workspace: Workspace; readonly colourKept: boolean };
 /** Why a workspace couldn't be read, added or changed. */
 export type WorkspaceError =
   | { readonly kind: "not-found" }
+  /** Its folder is in the archived folder. */
+  | { readonly kind: "archived" }
   /** What the owner asked for can't be done as asked. */
   | { readonly kind: "invalid"; readonly message: string }
   /** It clashes with what's already in the context folder. */
@@ -143,7 +150,13 @@ const readWorkspace = async (
   });
 };
 
-/** The workspace ids in the context folder: folders named like one (so not `.git`), not files. */
+/** A folder name as a workspace id, unless it can't be one (`.git`, or the archived folder). */
+const workspaceIdFrom = (name: string): WorkspaceId | undefined => {
+  const id = WorkspaceId.safeParse(name);
+  return id.success && id.data !== ARCHIVED_FOLDER ? id.data : undefined;
+};
+
+/** The workspace ids in the context folder: folders named like one, not files. */
 const workspaceIds = async (contextDir: string): Promise<Result<WorkspaceId[], WorkspaceError>> => {
   let entries: Dirent[];
   try {
@@ -153,11 +166,24 @@ const workspaceIds = async (contextDir: string): Promise<Result<WorkspaceId[], W
   }
   return ok(
     entries.flatMap((entry) => {
-      const id = WorkspaceId.safeParse(entry.name);
-      return entry.isDirectory() && id.success ? [id.data] : [];
+      const id = workspaceIdFrom(entry.name);
+      return entry.isDirectory() && id !== undefined ? [id] : [];
     }),
   );
 };
+
+/** Whether a folder exists, or an error when that can't be told. */
+const isFolder = async (path: string): Promise<Result<boolean, WorkspaceError>> => {
+  try {
+    return ok((await stat(path)).isDirectory());
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(false) : err(CONTEXT_FOLDER_UNREADABLE);
+  }
+};
+
+/** Where a workspace's folder goes when it's archived. */
+const archivedFolderOf = (contextDir: string, id: WorkspaceId) =>
+  join(contextDir, ARCHIVED_FOLDER, id);
 
 /**
  * Settles each workspace's colour. A workspace has the colour its config keeps. One without (made
@@ -210,17 +236,17 @@ export const getWorkspace = async (
   contextDir: string,
   id: string,
 ): Promise<Result<Workspace, WorkspaceError>> => {
-  const parsed = WorkspaceId.safeParse(id);
-  if (!parsed.success) return err({ kind: "not-found" });
+  const parsed = workspaceIdFrom(id);
+  if (parsed === undefined) return err({ kind: "not-found" });
 
-  let folder: Awaited<ReturnType<typeof stat>> | undefined;
-  try {
-    folder = await stat(join(contextDir, parsed.data));
-  } catch (error) {
-    if (!hasCode(error, "ENOENT")) return err(CONTEXT_FOLDER_UNREADABLE);
+  const folder = await isFolder(join(contextDir, parsed));
+  if (!folder.ok) return folder;
+  if (!folder.value) {
+    const archived = await isFolder(archivedFolderOf(contextDir, parsed));
+    if (!archived.ok) return archived;
+    return err({ kind: archived.value ? "archived" : "not-found" });
   }
-  if (!folder?.isDirectory()) return err({ kind: "not-found" });
-  const read = await readWorkspace(contextDir, parsed.data);
+  const read = await readWorkspace(contextDir, parsed);
   if (!read.ok) return read;
   const [own] = withColours([read.value]);
   if (own?.colourKept) return ok(own.workspace);
@@ -228,19 +254,19 @@ export const getWorkspace = async (
   // Without a kept colour, a workspace's colour depends on which others have one.
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
-  const listed = every.value.find((w) => w.workspace.summary.id === parsed.data);
+  const listed = every.value.find((w) => w.workspace.summary.id === parsed);
   return listed ? ok(listed.workspace) : err({ kind: "not-found" });
 };
 
-/** Keeps a colour in a workspace's config, alongside whatever else is there. */
-const keepColour = async (
+/** Keeps a name or colour in a workspace's config, alongside whatever else is there. */
+const keepInConfig = async (
   workspace: Workspace,
-  colour: WorkspaceColour,
+  fields: { name?: string; colour?: WorkspaceColour },
 ): Promise<Result<null, WorkspaceError>> => {
   // Read as it is on disk, so fields the worker doesn't know about are kept too.
   const path = join(workspace.folder, CONFIG_FILE);
   const config = await readJsonFile(path, z.record(z.string(), z.unknown()));
-  const written = config.ok ? await writeJsonFile(path, { ...config.value, colour }) : config;
+  const written = config.ok ? await writeJsonFile(path, { ...config.value, ...fields }) : config;
   return written.ok
     ? ok(null)
     : err({
@@ -256,7 +282,7 @@ const keepColour = async (
 const keepColours = async (every: readonly Listed[]): Promise<Result<null, WorkspaceError>> => {
   for (const { workspace, colourKept } of every) {
     if (colourKept || workspace.summary.configProblem !== undefined) continue;
-    const kept = await keepColour(workspace, workspace.summary.colour);
+    const kept = await keepInConfig(workspace, { colour: workspace.summary.colour });
     if (!kept.ok) return kept;
   }
   return ok(null);
@@ -303,7 +329,52 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
       message: `"${id.data}" can't be a folder name on Windows. Choose another name.`,
     });
   }
+  if (id.data === ARCHIVED_FOLDER) {
+    return err({
+      kind: "invalid",
+      message: `"${ARCHIVED_FOLDER}" is where archived workspaces go. Choose another name.`,
+    });
+  }
   return ok(id.data);
+};
+
+/**
+ * Why `name` can't be used, when another workspace already has it (or, for a new workspace, the
+ * folder name `id`). Names that differ only in case or accents count as the same.
+ */
+const nameClash = (
+  every: readonly Listed[],
+  wanted: { name: string; id?: WorkspaceId; except?: WorkspaceId },
+): WorkspaceError | undefined => {
+  const clash = every.find(({ workspace: { summary } }) => {
+    if (summary.id === wanted.except) return false;
+    return summary.id === wanted.id || compareNames(summary.name, wanted.name) === 0;
+  });
+  return clash
+    ? {
+        kind: "conflict",
+        message: `There's already a workspace called ${clash.workspace.summary.name}.`,
+      }
+    : undefined;
+};
+
+/**
+ * Why a new workspace can't have the folder name `id`, when an archived one has it: its sessions
+ * would turn up in the new one.
+ */
+const archivedClash = async (
+  contextDir: string,
+  id: WorkspaceId,
+): Promise<WorkspaceError | undefined> => {
+  const archived = await isFolder(archivedFolderOf(contextDir, id));
+  if (!archived.ok) return archived.error;
+  if (!archived.value) return undefined;
+  const read = await readWorkspace(join(contextDir, ARCHIVED_FOLDER), id);
+  const name = read.ok ? read.value.summary.name : id;
+  return {
+    kind: "conflict",
+    message: `There's an archived workspace called ${name}. Move its folder out of the ${ARCHIVED_FOLDER} folder to bring it back, or choose another name.`,
+  };
 };
 
 /** The colour the fewest workspaces have, earliest in the list on a tie. */
@@ -362,13 +433,10 @@ export const createWorkspace = async (
   if (!id.ok) return id;
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
-  const clash = every.value.find(({ workspace: { summary } }) => {
-    return summary.id === id.value || compareNames(summary.name, name) === 0;
-  });
-  if (clash) {
-    const message = `There's already a workspace called ${clash.workspace.summary.name}.`;
-    return err({ kind: "conflict", message });
-  }
+  const clash = nameClash(every.value, { name, id: id.value });
+  if (clash) return err(clash);
+  const archived = await archivedClash(contextDir, id.value);
+  if (archived) return err(archived);
 
   const folder = join(contextDir, id.value);
   try {
@@ -397,12 +465,13 @@ export const createWorkspace = async (
 };
 
 /**
- * Gives a workspace a new colour, kept in its config. A config that was ignored is left for the
- * owner to fix rather than overwritten.
+ * Gives a workspace a new name or colour, kept in its config. Its folder stays as it is, so its
+ * sessions stay with it. Refuses a name another workspace has. A config that was ignored is left
+ * for the owner to fix rather than overwritten.
  */
-export const setWorkspaceColour = async (
+export const changeWorkspace = async (
   contextDir: string,
-  change: { id: string; colour: WorkspaceColour },
+  change: { id: string; name?: string | undefined; colour?: WorkspaceColour | undefined },
 ): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
@@ -410,14 +479,55 @@ export const setWorkspaceColour = async (
   if (!listed) return err({ kind: "not-found" });
   const { summary } = listed.workspace;
   if (summary.configProblem !== undefined) {
-    return err({
-      kind: "conflict",
-      message: `${summary.configProblem} Fix it, then choose the colour again.`,
-    });
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  const { name, colour } = change;
+  if (name !== undefined) {
+    const clash = nameClash(every.value, { name, except: summary.id });
+    if (clash) return err(clash);
   }
 
-  const others = await keepColours(every.value.filter((w) => w !== listed));
-  if (!others.ok) return others;
-  const kept = await keepColour(listed.workspace, change.colour);
-  return kept.ok ? ok({ ...summary, colour: change.colour }) : kept;
+  if (colour !== undefined) {
+    // Choosing a colour may change which others take turns, so theirs are kept first.
+    const others = await keepColours(every.value.filter((w) => w !== listed));
+    if (!others.ok) return others;
+  }
+  const fields = {
+    ...(name === undefined ? {} : { name }),
+    ...(colour === undefined ? {} : { colour }),
+  };
+  const kept = await keepInConfig(listed.workspace, fields);
+  return kept.ok ? ok({ ...summary, ...fields }) : kept;
+};
+
+/**
+ * Archives a workspace: its folder moves into the archived folder, so it leaves every list but
+ * nothing in it is lost. Moving the folder back brings it back, sessions and all.
+ */
+export const archiveWorkspace = async (
+  contextDir: string,
+  id: string,
+): Promise<Result<null, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, id);
+  if (!workspace.ok) return workspace;
+  const { summary, folder } = workspace.value;
+  const target = archivedFolderOf(contextDir, summary.id);
+  const taken = await isFolder(target);
+  if (!taken.ok) return taken;
+  if (taken.value) {
+    return err({
+      kind: "conflict",
+      message: `The ${ARCHIVED_FOLDER} folder already has a ${summary.id} folder. Rename one of them, then try again.`,
+    });
+  }
+  try {
+    await mkdir(join(contextDir, ARCHIVED_FOLDER), { recursive: true });
+    await move(folder, target);
+  } catch {
+    return err({
+      kind: "storage",
+      message: `The ${summary.name} workspace couldn't be archived. Close anything that has its folder open, then try again.`,
+    });
+  }
+  return ok(null);
 };

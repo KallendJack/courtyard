@@ -1,6 +1,8 @@
 import {
   NewMessage,
   type ProviderList,
+  SessionChange,
+  type SessionDetail,
   type SessionList,
   type SessionSummary,
   StopRequest,
@@ -8,7 +10,7 @@ import {
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { apiError } from "../http.ts";
+import { apiError, readBody } from "../http.ts";
 import type { Provider } from "../providers/index.ts";
 import { err, ok } from "../result.ts";
 import { getWorkspace } from "../workspaces/index.ts";
@@ -31,6 +33,16 @@ const sessionError = (c: Context, error: SessionError) => {
       });
     case "nothing-running":
       return apiError(c, { status: 409, error: "Nothing is running in this session." });
+    case "running":
+      return apiError(c, {
+        status: 409,
+        error: "A turn is running in this session. Stop it first, then delete the session.",
+      });
+    case "workspace-archived":
+      return apiError(c, {
+        status: 409,
+        error: "This session's workspace is archived, so the session can't carry on.",
+      });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
     case "storage":
@@ -86,7 +98,23 @@ export const sessionRoutes = (options: {
   routes.get("/sessions/:id", async (c) => {
     const session = await sessions.get(c.req.param("id"));
     if (!session.ok) return sessionError(c, session.error);
+    const workspace = await getWorkspace(contextDir, session.value.workspaceId);
+    const workspaceArchived = !workspace.ok && workspace.error.kind === "archived";
+    return c.json({ ...session.value, workspaceArchived } satisfies SessionDetail);
+  });
+
+  routes.patch("/sessions/:id", async (c) => {
+    const body = await readBody(c, SessionChange);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const session = await sessions.rename(c.req.param("id"), body.value.title);
+    if (!session.ok) return sessionError(c, session.error);
     return c.json(session.value satisfies SessionSummary);
+  });
+
+  routes.delete("/sessions/:id", async (c) => {
+    const removed = await sessions.remove(c.req.param("id"));
+    if (!removed.ok) return sessionError(c, removed.error);
+    return c.body(null, 204);
   });
 
   routes.post("/sessions/:id/messages", async (c) => {

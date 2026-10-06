@@ -36,8 +36,11 @@ const BUSY_RETRY_DELAYS_MS = [10, 20, 40, 80, 160, 320, 640];
 /** The errors Windows gives for a busy file; elsewhere these mean a real permission problem. */
 const BUSY_CODES = process.platform === "win32" ? ["EPERM", "EACCES", "EBUSY"] : [];
 
-/** Moves `from` over `to`, waiting out the moments Windows says the file is busy. */
-const replace = async (from: string, to: string) => {
+/**
+ * Moves a file or folder to `to` (a file goes over any file already there), waiting out the
+ * moments Windows says it's busy.
+ */
+export const move = async (from: string, to: string) => {
   for (const delay of [...BUSY_RETRY_DELAYS_MS, undefined]) {
     try {
       return await rename(from, to);
@@ -64,7 +67,7 @@ export const writeJsonFile = async (
     await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
     // A hard link fails if the target exists, which makes the exclusive case one atomic step.
     if (options.exclusive) await link(temporary, path);
-    else await replace(temporary, path);
+    else await move(temporary, path);
     return ok(null);
   } catch (error) {
     return err(hasCode(error, "EEXIST") ? "exists" : "unwritable");

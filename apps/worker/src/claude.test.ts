@@ -96,6 +96,37 @@ describe("Claude's status", () => {
     expect(status.capabilities).toEqual({ readsFiles: true, codes: false, usesTools: false });
   });
 
+  it("says which model Default is, from Claude Code's description of it", async () => {
+    const { claudeCode } = stubClaudeCode({
+      check: async () => ({
+        account: { subscriptionType: "Claude Pro" },
+        models: [
+          {
+            value: "default",
+            displayName: "Default (recommended)",
+            description: "Opus 5.5 · Best for everyday, complex tasks",
+          },
+          { value: "sonnet", displayName: "Sonnet 5.5", description: "Most efficient" },
+        ],
+      }),
+    });
+
+    const status = await createClaudeProvider({ claudeCode }).status();
+
+    if (!status.available) throw new Error("expected available");
+    expect(status.models.map((m) => m.label)).toEqual([
+      "Claude · Default (Opus 5.5)",
+      "Claude · Sonnet 5.5",
+    ]);
+  });
+
+  it("keeps Default's own name when Claude Code's description doesn't name a model", async () => {
+    const status = await createClaudeProvider({ claudeCode: stubClaudeCode().claudeCode }).status();
+
+    if (!status.available) throw new Error("expected available");
+    expect(status.models[0]?.label).toBe("Claude · Default (recommended)");
+  });
+
   it("is unavailable with a useful reason when Claude Code isn't logged in", async () => {
     const { claudeCode } = stubClaudeCode({ check: async () => ({ account: {}, models: [] }) });
 

@@ -71,6 +71,26 @@ export const SessionSummary = z.object({
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 
+/** One session, as its page opens it. */
+export const SessionDetail = SessionSummary.extend({
+  /** Its workspace is archived, so the session can be read but not carried on. */
+  workspaceArchived: z.boolean(),
+});
+export type SessionDetail = z.infer<typeof SessionDetail>;
+
+/** The longest title a session can be given. */
+export const SESSION_TITLE_MAX_LENGTH = 60;
+
+/** Changing a session from the app. */
+export const SessionChange = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Give the session a title.")
+    .max(SESSION_TITLE_MAX_LENGTH, `Keep the title to ${SESSION_TITLE_MAX_LENGTH} characters.`),
+});
+export type SessionChange = z.infer<typeof SessionChange>;
+
 export const SessionList = z.object({ sessions: z.array(SessionSummary) });
 export type SessionList = z.infer<typeof SessionList>;
 
