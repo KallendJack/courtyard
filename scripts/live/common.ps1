@@ -3,8 +3,11 @@
 
 $ErrorActionPreference = "Stop"
 
-# The scheduled task that runs the live worker.
-$DefaultTaskName = "Courtyard worker"
+# The scheduled task that runs the live worker, unless a script is given another name.
+function Resolve-TaskName([string]$Name) {
+  if ($Name) { return $Name }
+  return "Courtyard worker"
+}
 
 # The live copy: the clone of main these scripts sit in.
 function Get-LiveRoot {
@@ -12,7 +15,8 @@ function Get-LiveRoot {
 }
 
 # The live copy's settings, from its .env (which git ignores). Only what the scripts need: the
-# worker reads the whole file itself.
+# worker reads the whole file itself. Read the way Node reads it: quotes are taken off, and an
+# unquoted value ends at a # comment.
 function Read-LiveSettings([string]$Root) {
   $envFile = Join-Path $Root ".env"
   if (-not (Test-Path $envFile)) {
@@ -20,8 +24,15 @@ function Read-LiveSettings([string]$Root) {
   }
   $values = @{}
   foreach ($line in Get-Content $envFile) {
-    if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') {
-      $values[$Matches[1]] = $Matches[2].Trim('"', "'")
+    if ($line -match '^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$') {
+      $name = $Matches[1]
+      $value = $Matches[2].Trim()
+      if ($value -match '^"([^"]*)"' -or $value -match "^'([^']*)'") {
+        $value = $Matches[1]
+      } else {
+        $value = ($value -replace '\s+#.*$', '').Trim()
+      }
+      $values[$name] = $value
     }
   }
   if (-not $values["COURTYARD_DATA_DIR"]) { throw ".env needs COURTYARD_DATA_DIR." }
@@ -53,8 +64,8 @@ function Wait-Health([int]$Port, [int]$Seconds = 60, [switch]$Down) {
   return $false
 }
 
-# Appends a line to a text file as UTF-8, which is what the worker's own output is.
-function Add-Line([string]$Path, [string]$Text) {
+# Appends a line to a log as UTF-8, which is what the worker's own output is.
+function Add-LogLine([string]$Path, [string]$Text) {
   [IO.File]::AppendAllText($Path, "$Text`r`n", (New-Object Text.UTF8Encoding $false))
 }
 
@@ -64,10 +75,22 @@ function Get-WorkerEntry([string]$Root) {
   return Join-Path $Root "apps\worker\src\main.ts"
 }
 
-# Stops the live worker's node processes, if any are running.
-function Stop-WorkerProcesses([string]$Root) {
+# Shuts the live worker down: the task, the run.ps1 loop it started and the worker itself. Ending
+# a task ends only its first process, so the loop would otherwise carry on and start the worker
+# again. Says whether the port is free afterwards.
+function Stop-LiveWorker([string]$Root, [string]$TaskName, [int]$Port) {
+  if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $TaskName
+  }
+  $loop = Join-Path $Root "scripts\live\run.ps1"
   $entry = Get-WorkerEntry $Root
-  Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
-    Where-Object { $_.CommandLine -and $_.CommandLine.Contains($entry) } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  # The loops first, so none of them starts the worker again in between.
+  foreach ($name in @("powershell.exe", "node.exe")) {
+    $match = $loop
+    if ($name -eq "node.exe") { $match = $entry }
+    Get-CimInstance Win32_Process -Filter "Name = '$name'" |
+      Where-Object { $_.CommandLine -and $_.CommandLine.Contains($match) } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  }
+  return (Wait-Health $Port -Seconds 15 -Down)
 }

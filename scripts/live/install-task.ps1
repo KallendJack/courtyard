@@ -11,7 +11,7 @@ param(
 )
 
 . "$PSScriptRoot\common.ps1"
-if (-not $TaskName) { $TaskName = $DefaultTaskName }
+$TaskName = Resolve-TaskName $TaskName
 
 $root = Get-LiveRoot
 $settings = Read-LiveSettings $root
@@ -26,14 +26,10 @@ if (-not (Test-Path (Join-Path $root "apps\web\dist\index.html"))) {
   throw "The web app isn't built. In $root, run: pnpm install --frozen-lockfile, then pnpm build."
 }
 
-# Replacing the task stops the worker it runs; a worker that answers after that is something else.
-if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
-  Stop-ScheduledTask -TaskName $TaskName
-  Stop-WorkerProcesses $root
-  Wait-Health $settings.Port -Seconds 15 -Down | Out-Null
-}
-if (Test-Health $settings.Port) {
-  throw "Something already answers on port $($settings.Port), most likely a worker started by hand. Stop it first."
+# Setting it up again shuts down the worker this live copy already runs; anything that still
+# answers on the port after that is something else.
+if (-not (Stop-LiveWorker $root $TaskName $settings.Port)) {
+  throw "Something else answers on port $($settings.Port), most likely a worker started by hand. Shut it down first."
 }
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
@@ -44,10 +40,11 @@ $action = New-ScheduledTaskAction -Execute "conhost.exe" -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 # As the owner, so the worker finds their Claude Code login (ADR 0003); no password is stored.
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-# No time limit, on battery too; run.ps1 restarts the worker itself, and the task restarts run.ps1.
+# No time limit, on battery too, and one copy at a time. run.ps1 is what restarts the worker: Task
+# Scheduler's own restart only covers the task failing to start.
 $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
-  -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+  -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal `
   -Settings $taskSettings -Description "Courtyard's live worker (ADR 0011). Set up by $run." -Force | Out-Null

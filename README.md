@@ -106,10 +106,13 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
 
 - **It refuses** if the live copy has changes of its own, isn't on `main`, or `main`'s newest
   commit isn't passing CI.
-- **Otherwise it updates:** it stops the worker, pulls, installs the locked package versions and
-  builds, then starts the worker and waits for it to answer. A turn running at that moment is
-  recorded as interrupted.
+- **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
+  and builds, then starts the worker and waits for it to answer. It shuts the worker down first
+  because Windows can refuse to replace files a running worker has open. A turn running at that
+  moment is recorded as interrupted.
 - **If any step fails,** it puts the previous version back and starts that instead.
+- **Only one update runs at a time.** If something other than the worker answers on its port,
+  the update stops without changing anything.
 - **The result** is written to `live-update.json` in the data folder.
 
 ## Claude
