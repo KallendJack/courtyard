@@ -1,3 +1,4 @@
+import type { SessionId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Turn } from "./events.ts";
@@ -22,8 +23,12 @@ const atTheEnd = () =>
  * Turns not drawn can't be found with the browser's Find, and screen readers only see the drawn
  * ones (each says where it sits, "turn 180 of 200"): the price of a long session staying smooth.
  */
-export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Turn) => void }) {
-  const { turns, onRetry } = props;
+export function SessionTurns(props: {
+  sessionId: SessionId;
+  turns: readonly Turn[];
+  onRetry: (turn: Turn) => void;
+}) {
+  const { sessionId, turns, onRetry } = props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -58,7 +63,8 @@ export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Tu
   }, []);
 
   const last = turns.at(-1);
-  const lastLength = (last?.answer.length ?? 0) + (last?.activities.length ?? 0);
+  const lastLength =
+    (last?.answer.length ?? 0) + (last?.activities.length ?? 0) + (last?.notes.length ?? 0);
   const lastState = last?.state.kind;
   // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength and lastState are the triggers, so the end stays in view while text streams in or a turn fails
   useLayoutEffect(() => {
@@ -91,6 +97,7 @@ export function SessionTurns(props: { turns: readonly Turn[]; onRetry: (turn: Tu
             style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
           >
             <TurnView
+              sessionId={sessionId}
               turn={turn}
               // Only the last turn can be retried, so only it gets the handler.
               {...(turn === last ? { onRetry } : {})}
