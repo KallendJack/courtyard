@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ContextFile,
@@ -10,7 +10,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { parseContextFile } from "../context-file/index.ts";
-import { hasCode, move, readJsonFile, writeJsonFile } from "../files.ts";
+import { hasCode, isFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 const CONTEXT_FILE = "CONTEXT.md";
@@ -81,17 +81,8 @@ const CONTEXT_FOLDER_UNREADABLE: WorkspaceError = {
   message: "The context folder can't be read.",
 };
 
-/** A file's text, `undefined` when it doesn't exist, or an error when it exists but can't be read. */
-const readIfPresent = async (path: string): Promise<Result<string | undefined, unknown>> => {
-  try {
-    return ok(await readFile(path, "utf8"));
-  } catch (error) {
-    return hasCode(error, "ENOENT") ? ok(undefined) : err(error);
-  }
-};
-
 const readConfig = async (folder: string): Promise<Config> => {
-  const text = await readIfPresent(join(folder, CONFIG_FILE));
+  const text = await readTextFile(join(folder, CONFIG_FILE));
   if (!text.ok)
     return { kind: "ignored", problem: `${CONFIG_FILE} can't be read, so it was ignored.` };
   if (text.value === undefined) return { kind: "absent" };
@@ -124,7 +115,7 @@ const readWorkspace = async (
   const folder = join(contextDir, id);
   const [config, markdown] = await Promise.all([
     readConfig(folder),
-    readIfPresent(join(folder, CONTEXT_FILE)),
+    readTextFile(join(folder, CONTEXT_FILE)),
   ]);
   if (!markdown.ok) {
     return err({
@@ -172,13 +163,10 @@ const workspaceIds = async (contextDir: string): Promise<Result<WorkspaceId[], W
   );
 };
 
-/** Whether a folder exists, or an error when that can't be told. */
-const isFolder = async (path: string): Promise<Result<boolean, WorkspaceError>> => {
-  try {
-    return ok((await stat(path)).isDirectory());
-  } catch (error) {
-    return hasCode(error, "ENOENT") ? ok(false) : err(CONTEXT_FOLDER_UNREADABLE);
-  }
+/** Whether a folder in the context folder exists, or an error when that can't be told. */
+const isWorkspaceFolder = async (path: string): Promise<Result<boolean, WorkspaceError>> => {
+  const found = await isFolder(path);
+  return found.ok ? found : err(CONTEXT_FOLDER_UNREADABLE);
 };
 
 /** Where a workspace's folder goes when it's archived. */
@@ -239,10 +227,10 @@ export const getWorkspace = async (
   const parsed = workspaceIdFrom(id);
   if (parsed === undefined) return err({ kind: "not-found" });
 
-  const folder = await isFolder(join(contextDir, parsed));
+  const folder = await isWorkspaceFolder(join(contextDir, parsed));
   if (!folder.ok) return folder;
   if (!folder.value) {
-    const archived = await isFolder(archivedFolderOf(contextDir, parsed));
+    const archived = await isWorkspaceFolder(archivedFolderOf(contextDir, parsed));
     if (!archived.ok) return archived;
     return err({ kind: archived.value ? "archived" : "not-found" });
   }
@@ -372,7 +360,7 @@ const archivedClash = async (
   contextDir: string,
   id: WorkspaceId,
 ): Promise<WorkspaceError | undefined> => {
-  const archived = await isFolder(archivedFolderOf(contextDir, id));
+  const archived = await isWorkspaceFolder(archivedFolderOf(contextDir, id));
   if (!archived.ok) return archived.error;
   if (!archived.value) return undefined;
   const read = await readWorkspace(join(contextDir, ARCHIVED_FOLDER), id);
@@ -518,7 +506,7 @@ export const archiveWorkspace = async (
   if (!workspace.ok) return workspace;
   const { summary, folder } = workspace.value;
   const target = archivedFolderOf(contextDir, summary.id);
-  const taken = await isFolder(target);
+  const taken = await isWorkspaceFolder(target);
   if (!taken.ok) return taken;
   if (taken.value) {
     return err({

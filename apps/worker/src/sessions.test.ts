@@ -12,8 +12,15 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
-import { asOwner, FAKE_MODEL, followSession, gatedProvider, startSession } from "./testing.ts";
-import { createWorker } from "./worker.ts";
+import {
+  asOwner,
+  FAKE_MODEL,
+  followSession,
+  gatedProvider,
+  postJson,
+  startSession,
+  testWorker,
+} from "./testing.ts";
 
 let root: string;
 let now: number;
@@ -29,19 +36,8 @@ afterEach(async () => {
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    now: () => now,
-    providers,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  const request = await asOwner(worker.value.app);
-  const post = (path: string, body: unknown) =>
-    request(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const request = await asOwner(testWorker({ root, now: () => now, providers }));
+  const post = (path: string, body: unknown) => postJson(request, path, body);
   return { request, post };
 };
 

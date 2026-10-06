@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { link, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { setTimeout as wait } from "node:timers/promises";
 import type { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
@@ -8,22 +8,48 @@ import { err, ok, type Result } from "./result.ts";
 export const hasCode = (error: unknown, code: string) =>
   error instanceof Error && "code" in error && error.code === code;
 
+/** A text file's contents; `undefined` when the file doesn't exist. */
+export const readTextFile = async (
+  path: string,
+): Promise<Result<string | undefined, "unreadable">> => {
+  try {
+    return ok(await readFile(path, "utf8"));
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  }
+};
+
 /** A JSON file's contents, checked with `schema`; `undefined` when the file doesn't exist. */
 export const readJsonFile = async <T>(
   path: string,
   schema: z.ZodType<T>,
 ): Promise<Result<T | undefined, "unreadable">> => {
-  let text: string;
+  const text = await readTextFile(path);
+  if (!text.ok) return err(text.error);
+  if (text.value === undefined) return ok(undefined);
   try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
-  }
-  try {
-    const parsed = schema.safeParse(JSON.parse(text));
+    const parsed = schema.safeParse(JSON.parse(text.value));
     return parsed.success ? ok(parsed.data) : err("unreadable");
   } catch {
     return err("unreadable");
+  }
+};
+
+/** Whether a folder exists (not a file of that name), or an error when that can't be told. */
+export const isFolder = async (path: string): Promise<Result<boolean, "unreadable">> => {
+  try {
+    return ok((await stat(path)).isDirectory());
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(false) : err("unreadable");
+  }
+};
+
+/** The names in a folder; none when the folder doesn't exist yet. */
+export const listFolder = async (path: string): Promise<Result<string[], "unreadable">> => {
+  try {
+    return ok(await readdir(path));
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok([]) : err("unreadable");
   }
 };
 

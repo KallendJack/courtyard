@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { ApiError, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, type Requester } from "./testing.ts";
-import { createWorker, type UpdateCommand } from "./worker.ts";
+import { asOwner, type Requester, testWorker } from "./testing.ts";
+import type { UpdateCommand } from "./worker.ts";
 
 // Updating the live copy from the app (ADR 0011, #35), against real git in temporary folders: a
 // remote standing in for GitHub, and a live copy cloned from it.
@@ -57,19 +57,15 @@ afterEach(async () => {
 
 /** A worker running from the live copy, or from nowhere in particular with `live: false`. */
 const workerFor = async (options: { live: boolean } = { live: true }): Promise<Requester> => {
-  const worker = createWorker({
-    env: {
-      COURTYARD_CONTEXT_DIR: join(root, "context"),
-      COURTYARD_DATA_DIR: dataDir,
-      ...(options.live ? { COURTYARD_LIVE_COPY: liveCopy } : {}),
-    },
+  const app = testWorker({
+    root,
+    env: options.live ? { COURTYARD_LIVE_COPY: liveCopy } : {},
     now: () => now,
     startUpdate: (command) => {
       started.push(command);
     },
   });
-  if (!worker.ok) throw new Error(worker.error);
-  return asOwner(worker.value.app);
+  return asOwner(app);
 };
 
 const statusOf = async (request: Requester) => {

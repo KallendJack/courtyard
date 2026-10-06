@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, rm, truncate } from "node:fs/promises";
+import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
   endsTurn,
@@ -13,7 +13,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { hasCode, readJsonFile, writeJsonFile } from "../files.ts";
+import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { type FramingWorkspace, framingFor } from "../prompts/index.ts";
 import type { Provider } from "../providers/index.ts";
@@ -127,14 +127,10 @@ export const createSessions = (options: {
   const eventsPath = (id: SessionId) => join(folderOf(id), "events.jsonl");
 
   const readEvents = async (id: SessionId): Promise<Result<SessionEvent[], SessionError>> => {
-    let text: string;
-    try {
-      text = await readFile(eventsPath(id), "utf8");
-    } catch (error) {
-      return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
-    }
+    const text = await readTextFile(eventsPath(id));
+    if (!text.ok) return err(STORAGE_ERROR);
     const events: SessionEvent[] = [];
-    for (const line of text.split("\n")) {
+    for (const line of (text.value ?? "").split("\n")) {
       if (line.trim() === "") continue;
       let json: unknown;
       try {
@@ -188,13 +184,10 @@ export const createSessions = (options: {
    * interrupted and the session is usable again.
    */
   const recover = async (id: SessionId, session: RunningSession) => {
-    let text: string;
-    try {
-      text = await readFile(eventsPath(id), "utf8");
-    } catch (error) {
-      if (!hasCode(error, "ENOENT")) console.error(`Session ${id}: its event log can't be read`);
-      return;
-    }
+    const read = await readTextFile(eventsPath(id));
+    if (!read.ok) console.error(`Session ${id}: its event log can't be read`);
+    if (!read.ok || read.value === undefined) return;
+    const text = read.value;
     if (text !== "" && !text.endsWith("\n")) {
       const whole = text.slice(0, text.lastIndexOf("\n") + 1);
       try {
@@ -406,14 +399,10 @@ export const createSessions = (options: {
   const sessionsOf = async (
     workspaceId: WorkspaceId,
   ): Promise<Result<SessionSummary[], SessionError>> => {
-    let folders: string[];
-    try {
-      folders = await readdir(sessionsDir);
-    } catch (error) {
-      return hasCode(error, "ENOENT") ? ok([]) : err(STORAGE_ERROR);
-    }
+    const folders = await listFolder(sessionsDir);
+    if (!folders.ok) return err(STORAGE_ERROR);
     const summaries: SessionSummary[] = [];
-    for (const folder of folders) {
+    for (const folder of folders.value) {
       const id = SessionId.safeParse(folder);
       if (!id.success) continue;
       const file = await readJsonFile(sessionFilePath(id.data), SessionFile);

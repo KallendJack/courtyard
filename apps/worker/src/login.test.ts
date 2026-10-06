@@ -3,8 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, AuthState } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loginCookie } from "./testing.ts";
-import { createWorker } from "./worker.ts";
+import { loginCookie, testWorker } from "./testing.ts";
 
 const PASSWORD = "correct horse battery";
 
@@ -22,14 +21,7 @@ afterEach(async () => {
 });
 
 /** A worker on the same folders as every other in this test, like one restarted. */
-const startWorker = () => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    now: () => now,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  return worker.value.app;
-};
+const startWorker = () => testWorker({ root, now: () => now });
 
 const post = (path: string, body: unknown, cookie?: string) =>
   startWorker().request(path, {

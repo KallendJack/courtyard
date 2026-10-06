@@ -1,6 +1,31 @@
-import { SessionEvent, SessionSummary } from "@courtyard/contract";
+import { join } from "node:path";
+import { ApiError, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
 import { createFakeProvider } from "./providers/index.ts";
+import { createWorker, type Environment } from "./worker.ts";
+
+/**
+ * For tests: a worker on the `context` and `data` folders in `root`, with any other options and
+ * settings given. Throws if it won't start, since every test that uses it needs one that does.
+ */
+export const testWorker = (
+  options: { root: string; env?: Environment } & Omit<Parameters<typeof createWorker>[0], "env">,
+) => {
+  const { root, env, ...rest } = options;
+  const worker = createWorker({
+    ...rest,
+    env: {
+      COURTYARD_CONTEXT_DIR: join(root, "context"),
+      COURTYARD_DATA_DIR: join(root, "data"),
+      ...env,
+    },
+  });
+  if (!worker.ok) throw new Error(worker.error);
+  return worker.value.app;
+};
+
+/** For tests: the message an error answer carries. */
+export const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
 
 /** For tests: a request function, like `app.request`. */
 export type Requester = (path: string, init?: RequestInit) => Response | Promise<Response>;

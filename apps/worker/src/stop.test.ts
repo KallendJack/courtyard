@@ -12,8 +12,8 @@ import {
   postJson,
   type Requester,
   startSession,
+  testWorker,
 } from "./testing.ts";
-import { createWorker } from "./worker.ts";
 
 let root: string;
 
@@ -27,12 +27,7 @@ afterEach(async () => {
 });
 
 const start = async (providers: Provider[]) => {
-  const worker = createWorker({
-    env: { COURTYARD_CONTEXT_DIR: join(root, "context"), COURTYARD_DATA_DIR: join(root, "data") },
-    providers,
-  });
-  if (!worker.ok) throw new Error(worker.error);
-  return asOwner(worker.value.app);
+  return asOwner(testWorker({ root, providers }));
 };
 
 /** Stops a turn, named by its owner message's event number (the first turn's is 1). */

@@ -1,8 +1,11 @@
 import { type AuthState, MIN_PASSWORD_LENGTH, PasswordForm } from "@courtyard/contract";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { apiError } from "../http.ts";
+import { apiError, readBody } from "../http.ts";
 import { LoginSecret, type Owner, type StorageError } from "./index.ts";
+
+/** The answer to a setup or login request that didn't send a password form. */
+const PASSWORD_REFUSED = "Send a password of up to 1,024 characters";
 
 const LOGIN_COOKIE = "courtyard_login";
 /** Browsers cap a cookie's life at 400 days; it's renewed every time the device checks in. */
@@ -43,13 +46,6 @@ const setLoginCookie = (c: Context, secret: LoginSecret) => {
     path: "/",
     maxAge: LOGIN_MAX_AGE_SECONDS,
   });
-};
-
-/** The form a setup or login request sent, or `undefined` when it isn't one. */
-const readPasswordForm = async (c: Context) => {
-  const body: unknown = await c.req.json().catch(() => undefined);
-  const form = PasswordForm.safeParse(body);
-  return form.success ? form.data : undefined;
 };
 
 /**
@@ -96,10 +92,9 @@ export const loginRoutes = (owner: Owner) => {
   });
 
   routes.post("/setup", async (c) => {
-    const form = await readPasswordForm(c);
-    if (!form)
-      return apiError(c, { status: 400, error: "Send a password of up to 1,024 characters" });
-    const secret = await owner.setUp(form.password);
+    const form = await readBody(c, PasswordForm);
+    if (!form.ok) return apiError(c, { status: 400, error: PASSWORD_REFUSED });
+    const secret = await owner.setUp(form.value.password);
     if (!secret.ok) {
       switch (secret.error.kind) {
         case "too-short":
@@ -118,10 +113,9 @@ export const loginRoutes = (owner: Owner) => {
   });
 
   routes.post("/login", async (c) => {
-    const form = await readPasswordForm(c);
-    if (!form)
-      return apiError(c, { status: 400, error: "Send a password of up to 1,024 characters" });
-    const secret = await owner.logIn(form.password);
+    const form = await readBody(c, PasswordForm);
+    if (!form.ok) return apiError(c, { status: 400, error: PASSWORD_REFUSED });
+    const secret = await owner.logIn(form.value.password);
     if (!secret.ok) {
       switch (secret.error.kind) {
         case "not-set-up":
