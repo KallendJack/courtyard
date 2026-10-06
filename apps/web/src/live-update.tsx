@@ -21,19 +21,18 @@ type Following =
 const isRecent = (result: LiveUpdateResult) =>
   result.finishedAt !== null && Date.now() - Date.parse(result.finishedAt) < SHOW_RESULT_FOR_MS;
 
-function Result({ result }: { result: LiveUpdateResult }) {
-  if (result.outcome === "updated") {
-    return (
-      <>
-        <span>{result.message}</span>
-        {/* The page is still the old version until it's loaded again. */}
+/** How the update went. Reload only where this page followed it, so is still the old version. */
+function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
+  return (
+    <>
+      <span>{props.result.message}</span>
+      {props.offerReload && props.result.outcome === "updated" && (
         <button type="button" onClick={() => window.location.reload()} className={BUTTON}>
           Reload
         </button>
-      </>
-    );
-  }
-  return <span>{result.message}</span>;
+      )}
+    </>
+  );
 }
 
 /** A plain button: shadcn's Button would put its class-merging code on the first load. */
@@ -56,18 +55,28 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
 
   useEffect(() => {
     if (following.kind !== "updating") return;
-    const timer = setInterval(async () => {
+    // One question at a time: the next is asked only after the last one's answer.
+    let current = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const ask = async () => {
       if (Date.now() - following.at > FOLLOW_FOR_MS) return setFollowing({ kind: "lost" });
       const next = await loadLive();
+      if (!current) return;
       // While the worker restarts it doesn't answer; the page just asks again.
-      if (next.kind !== "loaded" || next.data.kind !== "live") return;
-      setStatus(next);
-      const last = next.data.lastUpdate;
-      if (last && last.finishedAt !== null && last.startedAt !== following.since) {
-        setFollowing({ kind: "done", result: last });
+      if (next.kind === "loaded" && next.data.kind === "live") {
+        setStatus(next);
+        const last = next.data.lastUpdate;
+        if (last && last.finishedAt !== null && last.startedAt !== following.since) {
+          return setFollowing({ kind: "done", result: last });
+        }
       }
-    }, FOLLOW_EVERY_MS);
-    return () => clearInterval(timer);
+      timer = setTimeout(ask, FOLLOW_EVERY_MS);
+    };
+    timer = setTimeout(ask, FOLLOW_EVERY_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   }, [following]);
 
   if (status.kind !== "loaded" || status.data.kind !== "live") return null;
@@ -76,8 +85,10 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
   const update = async () => {
     const since = live.lastUpdate?.startedAt ?? null;
     const started = await startLiveUpdate();
+    // Already running (started on another device, say): this page follows that one.
+    const alreadyRunning = started.kind === "failed" && started.status === 409;
     setFollowing(
-      started.kind === "loaded"
+      started.kind === "loaded" || alreadyRunning
         ? { kind: "updating", since, at: Date.now() }
         : { kind: "problem", message: describeProblem(started).body },
     );
@@ -87,7 +98,7 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
   if (following.kind === "updating") {
     content = <span>Updating. Courtyard restarts, and this page carries on by itself.</span>;
   } else if (following.kind === "done") {
-    content = <Result result={following.result} />;
+    content = <Result result={following.result} offerReload />;
   } else if (following.kind === "lost") {
     content = <span>No word from the update yet. Check back in a few minutes.</span>;
   } else if (following.kind === "problem") {
@@ -106,7 +117,7 @@ export function LiveUpdate(props: { result: FromWorker<LiveStatus> }) {
     isRecent(live.lastUpdate) &&
     live.lastUpdate.outcome !== "unchanged"
   ) {
-    content = <Result result={live.lastUpdate} />;
+    content = <Result result={live.lastUpdate} offerReload={false} />;
   }
   if (content === null) return null;
 

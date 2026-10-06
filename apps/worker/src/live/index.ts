@@ -8,23 +8,22 @@ import { err, ok, type Result } from "../result.ts";
 
 /** How often the worker asks the live copy's remote whether main has moved on. */
 const CHECK_EVERY_MS = 3 * 60 * 60 * 1000;
-/** An update still "running" after this long has stopped without saying how it went. */
-const UPDATE_GIVES_UP_MS = 20 * 60 * 1000;
-
+/** After the remote couldn't be reached, how soon to ask again. */
+const RECHECK_AFTER_FAILURE_MS = 5 * 60 * 1000;
 /**
- * The scheduled task that runs scripts/live/update.ps1, which install-task.ps1 registers next to
- * the worker's own task.
+ * An update still "running" after this long ended without saying how it went. Longer than the
+ * update task's own 30-minute limit (install-task.ps1), so a slow update is never cut short.
  */
-const UPDATE_TASK = "Courtyard update";
+const UPDATE_GIVES_UP_MS = 35 * 60 * 1000;
 
-/** What starts an update: the scheduled task to run. */
+/** What starts an update: the scheduled task that runs scripts/live/update.ps1. */
 export type UpdateCommand = { readonly task: string };
 
 /** Why an update couldn't start. */
 export type LiveError =
   | { readonly kind: "off" }
   | { readonly kind: "running" }
-  | { readonly kind: "storage"; readonly message: string };
+  | { readonly kind: "not-started"; readonly message: string };
 
 export type Live = {
   /** What the live copy runs, whether main is newer, and how the last update went. */
@@ -59,11 +58,13 @@ const gitIn =
 export const createLive = (options: {
   /** The live copy this worker runs from, if it does. */
   liveCopy: string | null;
+  /** The scheduled task that updates it. */
+  updateTask: string;
   dataDir: string;
   now: () => number;
   startUpdate: (command: UpdateCommand) => void | Promise<void>;
 }): Live => {
-  const { liveCopy, dataDir, now } = options;
+  const { liveCopy, updateTask, dataDir, now } = options;
   if (liveCopy === null) {
     return {
       status: async () => ({ kind: "off" }),
@@ -73,7 +74,8 @@ export const createLive = (options: {
 
   const git = gitIn(liveCopy);
   const resultFile = join(dataDir, "live-update.json");
-  let lastCheck: { at: number; newest: string | undefined } | undefined;
+  /** The last answer from the remote, and when to ask again. */
+  let check: { readonly newest: Promise<string | undefined>; readonly until: number } | undefined;
 
   const versionOf = async (ref: string): Promise<LiveVersion | null> => {
     const [commit, title] = await Promise.all([
@@ -83,47 +85,56 @@ export const createLive = (options: {
     return commit && title ? { commit, title } : null;
   };
 
-  /** Main's newest commit, asking the remote at most every few hours. */
-  const newestOnMain = async () => {
-    if (lastCheck === undefined || now() - lastCheck.at >= CHECK_EVERY_MS) {
-      const fetched = await git("fetch", "--quiet", "origin", "main");
-      lastCheck = {
-        at: now(),
-        newest: fetched === undefined ? undefined : await git("rev-parse", "origin/main"),
-      };
-    }
-    return lastCheck.newest;
+  const fetchNewest = async () => {
+    const fetched = await git("fetch", "--quiet", "origin", "main");
+    return fetched === undefined ? undefined : git("rev-parse", "origin/main");
   };
 
-  const lastUpdate = async (): Promise<LiveUpdateResult | null> => {
+  /**
+   * Main's newest commit, asking the remote at most every few hours, or again in a few minutes
+   * when it couldn't be reached. Pages loading at once share one question.
+   */
+  const newestOnMain = () => {
+    if (check === undefined || now() >= check.until) {
+      const newest = fetchNewest();
+      const asked = now();
+      check = { newest, until: asked + RECHECK_AFTER_FAILURE_MS };
+      void newest.then((commit) => {
+        if (commit !== undefined && check?.newest === newest) {
+          check = { newest, until: asked + CHECK_EVERY_MS };
+        }
+      });
+    }
+    return check.newest;
+  };
+
+  const lastUpdate = async (): Promise<Result<LiveUpdateResult | null, LiveError>> => {
     let text: string;
     try {
       text = await readFile(resultFile, "utf8");
     } catch (error) {
-      if (hasCode(error, "ENOENT")) return null;
-      throw error;
+      if (hasCode(error, "ENOENT")) return ok(null);
+      return err({ kind: "not-started", message: "live-update.json can't be read." });
     }
-    const parsed = LiveUpdateResult.safeParse(JSON.parse(text.replace(/^﻿/, "")));
-    if (!parsed.success) return null;
-    const result = parsed.data;
-    const stuck =
-      result.outcome === "running" && now() - Date.parse(result.startedAt) > UPDATE_GIVES_UP_MS;
-    return stuck
-      ? {
-          ...result,
-          outcome: "failed",
-          message:
-            "The update stopped without saying how it went. See live-update.log in the data folder.",
-        }
-      : result;
-  };
-
-  const readLastUpdate = async (): Promise<Result<LiveUpdateResult | null, LiveError>> => {
+    let json: unknown;
     try {
-      return ok(await lastUpdate());
+      json = JSON.parse(text.replace(/^﻿/, ""));
     } catch {
-      return err({ kind: "storage", message: "live-update.json can't be read." });
+      // Half written, or edited by hand: no result to show, and nothing to stop an update.
+      return ok(null);
     }
+    const parsed = LiveUpdateResult.safeParse(json);
+    if (!parsed.success) return ok(null);
+    const result = parsed.data;
+    const gaveUpAt = Date.parse(result.startedAt) + UPDATE_GIVES_UP_MS;
+    if (result.outcome !== "running" || now() < gaveUpAt) return ok(result);
+    return ok({
+      ...result,
+      outcome: "failed",
+      message:
+        "The update ended without saying how it went. See live-update.log in the data folder.",
+      finishedAt: new Date(gaveUpAt).toISOString(),
+    });
   };
 
   return {
@@ -131,10 +142,10 @@ export const createLive = (options: {
       const [running, newestCommit, last] = await Promise.all([
         versionOf("HEAD"),
         newestOnMain(),
-        readLastUpdate(),
+        lastUpdate(),
       ]);
-      const newest = newestCommit === undefined ? null : await versionOf(newestCommit);
       if (running === null) return { kind: "off" };
+      const newest = newestCommit === undefined ? null : await versionOf(newestCommit);
       return {
         kind: "live",
         running,
@@ -144,15 +155,15 @@ export const createLive = (options: {
       };
     },
     update: async () => {
-      const last = await readLastUpdate();
+      const last = await lastUpdate();
       if (!last.ok) return last;
       if (last.value?.outcome === "running") return err({ kind: "running" });
       try {
-        await options.startUpdate({ task: UPDATE_TASK });
+        await options.startUpdate({ task: updateTask });
       } catch {
         return err({
-          kind: "storage",
-          message: `The update couldn't be started. Run install-task.ps1 again to set up the '${UPDATE_TASK}' task.`,
+          kind: "not-started",
+          message: `The update couldn't be started. Run install-task.ps1 again to set up the '${updateTask}' task.`,
         });
       }
       return ok(null);

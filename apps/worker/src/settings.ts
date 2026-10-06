@@ -47,10 +47,12 @@ const Env = z.object({
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
+  // Both set by scripts/live/run.ps1 when it starts the live worker, never by hand.
   COURTYARD_LIVE_COPY: z.preprocess(
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
+  COURTYARD_UPDATE_TASK: z.preprocess(unsetIfEmpty, z.string().default("Courtyard update")),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -68,9 +70,11 @@ export type Settings = {
   readonly fakeProvider: boolean;
   /**
    * The live copy this worker runs from (ADR 0011), which the owner can update from the app.
-   * `null` everywhere else, so development and tests never update themselves.
+   * Only the live scripts set it, so development and tests never update themselves.
    */
   readonly liveCopy: string | null;
+  /** The scheduled task that updates the live copy, as install-task.ps1 named it. */
+  readonly updateTask: string;
 };
 
 /**
@@ -96,5 +100,6 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
       parsed.data.COURTYARD_LIVE_COPY === undefined
         ? null
         : resolve(parsed.data.COURTYARD_LIVE_COPY),
+    updateTask: parsed.data.COURTYARD_UPDATE_TASK,
   });
 };

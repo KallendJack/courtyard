@@ -197,13 +197,53 @@ describe("updating from the app", () => {
     expect(started).toEqual([]);
   });
 
-  it("treats an update that's said 'running' for too long as stopped, and lets another start", async () => {
+  it("treats an update that's said 'running' for too long as failed, and lets another start", async () => {
     await lastUpdateIs({ outcome: "running", startedAt: "2026-10-06T11:00:00Z", finishedAt: null });
     const request = await workerFor();
 
     expect(await statusOf(request)).toMatchObject({
-      lastUpdate: { outcome: "failed", message: expect.stringMatching(/live-update\.log/) },
+      lastUpdate: {
+        outcome: "failed",
+        message: expect.stringMatching(/live-update\.log/),
+        // Finished, so the page shows how it went rather than waiting on it.
+        finishedAt: "2026-10-06T11:35:00.000Z",
+      },
     });
     expect((await startUpdate(request)).status).toBe(202);
+  });
+});
+
+describe("a result file that can't be read", () => {
+  it("counts as no last update, and doesn't stop an update", async () => {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(join(dataDir, "live-update.json"), '{ "outcome": "upd');
+    const request = await workerFor();
+
+    expect(await statusOf(request)).toMatchObject({ kind: "live", lastUpdate: null });
+    expect((await startUpdate(request)).status).toBe(202);
+  });
+});
+
+describe("asking the remote", () => {
+  it("asks again soon after it couldn't reach the remote, rather than in hours", async () => {
+    const reachable = (await git(liveCopy, "remote", "get-url", "origin")).stdout.trim();
+    await git(liveCopy, "remote", "set-url", "origin", join(root, "nowhere.git"));
+    const request = await workerFor();
+    expect(await statusOf(request)).toMatchObject({ newest: null });
+    await git(liveCopy, "remote", "set-url", "origin", reachable);
+    await merge("A change made while it couldn't reach the remote");
+
+    now += 6 * 60 * 1000;
+
+    expect(await statusOf(request)).toMatchObject({ newerOnMain: true });
+  });
+
+  it("asks once for pages loading at the same time", async () => {
+    await merge("Add the Update button");
+    const request = await workerFor();
+
+    const statuses = await Promise.all([statusOf(request), statusOf(request), statusOf(request)]);
+
+    for (const status of statuses) expect(status).toMatchObject({ newerOnMain: true });
   });
 });

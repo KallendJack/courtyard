@@ -86,8 +86,7 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
    ```
 
 2. **Write its settings:** copy `.env.example` to `.env` in the live copy and fill it in. Keep
-   your context and data folders outside the live copy, and set `COURTYARD_LIVE_COPY` to the
-   live copy's own folder, which turns on updating from the app.
+   your context and data folders outside the live copy.
 3. **Set it to start by itself.** This needs no administrator window:
 
    ```powershell
@@ -98,7 +97,11 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
    whenever you log on, and starts it now. It runs as you so it can use your Claude Code login.
    If the worker stops, it starts again by itself. Its output goes to `worker.log` in the data
    folder (the previous one is kept as `worker.log.old`). A second task, "Courtyard update", has
-   no trigger: the app runs it when you press Update.
+   no trigger: the app runs it when you press Update. Only a worker started this way offers
+   updates, so one you start yourself while developing never updates itself.
+
+   A live copy set up before the Update button existed needs `update.ps1` run once, then
+   `install-task.ps1` again, to get the second task.
 
 **To update** to the newest `main`, press **Update** on the home page when it says a new version
 is ready (it checks every few hours), or run:

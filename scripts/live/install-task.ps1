@@ -35,9 +35,12 @@ if (-not (Stop-LiveWorker $root $TaskName $settings.Port)) {
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $run = Join-Path $PSScriptRoot "run.ps1"
+# Both scripts are told the task's name when it isn't the usual one.
+$forTask = ""
+if ($TaskName -ne (Resolve-TaskName "")) { $forTask = " -TaskName `"$TaskName`"" }
 # conhost --headless runs it with no window at all, not even a flash at log on.
 $action = New-ScheduledTaskAction -Execute "conhost.exe" -WorkingDirectory $root `
-  -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$run`""
+  -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$run`"$forTask"
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 # As the owner, so the worker finds their Claude Code login (ADR 0003); no password is stored.
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
@@ -56,8 +59,6 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Pr
 $updateTask = Get-UpdateTaskName $TaskName
 $update = Join-Path $PSScriptRoot "update.ps1"
 $updateLog = Join-Path $settings.DataDir "live-update.log"
-$forTask = ""
-if ($TaskName -ne (Resolve-TaskName "")) { $forTask = " -TaskName `"$TaskName`"" }
 $updateAction = New-ScheduledTaskAction -Execute "conhost.exe" -WorkingDirectory $root `
   -Argument "--headless cmd.exe /c `"powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$update`"$forTask >> `"$updateLog`" 2>&1`""
 $updateSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `

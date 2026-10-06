@@ -57,7 +57,7 @@ export const createWorker = (options: {
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
-  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider, liveCopy } =
+  const { port, contextDir, dataDir, webDir, claudeProvider, fakeProvider, liveCopy, updateTask } =
     settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
@@ -69,6 +69,7 @@ export const createWorker = (options: {
   const sessions = createSessions({ dataDir, providers, contextDir, now });
   const live = createLive({
     liveCopy,
+    updateTask,
     dataDir,
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
@@ -98,7 +99,7 @@ export const createWorker = (options: {
         return apiError(c, { status: 404, error: "Updates from the app are off on this worker." });
       case "running":
         return apiError(c, { status: 409, error: "An update is already running." });
-      case "storage":
+      case "not-started":
         return apiError(c, { status: 500, error: started.error.message });
     }
   });
