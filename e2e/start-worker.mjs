@@ -1,6 +1,7 @@
 // Starts the worker for the browser tests on a fresh data folder, so every run begins as a new
-// install with no owner yet, plus one long session to check that long sessions stay smooth.
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+// install with no owner yet, plus one long session to check that long sessions stay smooth. The
+// context folder is a fresh copy of the fixtures, so adding a workspace never touches the repo.
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
@@ -9,6 +10,12 @@ const dataDir = process.env.COURTYARD_DATA_DIR;
 if (!dataDir)
   throw new Error("COURTYARD_DATA_DIR isn't set: start the browser tests with Playwright");
 rmSync(dataDir, { recursive: true, force: true });
+
+const contextDir = process.env.COURTYARD_CONTEXT_DIR;
+if (!contextDir)
+  throw new Error("COURTYARD_CONTEXT_DIR isn't set: start the browser tests with Playwright");
+rmSync(contextDir, { recursive: true, force: true });
+cpSync(join(import.meta.dirname, "fixtures", "context"), contextDir, { recursive: true });
 
 // The long session, written in the worker's own formats: parsing each record with the contract's
 // schemas means a format change fails here, by name, rather than as a blank page in a test.

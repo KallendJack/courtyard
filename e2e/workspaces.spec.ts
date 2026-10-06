@@ -36,3 +36,40 @@ test("warns when a context file grows long enough to crowd every message", async
   await expect(page.getByRole("region", { name: "Facts" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
 });
+
+test("the owner adds a workspace from the sidebar, and it opens ready for a first session", async ({
+  page,
+}) => {
+  // A name of its own, so the test can run again on the same worker.
+  const name = `Allotment ${Date.now()}`;
+  await page.goto("/");
+  const switcher = page.getByRole("navigation", { name: "Workspaces" });
+
+  await switcher.getByRole("link", { name: "New workspace" }).click();
+  await page.getByLabel("Name").fill(name);
+  await page.getByRole("button", { name: "Add workspace" }).click();
+
+  await expect(page).toHaveURL(/\/workspaces\/allotment-\d+$/);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Facts" })).toContainText("Nothing yet.");
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
+  await expect(switcher.getByRole("link", { name })).toBeVisible();
+
+  // Its colour can change, and the change stays.
+  await page.getByRole("button", { name: "Change colour" }).click();
+  await page.getByRole("radio", { name: "Moss" }).check();
+  await page.reload();
+  await expect(
+    switcher.getByRole("link", { name }).locator("[data-workspace-colour]"),
+  ).toHaveAttribute("data-workspace-colour", "moss");
+});
+
+test("a name another workspace has gets a clear message", async ({ page }) => {
+  await page.goto("/new-workspace");
+
+  await page.getByLabel("Name").fill("garage GYM");
+  await page.getByRole("button", { name: "Add workspace" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("already a workspace called Garage gym");
+  await expect(page).toHaveURL(/\/new-workspace$/);
+});

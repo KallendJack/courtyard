@@ -1,14 +1,14 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiError, WorkspaceDetail, WorkspaceList } from "@courtyard/contract";
+import { ApiError, WorkspaceDetail, WorkspaceList, WorkspaceSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner } from "./testing.ts";
+import { asOwner, postJson, type Requester } from "./testing.ts";
 import { createWorker } from "./worker.ts";
 
 let root: string;
 let contextDir: string;
-let request: (path: string) => Response | Promise<Response>;
+let request: Requester;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
@@ -260,5 +260,167 @@ describe("opening a workspace", () => {
       expect(response.status).toBe(404);
       expect(ApiError.safeParse(await response.json()).success).toBe(true);
     }
+  });
+});
+
+const addWorkspace = (name: unknown) => postJson(request, "/api/workspaces", { name });
+
+const added = async (name: string) => {
+  const response = await addWorkspace(name);
+  expect(response.status).toBe(201);
+  return WorkspaceSummary.parse(await response.json());
+};
+
+const changeColour = (id: string, colour: unknown) =>
+  request(`/api/workspaces/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ colour }),
+  });
+
+const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
+
+describe("adding a workspace", () => {
+  it("makes its folder and a starter context file with empty facts, plans and ideas", async () => {
+    const workspace = await added("Garage gym");
+
+    expect(workspace).toMatchObject({
+      id: "garage-gym",
+      name: "Garage gym",
+      mode: "planning",
+      hasContextFile: true,
+    });
+    const markdown = await readFile(join(contextDir, "garage-gym", "CONTEXT.md"), "utf8");
+    expect(markdown).toMatch(/^# Garage gym\n/);
+    const { contextFile } = await openWorkspace("garage-gym");
+    expect(contextFile).toMatchObject({ title: "Garage gym", facts: [], plans: [], ideas: [] });
+    // The hint says how to write lines, in the words of docs/ai-conduct.md.
+    expect(contextFile?.intro).toContain("one line");
+  });
+
+  it("makes a folder name from the name, keeping the name as written", async () => {
+    const birthday = await added("  Nan's 80th Birthday!  ");
+    const cafe = await added("Café plans");
+    const shed = await added("Søren's Straße shed");
+
+    expect([birthday.id, birthday.name]).toEqual(["nans-80th-birthday", "Nan's 80th Birthday!"]);
+    expect([cafe.id, cafe.name]).toEqual(["cafe-plans", "Café plans"]);
+    expect(shed.id).toBe("sorens-strasse-shed");
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual([
+      "cafe-plans",
+      "nans-80th-birthday",
+      "sorens-strasse-shed",
+    ]);
+  });
+
+  it("refuses a name that clashes with a workspace's folder or its name", async () => {
+    await workspace("garage-gym");
+    await workspace("bike", { "workspace.json": '{ "name": "MTB workstation" }' });
+
+    for (const name of ["Garage Gym", "mtb workstation"]) {
+      const response = await addWorkspace(name);
+      expect(response.status).toBe(409);
+      expect(await errorOf(response)).toContain("already");
+    }
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual(["garage-gym", "bike"]);
+  });
+
+  it("refuses a name that can't be a folder name, saying why", async () => {
+    for (const name of ["", "   ", "!!!", "日本語", "Con", "nul", "x".repeat(61), 42]) {
+      const response = await addWorkspace(name);
+      expect(response.status, String(name)).toBe(400);
+      expect(await errorOf(response)).not.toBe("");
+    }
+    expect(await listWorkspaces()).toEqual([]);
+  });
+
+  it("gives each new workspace the colour the fewest workspaces have, in turn", async () => {
+    const colours = [];
+    for (const name of ["One", "Two", "Three", "Four", "Five", "Six"]) {
+      colours.push((await added(name)).colour);
+    }
+
+    expect(colours).toEqual(["bracken", "heather", "slate", "moss", "peat", "bracken"]);
+  });
+
+  it("never changes another workspace's colour", async () => {
+    await workspace("office");
+    await workspace("studio");
+    const before = (await listWorkspaces()).map((w) => [w.id, w.colour]);
+
+    const allotment = await added("Allotment");
+
+    expect(before).toEqual([
+      ["office", "bracken"],
+      ["studio", "heather"],
+    ]);
+    expect(allotment.colour).toBe("slate");
+    expect((await listWorkspaces()).map((w) => [w.id, w.colour])).toEqual([
+      ["allotment", "slate"],
+      ...before,
+    ]);
+  });
+});
+
+describe("changing a workspace's colour", () => {
+  it("keeps the new colour, and the rest of the workspace's config", async () => {
+    await workspace("side-project", {
+      "workspace.json": '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    });
+
+    const response = await changeColour("side-project", "moss");
+
+    expect(response.status).toBe(200);
+    expect(WorkspaceSummary.parse(await response.json())).toMatchObject({
+      colour: "moss",
+      mode: "code",
+    });
+    const { workspace: reopened } = await openWorkspace("side-project");
+    expect(reopened).toMatchObject({ colour: "moss", mode: "code" });
+  });
+
+  it("never changes another workspace's colour, even one that wasn't kept yet", async () => {
+    await workspace("office");
+    await workspace("studio");
+    await workspace("workshop");
+    const before = (await listWorkspaces()).map((w) => [w.id, w.colour]);
+
+    expect((await changeColour("office", "moss")).status).toBe(200);
+
+    expect(before).toEqual([
+      ["office", "bracken"],
+      ["studio", "heather"],
+      ["workshop", "slate"],
+    ]);
+    expect((await listWorkspaces()).map((w) => [w.id, w.colour])).toEqual([
+      ["office", "moss"],
+      ["studio", "heather"],
+      ["workshop", "slate"],
+    ]);
+    // Kept now, so a folder added by hand later can't move them either.
+    await workspace("attic");
+    expect((await listWorkspaces()).map((w) => w.colour)).toEqual([
+      "bracken",
+      "moss",
+      "heather",
+      "slate",
+    ]);
+  });
+
+  it("refuses a colour that isn't one of the five, or a workspace that doesn't exist", async () => {
+    await workspace("office");
+
+    expect((await changeColour("office", "teal")).status).toBe(400);
+    expect((await changeColour("nope", "moss")).status).toBe(404);
+  });
+
+  it("won't overwrite a config it had to ignore", async () => {
+    await workspace("office", { "workspace.json": "{ not json" });
+
+    const response = await changeColour("office", "moss");
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toContain("workspace.json");
+    expect(await readFile(join(contextDir, "office", "workspace.json"), "utf8")).toBe("{ not json");
   });
 });

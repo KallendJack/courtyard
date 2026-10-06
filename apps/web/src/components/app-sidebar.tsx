@@ -1,11 +1,11 @@
 import { SessionList, type WorkspaceSummary } from "@courtyard/contract";
 import { Link, useLocation, useParams } from "@tanstack/react-router";
-import { LogOut, PanelLeft } from "lucide-react";
+import { LogOut, PanelLeft, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { fromWorker } from "../worker.ts";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
-import { type ColourOf, WorkspaceDot } from "./workspace-colour.tsx";
+import { WorkspaceDot } from "./workspace-colour.tsx";
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;
@@ -42,7 +42,6 @@ const remember = (collapsed: boolean) => {
  */
 export function AppSidebar(props: {
   workspaces: readonly WorkspaceSummary[];
-  colourOf: ColourOf;
   onLogOut: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(wasCollapsed);
@@ -96,13 +95,27 @@ export function AppSidebar(props: {
                 title={collapsed ? workspace.name : undefined}
                 className="flex h-9 items-center gap-3 rounded-md px-3 text-[15px] hover:bg-muted/60 data-[status=active]:bg-muted data-[status=active]:font-semibold group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
               >
-                <WorkspaceDot colour={props.colourOf(workspace.id)} />
+                <WorkspaceDot colour={workspace.colour} />
                 <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
                   {workspace.name}
                 </span>
               </Link>
             </li>
           ))}
+          <li>
+            <Link
+              to="/new-workspace"
+              aria-label="New workspace"
+              title={collapsed ? "New workspace" : undefined}
+              className="flex h-9 items-center gap-3 rounded-md px-3 text-[15px] text-muted-foreground hover:bg-muted/60 data-[status=active]:bg-muted data-[status=active]:font-semibold data-[status=active]:text-foreground group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+            >
+              {/* As wide as a dot's slot, so the names line up. */}
+              <Plus className="-mx-[3px] size-4 shrink-0" aria-hidden />
+              <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
+                New workspace
+              </span>
+            </Link>
+          </li>
         </ul>
         <RecentSessions workspaces={props.workspaces} />
         <button

@@ -23,6 +23,10 @@ export {
 export {
   CONTEXT_FILE_LONG_CHARACTERS,
   ContextFile,
+  NewWorkspace,
+  WORKSPACE_NAME_MAX_LENGTH,
+  WorkspaceChange,
+  WorkspaceColour,
   WorkspaceDetail,
   WorkspaceId,
   WorkspaceList,

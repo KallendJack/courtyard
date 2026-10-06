@@ -5,14 +5,14 @@ import {
   type SessionSummary,
   WorkspaceDetail,
 } from "@courtyard/contract";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
-import { useWorkspaceColours, WorkspaceDot } from "@/components/workspace-colour";
+import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { describeWhen } from "../../when.ts";
-import { fromWorker, loadProviders, startSession } from "../../worker.ts";
+import { changeWorkspace, fromWorker, loadProviders, startSession } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
 function Workspace() {
   const { detail, sessions, providers } = Route.useLoaderData();
   const navigate = useNavigate();
-  const colourOf = useWorkspaceColours();
+  const router = useRouter();
 
   if (detail.kind === "not-found") {
     return (
@@ -50,7 +50,16 @@ function Workspace() {
       <PageTitle
         above={
           <span className="flex items-center gap-2 text-xs font-medium text-primary-text">
-            <WorkspaceDot colour={colourOf(workspace.id)} small />
+            <ColourChooser
+              colour={workspace.colour}
+              choose={async (colour) => {
+                const changed = await changeWorkspace(workspace.id, { colour });
+                if (changed.kind !== "loaded") return describeProblem(changed).body;
+                // Every list of workspaces shows the new colour.
+                await router.invalidate();
+                return undefined;
+              }}
+            />
             {workspace.mode === "code" ? "Code workspace" : "Workspace"}
           </span>
         }

@@ -26,7 +26,8 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       COURTYARD_PORT: String(port),
-      COURTYARD_CONTEXT_DIR: "e2e/fixtures/context",
+      // A copy of e2e/fixtures/context, made fresh by start-worker.mjs.
+      COURTYARD_CONTEXT_DIR: "test-results/e2e/context",
       COURTYARD_DATA_DIR: "test-results/e2e/data",
       COURTYARD_FAKE_PROVIDER: "1",
       // The browser tests never start the real Claude Code.

@@ -2,7 +2,8 @@
 
 The rules for everything Courtyard tells a model, in every scenario. The worker's prompts module
 (`apps/worker/src/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
-and the fake are told the same things.
+and the fake are told the same things. The one exception is the starter context file, a template the workspaces
+module writes (see below).
 
 ## Changing what a model is told
 
@@ -43,6 +44,17 @@ conversation markers, then the new message. Earlier answers say how their turn e
 - **Stopped by the owner:** marked as stopped before it finished, with whatever was written.
 - **Failed or interrupted:** marked as failed, so a retry reads as a retry, not the owner repeating themselves.
 
+## Starter context file
+
+Built with #24. A workspace added from the app starts with a context file from a template (`createWorkspace` in
+`apps/worker/src/workspaces/`), no model involved:
+
+1. The workspace's name as the title.
+2. One line on how to write lines, following the context-line rules below: one line each, facts true now, plans
+   decided but not done, ideas being considered. It sits where the intro goes, so the owner replaces it with what
+   the workspace covers.
+3. Empty Facts, Plans and Ideas sections.
+
 ## Scenarios still to build
 
 Each is written here, as rules, before its phase starts. What the spec already decides:
@@ -50,7 +62,6 @@ Each is written here, as rules, before its phase starts. What the spec already d
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Suggesting context lines                      | 2            | Asked for by the owner ("remember that", Save to context). Each suggestion is labelled fact, plan or idea, and may change or remove a line. Follows the context-line rules below. |
-| Starter context file                          | With #24     | No model: a template with the three sections and a one-line hint.                                                                                      |
 | Coding                                        | 3            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
 | Switching model mid-session                   | 4            | The new model gets every turn's framing as usual: the context file and the conversation so far, with the owner's last message re-sent.                  |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |

@@ -1,8 +1,8 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
+import { LogOut, Plus } from "lucide-react";
 import { CourtyardMark } from "./courtyard-mark.tsx";
-import { type ColourOf, WorkspaceDot } from "./workspace-colour.tsx";
+import { WorkspaceDot } from "./workspace-colour.tsx";
 
 /**
  * The workspace switcher on a narrow screen (a folded phone): one row across the top that
@@ -10,7 +10,6 @@ import { type ColourOf, WorkspaceDot } from "./workspace-colour.tsx";
  */
 export function WorkspaceStrip(props: {
   workspaces: readonly WorkspaceSummary[];
-  colourOf: ColourOf;
   onLogOut: () => void;
 }) {
   return (
@@ -26,10 +25,17 @@ export function WorkspaceStrip(props: {
             params={{ workspaceId: workspace.id }}
             className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm data-[status=active]:bg-muted data-[status=active]:font-semibold"
           >
-            <WorkspaceDot colour={props.colourOf(workspace.id)} small />
+            <WorkspaceDot colour={workspace.colour} small />
             {workspace.name}
           </Link>
         ))}
+        <Link
+          to="/new-workspace"
+          aria-label="New workspace"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
+        >
+          <Plus className="size-4" />
+        </Link>
       </nav>
       <button
         type="button"
