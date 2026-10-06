@@ -47,6 +47,12 @@ const Env = z.object({
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
+  // Both set by scripts/live/run.ps1 when it starts the live worker, never by hand.
+  COURTYARD_LIVE_COPY: z.preprocess(
+    unsetIfEmpty,
+    z.string().refine(isFolder, "must be an existing folder").optional(),
+  ),
+  COURTYARD_UPDATE_TASK: z.preprocess(unsetIfEmpty, z.string().default("Courtyard update")),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -62,6 +68,13 @@ export type Settings = {
   readonly claudeProvider: boolean;
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
+  /**
+   * The live copy this worker runs from (ADR 0011), which the owner can update from the app.
+   * Only the live scripts set it, so development and tests never update themselves.
+   */
+  readonly liveCopy: string | null;
+  /** The scheduled task that updates the live copy, as install-task.ps1 named it. */
+  readonly updateTask: string;
 };
 
 /**
@@ -83,5 +96,10 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
     claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER === "1",
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER === "1",
+    liveCopy:
+      parsed.data.COURTYARD_LIVE_COPY === undefined
+        ? null
+        : resolve(parsed.data.COURTYARD_LIVE_COPY),
+    updateTask: parsed.data.COURTYARD_UPDATE_TASK,
   });
 };

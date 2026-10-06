@@ -2,9 +2,20 @@
 # install-task.ps1 registers runs this at log on, with no window; its output goes to worker.log
 # in the data folder.
 
+param(
+  # The task that runs this, if install-task.ps1 was given another name.
+  [string]$TaskName = ""
+)
+
 . "$PSScriptRoot\common.ps1"
+$TaskName = Resolve-TaskName $TaskName
 
 $root = Get-LiveRoot
+# The worker is told it runs from this live copy, and which task updates it, so the app can offer
+# updates. Only ever set here: a worker started any other way never updates itself. (Values in
+# the environment win over the same names in .env.)
+$env:COURTYARD_LIVE_COPY = $root
+$env:COURTYARD_UPDATE_TASK = Get-UpdateTaskName $TaskName
 $settings = Read-LiveSettings $root
 New-Item -ItemType Directory -Force -Path $settings.DataDir | Out-Null
 $log = Join-Path $settings.DataDir "worker.log"
