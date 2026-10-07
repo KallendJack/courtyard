@@ -1,10 +1,11 @@
 import {
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
+  LinePlace,
   type OwnerContextShared,
   OwnerSection,
   type PlacedLine,
-  placeNames,
+  placeName,
   type Save,
   type SessionEvent,
   type WorkspaceMode,
@@ -155,12 +156,9 @@ const SAVING_IN_CODE = [
 
 const SAVE_INPUT: SaveTool["input"] = {
   action: z.enum(["add", "change", "remove"]).describe("Add a line, or change or remove one."),
-  place: z
-    .enum(["workspace", "owner"])
-    .optional()
-    .describe(
-      "Where the line goes: this workspace's context file, or the owner context. Leave it out to add to the workspace, or to keep a changed line where it is.",
-    ),
+  place: LinePlace.optional().describe(
+    "Where the line goes: this workspace's context file, or the owner context. Leave it out to add to the workspace, or to keep a changed line where it is.",
+  ),
   section: OwnerSection.describe(
     "Where the line belongs: facts (true now), plans (decided, not done) or ideas (being considered); or answers, How to answer me in the owner context. For remove, the section it's in.",
   ),
@@ -289,7 +287,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   return said;
 };
 
-const placed = (line: PlacedLine) => `${placeNames(line).join(" → ")}: "${line.line}"`;
+const placed = (line: PlacedLine) => `${placeName(line)}: "${line.line}"`;
 
 /** A save as the model reads it in the conversation, with what the owner did with it. */
 const saveLine = ({ save, outcome }: SaidSave) => {

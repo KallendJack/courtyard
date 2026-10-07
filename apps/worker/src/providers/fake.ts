@@ -22,12 +22,16 @@ const ADD = /^save (owner )?(fact|plan|idea|preference): (.+)$/i;
 const CHANGE = /^change (\w+) to (owner )?(fact|plan|idea|preference): (.+)$/i;
 const REMOVE = /^remove (\w+)$/i;
 
-/** Where a scripted save goes: "owner fact" is About me, "preference" How to answer me. */
+/**
+ * Where a scripted save goes: "owner fact" is About me and "preference" How to answer me. Without
+ * "owner", it names no place, as a model needn't: an added line goes to the workspace and a
+ * changed one stays where it is.
+ */
 const whereTo = (owner: string | undefined, word: string) => {
   const lower = word.toLowerCase();
   const section =
     SECTIONS[lower === "plan" || lower === "idea" || lower === "preference" ? lower : "fact"];
-  return { place: owner || section === "answers" ? "owner" : "workspace", section };
+  return owner ? { place: "owner", section } : { section };
 };
 
 /**

@@ -2,9 +2,10 @@ import { join } from "node:path";
 import {
   CONTEXT_LINE_MAX_CHARACTERS,
   type ContextSection,
+  LinePlace,
   OwnerSection,
   type PlacedLine,
-  placeNames,
+  placeName,
   type Save,
   type SessionId,
   type WorkspaceId,
@@ -19,7 +20,7 @@ import {
   removeContextLine,
   replaceContextLine,
 } from "../context-file/index.ts";
-import type { ContextFolder, Place } from "../context-folder/index.ts";
+import type { ChangeKind, ContextFolder, Place } from "../context-folder/index.ts";
 import { writeTextFile } from "../files.ts";
 import { OWNER_FILE, readOwnerContext, STARTER_OWNER_CONTEXT } from "../owner-context/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -31,8 +32,6 @@ import { CONTEXT_FILE, getWorkspace, starterContextFile } from "../workspaces/in
  * the context folder.
  */
 
-const SavePlace = z.enum(["workspace", "owner"]);
-
 /**
  * What a model asks the save tool for, checked like anything else a model sends. Without a
  * place, a save goes where its line already is, or to How to answer me for `answers`, or else to
@@ -41,13 +40,13 @@ const SavePlace = z.enum(["workspace", "owner"]);
 const SaveRequest = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("add"),
-    place: SavePlace.optional(),
+    place: LinePlace.optional(),
     section: OwnerSection,
     text: z.string(),
   }),
   z.object({
     action: z.literal("change"),
-    place: SavePlace.optional(),
+    place: LinePlace.optional(),
     section: OwnerSection,
     label: z.string(),
     text: z.string(),
@@ -138,7 +137,7 @@ const checkedLine = (text: string): Result<string, SaveRefusal> => {
 const changeFiles = async <T, E>(
   target: SaveTarget,
   options: {
-    kind: "save" | "undo" | "edit";
+    kind: Extract<ChangeKind, "save" | "undo" | "edit">;
     title: (value: T) => string;
     storage: E;
     change: (files: Files) => Result<{ files: Files; value: T }, E>;
@@ -159,18 +158,30 @@ const changeFiles = async <T, E>(
       const made = options.change(before);
       if (!made.ok) return made;
       const after = made.value.files;
-      const places: Place[] = [];
-      if (after.owner !== before.owner) {
-        const written = await writeTextFile(join(target.contextDir, OWNER_FILE), after.owner);
-        if (!written.ok) return err(options.storage);
-        places.push({ kind: "owner-context" });
+      const files = [
+        {
+          path: join(target.contextDir, OWNER_FILE),
+          before: before.owner,
+          after: after.owner,
+          place: { kind: "owner-context" } satisfies Place,
+        },
+        {
+          path: join(folder, CONTEXT_FILE),
+          before: before.workspace,
+          after: after.workspace,
+          place: { kind: "workspace", id: target.workspaceId } satisfies Place,
+        },
+      ].filter((file) => file.after !== file.before);
+      const written: typeof files = [];
+      for (const file of files) {
+        if (!(await writeTextFile(file.path, file.after)).ok) {
+          // A line moved between the files is never left in neither: put back what was written.
+          for (const done of written) await writeTextFile(done.path, done.before);
+          return err(options.storage);
+        }
+        written.push(file);
       }
-      if (after.workspace !== before.workspace) {
-        const written = await writeTextFile(join(folder, CONTEXT_FILE), after.workspace);
-        if (!written.ok) return err(options.storage);
-        places.push({ kind: "workspace", id: target.workspaceId });
-      }
-      return ok({ value: made.value.value, places });
+      return ok({ value: made.value.value, places: files.map((file) => file.place) });
     },
     ({ value, places }) => ({
       kind: options.kind,
@@ -198,13 +209,14 @@ const replaced = (files: Files, change: { was: PlacedLine; now: PlacedLine }) =>
 const mayChange = (mode: WorkspaceMode, placed: Pick<PlacedLine, "place" | "section">) =>
   mode === "planning" || (placed.place === "owner" && placed.section === "answers");
 
-/** The lines a model in a workspace of this mode is shown, with their labels. */
+/**
+ * The lines a model in a workspace of this mode is shown, with their labels: the context file's,
+ * and the owner context's that it reads (all of them, or How to answer me in a code workspace).
+ */
 const linesShown = (files: ShownFiles, mode: WorkspaceMode): LabelledLine[] => [
-  ...(files.workspace === null || mode === "code"
-    ? []
-    : labelledLines(files.workspace, "workspace")),
-  ...(files.owner === null ? [] : labelledLines(files.owner, "owner")).filter((line) =>
-    mayChange(mode, line),
+  ...(files.workspace === null ? [] : labelledLines(files.workspace, "workspace")),
+  ...(files.owner === null ? [] : labelledLines(files.owner, "owner")).filter(
+    (line) => mode === "planning" || (line.place === "owner" && line.section === "answers"),
   ),
 ];
 
@@ -231,10 +243,8 @@ const applySave = (apply: {
   mode: WorkspaceMode;
 }): Result<{ files: Files; value: Save }, SaveRefusal> => {
   const { files, request, shown, mode } = apply;
-  const lines = [
-    ...labelledLines(files.workspace, "workspace"),
-    ...labelledLines(files.owner, "owner"),
-  ];
+  // Only what the model can see counts as a repeat, so a refusal never quotes a line it isn't shown.
+  const lines = linesShown(files, mode);
   const repeats = (line: string, except?: PlacedLine) =>
     lines.find(
       (other) =>
@@ -247,22 +257,24 @@ const applySave = (apply: {
         ),
     );
   /** The line a request saves, where it goes, or why it can't. */
-  const savedLine = (
-    text: string,
-    where: Where | undefined,
-    except?: PlacedLine,
-  ): Result<PlacedLine, SaveRefusal> => {
+  const savedLine = (save: {
+    text: string;
+    where: Where | undefined;
+    /** The line a change replaces, which it may repeat. */
+    replacing?: PlacedLine;
+  }): Result<PlacedLine, SaveRefusal> => {
+    const { where } = save;
     if (where === undefined) return err({ kind: "malformed" });
     if (!mayChange(mode, where)) return err({ kind: "code-workspace" });
-    const line = checkedLine(text);
+    const line = checkedLine(save.text);
     if (!line.ok) return line;
-    const repeated = repeats(line.value, except);
+    const repeated = repeats(line.value, save.replacing);
     if (repeated) return err({ kind: "duplicate", line: repeated.line });
     return ok({ ...where, line: line.value });
   };
 
   if (request.action === "add") {
-    const saved = savedLine(request.text, whereTo(request, "workspace"));
+    const saved = savedLine({ text: request.text, where: whereTo(request, "workspace") });
     if (!saved.ok) return saved;
     const markdown = addContextLine(files[saved.value.place], saved.value);
     return ok({
@@ -274,10 +286,8 @@ const applySave = (apply: {
   // Changes and removals name a line by the label the model was shown.
   const was = shown.get(request.label.replace(/[[\]\s]/g, "").toUpperCase());
   if (was === undefined) return err({ kind: "unknown-label", label: request.label });
-  const stale: SaveRefusal = {
-    kind: "stale",
-    lines: linesShown({ workspace: files.workspace, owner: files.owner }, mode),
-  };
+  if (!mayChange(mode, was)) return err({ kind: "code-workspace" });
+  const stale: SaveRefusal = { kind: "stale", lines: linesShown(files, mode) };
 
   if (request.action === "remove") {
     const removed = removeContextLine(files[was.place], was);
@@ -290,7 +300,11 @@ const applySave = (apply: {
   }
 
   if (!hasContextLine(files[was.place], was)) return err(stale);
-  const saved = savedLine(request.text, whereTo(request, was.place), was);
+  const saved = savedLine({
+    text: request.text,
+    where: whereTo(request, was.place),
+    replacing: was,
+  });
   if (!saved.ok) return saved;
   const changed = replaced(files, { was, now: saved.value });
   return changed === undefined
@@ -298,18 +312,15 @@ const applySave = (apply: {
     : ok({ files: changed, value: { action: "change", saved: saved.value, replaced: was } });
 };
 
-/** Where a line is, as a change's title names it: "Facts", or "Owner context → About me → Facts". */
-const placeOf = (line: PlacedLine) => placeNames(line).join(" → ");
-
 /** A save's change, as the context folder's history titles it. */
 const titleOf = (save: Save) => {
   switch (save.action) {
     case "add":
-      return `Save to ${placeOf(save.saved)}: ${save.saved.line}`;
+      return `Save to ${placeName(save.saved)}: ${save.saved.line}`;
     case "change":
-      return `Change in ${placeOf(save.saved)}: ${save.saved.line}`;
+      return `Change in ${placeName(save.saved)}: ${save.saved.line}`;
     case "remove":
-      return `Remove from ${placeOf(save.replaced)}: ${save.replaced.line}`;
+      return `Remove from ${placeName(save.replaced)}: ${save.replaced.line}`;
   }
 };
 
@@ -401,7 +412,7 @@ export const editSave = async (
   if (current === undefined) return err({ kind: "nothing-to-edit" });
   return changeFiles<null, NoteRefusal>(target, {
     kind: "edit",
-    title: () => `Edit in ${placeOf(now)}: ${now.line}`,
+    title: () => `Edit in ${placeName(now)}: ${now.line}`,
     storage: NOTE_STORAGE,
     change: (files) => {
       const edited = replaced(files, { was: current, now });

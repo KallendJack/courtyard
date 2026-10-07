@@ -64,6 +64,8 @@ export type Scenario = {
   readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
   /** A starting owner context, when there is one. */
   readonly owner?: { facts?: string[]; plans?: string[]; ideas?: string[]; answers?: string[] };
+  /** A code workspace, whose models save only to How to answer me; planning unless it says. */
+  readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
   readonly turns: readonly Turn[];
@@ -420,6 +422,24 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Keep it really short today, I'm in a rush: what's a 15-minute workout with just dumbbells?",
+        expect: [],
+      },
+    ],
+  },
+  {
+    name: "code-workspace-preference",
+    rule: "a code workspace saves a lasting preference to How to answer me, and nothing about the owner",
+    workspace: "Website",
+    mode: "code",
+    context: { facts: ["A static site built with Astro"] },
+    owner: { answers: ["Metric units"] },
+    turns: [
+      {
+        say: "Always show me TypeScript, never plain JavaScript. How do I add a sitemap?",
+        expect: [{ action: "add", place: "owner", section: "answers", words: ["typescript"] }],
+      },
+      {
+        say: "I moved to Leeds last month, so I'm a bit slow this week. Which file does the sitemap go in?",
         expect: [],
       },
     ],

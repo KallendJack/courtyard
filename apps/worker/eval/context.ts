@@ -95,8 +95,9 @@ const placesOf = (place: Places | undefined) =>
 /** Sections, with the place unless it's only the workspace: "owner facts or plans". */
 const describeSections = (place: Places | undefined, section: Sections) => {
   const places = placesOf(place);
-  const where = places.length === 1 && places[0] === "workspace" ? "" : `${places.join(" or ")} `;
-  return `${where.replace("owner", "owner context")}${sectionsOf(section).join(" or ")}`;
+  if (places.length === 1 && places[0] === "workspace") return sectionsOf(section).join(" or ");
+  const named = places.map((p) => (p === "owner" ? "owner context" : p)).join(" or ");
+  return `${named} ${sectionsOf(section).join(" or ")}`;
 };
 
 const describeExpected = (expected: ExpectedSave) => {
@@ -237,6 +238,10 @@ const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict>
     const ownerContext = ownerContextFor(scenario);
     if (ownerContext !== undefined) {
       await writeFile(join(root, "context", OWNER_FILE), ownerContext);
+    }
+    if (scenario.mode === "code") {
+      const config = { mode: "code", repoPath: "/path/to/repo" };
+      await writeFile(join(folder, "workspace.json"), JSON.stringify(config));
     }
     for (const [path, text] of Object.entries(scenario.files ?? {})) {
       await mkdir(dirname(join(folder, path)), { recursive: true });

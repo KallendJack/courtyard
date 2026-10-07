@@ -3,7 +3,7 @@ import {
   CONTEXT_SECTION_NAMES,
   ContextSection,
   type PlacedLine,
-  placeNames,
+  placeName,
   type SaveEdit,
   type SessionId,
 } from "@courtyard/contract";
@@ -46,9 +46,6 @@ const editOf = (choice: { where: Where; section: ContextSection; line: string })
     ? { place: "owner", section, line }
     : { place: "owner", section: "answers", line };
 };
-
-/** Where a line is, as a note names it: "Facts", or "Owner context → About me → Facts". */
-const placeName = (line: PlacedLine) => placeNames(line).join(" → ");
 
 /** What a note says: its label ("Saved to Facts"), its line, and what that line replaced. */
 const wordsFor = (note: Note) => {

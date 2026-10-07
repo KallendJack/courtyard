@@ -228,6 +228,9 @@ const OWNER_MD = [
   "### Plans",
   "- Moving house in spring.",
   "",
+  "### Ideas",
+  "- An allotment.",
+  "",
   "## How to answer me",
   "",
   "- Metric units and pounds.",
@@ -246,6 +249,7 @@ describe("the owner context every turn carries (ADR 0010)", () => {
     // Each line with its label, which can't clash with the context file's (ADR 0013).
     expect(instructions).toContain("- [MF1] Lives in the UK.");
     expect(instructions).toContain("- [MP1] Moving house in spring.");
+    expect(instructions).toContain("- [MI1] An allotment.");
     expect(instructions).toContain("- [A1] Metric units and pounds.");
     expect(instructions).toContain("- [F1] Single garage.");
     expect(instructions.indexOf("</owner_context>")).toBeLessThan(

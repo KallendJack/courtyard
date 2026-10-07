@@ -119,10 +119,15 @@ export const Activity = z.discriminatedUnion("kind", [
 ]);
 export type Activity = z.infer<typeof Activity>;
 
+/** Which file a line is written in: the workspace's context file, or the owner context (ADR 0013). */
+export const LinePlace = z.enum(["workspace", "owner"]);
+export type LinePlace = z.infer<typeof LinePlace>;
+
 /**
- * A line where it's written: in the workspace's context file, or in the owner context (ADR 0013).
- * Saves recorded before the owner context could be saved to have no place: they're the
- * workspace's.
+ * A line where it's written: its place and its section. Saves recorded before the owner context
+ * could be saved to have no place: they're the workspace's. That default is why this is a plain
+ * union rather than a discriminated one, which can't default its discriminator; the type it
+ * gives is still discriminated by `place`.
  */
 export const PlacedLine = z.union([
   z.object({
@@ -134,13 +139,13 @@ export const PlacedLine = z.union([
 ]);
 export type PlacedLine = z.infer<typeof PlacedLine>;
 
-/** Where a line is, as the app names it: ["Facts"], or ["Owner context", "About me", "Facts"]. */
-export const placeNames = (placed: PlacedLine): readonly string[] => {
-  if (placed.place === "workspace") return [CONTEXT_SECTION_NAMES[placed.section]];
+/** Where a line is, as the app names it: "Facts", or "Owner context → About me → Facts". */
+export const placeName = (placed: PlacedLine): string => {
+  if (placed.place === "workspace") return CONTEXT_SECTION_NAMES[placed.section];
   const { section } = placed;
   return section === "answers"
-    ? ["Owner context", "How to answer me"]
-    : ["Owner context", "About me", CONTEXT_SECTION_NAMES[section]];
+    ? "Owner context → How to answer me"
+    : `Owner context → About me → ${CONTEXT_SECTION_NAMES[section]}`;
 };
 
 /**

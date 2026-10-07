@@ -38,10 +38,11 @@ test("the owner starts their owner context, fills it in, and each workspace says
   await expect(panel.getByRole("status")).toContainText("Getting long");
 });
 
-// After the test above, so the owner context it fills in is there to save to.
+// In this file, so it never runs alongside the test above, which needs no OWNER.md at first.
 test("a save to the owner context names its place, shows on the home page, and Edit moves it", async ({
   page,
 }) => {
+  writeFileSync(OWNER_FILE, "## About me\n### Facts\n- Lives in Leeds.\n");
   const name = `Knee ${Date.now()}`;
   await newWorkspace(page, name);
   await startSaving(page, "save owner fact: Has a bad left knee.");
