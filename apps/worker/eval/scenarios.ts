@@ -1,21 +1,31 @@
-import type { ContextSection } from "@courtyard/contract";
+import type { OwnerSection, PlacedLine } from "@courtyard/contract";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
- * with a starting context file, and the saves each owner message should end with. Everything here
- * is invented, since the repo is public: a made-up owner and workspaces.
+ * with a starting context file (and owner context), and the saves each owner message should end
+ * with. Everything here is invented, since the repo is public: a made-up owner and workspaces.
  */
 
 /** Words a line must have, each lowercase: a list in place of a word means any one of them. */
 export type Words = readonly (string | readonly string[])[];
 
-/** Where a saved line belongs: a list means any of those sections is right. */
-export type Sections = ContextSection | readonly ContextSection[];
+/**
+ * Where a saved line belongs: a list means any of those sections is right. `answers` is How to
+ * answer me, in the owner context.
+ */
+export type Sections = OwnerSection | readonly OwnerSection[];
+
+/**
+ * Where a saved line belongs: the workspace's context file unless it says the owner context, and a
+ * list means either is right.
+ */
+export type Places = PlacedLine["place"] | readonly PlacedLine["place"][];
 
 /** A save a turn should make. */
 export type ExpectedSave =
   | {
       readonly action: "add";
+      readonly place?: Places;
       readonly section: Sections;
       readonly words: Words;
       /** Words the line must not have, such as a date where time doesn't matter. */
@@ -25,6 +35,8 @@ export type ExpectedSave =
       readonly action: "change";
       /** The line it changes, as the starting context file has it. */
       readonly was: string;
+      /** Where the changed line ends up. */
+      readonly place?: Places;
       readonly section: Sections;
       readonly words: Words;
     }
@@ -50,6 +62,10 @@ export type Scenario = {
   readonly rule: string;
   readonly workspace: string;
   readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
+  /** A starting owner context, when there is one. */
+  readonly owner?: { facts?: string[]; plans?: string[]; ideas?: string[]; answers?: string[] };
+  /** A code workspace, whose models save only to How to answer me; planning unless it says. */
+  readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
   readonly turns: readonly Turn[];
@@ -101,7 +117,7 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         say: "The hallway's probably going dark green.",
         expect: [],
-        asks: [["decided", "decide", "settled", "definite", "sure", "plan", "committed"]],
+        asks: [["decided", "decide", "settled", "set on", "definite", "sure", "plan", "committed"]],
       },
       {
         say: "It's decided, I'm doing it.",
@@ -241,7 +257,10 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Remember that my left shoulder clicks when I overhead press.",
-        expect: [{ action: "add", section: "facts", words: ["shoulder"] }],
+        // A body fact matters to more than one workspace, so About me is right too.
+        expect: [
+          { action: "add", place: ["workspace", "owner"], section: "facts", words: ["shoulder"] },
+        ],
       },
     ],
   },
@@ -292,6 +311,8 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [
           {
             action: "add",
+            // A body fact matters to more than one workspace, so About me is right too.
+            place: ["workspace", "owner"],
             section: "facts",
             words: ["pronat"],
             without: ["2026", "october", "today", "yesterday"],
@@ -339,22 +360,124 @@ export const SCENARIOS: readonly Scenario[] = [
     },
     turns: [{ say: "What should I grow in bed 3 next spring?", expect: [] }],
   },
+  // Where a save goes: About me, How to answer me, or the workspace (docs/ai-conduct.md).
+  {
+    name: "owner-life-wide-fact",
+    rule: "a fact true across the owner's life goes to About me",
+    workspace: "Running",
+    context: { facts: ["Runs about 25 km a week"] },
+    owner: { answers: ["Metric units"] },
+    turns: [
+      {
+        say: "I moved to Leeds last month. Where are some good flat routes for a long run?",
+        expect: [{ action: "add", place: "owner", section: "facts", words: ["leeds"] }],
+      },
+    ],
+  },
+  {
+    name: "owner-two-workspaces",
+    rule: "a fact that matters to more than one workspace goes to About me",
+    workspace: "Garage gym",
+    context: { facts: ["The garage is 5 m by 3 m"] },
+    owner: { facts: ["Lives in Leeds"] },
+    turns: [
+      {
+        say: "I've got a bad left knee, which messes with my running as well. Which leg exercises are safe for it?",
+        expect: [{ action: "add", place: "owner", section: "facts", words: ["knee"] }],
+      },
+    ],
+  },
+  {
+    name: "workspace-only-fact",
+    rule: "a fact about one workspace stays in its context file",
+    workspace: "Garage gym",
+    context: { facts: ["The garage is 5 m by 3 m"] },
+    owner: { facts: ["Lives in Leeds"], answers: ["Metric units"] },
+    turns: [
+      {
+        say: "There's a damp patch in the back corner of the garage. Is it safe to keep my dumbbells there?",
+        expect: [{ action: "add", section: "facts", words: ["damp"] }],
+      },
+    ],
+  },
+  {
+    name: "lasting-preference",
+    rule: "a preference stated as lasting goes to How to answer me",
+    workspace: "Allotment",
+    context: { facts: ["The plot is a half plot with four raised beds"] },
+    owner: { facts: ["Lives in Leeds"] },
+    turns: [
+      {
+        say: "From now on, always give me sowing times as months, not seasons. When do I sow broad beans?",
+        expect: [{ action: "add", place: "owner", section: "answers", words: ["month"] }],
+      },
+    ],
+  },
+  {
+    name: "one-off-not-a-preference",
+    rule: "a one-off request isn't a preference, so nothing goes to How to answer me",
+    workspace: "Garage gym",
+    context: { facts: ["The garage is 5 m by 3 m"] },
+    owner: { facts: ["Lives in Leeds"], answers: ["Metric units"] },
+    turns: [
+      {
+        say: "Keep it really short today, I'm in a rush: what's a 15-minute workout with just dumbbells?",
+        expect: [],
+      },
+    ],
+  },
+  {
+    name: "code-workspace-preference",
+    rule: "a code workspace saves a lasting preference to How to answer me, and nothing about the owner",
+    workspace: "Website",
+    mode: "code",
+    context: { facts: ["A static site built with Astro"] },
+    owner: { answers: ["Metric units"] },
+    turns: [
+      {
+        say: "Always show me TypeScript, never plain JavaScript. How do I add a sitemap?",
+        expect: [{ action: "add", place: "owner", section: "answers", words: ["typescript"] }],
+      },
+      {
+        say: "I moved to Leeds last month, so I'm a bit slow this week. Which file does the sitemap go in?",
+        expect: [],
+      },
+    ],
+  },
+];
+
+/** A section of a starting file, under a heading of this level. */
+const section = (heading: string, lines: readonly string[] = []) => [
+  heading,
+  "",
+  ...lines.map((line) => `- ${line}`),
+  ...(lines.length === 0 ? [] : [""]),
 ];
 
 /** A starting context file, as the owner would have written it. */
 export const contextFileFor = (scenario: Scenario) => {
-  const section = (heading: string, lines: readonly string[] = []) => [
-    `## ${heading}`,
-    "",
-    ...lines.map((line) => `- ${line}`),
-    ...(lines.length === 0 ? [] : [""]),
-  ];
   const { facts, plans, ideas } = scenario.context;
   return [
     `# ${scenario.workspace}`,
     "",
-    ...section("Facts", facts),
-    ...section("Plans", plans),
-    ...section("Ideas", ideas),
+    ...section("## Facts", facts),
+    ...section("## Plans", plans),
+    ...section("## Ideas", ideas),
+  ].join("\n");
+};
+
+/** A starting owner context, as the owner would have written it, or `undefined` for none. */
+export const ownerContextFor = (scenario: Scenario) => {
+  if (scenario.owner === undefined) return undefined;
+  const { facts, plans, ideas, answers } = scenario.owner;
+  return [
+    "# Owner context",
+    "",
+    "## About me",
+    "",
+    ...section("### Facts", facts),
+    ...section("### Plans", plans),
+    ...section("### Ideas", ideas),
+    ...section("## How to answer me", answers),
   ].join("\n");
 };

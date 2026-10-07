@@ -70,6 +70,13 @@ export const CONTEXT_SECTION_NAMES: Record<ContextSection, string> = {
   ideas: "Ideas",
 };
 
+/**
+ * The sections of the owner context that hold lines: About me's Facts, Plans and Ideas, and How
+ * to answer me (`answers`), one preference per line (ADR 0010).
+ */
+export const OwnerSection = z.enum(["facts", "plans", "ideas", "answers"]);
+export type OwnerSection = z.infer<typeof OwnerSection>;
+
 /** One line of a context file, as the owner writes it in the app. */
 export const ContextLine = z
   .string()

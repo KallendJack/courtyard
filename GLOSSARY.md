@@ -74,9 +74,15 @@ worker. It names its section (fact, plan or idea, or a preference) and is commit
 edits it afterwards (ADR 0013).
 _Avoid_: suggestion (that was ADR 0005's tick-first way), memory, update, write
 
+**Place**:
+Which file a line is written in: the workspace's context file (`workspace`) or the owner context (`owner`). A save
+names its place, and the owner's Edit can move a line from one to the other (ADR 0013).
+_Avoid_: target, destination, scope
+
 **Line label**:
-The short tag (`F3`, `P1`) the worker puts before each line when a model reads a context file or the owner context,
-so a save can name the line it changes or removes. Never stored in the file.
+The short tag the worker puts before each line when a model reads a context file (`F3`, `P1`, `I2`) or the owner
+context (`MF1`, `MP1`, `MI1` for About me, `A1` for How to answer me), so a save can name the line it changes or
+removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type SessionEvent, SessionSummary } from "@courtyard/contract";
+import { OwnerContextDetail, type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   asOwner,
@@ -16,7 +16,8 @@ import {
   testWorker,
 } from "./testing.ts";
 
-// Saves to the workspace's context file as a model chats, and the owner's Undo and Edit (ADR 0013).
+// Saves to the workspace's context file and the owner context as a model chats, and the owner's Undo
+// and Edit (ADR 0013).
 
 const CONTEXT = [
   "# Garage gym",
@@ -107,7 +108,7 @@ describe("a save during a turn", () => {
     expect(replies()[0]?.saved).toBe(true);
     expect(onlySave(events).save).toEqual({
       action: "add",
-      saved: { section: "facts", line: "Padel lessons on Tuesdays." },
+      saved: { place: "workspace", section: "facts", line: "Padel lessons on Tuesdays." },
     });
     expect((await latestChange())?.trailers).toEqual([
       "Courtyard-Change: save",
@@ -130,13 +131,13 @@ describe("a save during a turn", () => {
     expect(savesIn(events).map((event) => event.save)).toEqual([
       {
         action: "change",
-        saved: { section: "facts", line: "Single garage, 5.2 m deep." },
-        replaced: { section: "facts", line: "Single garage." },
+        saved: { place: "workspace", section: "facts", line: "Single garage, 5.2 m deep." },
+        replaced: { place: "workspace", section: "facts", line: "Single garage." },
       },
       {
         action: "change",
-        saved: { section: "facts", line: "Bought a second-hand rack." },
-        replaced: { section: "plans", line: "Buy a second-hand rack." },
+        saved: { place: "workspace", section: "facts", line: "Bought a second-hand rack." },
+        replaced: { place: "workspace", section: "plans", line: "Buy a second-hand rack." },
       },
     ]);
   });
@@ -147,7 +148,7 @@ describe("a save during a turn", () => {
     expect(await contextFile()).not.toContain("cable machine");
     expect(onlySave(events).save).toEqual({
       action: "remove",
-      replaced: { section: "ideas", line: "A cable machine in the corner." },
+      replaced: { place: "workspace", section: "ideas", line: "A cable machine in the corner." },
     });
   });
 
@@ -311,6 +312,7 @@ describe("Edit", () => {
     const save = onlySave(events).seq;
 
     const edited = await edit(request, session.id, save, {
+      place: "workspace",
       section: "plans",
       line: "Padel lessons, Tuesdays 7pm until Christmas.",
     });
@@ -329,7 +331,11 @@ describe("Edit", () => {
     });
     expect(recorded).toMatchObject({
       save,
-      now: { section: "plans", line: "Padel lessons, Tuesdays 7pm until Christmas." },
+      now: {
+        place: "workspace",
+        section: "plans",
+        line: "Padel lessons, Tuesdays 7pm until Christmas.",
+      },
     });
   });
 
@@ -339,7 +345,11 @@ describe("Edit", () => {
     ]);
     const save = onlySave(events).seq;
 
-    await edit(request, session.id, save, { section: "facts", line: "Single garage, 5 m deep." });
+    await edit(request, session.id, save, {
+      place: "workspace",
+      section: "facts",
+      line: "Single garage, 5 m deep.",
+    });
     expect(await contextFile()).toContain("## Facts\n\n- Single garage, 5 m deep.\n- The ceiling");
 
     await undo(request, session.id, save);
@@ -353,12 +363,170 @@ describe("Edit", () => {
     const save = onlySave(events).seq;
 
     const tooLong = await edit(request, session.id, save, {
+      place: "workspace",
       section: "facts",
       line: "A".repeat(251),
     });
     expect(tooLong.status).toBe(400);
     await undo(request, session.id, save);
-    const afterUndo = await edit(request, session.id, save, { section: "facts", line: "Padel." });
+    const afterUndo = await edit(request, session.id, save, {
+      place: "workspace",
+      section: "facts",
+      line: "Padel.",
+    });
     expect(afterUndo.status).toBe(409);
+  });
+});
+
+const OWNER = [
+  "# Owner context",
+  "",
+  "## About me",
+  "",
+  "### Facts",
+  "",
+  "- Lives in Leeds.",
+  "",
+  "### Plans",
+  "",
+  "### Ideas",
+  "",
+  "## How to answer me",
+  "",
+  "- Metric units.",
+  "",
+].join("\n");
+
+const ownerPath = () => join(contextDir, "OWNER.md");
+const ownerFile = () => readFile(ownerPath(), "utf8");
+
+describe("a save to the owner context", () => {
+  beforeEach(() => writeFile(ownerPath(), OWNER));
+
+  it("adds to About me, as a change to the owner context alone, which the home page shows", async () => {
+    const { request, session, events } = await sessionSaving([
+      { action: "add", place: "owner", section: "facts", text: "Has a bad left knee." },
+    ]);
+
+    expect(await ownerFile()).toContain("- Lives in Leeds.\n- Has a bad left knee.\n\n### Plans");
+    expect(await contextFile()).toBe(CONTEXT);
+    expect(onlySave(events).save).toEqual({
+      action: "add",
+      saved: { place: "owner", section: "facts", line: "Has a bad left knee." },
+    });
+    expect((await latestChange())?.trailers).toEqual([
+      "Courtyard-Change: save",
+      "Courtyard-Place: owner-context",
+      `Courtyard-Session: ${session.id}`,
+    ]);
+    const home = OwnerContextDetail.parse(await (await request("/api/owner-context")).json());
+    expect(home.ownerContext?.facts).toEqual(["Lives in Leeds.", "Has a bad left knee."]);
+  });
+
+  it("adds a lasting preference to How to answer me", async () => {
+    await sessionSaving([{ action: "add", section: "answers", text: "Weights in kg." }]);
+
+    expect(await ownerFile()).toContain(
+      "## How to answer me\n\n- Metric units.\n- Weights in kg.\n",
+    );
+  });
+
+  it("changes and removes the owner context's lines by their labels", async () => {
+    await sessionSaving([
+      { action: "change", section: "facts", label: "MF1", text: "Lives in Leeds, near the park." },
+      { action: "remove", label: "A1" },
+    ]);
+
+    const file = await ownerFile();
+    expect(file).toContain("### Facts\n\n- Lives in Leeds, near the park.\n");
+    expect(file).not.toContain("Metric units");
+  });
+
+  it("starts a missing OWNER.md from its starter, then saves into it", async () => {
+    await rm(ownerPath());
+
+    await sessionSaving([
+      { action: "add", place: "owner", section: "plans", text: "Moving house in spring." },
+    ]);
+
+    const file = await ownerFile();
+    expect(file.startsWith("# Owner context\n")).toBe(true);
+    expect(file).toContain("### Plans\n\n- Moving house in spring.\n");
+    expect(file).toContain("## How to answer me");
+  });
+
+  it("is refused when the other file already says it, or for answers in the workspace", async () => {
+    const { replies } = await sessionSaving([
+      { action: "add", section: "facts", text: "lives in leeds" },
+      { action: "add", place: "workspace", section: "answers", text: "Short answers." },
+    ]);
+
+    expect(replies().map((reply) => reply.saved)).toEqual([false, false]);
+    expect(replies()[0]?.reply).toMatch(/already saved: "Lives in Leeds."/);
+    expect(await ownerFile()).toBe(OWNER);
+    expect(await contextFile()).toBe(CONTEXT);
+  });
+
+  it("from a code workspace, saves only to How to answer me", async () => {
+    await writeFile(
+      join(contextDir, "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+
+    const { replies } = await sessionSaving([
+      { action: "add", place: "owner", section: "facts", text: "Has a bad left knee." },
+      { action: "add", section: "facts", text: "Padel lessons on Tuesdays." },
+      { action: "remove", label: "MF1" },
+      { action: "remove", label: "F1" },
+      { action: "add", section: "answers", text: "Examples in TypeScript." },
+    ]);
+
+    expect(replies().map((reply) => reply.saved)).toEqual([false, false, false, false, true]);
+    expect(replies()[0]?.reply).toMatch(/only to How to answer me/);
+    // It isn't shown About me, so it has no labels for it; it is shown the context file.
+    expect(replies()[2]?.reply).toMatch(/no line labelled MF1/);
+    expect(replies()[3]?.reply).toMatch(/only to How to answer me/);
+    const file = await ownerFile();
+    expect(file).toContain("- Metric units.\n- Examples in TypeScript.\n");
+    expect(file).not.toContain("knee");
+    expect(await contextFile()).toBe(CONTEXT);
+  });
+
+  it("is undone like any other save", async () => {
+    const { request, session, events } = await sessionSaving([
+      { action: "add", section: "answers", text: "Weights in kg." },
+    ]);
+
+    expect((await undo(request, session.id, onlySave(events).seq)).status).toBe(204);
+
+    expect(await ownerFile()).toBe(OWNER);
+    expect((await latestChange())?.trailers[1]).toBe("Courtyard-Place: owner-context");
+  });
+
+  it("can be moved by Edit between the workspace and the owner context, and undone", async () => {
+    const { request, session, events } = await sessionSaving([
+      { action: "add", section: "facts", text: "Has a bad left knee." },
+    ]);
+    const save = onlySave(events).seq;
+
+    const moved = await edit(request, session.id, save, {
+      place: "owner",
+      section: "facts",
+      line: "Has a bad left knee.",
+    });
+
+    expect(moved.status).toBe(204);
+    expect(await contextFile()).toBe(CONTEXT);
+    expect(await ownerFile()).toContain("- Lives in Leeds.\n- Has a bad left knee.\n");
+    expect((await latestChange())?.trailers).toEqual([
+      "Courtyard-Change: edit",
+      "Courtyard-Place: owner-context",
+      "Courtyard-Place: workspace/garage-gym",
+      `Courtyard-Session: ${session.id}`,
+    ]);
+
+    await undo(request, session.id, save);
+    expect(await ownerFile()).toBe(OWNER);
+    expect(await contextFile()).toBe(CONTEXT);
   });
 });

@@ -3,6 +3,8 @@ import {
   CONTEXT_SECTION_NAMES,
   ContextSection,
   type PlacedLine,
+  placeName,
+  type SaveEdit,
   type SessionId,
 } from "@courtyard/contract";
 import { BookmarkCheck, Undo2 } from "lucide-react";
@@ -22,7 +24,28 @@ const SECTIONS = ContextSection.options.map((value) => ({
   label: CONTEXT_SECTION_NAMES[value],
 }));
 
-const sectionName = (section: ContextSection) => CONTEXT_SECTION_NAMES[section];
+/** Where an edited line can go: the workspace's context file, About me, or How to answer me. */
+type Where = "workspace" | "aboutMe" | "answers";
+
+const PLACES: readonly { readonly value: Where; readonly label: string }[] = [
+  { value: "workspace", label: "Workspace" },
+  { value: "aboutMe", label: "About me" },
+  { value: "answers", label: "How to answer me" },
+];
+
+const whereOf = (line: PlacedLine): Where => {
+  if (line.place === "workspace") return "workspace";
+  return line.section === "answers" ? "answers" : "aboutMe";
+};
+
+/** The edit the form's choices make: How to answer me has no Facts, Plans or Ideas. */
+const editOf = (choice: { where: Where; section: ContextSection; line: string }): SaveEdit => {
+  const { where, section, line } = choice;
+  if (where === "workspace") return { place: "workspace", section, line };
+  return where === "aboutMe"
+    ? { place: "owner", section, line }
+    : { place: "owner", section: "answers", line };
+};
 
 /** What a note says: its label ("Saved to Facts"), its line, and what that line replaced. */
 const wordsFor = (note: Note) => {
@@ -31,19 +54,19 @@ const wordsFor = (note: Note) => {
   switch (save.action) {
     case "add": {
       const line = state.kind === "edited" ? state.now : save.saved;
-      return { label: `Saved to ${sectionName(line.section)}${edited}`, line: line.line };
+      return { label: `Saved to ${placeName(line)}${edited}`, line: line.line };
     }
     case "change": {
       const line = state.kind === "edited" ? state.now : save.saved;
       return {
-        label: `Changed in ${sectionName(line.section)}${edited}`,
+        label: `Changed in ${placeName(line)}${edited}`,
         line: line.line,
         was: save.replaced.line,
       };
     }
     case "remove":
       return {
-        label: `Removed from ${sectionName(save.replaced.section)}`,
+        label: `Removed from ${placeName(save.replaced)}`,
         line: save.replaced.line,
         struck: true,
       };
@@ -56,14 +79,20 @@ const currentLine = (note: Note): PlacedLine | undefined => {
   return note.save.action === "remove" ? undefined : note.save.saved;
 };
 
-/** The line being edited where it is: its wording and its section (ADR 0013). */
+/**
+ * The line being edited where it is: its wording, its place (the workspace, About me or How to
+ * answer me) and its section (ADR 0013).
+ */
 function EditForm(props: {
   line: PlacedLine;
-  save: (line: PlacedLine) => Promise<string | undefined>;
+  save: (edit: SaveEdit) => Promise<string | undefined>;
   onDone: () => void;
 }) {
   const [line, setLine] = useState(props.line.line);
-  const [section, setSection] = useState(props.line.section);
+  const [where, setWhere] = useState(whereOf(props.line));
+  const [section, setSection] = useState<ContextSection>(
+    props.line.section === "answers" ? "facts" : props.line.section,
+  );
   const save = useAction(props.save);
   const box = useRef<HTMLInputElement>(null);
 
@@ -72,8 +101,12 @@ function EditForm(props: {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const unchanged = line.trim() === props.line.line && section === props.line.section;
-    if (unchanged || (await save.run({ section, line }))) props.onDone();
+    const edit = editOf({ where, section, line });
+    const unchanged =
+      line.trim() === props.line.line &&
+      edit.place === props.line.place &&
+      edit.section === props.line.section;
+    if (unchanged || (await save.run(edit))) props.onDone();
   };
 
   return (
@@ -92,8 +125,16 @@ function EditForm(props: {
         required
         autoComplete="off"
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <SegmentedChoice label="Section" options={SECTIONS} value={section} onChange={setSection} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <SegmentedChoice label="Place" options={PLACES} value={where} onChange={setWhere} />
+        {where !== "answers" && (
+          <SegmentedChoice
+            label="Section"
+            options={SECTIONS}
+            value={section}
+            onChange={setSection}
+          />
+        )}
         <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" onClick={props.onDone}>
             Cancel

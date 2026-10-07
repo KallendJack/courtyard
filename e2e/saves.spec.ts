@@ -1,23 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-
-/** A workspace of its own, so the test can run again on the same worker; opens it. */
-const newWorkspace = async (page: Page, name: string) => {
-  await page.goto("/");
-  await page
-    .getByRole("navigation", { name: "Workspaces" })
-    .getByRole("link", { name: "New workspace" })
-    .click();
-  await page.getByLabel("Name").fill(name);
-  await page.getByRole("button", { name: "Add workspace" }).click();
-  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-};
-
-/** Starts a session whose message scripts the fake provider's saves, and waits for its answer. */
-const startSaving = async (page: Page, message: string) => {
-  await page.getByLabel("Message").fill(message);
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
-};
+import { expect, test } from "@playwright/test";
+import { newWorkspace, startSaving } from "./saving.ts";
 
 test("a save shows as a note under the answer, and Undo takes it out of the context file", async ({
   page,

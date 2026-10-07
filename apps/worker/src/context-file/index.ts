@@ -1,8 +1,9 @@
 import {
   CONTEXT_SECTION_NAMES,
   type ContextFile,
-  type ContextSection,
+  ContextSection,
   type OwnerContext,
+  OwnerSection,
   type PlacedLine,
 } from "@courtyard/contract";
 
@@ -13,9 +14,6 @@ const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
 /** A list item's marker and the space after it, which a reworded line keeps. */
 const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const CONTINUATION = /^\s+\S/;
-
-const SECTIONS = ["facts", "plans", "ideas"] as const satisfies readonly ContextSection[];
-const LABEL_LETTERS: Record<ContextSection, string> = { facts: "F", plans: "P", ideas: "I" };
 
 const sectionNamed = (heading: string): ContextSection | undefined => {
   const word = /^(facts|plans|ideas)\b/i.exec(heading)?.[1]?.toLowerCase();
@@ -137,115 +135,43 @@ export const parseContextFile = (markdown: string): ContextFile => {
   };
 };
 
-/** A line of a context file with its line label: `F1` for the first fact, `P2`, `I3`. */
-export type LabelledLine = PlacedLine & { readonly label: string };
+/** Where one section's lines are written in a file: its heading's line, when it has one, and its lines. */
+type SectionAt = Scanned["sections"][ContextSection];
 
-const labelled = (scanned: Scanned) =>
-  SECTIONS.flatMap((section) =>
-    scanned.sections[section].lines.map((line, index) => ({
-      section,
-      line: line.text,
-      label: `${LABEL_LETTERS[section]}${index + 1}`,
-      start: line.start,
-    })),
-  );
-
-/** Each line of a context file with its label, Facts first. */
-export const labelledLines = (markdown: string): LabelledLine[] =>
-  labelled(scan(markdown)).map(({ section, line, label }) => ({ section, line, label }));
-
-/**
- * The context file as a model reads it, each line with its label in front (`- [F1] …`). Labels
- * are only ever shown, never stored (ADR 0013).
- */
-export const withLabels = (markdown: string) => {
-  const scanned = scan(markdown);
-  const lines = [...scanned.lines];
-  for (const { label, start } of labelled(scanned)) {
-    const line = lines[start] ?? "";
-    const marker = LIST_MARKER.exec(line)?.[0] ?? /^\s*/.exec(line)?.[0] ?? "";
-    lines[start] = `${marker}[${label}] ${line.slice(marker.length)}`;
-  }
-  return lines.join("\n");
+/** A file read for the lines it holds: its lines, where each section is, and how to add one it lacks. */
+type Layout<S extends string> = {
+  readonly lines: readonly string[];
+  readonly sections: Record<S, SectionAt>;
+  /** The file's lines with `section` added, holding just `item`. */
+  readonly withMissing: (section: S, item: string) => string[];
 };
 
-/** Puts the lines back together with the line endings the file had. */
-const joined = (markdown: string, lines: readonly string[]) =>
-  lines.join(markdown.includes("\r\n") ? "\r\n" : "\n");
-
-/** Where `placed` is written, exactly as worded, in its section. */
-const locate = (scanned: Scanned, placed: PlacedLine) =>
-  scanned.sections[placed.section].lines.find((line) => line.text === placed.line);
-
-/** Whether the context file has this line, exactly as worded, in this section. */
-export const hasContextLine = (markdown: string, placed: PlacedLine) =>
-  locate(scan(markdown), placed) !== undefined;
-
-/**
- * Adds a line as a list item at the end of its section: after its last line, or under its heading
- * when it has none. A file without the section gets it at the end.
- */
-export const addContextLine = (markdown: string, placed: PlacedLine) => {
-  const scanned = scan(markdown);
-  const lines = [...scanned.lines];
-  const item = `- ${placed.line}`;
-  const { heading, lines: existing } = scanned.sections[placed.section];
-  const last = existing.at(-1);
-  if (last !== undefined) {
-    lines.splice(last.end, 0, item);
-  } else if (heading !== undefined) {
-    // A blank line between the heading and the item, and between the item and what follows.
-    const inserted: string[] = [];
-    let at = heading + 1;
-    if (lines[at]?.trim() === "") at += 1;
-    else inserted.push("");
-    inserted.push(item);
-    const after = lines[at];
-    if (after === undefined || after.trim() !== "") inserted.push("");
-    lines.splice(at, 0, ...inserted);
-  } else {
-    while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
-    lines.push(
-      ...(lines.length > 0 ? [""] : []),
-      `## ${CONTEXT_SECTION_NAMES[placed.section]}`,
-      "",
-      item,
-      "",
-    );
-  }
-  return joined(markdown, lines);
+/** The lines with a section added at the end, after one blank line. */
+const appended = (lines: readonly string[], section: readonly string[]) => {
+  const out = [...lines];
+  while (out.length > 0 && out.at(-1)?.trim() === "") out.pop();
+  out.push(...(out.length > 0 ? [""] : []), ...section, "");
+  return out;
 };
 
-/** Takes a line out of its section, or `undefined` when it isn't there as worded. */
-export const removeContextLine = (markdown: string, placed: PlacedLine) => {
-  const scanned = scan(markdown);
-  const found = locate(scanned, placed);
-  if (found === undefined) return undefined;
-  const lines = [...scanned.lines];
-  lines.splice(found.start, found.end - found.start);
-  return joined(markdown, lines);
+/** The lines with `block` put in at `at`, with a blank line either side of it. */
+const inserted = (lines: readonly string[], at: number, block: readonly string[]) => {
+  const out = [...lines];
+  const before = at > 0 && out[at - 1]?.trim() !== "" ? [""] : [];
+  const next = out[at];
+  const after = next === undefined || next.trim() !== "" ? [""] : [];
+  out.splice(at, 0, ...before, ...block, ...after);
+  return out;
 };
 
-/**
- * Rewords a line where it is, or moves it to the end of another section, or `undefined` when it
- * isn't there as worded.
- */
-export const replaceContextLine = (
-  markdown: string,
-  change: { readonly was: PlacedLine; readonly now: PlacedLine },
-) => {
-  const { was, now } = change;
-  if (was.section !== now.section) {
-    const removed = removeContextLine(markdown, was);
-    return removed === undefined ? undefined : addContextLine(removed, now);
-  }
-  const scanned = scan(markdown);
-  const found = locate(scanned, was);
-  if (found === undefined) return undefined;
-  const lines = [...scanned.lines];
-  const marker = LIST_MARKER.exec(lines[found.start] ?? "")?.[0] ?? "- ";
-  lines.splice(found.start, found.end - found.start, `${marker}${now.line}`);
-  return joined(markdown, lines);
+const workspaceLayout = (markdown: string): Layout<ContextSection> => {
+  const { lines, sections } = scan(markdown);
+  return {
+    lines,
+    sections,
+    withMissing: (section, item) =>
+      appended(lines, [`## ${CONTEXT_SECTION_NAMES[section]}`, "", item]),
+  };
 };
 
 type OwnerPart = "intro" | "aboutMe" | "answers" | "other";
@@ -256,29 +182,18 @@ const ownerPartNamed = (heading: string): OwnerPart => {
   return "other";
 };
 
-/** The owner context as read, with the text its two kinds of reader get (ADR 0010). */
-export type ReadOwnerContext = {
-  readonly ownerContext: OwnerContext;
-  /** The whole file as written. */
-  readonly markdown: string;
-  /** The How to answer me section as written, or `null` when it has no lines. */
-  readonly answersMarkdown: string | null;
-};
-
 /**
- * Reads the owner context's Markdown. A heading at any level starting About me or How to answer
- * me begins that part; any other first- or second-level heading begins a part that's kept but
- * not read, and deeper ones (Facts, say) stay in the part they're in. About me
- * reads like a context file (Facts, Plans and Ideas under it); How to answer me is one preference
- * per line, by the same line rules. A first-level heading at the top is the title.
+ * The owner context read line by line: which part each line is in (the title is in none), and
+ * where each section is. A heading at any level starting About me or How to answer me begins that
+ * part; any other first- or second-level heading begins a part that's kept but not read, and
+ * deeper ones (Facts, say) stay in the part they're in.
  */
-export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
+const scanOwner = (markdown: string) => {
   const lines = splitLines(markdown);
-  const parts: Record<OwnerPart, string[]> = { intro: [], aboutMe: [], answers: [], other: [] };
+  const parts: (OwnerPart | undefined)[] = [];
   let part: OwnerPart = "intro";
   let titled = false;
-
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const heading = HEADING.exec(line);
     const level = heading?.[1]?.length ?? 0;
     const text = heading?.[2];
@@ -286,34 +201,245 @@ export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
     if (named === "aboutMe" || named === "answers") {
       part = named;
     } else if (named === "other" && level <= 2) {
-      const atTop = part === "intro" && parts.intro.join("").trim() === "";
+      const atTop = part === "intro" && lines.slice(0, index).every((above) => above.trim() === "");
       if (level === 1 && atTop && !titled) {
         titled = true;
+        parts.push(undefined);
         continue;
       }
       part = "other";
     }
-    parts[part].push(line);
+    parts.push(part);
   }
 
-  const answers: Located[] = [];
+  /** The lines of one part where they are, with every other line blank. */
+  const only = (wanted: OwnerPart) =>
+    lines.map((line, index) => (parts[index] === wanted ? line : ""));
+
+  // About me reads like a context file: Facts, Plans and Ideas under it.
+  const { facts, plans, ideas } = scan(only("aboutMe").join("\n")).sections;
+  // How to answer me is one preference per line. Headings (the section's own, and any subheading
+  // grouping its lines) aren't lines themselves.
+  const answers: SectionAt = { heading: undefined, lines: [] };
   let continuing = false;
-  // Headings (the section's own, and any subheading grouping its lines) aren't lines themselves.
-  for (const [index, line] of parts.answers.entries()) {
-    continuing = HEADING.test(line) ? false : addLine(answers, { line, index, continuing });
+  for (const [index, line] of only("answers").entries()) {
+    if (HEADING.test(line)) {
+      answers.heading ??= index;
+      continuing = false;
+    } else {
+      continuing = addLine(answers.lines, { line, index, continuing });
+    }
   }
-  const { facts, plans, ideas } = parseContextFile(parts.aboutMe.join("\n"));
 
+  const sections: Record<OwnerSection, SectionAt> = { facts, plans, ideas, answers };
+  return { lines, parts, only, sections };
+};
+
+const ownerLayout = (markdown: string): Layout<OwnerSection> => {
+  const { lines, parts, sections } = scanOwner(markdown);
+  return {
+    lines,
+    sections,
+    withMissing: (section, item) => {
+      if (section === "answers") return appended(lines, ["## How to answer me", "", item]);
+      const heading = `### ${CONTEXT_SECTION_NAMES[section]}`;
+      // After About me's last written line, or in a new About me at the end.
+      const last = lines.findLastIndex(
+        (line, index) => parts[index] === "aboutMe" && line.trim() !== "",
+      );
+      return last === -1
+        ? appended(lines, ["## About me", "", heading, "", item])
+        : inserted(lines, last + 1, [heading, "", item]);
+    },
+  };
+};
+
+/** One section of a file, ready to change: the file's lines, the section, and how to add it. */
+type Found = {
+  readonly lines: readonly string[];
+  readonly at: SectionAt;
+  readonly withMissing: (item: string) => string[];
+};
+
+const foundIn = <S extends string>(layout: Layout<S>, section: S): Found => ({
+  lines: layout.lines,
+  at: layout.sections[section],
+  withMissing: (item) => layout.withMissing(section, item),
+});
+
+/** The section a placed line belongs in, in the file it's placed in. */
+const find = (markdown: string, placed: PlacedLine): Found =>
+  placed.place === "workspace"
+    ? foundIn(workspaceLayout(markdown), placed.section)
+    : foundIn(ownerLayout(markdown), placed.section);
+
+/** A line with its place and its line label: `F1` for the workspace's first fact, `MF1`, `A2`. */
+export type LabelledLine = PlacedLine & { readonly label: string };
+
+const WORKSPACE_LABELS: Record<ContextSection, string> = { facts: "F", plans: "P", ideas: "I" };
+/** The owner context's labels, which can't clash with a workspace's (ADR 0013). */
+const OWNER_LABELS: Record<OwnerSection, string> = {
+  facts: "MF",
+  plans: "MP",
+  ideas: "MI",
+  answers: "A",
+};
+
+/** A section's lines with their labels and where each starts. */
+const labelsIn = (at: SectionAt, letters: string) =>
+  at.lines.map((line, index) => ({
+    line: line.text,
+    label: `${letters}${index + 1}`,
+    start: line.start,
+  }));
+
+/** Each line of a file with its label, place and section, and where it starts, in label order. */
+const labelled = (markdown: string, place: PlacedLine["place"]) => {
+  if (place === "workspace") {
+    const { sections } = workspaceLayout(markdown);
+    return ContextSection.options.flatMap((section) =>
+      labelsIn(sections[section], WORKSPACE_LABELS[section]).map((line) => ({
+        ...line,
+        place,
+        section,
+      })),
+    );
+  }
+  const { sections } = ownerLayout(markdown);
+  return OwnerSection.options.flatMap((section) =>
+    labelsIn(sections[section], OWNER_LABELS[section]).map((line) => ({
+      ...line,
+      place,
+      section,
+    })),
+  );
+};
+
+/** Each line of a workspace's context file or the owner context with its label, Facts first. */
+export const labelledLines = (markdown: string, place: PlacedLine["place"]): LabelledLine[] =>
+  labelled(markdown, place).map(({ start: _, ...line }) => line);
+
+/** The file's lines, each line with its label put in front (`- [F1] …`). */
+const labelledText = (markdown: string, place: PlacedLine["place"]) => {
+  const lines = splitLines(markdown);
+  for (const { label, start } of labelled(markdown, place)) {
+    const line = lines[start] ?? "";
+    const marker = LIST_MARKER.exec(line)?.[0] ?? /^\s*/.exec(line)?.[0] ?? "";
+    lines[start] = `${marker}[${label}] ${line.slice(marker.length)}`;
+  }
+  return lines;
+};
+
+/**
+ * A context file or the owner context as a model reads it, each line with its label in front
+ * (`- [F1] …`). Labels are only ever shown, never stored (ADR 0013).
+ */
+export const withLabels = (markdown: string, place: PlacedLine["place"]) =>
+  labelledText(markdown, place).join("\n");
+
+/**
+ * The owner context's How to answer me with its labels, as a code workspace's models read it, or
+ * `null` when it has no lines.
+ */
+export const answersWithLabels = (markdown: string): string | null => {
+  const { parts, sections } = scanOwner(markdown);
+  if (sections.answers.lines.length === 0) return null;
+  return labelledText(markdown, "owner")
+    .filter((_, index) => parts[index] === "answers")
+    .join("\n")
+    .trim();
+};
+
+/** Puts the lines back together with the line endings the file had. */
+const joined = (markdown: string, lines: readonly string[]) =>
+  lines.join(markdown.includes("\r\n") ? "\r\n" : "\n");
+
+/** Where `placed` is written, exactly as worded, in its section. */
+const locate = (found: Found, placed: PlacedLine) =>
+  found.at.lines.find((line) => line.text === placed.line);
+
+/** Whether the file has this line, exactly as worded, in this section. */
+export const hasContextLine = (markdown: string, placed: PlacedLine) =>
+  locate(find(markdown, placed), placed) !== undefined;
+
+/**
+ * Adds a line as a list item at the end of its section: after its last line, or under its heading
+ * when it has none. A file without the section gets it.
+ */
+export const addContextLine = (markdown: string, placed: PlacedLine) => {
+  const found = find(markdown, placed);
+  const item = `- ${placed.line}`;
+  const { heading, lines: existing } = found.at;
+  const last = existing.at(-1);
+  if (last !== undefined) {
+    const lines = [...found.lines];
+    lines.splice(last.end, 0, item);
+    return joined(markdown, lines);
+  }
+  if (heading === undefined) return joined(markdown, found.withMissing(item));
+  // Under the heading, past the blank line after it.
+  const at = found.lines[heading + 1]?.trim() === "" ? heading + 2 : heading + 1;
+  return joined(markdown, inserted(found.lines, at, [item]));
+};
+
+/** Takes a line out of its section, or `undefined` when it isn't there as worded. */
+export const removeContextLine = (markdown: string, placed: PlacedLine) => {
+  const found = find(markdown, placed);
+  const line = locate(found, placed);
+  if (line === undefined) return undefined;
+  const lines = [...found.lines];
+  lines.splice(line.start, line.end - line.start);
+  return joined(markdown, lines);
+};
+
+/**
+ * Rewords a line where it is, or moves it to the end of another section of the same file, or
+ * `undefined` when it isn't there as worded. Moving a line to the other file is the caller's:
+ * take it out of one and add it to the other.
+ */
+export const replaceContextLine = (
+  markdown: string,
+  change: { readonly was: PlacedLine; readonly now: PlacedLine },
+) => {
+  const { was, now } = change;
+  if (was.place !== now.place) return undefined;
+  if (was.section !== now.section) {
+    const removed = removeContextLine(markdown, was);
+    return removed === undefined ? undefined : addContextLine(removed, now);
+  }
+  const found = find(markdown, was);
+  const line = locate(found, was);
+  if (line === undefined) return undefined;
+  const lines = [...found.lines];
+  const marker = LIST_MARKER.exec(lines[line.start] ?? "")?.[0] ?? "- ";
+  lines.splice(line.start, line.end - line.start, `${marker}${now.line}`);
+  return joined(markdown, lines);
+};
+
+/** The owner context as read (ADR 0010). */
+export type ReadOwnerContext = {
+  readonly ownerContext: OwnerContext;
+  /** The whole file as written. */
+  readonly markdown: string;
+};
+
+/**
+ * Reads the owner context's Markdown (see `scanOwner` for its parts). About me reads like a
+ * context file (Facts, Plans and Ideas under it); How to answer me is one preference per line, by
+ * the same line rules. A first-level heading at the top is the title.
+ */
+export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
+  const { only, sections } = scanOwner(markdown);
+  const texts = (section: OwnerSection) => sections[section].lines.map((line) => line.text);
   return {
     ownerContext: {
-      intro: parts.intro.join("\n").trim(),
-      facts,
-      plans,
-      ideas,
-      answers: answers.map((answer) => answer.text),
+      intro: only("intro").join("\n").trim(),
+      facts: texts("facts"),
+      plans: texts("plans"),
+      ideas: texts("ideas"),
+      answers: texts("answers"),
       characters: markdown.length,
     },
     markdown,
-    answersMarkdown: answers.length === 0 ? null : parts.answers.join("\n").trim(),
   };
 };
