@@ -270,15 +270,15 @@ describe("saving a tidy", () => {
     expect(await readFile(contextFile(), "utf8")).toBe(edited);
   });
 
-  it("can't be saved twice, or once a newer tidy of the file replaces it", async () => {
+  it("can't be saved twice, nor once another tidy of the file is saved", async () => {
     await writeFile(contextFile(), MESSY);
     const request = await start();
     const first = await propose(request);
     const second = await propose(request);
 
-    expect(await save(request, first.id, [0])).toHaveProperty("status", 404);
     expect(await save(request, second.id, [0])).toHaveProperty("status", 204);
     expect(await save(request, second.id, [0])).toHaveProperty("status", 404);
+    expect(await save(request, first.id, [0])).toHaveProperty("status", 409);
   });
 });
 

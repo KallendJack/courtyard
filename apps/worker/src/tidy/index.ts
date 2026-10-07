@@ -46,7 +46,7 @@ export type TidyRefusal =
   | { readonly kind: "changed-since" }
   | { readonly kind: "storage" };
 
-/** A proposed tidy, kept until it's saved or another of the same file replaces it. */
+/** A proposed tidy, kept until it's saved or enough newer ones push it out. */
 type Proposed = {
   readonly place: Place;
   /** The file as the model read it. */
@@ -181,10 +181,15 @@ const withChange = (markdown: string, change: Omit<TidyChange, "shortensBy">) =>
 /** The model's answer as a list of changes, or `undefined` when it isn't one. */
 const AnswerList = z.object({ changes: z.array(z.unknown()) });
 
-/** Proposing and saving tidies; it holds each file's latest proposal until it's saved. */
+/**
+ * How many proposed tidies are held. Older ones go; one of the same file as a newer tidy that's
+ * been saved is refused anyway, as the file has changed since.
+ */
+const PROPOSALS_HELD = 20;
+
+/** Proposing and saving tidies; it holds the latest proposals until they're saved. */
 export const createTidying = (target: TidyTarget) => {
   const proposed = new Map<TidyId, Proposed>();
-  const sameFile = (a: Place, b: Place) => placeFile(a) === placeFile(b);
   const fileOf = (place: Place) => join(target.contextDir, placeFile(place));
 
   return {
@@ -234,7 +239,11 @@ export const createTidying = (target: TidyTarget) => {
           ? []
           : [{ ...change, shortensBy: markdown.length - after.length }];
       });
-      for (const [id, earlier] of proposed) if (sameFile(earlier.place, place)) proposed.delete(id);
+      // Maps keep their order, so the first is the oldest.
+      for (const [held] of proposed) {
+        if (proposed.size < PROPOSALS_HELD) break;
+        proposed.delete(held);
+      }
       const id = TidyId.parse(randomUUID());
       proposed.set(id, { place, markdown, changes: sized });
       return ok({ id, changes: sized, characters: markdown.length });

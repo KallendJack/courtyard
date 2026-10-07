@@ -67,7 +67,7 @@ export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise
 };
 
 /** Sends JSON to the worker's API (a POST unless `method` says) and reads the answer with `schema`. */
-const sendJson = async <T>(request: {
+export const sendJson = async <T>(request: {
   path: string;
   method?: "POST" | "PATCH" | "DELETE";
   body: unknown;

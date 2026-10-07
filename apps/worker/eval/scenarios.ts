@@ -71,7 +71,21 @@ export type Scenario = {
   readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
+  /** The conversation; none for a tidy. */
   readonly turns: readonly Turn[];
+  /**
+   * A tidy of the starting context file (docs/ai-conduct.md, Tidying), saved with every change
+   * ticked: what must still be there afterwards, and lines that should be gone.
+   */
+  readonly tidy?: {
+    /** Each fact's words: some line of the tidied file has them all. */
+    readonly keeps: readonly Words[];
+    /**
+     * Lines, as the starting file words them, that a tidy should take out: a list means at least
+     * one of them (one of two repeats, say).
+     */
+    readonly goes: readonly (string | readonly string[])[];
+  };
 };
 
 export const SCENARIOS: readonly Scenario[] = [
@@ -461,6 +475,43 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
       },
     ],
+  },
+  {
+    name: "tidy-loses-nothing",
+    rule: "a tidy of a messy file loses no fact, and takes out what's repeated or stale",
+    workspace: "Garage gym",
+    context: {
+      facts: [
+        "Double garage",
+        "The garage is 5.4 m by 5.1 m",
+        "The garage door is electric",
+        "Garage door is electric, with a remote",
+        "Rubber flooring went down in Sep 2026",
+        "Squat rack bolted to the back wall",
+        "The ceiling is 2.3 m, too low to press overhead standing",
+        "I train Monday, Wednesday and Friday mornings at 6:30 before work, because that's the only time the house is quiet enough with the kids asleep upstairs",
+      ],
+      plans: ["Get a quote for rubber flooring", "Buy a 20 kg kettlebell before Christmas"],
+      ideas: ["A wall-mounted pull-up bar", "A rowing machine"],
+    },
+    turns: [],
+    tidy: {
+      keeps: [
+        ["double"],
+        ["5.4", "5.1"],
+        ["electric"],
+        ["rubber", "flooring", "sep 2026"],
+        ["squat rack"],
+        ["2.3"],
+        ["monday", "wednesday", "friday", "6:30"],
+        ["kettlebell", "20"],
+        ["pull-up"],
+      ],
+      goes: [
+        "Get a quote for rubber flooring",
+        ["The garage door is electric", "Garage door is electric, with a remote"],
+      ],
+    },
   },
 ];
 

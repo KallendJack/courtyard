@@ -10,7 +10,7 @@ import {
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { useState } from "react";
-import { IconButton } from "@/components/button";
+import { Button, IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
@@ -190,7 +190,18 @@ function Workspace() {
         <>
           {contextFile.characters > CONTEXT_FILE_LONG_CHARACTERS && (
             <div className="mt-3">
-              <StatusPill>
+              <StatusPill
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void navigate({ to: "/tidy", search: { workspace: workspace.id } })
+                    }
+                  >
+                    Tidy
+                  </Button>
+                }
+              >
                 Getting long: it goes with every message, so keep it to what matters.
               </StatusPill>
             </div>
@@ -217,7 +228,21 @@ function Workspace() {
         >
           Recent changes
         </Link>
-        , with Undo.
+        , with Undo
+        {contextFile !== null &&
+          hasLines(contextFile) &&
+          contextFile.characters <= CONTEXT_FILE_LONG_CHARACTERS && (
+            <>
+              {" · "}
+              <Link
+                to="/tidy"
+                search={{ workspace: workspace.id }}
+                className="text-foreground underline"
+              >
+                Tidy
+              </Link>
+            </>
+          )}
       </p>
     </Page>
   );
