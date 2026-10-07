@@ -16,23 +16,24 @@ gives the score and each miss.
 
 ### The eval set
 
-`pnpm eval:context` checks what real Claude saves. It runs each scenario in `apps/worker/eval/scenarios.ts` (a short
-conversation, a starting context file, and the saves each owner message should end with) through a worker on a
-temporary context folder, signed in as the owner on that machine, and prints the score and each miss: what was
-expected and what was saved. A save matches on its section, whether it adds, changes or removes, and the line it
-changes; its wording only needs the scenario's key words, and an answer that should ask has a question with them in.
-Where a scenario says how many questions an answer asks, they're counted by question mark, an example put as a
-question ("For example, is it…?") counting with the question before it.
-It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
+`pnpm eval:context` checks what real models save, Claude's and Codex's. It runs each scenario in
+`apps/worker/eval/scenarios.ts` (a short conversation, a starting context file, and the saves each owner message should
+end with) through a worker on a temporary context folder, signed in as the owner on that machine (Codex through
+Courtyard's Codex home), and prints the score and each miss: what was expected and what was saved. A save matches on its
+section, whether it adds, changes or removes, and the line it changes; its wording only needs the scenario's key words,
+and an answer that should ask has a question with them in. Where a scenario says how many questions an answer asks,
+they're counted by question mark, an example put as a question ("For example, is it…?") counting with the question
+before it. It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
 
-- **Before merging any change to the saving rules,** run it and put the score in the pull request, with each miss
-  left and why. Run the changed scenarios with `--times 3` too: a verdict that flips is noted, not counted as fixed.
+- **Before merging any change to the saving rules,** run it on both providers and put each score in the pull request,
+  with each miss left and why. Run the changed scenarios with `--times 3` too: a verdict that flips is noted, not
+  counted as fixed.
 - **A run that doesn't finish** (a failed turn, or `rate-limited` when the plan's limit is hit) prints its reason and
   is left out of the score, so run it again later.
 - **Scenarios are invented,** since the repo is public: a made-up owner and workspaces. A new saving rule gets a
   scenario, and a scenario that turns out to expect the wrong thing is fixed in the same pull request, saying why.
-- `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), and `--model <id>` picks the
-  Claude model (the app's default).
+- `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
+  any provider's (Claude's default when left out), and `--effort <level>` its effort (the model's default).
 
 ## Rules for every scenario
 
@@ -53,7 +54,8 @@ It never runs in CI or `pnpm verify`, since it needs the owner's login and uses 
 
 ## Every turn
 
-Built in phase 1, with today's date, line labels and saving added in #47. The instructions, in order:
+Built in phase 1, with today's date, line labels and saving added in #47. Codex gets them in place of its own
+instructions, as Claude does (ADR 0015). The instructions, in order:
 
 1. The workspace, by name, as one area of the owner's life.
 2. Access. With `readsFiles`: read and search the workspace's folder (images included) and read files when they help;
@@ -74,6 +76,22 @@ conversation markers, then the new message. Earlier answers say how their turn e
 - **Completed:** the answer as written.
 - **Stopped by the owner:** marked as stopped before it finished, with whatever was written.
 - **Failed or interrupted:** marked as failed, so a retry reads as a retry, not the owner repeating themselves.
+
+## Switching model mid-session
+
+Phase 3. A session can change model between turns, by the owner's pick or by Carry on after a usage limit. The new
+model gets the same framing as any turn, nothing more: the context file and the conversation so far, with earlier
+answers still marked "You" whichever model wrote them, so it carries on rather than commenting on another model's
+work. After Carry on, the failed turn reads as failed and the owner's message follows it again, as a retry. The owner
+sees which model answered from a line in the chat; the model isn't told.
+
+## Courtyard's file tools
+
+Phase 3, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its access
+line (Every turn, item 2) is the same as Claude's; the tools behind it are Courtyard's: list a folder, read a file,
+and search the files' text, each limited to the workspace folder. Their descriptions say what each does and that
+only the workspace folder can be reached, nothing more. A path outside it is refused with the same reason Claude is
+given, and each file read shows as an activity.
 
 ## Starter context file
 
@@ -224,12 +242,14 @@ A tidy is a one-off question, outside any session, with no tools: its model has 
 > and date that matters, never change what a line means, and never turn a plan or an idea into a fact. Each line stays
 > under 250 characters. When unsure, leave the line alone; when nothing needs changing, propose nothing.
 
-Its message is today's date, then the file with its labels. The worker checks every change it proposes and drops any
-it can't trust: a label the file hasn't got, a line two changes both take, a merge across sections, a removal without
-its why, a change that leaves the file no shorter, a line over `CONTEXT_LINE_MAX_CHARACTERS`, or a word that none of
-the lines it replaces has. A form of a word counts ("lessons" for "lesson"), but a number, a date or a word that turns
-a meaning round ("not", "doesn't") must be there as it is. A tidy is saved only if the file is still as the model
-read it.
+Its answer is a list of changes in a fixed shape: each change's kind and labels, its new line for a merge or a shorten,
+and its why for a removal. A field a change doesn't use is empty (null) rather than left out, since Codex's fixed-shape
+answers need every field (phase 3). Its message is today's date, then the file with its labels. The worker checks every
+change it proposes and drops any it can't trust: a label the file hasn't got, a line two changes both take, a merge
+across sections, a removal without its why, a change that leaves the file no shorter, a line over
+`CONTEXT_LINE_MAX_CHARACTERS`, or a word that none of the lines it replaces has. A form of a word counts ("lessons" for
+"lesson"), but a number, a date or a word that turns a meaning round ("not", "doesn't") must be there as it is. A tidy
+is saved only if the file is still as the model read it.
 
 ## Scenarios still to build
 
@@ -238,7 +258,6 @@ Each is written here, as rules, before its phase starts. What the spec already d
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Coding                                        | 4            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
-| Switching model mid-session                   | 3            | The new model gets every turn's framing as usual: the context file and the conversation so far, with the owner's last message re-sent.                  |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |
 | Floor plans                                   | 5            | Drawn as SVG in the answer, to scale with dimensions; the web app sanitises and renders it. Saving one is the owner's action, never the model's.          |
 

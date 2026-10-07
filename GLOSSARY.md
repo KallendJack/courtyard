@@ -123,12 +123,24 @@ _Avoid_: backend, LLM, vendor, engine, model connection
 **Model**:
 One specific model offered by a provider.
 
+**Effort**:
+How much a model thinks before it answers: one of the levels its provider offers for that model, or the model's
+default. Chosen beside the model, recorded with each message, and followed by the session until the owner changes it.
+_Avoid_: thinking, reasoning, mode, speed
+
+**Codex home**:
+The folder in the data folder where Courtyard's Codex keeps its sign-in, and nothing else: separate from any Codex the
+owner uses elsewhere on the machine (ADR 0015).
+_Avoid_: Codex config, profile, ~/.codex
+
 **Usage limit**:
-The point at which a provider stops answering until a reset time, under the owner's subscription.
+The point at which a provider stops answering until a reset time, under the owner's subscription. The worker remembers
+it until then, and the model picker shows it.
 _Avoid_: quota, rate limit (except for the failure reason)
 
 **Overflow**:
-Continuing a session on another provider's model after a usage limit is hit.
+Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
+the failed turn; it never happens by itself, and the session stays on the new model until the owner switches back.
 _Avoid_: fallback, failover
 
 ### Sessions
