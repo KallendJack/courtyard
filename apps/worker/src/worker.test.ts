@@ -78,6 +78,12 @@ describe("settings", () => {
     expect(existsSync(dataDir)).toBe(true);
   });
 
+  it("takes 1 or 0 for whether to offer Codex, and nothing else", () => {
+    expect(startupError({ ...settings, COURTYARD_CODEX_PROVIDER: "off" })).toContain(
+      "COURTYARD_CODEX_PROVIDER must be 1 or 0",
+    );
+  });
+
   it("refuses a web app folder that was set but doesn't exist", () => {
     const error = startupError({ ...settings, COURTYARD_WEB_DIR: join(root, "no-build") });
 

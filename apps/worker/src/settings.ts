@@ -40,6 +40,10 @@ const Env = z.object({
     unsetIfEmpty,
     z.enum(["0", "1"], { error: "must be 1 or 0" }).default("1"),
   ),
+  COURTYARD_CODEX_PROVIDER: z.preprocess(
+    unsetIfEmpty,
+    z.enum(["0", "1"], { error: "must be 1 or 0" }).default("1"),
+  ),
   COURTYARD_FAKE_PROVIDER: z.preprocess(
     unsetIfEmpty,
     z.enum(["0", "1"], { error: "must be 1 or 0" }).default("0"),
@@ -69,6 +73,11 @@ export type Settings = {
   readonly webDir: string;
   /** Whether to offer Claude, through the worker machine's Claude Code (on unless turned off). */
   readonly claudeProvider: boolean;
+  /**
+   * Whether to offer Codex, through Courtyard's own Codex home in the data folder (on unless
+   * turned off, for someone without a ChatGPT plan).
+   */
+  readonly codexProvider: boolean;
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
   /**
@@ -99,6 +108,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     contextRemote: parsed.data.COURTYARD_CONTEXT_REMOTE ?? null,
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
     claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER === "1",
+    codexProvider: parsed.data.COURTYARD_CODEX_PROVIDER === "1",
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER === "1",
     liveCopy:
       parsed.data.COURTYARD_LIVE_COPY === undefined

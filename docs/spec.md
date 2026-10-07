@@ -444,7 +444,8 @@ changes an earlier one. The directions in the phase table are proposals until th
 
 - Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 4 (ADR 0003).
 - Before changing Codex's pinned version, re-check its feature list against what the adapter switches off, and run
-  the real-Codex checklist (ADR 0015). Its app-server and dynamic tools are marked experimental.
+  the real-Codex checklist ([`docs/real-codex-check.md`](real-codex-check.md), ADR 0015). Its app-server and dynamic
+  tools are marked experimental.
 - Paper's free plan allows 100 MCP calls a week; Pro raises it. Phase 0 may need a month of Pro.
 - Wake-on-LAN rarely works over USB Wi-Fi adapters, hence the wired connection in phase 6.
 - Node does not trust a private certificate authority by default; the worker needs it added to reach a tool connection

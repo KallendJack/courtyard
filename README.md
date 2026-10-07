@@ -159,5 +159,34 @@ to other people, so everyone who runs Courtyard signs in with their own. Set
 `COURTYARD_CLAUDE_PROVIDER=0` to leave Claude out.
 
 Each session sees only its own workspace's folder: none of the machine's Claude Code settings,
-memory, skills or connectors, and in planning workspaces it can only read. What is being built is in [`docs/spec.md`](docs/spec.md), the vocabulary in
+memory, skills or connectors, and in planning workspaces it can only read.
+
+## Codex
+
+Courtyard also talks to Codex, on your ChatGPT plan, so a session can carry on when Claude's
+usage runs out. It uses the Codex program Courtyard installs itself (`pnpm install`), at a fixed
+version, never a Codex you've installed elsewhere.
+
+- **Courtyard's Codex home is its own.** Codex keeps its sign-in in a `codex` folder in the data
+  folder (`COURTYARD_DATA_DIR`), separate from `~/.codex`, so none of your own Codex settings,
+  skills, memories, plugins or connectors reach a workspace, and signing in or out of one doesn't
+  touch the other.
+- **Sign in once on the worker machine,** with a ChatGPT plan, pointing Codex at Courtyard's home.
+  In PowerShell, from Courtyard's folder:
+
+  ```powershell
+  $env:CODEX_HOME = "C:\path\to\data\codex"
+  pnpm --filter @courtyard/worker exec codex login --device-auth
+  Remove-Item Env:CODEX_HOME
+  ```
+
+  It shows a link and a one-time code to finish in any browser. If ChatGPT refuses the code,
+  switch on device code sign-in at chatgpt.com (Settings, Security) first. Signing in from the
+  app itself comes later.
+- **Codex is on unless switched off.** Without a ChatGPT plan, set `COURTYARD_CODEX_PROVIDER=0`
+  to leave Codex out; otherwise the model picker says Codex isn't signed in.
+
+Codex has no shell in Courtyard and can't read files yet: it answers from the context file and
+the conversation. Courtyard never reads, stores or logs its sign-in. Before changing Codex's
+version, run [the real-Codex check](docs/real-codex-check.md). What is being built is in [`docs/spec.md`](docs/spec.md), the vocabulary in
 [`GLOSSARY.md`](GLOSSARY.md), and why it is built this way in [`docs/adr/`](docs/adr/).
