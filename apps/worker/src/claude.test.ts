@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
-import type { Activity, SaveTool, TurnInput } from "./providers/index.ts";
+import type { Activity, CourtyardTool, TurnInput } from "./providers/index.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
@@ -59,6 +59,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
       saveTool: null,
+      fileTools: null,
     },
     save: async () => ({ saved: false, reply: "No saves in this test." }),
     emit: async (text) => {
@@ -297,6 +298,7 @@ describe("a Claude turn", () => {
         message: "Exactly this message.",
         newMessage: "This message.",
         saveTool: null,
+        fileTools: null,
       },
     });
 
@@ -517,7 +519,7 @@ describe("after the security review", () => {
   });
 });
 
-const SAVE_TOOL: SaveTool = {
+const SAVE_TOOL: CourtyardTool = {
   name: "save_to_context",
   description: "Saves one line to the context file.",
   input: {
@@ -527,11 +529,12 @@ const SAVE_TOOL: SaveTool = {
   },
 };
 
-const framingWith = (saveTool: SaveTool | null) => ({
+const framingWith = (saveTool: CourtyardTool | null) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
   saveTool,
+  fileTools: null,
 });
 
 describe("the save tool on a Claude turn", () => {

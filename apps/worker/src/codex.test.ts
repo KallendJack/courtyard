@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effort, ModelId, ProviderList, SessionSummary } from "@courtyard/contract";
@@ -37,9 +37,18 @@ type TurnScript = (turn: {
   complete: (status: string, error?: unknown) => void;
   /** Codex asking the worker something, as it does for an approval. */
   ask: (method: string, params: unknown) => void;
+  /**
+   * Codex calling one of Courtyard's tools (its `item/tool/call`), for this turn unless it names
+   * another; resolves with the worker's answer.
+   */
+  call: (
+    tool: string,
+    args: unknown,
+    ids?: { threadId?: string; turnId?: string },
+  ) => Promise<Message>;
   /** The app-server process ending without warning. */
   crash: () => void;
-}) => void;
+}) => void | Promise<void>;
 
 const MODELS = [
   {
@@ -108,6 +117,9 @@ const standIn = (
   const answered: Message[] = [];
   let threads = 0;
   let turns = 0;
+  let calls = 0;
+  /** Codex's calls to Courtyard's tools, each waiting for the worker's answer. */
+  const waiting = new Map<Message["id"], (answer: Message) => void>();
 
   const startAppServer: StartAppServer = (launch) => {
     if (script.missing) return err("missing");
@@ -131,6 +143,8 @@ const standIn = (
       const { id, method } = message;
       if (method === undefined) {
         answered.push(message);
+        waiting.get(message.id)?.(message);
+        waiting.delete(message.id);
         return;
       }
       if (id === undefined) return;
@@ -174,6 +188,24 @@ const standIn = (
             complete: (status, error = null) =>
               notify("turn/completed", { threadId, turn: { id: turnId, status, error } }),
             ask: (askMethod, params) => write({ id: `codex-${turns}`, method: askMethod, params }),
+            call: (tool, args, ids = {}) => {
+              calls += 1;
+              const callId = `call-${calls}`;
+              const answer = new Promise<Message>((resolve) => waiting.set(callId, resolve));
+              write({
+                id: callId,
+                method: "item/tool/call",
+                params: {
+                  threadId: ids.threadId ?? threadId,
+                  turnId: ids.turnId ?? turnId,
+                  callId,
+                  namespace: null,
+                  tool,
+                  arguments: args,
+                },
+              });
+              return answer;
+            },
             crash,
           });
           return;
@@ -214,6 +246,7 @@ const runTurn = async (
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
       saveTool: null,
+      fileTools: null,
     },
     save: async () => ({ saved: false, reply: "No saves in this test." }),
     emit: async (text) => {
@@ -239,7 +272,7 @@ describe("Codex's status", () => {
       id: "codex",
       label: "Codex",
       available: true,
-      capabilities: { readsFiles: false, codes: false, usesTools: false, savesContext: false },
+      capabilities: { readsFiles: true, codes: false, usesTools: false, savesContext: true },
       models: [
         {
           id: "gpt-6.1-sol",
@@ -365,6 +398,9 @@ describe("Codex's isolation", () => {
         "multi_agent",
       ]),
     );
+    // Codex's models call every tool, Courtyard's included, from code run in its code-mode host:
+    // plain JavaScript with no files, network or shell, and only the tools a thread is offered.
+    expect(off).not.toContain("code_mode_host");
   });
 });
 
@@ -396,6 +432,8 @@ describe("a Codex turn", () => {
         approvalPolicy: "never",
         // No environment, so nothing to run commands in.
         environments: [],
+        // Courtyard's tools are all it has, and this framing offers none.
+        dynamicTools: [],
       });
     }
     const [first, second] = codex.requests("turn/start");
@@ -723,5 +761,217 @@ describe("Codex in the worker", () => {
     const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
 
     expect(providers.map((p) => p.id)).toEqual(["fake"]);
+  });
+});
+
+describe("Courtyard's tools on a Codex turn", () => {
+  let root: string;
+  let workspace: string;
+  const SECRET = "swordfish";
+  const OUTSIDE = "Only files in this workspace's folder can be read.";
+  /** A few bytes that start like a PNG, which is all a read of one looks at. */
+  const IMAGE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    workspace = join(root, "context", "garage-gym");
+    await mkdir(join(workspace, "notes"), { recursive: true });
+    await writeFile(join(workspace, "CONTEXT.md"), "# Garage gym\n\n## Facts\n\n- Has a rack.\n");
+    await writeFile(
+      join(workspace, "notes", "rack.md"),
+      "Measured twice.\nThe rack goes against the back wall.\n",
+    );
+    await writeFile(join(workspace, "plan.png"), IMAGE);
+    // Just outside the workspace folder, and somewhere reachable only through a link inside it.
+    await writeFile(join(root, "context", "secret.txt"), `The word is ${SECRET}.`);
+    await mkdir(join(root, "elsewhere"));
+    await writeFile(join(root, "elsewhere", "secret.txt"), `The word is ${SECRET}.`);
+    await symlink(join(root, "elsewhere"), join(workspace, "linked"), "junction");
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  type Call = { tool: string; args: unknown; ids?: { threadId?: string; turnId?: string } };
+
+  /**
+   * A Codex turn in garage-gym in which Codex makes the scripted tool calls, then answers. Gives
+   * the worker's answer to each call, the session's events, and the stand-in.
+   */
+  const turnCalling = async (calls: readonly Call[]) => {
+    const answers: Message[] = [];
+    const codex = standIn({
+      turn: async (turn) => {
+        for (const { tool, args, ids } of calls) answers.push(await turn.call(tool, args, ids));
+        delta(turn, "Done.");
+        turn.complete("completed");
+      },
+    });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: { provider: "codex", model: "gpt-6.1-sol" },
+    });
+    const { id } = SessionSummary.parse(await response.json());
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    return { answers, events, codex };
+  };
+
+  const ToolAnswer = z.object({
+    result: z.object({
+      success: z.boolean(),
+      contentItems: z.array(
+        z.union([
+          z.object({ type: z.literal("inputText"), text: z.string() }),
+          z.object({ type: z.literal("inputImage"), imageUrl: z.string() }),
+        ]),
+      ),
+    }),
+  });
+  /** A tool's answer as Codex reads it: whether it worked, its text, and everything in it. */
+  const answerOf = (message: Message | undefined) => {
+    const { result } = ToolAnswer.parse(message);
+    const text = result.contentItems.map((item) => ("text" in item ? item.text : "")).join("\n");
+    return { success: result.success, text, items: result.contentItems };
+  };
+
+  it("offers the file tools and the save tool on each thread, with what each takes", async () => {
+    const { codex } = await turnCalling([]);
+
+    const ToolSpec = z.object({
+      type: z.literal("function"),
+      name: z.string(),
+      description: z.string(),
+      inputSchema: z.object({
+        type: z.literal("object"),
+        properties: z.record(z.string(), z.unknown()),
+      }),
+    });
+    const offered = z
+      .object({ dynamicTools: z.array(ToolSpec) })
+      .parse(codex.requests("thread/start")[0]?.params).dynamicTools;
+    expect(offered.map((tool) => tool.name)).toEqual([
+      "list_folder",
+      "read_file",
+      "search_files",
+      "save_to_context",
+    ]);
+    const read = offered.find((tool) => tool.name === "read_file");
+    expect(read?.inputSchema.properties).toHaveProperty("path");
+    // Its experimental API is what lets the worker offer them.
+    expect(codex.requests("initialize")[0]?.params).toMatchObject({
+      capabilities: { experimentalApi: true },
+    });
+  });
+
+  it("reads a file inside the workspace, and shows the read as an activity", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "read_file", args: { path: "notes/rack.md" } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({
+      success: true,
+      text: expect.stringContaining("The rack goes against the back wall."),
+    });
+    expect(events.filter((event) => event.type === "activity")).toMatchObject([
+      { activity: { kind: "read-file", path: "notes/rack.md" } },
+    ]);
+  });
+
+  it("reads an image as an image", async () => {
+    const { answers } = await turnCalling([{ tool: "read_file", args: { path: "plan.png" } }]);
+
+    const { success, items } = answerOf(answers[0]);
+    expect(success).toBe(true);
+    expect(items).toContainEqual({
+      type: "inputImage",
+      imageUrl: `data:image/png;base64,${IMAGE.toString("base64")}`,
+    });
+  });
+
+  it("lists a folder and searches the files' text, inside the workspace", async () => {
+    const { answers } = await turnCalling([
+      { tool: "list_folder", args: {} },
+      { tool: "search_files", args: { text: "BACK WALL" } },
+      { tool: "search_files", args: { text: "measured", glob: "*.md" } },
+    ]);
+
+    const [listed, searched, globbed] = answers.map(answerOf);
+    expect(listed?.text).toContain("notes/");
+    expect(listed?.text).toContain("CONTEXT.md");
+    expect(searched?.text).toContain("notes/rack.md:2: The rack goes against the back wall.");
+    expect(globbed?.text).toContain("notes/rack.md:1: Measured twice.");
+  });
+
+  it("refuses a path outside the workspace, a link out of it and a climbing glob, with Claude's reason", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "read_file", args: { path: "../secret.txt" } },
+      { tool: "read_file", args: { path: join(root, "context", "secret.txt") } },
+      { tool: "read_file", args: { path: "linked/secret.txt" } },
+      { tool: "list_folder", args: { path: ".." } },
+      { tool: "list_folder", args: { path: "linked" } },
+      { tool: "search_files", args: { text: SECRET, glob: "../**" } },
+      { tool: "search_files", args: { text: SECRET, path: "linked" } },
+    ]);
+
+    expect(answers).toHaveLength(7);
+    for (const answer of answers.map(answerOf)) {
+      expect(answer).toEqual({
+        success: false,
+        text: OUTSIDE,
+        items: [{ type: "inputText", text: OUTSIDE }],
+      });
+    }
+    expect(events.filter((event) => event.type === "activity")).toEqual([]);
+  });
+
+  it("never follows a link out of the workspace while searching all of it", async () => {
+    const { answers } = await turnCalling([{ tool: "search_files", args: { text: SECRET } }]);
+
+    expect(JSON.stringify(answers)).not.toContain(SECRET);
+    expect(answerOf(answers[0])).toMatchObject({ success: true, text: "No matches." });
+  });
+
+  it("hands a save to the worker, which checks it, writes it and says what happened", async () => {
+    const { answers, events } = await turnCalling([
+      {
+        tool: "save_to_context",
+        args: { action: "add", section: "facts", text: "The rack is bolted down." },
+      },
+      { tool: "save_to_context", args: { action: "add", section: "facts", text: "Has a rack" } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({ success: true, text: "Saved." });
+    // The second repeats a line already there, so the worker refuses it.
+    expect(answerOf(answers[1])).toMatchObject({
+      success: false,
+      text: expect.stringContaining("That's already saved"),
+    });
+    expect(events.filter((event) => event.type === "context-saved")).toMatchObject([
+      { save: { action: "add", saved: { section: "facts", line: "The rack is bolted down." } } },
+    ]);
+    expect(await readFile(join(workspace, "CONTEXT.md"), "utf8")).toContain(
+      "- The rack is bolted down.",
+    );
+  });
+
+  it("refuses a call for a turn or a thread it doesn't recognise, and a tool it didn't offer", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "read_file", args: { path: "notes/rack.md" }, ids: { turnId: "another-turn" } },
+      { tool: "read_file", args: { path: "notes/rack.md" }, ids: { threadId: "another-thread" } },
+      { tool: "run_command", args: { command: "type secret.txt" } },
+    ]);
+
+    expect(answers).toEqual([
+      expect.objectContaining({ error: expect.objectContaining({ code: -32601 }) }),
+      expect.objectContaining({ error: expect.objectContaining({ code: -32601 }) }),
+      expect.objectContaining({ error: expect.objectContaining({ code: -32601 }) }),
+    ]);
+    expect(events.filter((event) => event.type === "activity")).toEqual([]);
   });
 });

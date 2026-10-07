@@ -1,6 +1,5 @@
-import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   createSdkMcpServer,
@@ -22,7 +21,8 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok } from "../result.ts";
-import type { Provider, SaveTool, TurnInput } from "./index.ts";
+import { OUTSIDE_WORKSPACE, shownPath, staysInside } from "../workspace-files/index.ts";
+import type { CourtyardTool, Provider, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");
 /** Claude reads the workspace's files and saves to context; coding and tools come later. */
@@ -57,7 +57,7 @@ const courtyardTool = (name: string) => `mcp__${COURTYARD_SERVER}__${name}`;
  * The save tool as an in-process tool (ADR 0013). Its input goes to the worker as Claude sent it,
  * and the worker's reply comes back as the tool's result.
  */
-const saveServer = (saveTool: SaveTool, save: TurnInput["save"]) =>
+const saveServer = (saveTool: CourtyardTool, save: TurnInput["save"]) =>
   createSdkMcpServer({
     name: COURTYARD_SERVER,
     tools: [
@@ -305,28 +305,6 @@ const jsonSchemaOf = (schema: z.ZodType) => {
 const ONE_OFF_MAX_TURNS = 3;
 
 /**
- * Where a path really leads, following symlinks. For a path that doesn't exist yet, the nearest
- * existing folder above it is followed instead, and the rest is added back.
- */
-const realLocation = async (path: string): Promise<string> => {
-  try {
-    return await realpath(path);
-  } catch {
-    const parent = dirname(path);
-    return parent === path ? path : join(await realLocation(parent), basename(path));
-  }
-};
-
-const isWithin = (folder: string, path: string) => {
-  const fromFolder = relative(folder, path);
-  return fromFolder === "" || (!fromFolder.startsWith("..") && !isAbsolute(fromFolder));
-};
-
-/** A glob that could match outside the folder: it starts somewhere absolute or climbs with `..`. */
-const reachesOut = (glob: string | undefined) =>
-  glob !== undefined && (isAbsolute(glob) || glob.includes(".."));
-
-/**
  * Each tool's input exactly as Claude Code sends it. Strict, so a field Courtyard doesn't know
  * about (a new way to name a path) is refused rather than let through unchecked.
  */
@@ -414,15 +392,10 @@ const confineTo =
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
 
-      const realFolder = await realLocation(folder);
-      const realPaths = await Promise.all(reach.paths.map((p) => realLocation(resolve(folder, p))));
-      if (realPaths.some((p) => !isWithin(realFolder, p)) || reach.globs.some(reachesOut)) {
-        return decision(false, "Only files in this workspace's folder can be read.");
-      }
+      if (!(await staysInside(folder, reach))) return decision(false, OUTSIDE_WORKSPACE);
 
       if ("readsFile" in reach && reach.readsFile !== undefined) {
-        const shown = relative(folder, resolve(folder, reach.readsFile)).split(sep).join("/");
-        await report({ kind: "read-file", path: shown });
+        await report({ kind: "read-file", path: shownPath(folder, reach.readsFile) });
       }
       return decision(true);
     } catch {

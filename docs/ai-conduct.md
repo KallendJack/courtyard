@@ -19,7 +19,7 @@ gives the score and each miss.
 `pnpm eval:context` checks what real models save, Claude's and Codex's. It runs each scenario in
 `apps/worker/eval/scenarios.ts` (a short conversation, a starting context file, and the saves each owner message should
 end with) through a worker on a temporary context folder, signed in as the owner on that machine (Codex through
-Courtyard's Codex home), and prints the score and each miss: what was expected and what was saved. A save matches on its
+Courtyard's Codex home, in the data folder `COURTYARD_DATA_DIR` names), and prints the score and each miss: what was expected and what was saved. A save matches on its
 section, whether it adds, changes or removes, and the line it changes; its wording only needs the scenario's key words,
 and an answer that should ask has a question with them in. Where a scenario says how many questions an answer asks,
 they're counted by question mark, an example put as a question ("For example, is it…?") counting with the question
@@ -87,11 +87,14 @@ sees which model answered from a line in the chat; the model isn't told.
 
 ## Courtyard's file tools
 
-Phase 3, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its access
-line (Every turn, item 2) is the same as Claude's; the tools behind it are Courtyard's: list a folder, read a file,
-and search the files' text, each limited to the workspace folder. Their descriptions say what each does and that
-only the workspace folder can be reached, nothing more. A path outside it is refused with the same reason Claude is
-given, and each file read shows as an activity.
+Built with #71, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its
+access line (Every turn, item 2) is the same as Claude's; the tools behind it are Courtyard's, offered on a turn
+whose provider reads files (`readsFiles`): `list_folder` lists a folder, `read_file` reads a file's text (2,000
+lines at a time) or an image, and `search_files` searches the files' text, each limited to the workspace folder.
+Their descriptions say what each does and that only the workspace folder can be reached, nothing more. A path
+outside it, a link leading out of it or a glob that climbs out is refused with the same reason Claude is given
+("Only files in this workspace's folder can be read."), and each file read shows as an activity. The save tool
+comes alongside them on the same terms as Claude's.
 
 ## Starter context file
 

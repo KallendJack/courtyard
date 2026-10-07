@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   Effort,
@@ -17,7 +17,11 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { OWNER_FILE } from "../src/owner-context/index.ts";
-import { createClaudeProvider } from "../src/providers/index.ts";
+import {
+  createClaudeProvider,
+  createCodexProvider,
+  type Provider,
+} from "../src/providers/index.ts";
 import { asOwner, followSession, postJson, type Requester, testWorker } from "../src/testing.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
@@ -33,9 +37,11 @@ import {
 } from "./scenarios.ts";
 
 /**
- * The context eval (docs/ai-conduct.md): runs every scenario against real Claude, signed in as the
- * owner on this machine, through a worker on a temporary context folder, and prints the score and
- * each miss. Never part of CI or `pnpm verify`: it needs the owner's login and uses their plan.
+ * The context eval (docs/ai-conduct.md): runs every scenario against a real model, Claude's or
+ * Codex's, signed in as the owner on this machine, through a worker on a temporary context folder,
+ * and prints the score and each miss. Codex runs in Courtyard's Codex home, in the data folder
+ * `COURTYARD_DATA_DIR` names. Never part of CI or `pnpm verify`: it needs the owner's login and
+ * uses their plan.
  *
  *   pnpm eval:context [--only <name,name>] [--times <n>] [--parallel <n>] [--model <id>]
  *                     [--effort <level>]
@@ -48,7 +54,7 @@ const Options = z.object({
   times: z.coerce.number().int().min(1).default(1),
   /** How many scenarios run at once. */
   parallel: z.coerce.number().int().min(1).default(4),
-  /** The Claude model, by the short name the app offers. */
+  /** The model, any provider's, by the id the app offers: Claude's short names, or Codex's. */
   model: ModelId.default(ModelId.parse("default")),
   /** The model's level of effort; its default when left out. Tidies always use the default. */
   effort: Effort.optional(),
@@ -63,8 +69,15 @@ const argumentNames = {
   effort: { type: "string" },
 } as const;
 
-/** The model each scenario's messages are sent to, and the effort they're sent with. */
-type Choice = { readonly model: ModelId; readonly effort: Effort | undefined };
+/**
+ * The model each scenario's messages are sent to, the provider offering it (one for every
+ * scenario's worker), and the effort they're sent with.
+ */
+type Choice = {
+  readonly provider: Provider;
+  readonly model: ModelId;
+  readonly effort: Effort | undefined;
+};
 
 /** The longest one turn may take before the scenario counts as not run. */
 const TURN_TIMEOUT_MINUTES = 5;
@@ -247,10 +260,10 @@ const send = async (
   request: Requester,
   to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; choice: Choice },
 ): Promise<SessionId> => {
-  const { model, effort } = to.choice;
+  const { provider, model, effort } = to.choice;
   const message = {
     text: to.text,
-    model: { provider: "claude", model },
+    model: { provider: provider.id, model },
     ...(effort === undefined ? {} : { effort }),
   };
   if (to.sessionId === undefined) {
@@ -272,13 +285,13 @@ const judgeTidy = async (judge: {
   workspaceId: WorkspaceId;
   file: string;
   tidy: NonNullable<Scenario["tidy"]>;
-  model: ModelId;
+  choice: Choice;
 }): Promise<Check[]> => {
-  const { request, workspaceId, file, tidy, model } = judge;
+  const { request, workspaceId, file, tidy, choice } = judge;
   const asked = await withTimeout(
     Promise.resolve(
       postJson(request, `/api/workspaces/${workspaceId}/tidy`, {
-        model: { provider: "claude", model },
+        model: { provider: choice.provider.id, model: choice.model },
       }),
     ),
     "the tidy",
@@ -319,7 +332,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
   try {
     await mkdir(join(root, "context"));
-    const app = testWorker({ root, providers: [createClaudeProvider()] });
+    const app = testWorker({ root, providers: [choice.provider] });
     const request = await asOwner(app);
     const made = await postJson(request, "/api/workspaces", { name: scenario.workspace });
     if (made.status !== 201) throw new Error(`adding the workspace failed (${made.status})`);
@@ -345,7 +358,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         workspaceId: workspace.id,
         file: join(folder, CONTEXT_FILE),
         tidy: scenario.tidy,
-        model: choice.model,
+        choice,
       });
       return { kind: "judged", scenario, checks };
     }
@@ -461,22 +474,33 @@ const main = async () => {
     process.exit(1);
   }
   const options = parsed.data;
-  const status = await createClaudeProvider().status();
-  if (!status.available) {
-    console.error(`Claude isn't available: ${status.reason}`);
-    process.exit(1);
+  // Codex only with a data folder to find Courtyard's Codex home in, as the worker finds it.
+  const dataDir = process.env.COURTYARD_DATA_DIR;
+  const providers = [
+    createClaudeProvider(),
+    ...(dataDir ? [createCodexProvider({ dataDir: resolve(dataDir) })] : []),
+  ];
+  const statuses = await Promise.all(providers.map((provider) => provider.status()));
+  for (const status of statuses) {
+    if (!status.available) console.error(`${status.label} isn't available: ${status.reason}`);
   }
-  const model = status.models.find((m) => m.id === options.model);
-  if (model === undefined) {
+  const offered = statuses.flatMap((status) => (status.available ? status.models : []));
+  const [offer] = providers.flatMap((provider, index) => {
+    const status = statuses[index];
+    const model = status?.available ? status.models.find((m) => m.id === options.model) : undefined;
+    return model === undefined ? [] : [{ provider, model }];
+  });
+  if (offer === undefined) {
     console.error(
-      `No Claude model "${options.model}". Try one of: ${status.models.map((m) => m.id).join(", ")}`,
+      `No model "${options.model}". Try one of: ${offered.map((m) => m.id).join(", ")}${dataDir ? "" : ". For Codex's, set COURTYARD_DATA_DIR to the data folder holding Courtyard's Codex home"}`,
     );
     process.exit(1);
   }
+  const { provider, model } = offer;
   const { effort } = options;
   if (!takesEffort(model, effort)) {
     const levels = model.efforts.map((level) => level.id).join(", ") || "none";
-    console.error(`Claude's "${model.id}" doesn't take effort "${effort}". It takes: ${levels}`);
+    console.error(`"${model.id}" doesn't take effort "${effort}". It takes: ${levels}`);
     process.exit(1);
   }
 
@@ -485,18 +509,19 @@ const main = async () => {
     (s) => only === undefined || only.split(",").some((part) => s.name.includes(part.trim())),
   );
   console.log(
-    `Running ${scenarios.length} scenarios${options.times > 1 ? `, ${options.times} times each` : ""}, against Claude (${options.model}${effort === undefined ? "" : `, ${effort} effort`})…\n`,
+    `Running ${scenarios.length} scenarios${options.times > 1 ? `, ${options.times} times each` : ""}, against ${model.label}${effort === undefined ? "" : ` (${effort} effort)`}…\n`,
   );
 
   const jobs = scenarios.flatMap((scenario) =>
     Array.from({ length: options.times }, () => async () => {
-      const verdict = await runScenario(scenario, { model: options.model, effort });
+      const verdict = await runScenario(scenario, { provider, model: model.id, effort });
       report(verdict);
       return verdict;
     }),
   );
   summarise(scenarios, await pool(jobs, options.parallel));
-  // Claude Code can leave a process behind for a moment; the eval is done.
+  // Claude Code can leave a process behind for a moment, and Codex's app-server keeps running
+  // until the worker's process ends; the eval is done.
   process.exit(0);
 };
 

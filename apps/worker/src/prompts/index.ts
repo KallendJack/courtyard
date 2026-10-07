@@ -13,9 +13,10 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
-import type { Framing, SaveReply, SaveTool } from "../providers/index.ts";
+import type { CourtyardTool, FileTools, Framing, SaveReply } from "../providers/index.ts";
 import type { Result } from "../result.ts";
 import type { SaveRefusal } from "../saves/index.ts";
+import { READ_LINES } from "../workspace-files/index.ts";
 
 /**
  * Everything a model reads, built from the rules in docs/ai-conduct.md. Providers deliver it as
@@ -153,7 +154,7 @@ const SAVING_IN_CODE = [
   ...SAVES_SHOWN,
 ].join("\n\n");
 
-const SAVE_INPUT: SaveTool["input"] = {
+const SAVE_INPUT: CourtyardTool["input"] = {
   action: z.enum(["add", "change", "remove"]).describe("Add a line, or change or remove one."),
   place: LinePlace.optional().describe(
     "Where the line goes: this workspace's context file, or the owner context. Leave it out to add to the workspace, or to keep a changed line where it is.",
@@ -172,7 +173,7 @@ const SAVE_INPUT: SaveTool["input"] = {
 };
 
 /** The save tool's description and inputs, as the model reads them, in each kind of workspace. */
-const SAVE_TOOLS: Record<WorkspaceMode, SaveTool> = {
+const SAVE_TOOLS: Record<WorkspaceMode, CourtyardTool> = {
   planning: {
     name: SAVE_TOOL_NAME,
     description:
@@ -184,6 +185,59 @@ const SAVE_TOOLS: Record<WorkspaceMode, SaveTool> = {
     description:
       "Saves one line to How to answer me in the owner context: adds a preference, changes the line a label names, or removes it. Follow the saving rules in your instructions.",
     input: SAVE_INPUT,
+  },
+};
+
+/** Ends every file tool's description: the one limit a model is told about. */
+const ONLY_THE_WORKSPACE = "Only this workspace's folder can be reached.";
+
+/**
+ * Courtyard's file tools as a model reads them, for a provider that reads files only through
+ * Courtyard (docs/ai-conduct.md, Courtyard's file tools): what each does, and that only the
+ * workspace folder can be reached.
+ */
+const FILE_TOOLS: FileTools = {
+  list: {
+    name: "list_folder",
+    description: `Lists the files and folders in a folder, each folder's name ending in /. ${ONLY_THE_WORKSPACE}`,
+    input: {
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "The folder, from the workspace's folder. Leave it out for the workspace's folder.",
+        ),
+    },
+  },
+  read: {
+    name: "read_file",
+    description: `Reads a file: its text, or an image (PNG, JPEG, GIF or WebP) to look at. Long text comes ${READ_LINES.toLocaleString("en-GB")} lines at a time. ${ONLY_THE_WORKSPACE}`,
+    input: {
+      path: z.string().describe("The file, from the workspace's folder."),
+      start_line: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("For long text, the line to read on from; 1 is the first."),
+    },
+  },
+  search: {
+    name: "search_files",
+    description: `Searches the text of the files in a folder and the folders inside it, ignoring case, and gives each matching line with its file and line number. ${ONLY_THE_WORKSPACE}`,
+    input: {
+      text: z.string().describe("The text to look for."),
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "The folder or file to search, from the workspace's folder. Leave it out for all of it.",
+        ),
+      glob: z
+        .string()
+        .optional()
+        .describe("Only files whose path matches this glob, such as *.md or notes/**."),
+    },
   },
 };
 
@@ -355,6 +409,7 @@ export const framingFor = (turn: {
     message: messageFor(newest?.speaker === "owner" ? said.slice(0, -1) : said, newMessage),
     newMessage,
     saveTool: saves ? SAVE_TOOLS[turn.workspace.mode] : null,
+    fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
   };
 };
 

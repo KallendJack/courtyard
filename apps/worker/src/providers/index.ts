@@ -23,15 +23,27 @@ export type Framing = {
   /** The owner's new message on its own, for a provider that needs only that (the fake). */
   readonly newMessage: string;
   /** The save tool to offer, or `null` when this turn has none (ADR 0013). */
-  readonly saveTool: SaveTool | null;
+  readonly saveTool: CourtyardTool | null;
+  /**
+   * Courtyard's file tools, or `null` when the provider reads no files. Only a provider that
+   * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
+   */
+  readonly fileTools: FileTools | null;
 };
 
-/** The save tool as a model is told about it: its name, what it's for, and each input. */
-export type SaveTool = {
+/** One of Courtyard's own tools as a model is told about it: its name, what it's for, and each input. */
+export type CourtyardTool = {
   readonly name: string;
   readonly description: string;
   /** Each input by name, with what it means as its description. */
   readonly input: Readonly<Record<string, z.ZodType>>;
+};
+
+/** Courtyard's tools for looking at the workspace's files, each confined to its folder. */
+export type FileTools = {
+  readonly list: CourtyardTool;
+  readonly read: CourtyardTool;
+  readonly search: CourtyardTool;
 };
 
 /** What the worker made of a save: whether it saved, and what to tell the model. */

@@ -186,7 +186,8 @@ version, never a Codex you've installed elsewhere.
 - **Codex is on unless switched off.** Without a ChatGPT plan, set `COURTYARD_CODEX_PROVIDER=0`
   to leave Codex out; otherwise the model picker says Codex isn't signed in.
 
-Codex has no shell in Courtyard and can't read files yet: it answers from the context file and
-the conversation. Courtyard never reads, stores or logs its sign-in. Before changing Codex's
+Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
+Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.
+Courtyard never reads, stores or logs its sign-in. Before changing Codex's
 version, run [the real-Codex check](docs/real-codex-check.md). What is being built is in [`docs/spec.md`](docs/spec.md), the vocabulary in
 [`GLOSSARY.md`](GLOSSARY.md), and why it is built this way in [`docs/adr/`](docs/adr/).
