@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
@@ -193,7 +194,12 @@ const AssistantError = z.object({
   type: z.literal("assistant"),
   error: z.string().pipe(AnswerError),
 });
-const ResultMessage = z.object({ type: z.literal("result"), is_error: z.boolean().optional() });
+const ResultMessage = z.object({
+  type: z.literal("result"),
+  is_error: z.boolean().optional(),
+  /** A one-off question's answer, in the shape it asked for. */
+  structured_output: z.unknown().optional(),
+});
 
 const SIGNED_OUT =
   "Claude Code isn't logged in on the worker machine. Run `claude` there and log in, or set an API key.";
@@ -225,6 +231,53 @@ const failureFor = (error: AnswerError, resetAt: string | undefined): FailureRea
       return { kind: "unknown", message: "Claude couldn't answer this time." };
   }
 };
+
+/** What a run's messages have said so far about how it went. */
+type Progress = {
+  resetAt?: string | undefined;
+  failure?: FailureReason;
+  result?: z.infer<typeof ResultMessage>;
+};
+
+/** Notes what a message says about the run: a usage limit, a failed answer, or its result. */
+const noteProgress = (message: unknown, progress: Progress) => {
+  const limit = RateLimitEvent.safeParse(message);
+  if (limit.success) {
+    if (limit.data.rate_limit_info.status === "rejected") {
+      progress.resetAt = resetTimeFrom(limit.data.rate_limit_info.resetsAt);
+      progress.failure = failureFor("rate_limit", progress.resetAt);
+    }
+    return;
+  }
+  const assistant = AssistantError.safeParse(message);
+  if (assistant.success) {
+    progress.failure ??= failureFor(assistant.data.error, progress.resetAt);
+    return;
+  }
+  const result = ResultMessage.safeParse(message);
+  if (result.success) {
+    progress.result = result.data;
+    if (result.data.is_error) progress.failure ??= failureFor("unknown", progress.resetAt);
+  }
+};
+
+/** Claude Code failing to run at all: only the kind of error goes to the worker's log. */
+const claudeCodeStopped = (error: unknown): FailureReason => {
+  console.error("Claude Code stopped:", error instanceof Error ? error.name : typeof error);
+  return {
+    kind: "provider-unavailable",
+    message: "Claude Code stopped unexpectedly on the worker machine.",
+  };
+};
+
+/** A schema as Claude Code takes it: JSON Schema without the `$schema` line, which it refuses. */
+const jsonSchemaOf = (schema: z.ZodType) => {
+  const { $schema: _, ...rest } = z.toJSONSchema(schema);
+  return rest;
+};
+
+/** Turns a one-off question may take: answering in its shape can take a retry. */
+const ONE_OFF_MAX_TURNS = 3;
 
 /**
  * Where a path really leads, following symlinks. For a path that doesn't exist yet, the nearest
@@ -463,9 +516,7 @@ export const createClaudeProvider = (
 
     runTurn: async (input) => {
       const folder = resolve(input.folder);
-      let resetAt: string | undefined;
-      let failure: FailureReason | undefined;
-      let resultArrived = false;
+      const progress: Progress = {};
       // The owner stopping the turn stops Claude Code itself.
       const stop = new AbortController();
       const stopClaudeCode = () => stop.abort();
@@ -505,42 +556,57 @@ export const createClaudeProvider = (
             if (!delta.data.parent_tool_use_id) await input.emit(delta.data.event.delta.text);
             continue;
           }
-          const limit = RateLimitEvent.safeParse(message);
-          if (limit.success) {
-            if (limit.data.rate_limit_info.status === "rejected") {
-              resetAt = resetTimeFrom(limit.data.rate_limit_info.resetsAt);
-              failure = failureFor("rate_limit", resetAt);
-            }
-            continue;
-          }
-          const assistant = AssistantError.safeParse(message);
-          if (assistant.success) {
-            failure ??= failureFor(assistant.data.error, resetAt);
-            continue;
-          }
-          const result = ResultMessage.safeParse(message);
-          if (result.success) {
-            resultArrived = true;
-            if (result.data.is_error) failure ??= failureFor("unknown", resetAt);
-          }
+          noteProgress(message, progress);
         }
       } catch (error) {
         // Stopping can make Claude Code end with an error; that's the stop working, not a failure,
-        // and it's handled below. Otherwise Claude Code itself failed (it couldn't start, or stopped). Only the kind of error goes to
-        // the worker's log, never its text; the session gets plain words.
-        if (!input.signal.aborted) {
-          console.error("Claude Code stopped:", error instanceof Error ? error.name : typeof error);
-        }
-        failure ??= {
-          kind: "provider-unavailable",
-          message: "Claude Code stopped unexpectedly on the worker machine.",
-        };
+        // and it's handled below. Otherwise Claude Code itself failed (it couldn't start, or
+        // stopped), and the session gets plain words.
+        if (!input.signal.aborted) progress.failure ??= claudeCodeStopped(error);
       } finally {
         input.signal.removeEventListener("abort", stopClaudeCode);
       }
       if (input.signal.aborted) return ok(null);
-      if (!failure && !resultArrived) failure = failureFor("unknown", resetAt);
+      const failure =
+        progress.failure ??
+        (progress.result === undefined ? failureFor("unknown", progress.resetAt) : undefined);
       return failure ? err(failure) : ok(null);
+    },
+
+    answerOnce: async (input) => {
+      const progress: Progress = {};
+      const stop = new AbortController();
+      const stopClaudeCode = () => stop.abort();
+      if (input.signal.aborted) stop.abort();
+      input.signal.addEventListener("abort", stopClaudeCode);
+      try {
+        const messages = claudeCode.run({
+          prompt: input.message,
+          options: {
+            ...isolatedOptions(),
+            ...(input.model === "default" ? {} : { model: input.model }),
+            // Nowhere in particular: it has no tools to look with.
+            cwd: tmpdir(),
+            systemPrompt: input.instructions,
+            tools: [],
+            permissionMode: "dontAsk",
+            outputFormat: { type: "json_schema", schema: jsonSchemaOf(input.schema) },
+            maxTurns: ONE_OFF_MAX_TURNS,
+            abortController: stop,
+          },
+        });
+        for await (const message of untilStopped(messages, stop.signal)) {
+          noteProgress(message, progress);
+        }
+      } catch (error) {
+        if (!input.signal.aborted) progress.failure ??= claudeCodeStopped(error);
+      } finally {
+        input.signal.removeEventListener("abort", stopClaudeCode);
+      }
+      if (input.signal.aborted) return err({ kind: "unknown", message: "It was stopped." });
+      if (progress.failure !== undefined) return err(progress.failure);
+      const answer = progress.result?.structured_output;
+      return answer === undefined ? err(failureFor("unknown", progress.resetAt)) : ok(answer);
     },
   };
 };

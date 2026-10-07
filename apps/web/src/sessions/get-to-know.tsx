@@ -6,7 +6,7 @@ import { InfoBox } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { type ContextPlace, loadProviders, startGettingToKnow } from "../worker.ts";
-import { availableModels } from "./models.ts";
+import { firstSavingModel } from "./models.ts";
 
 /**
  * An offer to get to know an empty workspace or owner context (docs/ai-conduct.md, Getting to
@@ -23,10 +23,7 @@ export function GetToKnow(props: {
   const start = useAction(async () => {
     const providers = await loadProviders();
     if (providers.kind !== "loaded") return describeProblem(providers).body;
-    const saving = providers.data.providers.filter(
-      (provider) => provider.available && provider.capabilities.savesContext,
-    );
-    const model = availableModels(saving)[0]?.ref;
+    const model = firstSavingModel(providers.data.providers);
     if (model === undefined)
       return "No model that saves to context is available. Check the providers' settings.";
     const session = await startGettingToKnow(props.about, { model });

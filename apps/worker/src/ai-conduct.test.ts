@@ -9,7 +9,7 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Provider, TurnInput } from "./providers/index.ts";
+import type { OneOffInput, Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,
@@ -67,6 +67,7 @@ const recorder = (capabilities: Capabilities, replies: readonly (string | typeof
       await input.emit(reply);
       return ok(null);
     },
+    answerOnce: async () => err({ kind: "unknown", message: "The recorder only answers turns." }),
   };
   return { provider, turns };
 };
@@ -445,27 +446,27 @@ describe("saving context as a model answers (ADR 0013)", () => {
   }, 20_000);
 });
 
-describe("getting to know a workspace (#51)", () => {
-  /**
-   * A starter message as docs/ai-conduct.md quotes it, starting from its first line: the quoted
-   * lines, wrapped lines joined back up, paragraphs kept.
-   */
-  const quotedStarter = async (firstLine: string) => {
-    const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
-    const lines = guide.replace(/\r\n/g, "\n").split("\n");
-    const start = lines.indexOf(`> ${firstLine}`);
-    const quoted: string[] = [];
-    for (const line of lines.slice(start)) {
-      if (!line.startsWith(">")) break;
-      quoted.push(line.replace(/^> ?/, ""));
-    }
-    return quoted
-      .join("\n")
-      .split("\n\n")
-      .map((paragraph) => paragraph.replace(/\n/g, " "))
-      .join("\n\n");
-  };
+/**
+ * What docs/ai-conduct.md quotes, from the quote starting with `firstWords`: the quoted lines,
+ * wrapped lines joined back up, list items and paragraphs kept.
+ */
+const quotedInGuide = async (firstWords: string) => {
+  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
+  const lines = guide.replace(/\r\n/g, "\n").split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
+  const quoted: string[] = [];
+  for (const line of lines.slice(start)) {
+    if (!line.startsWith(">")) break;
+    quoted.push(line.replace(/^> ?/, ""));
+  }
+  return quoted
+    .join("\n")
+    .split("\n\n")
+    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
+    .join("\n\n");
+};
 
+describe("getting to know a workspace (#51)", () => {
   /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */
   const gettingToKnow = async () => {
     const { provider, turns } = recorder(READS_FILES);
@@ -488,7 +489,7 @@ describe("getting to know a workspace (#51)", () => {
     const started = await start("/api/workspaces/garage-gym/get-to-know");
 
     expect(started.started && started.session.title).toBe("Get to know this workspace.");
-    expect(turns[0]?.framing.newMessage).toBe(await quotedStarter("Get to know this workspace."));
+    expect(turns[0]?.framing.newMessage).toBe(await quotedInGuide("Get to know this workspace."));
     expect(turns[0]?.framing.newMessage).toMatch(/one question per message, two at most/);
   });
 
@@ -503,7 +504,7 @@ describe("getting to know a workspace (#51)", () => {
     const started = await start("/api/owner-context/get-to-know");
 
     expect(started.started && started.session.workspaceId).toBe("garage-gym");
-    expect(turns[0]?.framing.newMessage).toBe(await quotedStarter("Get to know me."));
+    expect(turns[0]?.framing.newMessage).toBe(await quotedInGuide("Get to know me."));
     expect(turns[0]?.framing.newMessage).toMatch(/save what I tell you to my owner context/);
   });
 
@@ -519,5 +520,35 @@ describe("getting to know a workspace (#51)", () => {
       status: 409,
     });
     expect(await start("/api/owner-context/get-to-know")).toEqual({ started: false, status: 409 });
+  });
+});
+
+describe("tidying a context file (#52)", () => {
+  it("tells the model what the guide says, and gives it the file with its labels and today's date", async () => {
+    await contextFile("## Facts\n\n- Double garage\n\n## Ideas\n\n- A rowing machine\n");
+    const told: OneOffInput[] = [];
+    const { provider } = recorder(READS_FILES);
+    const request = await asOwner(
+      testWorker({
+        root,
+        providers: [
+          {
+            ...provider,
+            answerOnce: async (input) => {
+              told.push(input);
+              return ok({ changes: [] });
+            },
+          },
+        ],
+      }),
+    );
+
+    await postJson(request, "/api/workspaces/garage-gym/tidy", { model: MODEL });
+
+    expect(told[0]?.purpose).toBe("tidy");
+    expect(told[0]?.instructions).toBe(await quotedInGuide("You tidy one context file"));
+    expect(told[0]?.message).toMatch(/^Today is \w+day, \d+ \w+ \d{4}\./);
+    expect(told[0]?.message).toContain("- [F1] Double garage");
+    expect(told[0]?.message).toContain("- [I1] A rowing machine");
   });
 });

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { classes } from "@/lib/classes";
 
 /**
  * Something that went wrong or is about to, said plainly, with an optional way to act on it:
@@ -55,15 +56,24 @@ export function InfoBox(props: { label: string; children: ReactNode }) {
 }
 
 /** Something to know about that's being handled (the worker reconnecting, say). */
-export function StatusPill(props: { children: ReactNode }) {
+export function StatusPill(props: {
+  children: ReactNode;
+  /** A small button at the pill's end that deals with what it says. */
+  action?: ReactNode;
+}) {
   return (
-    <p
-      role="status"
-      className="flex w-fit items-center gap-2 rounded-full bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-foreground"
+    <div
+      className={classes(
+        "flex w-fit items-center gap-x-3 gap-y-2 rounded-2xl bg-accent text-sm font-medium text-accent-foreground max-md:flex-wrap",
+        props.action === undefined ? "px-3.5 py-1.5" : "py-1.5 pr-1.5 pl-3.5",
+      )}
     >
-      <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
-      {props.children}
-    </p>
+      <p role="status" className="flex min-w-0 items-center gap-2">
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+        {props.children}
+      </p>
+      {props.action}
+    </div>
   );
 }
 

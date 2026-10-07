@@ -15,6 +15,7 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppChangesRouteImport } from './routes/_app/changes'
 import { Route as AppNewWorkspaceRouteImport } from './routes/_app/new-workspace'
+import { Route as AppTidyRouteImport } from './routes/_app/tidy'
 import { Route as AppWorkspacesWorkspaceIdIndexRouteImport } from './routes/_app/workspaces.$workspaceId.index'
 import { Route as AppWorkspacesWorkspaceIdSessionsSessionIdRouteImport } from './routes/_app/workspaces.$workspaceId.sessions.$sessionId'
 
@@ -47,6 +48,11 @@ const AppNewWorkspaceRoute = AppNewWorkspaceRouteImport.update({
   path: '/new-workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTidyRoute = AppTidyRouteImport.update({
+  id: '/tidy',
+  path: '/tidy',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWorkspacesWorkspaceIdIndexRoute =
   AppWorkspacesWorkspaceIdIndexRouteImport.update({
     id: '/workspaces/$workspaceId/',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/changes': typeof AppChangesRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/tidy': typeof AppTidyRoute
   '/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
 }
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/changes': typeof AppChangesRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/tidy': typeof AppTidyRoute
   '/': typeof AppIndexRoute
   '/workspaces/$workspaceId': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/_app/changes': typeof AppChangesRoute
   '/_app/new-workspace': typeof AppNewWorkspaceRoute
+  '/_app/tidy': typeof AppTidyRoute
   '/_app/': typeof AppIndexRoute
   '/_app/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/_app/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/changes'
     | '/new-workspace'
+    | '/tidy'
     | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/sessions/$sessionId'
   fileRoutesByTo: FileRoutesByTo
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/changes'
     | '/new-workspace'
+    | '/tidy'
     | '/'
     | '/workspaces/$workspaceId'
     | '/workspaces/$workspaceId/sessions/$sessionId'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/_app/changes'
     | '/_app/new-workspace'
+    | '/_app/tidy'
     | '/_app/'
     | '/_app/workspaces/$workspaceId/'
     | '/_app/workspaces/$workspaceId/sessions/$sessionId'
@@ -170,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNewWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tidy': {
+      id: '/_app/tidy'
+      path: '/tidy'
+      fullPath: '/tidy'
+      preLoaderRoute: typeof AppTidyRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/workspaces/$workspaceId/': {
       id: '/_app/workspaces/$workspaceId/'
       path: '/workspaces/$workspaceId'
@@ -190,6 +209,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppChangesRoute: typeof AppChangesRoute
   AppNewWorkspaceRoute: typeof AppNewWorkspaceRoute
+  AppTidyRoute: typeof AppTidyRoute
   AppIndexRoute: typeof AppIndexRoute
   AppWorkspacesWorkspaceIdIndexRoute: typeof AppWorkspacesWorkspaceIdIndexRoute
   AppWorkspacesWorkspaceIdSessionsSessionIdRoute: typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -198,6 +218,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppChangesRoute: AppChangesRoute,
   AppNewWorkspaceRoute: AppNewWorkspaceRoute,
+  AppTidyRoute: AppTidyRoute,
   AppIndexRoute: AppIndexRoute,
   AppWorkspacesWorkspaceIdIndexRoute: AppWorkspacesWorkspaceIdIndexRoute,
   AppWorkspacesWorkspaceIdSessionsSessionIdRoute:

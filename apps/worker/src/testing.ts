@@ -8,7 +8,7 @@ import {
   type Provider,
   type SaveReply,
 } from "./providers/index.ts";
-import { ok } from "./result.ts";
+import { err, ok } from "./result.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
 /**
@@ -207,6 +207,7 @@ export const savingProvider = (
       await input.emit("Done.");
       return ok(null);
     },
+    answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
   };
   return { provider, replies, framings };
 };

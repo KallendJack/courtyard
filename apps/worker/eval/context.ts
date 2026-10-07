@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
@@ -9,6 +9,7 @@ import {
   type Save,
   type SessionId,
   SessionSummary,
+  TidyProposal,
   type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
@@ -248,6 +249,57 @@ const send = async (
   return to.sessionId;
 };
 
+/**
+ * A tidy of the scenario's starting file, saved with every change ticked, judged on the file it
+ * leaves: every fact's words still in some line, the lines that should go gone, and shorter.
+ */
+const judgeTidy = async (judge: {
+  request: Requester;
+  workspaceId: WorkspaceId;
+  file: string;
+  tidy: NonNullable<Scenario["tidy"]>;
+  model: ModelId;
+}): Promise<Check[]> => {
+  const { request, workspaceId, file, tidy, model } = judge;
+  const asked = await withTimeout(
+    Promise.resolve(
+      postJson(request, `/api/workspaces/${workspaceId}/tidy`, {
+        model: { provider: "claude", model },
+      }),
+    ),
+    "the tidy",
+  );
+  // A usage limit shows here as a failed tidy, so a run that hit it isn't read as misses.
+  if (asked.status !== 200)
+    throw new Error(`the tidy failed (${asked.status}): ${await asked.text()}`);
+  const proposal = TidyProposal.parse(await asked.json());
+  const keep = proposal.changes.map((_, index) => index);
+  const saved = await postJson(request, `/api/tidies/${proposal.id}/save`, { keep });
+  if (saved.status !== 204) throw new Error(`saving the tidy failed (${saved.status})`);
+  const after = await readFile(file, "utf8");
+  const lines = after.split("\n").filter((line) => line.trim().startsWith("- "));
+
+  const kept = tidy.keeps.map(
+    (words): Check => ({
+      miss: lines.some((line) => hasWords(line, { words }))
+        ? null
+        : `lost a fact: no line has ${describeWords(words)}`,
+    }),
+  );
+  const gone = tidy.goes.map((line): Check => {
+    const either = anyOf(line);
+    return {
+      miss: either.some((was) => !lines.includes(`- ${was}`))
+        ? null
+        : `kept ${either.map((was) => `"${was}"`).join(" and ")}`,
+    };
+  });
+  const shorter: Check = {
+    miss: after.length < proposal.characters ? null : "the file isn't shorter",
+  };
+  return [...kept, ...gone, shorter];
+};
+
 /** Runs one scenario on a worker of its own, in a temporary folder it removes afterwards. */
 const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict> => {
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
@@ -271,6 +323,17 @@ const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict>
     for (const [path, text] of Object.entries(scenario.files ?? {})) {
       await mkdir(dirname(join(folder, path)), { recursive: true });
       await writeFile(join(folder, path), text);
+    }
+
+    if (scenario.tidy !== undefined) {
+      const checks = await judgeTidy({
+        request,
+        workspaceId: workspace.id,
+        file: join(folder, CONTEXT_FILE),
+        tidy: scenario.tidy,
+        model,
+      });
+      return { kind: "judged", scenario, checks };
     }
 
     const checks: Check[] = [];

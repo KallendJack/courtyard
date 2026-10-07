@@ -5,7 +5,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, Pencil, Undo2 } from "lucide-react";
+import { BookmarkCheck, ListChecks, Pencil, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
@@ -28,7 +28,10 @@ const placeOf = (workspace: Whose): ContextPlace =>
 const placeIn = (workspace: Whose, line: PlacedLine) =>
   placeName(line, { withinOwnerContext: workspace === undefined });
 
-/** A hand edit's lines: each one put in with the line it replaced in that section, if any. */
+/**
+ * A hand edit's or a tidy's lines: each one put in with the line it replaced in that section, if
+ * any, and the lines that went.
+ */
 const pairedLines = (change: RecentChange) => {
   const removed = [...change.removed];
   const pairs = change.added.map((now) => {
@@ -143,17 +146,18 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
       </Button>
     ) : undefined;
 
-  if (change.kind === "hand-edit") {
+  if (change.kind === "hand-edit" || change.kind === "tidy") {
     const { pairs, gone } = pairedLines(change);
+    const tidy = change.kind === "tidy";
     return (
       <NoteRow
-        icon={muted ? <Undo2 /> : <Pencil />}
+        icon={muted ? <Undo2 /> : tidy ? <ListChecks /> : <Pencil />}
         muted={muted}
         tall
         actions={actions}
         error={undo.error}
       >
-        <NoteWords label={muted ? "Undone" : "Edited by hand"} muted={muted} />
+        <NoteWords label={muted ? "Undone" : tidy ? "Tidied" : "Edited by hand"} muted={muted} />
         {pairs.map(({ now, was }) => (
           <HandEditLine
             key={`${now.section}:${now.line}`}
@@ -170,7 +174,11 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
             gone
           />
         ))}
-        <Meta workspace={workspace} change={change} note={muted ? "undone" : undefined} />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? "undone" : tidy ? "ticked by you" : undefined}
+        />
       </NoteRow>
     );
   }

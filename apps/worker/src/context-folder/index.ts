@@ -16,7 +16,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
 /**
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
  * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
- * owner context started from the app, or a model's save and the owner undoing or editing one.
+ * owner context started from the app, a model's save and the owner undoing or editing one, or a
+ * tidy the owner ticked.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -26,6 +27,7 @@ export const ChangeKind = z.enum([
   "save",
   "undo",
   "edit",
+  "tidy",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;
 
