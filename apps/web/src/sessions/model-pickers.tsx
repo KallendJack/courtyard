@@ -1,7 +1,7 @@
-import { Effort, type ModelRef } from "@courtyard/contract";
+import { Effort, type ModelRef, takesEffort } from "@courtyard/contract";
 import { useState } from "react";
 import { Select } from "@/components/select";
-import { effortLabel, type OfferedModel, takesEffort } from "./models.ts";
+import { effortLabel, type OfferedModel } from "./models.ts";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
 
@@ -28,7 +28,7 @@ export const useModelChoice = (choice: {
   const modelKey = chosenKey ?? (following ? followedKey : undefined);
   const model = models.find((m) => keyOf(m.ref) === modelKey) ?? models[0];
   const wanted = chosenEffort ? chosenEffort.effort : following ? choice.followEffort : undefined;
-  const effort = takesEffort(model, wanted) ? wanted : undefined;
+  const effort = model !== undefined && takesEffort(model, wanted) ? wanted : undefined;
 
   return {
     model,
@@ -36,7 +36,8 @@ export const useModelChoice = (choice: {
     pickModel: (key: string) => {
       const picked = models.find((m) => keyOf(m.ref) === key);
       setChosenKey(key);
-      setChosenEffort({ effort: takesEffort(picked, effort) ? effort : undefined });
+      const kept = picked !== undefined && takesEffort(picked, effort);
+      setChosenEffort({ effort: kept ? effort : undefined });
     },
     pickEffort: (picked: Effort | undefined) => setChosenEffort({ effort: picked }),
   };

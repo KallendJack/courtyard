@@ -19,10 +19,6 @@ export const availableModels = (providers: ProviderList["providers"]) =>
 /** One model on offer, with the levels of effort it takes. */
 export type OfferedModel = ReturnType<typeof availableModels>[number];
 
-/** Whether a model takes this level of effort. `undefined`, its default, it always takes. */
-export const takesEffort = (model: OfferedModel | undefined, effort: Effort | undefined) =>
-  effort === undefined || (model?.efforts.some((level) => level.id === effort) ?? false);
-
 /** How an effort reads in a picker: "High effort", or "Default effort (Medium)". */
 export const effortLabel = (model: OfferedModel, effort: Effort | undefined) => {
   const named = (level: Effort | undefined) =>

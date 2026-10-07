@@ -13,6 +13,7 @@ import {
   SessionId,
   type SessionSummary,
   type StopRequest,
+  takesEffort,
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -472,13 +473,10 @@ export const createSessions = (options: {
   };
 
   /** The provider to answer a message: its model must be on offer, and take its effort. */
-  const providerOf = async (message: NewMessage): Promise<Result<Provider, SessionError>> => {
+  const providerFor = async (message: NewMessage): Promise<Result<Provider, SessionError>> => {
     const offer = await offerFor(options.providers, message.model);
     if (!offer) return err({ kind: "model-unavailable" });
-    const { effort } = message;
-    if (effort !== undefined && !offer.model.efforts.some((level) => level.id === effort)) {
-      return err({ kind: "effort-unavailable" });
-    }
+    if (!takesEffort(offer.model, message.effort)) return err({ kind: "effort-unavailable" });
     return ok(offer.provider);
   };
 
@@ -590,7 +588,7 @@ export const createSessions = (options: {
       workspaceId: WorkspaceId;
       message: NewMessage;
     }): Promise<Result<SessionSummary, SessionError>> => {
-      const provider = await providerOf(start.message);
+      const provider = await providerFor(start.message);
       if (!provider.ok) return provider;
       const id = SessionId.parse(randomUUID());
       const at = stamp();
@@ -631,7 +629,7 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerOf(message);
+      const provider = await providerFor(message);
       if (!provider.ok) return provider;
       return startTurn({
         id: session.value.id,

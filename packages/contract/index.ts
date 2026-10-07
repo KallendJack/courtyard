@@ -40,6 +40,7 @@ export {
   SessionList,
   SessionSummary,
   StopRequest,
+  takesEffort,
 } from "./lib/session.ts";
 export {
   TidyChange,

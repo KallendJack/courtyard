@@ -2,16 +2,17 @@ import { ChevronDown } from "lucide-react";
 import { useId } from "react";
 import { classes } from "@/lib/classes";
 
+/** A small quiet pill in a row of controls: the composer's pickers, and the chip that opens them. */
+export const PILL =
+  "rounded-full bg-background py-1.5 pl-3 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+
 const LOOKS = {
-  /** Small and quiet, in a row of controls (the composer's model and effort). */
-  pill: {
-    box: "rounded-full bg-background py-1.5 pr-7 pl-3 text-xs font-medium text-muted-foreground field-sizing-content",
-    chevron: "right-2.5 size-3.5",
-  },
-  /** Full width, named by a label above it (in a sheet). */
+  /** Small and quiet, in a row of controls (the composer's model and effort), sized to its choice. */
+  pill: { box: classes(PILL, "pr-7 field-sizing-content"), chevron: "right-2.5 size-3.5" },
+  /** Full width, named by a label above it (in a sheet): a TextField's look. */
   field: {
-    box: "w-full rounded-md border bg-field py-2.5 pr-10 pl-3.5 text-base text-foreground",
-    chevron: "right-3.5 size-4",
+    box: "h-11 w-full rounded-lg border border-input bg-field pr-10 pl-2.5 text-base outline-none transition-colors focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-accent md:text-sm",
+    chevron: "right-3 size-4",
   },
 } as const;
 
@@ -28,7 +29,6 @@ export function Select<T extends string>(props: {
   look: keyof typeof LOOKS;
   /** Only from tablet width up: on a narrow screen something else offers the choice. */
   wideOnly?: boolean;
-  disabled?: boolean;
 }) {
   const id = useId();
   const look = LOOKS[props.look];
@@ -44,16 +44,12 @@ export function Select<T extends string>(props: {
         id={id}
         {...(props.look === "pill" ? { "aria-label": props.label } : {})}
         value={props.value}
-        disabled={props.disabled}
-        // Only a value among the options can be picked, so this is one of them.
+        // The option picked, as its own value rather than the plain string the browser gives.
         onChange={(event) => {
           const picked = props.options.find((option) => option.value === event.target.value);
           if (picked) props.onChange(picked.value);
         }}
-        className={classes(
-          "min-w-0 appearance-none truncate outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-          look.box,
-        )}
+        className={classes("min-w-0 appearance-none truncate", look.box)}
       >
         {props.options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -73,7 +69,7 @@ export function Select<T extends string>(props: {
   if (props.look === "pill") return picker;
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
+      <label htmlFor={id} className="text-sm font-medium">
         {props.label}
       </label>
       {picker}

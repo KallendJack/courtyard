@@ -42,6 +42,12 @@ export const ModelInfo = z.object({
 });
 export type ModelInfo = z.infer<typeof ModelInfo>;
 
+/** Whether a model takes this level of effort. `undefined`, its default, every model takes. */
+export const takesEffort = (
+  model: { readonly efforts: readonly EffortInfo[] },
+  effort: Effort | undefined,
+) => effort === undefined || model.efforts.some((level) => level.id === effort);
+
 /** What a provider can do. These drive the rules, not provider names. */
 export const Capabilities = z.object({
   readsFiles: z.boolean(),

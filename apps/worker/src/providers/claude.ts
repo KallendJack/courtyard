@@ -134,16 +134,16 @@ const realClaudeCode: ClaudeCode = {
   run: ({ prompt, options }) => query({ prompt, options }),
 };
 
-/** Claude's levels of effort, least first, each in Claude's own words. */
-const EFFORT_LABELS = {
+/** A level of effort as the Agent SDK takes it, least first. */
+const ClaudeEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
+/** Each of Claude's levels of effort in Claude's own words. */
+const EFFORT_LABELS: Record<z.infer<typeof ClaudeEffort>, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
   xhigh: "Extra high",
   max: "Max",
-} as const;
-/** A level of effort as the Agent SDK takes it. */
-const ClaudeEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
+};
 
 const ClaudeModel = z.object({
   value: z.string(),

@@ -11,6 +11,7 @@ import {
   type SessionId,
   SessionSummary,
   TidyProposal,
+  takesEffort,
   type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
@@ -473,7 +474,7 @@ const main = async () => {
     process.exit(1);
   }
   const { effort } = options;
-  if (effort !== undefined && !model.efforts.some((level) => level.id === effort)) {
+  if (!takesEffort(model, effort)) {
     const levels = model.efforts.map((level) => level.id).join(", ") || "none";
     console.error(`Claude's "${model.id}" doesn't take effort "${effort}". It takes: ${levels}`);
     process.exit(1);

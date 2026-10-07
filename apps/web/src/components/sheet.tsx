@@ -6,7 +6,7 @@ import { Button } from "./button.tsx";
  * Done to close it (the model and effort for a session). The browser's own dialog, so Escape,
  * focus and screen readers work as they should. Tapping the dimmed page closes it too. What's in it
  * is only there while it's open, so the page never holds a second copy of its controls. Safe on
- * the first load (ADR 0012).
+ * the first load (ADR 0012), which shadcn's dialog isn't: it brings the class-merging code.
  */
 export function Sheet(props: {
   title: string;
