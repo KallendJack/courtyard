@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  type ChangeId,
   CONTEXT_LINE_MAX_CHARACTERS,
   type ContextSection,
   LinePlace,
@@ -132,7 +133,7 @@ const checkedLine = (text: string): Result<string, SaveRefusal> => {
  * Makes one change to the workspace's context file and the owner context through the context
  * folder's queue: `change` gets both as they are now (from their starters when they aren't there)
  * and returns them changed, with a value, or a refusal. Only the files it changed are written, and
- * nothing is when it refuses.
+ * nothing is when it refuses. Says which change it committed, if git kept it.
  */
 const changeFiles = async <T, E>(
   target: SaveTarget,
@@ -142,8 +143,8 @@ const changeFiles = async <T, E>(
     storage: E;
     change: (files: Files) => Result<{ files: Files; value: T }, E>;
   },
-): Promise<Result<T, E>> => {
-  const changed = await target.contextFolder.change(
+): Promise<Result<{ value: T; change: ChangeId | undefined }, E>> => {
+  const changed = await target.contextFolder.changeWithId(
     async (): Promise<Result<{ value: T; places: Place[] }, E>> => {
       const [workspace, owner] = await Promise.all([
         getWorkspace(target.contextDir, target.workspaceId),
@@ -190,7 +191,8 @@ const changeFiles = async <T, E>(
       session: target.sessionId,
     }),
   );
-  return changed.ok ? ok(changed.value.value) : changed;
+  if (!changed.ok) return changed;
+  return ok({ value: changed.value.value.value, change: changed.value.id });
 };
 
 /** The files with a line moved or reworded, in either file, or `undefined` when it isn't there. */
@@ -313,7 +315,7 @@ const applySave = (apply: {
 };
 
 /** A save's change, as the context folder's history titles it. */
-const titleOf = (save: Save) => {
+export const titleOf = (save: Save) => {
   switch (save.action) {
     case "add":
       return `Save to ${placeName(save.saved)}: ${save.saved.line}`;
@@ -343,7 +345,9 @@ export const createTurnSaves = (
 ) => {
   const { mode } = options;
   let shown = labelsOf(linesShown(options.shown, mode));
-  return async (raw: unknown): Promise<Result<Save, SaveRefusal>> => {
+  return async (
+    raw: unknown,
+  ): Promise<Result<{ value: Save; change: ChangeId | undefined }, SaveRefusal>> => {
     const request = SaveRequest.safeParse(raw);
     if (!request.success) return err({ kind: "malformed" });
     const saved = await changeFiles<Save, SaveRefusal>(options, {
@@ -386,7 +390,7 @@ export const undoSave = async (
   state: SaveState,
 ): Promise<Result<null, NoteRefusal>> => {
   if (state.undone) return err({ kind: "already-undone" });
-  return changeFiles<null, NoteRefusal>(target, {
+  const changed = await changeFiles<null, NoteRefusal>(target, {
     kind: "undo",
     title: () => `Undo: ${titleOf(state.save)}`,
     storage: NOTE_STORAGE,
@@ -396,6 +400,7 @@ export const undoSave = async (
       return err({ kind: state.save.action === "remove" ? "already-back" : "changed-since" });
     },
   });
+  return changed.ok ? ok(null) : changed;
 };
 
 /**
@@ -410,7 +415,7 @@ export const editSave = async (
   const { current } = state;
   if (state.undone) return err({ kind: "already-undone" });
   if (current === undefined) return err({ kind: "nothing-to-edit" });
-  return changeFiles<null, NoteRefusal>(target, {
+  const changed = await changeFiles<null, NoteRefusal>(target, {
     kind: "edit",
     title: () => `Edit in ${placeName(now)}: ${now.line}`,
     storage: NOTE_STORAGE,
@@ -421,4 +426,5 @@ export const editSave = async (
         : ok({ files: edited, value: null });
     },
   });
+  return changed.ok ? ok(null) : changed;
 };

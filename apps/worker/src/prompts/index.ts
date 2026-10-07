@@ -390,7 +390,7 @@ const refusalReason = (refusal: SaveRefusal) => {
  * What a model is told about its save. A refused save can be put right once; after a second
  * refusal in a row it carries on without it.
  */
-export const saveReply = (saved: Result<Save, SaveRefusal>, retrying: boolean): SaveReply => {
+export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean): SaveReply => {
   if (saved.ok) return { saved: true, reply: "Saved." };
   const reason = refusalReason(saved.error);
   const final = retrying || ["stopped", "not-offered", "storage"].includes(saved.error.kind);

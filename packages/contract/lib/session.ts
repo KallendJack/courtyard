@@ -54,6 +54,13 @@ export type ProviderStatus = z.infer<typeof ProviderStatus>;
 export const ProviderList = z.object({ providers: z.array(ProviderStatus) });
 export type ProviderList = z.infer<typeof ProviderList>;
 
+/** One change in the context folder's history, by its git commit. */
+export const ChangeId = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/)
+  .brand<"ChangeId">();
+export type ChangeId = z.infer<typeof ChangeId>;
+
 export const SessionId = z.uuid().brand<"SessionId">();
 export type SessionId = z.infer<typeof SessionId>;
 
@@ -185,7 +192,13 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("turn-stopped") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
   /** A save the model made during the turn, already in the context file. */
-  z.object({ ...eventBase, type: z.literal("context-saved"), save: Save }),
+  z.object({
+    ...eventBase,
+    type: z.literal("context-saved"),
+    save: Save,
+    /** The change it was committed as, so Recent changes can find it (absent before #50). */
+    change: ChangeId.optional(),
+  }),
   /** The owner undid the save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("context-undone"), save: z.number().int().positive() }),
   /** The owner edited the save numbered `save`: its line is now `now`. */

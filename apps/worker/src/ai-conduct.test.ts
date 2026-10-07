@@ -395,6 +395,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     expect(framing?.instructions).not.toMatch(/About me/);
   });
 
+  // Many real git changes in a row: slow on Windows while every test file runs at once.
   it("shows each earlier answer's saves and what the owner did with them", async () => {
     await contextFile("# Garage gym\n\n## Facts\n\n- Single garage.\n");
     const saver = savingProvider([
@@ -441,7 +442,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     expect(saver.framings[1]?.instructions).toMatch(
       /A save the owner undid was wrong: save it again only if the owner brings it up/,
     );
-  });
+  }, 20_000);
 });
 
 describe("getting to know a workspace (#51)", () => {
