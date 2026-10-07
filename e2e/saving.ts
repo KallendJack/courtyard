@@ -22,6 +22,6 @@ export const startSaving = async (page: Page, message: string) => {
   await page.getByLabel("Message").fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:", {
-    timeout: 15_000,
+    timeout: 5_000,
   });
 };
