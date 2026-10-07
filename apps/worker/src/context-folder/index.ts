@@ -126,7 +126,7 @@ export const createContextFolder = (options: {
     changes = done.catch(() => undefined);
     return done;
   };
-  /** Pushes wait for each other, but never hold up a change. */
+  /** Pushes and backup status checks wait for each other, but never hold up a change. */
   let pushes: Promise<void> = Promise.resolve();
 
   /** Why git last couldn't keep a change, until it next can. */
@@ -237,8 +237,9 @@ export const createContextFolder = (options: {
       }),
     backup: async () => {
       await inTurn(async () => undefined);
-      await pushes;
-      return inTurn(async (): Promise<ContextBackup> => {
+      // Its git commands wait for pushes (both point the remote at the setting) but never take a
+      // turn among the changes, so asking often, as the home page does, can't hold up a save.
+      const status = pushes.then(async (): Promise<ContextBackup> => {
         if (gitFailure !== undefined) return { kind: "not-kept", reason: gitFailure };
         try {
           return await backupNow();
@@ -246,6 +247,8 @@ export const createContextFolder = (options: {
           return { kind: "not-kept", reason: gitFailureReason(error) };
         }
       });
+      pushes = status.then(() => undefined);
+      return status;
     },
     keepUp: async () => {
       const behind = await inTurn(async () => {
