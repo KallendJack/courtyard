@@ -2,19 +2,31 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effort, ModelId, ProviderList, SessionSummary } from "@courtyard/contract";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   type AppServerLaunch,
   createCodexProvider,
   type StartAppServer,
 } from "./providers/codex.ts";
 import type { TurnInput } from "./providers/index.ts";
+import { err, ok } from "./result.ts";
 import { asOwner, followSession, postJson, testWorker } from "./testing.ts";
 
 const dataDir = resolve("/path/to/data");
 const folder = resolve("/path/to/context/garage-gym");
 
-type Message = { id?: number | string; method?: string; params?: unknown; result?: unknown };
+/** One JSON-RPC message from the worker, as the stand-in reads it. */
+const Message = z.object({
+  id: z.union([z.number(), z.string()]).optional(),
+  method: z.string().optional(),
+  params: z.unknown().optional(),
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+});
+type Message = z.infer<typeof Message>;
+/** What the worker names when it asks about a turn. */
+const TurnParams = z.object({ threadId: z.string(), turnId: z.string().optional() });
 
 /** What the stand-in can do during a turn: what Codex would send while it answers. */
 type TurnScript = (turn: {
@@ -98,7 +110,7 @@ const standIn = (
   let turns = 0;
 
   const startAppServer: StartAppServer = (launch) => {
-    if (script.missing) return "missing";
+    if (script.missing) return err("missing");
     launches.push(launch);
     let alive = true;
     const write = (message: unknown) => {
@@ -138,7 +150,7 @@ const standIn = (
         case "thread/unsubscribe":
           return reply(id, { status: "unsubscribed" });
         case "turn/interrupt": {
-          const { threadId, turnId } = message.params as { threadId: string; turnId: string };
+          const { threadId, turnId } = TurnParams.parse(message.params);
           reply(id, {});
           return notify("turn/completed", {
             threadId,
@@ -147,7 +159,7 @@ const standIn = (
         }
         case "turn/start": {
           turns += 1;
-          const threadId = (message.params as { threadId: string }).threadId;
+          const { threadId } = TurnParams.parse(message.params);
           const turnId = `turn-${turns}`;
           reply(id, { turn: { id: turnId, status: "inProgress", error: null } });
           (
@@ -171,16 +183,16 @@ const standIn = (
       }
     };
 
-    return {
+    return ok({
       send: (line) => {
-        const message = JSON.parse(line) as Message;
+        const message = Message.parse(JSON.parse(line));
         received.push(message);
         handle(message);
       },
       stop: () => {
         alive = false;
       },
-    };
+    });
   };
 
   const requests = (method: string) => received.filter((m) => m.method === method);
@@ -296,7 +308,7 @@ describe("Codex's status, when it can't be used", () => {
     const codex = standIn();
     const startAppServer: StartAppServer = (launch) => {
       setImmediate(launch.onExit);
-      return { send: () => {}, stop: () => {} };
+      return ok({ send: () => {}, stop: () => {} });
     };
 
     const status = await createCodexProvider({ dataDir, startAppServer }).status();
@@ -529,7 +541,7 @@ describe("Codex stopping or being stopped", () => {
   });
 });
 
-describe("Codex's turn, after the security review", () => {
+describe("what never passes between Codex and the worker", () => {
   it("refuses anything Codex asks of the worker, such as an approval", async () => {
     const codex = standIn({
       turn: (turn) => {
@@ -602,81 +614,114 @@ describe("Codex's turn, after the security review", () => {
       ok: false,
       error: { kind: "provider-unavailable", message: "Codex needs updating." },
     });
+    // An update that isn't of Codex itself is an ordinary failure.
+    expect(
+      await turnFailing({ message: "Failed to update the thread.", codexErrorInfo: "other" }),
+    ).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: "Codex couldn't answer this time." },
+    });
   });
 });
 
 describe("Codex in the worker", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    await mkdir(join(root, "context", "garage-gym"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  /** A worker offering Codex, with the stand-in acting out each turn. */
+  const workerWith = async (turn: TurnScript) => {
+    const codex = standIn({ turn });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    return { codex, request: await asOwner(testWorker({ root, providers: [provider] })) };
+  };
+
   it("offers Codex's models in the model picker, with their effort levels, and answers a turn", async () => {
-    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
-    try {
-      await mkdir(join(root, "context", "garage-gym"), { recursive: true });
-      const codex = standIn({
-        turn: (turn) => {
-          delta(turn, "Against the back wall.");
-          turn.complete("completed");
+    const { codex, request } = await workerWith((turn) => {
+      delta(turn, "Against the back wall.");
+      turn.complete("completed");
+    });
+
+    const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: { provider: "codex", model: "gpt-6-astra" },
+      effort: "max",
+    });
+    const { id } = SessionSummary.parse(await response.json());
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+
+    expect(providers[0]).toMatchObject({
+      id: "codex",
+      available: true,
+      models: [
+        {
+          id: "gpt-6.1-sol",
+          efforts: expect.arrayContaining([{ id: "xhigh", label: "Extra high" }]),
         },
-      });
-      const provider = createCodexProvider({
-        dataDir: join(root, "data"),
-        startAppServer: codex.startAppServer,
-      });
-      const request = await asOwner(testWorker({ root, providers: [provider] }));
+        { id: "gpt-6-astra", defaultEffort: "medium" },
+      ],
+    });
+    expect(events.map((event) => event.type)).toEqual(
+      expect.arrayContaining(["owner-message", "text-delta", "turn-completed"]),
+    );
+    // It works in the workspace's folder, with the model and effort the owner chose.
+    expect(codex.requests("thread/start")[0]?.params).toMatchObject({
+      model: "gpt-6-astra",
+      cwd: join(root, "context", "garage-gym"),
+    });
+    expect(codex.requests("turn/start")[0]?.params).toMatchObject({ effort: "max" });
+  });
 
-      const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
-      const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
-        text: "Where should the rack go?",
-        model: { provider: "codex", model: "gpt-6-astra" },
-        effort: "max",
-      });
-      const { id } = SessionSummary.parse(await response.json());
-      const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+  it("keeps the sign-in and Codex's own words out of the session's events", async () => {
+    const secret = "sk-test-not-a-real-key";
+    const { request } = await workerWith((turn) => {
+      delta(turn, "Half");
+      turn.complete("failed", { message: `Token ${secret} rejected`, codexErrorInfo: "other" });
+    });
 
-      expect(providers[0]).toMatchObject({
-        id: "codex",
-        available: true,
-        models: [
-          {
-            id: "gpt-6.1-sol",
-            efforts: expect.arrayContaining([{ id: "xhigh", label: "Extra high" }]),
-          },
-          { id: "gpt-6-astra", defaultEffort: "medium" },
-        ],
-      });
-      expect(events.map((event) => event.type)).toEqual(
-        expect.arrayContaining(["owner-message", "text-delta", "turn-completed"]),
-      );
-      // Until Courtyard's tools reach Codex, it's offered no save tool and told it can't read files.
-      const [thread] = codex.requests("thread/start");
-      expect(thread?.params).toMatchObject({
-        model: "gpt-6-astra",
-        cwd: join(root, "context", "garage-gym"),
-      });
-      expect(codex.requests("turn/start")[0]?.params).toMatchObject({ effort: "max" });
-    } finally {
-      await rm(root, { recursive: true, force: true });
+    const providers = await (await request("/api/providers")).text();
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: { provider: "codex", model: "gpt-6.1-sol" },
+    });
+    const { id } = SessionSummary.parse(await response.json());
+    const events = await followSession(request, { sessionId: id, until: "turn-failed" });
+
+    for (const shown of [providers, JSON.stringify(events)]) {
+      expect(shown).not.toContain("owner@courtyard.example");
+      expect(shown).not.toContain(secret);
     }
+    expect(events.at(-1)).toMatchObject({
+      type: "turn-failed",
+      reason: { kind: "unknown", message: "Codex couldn't answer this time." },
+    });
   });
 
   it("leaves Codex out when the worker's settings switch it off", async () => {
-    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
-    try {
-      await mkdir(join(root, "context"), { recursive: true });
-      const request = await asOwner(
-        testWorker({
-          root,
-          env: {
-            COURTYARD_CLAUDE_PROVIDER: "0",
-            COURTYARD_CODEX_PROVIDER: "0",
-            COURTYARD_FAKE_PROVIDER: "1",
-          },
-        }),
-      );
+    const request = await asOwner(
+      testWorker({
+        root,
+        env: {
+          COURTYARD_CLAUDE_PROVIDER: "0",
+          COURTYARD_CODEX_PROVIDER: "0",
+          COURTYARD_FAKE_PROVIDER: "1",
+        },
+      }),
+    );
 
-      const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
+    const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
 
-      expect(providers.map((p) => p.id)).toEqual(["fake"]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+    expect(providers.map((p) => p.id)).toEqual(["fake"]);
   });
 });

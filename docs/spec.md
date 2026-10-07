@@ -312,7 +312,8 @@ Deep modules, each with a small interface at its root and its implementation pri
   is pinned, and every message from it is parsed with Zod.
 - Isolation, every turn: Courtyard's own Codex home in the data folder; the shell off; Codex's extras off (connectors,
   plugins, skills, memories, `AGENTS.md`, browser and computer use, web search, image generation, sub-agents); the
-  read-only sandbox, no network, approvals never.
+  read-only sandbox, no network, approvals never. The home and settings are fixed when the app-server starts, which every turn shares; the
+  sandbox, network and approvals are set again on each thread and turn.
 - A fresh, unsaved Codex thread per turn, with Courtyard's instructions in place of Codex's own and the conversation so
   far in the message, as Claude gets them.
 - Courtyard's tools are offered as the app-server's dynamic tools: list, read and search, confined to the workspace

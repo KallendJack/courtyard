@@ -47,7 +47,7 @@ export type AppServerProcess = {
 };
 
 /** Starts Codex's app-server, or says the program isn't there. Tests stand in for it. */
-export type StartAppServer = (launch: AppServerLaunch) => AppServerProcess | "missing";
+export type StartAppServer = (launch: AppServerLaunch) => Result<AppServerProcess, "missing">;
 
 /**
  * Codex's settings, every time it starts (ADR 0015): nothing of the machine's own Codex setup, and
@@ -134,9 +134,9 @@ const realStartAppServer: StartAppServer = (launch) => {
   try {
     program = fileURLToPath(import.meta.resolve("@openai/codex/bin/codex.js"));
   } catch {
-    return "missing";
+    return err("missing");
   }
-  if (!existsSync(program)) return "missing";
+  if (!existsSync(program)) return err("missing");
 
   const child = spawn(process.execPath, [program, ...launch.args], {
     env: launch.env,
@@ -155,7 +155,7 @@ const realStartAppServer: StartAppServer = (launch) => {
   // Writing after it has ended fails; the exit above has already said so.
   child.stdin.on("error", () => {});
   createInterface({ input: child.stdout }).on("line", launch.onLine);
-  return {
+  return ok({
     send: (line) => {
       if (!ended) child.stdin.write(`${line}\n`);
     },
@@ -164,22 +164,23 @@ const realStartAppServer: StartAppServer = (launch) => {
       child.stdin.end();
       child.kill();
     },
-  };
+  });
 };
 
-/** What Codex can send: an answer to a request, a request of its own, or a notification. */
+/** What Codex can send: an answer to a request, a request of its own, or a notice (JSON-RPC's notification). */
 const Answer = z.union([
   z.object({ id: z.number(), result: z.unknown() }),
   z.object({ id: z.number(), error: z.object({ message: z.string() }) }),
 ]);
 const CodexRequest = z.object({ id: z.union([z.number(), z.string()]), method: z.string() });
-const Notification = z.object({ method: z.string(), params: z.unknown() });
-/** A notification about one thread names it. */
+const CodexNotice = z.object({ method: z.string(), params: z.unknown() });
+/** A notice about one thread names it. */
 const AboutThread = z.object({ threadId: z.string() });
 
 /** Why a request to Codex got no answer. */
 type RequestFailure =
-  | { kind: "stopped" }
+  /** The app-server ended before answering. */
+  | { kind: "ended" }
   | { kind: "timed-out" }
   /** Codex answered with an error, in its own words (never shown as they are). */
   | { kind: "refused"; message: string };
@@ -187,7 +188,7 @@ type RequestFailure =
 type Connection = {
   readonly request: (method: string, params: unknown) => Promise<Result<unknown, RequestFailure>>;
   /**
-   * Hears every notification about one thread, and the app-server ending, until the returned
+   * Hears every notice about one thread, and the app-server ending, until the returned
    * function is called.
    */
   readonly listen: (threadId: string, listener: ThreadListener) => () => void;
@@ -196,7 +197,7 @@ type Connection = {
 };
 
 type ThreadListener = {
-  readonly heard: (notification: z.infer<typeof Notification>) => void;
+  readonly heard: (notice: z.infer<typeof CodexNotice>) => void;
   readonly ended: () => void;
 };
 
@@ -254,19 +255,19 @@ const connect = async (options: {
       });
       return;
     }
-    const notification = Notification.safeParse(message);
-    if (!notification.success) return;
-    const threadId = AboutThread.safeParse(notification.data.params);
-    if (threadId.success) listeners.get(threadId.data.threadId)?.heard(notification.data);
+    const notice = CodexNotice.safeParse(message);
+    if (!notice.success) return;
+    const about = AboutThread.safeParse(notice.data.params);
+    if (about.success) listeners.get(about.data.threadId)?.heard(notice.data);
   };
 
   const send = (message: unknown) => {
-    if (appServer !== "missing") appServer.send(JSON.stringify(message));
+    if (appServer.ok) appServer.value.send(JSON.stringify(message));
   };
 
   const onExit = () => {
     alive = false;
-    for (const settle of pending.values()) settle(err({ kind: "stopped" }));
+    for (const settle of pending.values()) settle(err({ kind: "ended" }));
     pending.clear();
     for (const listener of listeners.values()) listener.ended();
     markEnded();
@@ -278,11 +279,11 @@ const connect = async (options: {
     onLine,
     onExit,
   });
-  if (appServer === "missing") return err("missing");
+  if (!appServer.ok) return appServer;
 
   const request = (method: string, params: unknown) =>
     new Promise<Result<unknown, RequestFailure>>((resolve) => {
-      if (!alive) return resolve(err({ kind: "stopped" }));
+      if (!alive) return resolve(err({ kind: "ended" }));
       const requestId = nextId++;
       const timer = setTimeout(() => {
         pending.delete(requestId);
@@ -302,7 +303,7 @@ const connect = async (options: {
     capabilities: { experimentalApi: true, requestAttestation: false },
   });
   if (!started.ok) {
-    appServer.stop();
+    appServer.value.stop();
     return err("not-started");
   }
   send({ method: "initialized" });
@@ -362,11 +363,13 @@ const NOT_UNDERSTOOD = "Codex answered in a way Courtyard doesn't understand.";
 
 /**
  * OpenAI's servers turn away a Codex too old for them, saying it should be updated. That's the
- * only sign there is, so the words are what's checked.
+ * only sign there is, so the words are what's checked: an update or upgrade of Codex or its
+ * version, or a version that's no longer supported.
  */
+const TOO_OLD =
+  /\b(update|upgrade)\b[^.]*\b(codex|version)\b|\bversion\b[^.]*\bno longer supported\b/i;
 const tooOld = (failure: RequestFailure) =>
-  failure.kind === "refused" &&
-  /upgrade|update|no longer supported|newer version/i.test(failure.message);
+  failure.kind === "refused" && TOO_OLD.test(failure.message);
 
 const ThreadStarted = z.object({ thread: z.object({ id: z.string() }) });
 const TurnStarted = z.object({ turn: z.object({ id: z.string() }) });
@@ -374,13 +377,25 @@ const TextDelta = z.object({
   method: z.literal("item/agentMessage/delta"),
   params: z.object({ delta: z.string() }),
 });
+/** The ways a turn fails that Courtyard tells apart; anything else counts as "other". */
+const CodexErrorCode = z
+  .enum([
+    "usageLimitExceeded",
+    "unauthorized",
+    "serverOverloaded",
+    "rateLimitExceeded",
+    "contextWindowExceeded",
+    "other",
+  ])
+  .catch("other");
 const TurnCompleted = z.object({
   method: z.literal("turn/completed"),
   params: z.object({
     turn: z.object({
-      status: z.string(),
+      /** A status Courtyard doesn't know counts as a failure. */
+      status: z.enum(["completed", "interrupted", "failed"]).catch("failed"),
       error: z
-        .object({ message: z.string().catch(""), codexErrorInfo: z.unknown() })
+        .object({ message: z.string().catch(""), codexErrorInfo: CodexErrorCode })
         .nullable()
         .catch(null),
     }),
@@ -424,17 +439,20 @@ const resetTimeFrom = (answer: unknown): string | undefined => {
   return resets.length === 0 ? undefined : new Date(Math.max(...resets) * 1000).toISOString();
 };
 
-const STOPPED_UNEXPECTEDLY: FailureReason = {
+/** A failure Courtyard explains in its own words. */
+type ExplainedFailure = Extract<FailureReason, { message: string }>;
+
+const CRASHED: ExplainedFailure = {
   kind: "provider-unavailable",
   message: "Codex stopped unexpectedly.",
 };
 
-/** A failed request on the way to a turn, in plain words. */
-const failureForRequest = (failure: RequestFailure): FailureReason => {
+/** A failed request to Codex, in plain words, for a turn or for Codex's status. */
+const failureForRequest = (failure: RequestFailure): ExplainedFailure => {
   if (tooOld(failure)) return { kind: "provider-unavailable", message: NEEDS_UPDATING };
   switch (failure.kind) {
-    case "stopped":
-      return STOPPED_UNEXPECTEDLY;
+    case "ended":
+      return CRASHED;
     case "timed-out":
       return { kind: "provider-unavailable", message: START_FAILURES["not-started"] };
     case "refused":
@@ -443,7 +461,7 @@ const failureForRequest = (failure: RequestFailure): FailureReason => {
 };
 
 /** Plain words for each way Codex reports a failed turn: Codex's own words are never passed on. */
-const failureForTurn = (error: TurnError | null): FailureReason => {
+const failureForTurn = (error: TurnError | null): ExplainedFailure => {
   switch (error?.codexErrorInfo) {
     case "unauthorized":
       return { kind: "provider-unavailable", message: SIGNED_OUT };
@@ -507,8 +525,7 @@ export const createCodexProvider = (options: {
     const started = await connection();
     if (!started.ok) return unavailable(START_FAILURES[started.error]);
     const codex = started.value;
-    const failedWith = (failure: RequestFailure) =>
-      unavailable(tooOld(failure) ? NEEDS_UPDATING : START_FAILURES["not-started"]);
+    const failedWith = (failure: RequestFailure) => unavailable(failureForRequest(failure).message);
 
     const account = await codex.request("account/read", { refreshToken: false });
     if (!account.ok) return failedWith(account.error);
@@ -580,8 +597,9 @@ export const createCodexProvider = (options: {
         environments: [],
       });
       if (!thread.ok) return err(failureForRequest(thread.error));
-      const threadId = ThreadStarted.safeParse(thread.value);
-      if (!threadId.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+      const startedThread = ThreadStarted.safeParse(thread.value);
+      if (!startedThread.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+      const threadId = startedThread.data.thread.id;
 
       // The answer goes out a piece at a time, in order, however fast Codex sends it.
       let emitting = Promise.resolve();
@@ -590,9 +608,9 @@ export const createCodexProvider = (options: {
       const ended = new Promise<TurnEnd>((resolve) => {
         settle = resolve;
       });
-      const stopListening = codex.listen(threadId.data.thread.id, {
-        heard: (notification) => {
-          const text = TextDelta.safeParse(notification);
+      const stopListening = codex.listen(threadId, {
+        heard: (notice) => {
+          const text = TextDelta.safeParse(notice);
           if (text.success) {
             const piece = text.data.params.delta;
             emitting = emitting
@@ -602,45 +620,45 @@ export const createCodexProvider = (options: {
               });
             return;
           }
-          const completed = TurnCompleted.safeParse(notification);
+          const completed = TurnCompleted.safeParse(notice);
           if (!completed.success) return;
           const { status, error } = completed.data.params.turn;
-          settle(
-            status === "completed"
-              ? { kind: "completed" }
-              : status === "interrupted"
-                ? { kind: "stopped" }
-                : { kind: "failed", error },
-          );
+          switch (status) {
+            case "completed":
+              return settle({ kind: "completed" });
+            case "interrupted":
+              return settle({ kind: "stopped" });
+            case "failed":
+              return settle({ kind: "failed", error });
+          }
         },
         ended: () => settle({ kind: "crashed" }),
       });
 
       try {
         const turn = await codex.request("turn/start", {
-          threadId: threadId.data.thread.id,
+          threadId,
           input: [{ type: "text", text: input.framing.message, text_elements: [] }],
           ...(input.effort === undefined ? {} : { effort: input.effort }),
           sandboxPolicy: { type: "readOnly", networkAccess: false },
           approvalPolicy: "never",
         });
         if (!turn.ok) return err(failureForRequest(turn.error));
-        const turnId = TurnStarted.safeParse(turn.value);
-        if (!turnId.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+        const startedTurn = TurnStarted.safeParse(turn.value);
+        if (!startedTurn.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+        const turnId = startedTurn.data.turn.id;
 
-        // The owner stopping the turn interrupts it. Codex says when it has stopped; if it doesn't
-        // say so soon, the turn ends anyway, so the session isn't held up.
-        const interrupt = () => {
-          void codex.request("turn/interrupt", {
-            threadId: threadId.data.thread.id,
-            turnId: turnId.data.turn.id,
-          });
+        // The owner stopping the turn stops Codex (its own name for that is `turn/interrupt`).
+        // Codex says when it has stopped; if it doesn't say so soon, the turn ends anyway, so the
+        // session isn't held up.
+        const stopTurn = () => {
+          void codex.request("turn/interrupt", { threadId, turnId });
           void wait(WIND_DOWN_MS).then(() => settle({ kind: "stopped" }));
         };
-        if (input.signal.aborted) interrupt();
-        else input.signal.addEventListener("abort", interrupt, { once: true });
+        if (input.signal.aborted) stopTurn();
+        else input.signal.addEventListener("abort", stopTurn, { once: true });
         const end = await ended;
-        input.signal.removeEventListener("abort", interrupt);
+        input.signal.removeEventListener("abort", stopTurn);
         await emitting;
         if (input.signal.aborted) return ok(null);
         if (lost)
@@ -650,7 +668,7 @@ export const createCodexProvider = (options: {
           case "stopped":
             return ok(null);
           case "crashed":
-            return err(STOPPED_UNEXPECTEDLY);
+            return err(CRASHED);
           case "failed": {
             if (end.error?.codexErrorInfo !== "usageLimitExceeded") {
               return err(failureForTurn(end.error));
@@ -663,7 +681,7 @@ export const createCodexProvider = (options: {
       } finally {
         stopListening();
         // Codex forgets the thread; nothing of it is kept.
-        void codex.request("thread/unsubscribe", { threadId: threadId.data.thread.id });
+        void codex.request("thread/unsubscribe", { threadId });
       }
     },
 
