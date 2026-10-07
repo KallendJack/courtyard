@@ -43,7 +43,7 @@ export type ChangesTarget = {
 /** Why Undo from Recent changes didn't happen. */
 export type ChangeUndoRefusal =
   | { readonly kind: "not-found" }
-  /** Only a save or a hand edit can be undone from the list. */
+  /** Only a save, a hand edit or a tidy can be undone from the list. */
   | { readonly kind: "not-undoable" }
   /** A line the change touched has changed since. */
   | { readonly kind: "changed-since" }
@@ -57,6 +57,10 @@ type LinesChanged = { readonly removed: PlacedLine[]; readonly added: PlacedLine
 /** Which kind of file a place's file is, as its lines are read. */
 const linePlaceOf = (place: Place): LinePlace =>
   place.kind === "owner-context" ? "owner" : "workspace";
+
+/** Whether a change is undone line by line: a hand edit or a tidy, which no session holds. */
+const undoneByLines = (change: HistoryChange) =>
+  change.kind === "hand-edit" || change.kind === "tidy";
 
 const sameLine = (a: PlacedLine, b: PlacedLine) =>
   a.place === b.place && a.section === b.section && a.line === b.line;
@@ -167,8 +171,8 @@ const saveMadeBy = async (savesOf: ReturnType<typeof sessionSaves>, change: Hist
 /**
  * One page of a place's Recent changes, newest first, after the change `after` when it's given.
  * A change that only moved lines, or changed what isn't a line (the intro, say), isn't listed.
- * A hand edit offers Undo only while its lines are as it left them, and shows as undone once its
- * undo is in the history.
+ * A hand edit or a tidy offers Undo only while its lines are as it left them, and shows as undone
+ * once its undo is in the history.
  */
 export const listChanges = async (
   target: ChangesTarget,
@@ -194,7 +198,7 @@ export const listChanges = async (
     change: HistoryChange,
     changed: LinesChanged,
   ): Promise<RecentChangeUndo> => {
-    if (change.kind === "hand-edit") {
+    if (undoneByLines(change)) {
       if (undone.value.has(change.id)) return "undone";
       return reversed(now.value, changed) === undefined ? "none" : "available";
     }
@@ -233,8 +237,8 @@ export const listChanges = async (
   return ok({ changes: listed.flat(), more });
 };
 
-/** Undoes a hand edit, as a change of its own: each place's lines it changed, reversed. */
-const undoHandEdit = async (
+/** Undoes a hand edit or a tidy, as a change of its own: each place's lines it changed, reversed. */
+const undoLines = async (
   target: ChangesTarget,
   change: HistoryChange,
 ): Promise<Result<null, ChangeUndoRefusal>> => {
@@ -276,7 +280,8 @@ const undoHandEdit = async (
 
 /**
  * Undoes a change from Recent changes. A save is undone through its session, the same as its
- * note's Undo, so the note shows it and the model knows. A hand edit is reversed line by line.
+ * note's Undo, so the note shows it and the model knows. A hand edit or a tidy is reversed line by
+ * line.
  */
 export const undoChange = async (
   target: ChangesTarget,
@@ -286,12 +291,10 @@ export const undoChange = async (
   if (!found.ok) return err({ kind: "storage" });
   const change = found.value;
   if (change === undefined) return err({ kind: "not-found" });
-  if (change.kind === "hand-edit") {
+  if (undoneByLines(change)) {
     const undone = await target.contextFolder.undone();
     if (!undone.ok) return err({ kind: "storage" });
-    return undone.value.has(change.id)
-      ? err({ kind: "not-undoable" })
-      : undoHandEdit(target, change);
+    return undone.value.has(change.id) ? err({ kind: "not-undoable" }) : undoLines(target, change);
   }
   const made = await saveMadeBy(sessionSaves(target.sessions), change);
   if (made === undefined || change.session === undefined) return err({ kind: "not-undoable" });

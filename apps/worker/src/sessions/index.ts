@@ -19,7 +19,7 @@ import type { ContextFolder } from "../context-folder/index.ts";
 import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
-import type { Provider, SaveReply } from "../providers/index.ts";
+import { type Provider, providerFor, type SaveReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
   createTurnSaves,
@@ -268,13 +268,6 @@ export const createSessions = (options: {
     });
 
   const markUpdated = (id: SessionId) => updateFile(id, { updatedAt: stamp() });
-
-  const providerFor = async (ref: ModelRef) => {
-    const provider = options.providers.find((p) => p.id === ref.provider);
-    if (!provider) return undefined;
-    const status = await provider.status();
-    return status.available && status.models.some((m) => m.id === ref.model) ? provider : undefined;
-  };
 
   /**
    * What a turn needs from its workspace: its name, mode and folder, its context file as written,
@@ -579,7 +572,7 @@ export const createSessions = (options: {
       workspaceId: WorkspaceId;
       message: NewMessage;
     }): Promise<Result<SessionSummary, SessionError>> => {
-      const provider = await providerFor(start.message.model);
+      const provider = await providerFor(options.providers, start.message.model);
       if (!provider) return err({ kind: "model-unavailable" });
       const id = SessionId.parse(randomUUID());
       const at = stamp();
@@ -615,7 +608,7 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerFor(message.model);
+      const provider = await providerFor(options.providers, message.model);
       if (!provider) return err({ kind: "model-unavailable" });
       return startTurn({
         id: session.value.id,

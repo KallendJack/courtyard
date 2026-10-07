@@ -556,3 +556,59 @@ describe("stopping a Claude turn", () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 });
+
+describe("a one-off question to Claude (a tidy)", () => {
+  const Answer = z.object({ changes: z.array(z.object({ kind: z.string() })) });
+
+  const ask = (claudeCode: ClaudeCode) =>
+    createClaudeProvider({ claudeCode }).answerOnce({
+      purpose: "tidy",
+      model: ModelId.parse("sonnet"),
+      instructions: "The tidy's instructions.",
+      message: "The file.",
+      schema: Answer,
+      signal: new AbortController().signal,
+    });
+
+  it("asks for an answer in the schema's shape, isolated and with no tools, and returns it", async () => {
+    const answer = { changes: [{ kind: "remove" }] };
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [{ ...success, structured_output: answer }],
+    });
+
+    expect(await ask(claudeCode)).toEqual({ ok: true, value: answer });
+    const [run] = runs;
+    expect(run?.prompt).toBe("The file.");
+    expect(run?.options).toMatchObject({
+      systemPrompt: "The tidy's instructions.",
+      model: "sonnet",
+      tools: [],
+      permissionMode: "dontAsk",
+      settingSources: [],
+      outputFormat: { type: "json_schema", schema: { type: "object" } },
+    });
+    // Claude Code refuses a schema that names its own draft.
+    expect(run?.options.outputFormat?.schema).not.toHaveProperty("$schema");
+    expect(run?.options.cwd).not.toContain("context");
+  });
+
+  it("fails in plain words when no answer comes back", async () => {
+    const { claudeCode } = stubClaudeCode({ messages: [success] });
+
+    expect(await ask(claudeCode)).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: "Claude couldn't answer this time." },
+    });
+  });
+
+  it("turns a usage limit into a rate-limited failure", async () => {
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        { type: "rate_limit_event", rate_limit_info: { status: "rejected" } },
+        { ...success, is_error: true },
+      ],
+    });
+
+    expect(await ask(claudeCode)).toEqual({ ok: false, error: { kind: "rate-limited" } });
+  });
+});

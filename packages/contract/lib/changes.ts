@@ -2,12 +2,15 @@ import { z } from "zod";
 import { ChangeId, PlacedLine, SessionId } from "./session.ts";
 import { WorkspaceId } from "./workspace.ts";
 
-/** The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit. */
-export const RecentChangeKind = z.enum(["save", "undo", "edit", "hand-edit"]);
+/**
+ * The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit,
+ * a tidy.
+ */
+export const RecentChangeKind = z.enum(["save", "undo", "edit", "hand-edit", "tidy"]);
 export type RecentChangeKind = z.infer<typeof RecentChangeKind>;
 
 /**
- * Whether Recent changes offers Undo: for a save whose session still has it, or a hand edit
+ * Whether Recent changes offers Undo: for a save whose session still has it, a hand edit or a tidy
  * (`available`); not for a save already undone (`undone`); not for anything else (`none`).
  */
 export const RecentChangeUndo = z.enum(["available", "undone", "none"]);

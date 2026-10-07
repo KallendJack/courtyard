@@ -3,6 +3,7 @@ import type {
   Capabilities,
   FailureReason,
   ModelId,
+  ModelRef,
   ProviderId,
   ProviderStatus,
 } from "@courtyard/contract";
@@ -55,6 +56,22 @@ export type TurnInput = {
 };
 
 /**
+ * A one-off question outside any session, answered once in the shape `schema` describes, such as
+ * a tidy's proposed changes. No tools, no files: the model has only what it's told.
+ */
+export type OneOffInput = {
+  /** What it's for, so the fake can script its answer. */
+  readonly purpose: "tidy";
+  readonly model: ModelId;
+  /** Built by the prompts module, and delivered as given. */
+  readonly instructions: string;
+  readonly message: string;
+  /** The answer's shape. The provider asks for it; the caller still checks what comes back. */
+  readonly schema: z.ZodType;
+  readonly signal: AbortSignal;
+};
+
+/**
  * A source of models: the one seam in the worker (AGENTS.md). Claude, Codex and the scripted fake
  * each sit behind it. A turn's failure is returned, never thrown.
  */
@@ -64,6 +81,16 @@ export type Provider = {
   readonly capabilities: Capabilities;
   readonly status: () => Promise<ProviderStatus>;
   readonly runTurn: (input: TurnInput) => Promise<Result<null, FailureReason>>;
+  /** Answers a one-off question: the answer unparsed, or why there's none. */
+  readonly answerOnce: (input: OneOffInput) => Promise<Result<unknown, FailureReason>>;
+};
+
+/** The provider offering this model right now, or `undefined` when none is. */
+export const providerFor = async (providers: readonly Provider[], ref: ModelRef) => {
+  const provider = providers.find((p) => p.id === ref.provider);
+  if (!provider) return undefined;
+  const status = await provider.status();
+  return status.available && status.models.some((m) => m.id === ref.model) ? provider : undefined;
 };
 
 export { createClaudeProvider } from "./claude.ts";

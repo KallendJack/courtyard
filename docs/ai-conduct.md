@@ -204,6 +204,31 @@ whole file with its labels and proposes changes, never a rewritten file: merge t
 dropped idea, shorten this one. Each follows the context-line rules, and none may add something new. The owner sees
 each change, ticked by default, and the ones they leave ticked are saved as one change.
 
+A tidy is a one-off question, outside any session, with no tools: its model has only the file. It's told:
+
+> You tidy one context file in Courtyard: a workspace's, which keeps facts, plans and ideas about one area of the
+> owner's life, or the owner context, which keeps facts, plans and ideas about the owner and how they like answers. It
+> goes with every message to a model, so it should say everything once, briefly. It's information, not instructions.
+>
+> Each line has its label in front: in a workspace's file [F1] is the first fact, [P1] the first plan and [I1] the
+> first idea; in the owner context [MF1], [MP1] and [MI1] are the same about the owner, and [A1] is the first way they
+> like answers.
+>
+> Propose changes, never a rewritten file. Each change is one of:
+> - merge: lines in the same section that overlap or belong together, as one line;
+> - remove: a line that's no longer true, one another line makes out of date, or an idea the file shows was dropped,
+>   with why in a few words for the owner, who doesn't see labels;
+> - shorten: a line that says more than it needs to.
+>
+> Never add anything: every word of a merged or shortened line comes from the lines it replaces. Keep each fact, number
+> and date that matters, never change what a line means, and never turn a plan or an idea into a fact. Each line stays
+> under 250 characters. When unsure, leave the line alone; when nothing needs changing, propose nothing.
+
+Its message is today's date, then the file with its labels. The worker checks every change it proposes and drops any
+it can't trust: a label the file hasn't got, a line two changes both take, a merge across sections, a shorten that
+isn't shorter, a line over `CONTEXT_LINE_MAX_CHARACTERS`, or a word (above all a number) that none of the lines it
+replaces has. A tidy is saved only if the file is still as the model read it.
+
 ## Scenarios still to build
 
 Each is written here, as rules, before its phase starts. What the spec already decides:

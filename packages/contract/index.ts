@@ -40,6 +40,14 @@ export {
   StopRequest,
 } from "./lib/session.ts";
 export {
+  TidyChange,
+  TidyChangeKind,
+  TidyId,
+  TidyProposal,
+  TidyRequest,
+  TidySave,
+} from "./lib/tidy.ts";
+export {
   CONTEXT_FILE_LONG_CHARACTERS,
   CONTEXT_LINE_MAX_CHARACTERS,
   CONTEXT_SECTION_NAMES,

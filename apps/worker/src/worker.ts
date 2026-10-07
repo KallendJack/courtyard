@@ -28,6 +28,8 @@ import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
+import { createTidying } from "./tidy/index.ts";
+import { tidyRoutes } from "./tidy/routes.ts";
 import {
   archiveWorkspace,
   changeWorkspace,
@@ -131,6 +133,8 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
+  const tidying = createTidying({ contextDir, contextFolder, providers, now });
+  api.route("/", tidyRoutes({ contextDir, tidying }));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

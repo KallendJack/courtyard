@@ -58,6 +58,39 @@ const scriptedSaves = (message: string): Record<string, string>[] =>
     return remove?.[1] ? [{ action: "remove", label: remove[1] }] : [];
   });
 
+/** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
+const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
+
+/**
+ * The tidy a file scripts, by markers at the end of its lines: "(stale)" is removed, "(long)" is
+ * shortened to the line without the marker, the lines of a section ending "(merge)" are merged
+ * into one, and "(adds)" is shortened to "A sauna", a change that adds something new.
+ */
+const scriptedTidy = (message: string) => {
+  const changes: Record<string, unknown>[] = [];
+  const merging = new Map<string, { labels: string[]; texts: string[] }>();
+  for (const line of message.split("\n")) {
+    const [, letters, number, text] = LABELLED.exec(line.trim()) ?? [];
+    if (letters === undefined || text === undefined) continue;
+    const label = `${letters}${number}`;
+    const marked = /^(.*) \((stale|long|merge|adds)\)$/.exec(text);
+    const [, words = text, marker] = marked ?? [];
+    if (marker === "stale") changes.push({ kind: "remove", labels: [label], why: "It's stale." });
+    if (marker === "long") changes.push({ kind: "shorten", labels: [label], text: words });
+    if (marker === "adds") changes.push({ kind: "shorten", labels: [label], text: "A sauna" });
+    if (marker === "merge") {
+      const merge = merging.get(letters) ?? { labels: [], texts: [] };
+      merge.labels.push(label);
+      merge.texts.push(words);
+      merging.set(letters, merge);
+    }
+  }
+  for (const { labels, texts } of merging.values()) {
+    if (labels.length > 1) changes.push({ kind: "merge", labels, text: texts.join(", ") });
+  }
+  return { changes };
+};
+
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
   wait(ms, undefined, { signal }).catch(() => undefined);
@@ -67,7 +100,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (story 90). It answers "You said: …" a word at a time, and fails on purpose when a message asks
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
- * `scriptedSaves`) when the turn offers the save tool.
+ * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
+ * `scriptedTidy`).
  */
 export const createFakeProvider = (
   options: {
@@ -110,6 +144,15 @@ export const createFakeProvider = (
         await emit(word);
       }
       return ok(null);
+    },
+
+    answerOnce: async ({ purpose, message, signal }) => {
+      if (delayMs > 0) await pause(delayMs * 10, signal);
+      if (signal.aborted) return err({ kind: "unknown", message: "Stopped." });
+      switch (purpose) {
+        case "tidy":
+          return ok(scriptedTidy(message));
+      }
     },
   };
 };
