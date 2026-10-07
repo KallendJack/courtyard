@@ -312,7 +312,8 @@ Deep modules, each with a small interface at its root and its implementation pri
   is pinned, and every message from it is parsed with Zod.
 - Isolation, every turn: Courtyard's own Codex home in the data folder; the shell off; Codex's extras off (connectors,
   plugins, skills, memories, `AGENTS.md`, browser and computer use, web search, image generation, sub-agents); the
-  read-only sandbox, no network, approvals never.
+  read-only sandbox, no network, approvals never. The home and settings are fixed when the app-server starts, which every turn shares; the
+  sandbox, network and approvals are set again on each thread and turn.
 - A fresh, unsaved Codex thread per turn, with Courtyard's instructions in place of Codex's own and the conversation so
   far in the message, as Claude gets them.
 - Courtyard's tools are offered as the app-server's dynamic tools: list, read and search, confined to the workspace
@@ -444,7 +445,8 @@ changes an earlier one. The directions in the phase table are proposals until th
 
 - Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 4 (ADR 0003).
 - Before changing Codex's pinned version, re-check its feature list against what the adapter switches off, and run
-  the real-Codex checklist (ADR 0015). Its app-server and dynamic tools are marked experimental.
+  the real-Codex checklist ([`docs/real-codex-check.md`](real-codex-check.md), ADR 0015). Its app-server and dynamic
+  tools are marked experimental.
 - Paper's free plan allows 100 MCP calls a week; Pro raises it. Phase 0 may need a month of Pro.
 - Wake-on-LAN rarely works over USB Wi-Fi adapters, hence the wired connection in phase 6.
 - Node does not trust a private certificate authority by default; the worker needs it added to reach a tool connection

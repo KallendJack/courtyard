@@ -23,7 +23,12 @@ import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
 import { sharedOwnerContext } from "./prompts/index.ts";
-import { createClaudeProvider, createFakeProvider, type Provider } from "./providers/index.ts";
+import {
+  createClaudeProvider,
+  createCodexProvider,
+  createFakeProvider,
+  type Provider,
+} from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
@@ -96,6 +101,7 @@ export const createWorker = (options: {
     dataDir,
     webDir,
     claudeProvider,
+    codexProvider,
     fakeProvider,
     liveCopy,
     updateTask,
@@ -105,6 +111,7 @@ export const createWorker = (options: {
   // Claude first, so it's the default model wherever it's available.
   const providers = options.providers ?? [
     ...(claudeProvider ? [createClaudeProvider()] : []),
+    ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
     ...(fakeProvider ? [createFakeProvider()] : []),
   ];
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });

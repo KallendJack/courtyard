@@ -105,4 +105,5 @@ export const offerFor = async (
 };
 
 export { createClaudeProvider } from "./claude.ts";
+export { createCodexProvider } from "./codex.ts";
 export { createFakeProvider } from "./fake.ts";

@@ -22,6 +22,15 @@ const ensureFolder = (path: string) => {
 const NOT_A_PORT = "must be a port number from 1 to 65535";
 const unsetIfEmpty = (value: unknown) => (value === "" ? undefined : value);
 const required = z.string({ error: "is required" }).min(1, "is required");
+/** A setting that's on (1) or off (0), and `whenUnset` when it isn't set. */
+const flag = (whenUnset: "0" | "1") =>
+  z.preprocess(
+    unsetIfEmpty,
+    z
+      .enum(["0", "1"], { error: "must be 1 or 0" })
+      .default(whenUnset)
+      .transform((value) => value === "1"),
+  );
 
 const Env = z.object({
   COURTYARD_PORT: z.preprocess(
@@ -36,14 +45,9 @@ const Env = z.object({
   COURTYARD_CONTEXT_DIR: required.refine(isFolder, "must be an existing folder"),
   COURTYARD_DATA_DIR: required.refine(ensureFolder, "must be a folder the worker can create"),
   COURTYARD_CONTEXT_REMOTE: z.preprocess(unsetIfEmpty, z.string().optional()),
-  COURTYARD_CLAUDE_PROVIDER: z.preprocess(
-    unsetIfEmpty,
-    z.enum(["0", "1"], { error: "must be 1 or 0" }).default("1"),
-  ),
-  COURTYARD_FAKE_PROVIDER: z.preprocess(
-    unsetIfEmpty,
-    z.enum(["0", "1"], { error: "must be 1 or 0" }).default("0"),
-  ),
+  COURTYARD_CLAUDE_PROVIDER: flag("1"),
+  COURTYARD_CODEX_PROVIDER: flag("1"),
+  COURTYARD_FAKE_PROVIDER: flag("0"),
   COURTYARD_WEB_DIR: z.preprocess(
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
@@ -69,6 +73,11 @@ export type Settings = {
   readonly webDir: string;
   /** Whether to offer Claude, through the worker machine's Claude Code (on unless turned off). */
   readonly claudeProvider: boolean;
+  /**
+   * Whether to offer Codex, through Courtyard's own Codex home in the data folder (on unless
+   * turned off, for someone without a ChatGPT plan).
+   */
+  readonly codexProvider: boolean;
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
   /**
@@ -98,8 +107,9 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     dataDir: resolve(parsed.data.COURTYARD_DATA_DIR),
     contextRemote: parsed.data.COURTYARD_CONTEXT_REMOTE ?? null,
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
-    claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER === "1",
-    fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER === "1",
+    claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER,
+    codexProvider: parsed.data.COURTYARD_CODEX_PROVIDER,
+    fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER,
     liveCopy:
       parsed.data.COURTYARD_LIVE_COPY === undefined
         ? null
