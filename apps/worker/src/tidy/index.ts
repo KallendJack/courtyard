@@ -97,19 +97,27 @@ const commonStart = (a: string, b: string) => {
   return length;
 };
 
+/** Words that turn a meaning round, which must be there already: "doesn't", "not", "never". */
+const NEGATING = /n['’]t$|^(?:no|not|never|none|nothing|nobody|neither|nor|without)$/;
+
+/** The shortest word, and the shortest shared start, that counts as a form of another. */
+const FORM_LETTERS = 4;
+
 /**
- * Whether a word comes from these: the same word, or a form of one ("lesson" from "lessons"). A
- * word with a digit in it must be there exactly, so no number or date changes.
+ * Whether a word comes from these: the same word, or a form of one ("lessons" from "lesson": at
+ * least four letters in common and at most three more). A word with a digit in it must be there
+ * exactly, so no number or date changes, and so must a word that turns a meaning round.
  */
-const comesFrom = (word: string, from: readonly string[]) =>
-  JOINING.has(word) ||
-  from.some((source) => {
-    if (source === word) return true;
-    if (/\p{N}/u.test(word)) return false;
+const comesFrom = (word: string, from: readonly string[]) => {
+  if (from.includes(word)) return true;
+  if (/\p{N}/u.test(word) || NEGATING.test(word)) return false;
+  if (JOINING.has(word)) return true;
+  return from.some((source) => {
     const shorter = Math.min(source.length, word.length);
     const shared = commonStart(source, word);
-    return shared >= Math.min(4, shorter) && shared >= shorter - 3;
+    return shorter >= FORM_LETTERS && shared >= FORM_LETTERS && shared >= shorter - 3;
   });
+};
 
 /** Whether every word of `text` comes from the lines it replaces: a tidy never adds anything. */
 const addsNothing = (text: string, lines: readonly PlacedLine[]) => {
@@ -121,8 +129,9 @@ const ProposedChange = TidyAnswer.shape.changes.element;
 
 /**
  * A change the model proposed, checked against the file: its lines by label, each used once in a
- * tidy; one line to remove or shorten and two or more in one section to merge; a new line that's
- * short, shorter than what it replaces, and adds nothing. `undefined` for one that fails.
+ * tidy; one line to remove (with why) or shorten, and two or more in one section to merge; a new
+ * line that's short, shorter than what it replaces, and adds nothing. `undefined` for one that
+ * fails.
  */
 const checked = (
   raw: unknown,
@@ -131,7 +140,10 @@ const checked = (
   const proposed = ProposedChange.safeParse(raw);
   if (!proposed.success) return undefined;
   const { kind, labels, text, why } = proposed.data;
-  const found = labels.map((label) => file.byLabel.get(label.trim().toUpperCase()));
+  // A label as it's shown ("[F1]") is still that label.
+  const found = labels.map((label) =>
+    file.byLabel.get(label.replace(/[[\]\s]/g, "").toUpperCase()),
+  );
   const labelled = found.filter((line) => line !== undefined);
   if (labelled.length !== labels.length || labelled.some(({ label }) => file.used.has(label))) {
     return undefined;
@@ -144,8 +156,10 @@ const checked = (
   let change: Omit<TidyChange, "shortensBy">;
   if (kind === "remove") {
     if (lines.length !== 1) return undefined;
-    const reason = why?.replace(/\s+/g, " ").trim().slice(0, WHY_MAX_CHARACTERS);
-    change = { kind, lines, ...(reason ? { why: reason } : {}) };
+    // The owner decides on a removal by its reason, so one without is dropped.
+    const reason = why?.replace(/\s+/g, " ").trim().slice(0, WHY_MAX_CHARACTERS) ?? "";
+    if (reason === "") return undefined;
+    change = { kind, lines, why: reason };
   } else {
     const line = text?.replace(/\s+/g, " ").trim() ?? "";
     if (line === "" || line.length > CONTEXT_LINE_MAX_CHARACTERS) return undefined;
@@ -235,9 +249,9 @@ export const createTidying = (target: TidyTarget) => {
 
       const sized = changes.flatMap((change): TidyChange[] => {
         const after = withChange(markdown, change);
-        return after === undefined
-          ? []
-          : [{ ...change, shortensBy: markdown.length - after.length }];
+        const shortensBy = after === undefined ? 0 : markdown.length - after.length;
+        // A tidy only makes the file shorter: a merge as long as its lines is no tidy.
+        return shortensBy > 0 ? [{ ...change, shortensBy }] : [];
       });
       // Maps keep their order, so the first is the oldest.
       for (const [held] of proposed) {

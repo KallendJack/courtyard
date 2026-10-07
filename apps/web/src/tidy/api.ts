@@ -4,9 +4,13 @@ import { type ContextPlace, sendJson } from "../worker.ts";
 
 // Tidy's calls live with Tidy rather than in worker.ts, so its schemas stay off the first load.
 
-/** Asks for a tidy of a workspace's context file or the owner context. It can take a minute. */
-export const proposeTidy = (about: ContextPlace, request: TidyRequest) =>
+/**
+ * Asks for a tidy of a workspace's context file or the owner context. It can take a minute;
+ * aborting `signal` stops the model too.
+ */
+export const proposeTidy = (about: ContextPlace, request: TidyRequest, signal: AbortSignal) =>
   sendJson({
+    signal,
     path:
       about.kind === "owner"
         ? "/owner-context/tidy"

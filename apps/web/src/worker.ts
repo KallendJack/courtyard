@@ -73,12 +73,15 @@ export const sendJson = async <T>(request: {
   body: unknown;
   schema: z.ZodType<T>;
   unauthorised?: "logged-out" | "failed";
+  /** Stops the request, and whatever the worker is doing for it, when the page no longer wants it. */
+  signal?: AbortSignal;
 }): Promise<FromWorker<T>> => {
   try {
     const response = await fetch(`/api${request.path}`, {
       method: request.method ?? "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request.body),
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
     return await readResponse({
       response,

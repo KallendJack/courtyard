@@ -3,13 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ModelId,
+  OwnerContextDetail,
   ProviderId,
   RecentChanges,
   type TidyChange,
   TidyProposal,
+  WorkspaceDetail,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseContextFile, parseOwnerContext } from "./context-file/index.ts";
 import { createFakeProvider, type Provider } from "./providers/index.ts";
 import { ok } from "./result.ts";
 import {
@@ -74,7 +75,12 @@ const changeOf = (proposal: TidyProposal, kind: TidyChange["kind"]) => {
   return index;
 };
 
-const fileNow = async () => parseContextFile(await readFile(contextFile(), "utf8"));
+/** The workspace's context file as the app reads it. */
+const fileNow = async (request: Requester) => {
+  const detail = WorkspaceDetail.parse(await (await request("/api/workspaces/garage-gym")).json());
+  if (detail.contextFile === null) throw new Error("no context file");
+  return detail.contextFile;
+};
 
 describe("proposing a tidy", () => {
   it("proposes the changes the model makes, each with the lines it takes out and puts in", async () => {
@@ -138,11 +144,11 @@ describe("proposing a tidy", () => {
     expect(proposal.changes).toHaveLength(2);
     expect(await save(request, proposal.id, [0, 1])).toHaveProperty("status", 204);
 
-    const { ownerContext } = parseOwnerContext(
-      await readFile(join(contextDir(), "OWNER.md"), "utf8"),
+    const { ownerContext } = OwnerContextDetail.parse(
+      await (await request("/api/owner-context")).json(),
     );
-    expect(ownerContext.facts).toEqual(["Lives in Leeds"]);
-    expect(ownerContext.answers).toEqual([
+    expect(ownerContext?.facts).toEqual(["Lives in Leeds"]);
+    expect(ownerContext?.answers).toEqual([
       "Short answers, with the reasons left out unless I ask for them",
     ]);
   });
@@ -176,8 +182,20 @@ const scripted = (answer: unknown) => {
 };
 
 describe("checking what a model proposes", () => {
-  const FILE =
-    "## Facts\n\n- Double garage\n- The garage is 5.4 m by 5.1 m\n\n## Plans\n\n- Gym on Mondays and Thursdays\n";
+  const FILE = [
+    "## Facts",
+    "",
+    "- Double garage",
+    "- The garage is 5.4 m by 5.1 m",
+    "- Lives in Leeds with a partner",
+    "- Does drive, but rarely and only locally",
+    "- Can eat dairy now, since the tests in May",
+    "",
+    "## Plans",
+    "",
+    "- Gym on Mondays and Thursdays",
+    "",
+  ].join("\n");
 
   const proposed = async (changes: unknown[]) => {
     await writeFile(contextFile(), FILE);
@@ -188,17 +206,30 @@ describe("checking what a model proposes", () => {
     return TidyProposal.parse(await response.json()).changes;
   };
 
-  it("keeps a merge whose words all come from its lines, and a removal", async () => {
+  it("keeps a merge whose words all come from its lines, a word's other form, and a removal with why", async () => {
     const changes = await proposed([
-      { kind: "merge", labels: ["F1", "F2"], text: "Double garage, 5.4 m by 5.1 m" },
-      { kind: "remove", labels: ["p1"], why: "Done." },
+      { kind: "merge", labels: ["[F1]", "F2"], text: "Double garage, 5.4 m by 5.1 m" },
+      { kind: "shorten", labels: ["P1"], text: "Gym on Monday and Thursday" },
+      { kind: "remove", labels: ["f3"], why: "Moved." },
     ]);
 
-    expect(changes.map((change) => change.kind)).toEqual(["merge", "remove"]);
+    expect(changes.map((change) => change.kind)).toEqual(["merge", "shorten", "remove"]);
   });
 
   it.each([
-    ["a label the file hasn't got", { kind: "remove", labels: ["F9"] }],
+    ["a label the file hasn't got", { kind: "remove", labels: ["F9"], why: "Gone." }],
+    ["a removal without why", { kind: "remove", labels: ["F1"] }],
+    ["a new place", { kind: "shorten", labels: ["F3"], text: "Lives in Inverness, alone" }],
+    ["a meaning turned round", { kind: "shorten", labels: ["F4"], text: "Doesn't drive" }],
+    ["can turned into can't", { kind: "shorten", labels: ["F5"], text: "Can't eat dairy" }],
+    [
+      "a merge no shorter than its lines",
+      {
+        kind: "merge",
+        labels: ["F1", "F2"],
+        text: "Double garage, the garage is 5.4 m by 5.1 m and the garage is 5.4 m by 5.1 m",
+      },
+    ],
     ["a merge across sections", { kind: "merge", labels: ["F1", "P1"], text: "Double garage" }],
     ["a merge of one line", { kind: "merge", labels: ["F1"], text: "Double garage" }],
     ["a shorten that's no shorter", { kind: "shorten", labels: ["F1"], text: "Double garage" }],
@@ -241,7 +272,7 @@ describe("saving a tidy", () => {
 
     expect(await save(request, proposal.id, [merge, remove])).toHaveProperty("status", 204);
 
-    const file = await fileNow();
+    const file = await fileNow(request);
     expect(file.facts).toEqual([
       "Double garage, The garage is 5.4 m by 5.1 m",
       "Rubber flooring went down in Sep 2026",
@@ -286,7 +317,7 @@ describe("a tidy in Recent changes", () => {
   it("is listed with Undo, which reverses the whole tidy", async () => {
     await writeFile(contextFile(), MESSY);
     const request = await start();
-    const before = await fileNow();
+    const before = await fileNow(request);
     const proposal = await propose(request);
     await save(request, proposal.id, [0, 1, 2]);
 
@@ -301,7 +332,7 @@ describe("a tidy in Recent changes", () => {
     const undone = await postJson(request, `/api/changes/${tidy?.id}/undo`, {});
     expect(undone.status).toBe(204);
 
-    const after = await fileNow();
+    const after = await fileNow(request);
     expect(after.facts.toSorted()).toEqual(before.facts.toSorted());
     expect(after.plans.toSorted()).toEqual(before.plans.toSorted());
     expect(after.ideas).toEqual(before.ideas);

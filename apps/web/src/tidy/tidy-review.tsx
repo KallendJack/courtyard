@@ -30,7 +30,7 @@ type Asking =
   | { readonly kind: "proposed"; readonly proposal: TidyProposal };
 
 /** Asks the first model on offer that saves to context for a tidy of the file. */
-const askForTidy = async (workspace: Whose): Promise<Asking> => {
+const askForTidy = async (workspace: Whose, signal: AbortSignal): Promise<Asking> => {
   const providers = await loadProviders();
   if (providers.kind !== "loaded")
     return { kind: "failed", message: describeProblem(providers).body };
@@ -45,7 +45,7 @@ const askForTidy = async (workspace: Whose): Promise<Asking> => {
     workspace === undefined
       ? { kind: "owner" as const }
       : { kind: "workspace" as const, id: workspace };
-  const proposal = await proposeTidy(about, { model });
+  const proposal = await proposeTidy(about, { model }, signal);
   return proposal.kind === "loaded"
     ? { kind: "proposed", proposal: proposal.data }
     : { kind: "failed", message: describeProblem(proposal).body };
@@ -59,7 +59,11 @@ const VERB: Record<TidyChange["kind"], string> = {
 
 const count = (n: number) => n.toLocaleString("en-GB");
 
-/** One proposed change: its tick box, what it does where, the lines it takes out and puts in. */
+/**
+ * One proposed change: its tick box, named by what it does where, and the lines it takes out and
+ * puts in, which describe it. Unticked, nothing is struck and the new line is greyed: it stays as
+ * it is. Tapping the words ticks it too.
+ */
 function ProposedChange(props: {
   workspace: Whose;
   change: TidyChange;
@@ -68,17 +72,30 @@ function ProposedChange(props: {
 }) {
   const { change, ticked } = props;
   const id = useId();
+  const what = `${id}-what`;
+  const lines = `${id}-lines`;
   const [first] = change.lines;
   const where = (line: PlacedLine) =>
     placeName(line, { withinOwnerContext: props.workspace === undefined });
   return (
     <NoteRow
-      icon={{ control: <TickBox id={id} checked={ticked} onChange={props.onTick} /> }}
+      icon={{
+        control: (
+          <TickBox
+            id={id}
+            checked={ticked}
+            onChange={props.onTick}
+            labelledBy={what}
+            describedBy={lines}
+          />
+        ),
+      }}
       muted={!ticked}
       tall
     >
       <label htmlFor={id} className="block cursor-pointer">
         <span
+          id={what}
           className={classes(
             "block font-semibold",
             ticked ? "text-primary-text" : "text-muted-foreground",
@@ -86,20 +103,31 @@ function ProposedChange(props: {
         >
           {VERB[change.kind]} {first === undefined ? "" : where(first)}
         </span>
-        {change.lines.map((line) => (
-          <span
-            key={`${line.section}:${line.line}`}
-            className={classes("block text-muted-foreground", ticked && "line-through")}
-          >
-            {line.line}
-          </span>
-        ))}
-        {ticked && change.text !== undefined && (
-          <span className="block text-foreground">{change.text}</span>
-        )}
-        {change.why !== undefined && (
-          <span className="block text-[13px]/5 text-muted-foreground italic">{change.why}</span>
-        )}
+        <span id={lines} className="block">
+          {change.lines.map((line) => (
+            <del
+              key={`${line.section}:${line.line}`}
+              className={classes("block text-muted-foreground", !ticked && "no-underline")}
+            >
+              <span className="sr-only">Out: </span>
+              {line.line}
+            </del>
+          ))}
+          {change.text !== undefined && (
+            <ins
+              className={classes(
+                "block no-underline",
+                ticked ? "text-foreground" : "text-placeholder",
+              )}
+            >
+              <span className="sr-only">In: </span>
+              {change.text}
+            </ins>
+          )}
+          {change.why !== undefined && (
+            <span className="block text-[13px]/5 text-muted-foreground italic">{change.why}</span>
+          )}
+        </span>
       </label>
     </NoteRow>
   );
@@ -126,14 +154,12 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
-    // Only the latest ask's answer counts, so an earlier one finishing late never replaces it.
-    let current = true;
-    void askForTidy(workspace).then((asked) => {
-      if (current) setAsking(asked);
+    // Leaving stops the ask, and the model working on it, so a late answer never lands.
+    const stop = new AbortController();
+    void askForTidy(workspace, stop.signal).then((asked) => {
+      if (!stop.signal.aborted) setAsking(asked);
     });
-    return () => {
-      current = false;
-    };
+    return () => stop.abort();
   }, [workspace]);
 
   const back = () =>

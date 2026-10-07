@@ -225,9 +225,11 @@ A tidy is a one-off question, outside any session, with no tools: its model has 
 > under 250 characters. When unsure, leave the line alone; when nothing needs changing, propose nothing.
 
 Its message is today's date, then the file with its labels. The worker checks every change it proposes and drops any
-it can't trust: a label the file hasn't got, a line two changes both take, a merge across sections, a shorten that
-isn't shorter, a line over `CONTEXT_LINE_MAX_CHARACTERS`, or a word (above all a number) that none of the lines it
-replaces has. A tidy is saved only if the file is still as the model read it.
+it can't trust: a label the file hasn't got, a line two changes both take, a merge across sections, a removal without
+its why, a change that leaves the file no shorter, a line over `CONTEXT_LINE_MAX_CHARACTERS`, or a word that none of
+the lines it replaces has. A form of a word counts ("lessons" for "lesson"), but a number, a date or a word that turns
+a meaning round ("not", "doesn't") must be there as it is. A tidy is saved only if the file is still as the model
+read it.
 
 ## Scenarios still to build
 

@@ -1,13 +1,16 @@
 import { Check } from "lucide-react";
 
 /**
- * A tick box (ADR 0012): heather with a white tick when ticked, an empty box when not. Name it with
- * a `<label htmlFor={id}>` around what it ticks, so tapping those words ticks it too.
+ * A tick box (ADR 0012): heather with a white tick when ticked, an empty box when not. Put a
+ * `<label htmlFor={id}>` around what it ticks, so tapping those words ticks it too, and name it
+ * with the short part of them (`labelledBy`) when the rest describes it (`describedBy`).
  */
 export function TickBox(props: {
   id: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  labelledBy?: string;
+  describedBy?: string;
 }) {
   return (
     <span className="relative inline-flex size-4 shrink-0">
@@ -16,6 +19,8 @@ export function TickBox(props: {
         type="checkbox"
         checked={props.checked}
         onChange={(event) => props.onChange(event.target.checked)}
+        aria-labelledby={props.labelledBy}
+        aria-describedby={props.describedBy}
         className="peer size-4 cursor-pointer appearance-none rounded-sm border-[1.5px] border-placeholder bg-field transition-colors outline-none checked:border-primary checked:bg-primary focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       <Check

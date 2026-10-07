@@ -10,7 +10,8 @@ import {
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { useState } from "react";
-import { Button, IconButton } from "@/components/button";
+import { IconButton } from "@/components/button";
+import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
@@ -192,14 +193,9 @@ function Workspace() {
             <div className="mt-3">
               <StatusPill
                 action={
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      void navigate({ to: "/tidy", search: { workspace: workspace.id } })
-                    }
-                  >
+                  <ButtonLink size="sm" to="/tidy" search={{ workspace: workspace.id }}>
                     Tidy
-                  </Button>
+                  </ButtonLink>
                 }
               >
                 Getting long: it goes with every message, so keep it to what matters.

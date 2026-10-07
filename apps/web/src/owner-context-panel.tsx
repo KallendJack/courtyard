@@ -3,8 +3,9 @@ import {
   OWNER_CONTEXT_LONG_CHARACTERS,
   type OwnerContextDetail,
 } from "@courtyard/contract";
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/button";
+import { ButtonLink } from "@/components/button-link";
 import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
 import { FormError } from "@/components/form-error";
 import { StatusPill } from "@/components/notice";
@@ -24,7 +25,6 @@ export function OwnerContextPanel(props: {
   canGetToKnow: boolean;
 }) {
   const router = useRouter();
-  const navigate = useNavigate();
   const start = useAction(async () => {
     const started = await startOwnerContext();
     if (started.kind !== "loaded") return describeProblem(started).body;
@@ -71,9 +71,9 @@ export function OwnerContextPanel(props: {
             <div className="mt-3">
               <StatusPill
                 action={
-                  <Button size="sm" onClick={() => void navigate({ to: "/tidy" })}>
+                  <ButtonLink size="sm" to="/tidy">
                     Tidy
-                  </Button>
+                  </ButtonLink>
                 }
               >
                 Getting long: it goes with every message in every workspace, so keep it to what's

@@ -33,6 +33,10 @@ const SIZES = {
   lg: "h-11 px-5 text-sm",
 } as const;
 
+/** A Button's look, for a link that looks like one (ButtonLink). */
+export const buttonLook = (look: { variant: keyof typeof VARIANTS; size: keyof typeof SIZES }) =>
+  classes(BASE, VARIANTS[look.variant], SIZES[look.size]);
+
 /** A pill button: the main action filled, the others outlined. */
 export function Button({
   variant = "primary",
