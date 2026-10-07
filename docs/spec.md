@@ -109,6 +109,16 @@ nothing personal, so anyone can run their own.
     for hard problems and a lighter one for quick questions.
 34. As the owner, I want Courtyard never to read, store or log my provider credentials, so that they stay where the
     provider's own tool keeps them.
+96. As the owner, I want to choose a model's effort beside the model, so that a hard problem gets more thought and a
+    quick question uses less of my allowance.
+97. As the owner, I want to change the model and effort inside a session on my phone, so that I'm not stuck with the
+    last choice when I'm away from the PC.
+98. As the owner, I want to sign in to Codex from Courtyard on any device, so that a lapsed sign-in is fixed from my
+    phone.
+99. As the owner, I want Codex kept to the workspace as tightly as Claude, with none of the machine's own Codex setup,
+    so that a second provider isn't a way round the workspace boundary.
+100. As someone running Courtyard without a ChatGPT plan, I want to dismiss Codex's sign-in or switch Codex off, so
+     that it doesn't nag.
 
 ### Sessions
 
@@ -173,13 +183,20 @@ nothing personal, so anyone can run their own.
 
 66. As the owner, I want to be told plainly when I've hit a usage limit, with the reset time when known, so that I can
     decide what to do.
-67. As the owner, I want to be offered the other available models and continue the same session on one, so that I keep
-    working without re-explaining.
+67. As the owner, I want one tap on the failed turn to carry on in the same session with the other provider, or to pick
+    another of its models, so that I keep working without re-explaining.
 68. As the owner, I want the new model to receive the context file and the conversation so far, so that it picks up
-    where Claude stopped.
+    where the last one stopped.
 69. As the owner, I want the session to stay on the chosen model until I switch back, so that nothing changes under me.
 70. As the owner, I want nothing to switch models automatically, so that I always know which model is answering.
 71. As the owner, I want Codex through my ChatGPT plan login, so that overflow is also on a subscription.
+101. As the owner, I want the model picker to show which models are at their usage limit and when they reset, so that
+     I don't start on one that will fail.
+102. As the owner, I want a new session to start on a model that isn't at its limit, so that its first message doesn't
+     fail.
+103. As the owner, I want a line in the chat wherever the model changes, so that I can tell which model said what.
+104. As the owner, I want Tidy and Get to know this workspace to use a model that isn't at its limit, so that they work
+     while one provider is out.
 
 ### Tools and plans
 
@@ -259,8 +276,9 @@ Deep modules, each with a small interface at its root and its implementation pri
   Models never write context files (ADRs 0013, 0014).
 - **Providers:** the one seam. A provider reports its status (available, with models and capabilities, or unavailable
   with a reason) and runs one turn as a stream of events, returning a failure as a value, never a throw. Capabilities
-  (reads files, can code, uses tools) drive the rules, not provider names. Adapters: Claude (Agent SDK), Codex (Codex
-  SDK, later) and a scripted fake.
+  (reads files, can code, uses tools) drive the rules, not provider names. Each model lists the effort levels it
+  takes, and a turn names one or leaves the model's default. Adapters: Claude (Agent SDK), Codex (its app-server,
+  ADR 0015) and a scripted fake. The worker remembers each provider's usage limit until its reset time.
 - **Sessions:** create, send a message (starts a turn and returns at once), subscribe from a position, answer an
   approval, stop a turn, get and list. One turn at a time per session. Events are numbered from 1 with no gaps and are
   visible only once written. The model may change between turns.
@@ -285,19 +303,48 @@ Deep modules, each with a small interface at its root and its implementation pri
   callback to an approval event.
 - The context file is added to the system prompt on every turn.
 - A usage-limit error becomes a rate-limited failure carrying the reset time when the SDK gives one.
+- The chosen effort goes to the SDK with the turn; each model's levels come from the SDK's model list.
+
+### The Codex adapter
+
+- Drives Codex's app-server (ADR 0015): one process, started the first time Codex is needed and kept running. A crash
+  fails the turn in progress ("Codex stopped unexpectedly") and the next request starts it again. The Codex version
+  is pinned, and every message from it is parsed with Zod.
+- Isolation, every turn: Courtyard's own Codex home in the data folder; the shell off; Codex's extras off (connectors,
+  plugins, skills, memories, `AGENTS.md`, browser and computer use, web search, image generation, sub-agents); the
+  read-only sandbox, no network, approvals never.
+- A fresh, unsaved Codex thread per turn, with Courtyard's instructions in place of Codex's own and the conversation so
+  far in the message, as Claude gets them.
+- Courtyard's tools are offered as the app-server's dynamic tools: list, read and search, confined to the workspace
+  folder with the same check as Claude's reads (each read reported as an activity), and the save tool. A call names
+  its thread and turn, so it reaches the right session.
+- Status: signed in or not, the plan's models that aren't hidden with their effort levels, and the usage left with
+  its reset time. Signing in uses Codex's device code: the home page shows its link and one-time code, and Codex
+  keeps the sign-in in its home. A setting switches Codex off.
+- A usage-limit code becomes a rate-limited failure with its reset time. A Codex too old for OpenAI's servers is
+  unavailable, "Codex needs updating".
+- Stop interrupts the turn.
 
 ### Events
 
-Owner message, text delta, activity (file read, command run, tool connection used), approval requested (a command, or a
-tool connection action with its arguments), approval answered, model changed, turn completed, turn stopped (by the
-owner, recorded apart from failures, with the text written so far kept), and turn failed with a reason: rate limited
-(with reset time if known), provider unavailable, interrupted, or unknown.
+Owner message (with its model and effort), text delta, activity (file read, command run, tool connection used), approval
+requested (a command, or a tool connection action with its arguments), approval answered, model changed, turn completed,
+turn stopped (by the owner, recorded apart from failures, with the text written so far kept), and turn failed with a
+reason: rate limited (with reset time if known), provider unavailable, interrupted, or unknown.
 
 ### Overflow
 
-A rate-limited turn offers the other available providers' models (only ones that can code, in a code workspace).
-Choosing one records a model-changed event and re-sends the owner's last message to the new model, with the context
-file and the session's conversation so far, because the new provider has neither.
+A rate-limited turn says which provider hit its limit and when it resets, and offers Carry on with the other provider
+while that one is available and not at its limit (only a model that can code, in a code workspace). Carry on records
+a model-changed event and re-sends the owner's last message to the other provider's default model at its default
+effort, with the context file and the session's conversation so far, because the new provider has neither. The model
+picker still offers any of its models instead. If the other provider is signed out, the turn links to signing in; if
+both are at their limit, it shows both reset times.
+
+The session stays on the new model until the owner picks another; nothing switches by itself. The model picker labels
+a model at its limit with its reset time but still offers it, since a reset time can be an estimate. A new session,
+Tidy and Get to know start on the first model that isn't at its limit. A quiet line in the chat marks each model
+change, and earlier answers still read to the model as its own.
 
 ### Floor plans
 
@@ -331,17 +378,21 @@ picks and adjusts one; its colours, type and spacing become the shadcn theme's t
   saves, refusals, undos, edits and tidies committed and pushed, hand edits, push failures, and (phase 4) session
   branches, allowlist matching, diff,
   merge and discard against real temporary repositories.
-- **The provider seam.** The Claude adapter, and later Codex, tested with its SDK stubbed: the isolation options are
-  set on every turn, planning workspaces get read-only tools, permission requests become approval events, usage-limit
-  errors become rate-limited failures, and credentials never appear in events. A short manual checklist covers each
-  adapter against a real login.
-- **The browser, end to end.** Playwright against the built web app and a real worker running the fake provider: log
-  in, switch workspaces, send a message and watch it stream, close and reopen mid-turn, answer an approval, undo a
-  save, and the compact and two-pane layouts. Edge cases stay in the API tests, so these stay few.
+- **The provider seam.** The Claude adapter with its SDK stubbed, and the Codex adapter with a stand-in app-server: the
+  isolation options are set on every turn (for Codex, its own home, the shell and its extras off), planning
+  workspaces get read-only tools, Courtyard's file tools refuse paths outside the workspace, permission requests become
+  approval events, usage-limit errors become rate-limited failures with their reset time, the chosen effort reaches
+  the provider, and credentials never appear in events. A short manual checklist covers each adapter against a real
+  login, and runs again before Codex's pinned version changes.
+- **The browser, end to end.** Playwright against the built web app and a real worker running two fake providers (one
+  can act out a usage limit): log in, switch workspaces, send a message and watch it stream, close and reopen mid-turn,
+  answer an approval, undo a save, carry on after a usage limit, and the compact and two-pane layouts. Edge cases stay
+  in the API tests, so these stay few.
 - **The eval set, outside the three seams.** Whether a real model saves the right things can't be tested with the fake.
-  `pnpm eval:context` runs invented conversations (a made-up owner, nothing real) against the real model and scores
-  the saves each should make: plan or idea, plan becoming fact, workspace or owner context, nothing saved from small
-  talk. It runs on demand, never in CI, before any change to what gets saved merges (`docs/ai-conduct.md`).
+  `pnpm eval:context` runs invented conversations (a made-up owner, nothing real) against real models, Claude and Codex,
+  and scores the saves each should make: plan or idea, plan becoming fact, workspace or owner context, nothing saved
+  from small talk. It runs on demand, never in CI, on both providers before any change to what gets saved merges
+  (`docs/ai-conduct.md`).
 - **Observable side effects** go through dependencies passed in: the notification sender and the clock.
 - Prior art: homelab-mcp's in-process HTTP tests and Zod-parsed edges, and the session-service tests in an earlier
   scaffold of this idea, kept outside this repo (fake provider plus temporary folders).
@@ -371,7 +422,7 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | 0     | The design in Paper and the shadcn theme from it                                                             | Install Paper; name apps whose look you like        |
 | 1     | Login, workspaces, context files and the owner context, Claude sessions that stream and outlive the tab, the installable app, a live worker that starts by itself and updates when asked (ADR 0011) | A proxy route and fixed address for the worker; a live copy and its start task (one-off scripts) |
 | 2     | Context that keeps itself current (ADRs 0013, 0014), built in this order: the git repository and backup; saves with a note and Undo in the chat; the eval set; owner context saves; recent changes; Get to know this workspace; Tidy | File sharing on the NAS and a `courtyard` shared folder (a wizard walks through it) |
-| 3     | Codex as a second provider, and overflow, before code workspaces because coding uses up Claude fastest       | A ChatGPT plan                                      |
+| 3     | Codex as a second provider, and overflow, before code workspaces because coding uses up Claude fastest (ADR 0015), built in this order: effort levels (Claude first); the Codex adapter; Courtyard's tools for Codex; Sign in to Codex; overflow; Tidy and Get to know on any model | A ChatGPT plan, signed in to from the home page |
 | 4     | Code workspaces and the board: the repo's GitHub issues as a board, Start on a card for a session on its own branch, approvals, review, a pull request to finish; notifications; code workspaces grouped apart in the sidebar | None                                                |
 | 5     | Tool connections (homelab first, then Paper and Blender) and floor plans                                     | Paper and Blender running on the worker machine    |
 | 6     | The web app served from the NAS, then wake-on-LAN for the worker machine                                    | A wired network connection to the worker machine   |
@@ -392,6 +443,8 @@ changes an earlier one. The directions in the phase table are proposals until th
 ### Checks before relying on things outside our control
 
 - Re-read Anthropic's guidance on Agent SDK use with a subscription before phase 1 and before phase 4 (ADR 0003).
+- Before changing Codex's pinned version, re-check its feature list against what the adapter switches off, and run
+  the real-Codex checklist (ADR 0015). Its app-server and dynamic tools are marked experimental.
 - Paper's free plan allows 100 MCP calls a week; Pro raises it. Phase 0 may need a month of Pro.
 - Wake-on-LAN rarely works over USB Wi-Fi adapters, hence the wired connection in phase 6.
 - Node does not trust a private certificate authority by default; the worker needs it added to reach a tool connection

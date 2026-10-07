@@ -1,5 +1,8 @@
 # Overflow goes to Codex on a ChatGPT plan, not to local models or Gemini
 
+Changed by ADR 0015: Codex runs through its app-server, not the Codex SDK, in its own Codex home and without a
+shell.
+
 When Claude hits a usage limit, the owner continues the session on another provider. That provider is Codex, through
 the Codex SDK with a ChatGPT plan login: a second frontier model, on a flat subscription, that can code, and that
 OpenAI supports driving headlessly. It is added after the core works, when the owner subscribes.
