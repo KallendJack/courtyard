@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type ChangeId,
   endsTurn,
   type FailureReason,
   type ModelRef,
@@ -358,7 +359,12 @@ export const createSessions = (options: {
           if (framing.saveTool === null) return saveReply(err({ kind: "not-offered" }), true);
           const saved = await turnSaves(input);
           if (saved.ok) {
-            const recorded = await append(turn.id, { type: "context-saved", save: saved.value });
+            const { value: save, change } = saved.value;
+            const recorded = await append(turn.id, {
+              type: "context-saved",
+              save,
+              ...(change === undefined ? {} : { change }),
+            });
             if (!recorded.ok) recordingLost = true;
           }
           const reply = saveReply(saved, retrying);
@@ -542,15 +548,18 @@ export const createSessions = (options: {
     /** A session's saves as they stand now, oldest first, each by its event number. */
     savesOf: async (
       rawId: string,
-    ): Promise<Result<{ seq: number; state: SaveState }[], SessionError>> => {
+    ): Promise<
+      Result<{ seq: number; state: SaveState; change: ChangeId | undefined }[], SessionError>
+    > => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
       const events = await readEvents(found.value.id);
       if (!events.ok) return events;
       return ok(
         events.value.flatMap((event) => {
-          const state = event.type === "context-saved" && saveStateOf(events.value, event.seq);
-          return state ? [{ seq: event.seq, state }] : [];
+          if (event.type !== "context-saved") return [];
+          const state = saveStateOf(events.value, event.seq);
+          return state ? [{ seq: event.seq, state, change: event.change }] : [];
         }),
       );
     },

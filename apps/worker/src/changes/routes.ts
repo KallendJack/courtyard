@@ -42,7 +42,11 @@ export const changeRoutes = (target: ChangesTarget) => {
       place,
       ...(after === undefined ? {} : { after: after.data }),
     });
-    if (!listed.ok) return apiError(c, { status: 404, error: "No such change." });
+    if (!listed.ok) {
+      return listed.error === "unknown-change"
+        ? apiError(c, { status: 404, error: "No such change." })
+        : apiError(c, { status: 500, error: "The context folder's history can't be read." });
+    }
     return c.json(listed.value satisfies RecentChanges);
   };
 

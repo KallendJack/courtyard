@@ -1,12 +1,5 @@
 import { z } from "zod";
-import { PlacedLine, SessionId } from "./session.ts";
-
-/** One change in the context folder's history, by its git commit. */
-export const ChangeId = z
-  .string()
-  .regex(/^[0-9a-f]{40}$/)
-  .brand<"ChangeId">();
-export type ChangeId = z.infer<typeof ChangeId>;
+import { ChangeId, PlacedLine, SessionId } from "./session.ts";
 
 /** The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit. */
 export const RecentChangeKind = z.enum(["save", "undo", "edit", "hand-edit"]);

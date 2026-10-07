@@ -7,6 +7,7 @@ import {
   asOwner,
   errorOf,
   followSession,
+  gitIn,
   postJson,
   type Requester,
   SAVING_MODEL,
@@ -131,13 +132,24 @@ describe("Recent changes", () => {
   });
 
   it("comes 30 at a time, the next page after the last change shown", async () => {
-    const { request } = await workerSaving(
-      Array.from({ length: 31 }, (_, n) => ({
-        action: "add",
-        section: "facts",
-        text: `Fact number ${n + 1}.`,
-      })),
-    );
+    const { request } = await workerSaving([]);
+    await workspaceChanges(request);
+    // 31 hand edits, committed as the worker commits them, without a worker's queue for each.
+    let markdown = CONTEXT;
+    for (let n = 1; n <= 31; n += 1) {
+      markdown = markdown.replace("- Single garage.", `- Single garage.\n- Fact number ${n}.`);
+      await writeFile(contextPath(), markdown);
+      await gitIn(contextDir, "add", "--all");
+      await gitIn(
+        contextDir,
+        "commit",
+        "--quiet",
+        "-m",
+        "Edited by hand",
+        "-m",
+        "Courtyard-Change: hand-edit\nCourtyard-Place: workspace/garage-gym",
+      );
+    }
 
     const first = await workspaceChanges(request);
     expect(first.changes).toHaveLength(30);
@@ -150,7 +162,7 @@ describe("Recent changes", () => {
 
     const unknown = await request(`/api/workspaces/garage-gym/changes?after=${"0".repeat(40)}`);
     expect(unknown.status).toBe(404);
-  }, 60_000);
+  }, 30_000);
 
   it("lists the owner context's changes on their own", async () => {
     const { request } = await workerSaving([
@@ -233,5 +245,71 @@ describe("Undo from Recent changes", () => {
     expect((await undoChange(request, edit?.id ?? "")).status).toBe(409);
     expect((await undoChange(request, "0".repeat(40))).status).toBe(404);
     expect((await undoChange(request, "nope")).status).toBe(404);
+  });
+});
+
+describe("Recent changes, from the reviews", () => {
+  it("finds the right save when the same line was saved, undone and saved again", async () => {
+    const padel = { action: "add", section: "facts", text: "Padel lessons on Tuesdays." };
+    const saver = savingProvider([[padel], [padel]]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Some news.",
+      model: SAVING_MODEL,
+    });
+    const session = SessionSummary.parse(await started.json());
+    const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+    const firstSave = first.find((event) => event.type === "context-saved")?.seq;
+    await postJson(request, `/api/sessions/${session.id}/saves/${firstSave}/undo`, {});
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "Actually, yes.",
+      model: SAVING_MODEL,
+    });
+    const second = await followSession(request, {
+      sessionId: session.id,
+      after: first.at(-1)?.seq ?? 0,
+      until: "turn-completed",
+    });
+    const secondSave = second.find((event) => event.type === "context-saved")?.seq;
+
+    const saves = (await workspaceChanges(request)).changes.filter((c) => c.kind === "save");
+    // Newest first: the second save, then the first, which is undone.
+    expect(saves.map((change) => change.undo)).toEqual(["available", "undone"]);
+
+    expect((await undoChange(request, saves[0]?.id ?? "")).status).toBe(204);
+    const undone = await followSession(request, {
+      sessionId: session.id,
+      after: second.at(-1)?.seq ?? 0,
+      until: "context-undone",
+    });
+    expect(undone.at(-1)).toMatchObject({ save: secondSave });
+  });
+
+  it("offers a hand edit's Undo only while its lines are as it left them", async () => {
+    const { request } = await workerSaving([]);
+    await workspaceChanges(request);
+    await writeFile(contextPath(), CONTEXT.replace("Single", "Double"));
+    const [edit] = (await workspaceChanges(request)).changes;
+    expect(edit?.undo).toBe("available");
+
+    await undoChange(request, edit?.id ?? "");
+
+    const after = (await workspaceChanges(request)).changes;
+    expect(after.map(({ kind, undo }) => ({ kind, undo }))).toEqual([
+      { kind: "undo", undo: "none" },
+      { kind: "hand-edit", undo: "none" },
+    ]);
+  });
+
+  it("leaves out hand edits to the workspace's other files, without short pages", async () => {
+    const { request } = await workerSaving([
+      { action: "add", section: "facts", text: "Padel lessons on Tuesdays." },
+    ]);
+    await writeFile(join(contextDir, "garage-gym", "notes.md"), "Shopping list.\n");
+
+    const { changes, more } = await workspaceChanges(request);
+
+    expect(changes.map((change) => change.kind)).toEqual(["save"]);
+    expect(more).toBeNull();
   });
 });
