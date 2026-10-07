@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import {
   endsTurn,
   ModelId,
+  type PlacedLine,
   type Save,
   type SessionId,
   SessionSummary,
@@ -12,12 +13,14 @@ import {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { OWNER_FILE } from "../src/owner-context/index.ts";
 import { createClaudeProvider } from "../src/providers/index.ts";
 import { asOwner, followSession, postJson, type Requester, testWorker } from "../src/testing.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
   type ExpectedSave,
+  ownerContextFor,
   SCENARIOS,
   type Scenario,
   type Sections,
@@ -84,12 +87,16 @@ const hasWords = (text: string, has: { words: Words; without?: readonly string[]
 
 const describeWords = (words: Words) => words.map((word) => anyOf(word).join(" or ")).join(", ");
 
+/** Sections, with the place when it's the owner context: "owner facts or plans". */
+const describeSections = (place: PlacedLine["place"] | undefined, section: Sections) =>
+  `${place === "owner" ? "owner " : ""}${sectionsOf(section).join(" or ")}`;
+
 const describeExpected = (expected: ExpectedSave) => {
   switch (expected.action) {
     case "add":
-      return `add to ${sectionsOf(expected.section).join(" or ")} with ${describeWords(expected.words)}${expected.without ? ` and without ${expected.without.join(", ")}` : ""}`;
+      return `add to ${describeSections(expected.place, expected.section)} with ${describeWords(expected.words)}${expected.without ? ` and without ${expected.without.join(", ")}` : ""}`;
     case "change":
-      return `change "${expected.was}" to ${sectionsOf(expected.section).join(" or ")} with ${describeWords(expected.words)}`;
+      return `change "${expected.was}" to ${describeSections(expected.place, expected.section)} with ${describeWords(expected.words)}`;
     case "remove":
       return `remove "${expected.was}"`;
     case "change-or-remove":
@@ -97,12 +104,15 @@ const describeExpected = (expected: ExpectedSave) => {
   }
 };
 
+const describeLine = (line: PlacedLine) =>
+  `${describeSections(line.place, line.section)}: "${line.line}"`;
+
 const describeSave = (save: Save) => {
   switch (save.action) {
     case "add":
-      return `added to ${save.saved.section}: "${save.saved.line}"`;
+      return `added to ${describeLine(save.saved)}`;
     case "change":
-      return `changed "${save.replaced.line}" to ${save.saved.section}: "${save.saved.line}"`;
+      return `changed "${save.replaced.line}" to ${describeLine(save.saved)}`;
     case "remove":
       return `removed "${save.replaced.line}"`;
   }
@@ -128,6 +138,7 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
   if (expected.action === "remove" || expected.action === "change-or-remove") return true;
   if (save.action === "remove") return false;
   return (
+    save.saved.place === (expected.place ?? "workspace") &&
     sectionsOf(expected.section).includes(save.saved.section) &&
     hasWords(save.saved.line, {
       words: expected.words,
@@ -215,6 +226,10 @@ const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict>
     const workspace = WorkspaceSummary.parse(await made.json());
     const folder = join(root, "context", workspace.id);
     await writeFile(join(folder, CONTEXT_FILE), contextFileFor(scenario));
+    const ownerContext = ownerContextFor(scenario);
+    if (ownerContext !== undefined) {
+      await writeFile(join(root, "context", OWNER_FILE), ownerContext);
+    }
     for (const [path, text] of Object.entries(scenario.files ?? {})) {
       await mkdir(dirname(join(folder, path)), { recursive: true });
       await writeFile(join(folder, path), text);

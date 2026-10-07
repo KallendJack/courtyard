@@ -243,9 +243,11 @@ describe("the owner context every turn carries (ADR 0010)", () => {
     const { instructions } = framing;
 
     expect(instructions).toContain("<owner_context>");
-    expect(instructions).toContain("- Lives in the UK.");
-    expect(instructions).toContain("- Moving house in spring.");
-    expect(instructions).toContain("- Metric units and pounds.");
+    // Each line with its label, which can't clash with the context file's (ADR 0013).
+    expect(instructions).toContain("- [MF1] Lives in the UK.");
+    expect(instructions).toContain("- [MP1] Moving house in spring.");
+    expect(instructions).toContain("- [A1] Metric units and pounds.");
+    expect(instructions).toContain("- [F1] Single garage.");
     expect(instructions.indexOf("</owner_context>")).toBeLessThan(
       instructions.indexOf("<context_file>"),
     );
@@ -262,7 +264,7 @@ describe("the owner context every turn carries (ADR 0010)", () => {
 
     const { instructions } = (await firstTurn()).framing;
 
-    expect(instructions).toContain("- Metric units and pounds.");
+    expect(instructions).toContain("- [A1] Metric units and pounds.");
     expect(instructions).not.toContain("Lives in the UK");
     expect(instructions).not.toContain("Moving house");
   });
@@ -329,7 +331,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     const framing = saver.framings[0];
     expect(framing?.saveTool?.name).toBe("save_to_context");
     expect(framing?.instructions).toMatch(
-      /keep this workspace's context file current yourself, with the save_to_context tool/,
+      /keep this workspace's context file and the owner context current yourself, with the save_to_context tool/,
     );
     expect(framing?.instructions).toMatch(/A label names the line to change or remove/);
     expect(framing?.instructions).toMatch(/save your own suggestions once the owner agrees/i);
@@ -348,6 +350,23 @@ describe("saving context as a model answers (ADR 0013)", () => {
     );
   });
 
+  it("says where each save goes: About me, How to answer me, or the workspace", async () => {
+    const saver = savingProvider([[]]);
+    await turnOn(saver.provider);
+
+    const instructions = saver.framings[0]?.instructions ?? "";
+    expect(instructions).toMatch(
+      /About me \(place "owner", section facts, plans or ideas\), when it's true across the owner's life or matters to more than one workspace/,
+    );
+    expect(instructions).toMatch(
+      /How to answer me \(place "owner", section answers\), when it's a preference about answers that the owner states as lasting/,
+    );
+    expect(instructions).toMatch(
+      /this workspace's context file \(place "workspace"\) otherwise, and whenever it's unclear/,
+    );
+    expect(instructions).toMatch(/Leave out one-off requests \("shorter this time"\)/);
+  });
+
   it("offers no save tool to a provider that can't save", async () => {
     const { provider, turns } = recorder(READS_FILES);
     await (await sessionOn(provider)).say("Where should the rack go?");
@@ -356,7 +375,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     expect(turns[0]?.framing.instructions).not.toMatch(/save_to_context/);
   });
 
-  it("offers no save tool in a code workspace", async () => {
+  it("offers a code workspace the save tool for How to answer me only", async () => {
     await writeFile(
       join(root, "context", "garage-gym", "workspace.json"),
       '{ "mode": "code", "repoPath": "/path/to/repo" }',
@@ -364,8 +383,12 @@ describe("saving context as a model answers (ADR 0013)", () => {
     const saver = savingProvider([[]]);
     await turnOn(saver.provider);
 
-    expect(saver.framings[0]?.saveTool).toBeNull();
-    expect(saver.framings[0]?.instructions).not.toMatch(/save_to_context/);
+    const framing = saver.framings[0];
+    expect(framing?.saveTool?.description).toMatch(/to How to answer me in the owner context/);
+    expect(framing?.instructions).toMatch(
+      /It saves to the owner context's How to answer me \(place "owner", section answers\), the only place you can save to/,
+    );
+    expect(framing?.instructions).not.toMatch(/About me/);
   });
 
   it("shows each earlier answer's saves and what the owner did with them", async () => {
@@ -375,6 +398,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
         { section: "facts", action: "add", text: "Padel lessons on Tuesdays." },
         { section: "plans", action: "add", text: "Gym on Monday and Thursday." },
         { section: "ideas", action: "add", text: "A rowing machine." },
+        { section: "answers", action: "add", text: "Distances in km." },
       ],
       [],
     ]);
@@ -382,6 +406,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     const [padel, gym] = events.flatMap((e) => (e.type === "context-saved" ? [e.seq] : []));
     await postJson(request, `/api/sessions/${sessionId}/saves/${padel}/undo`, {});
     await postJson(request, `/api/sessions/${sessionId}/saves/${gym}/edit`, {
+      place: "workspace",
       section: "plans",
       line: "Gym on Monday and Thursday evenings.",
     });
@@ -405,6 +430,9 @@ describe("saving context as a model answers (ADR 0013)", () => {
       '- Added to Plans: "Gym on Monday and Thursday." (the owner edited it to Plans: "Gym on Monday and Thursday evenings.")',
     );
     expect(message).toContain('- Added to Ideas: "A rowing machine." (kept)');
+    expect(message).toContain(
+      '- Added to Owner context → How to answer me: "Distances in km." (kept)',
+    );
     expect(message.indexOf("Your saves")).toBeLessThan(message.indexOf("</conversation>"));
     expect(saver.framings[1]?.instructions).toMatch(
       /A save the owner undid was wrong: save it again only if the owner brings it up/,

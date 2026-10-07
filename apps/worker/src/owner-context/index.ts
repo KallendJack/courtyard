@@ -22,7 +22,7 @@ export const readOwnerContext = async (
 };
 
 /** A new owner context: a line on what goes where, then both sections, empty (docs/ai-conduct.md). */
-const STARTER = [
+export const STARTER_OWNER_CONTEXT = [
   "# Owner context",
   "",
   "Shared with every workspace. Under About me, write one line for each fact, plan or idea that's true across your whole life. Under How to answer me, write one line for each way you like answers.",
@@ -44,11 +44,11 @@ export const startOwnerContext = async (
   contextDir: string,
 ): Promise<Result<ReadOwnerContext, OwnerContextError>> => {
   try {
-    await writeFile(ownerFile(contextDir), STARTER, { flag: "wx" });
+    await writeFile(ownerFile(contextDir), STARTER_OWNER_CONTEXT, { flag: "wx" });
   } catch (error) {
     return hasCode(error, "EEXIST")
       ? err({ kind: "conflict", message: "There's already an owner context." })
       : err({ kind: "storage", message: "OWNER.md can't be saved." });
   }
-  return ok(parseOwnerContext(STARTER));
+  return ok(parseOwnerContext(STARTER_OWNER_CONTEXT));
 };

@@ -12,26 +12,42 @@ const CAPABILITIES: Capabilities = {
   savesContext: true,
 };
 
-const SECTIONS = { fact: "facts", plan: "plans", idea: "ideas" } as const;
-const ADD = /^save (fact|plan|idea): (.+)$/i;
-const CHANGE = /^change (\w+) to (fact|plan|idea): (.+)$/i;
+const SECTIONS = {
+  fact: "facts",
+  plan: "plans",
+  idea: "ideas",
+  preference: "answers",
+} as const;
+const ADD = /^save (owner )?(fact|plan|idea|preference): (.+)$/i;
+const CHANGE = /^change (\w+) to (owner )?(fact|plan|idea|preference): (.+)$/i;
 const REMOVE = /^remove (\w+)$/i;
 
-const sectionOf = (word: string) => {
+/** Where a scripted save goes: "owner fact" is About me, "preference" How to answer me. */
+const whereTo = (owner: string | undefined, word: string) => {
   const lower = word.toLowerCase();
-  return SECTIONS[lower === "plan" || lower === "idea" ? lower : "fact"];
+  const section =
+    SECTIONS[lower === "plan" || lower === "idea" || lower === "preference" ? lower : "fact"];
+  return { place: owner || section === "answers" ? "owner" : "workspace", section };
 };
 
-/** The saves a message scripts, one per line: "save fact: …", "change F1 to plan: …", "remove I2". */
+/**
+ * The saves a message scripts, one per line: "save fact: …", "save owner fact: …", "save
+ * preference: …", "change F1 to plan: …", "remove I2".
+ */
 const scriptedSaves = (message: string): Record<string, string>[] =>
   message.split("\n").flatMap((line): Record<string, string>[] => {
     const text = line.trim();
     const add = ADD.exec(text);
-    if (add?.[1] && add[2]) return [{ action: "add", section: sectionOf(add[1]), text: add[2] }];
+    if (add?.[2] && add[3]) return [{ action: "add", ...whereTo(add[1], add[2]), text: add[3] }];
     const change = CHANGE.exec(text);
-    if (change?.[1] && change[2] && change[3]) {
+    if (change?.[1] && change[3] && change[4]) {
       return [
-        { action: "change", section: sectionOf(change[2]), label: change[1], text: change[3] },
+        {
+          action: "change",
+          ...whereTo(change[2], change[3]),
+          label: change[1],
+          text: change[4],
+        },
       ];
     }
     const remove = REMOVE.exec(text);

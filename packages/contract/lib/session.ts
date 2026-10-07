@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { ContextLine, ContextSection, WorkspaceId } from "./workspace.ts";
+import {
+  CONTEXT_SECTION_NAMES,
+  ContextLine,
+  ContextSection,
+  OwnerSection,
+  WorkspaceId,
+} from "./workspace.ts";
 
 export const ProviderId = z
   .string()
@@ -113,13 +119,33 @@ export const Activity = z.discriminatedUnion("kind", [
 ]);
 export type Activity = z.infer<typeof Activity>;
 
-/** A line of a context file in its section. */
-export const PlacedLine = z.object({ section: ContextSection, line: z.string() });
+/**
+ * A line where it's written: in the workspace's context file, or in the owner context (ADR 0013).
+ * Saves recorded before the owner context could be saved to have no place: they're the
+ * workspace's.
+ */
+export const PlacedLine = z.union([
+  z.object({
+    place: z.literal("workspace").default("workspace"),
+    section: ContextSection,
+    line: z.string(),
+  }),
+  z.object({ place: z.literal("owner"), section: OwnerSection, line: z.string() }),
+]);
 export type PlacedLine = z.infer<typeof PlacedLine>;
 
+/** Where a line is, as the app names it: ["Facts"], or ["Owner context", "About me", "Facts"]. */
+export const placeNames = (placed: PlacedLine): readonly string[] => {
+  if (placed.place === "workspace") return [CONTEXT_SECTION_NAMES[placed.section]];
+  const { section } = placed;
+  return section === "answers"
+    ? ["Owner context", "How to answer me"]
+    : ["Owner context", "About me", CONTEXT_SECTION_NAMES[section]];
+};
+
 /**
- * What one save did to the workspace's context file (ADR 0013): a line added, a line changed (and
- * perhaps moved to another section, as a plan becomes a fact), or a line removed.
+ * What one save did (ADR 0013): a line added, a line changed (and perhaps moved to another
+ * section or place, as a plan becomes a fact), or a line removed.
  */
 export const Save = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add"), saved: PlacedLine }),
@@ -128,8 +154,11 @@ export const Save = z.discriminatedUnion("action", [
 ]);
 export type Save = z.infer<typeof Save>;
 
-/** The owner editing a saved line from its note: its new wording and section. */
-export const SaveEdit = z.object({ section: ContextSection, line: ContextLine });
+/** The owner editing a saved line from its note: its new wording, section and place. */
+export const SaveEdit = z.discriminatedUnion("place", [
+  z.object({ place: z.literal("workspace"), section: ContextSection, line: ContextLine }),
+  z.object({ place: z.literal("owner"), section: OwnerSection, line: ContextLine }),
+]);
 export type SaveEdit = z.infer<typeof SaveEdit>;
 
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };

@@ -298,7 +298,7 @@ export const createSessions = (options: {
     });
   };
 
-  /** Where a session's saves go: its workspace's context file, as changes naming the session. */
+  /** Where a session's saves go: its workspace's context file and the owner context, as changes naming the session. */
   const targetOf = (session: { id: SessionId; workspaceId: WorkspaceId }): SaveTarget => ({
     contextFolder: options.contextFolder,
     contextDir: options.contextDir,
@@ -342,7 +342,11 @@ export const createSessions = (options: {
         });
         const turnSaves = createTurnSaves({
           ...targetOf(turn),
-          shown: workspace.value.contextFile,
+          shown: {
+            workspace: workspace.value.contextFile,
+            owner: workspace.value.ownerContext?.markdown ?? null,
+          },
+          mode: workspace.value.mode,
         });
         /** Whether the last save was refused, so this one is its retry. */
         let retrying = false;
