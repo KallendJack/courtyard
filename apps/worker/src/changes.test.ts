@@ -127,7 +127,11 @@ describe("Recent changes", () => {
       },
       { kind: "save", removed: [], added: [fact("Padel lessons on Tuesdays.")], undo: "available" },
     ]);
-    expect(changes[1]?.session).toBe(session.id);
+    expect(changes[1]?.session).toEqual({
+      id: session.id,
+      title: "Some news.",
+      workspaceId: "garage-gym",
+    });
     expect(changes[0]?.session).toBeUndefined();
     expect(Date.parse(changes[0]?.at ?? "")).toBeGreaterThan(Date.now() - 60_000);
   }, 20_000);
@@ -286,7 +290,7 @@ describe("Recent changes, from the reviews", () => {
     expect(undone.at(-1)).toMatchObject({ save: secondSave });
   });
 
-  it("offers a hand edit's Undo only while its lines are as it left them", async () => {
+  it("offers a hand edit's Undo while its lines are as it left them, and shows it undone after", async () => {
     const { request } = await workerSaving([]);
     await workspaceChanges(request);
     await writeFile(contextPath(), CONTEXT.replace("Single", "Double"));
@@ -298,7 +302,7 @@ describe("Recent changes, from the reviews", () => {
     const after = (await workspaceChanges(request)).changes;
     expect(after.map(({ kind, undo }) => ({ kind, undo }))).toEqual([
       { kind: "undo", undo: "none" },
-      { kind: "hand-edit", undo: "none" },
+      { kind: "hand-edit", undo: "undone" },
     ]);
   });
 

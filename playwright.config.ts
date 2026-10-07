@@ -10,6 +10,9 @@ const port = 8799;
 export default defineConfig({
   testDir: "e2e",
   forbidOnly: Boolean(process.env.CI),
+  // Every change commits to git, one at a time; with tests side by side on Windows that queue can
+  // take a few seconds, so a check waits longer than the default five.
+  expect: { timeout: 10_000 },
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /\.setup\.ts$/ },

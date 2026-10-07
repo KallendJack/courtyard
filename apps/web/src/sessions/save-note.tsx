@@ -10,10 +10,9 @@ import {
 import { BookmarkCheck, Undo2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
-import { FormError } from "@/components/form-error";
+import { NoteRow, NoteWords } from "@/components/note-row";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { TextField } from "@/components/text-field";
-import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { editSave, undoSave } from "../worker.ts";
@@ -179,54 +178,32 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
   }
 
   return (
-    <li
-      className={classes(
-        "grid grid-cols-[16px_1fr] items-start gap-x-3 border-l-2 py-0.5 pl-3 text-sm/[22px] md:grid-cols-[16px_1fr_auto] md:items-center",
-        undone ? "border-border" : "border-primary",
-      )}
-    >
-      {undone ? (
-        <Undo2 aria-hidden className="mt-[3px] size-4 text-muted-foreground md:mt-0" />
-      ) : (
-        <BookmarkCheck aria-hidden className="mt-[3px] size-4 text-primary-text md:mt-0" />
-      )}
-      <p className="min-w-0 wrap-anywhere">
-        <span
-          className={classes(
-            "font-semibold max-md:block md:mr-1.5",
-            undone ? "text-muted-foreground" : "text-primary-text",
-          )}
-        >
-          {undone ? "Undone" : words.label}
-        </span>
-        <span
-          className={classes(
-            undone || words.struck ? "text-muted-foreground line-through" : "text-foreground",
-          )}
-        >
-          {words.line}
-        </span>
-        {words.was !== undefined && !undone && (
-          <span className="text-muted-foreground"> (was {words.was})</span>
-        )}
-      </p>
-      {!undone && (
-        <div className="col-start-2 -ml-3 flex md:col-start-3 md:ml-0 md:w-[84px]">
-          <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
-            Undo
-          </Button>
-          {line !== undefined && (
-            <Button variant="quiet" size="xs" onClick={() => setEditing(true)}>
-              Edit
+    <NoteRow
+      icon={undone ? <Undo2 /> : <BookmarkCheck />}
+      muted={undone}
+      actions={
+        undone ? undefined : (
+          <>
+            <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
+              Undo
             </Button>
-          )}
-        </div>
-      )}
-      {undo.error !== undefined && (
-        <div className="col-start-2 md:col-end-4">
-          <FormError message={undo.error} />
-        </div>
-      )}
-    </li>
+            {line !== undefined && (
+              <Button variant="quiet" size="xs" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            )}
+          </>
+        )
+      }
+      error={undo.error}
+    >
+      <NoteWords
+        label={undone ? "Undone" : words.label}
+        line={words.line}
+        was={words.was}
+        muted={undone}
+        struck={words.struck === true}
+      />
+    </NoteRow>
   );
 }

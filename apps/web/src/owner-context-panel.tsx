@@ -3,7 +3,7 @@ import {
   OWNER_CONTEXT_LONG_CHARACTERS,
   type OwnerContextDetail,
 } from "@courtyard/contract";
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/button";
 import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
 import { FormError } from "@/components/form-error";
@@ -89,7 +89,11 @@ export function OwnerContextPanel(props: {
             />
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
-            Edit it in <code>OWNER.md</code>, at the top of your context folder.
+            Edit it in <code>OWNER.md</code>, at the top of your context folder. See{" "}
+            <Link to="/changes" className="text-foreground underline">
+              recent changes
+            </Link>
+            .
           </p>
         </>
       )}

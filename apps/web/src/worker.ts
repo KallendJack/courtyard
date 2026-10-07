@@ -1,5 +1,6 @@
 import {
   ApiError,
+  type ChangeId,
   ContextBackup,
   type GetToKnowRequest,
   LiveStatus,
@@ -8,6 +9,7 @@ import {
   OwnerContextDetail,
   type PasswordForm,
   ProviderList,
+  RecentChanges,
   type SaveEdit,
   type SessionChange,
   type SessionId,
@@ -163,13 +165,27 @@ export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
     schema: SessionSummary,
   });
 
-/** What a get-to-know session learns about: one workspace, or the owner context. */
-export type GettingToKnow =
+/** A page of a workspace's or the owner context's Recent changes, after the change `after`. */
+export const loadChanges = (about: ContextPlace, after?: ChangeId) => {
+  const place =
+    about.kind === "owner" ? "/owner-context" : `/workspaces/${encodeURIComponent(about.id)}`;
+  return fromWorker(
+    `${place}/changes${after === undefined ? "" : `?after=${after}`}`,
+    RecentChanges,
+  );
+};
+
+/** Undoes a change from Recent changes. */
+export const undoChange = (id: ChangeId) =>
+  sendJson({ path: `/changes/${id}/undo`, body: {}, schema: z.unknown() });
+
+/** A context file to act on: one workspace's, or the owner context. */
+export type ContextPlace =
   | { readonly kind: "workspace"; readonly id: WorkspaceId }
   | { readonly kind: "owner" };
 
 /** Starts a session getting to know a workspace or the owner context, with the worker's starter. */
-export const startGettingToKnow = (about: GettingToKnow, start: GetToKnowRequest) =>
+export const startGettingToKnow = (about: ContextPlace, start: GetToKnowRequest) =>
   sendJson({
     path:
       about.kind === "owner"

@@ -209,6 +209,16 @@ function Workspace() {
           .
         </p>
       )}
+      <p className="mt-4 text-sm text-muted-foreground">
+        <Link
+          to="/changes"
+          search={{ workspace: workspace.id }}
+          className="text-foreground underline"
+        >
+          Recent changes
+        </Link>
+        , with Undo.
+      </p>
     </Page>
   );
 }

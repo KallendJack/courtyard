@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeId, PlacedLine, SessionId } from "./session.ts";
+import { WorkspaceId } from "./workspace.ts";
 
 /** The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit. */
 export const RecentChangeKind = z.enum(["save", "undo", "edit", "hand-edit"]);
@@ -20,8 +21,11 @@ export const RecentChange = z.object({
   id: ChangeId,
   kind: RecentChangeKind,
   at: z.iso.datetime({ offset: true }),
-  /** The session it came from, for a save and what the owner did with it. */
-  session: SessionId.optional(),
+  /**
+   * The session it came from, for a save and what the owner did with it: its title and workspace,
+   * so the list can link to it. Absent for a hand edit, or a session since deleted.
+   */
+  session: z.object({ id: SessionId, title: z.string(), workspaceId: WorkspaceId }).optional(),
   removed: z.array(PlacedLine),
   added: z.array(PlacedLine),
   undo: RecentChangeUndo,

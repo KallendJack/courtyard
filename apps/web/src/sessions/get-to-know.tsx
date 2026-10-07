@@ -5,7 +5,7 @@ import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { type GettingToKnow, loadProviders, startGettingToKnow } from "../worker.ts";
+import { type ContextPlace, loadProviders, startGettingToKnow } from "../worker.ts";
 import { availableModels } from "./models.ts";
 
 /**
@@ -14,7 +14,7 @@ import { availableModels } from "./models.ts";
  * model on offer that saves to context. Providers are only asked once it's tapped.
  */
 export function GetToKnow(props: {
-  about: GettingToKnow;
+  about: ContextPlace;
   /** The button, which also names the box. */
   label: string;
   children: ReactNode;
