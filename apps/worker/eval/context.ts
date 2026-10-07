@@ -156,8 +156,20 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
   );
 };
 
-/** The questions an answer asks, sentence by sentence. */
-const questionsIn = (answer: string) => answer.match(/[^.!?\n]*\?/g) ?? [];
+/**
+ * The questions an answer asks, sentence by sentence. An example put as a question ("For
+ * example, is it…?") belongs to the question before it rather than counting as one of its own.
+ */
+const questionsIn = (answer: string) => {
+  const questions: string[] = [];
+  for (const sentence of answer.match(/[^.!?\n]*\?/g) ?? []) {
+    const last = questions.at(-1);
+    const example = /^[\s*_]*(for example|for instance|e\.g\.)/i.test(sentence);
+    if (example && last !== undefined) questions[questions.length - 1] = `${last} ${sentence}`;
+    else questions.push(sentence);
+  }
+  return questions;
+};
 
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
@@ -193,7 +205,20 @@ const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }
               : `expected a question with ${describeWords(asks)}; asked ${questionsIn(answer).join(" ").trim() || "none"}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question];
+  const { questions } = turn;
+  const asked = questionsIn(answer);
+  const howMany: Check[] =
+    questions === undefined
+      ? []
+      : [
+          {
+            miss:
+              asked.length >= questions.atLeast && asked.length <= questions.atMost
+                ? null
+                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question, ...howMany];
 };
 
 const withTimeout = <T>(work: Promise<T>, what: string) =>

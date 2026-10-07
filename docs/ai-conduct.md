@@ -21,6 +21,8 @@ conversation, a starting context file, and the saves each owner message should e
 temporary context folder, signed in as the owner on that machine, and prints the score and each miss: what was
 expected and what was saved. A save matches on its section, whether it adds, changes or removes, and the line it
 changes; its wording only needs the scenario's key words, and an answer that should ask has a question with them in.
+Where a scenario says how many questions an answer asks, they're counted by question mark, an example put as a
+question ("For example, is it…?") counting with the question before it.
 It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
 
 - **Before merging any change to the saving rules,** run it and put the score in the pull request, with each miss
@@ -173,10 +175,27 @@ and that an edit shows how the owner wants such lines written.
 
 ### Getting to know a workspace
 
-When a workspace's context file has no lines, the session page offers **Get to know this workspace**. It sends a
-starter message, written here and not by a model, asking the model to learn the workspace by asking one or two
-questions at a time, about five rounds, and saving the answers as it goes. The owner can stop whenever they like. The
-home page offers the same for an owner context with no lines.
+Built with #51. When a planning workspace's context file has no lines, its page offers **Get to know this
+workspace**. It starts a new session with a starter message, written here and not by a model (`GET_TO_KNOW` in the
+prompts module), in the owner's voice, asking the model to learn the workspace by asking one or two questions at a
+time, about five rounds, and saving the answers as it goes. Its first line is the session's title. The owner can stop,
+or carry on chatting, whenever they like; saving follows the rules above, so nothing is saved that the owner didn't
+say. A code workspace isn't offered it, since its models don't save to its context file.
+
+> Get to know this workspace.
+>
+> Ask me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell
+> you as you go. Start with what it's for; later, where things stand, what I've decided and what I'm still
+> considering. I'll say when I've had enough.
+
+The home page offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). Its session runs in
+the first planning workspace, as a session needs a workspace and only a planning one's models save to About me:
+
+> Get to know me.
+>
+> Ask me about my life in general one question per message, two at most and no follow-ups, for about five rounds,
+> and save what I tell you to my owner context as you go: where I live and who with, work, health, plans and how I
+> like answers. I'll say when I've had enough.
 
 ### Tidying
 

@@ -1,6 +1,7 @@
 import {
   CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
+  hasLines,
   SessionList,
   type SessionSummary,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -18,6 +19,7 @@ import { RenameForm } from "@/components/rename-form";
 import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
+import { GetToKnow } from "../../sessions/get-to-know.tsx";
 import { describeWhen } from "../../when.ts";
 import {
   archiveWorkspace,
@@ -171,10 +173,18 @@ function Workspace() {
       <div className="mt-12">
         <SectionTitle>Context file</SectionTitle>
       </div>
+      {workspace.mode === "planning" && (contextFile === null || !hasLines(contextFile)) && (
+        <GetToKnow
+          about={{ kind: "workspace", id: workspace.id }}
+          label="Get to know this workspace"
+        >
+          You're asked a few questions about it, and what you say is saved here.
+        </GetToKnow>
+      )}
       {contextFile === null ? (
         <EmptyState>
-          No context file yet. Add a <code>CONTEXT.md</code> to this workspace's folder so every
-          model starts out knowing its facts, plans and ideas.
+          No context file yet. One is made the first time something's saved, or add a{" "}
+          <code>CONTEXT.md</code> to this workspace's folder yourself.
         </EmptyState>
       ) : (
         <>

@@ -28,7 +28,10 @@ function Home() {
       <PageTitle>Workspaces</PageTitle>
       <LiveUpdate />
       <BackupStatus />
-      <OwnerContextPanel result={ownerContext} />
+      <OwnerContextPanel
+        result={ownerContext}
+        canGetToKnow={list.some((workspace) => workspace.mode === "planning")}
+      />
       {list.length === 0 ? (
         <EmptyState>
           No workspaces yet.{" "}
