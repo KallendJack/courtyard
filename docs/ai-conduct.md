@@ -20,13 +20,13 @@ gives the score and each miss.
 conversation, a starting context file, and the saves each owner message should end with) through a worker on a
 temporary context folder, signed in as the owner on that machine, and prints the score and each miss: what was
 expected and what was saved. A save matches on its section, whether it adds, changes or removes, and the line it
-changes; its wording only needs the scenario's key words. It never runs in CI or `pnpm verify`, since it needs the
-owner's login and uses their plan's allowance.
+changes; its wording only needs the scenario's key words, and an answer that should ask has a question with them in.
+It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
 
 - **Before merging any change to the saving rules,** run it and put the score in the pull request, with each miss
   left and why. Run the changed scenarios with `--times 3` too: a verdict that flips is noted, not counted as fixed.
-- **A failed turn** prints its reason; one that's `rate-limited` hit the plan's limit, so run it again later rather
-  than reading it as a miss.
+- **A run that doesn't finish** (a failed turn, or `rate-limited` when the plan's limit is hit) prints its reason and
+  is left out of the score, so run it again later.
 - **Scenarios are invented,** since the repo is public: a made-up owner and workspaces. A new saving rule gets a
   scenario, and a scenario that turns out to expect the wrong thing is fixed in the same pull request, saying why.
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), and `--model <id>` picks the

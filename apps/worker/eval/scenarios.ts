@@ -6,23 +6,26 @@ import type { ContextSection } from "@courtyard/contract";
  * is invented, since the repo is public: a made-up owner and workspaces.
  */
 
-/** Words a saved line must have, each lowercase; `a|b` means either. */
-type Words = readonly string[];
+/** Words a line must have, each lowercase: a list in place of a word means any one of them. */
+export type Words = readonly (string | readonly string[])[];
 
-/** A save a turn should make. A section given as a list means any of them is right. */
+/** Where a saved line belongs: a list means any of those sections is right. */
+export type Sections = ContextSection | readonly ContextSection[];
+
+/** A save a turn should make. */
 export type ExpectedSave =
   | {
       readonly action: "add";
-      readonly section: ContextSection | readonly ContextSection[];
+      readonly section: Sections;
       readonly words: Words;
       /** Words the line must not have, such as a date where time doesn't matter. */
-      readonly without?: Words;
+      readonly without?: readonly string[];
     }
   | {
       readonly action: "change";
       /** The line it changes, as the starting context file has it. */
       readonly was: string;
-      readonly section: ContextSection | readonly ContextSection[];
+      readonly section: Sections;
       readonly words: Words;
     }
   | { readonly action: "remove"; readonly was: string }
@@ -34,8 +37,8 @@ export type Turn = {
   readonly say: string;
   /** The saves this message should end with; none means it saves nothing. */
   readonly expect: readonly ExpectedSave[];
-  /** The answer should ask the owner something, rather than guess. */
-  readonly asks?: boolean;
+  /** The answer should ask the owner something rather than guess: a question with these words. */
+  readonly asks?: Words;
   /** After the answer, the owner undoes every save it made. */
   readonly undoSaves?: boolean;
 };
@@ -43,8 +46,8 @@ export type Turn = {
 export type Scenario = {
   /** Short and unique, for `--only`. */
   readonly name: string;
-  /** The rule it checks, in the eval's report. */
-  readonly checks: string;
+  /** The saving rule it checks, in the eval's report. */
+  readonly rule: string;
   readonly workspace: string;
   readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
   /** Other files in the workspace's folder, by path. */
@@ -55,7 +58,7 @@ export type Scenario = {
 export const SCENARIOS: readonly Scenario[] = [
   {
     name: "fact-in-passing",
-    checks: "a fact stated in passing is saved",
+    rule: "a fact stated in passing is saved",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
@@ -67,19 +70,19 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "plan-is-a-plan",
-    checks: "a plan is saved as a plan, not a fact",
+    rule: "a plan is saved as a plan, not a fact",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
       {
         say: "I'm going to put rubber flooring down across the whole garage. How thick should it be for deadlifts?",
-        expect: [{ action: "add", section: "plans", words: ["rubber|floor"] }],
+        expect: [{ action: "add", section: "plans", words: [["rubber", "floor"]] }],
       },
     ],
   },
   {
     name: "maybe-one-day",
-    checks: '"maybe one day" is an idea',
+    rule: '"maybe one day" is an idea',
     workspace: "Allotment",
     context: { facts: ["The plot is a half plot with four raised beds"] },
     turns: [
@@ -91,14 +94,14 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "plan-or-idea-asks",
-    checks: "unclear between plan and idea gets a question, then a save once the owner says",
+    rule: "unclear between plan and idea gets a question, then a save once the owner says",
     workspace: "House",
     context: { facts: ["The hallway is painted magnolia"] },
     turns: [
       {
         say: "The hallway's probably going dark green.",
         expect: [],
-        asks: true,
+        asks: [["decided", "decide", "settled", "definite", "sure", "plan", "committed"]],
       },
       {
         say: "It's decided, I'm doing it.",
@@ -108,7 +111,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "done-plan-becomes-fact",
-    checks: '"I\'ve done it" changes the plan into a fact, by label',
+    rule: '"I\'ve done it" changes the plan into a fact, by label',
     workspace: "Garage gym",
     context: {
       facts: ["The garage is 5 m by 3 m"],
@@ -130,7 +133,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "idea-becomes-plan",
-    checks: "an idea the owner decides on changes into a plan, by label",
+    rule: "an idea the owner decides on changes into a plan, by label",
     workspace: "Allotment",
     context: {
       facts: ["The plot is a half plot with four raised beds"],
@@ -152,7 +155,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "stale-line-goes",
-    checks: "a line the owner says is no longer true is removed or changed",
+    rule: "a line the owner says is no longer true is removed or changed",
     workspace: "Running",
     context: {
       facts: ["Runs about 25 km a week", "Runs with a club on Thursday evenings"],
@@ -166,7 +169,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "stale-line-changed",
-    checks: "a line that's out of date is changed to what's true now",
+    rule: "a line that's out of date is changed to what's true now",
     workspace: "Car",
     context: { facts: ["Drives a 2015 hatchback", "Parks on the street"] },
     turns: [
@@ -185,7 +188,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "small-talk",
-    checks: "passing chat saves nothing",
+    rule: "passing chat saves nothing",
     workspace: "Allotment",
     context: { facts: ["The plot is a half plot with four raised beds"] },
     turns: [
@@ -197,7 +200,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "one-off-request",
-    checks: 'a one-off request ("shorter this time") saves nothing',
+    rule: 'a one-off request ("shorter this time") saves nothing',
     workspace: "Running",
     context: { facts: ["Runs about 25 km a week"] },
     turns: [
@@ -207,7 +210,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "suggestion-not-agreed",
-    checks: "Claude's own suggestions save nothing until the owner agrees",
+    rule: "Claude's own suggestions save nothing until the owner agrees",
     workspace: "House",
     context: { facts: ["The bathroom has no window", "The bathroom extractor fan is really loud"] },
     turns: [
@@ -219,7 +222,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "suggestion-agreed",
-    checks: "a suggestion the owner agrees to is saved",
+    rule: "a suggestion the owner agrees to is saved",
     workspace: "House",
     context: { facts: ["The bathroom has no window", "The bathroom extractor fan is really loud"] },
     turns: [
@@ -232,7 +235,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "remember-that",
-    checks: '"remember that" saves',
+    rule: '"remember that" saves',
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
@@ -244,7 +247,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "already-in-the-file",
-    checks: "something already in the file isn't saved again",
+    rule: "something already in the file isn't saved again",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m", "The ceiling is 2.3 m"] },
     turns: [
@@ -256,7 +259,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "already-said-differently",
-    checks: "something the file already says in other words isn't saved again",
+    rule: "something the file already says in other words isn't saved again",
     workspace: "Allotment",
     context: { facts: ["The soil is heavy clay"] },
     turns: [
@@ -268,19 +271,19 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "date-where-time-matters",
-    checks: "a line that can go out of date keeps its date",
+    rule: "a line that can go out of date keeps its date",
     workspace: "House",
     context: { facts: ["The boiler is 18 years old"] },
     turns: [
       {
         say: "Got a quote for a new boiler: £2,400 fitted, valid until the end of November. Is that a fair price?",
-        expect: [{ action: "add", section: ["facts", "plans"], words: ["2,400|2400", "nov"] }],
+        expect: [{ action: "add", section: ["facts", "plans"], words: [["2,400", "2400"], "nov"] }],
       },
     ],
   },
   {
     name: "no-date-where-it-doesnt",
-    checks: "a line that doesn't age has no date",
+    rule: "a line that doesn't age has no date",
     workspace: "Running",
     context: { facts: ["Runs about 25 km a week"] },
     turns: [
@@ -291,7 +294,7 @@ export const SCENARIOS: readonly Scenario[] = [
             action: "add",
             section: "facts",
             words: ["pronat"],
-            without: ["2026", "oct", "today", "yesterday"],
+            without: ["2026", "october", "today", "yesterday"],
           },
         ],
       },
@@ -299,7 +302,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "undone-stays-undone",
-    checks: "an undone save in the conversation isn't saved again",
+    rule: "an undone save in the conversation isn't saved again",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
@@ -313,7 +316,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "two-things-at-once",
-    checks: "a decision and an idea in one message become a plan and an idea",
+    rule: "a decision and an idea in one message become a plan and an idea",
     workspace: "Running",
     context: { facts: ["Runs about 25 km a week"] },
     turns: [
@@ -328,7 +331,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "files-only-when-asked",
-    checks: "what's in the workspace's files isn't saved unless the owner asks about that file",
+    rule: "what's in the workspace's files isn't saved unless the owner asks about that file",
     workspace: "Allotment",
     context: { facts: ["The plot is a half plot with four raised beds"] },
     files: {

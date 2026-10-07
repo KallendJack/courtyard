@@ -3,12 +3,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import {
-  type ContextSection,
   endsTurn,
+  ModelId,
   type Save,
+  type SessionId,
   SessionSummary,
+  type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
+import { z } from "zod";
 import { createClaudeProvider } from "../src/providers/index.ts";
 import { asOwner, followSession, postJson, type Requester, testWorker } from "../src/testing.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
@@ -17,7 +20,9 @@ import {
   type ExpectedSave,
   SCENARIOS,
   type Scenario,
+  type Sections,
   type Turn,
+  type Words,
 } from "./scenarios.ts";
 
 /**
@@ -28,48 +33,63 @@ import {
  *   pnpm eval:context [--only <name,name>] [--times <n>] [--parallel <n>] [--model <id>]
  */
 
-const { values: options } = parseArgs({
-  options: {
-    /** Only the scenarios whose name has one of these in it, separated by commas. */
-    only: { type: "string" },
-    /** Runs each scenario this many times, to see which verdicts flip. */
-    times: { type: "string", default: "1" },
-    /** How many scenarios run at once. */
-    parallel: { type: "string", default: "4" },
-    /** The Claude model, by the short name the app offers. */
-    model: { type: "string", default: "default" },
-  },
+const Options = z.object({
+  /** Only the scenarios whose name has one of these in it, separated by commas. */
+  only: z.string().optional(),
+  /** Runs each scenario this many times, to see which verdicts flip. */
+  times: z.coerce.number().int().min(1).default(1),
+  /** How many scenarios run at once. */
+  parallel: z.coerce.number().int().min(1).default(4),
+  /** The Claude model, by the short name the app offers. */
+  model: ModelId.default(ModelId.parse("default")),
 });
 
+/** The command line's options, each a string for `Options` to check. */
+const argumentNames = {
+  only: { type: "string" },
+  times: { type: "string" },
+  parallel: { type: "string" },
+  model: { type: "string" },
+} as const;
+
 /** The longest one turn may take before the scenario counts as not run. */
-const TURN_TIMEOUT_MS = 5 * 60 * 1000;
+const TURN_TIMEOUT_MINUTES = 5;
 
-type Verdict = {
-  readonly scenario: Scenario;
-  /** What went wrong, in words: empty when the scenario passed. */
-  readonly misses: readonly string[];
-  readonly checks: number;
-  readonly passedChecks: number;
-};
+/** One thing a turn is checked for, and what went wrong when it failed. */
+type Check = { readonly miss: string | null };
 
-const sectionsOf = (section: ContextSection | readonly ContextSection[]) =>
-  typeof section === "string" ? [section] : section;
+/**
+ * A scenario's run: judged on its checks, or not run to the end (a failed turn, a usage limit),
+ * which leaves it out of the score.
+ */
+type Verdict =
+  | { readonly kind: "judged"; readonly scenario: Scenario; readonly checks: readonly Check[] }
+  | { readonly kind: "not-run"; readonly scenario: Scenario; readonly reason: string };
 
-/** Whether a line has every word (`a|b` for either) and none of the words it must not. */
-const hasWords = (line: string, words: readonly string[], without: readonly string[] = []) => {
-  const lower = line.toLowerCase();
+const passed = (verdict: Verdict) =>
+  verdict.kind === "judged" && verdict.checks.every((check) => check.miss === null);
+
+const sectionsOf = (section: Sections) => (typeof section === "string" ? [section] : section);
+
+const anyOf = (word: string | readonly string[]) => (typeof word === "string" ? [word] : word);
+
+/** Whether text has every word (any one of a list) and none of the words it must not. */
+const hasWords = (text: string, has: { words: Words; without?: readonly string[] | undefined }) => {
+  const lower = text.toLowerCase();
   return (
-    words.every((word) => word.split("|").some((either) => lower.includes(either))) &&
-    !without.some((word) => lower.includes(word))
+    has.words.every((word) => anyOf(word).some((either) => lower.includes(either))) &&
+    !(has.without ?? []).some((word) => lower.includes(word))
   );
 };
+
+const describeWords = (words: Words) => words.map((word) => anyOf(word).join(" or ")).join(", ");
 
 const describeExpected = (expected: ExpectedSave) => {
   switch (expected.action) {
     case "add":
-      return `add to ${sectionsOf(expected.section).join(" or ")} with ${expected.words.join(", ")}${expected.without ? ` and without ${expected.without.join(", ")}` : ""}`;
+      return `add to ${sectionsOf(expected.section).join(" or ")} with ${describeWords(expected.words)}${expected.without ? ` and without ${expected.without.join(", ")}` : ""}`;
     case "change":
-      return `change "${expected.was}" in ${sectionsOf(expected.section).join(" or ")} with ${expected.words.join(", ")}`;
+      return `change "${expected.was}" to ${sectionsOf(expected.section).join(" or ")} with ${describeWords(expected.words)}`;
     case "remove":
       return `remove "${expected.was}"`;
     case "change-or-remove":
@@ -109,48 +129,70 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
   if (save.action === "remove") return false;
   return (
     sectionsOf(expected.section).includes(save.saved.section) &&
-    hasWords(save.saved.line, expected.words, expected.action === "add" ? expected.without : [])
+    hasWords(save.saved.line, {
+      words: expected.words,
+      without: expected.action === "add" ? expected.without : undefined,
+    })
   );
 };
 
+/** The questions an answer asks, sentence by sentence. */
+const questionsIn = (answer: string) => answer.match(/[^.!?\n]*\?/g) ?? [];
+
 /**
- * One turn's misses: each expected save matched to one the turn made (an exact match first), each
- * save left over, and a question the answer should have asked. A check is each expected save, the
- * turn saving nothing else, and the question.
+ * One turn's checks: one for each expected save, one for saving nothing else, and one for the
+ * question the answer should ask. Every exact match is paired up before any near one, so a save
+ * that's wrong can't take the place of one that's right.
  */
-const judgeTurn = (turn: Turn, saves: readonly Save[], answer: string) => {
-  const misses: string[] = [];
-  const left = [...saves];
-  for (const expected of turn.expect) {
-    const exact = left.findIndex((save) => fullyMatches(expected, save));
-    const near = exact === -1 ? left.findIndex((save) => sameTarget(expected, save)) : exact;
-    const [found] = near === -1 ? [] : left.splice(near, 1);
-    if (found === undefined)
-      misses.push(`expected: ${describeExpected(expected)}; saved nothing like it`);
-    else if (exact === -1)
-      misses.push(`expected: ${describeExpected(expected)}; ${describeSave(found)}`);
-  }
-  for (const extra of left) misses.push(`not expected: ${describeSave(extra)}`);
-  if (turn.asks && !answer.includes("?"))
-    misses.push("expected a question in the answer; it asked none");
-  const checks = turn.expect.length + 1 + (turn.asks ? 1 : 0);
-  return { misses, checks };
+const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }): Check[] => {
+  const { turn, answer } = judge;
+  const left = [...judge.saves];
+  const take = (matches: (save: Save) => boolean) => {
+    const index = left.findIndex(matches);
+    return index === -1 ? undefined : left.splice(index, 1)[0];
+  };
+  const exact = turn.expect.map((expected) => take((save) => fullyMatches(expected, save)));
+  const saveChecks = turn.expect.map((expected, index): Check => {
+    if (exact[index] !== undefined) return { miss: null };
+    const near = take((save) => sameTarget(expected, save));
+    return {
+      miss: `expected: ${describeExpected(expected)}; ${near === undefined ? "saved nothing like it" : describeSave(near)}`,
+    };
+  });
+  const nothingElse: Check = {
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeSave).join("; ")}`,
+  };
+  const { asks } = turn;
+  const question: Check[] =
+    asks === undefined
+      ? []
+      : [
+          {
+            miss: questionsIn(answer).some((asked) => hasWords(asked, { words: asks }))
+              ? null
+              : `expected a question with ${describeWords(asks)}; asked ${questionsIn(answer).join(" ").trim() || "none"}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question];
 };
 
 const withTimeout = <T>(work: Promise<T>, what: string) =>
   Promise.race([
     work,
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${what} took over 5 minutes`)), TURN_TIMEOUT_MS).unref(),
+      setTimeout(
+        () => reject(new Error(`${what} took over ${TURN_TIMEOUT_MINUTES} minutes`)),
+        TURN_TIMEOUT_MINUTES * 60 * 1000,
+      ).unref(),
     ),
   ]);
 
 /** Sends the owner's message, starting the session for the first, and returns the session's id. */
 const send = async (
   request: Requester,
-  to: { workspaceId: string; sessionId: string | undefined; text: string },
-) => {
-  const message = { text: to.text, model: { provider: "claude", model: options.model } };
+  to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; model: ModelId },
+): Promise<SessionId> => {
+  const message = { text: to.text, model: { provider: "claude", model: to.model } };
   if (to.sessionId === undefined) {
     const started = await postJson(request, `/api/workspaces/${to.workspaceId}/sessions`, message);
     if (started.status !== 201) throw new Error(`starting a session failed (${started.status})`);
@@ -162,7 +204,7 @@ const send = async (
 };
 
 /** Runs one scenario on a worker of its own, in a temporary folder it removes afterwards. */
-const runScenario = async (scenario: Scenario): Promise<Verdict> => {
+const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict> => {
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
   try {
     await mkdir(join(root, "context"));
@@ -178,13 +220,16 @@ const runScenario = async (scenario: Scenario): Promise<Verdict> => {
       await writeFile(join(folder, path), text);
     }
 
-    const misses: string[] = [];
-    let checks = 0;
-    let passedChecks = 0;
-    let sessionId: string | undefined;
+    const checks: Check[] = [];
+    let sessionId: SessionId | undefined;
     let after = 0;
     for (const [index, turn] of scenario.turns.entries()) {
-      sessionId = await send(request, { workspaceId: workspace.id, sessionId, text: turn.say });
+      sessionId = await send(request, {
+        workspaceId: workspace.id,
+        sessionId,
+        text: turn.say,
+        model,
+      });
       const events = await withTimeout(
         followSession(request, { sessionId, after, until: endsTurn }),
         `turn ${index + 1}`,
@@ -202,15 +247,9 @@ const runScenario = async (scenario: Scenario): Promise<Verdict> => {
       const answer = events
         .map((event) => (event.type === "text-delta" ? event.text : ""))
         .join("");
-      const judged = judgeTurn(
-        turn,
-        saves.map(({ save }) => save),
-        answer,
-      );
       const prefix = scenario.turns.length === 1 ? "" : `turn ${index + 1}: `;
-      misses.push(...judged.misses.map((miss) => prefix + miss));
-      checks += judged.checks;
-      passedChecks += Math.max(0, judged.checks - judged.misses.length);
+      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer });
+      checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {
         for (const { seq } of saves) {
@@ -224,11 +263,10 @@ const runScenario = async (scenario: Scenario): Promise<Verdict> => {
         }
       }
     }
-    return { scenario, misses, checks, passedChecks };
+    return { kind: "judged", scenario, checks };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const checks = scenario.turns.reduce((sum, turn) => sum + turn.expect.length + 1, 0);
-    return { scenario, misses: [`didn't run: ${message}`], checks, passedChecks: 0 };
+    const reason = error instanceof Error ? error.message : String(error);
+    return { kind: "not-run", scenario, reason };
   } finally {
     // Git can hold a file open for a moment on Windows; a leftover temporary folder is harmless.
     await rm(root, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
@@ -237,20 +275,62 @@ const runScenario = async (scenario: Scenario): Promise<Verdict> => {
 
 /** Runs `jobs` with at most `limit` at once, keeping their order. */
 const pool = async <T>(jobs: readonly (() => Promise<T>)[], limit: number) => {
-  const results: T[] = new Array(jobs.length);
+  const results: T[] = [];
   let next = 0;
-  const worker = async () => {
+  const runNext = async () => {
     while (next < jobs.length) {
       const index = next++;
       const job = jobs[index];
       if (job) results[index] = await job();
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, runNext));
   return results;
 };
 
+const report = (verdict: Verdict) => {
+  if (verdict.kind === "not-run") {
+    console.log(`----  ${verdict.scenario.name}: didn't run to the end: ${verdict.reason}`);
+    return;
+  }
+  console.log(`${passed(verdict) ? "pass" : "MISS"}  ${verdict.scenario.name}`);
+  for (const { miss } of verdict.checks) if (miss !== null) console.log(`      ${miss}`);
+};
+
+const summarise = (scenarios: readonly Scenario[], verdicts: readonly Verdict[]) => {
+  const judged = verdicts.filter((v) => v.kind === "judged");
+  const checks = judged.flatMap((v) => v.checks);
+  const passedChecks = checks.filter((check) => check.miss === null).length;
+  console.log(
+    `\nScore: ${judged.filter(passed).length}/${judged.length} scenario runs passed, ${passedChecks}/${checks.length} checks.`,
+  );
+
+  const runsOf = (scenario: Scenario) => judged.filter((v) => v.scenario === scenario);
+  const missed = scenarios.filter((s) => runsOf(s).some((v) => !passed(v)));
+  if (missed.length > 0) {
+    console.log("\nMissed:");
+    for (const scenario of missed) {
+      const runs = runsOf(scenario);
+      const passes = runs.filter(passed).length;
+      const flips = passes > 0 ? ` (flips: passed ${passes} of ${runs.length})` : "";
+      console.log(`- ${scenario.name}: ${scenario.rule}${flips}`);
+    }
+  }
+  const notRun = verdicts.filter((v) => v.kind === "not-run");
+  if (notRun.length > 0) {
+    console.log(
+      `\nNot counted: ${notRun.length} runs didn't run to the end. Run them again later.`,
+    );
+  }
+};
+
 const main = async () => {
+  const parsed = Options.safeParse(parseArgs({ options: argumentNames }).values);
+  if (!parsed.success) {
+    console.error(`Those options don't work: ${z.prettifyError(parsed.error)}`);
+    process.exit(1);
+  }
+  const options = parsed.data;
   const status = await createClaudeProvider().status();
   if (!status.available) {
     console.error(`Claude isn't available: ${status.reason}`);
@@ -263,46 +343,22 @@ const main = async () => {
     process.exit(1);
   }
 
+  const { only } = options;
   const scenarios = SCENARIOS.filter(
-    (s) =>
-      options.only === undefined ||
-      options.only.split(",").some((part) => s.name.includes(part.trim())),
+    (s) => only === undefined || only.split(",").some((part) => s.name.includes(part.trim())),
   );
-  const times = Math.max(1, Number.parseInt(options.times, 10) || 1);
-  const parallel = Math.max(1, Number.parseInt(options.parallel, 10) || 1);
   console.log(
-    `Running ${scenarios.length} scenarios${times > 1 ? `, ${times} times each` : ""}, against Claude (${options.model})…\n`,
+    `Running ${scenarios.length} scenarios${options.times > 1 ? `, ${options.times} times each` : ""}, against Claude (${options.model})…\n`,
   );
 
   const jobs = scenarios.flatMap((scenario) =>
-    Array.from({ length: times }, () => async () => {
-      const verdict = await runScenario(scenario);
-      console.log(`${verdict.misses.length === 0 ? "pass" : "MISS"}  ${scenario.name}`);
-      for (const miss of verdict.misses) console.log(`      ${miss}`);
+    Array.from({ length: options.times }, () => async () => {
+      const verdict = await runScenario(scenario, options.model);
+      report(verdict);
       return verdict;
     }),
   );
-  const verdicts = await pool(jobs, parallel);
-
-  const passed = verdicts.filter((v) => v.misses.length === 0).length;
-  const checks = verdicts.reduce((sum, v) => sum + v.checks, 0);
-  const passedChecks = verdicts.reduce((sum, v) => sum + v.passedChecks, 0);
-  console.log(
-    `\nScore: ${passed}/${verdicts.length} scenarios passed, ${passedChecks}/${checks} checks.`,
-  );
-
-  const missed = scenarios.filter((s) =>
-    verdicts.some((v) => v.scenario === s && v.misses.length > 0),
-  );
-  if (missed.length > 0) {
-    console.log("\nMissed:");
-    for (const scenario of missed) {
-      const runs = verdicts.filter((v) => v.scenario === scenario);
-      const passes = runs.filter((v) => v.misses.length === 0).length;
-      const flipped = passes > 0 ? ` (flips: passed ${passes} of ${runs.length})` : "";
-      console.log(`- ${scenario.name}: ${scenario.checks}${flipped}`);
-    }
-  }
+  summarise(scenarios, await pool(jobs, options.parallel));
   // Claude Code can leave a process behind for a moment; the eval is done.
   process.exit(0);
 };
