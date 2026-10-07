@@ -13,6 +13,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   type Capabilities,
+  Effort,
+  type EffortInfo,
   type FailureReason,
   ModelId,
   ProviderId,
@@ -132,11 +134,34 @@ const realClaudeCode: ClaudeCode = {
   run: ({ prompt, options }) => query({ prompt, options }),
 };
 
+/** A level of effort as the Agent SDK takes it, least first. */
+const ClaudeEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
+/** Each of Claude's levels of effort in Claude's own words. */
+const EFFORT_LABELS: Record<z.infer<typeof ClaudeEffort>, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
 const ClaudeModel = z.object({
   value: z.string(),
   displayName: z.string(),
   description: z.string().catch(""),
+  supportsEffort: z.boolean().optional().catch(undefined),
+  /** Unparsed: a level Courtyard doesn't know yet is left out rather than fail the check. */
+  supportedEffortLevels: z.array(z.string()).optional().catch(undefined),
 });
+
+/** The levels of effort a model takes, the ones Courtyard knows, in Claude's order. */
+const effortsOf = (model: z.infer<typeof ClaudeModel>): EffortInfo[] => {
+  if (model.supportsEffort === false) return [];
+  const levels = new Set(model.supportedEffortLevels ?? []);
+  return ClaudeEffort.options
+    .filter((level) => levels.has(level))
+    .map((level) => ({ id: Effort.parse(level), label: EFFORT_LABELS[level] }));
+};
 
 const CheckAnswer = z.object({
   account: z.object({
@@ -488,7 +513,7 @@ export const createClaudeProvider = (
     const offered = models.flatMap((m) => {
       const modelId = ModelId.safeParse(m.value);
       return modelId.success && !m.value.startsWith("claude-")
-        ? [{ id: modelId.data, label: labelFor(m) }]
+        ? [{ id: modelId.data, label: labelFor(m), efforts: effortsOf(m) }]
         : [];
     });
     return {
@@ -515,6 +540,11 @@ export const createClaudeProvider = (
     },
 
     runTurn: async (input) => {
+      // The worker only sends a level the model listed, so one Claude doesn't know is a bug.
+      const effort = input.effort === undefined ? undefined : ClaudeEffort.safeParse(input.effort);
+      if (effort?.success === false) {
+        return err({ kind: "unknown", message: "Claude doesn't take that effort." });
+      }
       const folder = resolve(input.folder);
       const progress: Progress = {};
       // The owner stopping the turn stops Claude Code itself.
@@ -531,6 +561,7 @@ export const createClaudeProvider = (
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),
+            ...(effort === undefined ? {} : { effort: effort.data }),
             cwd: folder,
             systemPrompt: input.framing.instructions,
             tools: PLANNING_TOOLS,

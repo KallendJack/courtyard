@@ -14,6 +14,8 @@ export {
   Activity,
   Capabilities,
   ChangeId,
+  Effort,
+  EffortInfo,
   endsTurn,
   FailureReason,
   GetToKnowRequest,
@@ -38,6 +40,7 @@ export {
   SessionList,
   SessionSummary,
   StopRequest,
+  takesEffort,
 } from "./lib/session.ts";
 export {
   TidyChange,

@@ -1,5 +1,5 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { type Capabilities, ModelId, ProviderId } from "@courtyard/contract";
+import { type Capabilities, Effort, ModelId, ProviderId } from "@courtyard/contract";
 import { err, ok } from "../result.ts";
 import type { Provider } from "./index.ts";
 
@@ -11,6 +11,13 @@ const CAPABILITIES: Capabilities = {
   usesTools: false,
   savesContext: true,
 };
+
+/** The levels of effort the fake's model takes, so picking one can be seen and tested. */
+const EFFORTS = [
+  { id: Effort.parse("low"), label: "Low" },
+  { id: Effort.parse("medium"), label: "Medium" },
+  { id: Effort.parse("high"), label: "High" },
+];
 
 const SECTIONS = {
   fact: "facts",
@@ -109,6 +116,8 @@ export const createFakeProvider = (
     delayMs?: number;
     /** Awaited before answering; tests use it to hold a turn open. */
     beforeReply?: (signal: AbortSignal) => Promise<void>;
+    /** Told the model and effort of each turn, so tests can see what reached the model. */
+    heard?: (turn: { model: ModelId; effort: Effort | undefined }) => void;
   } = {},
 ): Provider => {
   const delayMs = options.delayMs ?? 40;
@@ -120,11 +129,19 @@ export const createFakeProvider = (
       id,
       label: "Fake",
       available: true,
-      models: [{ id: ModelId.parse("echo"), label: "Fake (echoes you)" }],
+      models: [
+        {
+          id: ModelId.parse("echo"),
+          label: "Fake (echoes you)",
+          efforts: EFFORTS,
+          defaultEffort: Effort.parse("medium"),
+        },
+      ],
       capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ framing, emit, report, save, signal }) => {
+    runTurn: async ({ model, effort, framing, emit, report, save, signal }) => {
+      options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;

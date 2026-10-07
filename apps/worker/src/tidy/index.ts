@@ -20,7 +20,7 @@ import {
 import { type ContextFolder, type Place, placeFile } from "../context-folder/index.ts";
 import { readTextFile, writeTextFile } from "../files.ts";
 import { TIDYING, TidyAnswer, tidyMessage } from "../prompts/index.ts";
-import { type Provider, providerFor } from "../providers/index.ts";
+import { offerFor, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /**
@@ -214,7 +214,7 @@ export const createTidying = (target: TidyTarget) => {
       signal: AbortSignal;
     }): Promise<Result<TidyProposal, TidyRefusal>> => {
       const { place, model, signal } = request;
-      const provider = await providerFor(target.providers, model);
+      const provider = (await offerFor(target.providers, model))?.provider;
       if (provider === undefined) return err({ kind: "model-unavailable" });
       const read = await readTextFile(fileOf(place));
       if (!read.ok) return err({ kind: "storage" });

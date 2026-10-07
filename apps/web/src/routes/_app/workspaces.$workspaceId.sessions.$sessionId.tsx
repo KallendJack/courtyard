@@ -81,7 +81,11 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
   }, [session.id, runningTurn]);
   const retry = useCallback(
     async (turn: Turn) => {
-      const sent = await sendMessage(session.id, { text: turn.text, model: turn.model });
+      const sent = await sendMessage(session.id, {
+        text: turn.text,
+        model: turn.model,
+        ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+      });
       setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
     },
     [session.id],
@@ -188,6 +192,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
         <Composer
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
+          {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
           disabled={running || problem !== undefined || session.workspaceArchived}
           {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}

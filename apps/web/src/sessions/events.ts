@@ -1,6 +1,7 @@
 import {
   type Activity,
   ApiError,
+  type Effort,
   type FailureReason,
   type ModelRef,
   type PlacedLine,
@@ -29,6 +30,8 @@ export type Turn = {
   readonly seq: number;
   readonly text: string;
   readonly model: ModelRef;
+  /** The effort it was sent with; `undefined` for the model's default. */
+  readonly effort: Effort | undefined;
   readonly answer: string;
   /** What the model did along the way, such as files it read. */
   readonly activities: readonly Activity[];
@@ -86,6 +89,7 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
             seq,
             text: event.text,
             model: event.model,
+            effort: event.effort,
             answer: "",
             activities: [],
             notes: [],

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  Effort,
   endsTurn,
   ModelId,
   type PlacedLine,
@@ -10,6 +11,7 @@ import {
   type SessionId,
   SessionSummary,
   TidyProposal,
+  takesEffort,
   type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
@@ -36,6 +38,7 @@ import {
  * each miss. Never part of CI or `pnpm verify`: it needs the owner's login and uses their plan.
  *
  *   pnpm eval:context [--only <name,name>] [--times <n>] [--parallel <n>] [--model <id>]
+ *                     [--effort <level>]
  */
 
 const Options = z.object({
@@ -47,6 +50,8 @@ const Options = z.object({
   parallel: z.coerce.number().int().min(1).default(4),
   /** The Claude model, by the short name the app offers. */
   model: ModelId.default(ModelId.parse("default")),
+  /** The model's level of effort; its default when left out. Tidies always use the default. */
+  effort: Effort.optional(),
 });
 
 /** The command line's options, each a string for `Options` to check. */
@@ -55,7 +60,11 @@ const argumentNames = {
   times: { type: "string" },
   parallel: { type: "string" },
   model: { type: "string" },
+  effort: { type: "string" },
 } as const;
+
+/** The model each scenario's messages are sent to, and the effort they're sent with. */
+type Choice = { readonly model: ModelId; readonly effort: Effort | undefined };
 
 /** The longest one turn may take before the scenario counts as not run. */
 const TURN_TIMEOUT_MINUTES = 5;
@@ -236,9 +245,14 @@ const withTimeout = <T>(work: Promise<T>, what: string) =>
 /** Sends the owner's message, starting the session for the first, and returns the session's id. */
 const send = async (
   request: Requester,
-  to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; model: ModelId },
+  to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; choice: Choice },
 ): Promise<SessionId> => {
-  const message = { text: to.text, model: { provider: "claude", model: to.model } };
+  const { model, effort } = to.choice;
+  const message = {
+    text: to.text,
+    model: { provider: "claude", model },
+    ...(effort === undefined ? {} : { effort }),
+  };
   if (to.sessionId === undefined) {
     const started = await postJson(request, `/api/workspaces/${to.workspaceId}/sessions`, message);
     if (started.status !== 201) throw new Error(`starting a session failed (${started.status})`);
@@ -301,7 +315,7 @@ const judgeTidy = async (judge: {
 };
 
 /** Runs one scenario on a worker of its own, in a temporary folder it removes afterwards. */
-const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict> => {
+const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict> => {
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
   try {
     await mkdir(join(root, "context"));
@@ -331,7 +345,7 @@ const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict>
         workspaceId: workspace.id,
         file: join(folder, CONTEXT_FILE),
         tidy: scenario.tidy,
-        model,
+        model: choice.model,
       });
       return { kind: "judged", scenario, checks };
     }
@@ -344,7 +358,7 @@ const runScenario = async (scenario: Scenario, model: ModelId): Promise<Verdict>
         workspaceId: workspace.id,
         sessionId,
         text: turn.say,
-        model,
+        choice,
       });
       const events = await withTimeout(
         followSession(request, { sessionId, after, until: endsTurn }),
@@ -452,10 +466,17 @@ const main = async () => {
     console.error(`Claude isn't available: ${status.reason}`);
     process.exit(1);
   }
-  if (!status.models.some((model) => model.id === options.model)) {
+  const model = status.models.find((m) => m.id === options.model);
+  if (model === undefined) {
     console.error(
       `No Claude model "${options.model}". Try one of: ${status.models.map((m) => m.id).join(", ")}`,
     );
+    process.exit(1);
+  }
+  const { effort } = options;
+  if (!takesEffort(model, effort)) {
+    const levels = model.efforts.map((level) => level.id).join(", ") || "none";
+    console.error(`Claude's "${model.id}" doesn't take effort "${effort}". It takes: ${levels}`);
     process.exit(1);
   }
 
@@ -464,12 +485,12 @@ const main = async () => {
     (s) => only === undefined || only.split(",").some((part) => s.name.includes(part.trim())),
   );
   console.log(
-    `Running ${scenarios.length} scenarios${options.times > 1 ? `, ${options.times} times each` : ""}, against Claude (${options.model})…\n`,
+    `Running ${scenarios.length} scenarios${options.times > 1 ? `, ${options.times} times each` : ""}, against Claude (${options.model}${effort === undefined ? "" : `, ${effort} effort`})…\n`,
   );
 
   const jobs = scenarios.flatMap((scenario) =>
     Array.from({ length: options.times }, () => async () => {
-      const verdict = await runScenario(scenario, options.model);
+      const verdict = await runScenario(scenario, { model: options.model, effort });
       report(verdict);
       return verdict;
     }),

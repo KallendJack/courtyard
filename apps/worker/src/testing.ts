@@ -186,7 +186,7 @@ export const savingProvider = (
       id,
       label: "Saver",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One" }],
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
