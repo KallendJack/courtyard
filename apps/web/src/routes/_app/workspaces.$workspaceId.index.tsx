@@ -18,6 +18,7 @@ import { RenameForm } from "@/components/rename-form";
 import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
+import { GetToKnow } from "../../sessions/get-to-know.tsx";
 import { describeWhen } from "../../when.ts";
 import {
   archiveWorkspace,
@@ -171,10 +172,15 @@ function Workspace() {
       <div className="mt-12">
         <SectionTitle>Context file</SectionTitle>
       </div>
+      {workspace.mode === "planning" && !hasLines(contextFile) && (
+        <GetToKnow about={workspace.id} label="Get to know this workspace">
+          Claude asks you a few questions about it and saves what you tell it here.
+        </GetToKnow>
+      )}
       {contextFile === null ? (
         <EmptyState>
-          No context file yet. Add a <code>CONTEXT.md</code> to this workspace's folder so every
-          model starts out knowing its facts, plans and ideas.
+          No context file yet. One is made the first time something's saved, or add a{" "}
+          <code>CONTEXT.md</code> to this workspace's folder yourself.
         </EmptyState>
       ) : (
         <>
@@ -241,3 +247,8 @@ function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
     </div>
   );
 }
+
+/** Whether a context file has any facts, plans or ideas yet. */
+const hasLines = (contextFile: ContextFile | null) =>
+  contextFile !== null &&
+  [contextFile.facts, contextFile.plans, contextFile.ideas].some((lines) => lines.length > 0);

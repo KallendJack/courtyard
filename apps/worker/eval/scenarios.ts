@@ -1,4 +1,5 @@
 import type { OwnerSection, PlacedLine } from "@courtyard/contract";
+import { GET_TO_KNOW } from "../src/prompts/index.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
@@ -51,6 +52,8 @@ export type Turn = {
   readonly expect: readonly ExpectedSave[];
   /** The answer should ask the owner something rather than guess: a question with these words. */
   readonly asks?: Words;
+  /** How many questions the answer should ask, at least and at most. */
+  readonly questions?: { readonly atLeast: number; readonly atMost: number };
   /** After the answer, the owner undoes every save it made. */
   readonly undoSaves?: boolean;
 };
@@ -425,6 +428,21 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
       },
     ],
+  },
+  // Get to know a workspace or the owner context (docs/ai-conduct.md).
+  {
+    name: "get-to-know-workspace",
+    rule: "getting to know a workspace starts with one or two questions and saves nothing it wasn't told",
+    workspace: "Allotment",
+    context: {},
+    turns: [{ say: GET_TO_KNOW.workspace, expect: [], questions: { atLeast: 1, atMost: 2 } }],
+  },
+  {
+    name: "get-to-know-owner",
+    rule: "getting to know the owner starts with one or two questions and saves nothing it wasn't told",
+    workspace: "House",
+    context: {},
+    turns: [{ say: GET_TO_KNOW.owner, expect: [], questions: { atLeast: 1, atMost: 2 } }],
   },
   {
     name: "code-workspace-preference",

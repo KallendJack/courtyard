@@ -1,4 +1,5 @@
 import {
+  GetToKnow,
   NewMessage,
   type ProviderList,
   SaveEdit,
@@ -7,14 +8,16 @@ import {
   type SessionList,
   type SessionSummary,
   StopRequest,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { apiError, contextError, readBody } from "../http.ts";
+import { GET_TO_KNOW } from "../prompts/index.ts";
 import type { Provider } from "../providers/index.ts";
 import type { NoteRefusal } from "../saves/index.ts";
-import { getWorkspace, isArchived } from "../workspaces/index.ts";
+import { getWorkspace, isArchived, listWorkspaces } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
@@ -102,17 +105,55 @@ export const sessionRoutes = (options: {
     return c.json({ sessions: list.value } satisfies SessionList);
   });
 
+  /** Starts a session in a workspace with its first message, and answers with the session. */
+  const startIn = async (c: Context, start: { workspaceId: WorkspaceId; message: NewMessage }) => {
+    const session = await sessions.create(start);
+    if (!session.ok) return sessionError(c, session.error);
+    return c.json(session.value satisfies SessionSummary, 201);
+  };
+
   routes.post("/workspaces/:id/sessions", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
     const message = await readBody(c, NewMessage);
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
-    const session = await sessions.create({
-      workspaceId: workspace.value.summary.id,
-      message: message.value,
-    });
-    if (!session.ok) return sessionError(c, session.error);
-    return c.json(session.value satisfies SessionSummary, 201);
+    return startIn(c, { workspaceId: workspace.value.summary.id, message: message.value });
+  });
+
+  // Get to know a workspace or the owner context: a session started with the worker's own
+  // starter message (docs/ai-conduct.md, Getting to know a workspace).
+  routes.post("/workspaces/:id/get-to-know", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const { summary } = workspace.value;
+    if (summary.mode === "code") {
+      return apiError(c, {
+        status: 409,
+        error:
+          "A code workspace's models don't save to its context file, so it can't get to know it.",
+      });
+    }
+    const body = await readBody(c, GetToKnow);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const text = GET_TO_KNOW.workspace;
+    return startIn(c, { workspaceId: summary.id, message: { text, model: body.value.model } });
+  });
+
+  routes.post("/owner-context/get-to-know", async (c) => {
+    const workspaces = await listWorkspaces(contextDir);
+    if (!workspaces.ok) return contextError(c, workspaces.error);
+    // A session needs a workspace, and only a planning workspace's models save to About me.
+    const home = workspaces.value.find((workspace) => workspace.mode === "planning");
+    if (home === undefined) {
+      return apiError(c, {
+        status: 409,
+        error: "Add a workspace first: getting to know you happens in a session in one.",
+      });
+    }
+    const body = await readBody(c, GetToKnow);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const text = GET_TO_KNOW.owner;
+    return startIn(c, { workspaceId: home.id, message: { text, model: body.value.model } });
   });
 
   routes.get("/sessions/:id", async (c) => {

@@ -1,4 +1,8 @@
-import { OWNER_CONTEXT_LONG_CHARACTERS, type OwnerContextDetail } from "@courtyard/contract";
+import {
+  OWNER_CONTEXT_LONG_CHARACTERS,
+  type OwnerContext,
+  type OwnerContextDetail,
+} from "@courtyard/contract";
 import { useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/button";
 import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
@@ -7,6 +11,7 @@ import { StatusPill } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "./problems.tsx";
+import { GetToKnow } from "./sessions/get-to-know.tsx";
 import { type FromWorker, startOwnerContext } from "./worker.ts";
 
 /**
@@ -36,13 +41,18 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
           <FormError message={describeProblem(result).body} />
         </div>
       )}
+      {result.kind === "loaded" && !hasLines(ownerContext) && (
+        <GetToKnow about="owner" label="Get to know me">
+          Claude asks you a few questions about your life and saves what you tell it here.
+        </GetToKnow>
+      )}
       {ownerContext === null && (
         <div className="mt-4 space-y-3">
           <p className="text-[15px]/[23px]">
-            Write down once what's true across your life, such as where you live and how you like
-            answers, so no workspace needs telling.
+            Or write down yourself what's true across your life, such as where you live and how you
+            like answers, so no workspace needs telling.
           </p>
-          <Button onClick={() => void start.run()} disabled={start.busy}>
+          <Button variant="outline" onClick={() => void start.run()} disabled={start.busy}>
             Start your owner context
           </Button>
           <FormError message={start.error} />
@@ -80,3 +90,10 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
     </section>
   );
 }
+
+/** Whether the owner context has any lines yet: facts, plans, ideas or preferences. */
+const hasLines = (ownerContext: OwnerContext | null | undefined) =>
+  ownerContext != null &&
+  [ownerContext.facts, ownerContext.plans, ownerContext.ideas, ownerContext.answers].some(
+    (lines) => lines.length > 0,
+  );

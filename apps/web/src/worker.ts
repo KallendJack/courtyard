@@ -1,6 +1,7 @@
 import {
   ApiError,
   ContextBackup,
+  type GetToKnow,
   LiveStatus,
   type NewMessage,
   type NewWorkspace,
@@ -159,6 +160,20 @@ export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
   sendJson({
     path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
     body: message,
+    schema: SessionSummary,
+  });
+
+/**
+ * Starts a session getting to know a workspace, or the owner context with `"owner"`: the worker
+ * sends its own starter message.
+ */
+export const startGettingToKnow = (about: WorkspaceId | "owner", start: GetToKnow) =>
+  sendJson({
+    path:
+      about === "owner"
+        ? "/owner-context/get-to-know"
+        : `/workspaces/${encodeURIComponent(about)}/get-to-know`,
+    body: start,
     schema: SessionSummary,
   });
 

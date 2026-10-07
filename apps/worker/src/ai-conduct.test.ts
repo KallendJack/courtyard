@@ -443,3 +443,57 @@ describe("saving context as a model answers (ADR 0013)", () => {
     );
   });
 });
+
+describe("getting to know a workspace (#51)", () => {
+  /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */
+  const gettingToKnow = async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const start = async (path: string) => {
+      const started = await postJson(request, path, { model: MODEL });
+      if (started.status !== 201) return { status: started.status };
+      const session = SessionSummary.parse(await started.json());
+      await followSession(request, { sessionId: session.id, until: "turn-completed" });
+      return { status: started.status, session };
+    };
+    return { start, turns };
+  };
+
+  it("starts a session whose first message is the workspace's starter, titled by its first line", async () => {
+    const { start, turns } = await gettingToKnow();
+
+    const { session } = await start("/api/workspaces/garage-gym/get-to-know");
+
+    expect(session?.title).toBe("Get to know this workspace.");
+    expect(turns[0]?.framing.newMessage).toMatch(
+      /^Get to know this workspace\.\n\nAsk me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you as you go\./,
+    );
+  });
+
+  it("gets to know the owner in the first planning workspace", async () => {
+    await mkdir(join(root, "context", "attic"), { recursive: true });
+    await writeFile(
+      join(root, "context", "attic", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const { start, turns } = await gettingToKnow();
+
+    const { session } = await start("/api/owner-context/get-to-know");
+
+    expect(session?.workspaceId).toBe("garage-gym");
+    expect(turns[0]?.framing.newMessage).toMatch(
+      /^Get to know me\.\n\nAsk me about my life in general one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you to my owner context as you go/,
+    );
+  });
+
+  it("isn't offered in a code workspace, whose models can't save to its context file", async () => {
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const { start } = await gettingToKnow();
+
+    expect((await start("/api/workspaces/garage-gym/get-to-know")).status).toBe(409);
+    expect((await start("/api/owner-context/get-to-know")).status).toBe(409);
+  });
+});

@@ -8,6 +8,7 @@ export {
   Capabilities,
   endsTurn,
   FailureReason,
+  GetToKnow,
   LinePlace,
   MAX_MESSAGE_LENGTH,
   ModelId,

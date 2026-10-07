@@ -5,19 +5,9 @@ import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
+import { availableModels } from "./models.ts";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
-
-/** Every model the available providers offer, in order. */
-export const availableModels = (providers: ProviderList["providers"]) =>
-  providers.flatMap((provider) =>
-    provider.available
-      ? provider.models.map((model) => ({
-          ref: { provider: provider.id, model: model.id },
-          label: model.label,
-        }))
-      : [],
-  );
 
 /**
  * A message box with a model picker. `send` returns an error to show, or nothing on success.

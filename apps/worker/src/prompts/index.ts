@@ -400,3 +400,20 @@ export const saveReply = (saved: Result<Save, SaveRefusal>, retrying: boolean): 
     reply: `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
   };
 };
+
+/**
+ * The starter messages that get to know an empty workspace or owner context (docs/ai-conduct.md,
+ * Getting to know a workspace), sent as the owner's first message. The first line is the title.
+ */
+export const GET_TO_KNOW = {
+  workspace: [
+    "Get to know this workspace.",
+    "",
+    "Ask me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you as you go. Start with what it's for; later, where things stand, what I've decided and what I'm still considering. I'll say when I've had enough.",
+  ].join("\n"),
+  owner: [
+    "Get to know me.",
+    "",
+    "Ask me about my life in general one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you to my owner context as you go: where I live and who with, work, health, plans and how I like answers. I'll say when I've had enough.",
+  ].join("\n"),
+} as const;
