@@ -17,6 +17,7 @@
     "test": "pnpm -r test",
     "build": "pnpm -r build",
     "e2e": "playwright test",
+    "eval:context": "pnpm --filter @courtyard/worker eval:context",
     "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm build && pnpm e2e"
   },
   "devDependencies": {

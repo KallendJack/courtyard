@@ -74,15 +74,15 @@ export const requesterFor =
 export const asOwner = async (app: Hono) => requesterFor(app, await setUpOwner(app));
 
 /**
- * For tests: reads a session's server-sent events until one of type `until` arrives, then hangs
- * up, like a browser tab closing. Starts after `after`, or after `lastEventId` sent the way a
- * reconnecting browser sends it.
+ * For tests: reads a session's server-sent events until one of type `until` arrives (or one that
+ * `until` picks out), then hangs up, like a browser tab closing. Starts after `after`, or after
+ * `lastEventId` sent the way a reconnecting browser sends it.
  */
 export const followSession = async (
   request: Requester,
   read: {
     sessionId: string;
-    until: SessionEvent["type"];
+    until: SessionEvent["type"] | ((event: SessionEvent) => boolean);
     after?: number;
     lastEventId?: number;
     onEvent?: (event: SessionEvent) => void;
@@ -99,12 +99,15 @@ export const followSession = async (
   }
   const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
   if (!reader) throw new Error("no event stream");
+  const { until } = read;
+  const isLast =
+    typeof until === "function" ? until : (event: SessionEvent) => event.type === until;
 
   const events: SessionEvent[] = [];
   let buffer = "";
   while (true) {
     const { value, done } = await reader.read();
-    if (done) throw new Error(`stream ended before ${read.until}`);
+    if (done) throw new Error("stream ended before the event it waited for");
     buffer += value;
     const messages = buffer.split("\n\n");
     buffer = messages.pop() ?? "";
@@ -114,7 +117,7 @@ export const followSession = async (
       const event = SessionEvent.parse(JSON.parse(data.slice("data: ".length)));
       read.onEvent?.(event);
       events.push(event);
-      if (event.type === read.until) {
+      if (isLast(event)) {
         await reader.cancel();
         return events;
       }

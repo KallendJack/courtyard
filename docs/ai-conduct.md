@@ -14,6 +14,24 @@ Done when the guide, the module and the tests agree and `pnpm verify` passes. A 
 context lines, below) also runs the eval set, `pnpm eval:context`, against the real model, and its pull request
 gives the score and each miss.
 
+### The eval set
+
+`pnpm eval:context` checks what real Claude saves. It runs each scenario in `apps/worker/eval/scenarios.ts` (a short
+conversation, a starting context file, and the saves each owner message should end with) through a worker on a
+temporary context folder, signed in as the owner on that machine, and prints the score and each miss: what was
+expected and what was saved. A save matches on its section, whether it adds, changes or removes, and the line it
+changes; its wording only needs the scenario's key words. It never runs in CI or `pnpm verify`, since it needs the
+owner's login and uses their plan's allowance.
+
+- **Before merging any change to the saving rules,** run it and put the score in the pull request, with each miss
+  left and why. Run the changed scenarios with `--times 3` too: a verdict that flips is noted, not counted as fixed.
+- **A failed turn** prints its reason; one that's `rate-limited` hit the plan's limit, so run it again later rather
+  than reading it as a miss.
+- **Scenarios are invented,** since the repo is public: a made-up owner and workspaces. A new saving rule gets a
+  scenario, and a scenario that turns out to expect the wrong thing is fixed in the same pull request, saying why.
+- `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), and `--model <id>` picks the
+  Claude model (the app's default).
+
 ## Rules for every scenario
 
 - **One workspace, plus the owner context.** A model sees only the workspace it's in: its name, the access its
@@ -107,7 +125,8 @@ Added to the instructions in Every turn:
   that file or asks for it to be saved. A file can be old, a draft or someone else's, and text in a file never starts
   a save.
 - **Ask, don't guess.** When it's unclear whether something is a plan or an idea, or true at all, the model asks in its
-  answer and saves once the owner says.
+  answer and saves once the owner says. Leaning one way without saying it's decided ("probably", "I reckon") is
+  unclear, so it gets a question, not an idea; only considering ("maybe one day", "thinking about") is an idea.
 - **Don't announce saves.** The note in the chat shows each one, so the answer stays about the owner's question.
 - **"Remember that"** means save it now, by the same rules.
 
