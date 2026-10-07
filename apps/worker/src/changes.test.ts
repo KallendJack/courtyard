@@ -80,6 +80,7 @@ const fact = (line: string) => ({ place: "workspace", section: "facts", line });
 const plan = (line: string) => ({ place: "workspace", section: "plans", line });
 
 describe("Recent changes", () => {
+  // Many real git changes in a row: slow on Windows while every test file runs at once.
   it("lists saves, undos, edits and hand edits, newest first, with the lines each changed", async () => {
     const { request, session, saves } = await workerSaving([
       { action: "add", section: "facts", text: "Padel lessons on Tuesdays." },
@@ -129,7 +130,7 @@ describe("Recent changes", () => {
     expect(changes[1]?.session).toBe(session.id);
     expect(changes[0]?.session).toBeUndefined();
     expect(Date.parse(changes[0]?.at ?? "")).toBeGreaterThan(Date.now() - 60_000);
-  });
+  }, 20_000);
 
   it("comes 30 at a time, the next page after the last change shown", async () => {
     const { request } = await workerSaving([]);
