@@ -21,6 +21,7 @@ import {
   contextFileFor,
   type ExpectedSave,
   ownerContextFor,
+  type Places,
   SCENARIOS,
   type Scenario,
   type Sections,
@@ -87,9 +88,16 @@ const hasWords = (text: string, has: { words: Words; without?: readonly string[]
 
 const describeWords = (words: Words) => words.map((word) => anyOf(word).join(" or ")).join(", ");
 
-/** Sections, with the place when it's the owner context: "owner facts or plans". */
-const describeSections = (place: PlacedLine["place"] | undefined, section: Sections) =>
-  `${place === "owner" ? "owner " : ""}${sectionsOf(section).join(" or ")}`;
+/** The places a save may go: the workspace's context file unless it says. */
+const placesOf = (place: Places | undefined) =>
+  place === undefined ? ["workspace"] : typeof place === "string" ? [place] : place;
+
+/** Sections, with the place unless it's only the workspace: "owner facts or plans". */
+const describeSections = (place: Places | undefined, section: Sections) => {
+  const places = placesOf(place);
+  const where = places.length === 1 && places[0] === "workspace" ? "" : `${places.join(" or ")} `;
+  return `${where.replace("owner", "owner context")}${sectionsOf(section).join(" or ")}`;
+};
 
 const describeExpected = (expected: ExpectedSave) => {
   switch (expected.action) {
@@ -138,7 +146,7 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
   if (expected.action === "remove" || expected.action === "change-or-remove") return true;
   if (save.action === "remove") return false;
   return (
-    save.saved.place === (expected.place ?? "workspace") &&
+    placesOf(expected.place).includes(save.saved.place) &&
     sectionsOf(expected.section).includes(save.saved.section) &&
     hasWords(save.saved.line, {
       words: expected.words,

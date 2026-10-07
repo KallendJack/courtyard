@@ -15,12 +15,17 @@ export type Words = readonly (string | readonly string[])[];
  */
 export type Sections = OwnerSection | readonly OwnerSection[];
 
+/**
+ * Where a saved line belongs: the workspace's context file unless it says the owner context, and a
+ * list means either is right.
+ */
+export type Places = PlacedLine["place"] | readonly PlacedLine["place"][];
+
 /** A save a turn should make. */
 export type ExpectedSave =
   | {
       readonly action: "add";
-      /** The workspace's context file unless it says the owner context. */
-      readonly place?: PlacedLine["place"];
+      readonly place?: Places;
       readonly section: Sections;
       readonly words: Words;
       /** Words the line must not have, such as a date where time doesn't matter. */
@@ -30,8 +35,8 @@ export type ExpectedSave =
       readonly action: "change";
       /** The line it changes, as the starting context file has it. */
       readonly was: string;
-      /** Where the changed line ends up: the workspace's context file unless it says. */
-      readonly place?: PlacedLine["place"];
+      /** Where the changed line ends up. */
+      readonly place?: Places;
       readonly section: Sections;
       readonly words: Words;
     }
@@ -110,7 +115,7 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         say: "The hallway's probably going dark green.",
         expect: [],
-        asks: [["decided", "decide", "settled", "definite", "sure", "plan", "committed"]],
+        asks: [["decided", "decide", "settled", "set on", "definite", "sure", "plan", "committed"]],
       },
       {
         say: "It's decided, I'm doing it.",
@@ -250,7 +255,10 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Remember that my left shoulder clicks when I overhead press.",
-        expect: [{ action: "add", section: "facts", words: ["shoulder"] }],
+        // A body fact matters to more than one workspace, so About me is right too.
+        expect: [
+          { action: "add", place: ["workspace", "owner"], section: "facts", words: ["shoulder"] },
+        ],
       },
     ],
   },
@@ -301,6 +309,8 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [
           {
             action: "add",
+            // A body fact matters to more than one workspace, so About me is right too.
+            place: ["workspace", "owner"],
             section: "facts",
             words: ["pronat"],
             without: ["2026", "october", "today", "yesterday"],
