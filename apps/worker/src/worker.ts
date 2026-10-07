@@ -15,6 +15,7 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
@@ -129,6 +130,7 @@ export const createWorker = (options: {
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
+  api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

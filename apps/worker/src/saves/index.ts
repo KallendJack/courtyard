@@ -313,7 +313,7 @@ const applySave = (apply: {
 };
 
 /** A save's change, as the context folder's history titles it. */
-const titleOf = (save: Save) => {
+export const titleOf = (save: Save) => {
   switch (save.action) {
     case "add":
       return `Save to ${placeName(save.saved)}: ${save.saved.line}`;

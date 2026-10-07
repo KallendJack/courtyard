@@ -539,6 +539,22 @@ export const createSessions = (options: {
         recorded: { type: "context-undone", save },
       }),
 
+    /** A session's saves as they stand now, oldest first, each by its event number. */
+    savesOf: async (
+      rawId: string,
+    ): Promise<Result<{ seq: number; state: SaveState }[], SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const events = await readEvents(found.value.id);
+      if (!events.ok) return events;
+      return ok(
+        events.value.flatMap((event) => {
+          const state = event.type === "context-saved" && saveStateOf(events.value, event.seq);
+          return state ? [{ seq: event.seq, state }] : [];
+        }),
+      );
+    },
+
     /** Edits one of the session's saved lines: its wording, its section, or both. */
     editSave: ({ rawId, save, now }: { rawId: string; save: number; now: PlacedLine }) =>
       actOnSave({

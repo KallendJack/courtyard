@@ -44,7 +44,8 @@ const noteRefused = (refusal: NoteRefusal, act: NoteAct) => {
   }
 };
 
-const sessionError = (c: Context, error: SessionError) => {
+/** A session error as the API answers it, for every route that acts on a session. */
+export const sessionError = (c: Context, error: SessionError) => {
   switch (error.kind) {
     case "not-found":
       return apiError(c, { status: 404, error: "No such session" });

@@ -1,9 +1,10 @@
 import { join } from "node:path";
-import { type ContextBackup, type SessionId, WorkspaceId } from "@courtyard/contract";
+import { ChangeId, type ContextBackup, SessionId, WorkspaceId } from "@courtyard/contract";
+import { z } from "zod";
 import { exists } from "../files.ts";
-import { git, gitFailureReason } from "../git.ts";
+import { git, gitBytes, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
-import type { Result } from "../result.ts";
+import { err, ok, type Result } from "../result.ts";
 import { ARCHIVED_FOLDER } from "../workspaces/index.ts";
 
 /**
@@ -11,14 +12,16 @@ import { ARCHIVED_FOLDER } from "../workspaces/index.ts";
  * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
  * owner context started from the app, or a model's save and the owner undoing or editing one.
  */
-export type ChangeKind =
-  | "setup"
-  | "hand-edit"
-  | "workspace"
-  | "owner-context"
-  | "save"
-  | "undo"
-  | "edit";
+export const ChangeKind = z.enum([
+  "setup",
+  "hand-edit",
+  "workspace",
+  "owner-context",
+  "save",
+  "undo",
+  "edit",
+]);
+export type ChangeKind = z.infer<typeof ChangeKind>;
 
 /** Where a change was made: a workspace, or the owner context. */
 export type Place =
@@ -108,7 +111,103 @@ export type ContextFolder = {
    * backup is missing. Run at start and every so often.
    */
   keepUp(): Promise<void>;
+  /**
+   * One page of the changes to a place that Recent changes lists (saves, undos, edits and hand
+   * edits), newest first, starting after `after` when it's given. The owner's own edits are
+   * committed first, so they're listed too.
+   */
+  history(query: {
+    place: Place;
+    after?: ChangeId;
+    limit: number;
+  }): Promise<Result<{ changes: HistoryChange[]; more: ChangeId | null }, "unknown-change">>;
+  /** One change, or `undefined` when there's no such change. */
+  changeOf(id: ChangeId): Promise<HistoryChange | undefined>;
+  /**
+   * Files, by their paths from the folder's top, as changes left them (or as they were just before,
+   * with `before`), in one go: `null` for one that wasn't there.
+   */
+  filesAt(
+    wanted: readonly { change: ChangeId; before?: boolean; path: string }[],
+  ): Promise<(string | null)[]>;
 };
+
+/** A change from the history, as its commit describes it. */
+export type HistoryChange = {
+  readonly id: ChangeId;
+  readonly kind: ChangeKind;
+  readonly title: string;
+  readonly at: string;
+  readonly places: readonly Place[];
+  readonly session: SessionId | undefined;
+};
+
+const HISTORY_KINDS = ["save", "undo", "edit", "hand-edit"] as const satisfies ChangeKind[];
+
+/** Commit fields, and commits, as `git log` prints them here. */
+const FIELD = "\x1f";
+const RECORD = "\x1e";
+const LOG_FORMAT = `--format=%H${FIELD}%cI${FIELD}%s${FIELD}%(trailers:only,unfold)${RECORD}`;
+
+/** The place a `Courtyard-Place` trailer names, or `undefined` for one this worker doesn't know. */
+const placeFromTrailer = (value: string): Place | undefined => {
+  if (value === "owner-context") return { kind: "owner-context" };
+  const id = WorkspaceId.safeParse(value.replace(/^workspace\//, ""));
+  return value.startsWith("workspace/") && id.success
+    ? { kind: "workspace", id: id.data }
+    : undefined;
+};
+
+/**
+ * The files `git cat-file --batch` printed, in the order asked: each is a header line (its id,
+ * type and size in bytes) then that many bytes, or a header saying it's missing.
+ */
+const readBatch = (output: Buffer, count: number): (string | null)[] => {
+  const files: (string | null)[] = [];
+  let at = 0;
+  for (let index = 0; index < count; index += 1) {
+    const end = output.indexOf(0x0a, at);
+    if (end === -1) break;
+    const header = output.toString("utf8", at, end).split(" ");
+    at = end + 1;
+    const size = Number(header[2]);
+    if (header[1] !== "blob" || !Number.isInteger(size)) {
+      files.push(null);
+      continue;
+    }
+    files.push(output.toString("utf8", at, at + size));
+    // The file, then a newline before the next header.
+    at += size + 1;
+  }
+  return [...files, ...Array.from({ length: count - files.length }, () => null)];
+};
+
+/** The changes `git log` printed with `LOG_FORMAT`, skipping any it can't read. */
+const parseLog = (log: string): HistoryChange[] =>
+  log.split(RECORD).flatMap((record): HistoryChange[] => {
+    const [hash = "", at = "", title = "", trailers = ""] = record.trim().split(FIELD);
+    const id = ChangeId.safeParse(hash);
+    if (!id.success) return [];
+    const values = (key: string) =>
+      trailers
+        .split("\n")
+        .flatMap((line) =>
+          line.startsWith(`${key}: `) ? [line.slice(key.length + 2).trim()] : [],
+        );
+    const kind = ChangeKind.safeParse(values("Courtyard-Change")[0]);
+    if (!kind.success) return [];
+    const session = SessionId.safeParse(values("Courtyard-Session")[0]);
+    return [
+      {
+        id: id.data,
+        kind: kind.data,
+        title,
+        at,
+        places: values("Courtyard-Place").flatMap((value) => placeFromTrailer(value) ?? []),
+        session: session.success ? session.data : undefined,
+      },
+    ];
+  });
 
 /** The context folder as a git repository the worker looks after (ADRs 0009, 0014). */
 export const createContextFolder = (options: {
@@ -260,6 +359,45 @@ export const createContextFolder = (options: {
         return missing;
       });
       if (behind) await pushSoon();
+    },
+    history: async ({ place, after, limit }) => {
+      await inTurn(() => tryToKeep(prepare));
+      if (after !== undefined) {
+        const known = await run("cat-file", "-e", `${after}^{commit}`).then(
+          () => true,
+          () => false,
+        );
+        if (!known) return err("unknown-change");
+      }
+      // Git reads stay out of the change queue, like the backup status, so they never hold up a save.
+      const log = await run(
+        "log",
+        `-n${limit + 1}`,
+        "--all-match",
+        "--extended-regexp",
+        `--grep=^${placeTrailer(place)}$`,
+        `--grep=^Courtyard-Change: (${HISTORY_KINDS.join("|")})$`,
+        LOG_FORMAT,
+        after === undefined ? "HEAD" : `${after}^`,
+        "--",
+      ).catch(() => "");
+      const changes = parseLog(log);
+      const page = changes.slice(0, limit);
+      return ok({ changes: page, more: changes.length > limit ? (page.at(-1)?.id ?? null) : null });
+    },
+    changeOf: async (id) => {
+      const log = await run("log", "-1", LOG_FORMAT, id, "--").catch(() => "");
+      return parseLog(log)[0];
+    },
+    filesAt: async (wanted) => {
+      const names = wanted.map(
+        ({ change, before, path }) => `${change}${before ? "^" : ""}:${path}`,
+      );
+      const input = `${names.join("\n")}\n`;
+      const output = await gitBytes(contextDir, ["cat-file", "--batch"], input).catch(
+        () => undefined,
+      );
+      return output === undefined ? wanted.map(() => null) : readBatch(output, wanted.length);
     },
   };
 };

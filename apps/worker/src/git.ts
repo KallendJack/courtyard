@@ -24,6 +24,22 @@ export const git = async (
   return stdout.trim();
 };
 
+/**
+ * Runs git in `folder` with `input` on its standard input, and returns what it prints as bytes,
+ * for output that holds file contents measured in bytes (`git cat-file --batch`).
+ */
+export const gitBytes = async (folder: string, args: readonly string[], input: string) => {
+  const running = run("git", [...args], {
+    cwd: folder,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
+    windowsHide: true,
+    encoding: "buffer",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  running.child.stdin?.end(input);
+  return (await running).stdout;
+};
+
 /** Like `git`, but nothing instead of a failure, for questions whose answer can be missing. */
 export const gitOrNothing = async (folder: string, args: readonly string[]) => {
   try {
