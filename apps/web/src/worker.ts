@@ -185,7 +185,7 @@ export type ContextPlace =
   | { readonly kind: "owner" };
 
 /** Starts a session getting to know a workspace or the owner context, with the worker's starter. */
-export const startContextPlace = (about: ContextPlace, start: GetToKnowRequest) =>
+export const startGettingToKnow = (about: ContextPlace, start: GetToKnowRequest) =>
   sendJson({
     path:
       about.kind === "owner"

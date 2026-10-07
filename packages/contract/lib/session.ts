@@ -153,13 +153,19 @@ export const PlacedLine = z.union([
 ]);
 export type PlacedLine = z.infer<typeof PlacedLine>;
 
-/** Where a line is, as the app names it: "Facts", or "Owner context → About me → Facts". */
-export const placeName = (placed: PlacedLine): string => {
+/**
+ * Where a line is, as the app names it: "Facts", or "Owner context → About me → Facts". Within the
+ * owner context (its own Recent changes, say) its lines leave out "Owner context →".
+ */
+export const placeName = (
+  placed: PlacedLine,
+  options: { withinOwnerContext?: boolean } = {},
+): string => {
   if (placed.place === "workspace") return CONTEXT_SECTION_NAMES[placed.section];
   const { section } = placed;
-  return section === "answers"
-    ? "Owner context → How to answer me"
-    : `Owner context → About me → ${CONTEXT_SECTION_NAMES[section]}`;
+  const where =
+    section === "answers" ? "How to answer me" : `About me → ${CONTEXT_SECTION_NAMES[section]}`;
+  return options.withinOwnerContext ? where : `Owner context → ${where}`;
 };
 
 /**

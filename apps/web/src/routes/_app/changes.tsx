@@ -1,5 +1,6 @@
 import { WorkspaceId } from "@courtyard/contract";
-import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi } from "@tanstack/react-router";
+import { BackLink } from "@/components/back-link";
 import { Page, PageTitle } from "@/components/page";
 import { RecentChanges } from "../../changes/recent-changes.tsx";
 
@@ -13,8 +14,6 @@ export const Route = createFileRoute("/_app/changes")({
 });
 
 const loggedIn = getRouteApi("/_app");
-
-const BACK = "w-fit text-xs font-medium text-primary-text hover:underline";
 
 /**
  * Recent changes, for a workspace or the owner context, on a page of its own: one page holds the
@@ -30,28 +29,15 @@ function Changes() {
 
   return (
     <Page>
-      <PageTitle
-        above={
-          id === undefined ? (
-            <Link to="/" className={BACK}>
-              Workspaces
-            </Link>
-          ) : (
-            <Link to="/workspaces/$workspaceId" params={{ workspaceId: id }} className={BACK}>
-              {name ?? id}
-            </Link>
-          )
-        }
-      >
-        Recent changes
-      </PageTitle>
+      <PageTitle above={<BackLink workspaceId={id} />}>Recent changes</PageTitle>
       <p className="mt-2 text-[15px]/[23px] text-muted-foreground">
         {id === undefined
           ? "What's changed in your owner context, newest first."
           : `What's changed in ${name ?? "this workspace"}'s context file, newest first.`}
       </p>
       <div className="mt-8">
-        <RecentChanges about={id === undefined ? { kind: "owner" } : { kind: "workspace", id }} />
+        {/* A key per place, so going from one list to another starts the new one afresh. */}
+        <RecentChanges key={id ?? "owner"} workspace={id} />
       </div>
     </Page>
   );

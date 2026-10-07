@@ -3,6 +3,41 @@ import { classes } from "@/lib/classes";
 import { FormError } from "./form-error";
 
 /**
+ * What a note says: its label ("Saved to Facts"), its line, and the line it replaced. Grey when
+ * the change is undone; struck through when the line is gone.
+ */
+export function NoteWords(props: {
+  label: string;
+  line?: string | undefined;
+  was?: string | undefined;
+  muted?: boolean;
+  struck?: boolean;
+}) {
+  return (
+    <p>
+      <span
+        className={classes(
+          "font-semibold max-md:block md:mr-1.5",
+          props.muted ? "text-muted-foreground" : "text-primary-text",
+        )}
+      >
+        {props.label}
+      </span>
+      <span
+        className={
+          props.muted || props.struck ? "text-muted-foreground line-through" : "text-foreground"
+        }
+      >
+        {props.line}
+      </span>
+      {props.was !== undefined && !props.muted && (
+        <span className="text-muted-foreground"> (was {props.was})</span>
+      )}
+    </p>
+  );
+}
+
+/**
  * One change to context as a quiet list item with a heather rule (ADR 0013): the note under an
  * answer, and an entry in Recent changes. An icon, the words, an action slot that lines up from
  * row to row (under the words on a phone), and an error under them. A finished one is grey.

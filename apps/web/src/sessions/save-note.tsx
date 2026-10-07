@@ -10,10 +10,9 @@ import {
 import { BookmarkCheck, Undo2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
-import { NoteRow } from "@/components/note-row";
+import { NoteRow, NoteWords } from "@/components/note-row";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { TextField } from "@/components/text-field";
-import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { editSave, undoSave } from "../worker.ts";
@@ -198,26 +197,13 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
       }
       error={undo.error}
     >
-      <p>
-        <span
-          className={classes(
-            "font-semibold max-md:block md:mr-1.5",
-            undone ? "text-muted-foreground" : "text-primary-text",
-          )}
-        >
-          {undone ? "Undone" : words.label}
-        </span>
-        <span
-          className={classes(
-            undone || words.struck ? "text-muted-foreground line-through" : "text-foreground",
-          )}
-        >
-          {words.line}
-        </span>
-        {words.was !== undefined && !undone && (
-          <span className="text-muted-foreground"> (was {words.was})</span>
-        )}
-      </p>
+      <NoteWords
+        label={undone ? "Undone" : words.label}
+        line={words.line}
+        was={words.was}
+        muted={undone}
+        struck={words.struck === true}
+      />
     </NoteRow>
   );
 }

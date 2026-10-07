@@ -41,6 +41,8 @@ export type ChangeNote = {
   readonly places: readonly Place[];
   /** The session it came from, for a save and what the owner did with it. */
   readonly session?: SessionId;
+  /** The change an undo reverses, for an undo from Recent changes. */
+  readonly undoes?: ChangeId;
 };
 
 /** A workspace made, renamed, recoloured or archived in the app. */
@@ -97,6 +99,7 @@ const commitMessageArgs = (note: ChangeNote) => [
     `Courtyard-Change: ${note.kind}`,
     ...note.places.map(placeTrailer),
     ...(note.session === undefined ? [] : [`Courtyard-Session: ${note.session}`]),
+    ...(note.undoes === undefined ? [] : [`Courtyard-Undoes: ${note.undoes}`]),
   ].join("\n"),
 ];
 
@@ -132,6 +135,8 @@ export type ContextFolder = {
     after?: ChangeId;
     limit: number;
   }): Promise<Result<{ changes: HistoryChange[]; more: ChangeId | null }, HistoryError>>;
+  /** The changes Recent changes has undone, as their undos name them. */
+  undone(): Promise<Result<ReadonlySet<ChangeId>, HistoryError>>;
   /** One change, or `undefined` when there's no such change. */
   changeOf(id: ChangeId): Promise<Result<HistoryChange | undefined, HistoryError>>;
   /**
@@ -418,7 +423,8 @@ export const createContextFolder = (options: {
     history: async ({ place, after, limit }) => {
       // Hand edits are committed first, so they're listed, but only a folder with some takes a turn
       // among the changes: listing often, as a page does, never holds up a save.
-      const handEdited = await run("status", "--porcelain").then(
+      // Without optional locks, so the question never locks the index while a save is writing.
+      const handEdited = await run("--no-optional-locks", "status", "--porcelain").then(
         (status) => status !== "",
         () => true,
       );
@@ -443,6 +449,22 @@ export const createContextFolder = (options: {
         return { changes: page, more: changes.length > limit ? (page.at(-1)?.id ?? null) : null };
       });
     },
+    undone: () =>
+      readHistory(async () => {
+        const log = await run(
+          "log",
+          "--format=%(trailers:key=Courtyard-Undoes,valueonly)",
+          "--grep=^Courtyard-Undoes: ",
+          "HEAD",
+          "--",
+        );
+        return new Set(
+          log.split("\n").flatMap((line) => {
+            const id = ChangeId.safeParse(line.trim());
+            return id.success ? [id.data] : [];
+          }),
+        );
+      }),
     changeOf: async (id) => {
       if (!(await hasChange(id))) return ok(undefined);
       return readHistory(async () => parseLog(await run("log", "-1", LOG_FORMAT, id, "--"))[0]);

@@ -167,7 +167,8 @@ const saveMadeBy = async (savesOf: ReturnType<typeof sessionSaves>, change: Hist
 /**
  * One page of a place's Recent changes, newest first, after the change `after` when it's given.
  * A change that only moved lines, or changed what isn't a line (the intro, say), isn't listed.
- * A hand edit offers Undo only while its lines are as it left them.
+ * A hand edit offers Undo only while its lines are as it left them, and shows as undone once its
+ * undo is in the history.
  */
 export const listChanges = async (
   target: ChangesTarget,
@@ -184,6 +185,8 @@ export const listChanges = async (
   if (!lines.ok) return lines;
   const now = await fileNow(contextDir, query.place);
   if (!now.ok) return now;
+  const undone = await contextFolder.undone();
+  if (!undone.ok) return undone;
   const savesOf = sessionSaves(sessions);
   const sessionOf = sessionsRead(sessions);
 
@@ -192,6 +195,7 @@ export const listChanges = async (
     changed: LinesChanged,
   ): Promise<RecentChangeUndo> => {
     if (change.kind === "hand-edit") {
+      if (undone.value.has(change.id)) return "undone";
       return reversed(now.value, changed) === undefined ? "none" : "available";
     }
     const made = await saveMadeBy(savesOf, change);
@@ -261,7 +265,12 @@ const undoHandEdit = async (
       }
       return ok(null);
     },
-    () => ({ kind: "undo", title: `Undo: ${change.title}`, places: change.places }),
+    () => ({
+      kind: "undo",
+      title: `Undo: ${change.title}`,
+      places: change.places,
+      undoes: change.id,
+    }),
   );
 };
 
@@ -277,7 +286,13 @@ export const undoChange = async (
   if (!found.ok) return err({ kind: "storage" });
   const change = found.value;
   if (change === undefined) return err({ kind: "not-found" });
-  if (change.kind === "hand-edit") return undoHandEdit(target, change);
+  if (change.kind === "hand-edit") {
+    const undone = await target.contextFolder.undone();
+    if (!undone.ok) return err({ kind: "storage" });
+    return undone.value.has(change.id)
+      ? err({ kind: "not-undoable" })
+      : undoHandEdit(target, change);
+  }
   const made = await saveMadeBy(sessionSaves(target.sessions), change);
   if (made === undefined || change.session === undefined) return err({ kind: "not-undoable" });
   const undone = await target.sessions.undoSave({ rawId: change.session, save: made.seq });

@@ -3,18 +3,17 @@ import {
   type ProviderList,
   SESSION_TITLE_MAX_LENGTH,
   SessionDetail,
-  type WorkspaceId,
 } from "@courtyard/contract";
-import { createFileRoute, getRouteApi, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { BackLink } from "@/components/back-link";
 import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FormError } from "@/components/form-error";
 import { Notice, StatusPill } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
-import { WorkspaceDot } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
@@ -27,8 +26,6 @@ import {
   sendMessage,
   stopTurn,
 } from "../../worker.ts";
-
-const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
@@ -90,7 +87,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
     [session.id],
   );
 
-  const above = <WorkspaceChip workspaceId={session.workspaceId} />;
+  const above = <BackLink workspaceId={session.workspaceId} />;
   const toggle = (what: "rename" | "delete") =>
     setTidying((was) => (was === what ? undefined : what));
 
@@ -199,24 +196,5 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
         />
       </div>
     </Page>
-  );
-}
-
-/** The session's workspace, in its colour: also the way back to it. */
-function WorkspaceChip(props: { workspaceId: WorkspaceId }) {
-  const workspaces = loggedIn.useLoaderData();
-  const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
-  const workspace = list.find((w) => w.id === props.workspaceId);
-  const name = workspace?.name ?? props.workspaceId;
-  return (
-    <Link
-      to="/workspaces/$workspaceId"
-      params={{ workspaceId: props.workspaceId }}
-      aria-label={`Back to ${name}`}
-      className="flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline"
-    >
-      {workspace && <WorkspaceDot colour={workspace.colour} small />}
-      {name}
-    </Link>
   );
 }

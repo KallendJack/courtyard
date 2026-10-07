@@ -1,12 +1,16 @@
-import { type PlacedLine, placeName, type RecentChange } from "@courtyard/contract";
+import {
+  type PlacedLine,
+  placeName,
+  type RecentChange,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { BookmarkCheck, Pencil, Undo2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
-import { NoteRow } from "@/components/note-row";
+import { NoteRow, NoteWords } from "@/components/note-row";
 import { EmptyState } from "@/components/notice";
-import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { describeWhen } from "../when.ts";
@@ -14,11 +18,15 @@ import { type ContextPlace, loadChanges, undoChange } from "../worker.ts";
 
 const loggedIn = getRouteApi("/_app");
 
-/** A line's place as an entry names it; the owner context's list leaves out "Owner context". */
-const placeIn = (about: ContextPlace, line: PlacedLine) => {
-  const name = placeName(line);
-  return about.kind === "owner" ? name.replace(/^Owner context → /, "") : name;
-};
+/** Whose changes these are: a workspace's, or the owner context's for `undefined`. */
+type Whose = WorkspaceId | undefined;
+
+const placeOf = (workspace: Whose): ContextPlace =>
+  workspace === undefined ? { kind: "owner" } : { kind: "workspace", id: workspace };
+
+/** A line's place as an entry names it: the owner context's list leaves out "Owner context". */
+const placeIn = (workspace: Whose, line: PlacedLine) =>
+  placeName(line, { withinOwnerContext: workspace === undefined });
 
 /** A hand edit's lines: each one put in with the line it replaced in that section, if any. */
 const pairedLines = (change: RecentChange) => {
@@ -31,24 +39,40 @@ const pairedLines = (change: RecentChange) => {
   return { pairs, gone: removed };
 };
 
-/** What an entry says: its label, its line, what that line replaced, and how it's shown. */
-const wordsFor = (about: ContextPlace, change: RecentChange) => {
+/** What a save or an edit says: its label, its line, what it replaced, and a note on it. */
+const wordsFor = (workspace: Whose, change: RecentChange) => {
   const [added] = change.added;
   const [removed] = change.removed;
   if (change.undo === "undone") {
-    const line = added ?? removed;
-    const where = line === undefined ? "" : ` to ${placeIn(about, line)}`;
-    return { label: "Undone", line: line?.line, struck: true, note: `saved${where}, then undone` };
+    const what =
+      added === undefined
+        ? `removed from ${removed === undefined ? "" : placeIn(workspace, removed)}`
+        : `saved to ${placeIn(workspace, added)}`;
+    return { label: "Undone", line: (added ?? removed)?.line, note: `${what}, then undone` };
   }
   if (change.kind === "edit" && added !== undefined) {
-    return { label: `Edited in ${placeIn(about, added)}`, line: added.line, note: "edited by you" };
+    return {
+      label: `Edited in ${placeIn(workspace, added)}`,
+      line: added.line,
+      was: removed?.line,
+      note: "edited by you",
+    };
   }
   if (added !== undefined && removed !== undefined) {
-    return { label: `Changed in ${placeIn(about, added)}`, line: added.line, was: removed.line };
+    return {
+      label: `Changed in ${placeIn(workspace, added)}`,
+      line: added.line,
+      was: removed.line,
+    };
   }
-  if (added !== undefined) return { label: `Saved to ${placeIn(about, added)}`, line: added.line };
+  if (added !== undefined)
+    return { label: `Saved to ${placeIn(workspace, added)}`, line: added.line };
   if (removed !== undefined) {
-    return { label: `Removed from ${placeIn(about, removed)}`, line: removed.line, struck: true };
+    return {
+      label: `Removed from ${placeIn(workspace, removed)}`,
+      line: removed.line,
+      struck: true,
+    };
   }
   return { label: "Changed" };
 };
@@ -66,22 +90,22 @@ function HandEditLine(props: { section: string; line: string; was?: string; gone
   );
 }
 
-/** When it was, and where it came from: its session (with its workspace, on the home page). */
-function Meta(props: { about: ContextPlace; change: RecentChange; note?: string }) {
-  const { about, change } = props;
+/** When it was, and where it came from: its session (with its workspace, in the owner's list). */
+function Meta(props: { workspace: Whose; change: RecentChange; note?: string | undefined }) {
+  const { workspace, change } = props;
   const workspaces = loggedIn.useLoaderData();
   const { session } = change;
-  const workspace =
-    about.kind === "owner" && session !== undefined && workspaces.kind === "loaded"
+  const from =
+    workspace === undefined && session !== undefined && workspaces.kind === "loaded"
       ? workspaces.data.workspaces.find((w) => w.id === session.workspaceId)?.name
       : undefined;
   const parts = [
     describeWhen(change.at),
     ...(props.note === undefined ? [] : [props.note]),
     ...(change.kind === "hand-edit"
-      ? [`in ${about.kind === "owner" ? "OWNER.md" : "CONTEXT.md"}`]
+      ? [`in ${workspace === undefined ? "OWNER.md" : "CONTEXT.md"}`]
       : []),
-    ...(workspace === undefined ? [] : [workspace]),
+    ...(from === undefined ? [] : [from]),
   ];
   return (
     <p className="text-[13px]/5 text-muted-foreground">
@@ -103,8 +127,8 @@ function Meta(props: { about: ContextPlace; change: RecentChange; note?: string 
 }
 
 /** One entry: the change as a note, when and where it came from, and Undo while it can be. */
-function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndone: () => void }) {
-  const { about, change } = props;
+function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: () => void }) {
+  const { workspace, change } = props;
   const undo = useAction(async () => {
     const undone = await undoChange(change.id);
     if (undone.kind !== "loaded") return describeProblem(undone).body;
@@ -122,12 +146,18 @@ function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndon
   if (change.kind === "hand-edit") {
     const { pairs, gone } = pairedLines(change);
     return (
-      <NoteRow icon={<Pencil />} tall actions={actions} error={undo.error}>
-        <p className="font-semibold text-primary-text">Edited by hand</p>
+      <NoteRow
+        icon={muted ? <Undo2 /> : <Pencil />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords label={muted ? "Undone" : "Edited by hand"} muted={muted} />
         {pairs.map(({ now, was }) => (
           <HandEditLine
             key={`${now.section}:${now.line}`}
-            section={placeIn(about, now)}
+            section={placeIn(workspace, now)}
             line={now.line}
             {...(was === undefined ? {} : { was: was.line })}
           />
@@ -135,17 +165,17 @@ function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndon
         {gone.map((line) => (
           <HandEditLine
             key={`${line.section}:${line.line}`}
-            section={placeIn(about, line)}
+            section={placeIn(workspace, line)}
             line={line.line}
             gone
           />
         ))}
-        <Meta about={about} change={change} />
+        <Meta workspace={workspace} change={change} note={muted ? "undone" : undefined} />
       </NoteRow>
     );
   }
 
-  const words = wordsFor(about, change);
+  const words = wordsFor(workspace, change);
   return (
     <NoteRow
       icon={muted ? <Undo2 /> : change.kind === "edit" ? <Pencil /> : <BookmarkCheck />}
@@ -154,27 +184,14 @@ function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndon
       actions={actions}
       error={undo.error}
     >
-      <p>
-        <span
-          className={classes(
-            "font-semibold max-md:block md:mr-1.5",
-            muted ? "text-muted-foreground" : "text-primary-text",
-          )}
-        >
-          {words.label}
-        </span>
-        <span className={words.struck ? "text-muted-foreground line-through" : "text-foreground"}>
-          {words.line}
-        </span>
-        {words.was !== undefined && (
-          <span className="text-muted-foreground"> (was {words.was})</span>
-        )}
-      </p>
-      <Meta
-        about={about}
-        change={change}
-        {...(words.note === undefined ? {} : { note: words.note })}
+      <NoteWords
+        label={words.label}
+        line={words.line}
+        was={words.was}
+        muted={muted}
+        struck={words.struck === true}
       />
+      <Meta workspace={workspace} change={change} note={words.note} />
     </NoteRow>
   );
 }
@@ -183,44 +200,47 @@ function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndon
  * Recent changes to a workspace's context file or the owner context (ADR 0013), newest first,
  * 30 at a time, with Undo, under its page's title. Loaded once the page is showing, so the page
  * never waits for git. An undo shows as its change marked undone, so undos aren't listed
- * themselves.
+ * themselves. Its page gives it a key per place, so a new place starts it afresh.
  */
-export function RecentChanges(props: { about: ContextPlace }) {
-  const { about } = props;
+export function RecentChanges(props: { workspace: Whose }) {
+  const { workspace } = props;
   const [changes, setChanges] = useState<RecentChange[]>([]);
   const [more, setMore] = useState<RecentChange["id"] | null>(null);
   const [problem, setProblem] = useState<string>();
   const [loaded, setLoaded] = useState(false);
-  // Pages pass a new object each render: the list loads again only when the place itself changes.
-  const place = useRef(about);
-  place.current = about;
-  const key = about.kind === "owner" ? "owner" : `workspace/${about.id}`;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the place `place` holds.
-  const load = useCallback(
-    async (after?: RecentChange["id"]) => {
-      const page = await loadChanges(place.current, after);
-      if (page.kind !== "loaded") return describeProblem(page).body;
-      const listed = page.data.changes.filter((change) => change.kind !== "undo");
-      setChanges((shown) => (after === undefined ? listed : [...shown, ...listed]));
-      setMore(page.data.more);
-      return undefined;
-    },
-    [key],
-  );
-  const showMore = useAction(async () => (more === null ? undefined : load(more)));
+  const showMore = useAction(async () => {
+    if (more === null) return undefined;
+    const page = await loadChanges(placeOf(workspace), more);
+    if (page.kind !== "loaded") return describeProblem(page).body;
+    const listed = page.data.changes.filter((change) => change.kind !== "undo");
+    setChanges((shown) => [...shown, ...listed]);
+    setMore(page.data.more);
+    return undefined;
+  });
 
   useEffect(() => {
     let current = true;
-    void load().then((failed) => {
+    void loadChanges(placeOf(workspace)).then((page) => {
       if (!current) return;
-      setProblem(failed);
+      if (page.kind === "loaded") {
+        setChanges(page.data.changes.filter((change) => change.kind !== "undo"));
+        setMore(page.data.more);
+      } else {
+        setProblem(describeProblem(page).body);
+      }
       setLoaded(true);
     });
     return () => {
       current = false;
     };
-  }, [load]);
+  }, [workspace]);
+
+  /** Shows an undone change as undone, where it is, with every page shown kept. */
+  const markUndone = (id: RecentChange["id"]) =>
+    setChanges((shown) =>
+      shown.map((change) => (change.id === id ? { ...change, undo: "undone" } : change)),
+    );
 
   return (
     <section aria-label="Recent changes">
@@ -232,9 +252,9 @@ export function RecentChanges(props: { about: ContextPlace }) {
         {changes.map((change) => (
           <ChangeEntry
             key={change.id}
-            about={about}
+            workspace={workspace}
             change={change}
-            onUndone={() => void load().then(setProblem)}
+            onUndone={() => markUndone(change.id)}
           />
         ))}
       </ul>

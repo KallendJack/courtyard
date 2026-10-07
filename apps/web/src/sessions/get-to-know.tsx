@@ -5,7 +5,7 @@ import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { type ContextPlace, loadProviders, startContextPlace } from "../worker.ts";
+import { type ContextPlace, loadProviders, startGettingToKnow } from "../worker.ts";
 import { availableModels } from "./models.ts";
 
 /**
@@ -29,7 +29,7 @@ export function GetToKnow(props: {
     const model = availableModels(saving)[0]?.ref;
     if (model === undefined)
       return "No model that saves to context is available. Check the providers' settings.";
-    const session = await startContextPlace(props.about, { model });
+    const session = await startGettingToKnow(props.about, { model });
     if (session.kind !== "loaded") return describeProblem(session).body;
     await navigate({
       to: "/workspaces/$workspaceId/sessions/$sessionId",
