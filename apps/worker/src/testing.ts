@@ -12,7 +12,7 @@ import { ok } from "./result.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
 /**
- * For tests: a worker on the `context` and `data` folders in `root`, with any other options and
+ * For tests and the context eval: a worker on the `context` and `data` folders in `root`, with any other options and
  * settings given. Throws if it won't start, since every test that uses it needs one that does.
  */
 export const testWorker = (
@@ -40,7 +40,7 @@ export const gitIn = (folder: string, ...args: string[]) =>
 /** For tests: the message an error answer carries. */
 export const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
 
-/** For tests: a request function, like `app.request`. */
+/** For tests and the context eval: a request function, like `app.request`. */
 export type Requester = (path: string, init?: RequestInit) => Response | Promise<Response>;
 
 /** For tests: the `name=value` part of the login cookie a response set. */
@@ -68,21 +68,21 @@ export const requesterFor =
     app.request(path, { ...init, headers: { ...init.headers, cookie } });
 
 /**
- * For tests: sets up the owner on a fresh worker and returns a way to make requests as the owner.
+ * For tests and the context eval: sets up the owner on a fresh worker and returns a way to make requests as the owner.
  * Goes through the API like a browser would, so tests still only touch the worker's front door.
  */
 export const asOwner = async (app: Hono) => requesterFor(app, await setUpOwner(app));
 
 /**
- * For tests: reads a session's server-sent events until one of type `until` arrives, then hangs
- * up, like a browser tab closing. Starts after `after`, or after `lastEventId` sent the way a
- * reconnecting browser sends it.
+ * For tests and the context eval: reads a session's server-sent events until one of type `until` arrives (or one that
+ * `until` picks out), then hangs up, like a browser tab closing. Starts after `after`, or after
+ * `lastEventId` sent the way a reconnecting browser sends it.
  */
 export const followSession = async (
   request: Requester,
   read: {
     sessionId: string;
-    until: SessionEvent["type"];
+    until: SessionEvent["type"] | ((event: SessionEvent) => boolean);
     after?: number;
     lastEventId?: number;
     onEvent?: (event: SessionEvent) => void;
@@ -99,12 +99,15 @@ export const followSession = async (
   }
   const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
   if (!reader) throw new Error("no event stream");
+  const { until } = read;
+  const isLast =
+    typeof until === "function" ? until : (event: SessionEvent) => event.type === until;
 
   const events: SessionEvent[] = [];
   let buffer = "";
   while (true) {
     const { value, done } = await reader.read();
-    if (done) throw new Error(`stream ended before ${read.until}`);
+    if (done) throw new Error("stream ended before the event it waited for");
     buffer += value;
     const messages = buffer.split("\n\n");
     buffer = messages.pop() ?? "";
@@ -114,7 +117,7 @@ export const followSession = async (
       const event = SessionEvent.parse(JSON.parse(data.slice("data: ".length)));
       read.onEvent?.(event);
       events.push(event);
-      if (event.type === read.until) {
+      if (isLast(event)) {
         await reader.cancel();
         return events;
       }
@@ -125,7 +128,7 @@ export const followSession = async (
 /** For tests: the scripted fake provider's model. */
 export const FAKE_MODEL = { provider: "fake", model: "echo" };
 
-/** For tests: sends JSON, the way the web app does. */
+/** For tests and the context eval: sends JSON, the way the web app does. */
 export const postJson = (request: Requester, path: string, body: unknown) =>
   request(path, {
     method: "POST",
