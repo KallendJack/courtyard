@@ -85,8 +85,8 @@ nothing personal, so anyone can run their own.
 28. As the owner, I want models to save only what I've said, not their own suggestions or what's in a file unless I
     ask, so that my context is mine.
 89. As the owner, I want a model not to save again what I've undone, so that I don't undo the same thing twice.
-90. As the owner, I want a list of recent changes on each workspace's page (and the owner context's on the home page),
-    each with Undo, so that I can fix a change after I've left its session.
+90. As the owner, I want a list of recent changes for each workspace (and the owner context), a tap away from its page
+    (and the home page), each with Undo, so that I can fix a change after I've left its session.
 91. As the owner, I want my own edits to the files picked up as changes too, so that the list and Undo stay right.
 92. As the owner, I want Get to know this workspace on an empty workspace, so that a model asks me what it needs and
     saves my answers.

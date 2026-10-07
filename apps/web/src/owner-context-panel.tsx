@@ -90,7 +90,7 @@ export function OwnerContextPanel(props: {
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
             Edit it in <code>OWNER.md</code>, at the top of your context folder. See{" "}
-            <Link to="/owner-context" className="text-foreground underline">
+            <Link to="/changes" className="text-foreground underline">
               recent changes
             </Link>
             .

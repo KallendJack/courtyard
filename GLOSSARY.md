@@ -91,7 +91,8 @@ renamed or archived in the app. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:
-The list of changes on a workspace's page (and the owner context's on the home page), newest first, each with Undo.
+The list of changes to a workspace's context file or the owner context, newest first, each with Undo, on a page of
+its own linked from the workspace page (and the home page).
 _Avoid_: history, log, activity (that's a model's doing in a session)
 
 **Tidy**:

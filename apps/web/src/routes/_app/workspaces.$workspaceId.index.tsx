@@ -17,7 +17,6 @@ import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { ColourChooser } from "@/components/workspace-colour";
-import { RecentChanges } from "../../changes/recent-changes.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
@@ -210,9 +209,16 @@ function Workspace() {
           .
         </p>
       )}
-      <div className="mt-12">
-        <RecentChanges about={{ kind: "workspace", id: workspace.id }} />
-      </div>
+      <p className="mt-4 text-sm text-muted-foreground">
+        <Link
+          to="/changes"
+          search={{ workspace: workspace.id }}
+          className="text-foreground underline"
+        >
+          Recent changes
+        </Link>
+        , with Undo.
+      </p>
     </Page>
   );
 }

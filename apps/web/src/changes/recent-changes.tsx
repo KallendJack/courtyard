@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { NoteRow } from "@/components/note-row";
-import { SectionTitle } from "@/components/page";
+import { EmptyState } from "@/components/notice";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
@@ -181,14 +181,16 @@ function ChangeEntry(props: { about: ContextPlace; change: RecentChange; onUndon
 
 /**
  * Recent changes to a workspace's context file or the owner context (ADR 0013), newest first,
- * 30 at a time, with Undo. Loaded once the page is showing, so the page never waits for git. An
- * undo shows as its change marked undone, so undos aren't listed themselves.
+ * 30 at a time, with Undo, under its page's title. Loaded once the page is showing, so the page
+ * never waits for git. An undo shows as its change marked undone, so undos aren't listed
+ * themselves.
  */
 export function RecentChanges(props: { about: ContextPlace }) {
   const { about } = props;
   const [changes, setChanges] = useState<RecentChange[]>([]);
   const [more, setMore] = useState<RecentChange["id"] | null>(null);
   const [problem, setProblem] = useState<string>();
+  const [loaded, setLoaded] = useState(false);
   // Pages pass a new object each render: the list loads again only when the place itself changes.
   const place = useRef(about);
   place.current = about;
@@ -211,19 +213,22 @@ export function RecentChanges(props: { about: ContextPlace }) {
   useEffect(() => {
     let current = true;
     void load().then((failed) => {
-      if (current) setProblem(failed);
+      if (!current) return;
+      setProblem(failed);
+      setLoaded(true);
     });
     return () => {
       current = false;
     };
   }, [load]);
 
-  if (changes.length === 0 && problem === undefined) return null;
   return (
     <section aria-label="Recent changes">
-      <SectionTitle>Recent changes</SectionTitle>
       <FormError message={problem} />
-      <ul aria-label="Recent changes" className="mt-4 space-y-3.5">
+      {loaded && changes.length === 0 && problem === undefined && (
+        <EmptyState>No changes yet.</EmptyState>
+      )}
+      <ul aria-label="Recent changes" className="space-y-3.5">
         {changes.map((change) => (
           <ChangeEntry
             key={change.id}

@@ -416,7 +416,13 @@ export const createContextFolder = (options: {
       if (behind) await pushSoon();
     },
     history: async ({ place, after, limit }) => {
-      await inTurn(() => tryToKeep(prepare));
+      // Hand edits are committed first, so they're listed, but only a folder with some takes a turn
+      // among the changes: listing often, as a page does, never holds up a save.
+      const handEdited = await run("status", "--porcelain").then(
+        (status) => status !== "",
+        () => true,
+      );
+      if (handEdited) await inTurn(() => tryToKeep(prepare));
       if (after !== undefined && !(await hasChange(after))) return err("unknown-change");
       return readHistory(async () => {
         const log = await run(
