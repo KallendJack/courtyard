@@ -127,7 +127,11 @@ describe("Recent changes", () => {
       },
       { kind: "save", removed: [], added: [fact("Padel lessons on Tuesdays.")], undo: "available" },
     ]);
-    expect(changes[1]?.session).toBe(session.id);
+    expect(changes[1]?.session).toEqual({
+      id: session.id,
+      title: "Some news.",
+      workspaceId: "garage-gym",
+    });
     expect(changes[0]?.session).toBeUndefined();
     expect(Date.parse(changes[0]?.at ?? "")).toBeGreaterThan(Date.now() - 60_000);
   }, 20_000);

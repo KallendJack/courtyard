@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppNewWorkspaceRouteImport } from './routes/_app/new-workspace'
+import { Route as AppOwnerContextRouteImport } from './routes/_app/owner-context'
 import { Route as AppWorkspacesWorkspaceIdIndexRouteImport } from './routes/_app/workspaces.$workspaceId.index'
 import { Route as AppWorkspacesWorkspaceIdSessionsSessionIdRouteImport } from './routes/_app/workspaces.$workspaceId.sessions.$sessionId'
 
@@ -41,6 +42,11 @@ const AppNewWorkspaceRoute = AppNewWorkspaceRouteImport.update({
   path: '/new-workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOwnerContextRoute = AppOwnerContextRouteImport.update({
+  id: '/owner-context',
+  path: '/owner-context',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWorkspacesWorkspaceIdIndexRoute =
   AppWorkspacesWorkspaceIdIndexRouteImport.update({
     id: '/workspaces/$workspaceId/',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/owner-context': typeof AppOwnerContextRoute
   '/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
 }
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/owner-context': typeof AppOwnerContextRoute
   '/': typeof AppIndexRoute
   '/workspaces/$workspaceId': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/_app/new-workspace': typeof AppNewWorkspaceRoute
+  '/_app/owner-context': typeof AppOwnerContextRoute
   '/_app/': typeof AppIndexRoute
   '/_app/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/_app/workspaces/$workspaceId/sessions/$sessionId': typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/new-workspace'
+    | '/owner-context'
     | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/sessions/$sessionId'
   fileRoutesByTo: FileRoutesByTo
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/new-workspace'
+    | '/owner-context'
     | '/'
     | '/workspaces/$workspaceId'
     | '/workspaces/$workspaceId/sessions/$sessionId'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/_app/new-workspace'
+    | '/_app/owner-context'
     | '/_app/'
     | '/_app/workspaces/$workspaceId/'
     | '/_app/workspaces/$workspaceId/sessions/$sessionId'
@@ -151,6 +163,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNewWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/owner-context': {
+      id: '/_app/owner-context'
+      path: '/owner-context'
+      fullPath: '/owner-context'
+      preLoaderRoute: typeof AppOwnerContextRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/workspaces/$workspaceId/': {
       id: '/_app/workspaces/$workspaceId/'
       path: '/workspaces/$workspaceId'
@@ -170,6 +189,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppNewWorkspaceRoute: typeof AppNewWorkspaceRoute
+  AppOwnerContextRoute: typeof AppOwnerContextRoute
   AppIndexRoute: typeof AppIndexRoute
   AppWorkspacesWorkspaceIdIndexRoute: typeof AppWorkspacesWorkspaceIdIndexRoute
   AppWorkspacesWorkspaceIdSessionsSessionIdRoute: typeof AppWorkspacesWorkspaceIdSessionsSessionIdRoute
@@ -177,6 +197,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppNewWorkspaceRoute: AppNewWorkspaceRoute,
+  AppOwnerContextRoute: AppOwnerContextRoute,
   AppIndexRoute: AppIndexRoute,
   AppWorkspacesWorkspaceIdIndexRoute: AppWorkspacesWorkspaceIdIndexRoute,
   AppWorkspacesWorkspaceIdSessionsSessionIdRoute:

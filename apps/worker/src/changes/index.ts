@@ -126,6 +126,17 @@ const fileNow = async (contextDir: string, place: Place) => {
   return read.ok ? ok(read.value ?? "") : err("storage" as const);
 };
 
+/** Each session, read once however many changes come from it: `undefined` once deleted. */
+const sessionsRead = (sessions: Sessions) => {
+  const read = new Map<SessionId, ReturnType<Sessions["get"]>>();
+  return async (session: SessionId) => {
+    const summary = read.get(session) ?? sessions.get(session);
+    read.set(session, summary);
+    const found = await summary;
+    return found.ok ? found.value : undefined;
+  };
+};
+
 /** Each session's saves, read once however many changes come from it. */
 const sessionSaves = (sessions: Sessions) => {
   const read = new Map<SessionId, ReturnType<Sessions["savesOf"]>>();
@@ -174,6 +185,7 @@ export const listChanges = async (
   const now = await fileNow(contextDir, query.place);
   if (!now.ok) return now;
   const savesOf = sessionSaves(sessions);
+  const sessionOf = sessionsRead(sessions);
 
   const undoOf = async (
     change: HistoryChange,
@@ -193,12 +205,21 @@ export const listChanges = async (
       const changed = lines.value[index];
       if (!kind.success || changed === undefined) return [];
       if (changed.removed.length === 0 && changed.added.length === 0) return [];
+      const session = change.session === undefined ? undefined : await sessionOf(change.session);
       return [
         {
           id: change.id,
           kind: kind.data,
           at: change.at,
-          ...(change.session === undefined ? {} : { session: change.session }),
+          ...(session === undefined
+            ? {}
+            : {
+                session: {
+                  id: session.id,
+                  title: session.title,
+                  workspaceId: session.workspaceId,
+                },
+              }),
           ...changed,
           undo: await undoOf(change, changed),
         },
