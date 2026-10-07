@@ -206,16 +206,16 @@ const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }
           },
         ];
   const { questions } = turn;
-  const asked = questionsIn(answer).length;
+  const asked = questionsIn(answer);
   const howMany: Check[] =
     questions === undefined
       ? []
       : [
           {
             miss:
-              asked >= questions.atLeast && asked <= questions.atMost
+              asked.length >= questions.atLeast && asked.length <= questions.atMost
                 ? null
-                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked}: ${questionsIn(answer).join(" ").trim()}`,
+                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
           },
         ];
   return [...saveChecks, nothingElse, ...question, ...howMany];

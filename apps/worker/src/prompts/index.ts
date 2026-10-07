@@ -1,6 +1,7 @@
 import {
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
+  hasLines,
   LinePlace,
   type OwnerContextShared,
   OwnerSection,
@@ -47,9 +48,7 @@ export const sharedOwnerContext = (
     const answers = answersWithLabels(read.markdown);
     return answers === null ? { shared: "none", text: null } : { shared: "answers", text: answers };
   }
-  const { facts, plans, ideas, answers } = read.ownerContext;
-  const hasLines = [facts, plans, ideas, answers].some((lines) => lines.length > 0);
-  return hasLines
+  return hasLines(read.ownerContext)
     ? { shared: "all", text: withLabels(read.markdown, "owner").trim() }
     : { shared: "none", text: null };
 };

@@ -124,6 +124,17 @@ export const OwnerContext = z.object({
 });
 export type OwnerContext = z.infer<typeof OwnerContext>;
 
+/**
+ * Whether a context file or the owner context has any lines yet: facts, plans, ideas or (in the
+ * owner context) preferences. Only lines count: an untouched starter has none.
+ */
+export const hasLines = (read: {
+  readonly facts: readonly string[];
+  readonly plans: readonly string[];
+  readonly ideas: readonly string[];
+  readonly answers?: readonly string[];
+}) => [read.facts, read.plans, read.ideas, read.answers ?? []].some((lines) => lines.length > 0);
+
 export const OwnerContextDetail = z.object({
   /** Absent until the owner starts one. */
   ownerContext: OwnerContext.nullable(),

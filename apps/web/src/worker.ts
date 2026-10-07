@@ -1,7 +1,7 @@
 import {
   ApiError,
   ContextBackup,
-  type GetToKnow,
+  type GetToKnowRequest,
   LiveStatus,
   type NewMessage,
   type NewWorkspace,
@@ -163,16 +163,18 @@ export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
     schema: SessionSummary,
   });
 
-/**
- * Starts a session getting to know a workspace, or the owner context with `"owner"`: the worker
- * sends its own starter message.
- */
-export const startGettingToKnow = (about: WorkspaceId | "owner", start: GetToKnow) =>
+/** What a get-to-know session learns about: one workspace, or the owner context. */
+export type GettingToKnow =
+  | { readonly kind: "workspace"; readonly id: WorkspaceId }
+  | { readonly kind: "owner" };
+
+/** Starts a session getting to know a workspace or the owner context, with the worker's starter. */
+export const startGettingToKnow = (about: GettingToKnow, start: GetToKnowRequest) =>
   sendJson({
     path:
-      about === "owner"
+      about.kind === "owner"
         ? "/owner-context/get-to-know"
-        : `/workspaces/${encodeURIComponent(about)}/get-to-know`,
+        : `/workspaces/${encodeURIComponent(about.id)}/get-to-know`,
     body: start,
     schema: SessionSummary,
   });

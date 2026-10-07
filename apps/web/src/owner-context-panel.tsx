@@ -1,6 +1,6 @@
 import {
+  hasLines,
   OWNER_CONTEXT_LONG_CHARACTERS,
-  type OwnerContext,
   type OwnerContextDetail,
 } from "@courtyard/contract";
 import { useRouter } from "@tanstack/react-router";
@@ -18,7 +18,11 @@ import { type FromWorker, startOwnerContext } from "./worker.ts";
  * The owner context on the home page: what every workspace's models read about the owner
  * (ADR 0010), or a way to start one.
  */
-export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail> }) {
+export function OwnerContextPanel(props: {
+  result: FromWorker<OwnerContextDetail>;
+  /** Whether there's a planning workspace for a get-to-know session to run in. */
+  canGetToKnow: boolean;
+}) {
   const router = useRouter();
   const start = useAction(async () => {
     const started = await startOwnerContext();
@@ -41,11 +45,13 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
           <FormError message={describeProblem(result).body} />
         </div>
       )}
-      {result.kind === "loaded" && !hasLines(ownerContext) && (
-        <GetToKnow about="owner" label="Get to know me">
-          Claude asks you a few questions about your life and saves what you tell it here.
-        </GetToKnow>
-      )}
+      {props.canGetToKnow &&
+        result.kind === "loaded" &&
+        !(ownerContext && hasLines(ownerContext)) && (
+          <GetToKnow about={{ kind: "owner" }} label="Get to know me">
+            You're asked a few questions about your life, and what you say is saved here.
+          </GetToKnow>
+        )}
       {ownerContext === null && (
         <div className="mt-4 space-y-3">
           <p className="text-[15px]/[23px]">
@@ -90,10 +96,3 @@ export function OwnerContextPanel(props: { result: FromWorker<OwnerContextDetail
     </section>
   );
 }
-
-/** Whether the owner context has any lines yet: facts, plans, ideas or preferences. */
-const hasLines = (ownerContext: OwnerContext | null | undefined) =>
-  ownerContext != null &&
-  [ownerContext.facts, ownerContext.plans, ownerContext.ideas, ownerContext.answers].some(
-    (lines) => lines.length > 0,
-  );

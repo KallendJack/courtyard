@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -445,32 +445,53 @@ describe("saving context as a model answers (ADR 0013)", () => {
 });
 
 describe("getting to know a workspace (#51)", () => {
+  /**
+   * A starter message as docs/ai-conduct.md quotes it, starting from its first line: the quoted
+   * lines, wrapped lines joined back up, paragraphs kept.
+   */
+  const quotedStarter = async (firstLine: string) => {
+    const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
+    const lines = guide.replace(/\r\n/g, "\n").split("\n");
+    const start = lines.indexOf(`> ${firstLine}`);
+    const quoted: string[] = [];
+    for (const line of lines.slice(start)) {
+      if (!line.startsWith(">")) break;
+      quoted.push(line.replace(/^> ?/, ""));
+    }
+    return quoted
+      .join("\n")
+      .split("\n\n")
+      .map((paragraph) => paragraph.replace(/\n/g, " "))
+      .join("\n\n");
+  };
+
   /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */
   const gettingToKnow = async () => {
     const { provider, turns } = recorder(READS_FILES);
     const request = await asOwner(testWorker({ root, providers: [provider] }));
-    const start = async (path: string) => {
-      const started = await postJson(request, path, { model: MODEL });
-      if (started.status !== 201) return { status: started.status };
-      const session = SessionSummary.parse(await started.json());
+    const start = async (
+      path: string,
+    ): Promise<{ started: true; session: SessionSummary } | { started: false; status: number }> => {
+      const response = await postJson(request, path, { model: MODEL });
+      if (response.status !== 201) return { started: false, status: response.status };
+      const session = SessionSummary.parse(await response.json());
       await followSession(request, { sessionId: session.id, until: "turn-completed" });
-      return { status: started.status, session };
+      return { started: true, session };
     };
     return { start, turns };
   };
 
-  it("starts a session whose first message is the workspace's starter, titled by its first line", async () => {
+  it("starts a session with the workspace's starter, as the guide words it, titled by its first line", async () => {
     const { start, turns } = await gettingToKnow();
 
-    const { session } = await start("/api/workspaces/garage-gym/get-to-know");
+    const started = await start("/api/workspaces/garage-gym/get-to-know");
 
-    expect(session?.title).toBe("Get to know this workspace.");
-    expect(turns[0]?.framing.newMessage).toMatch(
-      /^Get to know this workspace\.\n\nAsk me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you as you go\./,
-    );
+    expect(started.started && started.session.title).toBe("Get to know this workspace.");
+    expect(turns[0]?.framing.newMessage).toBe(await quotedStarter("Get to know this workspace."));
+    expect(turns[0]?.framing.newMessage).toMatch(/one question per message, two at most/);
   });
 
-  it("gets to know the owner in the first planning workspace", async () => {
+  it("gets to know the owner, as the guide words it, in the first planning workspace", async () => {
     await mkdir(join(root, "context", "attic"), { recursive: true });
     await writeFile(
       join(root, "context", "attic", "workspace.json"),
@@ -478,12 +499,11 @@ describe("getting to know a workspace (#51)", () => {
     );
     const { start, turns } = await gettingToKnow();
 
-    const { session } = await start("/api/owner-context/get-to-know");
+    const started = await start("/api/owner-context/get-to-know");
 
-    expect(session?.workspaceId).toBe("garage-gym");
-    expect(turns[0]?.framing.newMessage).toMatch(
-      /^Get to know me\.\n\nAsk me about my life in general one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you to my owner context as you go/,
-    );
+    expect(started.started && started.session.workspaceId).toBe("garage-gym");
+    expect(turns[0]?.framing.newMessage).toBe(await quotedStarter("Get to know me."));
+    expect(turns[0]?.framing.newMessage).toMatch(/save what I tell you to my owner context/);
   });
 
   it("isn't offered in a code workspace, whose models can't save to its context file", async () => {
@@ -493,7 +513,10 @@ describe("getting to know a workspace (#51)", () => {
     );
     const { start } = await gettingToKnow();
 
-    expect((await start("/api/workspaces/garage-gym/get-to-know")).status).toBe(409);
-    expect((await start("/api/owner-context/get-to-know")).status).toBe(409);
+    expect(await start("/api/workspaces/garage-gym/get-to-know")).toEqual({
+      started: false,
+      status: 409,
+    });
+    expect(await start("/api/owner-context/get-to-know")).toEqual({ started: false, status: 409 });
   });
 });

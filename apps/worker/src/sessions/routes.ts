@@ -1,5 +1,5 @@
 import {
-  GetToKnow,
+  GetToKnowRequest,
   NewMessage,
   type ProviderList,
   SaveEdit,
@@ -120,8 +120,18 @@ export const sessionRoutes = (options: {
     return startIn(c, { workspaceId: workspace.value.summary.id, message: message.value });
   });
 
-  // Get to know a workspace or the owner context: a session started with the worker's own
-  // starter message (docs/ai-conduct.md, Getting to know a workspace).
+  /**
+   * Gets to know a workspace or the owner context: a session in `workspaceId` started with the
+   * worker's own starter message (docs/ai-conduct.md, Getting to know a workspace), answered by
+   * the model the request names.
+   */
+  const getToKnow = async (c: Context, start: { workspaceId: WorkspaceId; text: string }) => {
+    const body = await readBody(c, GetToKnowRequest);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const message = { text: start.text, model: body.value.model };
+    return startIn(c, { workspaceId: start.workspaceId, message });
+  };
+
   routes.post("/workspaces/:id/get-to-know", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
@@ -133,10 +143,7 @@ export const sessionRoutes = (options: {
           "A code workspace's models don't save to its context file, so it can't get to know it.",
       });
     }
-    const body = await readBody(c, GetToKnow);
-    if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const text = GET_TO_KNOW.workspace;
-    return startIn(c, { workspaceId: summary.id, message: { text, model: body.value.model } });
+    return getToKnow(c, { workspaceId: summary.id, text: GET_TO_KNOW.workspace });
   });
 
   routes.post("/owner-context/get-to-know", async (c) => {
@@ -147,13 +154,10 @@ export const sessionRoutes = (options: {
     if (home === undefined) {
       return apiError(c, {
         status: 409,
-        error: "Add a workspace first: getting to know you happens in a session in one.",
+        error: "Add a planning workspace first: getting to know you happens in a session in one.",
       });
     }
-    const body = await readBody(c, GetToKnow);
-    if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const text = GET_TO_KNOW.owner;
-    return startIn(c, { workspaceId: home.id, message: { text, model: body.value.model } });
+    return getToKnow(c, { workspaceId: home.id, text: GET_TO_KNOW.owner });
   });
 
   routes.get("/sessions/:id", async (c) => {

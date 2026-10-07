@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
@@ -65,4 +65,26 @@ test("a save to the owner context names its place, shows on the home page, and E
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("Has a bad left knee.");
   await page.goto("/");
   await expect(panel.getByRole("region", { name: "Facts" })).not.toContainText("left knee");
+});
+
+test("an empty owner context offers Get to know me, which opens a session with the starter sent, until a line is saved", async ({
+  page,
+}) => {
+  rmSync(OWNER_FILE, { force: true });
+  await page.goto("/");
+  const panel = page.getByRole("region", { name: "Owner context" });
+
+  await panel.getByRole("button", { name: "Get to know me", exact: true }).click();
+
+  const session = page.getByRole("list", { name: "Session" });
+  await expect(session).toContainText("Ask me about my life in general one question per message");
+  await expect(session).toContainText("You said: Get to know me.");
+  await page.getByLabel("Message").fill("save owner fact: Lives in Leeds.");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("list", { name: "Saved to context" })).toContainText(
+    "Lives in Leeds.",
+  );
+  await page.goto("/");
+  await expect(panel.getByRole("region", { name: "Facts" })).toContainText("Lives in Leeds.");
+  await expect(panel.getByRole("button", { name: "Get to know me", exact: true })).toHaveCount(0);
 });

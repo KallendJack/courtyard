@@ -1,6 +1,7 @@
 import {
   CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
+  hasLines,
   SessionList,
   type SessionSummary,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -172,9 +173,12 @@ function Workspace() {
       <div className="mt-12">
         <SectionTitle>Context file</SectionTitle>
       </div>
-      {workspace.mode === "planning" && !hasLines(contextFile) && (
-        <GetToKnow about={workspace.id} label="Get to know this workspace">
-          Claude asks you a few questions about it and saves what you tell it here.
+      {workspace.mode === "planning" && (contextFile === null || !hasLines(contextFile)) && (
+        <GetToKnow
+          about={{ kind: "workspace", id: workspace.id }}
+          label="Get to know this workspace"
+        >
+          You're asked a few questions about it, and what you say is saved here.
         </GetToKnow>
       )}
       {contextFile === null ? (
@@ -247,8 +251,3 @@ function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
     </div>
   );
 }
-
-/** Whether a context file has any facts, plans or ideas yet. */
-const hasLines = (contextFile: ContextFile | null) =>
-  contextFile !== null &&
-  [contextFile.facts, contextFile.plans, contextFile.ideas].some((lines) => lines.length > 0);
