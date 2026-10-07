@@ -14,6 +14,8 @@ export {
   Activity,
   Capabilities,
   ChangeId,
+  Effort,
+  EffortInfo,
   endsTurn,
   FailureReason,
   GetToKnowRequest,

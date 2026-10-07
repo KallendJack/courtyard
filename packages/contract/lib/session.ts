@@ -21,7 +21,25 @@ export type ModelId = z.infer<typeof ModelId>;
 export const ModelRef = z.object({ provider: ProviderId, model: ModelId });
 export type ModelRef = z.infer<typeof ModelRef>;
 
-export const ModelInfo = z.object({ id: ModelId, label: z.string() });
+/** One of the levels of effort a provider offers for a model, by the provider's own name, such as 'xhigh'. */
+export const Effort = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]*$/)
+  .brand<"Effort">();
+export type Effort = z.infer<typeof Effort>;
+
+/** A level of effort a model takes, and its name in the provider's own words ("Extra high"). */
+export const EffortInfo = z.object({ id: Effort, label: z.string() });
+export type EffortInfo = z.infer<typeof EffortInfo>;
+
+export const ModelInfo = z.object({
+  id: ModelId,
+  label: z.string(),
+  /** The levels of effort it takes, least first; none when it takes no effort at all. */
+  efforts: z.array(EffortInfo),
+  /** The level it uses when a message names none, when the provider says. */
+  defaultEffort: Effort.optional(),
+});
 export type ModelInfo = z.infer<typeof ModelInfo>;
 
 /** What a provider can do. These drive the rules, not provider names. */
@@ -67,10 +85,11 @@ export type SessionId = z.infer<typeof SessionId>;
 /** The longest message accepted. */
 export const MAX_MESSAGE_LENGTH = 20_000;
 
-/** What the owner sends: a message and the model to answer it. */
+/** What the owner sends: a message, the model to answer it, and its effort (none for the default). */
 export const NewMessage = z.object({
   text: z.string().trim().min(1, "Write something first").max(MAX_MESSAGE_LENGTH),
   model: ModelRef,
+  effort: Effort.optional(),
 });
 export type NewMessage = z.infer<typeof NewMessage>;
 
@@ -190,7 +209,14 @@ const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
 export const SessionEvent = z.discriminatedUnion("type", [
-  z.object({ ...eventBase, type: z.literal("owner-message"), text: z.string(), model: ModelRef }),
+  z.object({
+    ...eventBase,
+    type: z.literal("owner-message"),
+    text: z.string(),
+    model: ModelRef,
+    /** The effort it was sent with; none for the model's default. */
+    effort: Effort.optional(),
+  }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),

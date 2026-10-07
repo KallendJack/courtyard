@@ -68,6 +68,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
+    case "effort-unavailable":
+      return apiError(c, { status: 400, error: "That model doesn't take that effort." });
     case "save-not-found":
       return apiError(c, { status: 404, error: "No such save in this session." });
     case "note-refused":

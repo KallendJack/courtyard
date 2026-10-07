@@ -1,4 +1,4 @@
-import type { ProviderList } from "@courtyard/contract";
+import type { Effort, ProviderList } from "@courtyard/contract";
 
 /**
  * Every model the available providers offer, in order: the first is a new session's default. On
@@ -10,9 +10,27 @@ export const availableModels = (providers: ProviderList["providers"]) =>
       ? provider.models.map((model) => ({
           ref: { provider: provider.id, model: model.id },
           label: model.label,
+          efforts: model.efforts,
+          defaultEffort: model.defaultEffort,
         }))
       : [],
   );
+
+/** One model on offer, with the levels of effort it takes. */
+export type OfferedModel = ReturnType<typeof availableModels>[number];
+
+/** Whether a model takes this level of effort. `undefined`, its default, it always takes. */
+export const takesEffort = (model: OfferedModel | undefined, effort: Effort | undefined) =>
+  effort === undefined || (model?.efforts.some((level) => level.id === effort) ?? false);
+
+/** How an effort reads in a picker: "High effort", or "Default effort (Medium)". */
+export const effortLabel = (model: OfferedModel, effort: Effort | undefined) => {
+  const named = (level: Effort | undefined) =>
+    model.efforts.find((known) => known.id === level)?.label;
+  if (effort !== undefined) return `${named(effort) ?? effort} effort`;
+  const usual = named(model.defaultEffort);
+  return usual === undefined ? "Default effort" : `Default effort (${usual})`;
+};
 
 /**
  * The first model on offer whose provider saves to context: the one Get to know and Tidy use, as

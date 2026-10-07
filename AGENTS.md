@@ -24,8 +24,8 @@ its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. Wha
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
   feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece
   doesn't fit, give it an option or add a shared piece. Anything used twice becomes a shared piece; until then a
-  control that is the only one of its kind lives inside the one shared piece that uses it (the composer's message box
-  and model picker).
+  control that is the only one of its kind lives inside the one shared piece that uses it (the composer's message
+  box).
 - **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`http.ts`), files through
   `files.ts`, workspace errors through one handler, and tests through `testing.ts`. Check there before writing a
   helper; if one is missing, add it there.

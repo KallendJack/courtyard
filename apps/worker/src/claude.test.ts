@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { ModelId } from "@courtyard/contract";
+import { Effort, ModelId } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
@@ -52,6 +52,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
   const activities: Activity[] = [];
   const result = await provider.runTurn({
     model: ModelId.parse("sonnet"),
+    effort: undefined,
     folder,
     framing: {
       instructions: "The turn's instructions.",
@@ -135,6 +136,48 @@ describe("Claude's status", () => {
 
     if (!status.available) throw new Error("expected available");
     expect(status.models[0]?.label).toBe("Claude · Default (recommended)");
+  });
+
+  it("lists the levels of effort each model takes, in Claude's words, and none for a model without", async () => {
+    const { claudeCode } = stubClaudeCode({
+      check: async () => ({
+        account: { subscriptionType: "Claude Max" },
+        models: [
+          {
+            value: "opus",
+            displayName: "Opus 5.5",
+            description: "",
+            supportsEffort: true,
+            supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
+          },
+          {
+            value: "haiku",
+            displayName: "Haiku 4.5",
+            description: "",
+            supportsEffort: false,
+            supportedEffortLevels: ["low"],
+          },
+          { value: "sonnet", displayName: "Sonnet 5.5", description: "" },
+        ],
+      }),
+    });
+
+    const status = await createClaudeProvider({ claudeCode }).status();
+
+    if (!status.available) throw new Error("expected available");
+    expect(status.models.map((m) => m.efforts)).toEqual([
+      [
+        { id: "low", label: "Low" },
+        { id: "medium", label: "Medium" },
+        { id: "high", label: "High" },
+        { id: "xhigh", label: "Extra high" },
+        { id: "max", label: "Max" },
+      ],
+      [],
+      [],
+    ]);
+    // Claude Code doesn't say which level a model uses by default.
+    expect(status.models.map((m) => m.defaultEffort)).toEqual([undefined, undefined, undefined]);
   });
 
   it("is unavailable with a useful reason when Claude Code isn't logged in", async () => {
@@ -272,6 +315,28 @@ describe("a Claude turn", () => {
     expect(emitted).toEqual(["Put it ", "on the left wall."]);
     expect(runs[0]?.options.model).toBe("sonnet");
     expect(runs[0]?.options.includePartialMessages).toBe(true);
+  });
+
+  it("sends the chosen effort with the turn, and none for the model's default", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    await runTurn(claudeCode, { effort: Effort.parse("xhigh") });
+    await runTurn(claudeCode);
+
+    expect(runs[0]?.options.effort).toBe("xhigh");
+    expect(runs[1]?.options).not.toHaveProperty("effort");
+  });
+
+  it("fails a turn whose effort Claude doesn't know, rather than send it", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    const { result } = await runTurn(claudeCode, { effort: Effort.parse("ludicrous") });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: expect.stringMatching(/effort/) },
+    });
+    expect(runs).toEqual([]);
   });
 
   it("completes a turn whose answer arrives as ordinary assistant messages", async () => {

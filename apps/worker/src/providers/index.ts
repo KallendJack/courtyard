@@ -1,8 +1,10 @@
 import type {
   Activity,
   Capabilities,
+  Effort,
   FailureReason,
   ModelId,
+  ModelInfo,
   ModelRef,
   ProviderId,
   ProviderStatus,
@@ -38,6 +40,8 @@ export type SaveReply = { readonly saved: boolean; readonly reply: string };
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
   readonly model: ModelId;
+  /** One of the levels of effort the model takes, or `undefined` for the model's default. */
+  readonly effort: Effort | undefined;
   /** The workspace's folder on the worker machine: the only place a model may look. */
   readonly folder: string;
   /** Delivered as given: a provider never writes prompt text of its own. */
@@ -85,12 +89,19 @@ export type Provider = {
   readonly answerOnce: (input: OneOffInput) => Promise<Result<unknown, FailureReason>>;
 };
 
-/** The provider offering this model right now, or `undefined` when none is. */
-export const providerFor = async (providers: readonly Provider[], ref: ModelRef) => {
+/**
+ * The provider offering this model right now, and what it says of the model (its levels of
+ * effort, say), or `undefined` when none is.
+ */
+export const offerFor = async (
+  providers: readonly Provider[],
+  ref: ModelRef,
+): Promise<{ provider: Provider; model: ModelInfo } | undefined> => {
   const provider = providers.find((p) => p.id === ref.provider);
   if (!provider) return undefined;
   const status = await provider.status();
-  return status.available && status.models.some((m) => m.id === ref.model) ? provider : undefined;
+  const model = status.available ? status.models.find((m) => m.id === ref.model) : undefined;
+  return model === undefined ? undefined : { provider, model };
 };
 
 export { createClaudeProvider } from "./claude.ts";

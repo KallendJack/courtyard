@@ -3,6 +3,7 @@ import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ChangeId,
+  type Effort,
   endsTurn,
   type FailureReason,
   type ModelRef,
@@ -19,7 +20,7 @@ import type { ContextFolder } from "../context-folder/index.ts";
 import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
-import { type Provider, providerFor, type SaveReply } from "../providers/index.ts";
+import { offerFor, type Provider, type SaveReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
   createTurnSaves,
@@ -42,6 +43,8 @@ export type SessionError =
   | { readonly kind: "delete-while-running" }
   | { readonly kind: "workspace-archived" }
   | { readonly kind: "model-unavailable" }
+  /** The message names a level of effort its model doesn't take. */
+  | { readonly kind: "effort-unavailable" }
   /** No save in the session has that event number. */
   | { readonly kind: "save-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
@@ -307,6 +310,7 @@ export const createSessions = (options: {
     workspaceId: WorkspaceId;
     provider: Provider;
     model: ModelRef["model"];
+    effort: Effort | undefined;
   }) => {
     const session = runningSession(turn.id);
     const stopper = turn.stopper;
@@ -368,6 +372,7 @@ export const createSessions = (options: {
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
+            effort: turn.effort,
             folder: workspace.value.folder,
             framing,
             save: (input) => {
@@ -447,6 +452,7 @@ export const createSessions = (options: {
       type: "owner-message",
       text: start.message.text,
       model: start.message.model,
+      ...(start.message.effort === undefined ? {} : { effort: start.message.effort }),
     });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
@@ -460,8 +466,20 @@ export const createSessions = (options: {
       workspaceId: start.workspaceId,
       provider: start.provider,
       model: start.message.model.model,
+      effort: start.message.effort,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
+  };
+
+  /** The provider to answer a message: its model must be on offer, and take its effort. */
+  const providerOf = async (message: NewMessage): Promise<Result<Provider, SessionError>> => {
+    const offer = await offerFor(options.providers, message.model);
+    if (!offer) return err({ kind: "model-unavailable" });
+    const { effort } = message;
+    if (effort !== undefined && !offer.model.efforts.some((level) => level.id === effort)) {
+      return err({ kind: "effort-unavailable" });
+    }
+    return ok(offer.provider);
   };
 
   const summaryOf = (file: SessionFile): SessionSummary => ({
@@ -572,8 +590,8 @@ export const createSessions = (options: {
       workspaceId: WorkspaceId;
       message: NewMessage;
     }): Promise<Result<SessionSummary, SessionError>> => {
-      const provider = await providerFor(options.providers, start.message.model);
-      if (!provider) return err({ kind: "model-unavailable" });
+      const provider = await providerOf(start.message);
+      if (!provider.ok) return provider;
       const id = SessionId.parse(randomUUID());
       const at = stamp();
       const file: SessionFile = {
@@ -590,7 +608,12 @@ export const createSessions = (options: {
       }
       const written = await writeJsonFile(sessionFilePath(id), file);
       const started = written.ok
-        ? await startTurn({ id, workspaceId: start.workspaceId, provider, message: start.message })
+        ? await startTurn({
+            id,
+            workspaceId: start.workspaceId,
+            provider: provider.value,
+            message: start.message,
+          })
         : err(STORAGE_ERROR);
       if (!started.ok) {
         // Never leave a session behind without its first message.
@@ -608,12 +631,12 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerFor(options.providers, message.model);
-      if (!provider) return err({ kind: "model-unavailable" });
+      const provider = await providerOf(message);
+      if (!provider.ok) return provider;
       return startTurn({
         id: session.value.id,
         workspaceId: session.value.workspaceId,
-        provider,
+        provider: provider.value,
         message,
       });
     },

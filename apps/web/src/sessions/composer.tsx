@@ -1,57 +1,73 @@
-import type { ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
+import type { Effort, ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
 import { ArrowUp, Square } from "lucide-react";
 import { type FormEvent, memo, useState } from "react";
 import { Button } from "@/components/button";
+import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
+import { Sheet } from "@/components/sheet";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
+import { choiceSummary, ModelPickers, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
-const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
-
 /**
- * A message box with a model picker. `send` returns an error to show, or nothing on success.
- * Memoised: it doesn't re-render while an answer streams in above it.
+ * A message box with model and effort pickers. `send` returns an error to show, or nothing on
+ * success. Memoised: it doesn't re-render while an answer streams in above it.
  */
 export const Composer = memo(function Composer(props: {
   providers: ProviderList["providers"];
+  /** The session's last model and effort, which the pickers follow until the owner picks. */
   initialModel?: ModelRef;
+  initialEffort?: Effort;
   disabled?: boolean;
   /** While a turn runs: stops it, shown in place of Send. */
   stop?: () => void;
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
   submitLabel?: string;
-  /** One line with a round button on a narrow screen (a session, where the model carries on). */
+  /**
+   * One line with a round button on a narrow screen (a session, where the model carries on), the
+   * model and effort in a chip above it that opens a sheet.
+   */
   compactOnNarrow?: boolean;
   send: (message: NewMessage) => Promise<string | undefined>;
 }) {
   const models = availableModels(props.providers);
-  // Until the owner picks one, follow the session's last model (it arrives once the event log
-  // has replayed), else the first available.
-  const [chosenKey, setChosenKey] = useState<string>();
-  const followed = props.initialModel ? keyOf(props.initialModel) : undefined;
-  const firstKey = models[0] ? keyOf(models[0].ref) : "";
-  const followedKey = models.some((m) => keyOf(m.ref) === followed) ? followed : undefined;
-  const modelKey = chosenKey ?? followedKey ?? firstKey;
+  const choice = useModelChoice({
+    models,
+    followModel: props.initialModel,
+    followEffort: props.initialEffort,
+  });
+  const [choosing, setChoosing] = useState(false);
   const [text, setText] = useState("");
   const send = useAction(props.send);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const model = models.find((m) => keyOf(m.ref) === modelKey)?.ref;
+    const { model, effort } = choice;
     if (!model) return send.setError("No model is available. Check the providers' settings.");
     if (text.trim() === "") return;
-    if (await send.run({ text, model })) setText("");
+    const message = { text, model: model.ref, ...(effort === undefined ? {} : { effort }) };
+    if (await send.run(message)) setText("");
   };
 
   const label = props.stop ? "Stop" : (props.submitLabel ?? "Send");
-  // On a narrow screen a session's box is one line with a round button, the model following the
-  // session's last one; the picker is there from tablet width up.
+  // On a narrow screen a session's box is one line with a round button, and the chip above it
+  // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
+      {compact && (
+        <>
+          <Chip narrowOnly onClick={() => setChoosing(true)}>
+            {choiceSummary(choice)}
+          </Chip>
+          <Sheet title="Model for this session" open={choosing} onClose={() => setChoosing(false)}>
+            <ModelPickers models={models} choice={choice} look="field" />
+          </Sheet>
+        </>
+      )}
       <form
         onSubmit={submit}
         className={classes(
@@ -76,22 +92,7 @@ export const Composer = memo(function Composer(props: {
           className="block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
         />
         <div className="flex items-center gap-2">
-          <select
-            aria-label="Model"
-            value={modelKey}
-            onChange={(event) => setChosenKey(event.target.value)}
-            className={classes(
-              "min-w-0 max-w-56 truncate rounded-full bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground",
-              compact && "max-md:hidden",
-            )}
-          >
-            {models.length === 0 && <option value="">No models available</option>}
-            {models.map((m) => (
-              <option key={keyOf(m.ref)} value={keyOf(m.ref)}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+          <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
           <span className={classes("flex-1", compact && "max-md:hidden")} />
           <Button
             {...(props.stop
