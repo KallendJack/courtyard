@@ -64,6 +64,64 @@ export const listSubfolders = async (path: string): Promise<Result<string[], "un
   }
 };
 
+/** What is at a path: a file and its size, a folder, or something else. */
+export type Entry =
+  | { readonly kind: "file"; readonly size: number }
+  | { readonly kind: "folder" }
+  | { readonly kind: "other" };
+
+/** What is at a path, following links; `undefined` when nothing is. */
+export const entryAt = async (path: string): Promise<Result<Entry | undefined, "unreadable">> => {
+  try {
+    const info = await stat(path);
+    if (info.isFile()) return ok({ kind: "file", size: info.size });
+    return ok({ kind: info.isDirectory() ? "folder" : "other" });
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  }
+};
+
+/** A file's bytes; `undefined` when the file doesn't exist. */
+export const readBytes = async (
+  path: string,
+): Promise<Result<Buffer | undefined, "unreadable">> => {
+  try {
+    return ok(await readFile(path));
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  }
+};
+
+/** One thing in a folder: a link is a link here, wherever it leads. */
+export type FolderEntry = {
+  readonly name: string;
+  readonly kind: "file" | "folder" | "link" | "other";
+};
+
+/** What a folder holds, by name; an error when it's missing, isn't a folder or can't be read. */
+export const listEntries = async (
+  path: string,
+): Promise<Result<FolderEntry[], "missing" | "not-a-folder" | "unreadable">> => {
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+    return ok(
+      entries.map((entry) => ({
+        name: entry.name,
+        kind: entry.isSymbolicLink()
+          ? "link"
+          : entry.isDirectory()
+            ? "folder"
+            : entry.isFile()
+              ? "file"
+              : "other",
+      })),
+    );
+  } catch (error) {
+    if (hasCode(error, "ENOENT")) return err("missing");
+    return err(hasCode(error, "ENOTDIR") ? "not-a-folder" : "unreadable");
+  }
+};
+
 /** The names in a folder; none when the folder doesn't exist yet. */
 export const listFolder = async (path: string): Promise<Result<string[], "unreadable">> => {
   try {

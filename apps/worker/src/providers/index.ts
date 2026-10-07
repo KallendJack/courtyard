@@ -49,6 +49,14 @@ export type FileTools = {
 /** What the worker made of a save: whether it saved, and what to tell the model. */
 export type SaveReply = { readonly saved: boolean; readonly reply: string };
 
+/** Part of what a file tool gives a model: text, or an image. */
+export type FileContent =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "image"; readonly dataUrl: string };
+
+/** What a file tool found, or why it found nothing, as the model is told. */
+export type FileReply = { readonly found: boolean; readonly content: readonly FileContent[] };
+
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
   readonly model: ModelId;

@@ -975,3 +975,100 @@ describe("Courtyard's tools on a Codex turn", () => {
     expect(events.filter((event) => event.type === "activity")).toEqual([]);
   });
 });
+
+describe("Courtyard's tools on a Codex turn, after the review", () => {
+  let root: string;
+  let workspace: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    workspace = join(root, "context", "garage-gym");
+    await mkdir(join(workspace, "notes"), { recursive: true });
+    await writeFile(join(workspace, "notes", "rack.md"), "The rack goes against the back wall.\n");
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  /** A Codex turn in garage-gym making the scripted calls: the answers, events and stand-in. */
+  const turnCalling = async (calls: readonly { tool: string; args: unknown }[]) => {
+    const answers: Message[] = [];
+    const codex = standIn({
+      turn: async (turn) => {
+        for (const { tool, args } of calls) answers.push(await turn.call(tool, args));
+        turn.complete("completed");
+      },
+    });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: { provider: "codex", model: "gpt-6.1-sol" },
+    });
+    const { id } = SessionSummary.parse(await response.json());
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    return { answers, events, codex };
+  };
+
+  const textOf = (message: Message | undefined) =>
+    z
+      .object({
+        result: z.object({
+          success: z.boolean(),
+          contentItems: z.array(z.object({ text: z.string() })),
+        }),
+      })
+      .parse(message)
+      .result.contentItems.map((item) => item.text)
+      .join("\n");
+
+  it("keeps a read to its limit, however long one line is", async () => {
+    await writeFile(join(workspace, "minified.js"), "x".repeat(300_000));
+
+    const { answers } = await turnCalling([{ tool: "read_file", args: { path: "minified.js" } }]);
+
+    expect(textOf(answers[0]).length).toBeLessThan(110_000);
+  });
+
+  it("shows only files it gave the model as read, not one it can't read", async () => {
+    await writeFile(join(workspace, "backup.bin"), Buffer.from([0, 1, 2, 3, 0, 0]));
+
+    const { answers, events } = await turnCalling([
+      { tool: "read_file", args: { path: "backup.bin" } },
+    ]);
+
+    expect(answers[0]).toMatchObject({ result: { success: false } });
+    expect(events.filter((event) => event.type === "activity")).toEqual([]);
+  });
+
+  it("takes a glob or path written with Windows' backslashes", async () => {
+    const { answers } = await turnCalling([
+      { tool: "search_files", args: { text: "back wall", glob: "notes\\*.md" } },
+    ]);
+
+    expect(textOf(answers[0])).toContain("notes/rack.md:1: The rack goes against the back wall.");
+  });
+
+  it("offers a code workspace the save tool for How to answer me only, as Claude's", async () => {
+    await writeFile(
+      join(workspace, "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+
+    const { answers, codex } = await turnCalling([
+      { tool: "save_to_context", args: { action: "add", section: "facts", text: "Has a rack." } },
+    ]);
+
+    const offered = z
+      .object({ dynamicTools: z.array(z.object({ name: z.string(), description: z.string() })) })
+      .parse(codex.requests("thread/start")[0]?.params).dynamicTools;
+    expect(offered.find((tool) => tool.name === "save_to_context")?.description).toMatch(
+      /to How to answer me in the owner context/,
+    );
+    expect(textOf(answers[0])).toMatch(/In a code workspace you can save only to How to answer me/);
+  });
+});

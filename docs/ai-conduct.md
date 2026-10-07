@@ -93,8 +93,11 @@ whose provider reads files (`readsFiles`): `list_folder` lists a folder, `read_f
 lines at a time) or an image, and `search_files` searches the files' text, each limited to the workspace folder.
 Their descriptions say what each does and that only the workspace folder can be reached, nothing more. A path
 outside it, a link leading out of it or a glob that climbs out is refused with the same reason Claude is given
-("Only files in this workspace's folder can be read."), and each file read shows as an activity. The save tool
-comes alongside them on the same terms as Claude's.
+("Only files in this workspace's folder can be read."), and each file read shows as an activity. The worker finds
+what the tools ask for (`apps/worker/src/workspace-files/`) and the prompts module words it: the lines found, with a
+note when there's more to read or a search stopped early, or why nothing was found (nothing there, a folder where a
+file was meant, too large, not text or an image, an input the tool doesn't take). The save tool comes alongside them
+on the same terms as Claude's.
 
 ## Starter context file
 

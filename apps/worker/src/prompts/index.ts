@@ -13,10 +13,22 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
-import type { CourtyardTool, FileTools, Framing, SaveReply } from "../providers/index.ts";
+import type {
+  CourtyardTool,
+  FileContent,
+  FileReply,
+  FileTools,
+  Framing,
+  SaveReply,
+} from "../providers/index.ts";
 import type { Result } from "../result.ts";
 import type { SaveRefusal } from "../saves/index.ts";
-import { READ_LINES } from "../workspace-files/index.ts";
+import {
+  type FileToolAnswer,
+  type FileToolFound,
+  type FileToolRefusal,
+  READ_LINES,
+} from "../workspace-files/index.ts";
 
 /**
  * Everything a model reads, built from the rules in docs/ai-conduct.md. Providers deliver it as
@@ -454,6 +466,76 @@ export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean
     reply: `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
   };
 };
+
+/**
+ * What a model is told when it reaches outside the workspace folder, by Claude Code's tools or
+ * Courtyard's: the same reason whichever provider it's on.
+ */
+export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
+
+/** Why a file tool found nothing, in the model's terms. */
+const fileRefusalReason = (refusal: FileToolRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That input doesn't fit this tool: check what each of its inputs takes.";
+    case "outside":
+      return OUTSIDE_WORKSPACE;
+    case "missing":
+      return `There's nothing at ${refusal.path}.`;
+    case "not-a-folder":
+      return `${refusal.path} is a file: read it instead.`;
+    case "not-a-file":
+      return `${refusal.path} isn't a file: list it instead.`;
+    case "too-large":
+      return "That file is too large to read.";
+    case "not-text":
+      return "That file isn't text or an image, so it can't be read.";
+    case "past-the-end":
+      return `The file has ${refusal.total} lines.`;
+    case "unreadable":
+      return "That couldn't be read just now.";
+  }
+};
+
+/** What a file tool found, as the model reads it. */
+const foundWords = (found: FileToolFound): FileContent[] => {
+  switch (found.kind) {
+    case "listing": {
+      if (found.names.length === 0) return [{ kind: "text", text: "The folder is empty." }];
+      const more = found.more > 0 ? `\n…and ${found.more} more.` : "";
+      return [{ kind: "text", text: found.names.join("\n") + more }];
+    }
+    case "text": {
+      const more =
+        found.end < found.total
+          ? `\n\n(Lines ${found.start} to ${found.end} of ${found.total}. Read on with start_line ${found.end + 1}.)`
+          : "";
+      return [{ kind: "text", text: found.text + more }];
+    }
+    case "image":
+      return [{ kind: "image", dataUrl: found.dataUrl }];
+    case "matches": {
+      if (found.lines.length === 0) {
+        return [
+          {
+            kind: "text",
+            text: found.stopped ? "No matches in the files searched." : "No matches.",
+          },
+        ];
+      }
+      const stopped = found.stopped
+        ? "\n\n(The search stopped early. Search for something narrower, or in one folder, to see the rest.)"
+        : "";
+      return [{ kind: "text", text: found.lines.join("\n") + stopped }];
+    }
+  }
+};
+
+/** What a model is told about a call to one of Courtyard's file tools: what it found, or why not. */
+export const fileToolReply = (answer: FileToolAnswer): FileReply =>
+  answer.ok
+    ? { found: true, content: foundWords(answer.value) }
+    : { found: false, content: [{ kind: "text", text: fileRefusalReason(answer.error) }] };
 
 /**
  * The starter messages that get to know an empty workspace or owner context (docs/ai-conduct.md,

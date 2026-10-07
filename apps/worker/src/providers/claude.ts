@@ -20,8 +20,9 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { OUTSIDE_WORKSPACE } from "../prompts/index.ts";
 import { err, ok } from "../result.ts";
-import { OUTSIDE_WORKSPACE, shownPath, staysInside } from "../workspace-files/index.ts";
+import { shownPath, staysInside } from "../workspace-files/index.ts";
 import type { CourtyardTool, Provider, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");

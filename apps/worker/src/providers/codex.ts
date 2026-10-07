@@ -14,9 +14,10 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { type FileToolAnswer, workspaceFiles } from "../workspace-files/index.ts";
-import type { CourtyardTool, Provider, TurnInput } from "./index.ts";
+import { workspaceFiles } from "../workspace-files/index.ts";
+import type { CourtyardTool, FileReply, Provider, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("codex");
 /**
@@ -179,7 +180,7 @@ const CodexNotice = z.object({ method: z.string(), params: z.unknown() });
 /** A notice about one thread names it. */
 const AboutThread = z.object({ threadId: z.string() });
 /** Codex calling one of the tools the worker offered its thread, naming the thread and turn. */
-const ToolCall = z.object({
+const ToolCallRequest = z.object({
   id: RequestId,
   method: z.literal("item/tool/call"),
   params: z.object({
@@ -189,7 +190,8 @@ const ToolCall = z.object({
     arguments: z.unknown(),
   }),
 });
-type ToolCall = z.infer<typeof ToolCall>["params"];
+/** What a call to a tool names: its thread, turn and tool, and the tool's input. */
+type ToolCall = z.infer<typeof ToolCallRequest>["params"];
 
 /** What a tool call gives Codex back, in the app-server's words. */
 type ToolAnswer = {
@@ -276,12 +278,20 @@ const connect = async (options: {
       );
       return;
     }
-    const call = ToolCall.safeParse(message);
+    const call = ToolCallRequest.safeParse(message);
     if (call.success) {
       const { id, params } = call.data;
       const listener = listeners.get(params.threadId);
       void (listener?.called(params) ?? Promise.resolve(undefined))
-        .catch(() => undefined)
+        .catch((error: unknown) => {
+          // A tool throwing is a bug: only the kind of error goes to the worker's log, and Codex
+          // is refused.
+          console.error(
+            "A tool for Codex threw:",
+            error instanceof Error ? error.name : typeof error,
+          );
+          return undefined;
+        })
         .then((result) => send(result === undefined ? { id, error: REFUSED } : { id, result }));
       return;
     }
@@ -480,18 +490,15 @@ type TurnTool = {
   readonly answer: (args: unknown) => Promise<ToolAnswer>;
 };
 
-/** A file tool's answer as Codex takes it. */
-const fileToolAnswer = (answer: FileToolAnswer): ToolAnswer =>
-  answer.ok
-    ? {
-        success: true,
-        contentItems: answer.value.map((content) =>
-          content.kind === "text"
-            ? { type: "inputText", text: content.text }
-            : { type: "inputImage", imageUrl: content.dataUrl },
-        ),
-      }
-    : { success: false, contentItems: [{ type: "inputText", text: answer.error }] };
+/** A file tool's reply, worded by the prompts module, as Codex takes it. */
+const fromFileReply = (reply: FileReply): ToolAnswer => ({
+  success: reply.found,
+  contentItems: reply.content.map((content) =>
+    content.kind === "text"
+      ? { type: "inputText", text: content.text }
+      : { type: "inputImage", imageUrl: content.dataUrl },
+  ),
+});
 
 /**
  * The tools a turn's framing offers, by name: Courtyard's file tools, confined to the workspace
@@ -502,11 +509,12 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
   const { fileTools, saveTool } = input.framing;
   if (fileTools !== null) {
     const files = workspaceFiles({ folder: input.folder, report: input.report });
-    tools.push(
-      { tool: fileTools.list, answer: async (args) => fileToolAnswer(await files.list(args)) },
-      { tool: fileTools.read, answer: async (args) => fileToolAnswer(await files.read(args)) },
-      { tool: fileTools.search, answer: async (args) => fileToolAnswer(await files.search(args)) },
-    );
+    for (const kind of ["list", "read", "search"] as const) {
+      tools.push({
+        tool: fileTools[kind],
+        answer: async (args) => fromFileReply(fileToolReply(await files[kind](args))),
+      });
+    }
   }
   if (saveTool !== null) {
     tools.push({
@@ -521,7 +529,7 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
 };
 
 /** A tool as the app-server offers it to a thread (its dynamic tools), its inputs as JSON Schema. */
-const offered = ({ tool }: TurnTool) => {
+const asDynamicTool = ({ tool }: TurnTool) => {
   const { $schema: _, ...inputSchema } = z.toJSONSchema(z.object(tool.input));
   return { type: "function", name: tool.name, description: tool.description, inputSchema };
 };
@@ -684,7 +692,7 @@ export const createCodexProvider = (options: {
         sandbox: "read-only",
         approvalPolicy: "never",
         environments: [],
-        dynamicTools: [...tools.values()].map(offered),
+        dynamicTools: [...tools.values()].map(asDynamicTool),
       });
       if (!thread.ok) return err(failureForRequest(thread.error));
       const startedThread = ThreadStarted.safeParse(thread.value);
@@ -700,13 +708,13 @@ export const createCodexProvider = (options: {
       });
       // The turn's id, once Codex says it has started (or `undefined` if it didn't): a tool call
       // can arrive before the worker has read that answer.
-      let knowTurn: (turnId: string | undefined) => void = () => {};
-      const thisTurn = new Promise<string | undefined>((resolve) => {
-        knowTurn = resolve;
+      let learnTurnId: (turnId: string | undefined) => void = () => {};
+      const startedTurnId = new Promise<string | undefined>((resolve) => {
+        learnTurnId = resolve;
       });
       const stopListening = codex.listen(threadId, {
         called: async (call) =>
-          call.turnId === (await thisTurn)
+          call.turnId === (await startedTurnId)
             ? tools.get(call.tool)?.answer(call.arguments)
             : undefined,
         heard: (notice) => {
@@ -747,7 +755,7 @@ export const createCodexProvider = (options: {
         const startedTurn = TurnStarted.safeParse(turn.value);
         if (!startedTurn.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
         const turnId = startedTurn.data.turn.id;
-        knowTurn(turnId);
+        learnTurnId(turnId);
 
         // The owner stopping the turn stops Codex (its own name for that is `turn/interrupt`).
         // Codex says when it has stopped; if it doesn't say so soon, the turn ends anyway, so the
@@ -781,7 +789,7 @@ export const createCodexProvider = (options: {
         }
       } finally {
         // A call still waiting for the turn to start is refused.
-        knowTurn(undefined);
+        learnTurnId(undefined);
         stopListening();
         // Codex forgets the thread; nothing of it is kept.
         void codex.request("thread/unsubscribe", { threadId });

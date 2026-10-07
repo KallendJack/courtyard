@@ -1,5 +1,4 @@
-import type { Dirent } from "node:fs";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -13,17 +12,15 @@ import {
 } from "node:path";
 import type { Activity } from "@courtyard/contract";
 import { z } from "zod";
-import { hasCode } from "../files.ts";
+import { entryAt, type FolderEntry, listEntries, readBytes } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /**
  * The workspace folder as the edge of what a model may look at (ADRs 0003, 0015): the one check
  * every provider's reads go through, and Courtyard's own file tools for a provider that has none
- * of its own (Codex, whose shell is off).
+ * of its own (Codex, whose shell is off). The prompts module words what the tools find for the
+ * model.
  */
-
-/** What a model is told when it reaches outside the workspace folder, whichever provider it's on. */
-export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
 
 /**
  * Where a path really leads, following symlinks. For a path that doesn't exist yet, the nearest
@@ -64,13 +61,34 @@ export const staysInside = async (
 export const shownPath = (folder: string, path: string) =>
   relative(folder, resolve(folder, path)).split(sep).join("/");
 
-/** What one of Courtyard's file tools gives a model: text, or an image. */
-export type FileToolContent =
-  | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "image"; readonly dataUrl: string };
+/** What a file tool found. */
+export type FileToolFound =
+  | { readonly kind: "listing"; readonly names: readonly string[]; readonly more: number }
+  /** Part of a text file: lines `start` to `end` (counting from 1) of `total`. */
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly start: number;
+      readonly end: number;
+      readonly total: number;
+    }
+  | { readonly kind: "image"; readonly dataUrl: string }
+  /** Matching lines, `path:line: text`; `stopped` when the search stopped before the end. */
+  | { readonly kind: "matches"; readonly lines: readonly string[]; readonly stopped: boolean };
 
-/** A file tool's answer: what it found, or why it couldn't, in words for the model. */
-export type FileToolAnswer = Result<readonly FileToolContent[], string>;
+/** Why a file tool found nothing. */
+export type FileToolRefusal =
+  | { readonly kind: "malformed" }
+  | { readonly kind: "outside" }
+  | { readonly kind: "missing"; readonly path: string }
+  | { readonly kind: "not-a-folder"; readonly path: string }
+  | { readonly kind: "not-a-file"; readonly path: string }
+  | { readonly kind: "too-large" }
+  | { readonly kind: "not-text" }
+  | { readonly kind: "past-the-end"; readonly total: number }
+  | { readonly kind: "unreadable" };
+
+export type FileToolAnswer = Result<FileToolFound, FileToolRefusal>;
 
 /**
  * Each tool's input as the prompts module describes it. Strict, so a field Courtyard doesn't know
@@ -88,7 +106,6 @@ const SearchInput = z.strictObject({
   glob: z.string().nullish(),
 });
 
-const MALFORMED = "That input doesn't fit this tool: check what each of its inputs takes.";
 /** The most a read takes in, image or text. */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** The most text one read gives back; a longer file is read on from where it stopped. */
@@ -96,6 +113,8 @@ export const READ_LINES = 2000;
 const MAX_CHARACTERS = 100_000;
 const MAX_LISTED = 500;
 const MAX_MATCHES = 100;
+/** The most files one search opens, so a huge folder can't keep a turn waiting. */
+const MAX_SEARCHED_FILES = 5000;
 /** A file searched is at most this big, and a matching line is shown up to this long. */
 const MAX_SEARCHED_BYTES = 1024 * 1024;
 const MAX_MATCH_CHARACTERS = 300;
@@ -108,8 +127,6 @@ const IMAGE_TYPES: Readonly<Record<string, string>> = {
   ".webp": "image/webp",
 };
 
-const text = (words: string): FileToolContent => ({ kind: "text", text: words });
-
 /** Whether bytes look like text: a zero byte near the start means they're not. */
 const looksLikeText = (bytes: Buffer) => !bytes.subarray(0, 8000).includes(0);
 
@@ -118,109 +135,112 @@ const matchesGlob = (shown: string, glob: string) =>
   posix.matchesGlob(shown, glob) ||
   (!glob.includes("/") && posix.matchesGlob(posix.basename(shown), glob));
 
-const byName = (a: Dirent, b: Dirent) => a.name.localeCompare(b.name);
+const byName = (a: FolderEntry, b: FolderEntry) => a.name.localeCompare(b.name);
 
-/** The text a read gives back: from `start` (counting from 1), as many lines as fit. */
+/** Part of a text file: from `start` (counting from 1), as many lines as fit, the last cut short. */
 const pageOf = (whole: string, start: number): FileToolAnswer => {
   const lines = whole.replace(/\r?\n$/, "").split(/\r?\n/);
-  if (start > lines.length) return err(`The file has ${lines.length} lines.`);
+  if (start > lines.length) return err({ kind: "past-the-end", total: lines.length });
   const shown: string[] = [];
-  let characters = 0;
+  let left = MAX_CHARACTERS;
   for (const line of lines.slice(start - 1, start - 1 + READ_LINES)) {
-    if (shown.length > 0 && characters + line.length > MAX_CHARACTERS) break;
-    shown.push(line);
-    characters += line.length + 1;
+    if (left <= 0) break;
+    shown.push(line.slice(0, left));
+    left -= line.length + 1;
   }
-  const end = start + shown.length - 1;
-  const more =
-    end < lines.length
-      ? `\n\n(Lines ${start} to ${end} of ${lines.length}. Read on with start_line ${end + 1}.)`
-      : "";
-  return ok([text(shown.join("\n") + more)]);
+  const text = shown.join("\n");
+  return ok({ kind: "text", text, start, end: start + shown.length - 1, total: lines.length });
 };
 
 /**
  * Courtyard's file tools for one turn (docs/ai-conduct.md, Courtyard's file tools): list a folder,
  * read a file and search the files' text, each confined to the workspace folder with the same
- * check as every read. Each file read is reported. A tool never throws: anything that goes wrong
- * is an answer for the model.
+ * check as every read. Each file given to the model is reported as read. A tool never throws:
+ * anything that goes wrong is a refusal.
  */
 export const workspaceFiles = (options: {
   readonly folder: string;
   readonly report: (activity: Activity) => Promise<void>;
 }) => {
   const folder = resolve(options.folder);
+  /** A glob as the model wrote it, with forward slashes whichever separator it used. */
+  const forwardSlashes = (glob: string) => glob.replaceAll("\\", "/");
 
   const list = async (input: unknown): Promise<FileToolAnswer> => {
     const parsed = ListInput.safeParse(input);
-    if (!parsed.success) return err(MALFORMED);
+    if (!parsed.success) return err({ kind: "malformed" });
     const path = parsed.data.path ?? ".";
-    if (!(await staysInside(folder, { paths: [path], globs: [] }))) return err(OUTSIDE_WORKSPACE);
-    let entries: Dirent[];
-    try {
-      entries = await readdir(resolve(folder, path), { withFileTypes: true });
-    } catch (error) {
-      if (hasCode(error, "ENOENT")) return err(`There's no folder at ${path}.`);
-      if (hasCode(error, "ENOTDIR")) return err(`${path} is a file: read it instead.`);
-      return err("That folder couldn't be read.");
+    if (!(await staysInside(folder, { paths: [path], globs: [] }))) return err({ kind: "outside" });
+    const entries = await listEntries(resolve(folder, path));
+    if (!entries.ok) {
+      return err(
+        entries.error === "unreadable" ? { kind: "unreadable" } : { kind: entries.error, path },
+      );
     }
-    if (entries.length === 0) return ok([text("The folder is empty.")]);
-    const names = entries.sort(byName).map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-    const rest = names.length - MAX_LISTED;
-    return ok([
-      text(names.slice(0, MAX_LISTED).join("\n") + (rest > 0 ? `\n…and ${rest} more.` : "")),
-    ]);
+    const names = entries.value
+      .sort(byName)
+      .map((entry) => (entry.kind === "folder" ? `${entry.name}/` : entry.name));
+    return ok({
+      kind: "listing",
+      names: names.slice(0, MAX_LISTED),
+      more: Math.max(0, names.length - MAX_LISTED),
+    });
   };
 
   const read = async (input: unknown): Promise<FileToolAnswer> => {
     const parsed = ReadInput.safeParse(input);
-    if (!parsed.success) return err(MALFORMED);
+    if (!parsed.success) return err({ kind: "malformed" });
     const { path } = parsed.data;
-    if (!(await staysInside(folder, { paths: [path], globs: [] }))) return err(OUTSIDE_WORKSPACE);
+    if (!(await staysInside(folder, { paths: [path], globs: [] }))) return err({ kind: "outside" });
     const file = resolve(folder, path);
-    try {
-      const info = await stat(file);
-      if (info.isDirectory()) return err(`${path} is a folder: list it instead.`);
-      if (info.size > MAX_FILE_BYTES) return err("That file is too large to read.");
-      await options.report({ kind: "read-file", path: shownPath(folder, file) });
-      const bytes = await readFile(file);
-      const imageType = IMAGE_TYPES[extname(file).toLowerCase()];
-      if (imageType !== undefined) {
-        return ok([
-          { kind: "image", dataUrl: `data:${imageType};base64,${bytes.toString("base64")}` },
-        ]);
-      }
-      if (!looksLikeText(bytes))
-        return err("That file isn't text or an image, so it can't be read.");
-      return pageOf(bytes.toString("utf8"), parsed.data.start_line ?? 1);
-    } catch (error) {
-      return err(
-        hasCode(error, "ENOENT") ? `There's no file at ${path}.` : "That file couldn't be read.",
-      );
-    }
+    const entry = await entryAt(file);
+    if (!entry.ok) return err({ kind: "unreadable" });
+    if (entry.value === undefined) return err({ kind: "missing", path });
+    if (entry.value.kind !== "file") return err({ kind: "not-a-file", path });
+    if (entry.value.size > MAX_FILE_BYTES) return err({ kind: "too-large" });
+    const bytes = await readBytes(file);
+    if (!bytes.ok) return err({ kind: "unreadable" });
+    if (bytes.value === undefined) return err({ kind: "missing", path });
+
+    const imageType = IMAGE_TYPES[extname(file).toLowerCase()];
+    const found: FileToolAnswer =
+      imageType !== undefined
+        ? ok({
+            kind: "image",
+            dataUrl: `data:${imageType};base64,${bytes.value.toString("base64")}`,
+          })
+        : looksLikeText(bytes.value)
+          ? pageOf(bytes.value.toString("utf8"), parsed.data.start_line ?? 1)
+          : err({ kind: "not-text" });
+    if (found.ok) await options.report({ kind: "read-file", path: shownPath(folder, file) });
+    return found;
   };
 
   const search = async (input: unknown): Promise<FileToolAnswer> => {
     const parsed = SearchInput.safeParse(input);
-    if (!parsed.success) return err(MALFORMED);
+    if (!parsed.success) return err({ kind: "malformed" });
     const path = parsed.data.path ?? ".";
-    const glob = parsed.data.glob ?? undefined;
+    const glob = parsed.data.glob == null ? undefined : forwardSlashes(parsed.data.glob);
     const reach = { paths: [path], globs: glob === undefined ? [] : [glob] };
-    if (!(await staysInside(folder, reach))) return err(OUTSIDE_WORKSPACE);
+    if (!(await staysInside(folder, reach))) return err({ kind: "outside" });
     const wanted = parsed.data.text.toLowerCase();
-    const matches: string[] = [];
+    const lines: string[] = [];
+    let searched = 0;
+    const done = () => lines.length >= MAX_MATCHES || searched >= MAX_SEARCHED_FILES;
 
     const searchFile = async (file: string) => {
       const shown = shownPath(folder, file);
       if (glob !== undefined && !matchesGlob(shown, glob)) return;
-      const info = await stat(file);
-      if (!info.isFile() || info.size > MAX_SEARCHED_BYTES) return;
-      const bytes = await readFile(file);
-      if (!looksLikeText(bytes)) return;
-      for (const [index, line] of bytes.toString("utf8").split(/\r?\n/).entries()) {
-        if (matches.length >= MAX_MATCHES) return;
+      const entry = await entryAt(file);
+      if (!entry.ok || entry.value?.kind !== "file" || entry.value.size > MAX_SEARCHED_BYTES)
+        return;
+      searched += 1;
+      const bytes = await readBytes(file);
+      if (!bytes.ok || bytes.value === undefined || !looksLikeText(bytes.value)) return;
+      for (const [index, line] of bytes.value.toString("utf8").split(/\r?\n/).entries()) {
+        if (lines.length >= MAX_MATCHES) return;
         if (line.toLowerCase().includes(wanted)) {
-          matches.push(`${shown}:${index + 1}: ${line.trim().slice(0, MAX_MATCH_CHARACTERS)}`);
+          lines.push(`${shown}:${index + 1}: ${line.trim().slice(0, MAX_MATCH_CHARACTERS)}`);
         }
       }
     };
@@ -228,38 +248,29 @@ export const workspaceFiles = (options: {
     // Folders reached through a link aren't searched, so a link can't lead out or round in a
     // loop; a linked file is searched only when it leads somewhere inside.
     const searchFolder = async (inside: string): Promise<void> => {
-      const entries = await readdir(inside, { withFileTypes: true }).catch(() => []);
-      for (const entry of entries.sort(byName)) {
-        if (matches.length >= MAX_MATCHES) return;
+      const entries = await listEntries(inside);
+      if (!entries.ok) return;
+      for (const entry of entries.value.sort(byName)) {
+        if (done()) return;
         const entryPath = join(inside, entry.name);
-        if (entry.isDirectory()) await searchFolder(entryPath);
-        else if (entry.isFile()) await searchFile(entryPath).catch(() => undefined);
+        if (entry.kind === "folder") await searchFolder(entryPath);
+        else if (entry.kind === "file") await searchFile(entryPath);
         else if (
-          entry.isSymbolicLink() &&
+          entry.kind === "link" &&
           (await staysInside(folder, { paths: [entryPath], globs: [] }))
         ) {
-          await searchFile(entryPath).catch(() => undefined);
+          await searchFile(entryPath);
         }
       }
     };
 
-    try {
-      const start = resolve(folder, path);
-      if ((await stat(start)).isDirectory()) await searchFolder(start);
-      else await searchFile(start);
-    } catch (error) {
-      return err(
-        hasCode(error, "ENOENT")
-          ? `There's nothing at ${path}.`
-          : "Those files couldn't be searched.",
-      );
-    }
-    if (matches.length === 0) return ok([text("No matches.")]);
-    const capped =
-      matches.length >= MAX_MATCHES
-        ? `\n\n(The first ${MAX_MATCHES} matches. Search for something narrower to see the rest.)`
-        : "";
-    return ok([text(matches.join("\n") + capped)]);
+    const start = resolve(folder, path);
+    const entry = await entryAt(start);
+    if (!entry.ok) return err({ kind: "unreadable" });
+    if (entry.value === undefined) return err({ kind: "missing", path });
+    if (entry.value.kind === "folder") await searchFolder(start);
+    else await searchFile(start);
+    return ok({ kind: "matches", lines, stopped: done() });
   };
 
   return { list, read, search };
