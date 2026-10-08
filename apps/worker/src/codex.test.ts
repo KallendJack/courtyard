@@ -609,6 +609,107 @@ describe("a Codex turn that fails", () => {
   });
 });
 
+describe("a one-off question to Codex", () => {
+  const ask = (provider: ReturnType<typeof createCodexProvider>, effort?: Effort) =>
+    provider.answerOnce({
+      purpose: "title",
+      model: ModelId.parse("gpt-6.1-sol"),
+      ...(effort === undefined ? {} : { effort }),
+      instructions: "The question's instructions.",
+      message: "Where should the rack go?",
+      schema: z.object({ title: z.string() }),
+      signal: new AbortController().signal,
+    });
+
+  /** Codex finishing a message, as commentary on the way or as its answer. */
+  const message = (turn: Parameters<TurnScript>[0], text: string, phase: string) =>
+    turn.notify("item/completed", {
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      item: { type: "agentMessage", id: `msg-${phase}`, text, phase },
+    });
+
+  it("asks on a fresh, unsaved thread with no tools, sending the answer's shape and the effort, and returns the answer", async () => {
+    const codex = standIn({
+      turn: (turn) => {
+        message(turn, "Thinking of a title.", "commentary");
+        message(turn, '{"title":"Rack position"}', "final_answer");
+        turn.complete("completed");
+      },
+    });
+
+    const answer = await ask(
+      createCodexProvider({ dataDir, startAppServer: codex.startAppServer }),
+      Effort.parse("low"),
+    );
+
+    expect(answer).toEqual({ ok: true, value: { title: "Rack position" } });
+    expect(codex.requests("thread/start")[0]?.params).toMatchObject({
+      model: "gpt-6.1-sol",
+      ephemeral: true,
+      baseInstructions: "The question's instructions.",
+      sandbox: "read-only",
+      environments: [],
+      dynamicTools: [],
+    });
+    expect(codex.requests("turn/start")[0]?.params).toMatchObject({
+      input: [{ type: "text", text: "Where should the rack go?", text_elements: [] }],
+      effort: "low",
+      outputSchema: {
+        type: "object",
+        properties: { title: { type: "string" } },
+        required: ["title"],
+      },
+    });
+    expect(codex.requests("thread/unsubscribe")).toHaveLength(1);
+  });
+
+  it("turns a usage limit into a rate-limited failure, with the reset time of the limit reached", async () => {
+    const codex = standIn({
+      rateLimits: {
+        rateLimits: {
+          limitId: "codex",
+          primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: 1791468000 },
+          secondary: null,
+        },
+        rateLimitsByLimitId: null,
+      },
+      turn: (turn) =>
+        turn.complete("failed", {
+          message: "You've hit your usage limit.",
+          codexErrorInfo: "usageLimitExceeded",
+        }),
+    });
+
+    const answer = await ask(
+      createCodexProvider({ dataDir, startAppServer: codex.startAppServer }),
+    );
+
+    expect(answer).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", resetAt: new Date(1791468000 * 1000).toISOString() },
+    });
+  });
+
+  it("fails, in plain words, on an answer that isn't the shape asked for", async () => {
+    const codex = standIn({
+      turn: (turn) => {
+        message(turn, "Rack position", "final_answer");
+        turn.complete("completed");
+      },
+    });
+
+    const answer = await ask(
+      createCodexProvider({ dataDir, startAppServer: codex.startAppServer }),
+    );
+
+    expect(answer).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: "Codex answered in a way Courtyard doesn't understand." },
+    });
+  });
+});
+
 describe("Codex stopping or being stopped", () => {
   it("fails the turn when the app-server ends mid-turn, and starts it again for the next turn", async () => {
     let turns = 0;
