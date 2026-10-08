@@ -39,9 +39,11 @@ const providers = {
 export default defineConfig({
   testDir: "e2e",
   forbidOnly: Boolean(process.env.CI),
-  // Every change commits to git, one at a time; with tests side by side on Windows that queue can
-  // take a few seconds, so a check waits longer than the default five.
-  expect: { timeout: 10_000 },
+  // Every change commits to git, one command at a time, and each command is a new process. On
+  // Windows those are slow to start, and slower still with another copy's tests running, so a
+  // session's saves can take 20 seconds: a check waits up to 30, and a test up to a minute.
+  timeout: 60_000,
+  expect: { timeout: 30_000 },
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /\.setup\.ts$/ },
