@@ -60,10 +60,10 @@ export function SessionTurns(props: {
   // browser reporting it, by more than "near the end" on a slow frame, which isn't the owner
   // reading back.
   useEffect(() => {
-    let before = window.scrollY;
+    let lastScrollY = window.scrollY;
     const onScroll = () => {
-      following.current = atTheEnd() || (following.current && window.scrollY >= before);
-      before = window.scrollY;
+      following.current = atTheEnd() || (following.current && window.scrollY >= lastScrollY);
+      lastScrollY = window.scrollY;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

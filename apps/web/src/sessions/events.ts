@@ -83,7 +83,8 @@ const withNote = (
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
  * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
  */
-const applyEvent = (log: Log, event: SessionEvent, replayed: boolean): Log => {
+const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }): Log => {
+  const { event, replayed } = update;
   if (event.seq <= log.lastSeq) return log;
   const seq = event.seq;
   switch (event.type) {
@@ -165,7 +166,7 @@ const applyEvent = (log: Log, event: SessionEvent, replayed: boolean): Log => {
 type Batch = { readonly events: readonly SessionEvent[]; readonly replayed: boolean };
 
 const applyBatch = (log: Log, batch: Batch): Log =>
-  batch.events.reduce((next, event) => applyEvent(next, event, batch.replayed), log);
+  batch.events.reduce((next, event) => applyEvent(next, { event, replayed: batch.replayed }), log);
 
 const parseJson = (text: string): unknown => {
   try {
@@ -177,6 +178,8 @@ const parseJson = (text: string): unknown => {
 
 /** How long to wait before opening a stream again after the browser gave up on one. */
 const RECONNECT_MS = 3000;
+/** The longest a replay of the event log is taken to last after (re)connecting. */
+const REPLAY_MS = 500;
 
 /**
  * Follows a session's events: its whole event log first, then live as the worker records them.
@@ -184,7 +187,8 @@ const RECONNECT_MS = 3000;
  *
  * Events are applied once per frame, however many arrive, so a burst redraws the page once. The
  * worker sends what's already in the event log in one burst on (re)connecting, so everything up to
- * the first quiet frame after it counts as replayed: its text shows at once rather than revealed.
+ * the first quiet frame after it (and within `REPLAY_MS`) counts as replayed: its text shows at
+ * once rather than revealed.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
   const [log, dispatch] = useReducer(applyBatch, { lastSeq: 0, turns: [] });
@@ -196,18 +200,30 @@ export const useSessionTurns = (sessionId: SessionId) => {
     let source: EventSource | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
-    let waiting: SessionEvent[] = [];
+    let queued: SessionEvent[] = [];
     let frame: number | undefined;
     let replaying = true;
+    let connectedAt = performance.now();
+    // A hidden page draws no frames, so what arrives meanwhile waits for the owner's return, and
+    // then shows at once like a replay.
+    let hidden = document.hidden;
+    const onVisibility = () => {
+      hidden ||= document.hidden;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     const flush = () => {
       frame = undefined;
-      if (waiting.length === 0) {
+      // However busy the stream, a replay is over within moments of (re)connecting.
+      if (performance.now() - connectedAt > REPLAY_MS) replaying = false;
+      if (queued.length === 0) {
         replaying = false;
+        hidden = false;
         return;
       }
-      dispatch({ events: waiting, replayed: replaying });
-      waiting = [];
+      dispatch({ events: queued, replayed: replaying || hidden });
+      hidden = false;
+      queued = [];
       // While replaying, look again next frame: a frame with nothing new ends the replay.
       if (replaying) frame = requestAnimationFrame(flush);
     };
@@ -220,13 +236,14 @@ export const useSessionTurns = (sessionId: SessionId) => {
       // Also when the browser reconnects by itself: it's sent what was missed first.
       opened.onopen = () => {
         replaying = true;
+        connectedAt = performance.now();
         setReconnecting(false);
       };
       opened.onmessage = (message) => {
         const event = SessionEvent.safeParse(parseJson(message.data));
         if (!event.success) return;
         lastSeen.current = Math.max(lastSeen.current, event.data.seq);
-        waiting.push(event.data);
+        queued.push(event.data);
         frame ??= requestAnimationFrame(flush);
       };
       opened.addEventListener("problem", (message) => {
@@ -250,6 +267,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
       stopped = true;
       clearTimeout(retry);
       if (frame !== undefined) cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
       source?.close();
     };
   }, [sessionId]);

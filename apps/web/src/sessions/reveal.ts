@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /** The slowest the reveal goes, in characters a millisecond, so the last few never crawl in. */
 const SLOWEST = 0.06;
@@ -34,25 +34,28 @@ export const useReveal = (text: string, options: { running: boolean; replayed: n
   const reducedMotion = useReducedMotion();
   const live = options.running && !reducedMotion;
   const [shown, setShown] = useState(text.length);
-  // What the frames read, kept up to date without restarting them.
-  const latest = useRef({ length: text.length, replayed: options.replayed });
-  useEffect(() => {
-    latest.current = { length: text.length, replayed: options.replayed };
+  // The text's length and how much was replayed, for the frames to read without restarting.
+  const arrived = useRef({ length: text.length, replayed: options.replayed });
+  useLayoutEffect(() => {
+    arrived.current = { length: text.length, replayed: options.replayed };
   });
 
-  useEffect(() => {
+  // Before the page is painted, so turning reduced motion off mid-answer doesn't flash back to an
+  // older point: the reveal starts from everything there is.
+  useLayoutEffect(() => {
     if (!live) return;
-    let position = latest.current.length;
-    let before = performance.now();
+    let position = arrived.current.length;
+    setShown(position);
+    let lastFrame = performance.now();
     let frame = requestAnimationFrame(function step(now) {
-      const { length, replayed } = latest.current;
+      const { length, replayed } = arrived.current;
       position = Math.max(position, replayed);
-      const waiting = length - position;
-      if (waiting > 0) {
-        position = Math.min(length, position + (now - before) * (SLOWEST + waiting / BEHIND_MS));
+      const behind = length - position;
+      if (behind > 0) {
+        position = Math.min(length, position + (now - lastFrame) * (SLOWEST + behind / BEHIND_MS));
         setShown(Math.floor(position));
       }
-      before = now;
+      lastFrame = now;
       frame = requestAnimationFrame(step);
     });
     return () => cancelAnimationFrame(frame);

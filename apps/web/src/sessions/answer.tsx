@@ -96,7 +96,7 @@ export const Answer = memo(function Answer(props: {
     <div className="space-y-4 text-base/[26px] wrap-anywhere">
       {blocks.map((block, index) => (
         <Block
-          // biome-ignore lint/suspicious/noArrayIndexKey: blocks only ever grow, in order
+          // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)
           key={index}
           text={props.running && index === blocks.length - 1 ? finishForNow(block) : block}
         />

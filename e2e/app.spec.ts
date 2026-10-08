@@ -121,6 +121,12 @@ test("draws only the turns near the screen in a long session", async ({ page }) 
   await expect(session.getByText("You said: Message 1", { exact: true })).toBeVisible();
 });
 
+/** How far the bottom of the screen is from the end of the page, in pixels. */
+const fromTheEnd = (page: Page) =>
+  page.evaluate(
+    () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
+  );
+
 test.describe("at the end of a long session", () => {
   test.use({ viewport: COVER_SCREEN });
 
@@ -133,13 +139,7 @@ test.describe("at the end of a long session", () => {
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 
     // It follows once a frame, so the last of the answer can take a frame or two to come into view.
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
-        ),
-      )
-      .toBeLessThan(2);
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
   });
 
   test("stops following once the owner scrolls back up to read", async ({ page }) => {
@@ -149,13 +149,9 @@ test.describe("at the end of a long session", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText("line 10");
 
-    const fromTheEnd = () =>
-      page.evaluate(
-        () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
-      );
     await page.mouse.move(200, 300);
     await page.mouse.wheel(0, -600);
-    await expect.poll(fromTheEnd).toBeGreaterThan(400);
+    await expect.poll(() => fromTheEnd(page)).toBeGreaterThan(400);
     const reading = await page.evaluate(() => window.scrollY);
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
     expect(await page.evaluate(() => window.scrollY)).toBe(reading);
