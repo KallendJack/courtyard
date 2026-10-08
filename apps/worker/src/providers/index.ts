@@ -66,8 +66,10 @@ export type TurnInput = {
  */
 export type OneOffInput = {
   /** What it's for, so the fake can script its answer. */
-  readonly purpose: "tidy";
+  readonly purpose: "tidy" | "title";
   readonly model: ModelId;
+  /** One of the levels of effort the model takes; left out for the model's default. */
+  readonly effort?: Effort;
   /** Built by the prompts module, and delivered as given. */
   readonly instructions: string;
   readonly message: string;

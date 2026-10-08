@@ -51,13 +51,18 @@ export type Turn = {
     | { readonly kind: "failed"; readonly reason: FailureReason };
 };
 
-type Log = { readonly lastSeq: number; readonly turns: readonly Turn[] };
+type Log = {
+  readonly lastSeq: number;
+  readonly turns: readonly Turn[];
+  /** The title a model gave the session after its first answer, if one has. */
+  readonly modelTitle: string | undefined;
+};
 
 /** Swaps in a new last turn and leaves every other turn object as it was. */
 const withLastTurn = (log: Log, update: { seq: number; change: (turn: Turn) => Turn }): Log => {
   const last = log.turns.at(-1);
   if (!last) return { ...log, lastSeq: update.seq };
-  return { lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
+  return { ...log, lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
 };
 
 /**
@@ -68,6 +73,7 @@ const withNote = (
   log: Log,
   update: { seq: number; save: number; change: (note: Note) => Note },
 ): Log => ({
+  ...log,
   lastSeq: update.seq,
   turns: log.turns.map((turn) =>
     turn.notes.some((note) => note.seq === update.save)
@@ -91,6 +97,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     case "owner-message": {
       const before = log.turns.at(-1)?.model;
       return {
+        ...log,
         lastSeq: seq,
         turns: [
           ...log.turns,
@@ -114,6 +121,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     // The owner message after it shows the change; nothing else to show.
     case "model-changed":
       return { ...log, lastSeq: seq };
+    case "session-titled":
+      return { ...log, lastSeq: seq, modelTitle: event.title };
     case "text-delta":
       return withLastTurn(log, {
         seq,
@@ -191,7 +200,11 @@ const REPLAY_MS = 500;
  * once rather than revealed.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
-  const [log, dispatch] = useReducer(applyBatch, { lastSeq: 0, turns: [] });
+  const [log, dispatch] = useReducer(applyBatch, {
+    lastSeq: 0,
+    turns: [],
+    modelTitle: undefined,
+  });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
   const lastSeen = useRef(0);
@@ -272,5 +285,5 @@ export const useSessionTurns = (sessionId: SessionId) => {
     };
   }, [sessionId]);
 
-  return { turns: log.turns, problem, reconnecting };
+  return { turns: log.turns, modelTitle: log.modelTitle, problem, reconnecting };
 };

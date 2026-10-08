@@ -27,7 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5 });
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
@@ -118,9 +118,10 @@ describe("a session", () => {
   it("continues with later messages, numbering events without gaps", async () => {
     const api = await start();
     const session = await startSession(api.request, "First");
+    // After its first answer, the session is titled.
     const first = await followSession(api.request, {
       sessionId: session.id,
-      until: "turn-completed",
+      until: "session-titled",
     });
 
     const sent = await api.post(`/api/sessions/${session.id}/messages`, {

@@ -61,7 +61,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5 });
 });
 
 const now = () => clock;
@@ -78,10 +78,10 @@ const summaryOf = async (request: Requester) => {
 const startFresh = (request: Requester, confirm: unknown = "start fresh") =>
   postJson(request, "/api/fresh-start", { confirm });
 
-/** Starts a session in garage-gym and waits for its turn to finish. */
+/** Starts a session in garage-gym and waits for its first answer and the title a model gives it after. */
 const finishedSession = async (request: Requester, text: string) => {
   const session = await startSession(request, text);
-  await followSession(request, { sessionId: session.id, until: "turn-completed" });
+  await followSession(request, { sessionId: session.id, until: "session-titled" });
   return session;
 };
 
@@ -158,7 +158,7 @@ describe("a fresh start", () => {
 
     const firstEvents = join(dataDir(), "fresh-starts", "2026-10-08", first.id, "events.jsonl");
     expect(await readFile(firstEvents, "utf8")).toContain("Where should the rack go?");
-    const secondFile = join(dataDir(), "fresh-starts", "2026-10-08-2", second.id, "session.json");
+    const secondFile = join(dataDir(), "fresh-starts", "2026-10-08-2", second.id, "events.jsonl");
     expect(await readFile(secondFile, "utf8")).toContain("Mats or tiles?");
     expect(await readdir(join(dataDir(), "sessions")).catch(() => [])).toEqual([]);
     expect((await summaryOf(request)).sessions).toBe(0);

@@ -166,6 +166,14 @@ export const startSession = async (request: Requester, text: string, model = FAK
   return SessionSummary.parse(await response.json());
 };
 
+/** For tests: gives a session a new title, the way the web app does. */
+export const renameSession = (request: Requester, id: string, title: unknown) =>
+  request(`/api/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+
 /** For tests: a fake provider that holds each turn open until the test lets it go, if ever. */
 export const gatedProvider = () => {
   let release: () => void = () => {};

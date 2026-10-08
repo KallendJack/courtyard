@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5 });
 });
 
 /**
@@ -159,14 +159,14 @@ describe("a crash mid-write", () => {
     const session = await startSession(beforeRestart, "Finished before the crash");
     const recorded = await followSession(beforeRestart, {
       sessionId: session.id,
-      until: "turn-completed",
+      until: "session-titled",
     });
     await appendFile(eventsFile(session.id), '{"seq":99,"type":"text-de');
 
     const afterRestart = await startWorker();
     const replayed = await followSession(afterRestart, {
       sessionId: session.id,
-      until: "turn-completed",
+      until: "session-titled",
     });
     const again = await postJson(afterRestart, `/api/sessions/${session.id}/messages`, {
       text: "Still works",
