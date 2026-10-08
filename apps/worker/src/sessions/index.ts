@@ -13,6 +13,7 @@ import {
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
   type SessionSummary,
@@ -24,7 +25,14 @@ import { z } from "zod";
 import type { ContextFolder } from "../context-folder/index.ts";
 import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
-import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
+import {
+  type FramingWorkspace,
+  framingFor,
+  saveReply,
+  TITLING,
+  TitleAnswer,
+  titleMessage,
+} from "../prompts/index.ts";
 import { offerFor, type Provider, type SaveReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -81,6 +89,11 @@ const SessionFile = z.object({
   id: SessionId,
   workspaceId: WorkspaceId,
   title: z.string(),
+  /**
+   * Who set the title, when a model mustn't change it: the owner by renaming it, or a starter
+   * message whose first line is the title (Get to know). Left out otherwise, and in older files.
+   */
+  titledBy: z.enum(["owner", "starter"]).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -90,11 +103,32 @@ type SessionFile = z.infer<typeof SessionFile>;
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
 type NewEvent = WithoutNumbering<SessionEvent>;
 
-const TITLE_LENGTH = 60;
+/** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
 const titleFrom = (text: string) => {
   const firstLine = text.split("\n")[0]?.trim() ?? "";
-  return firstLine.length > TITLE_LENGTH ? `${firstLine.slice(0, TITLE_LENGTH - 1)}…` : firstLine;
+  return firstLine.length > SESSION_TITLE_MAX_LENGTH
+    ? `${firstLine.slice(0, SESSION_TITLE_MAX_LENGTH - 1)}…`
+    : firstLine;
 };
+
+/**
+ * A model's title as the session gets it: on one line, without the quotes or full stop it was
+ * told to leave off, and no longer than a title can be. `undefined` when nothing is left.
+ */
+const modelTitle = (answer: unknown) => {
+  const parsed = TitleAnswer.safeParse(answer);
+  if (!parsed.success) return undefined;
+  const tidied = parsed.data.title
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["'“‘]+|["'”’]+$/g, "")
+    .replace(/\.$/, "")
+    .trim();
+  return tidied === "" ? undefined : titleFrom(tidied);
+};
+
+/** How long titling a session can take before it's given up on: a few words shouldn't take long. */
+const TITLING_TIMEOUT_MS = 2 * 60 * 1000;
 
 const STORAGE_ERROR: SessionError = {
   kind: "storage",
@@ -308,7 +342,10 @@ export const createSessions = (options: {
    * Changes a session's own file. Runs in the session's queue, so two changes (a turn ending and
    * the owner renaming it, say) can't each read the file before the other writes it.
    */
-  const updateFile = (id: SessionId, change: Partial<Pick<SessionFile, "title" | "updatedAt">>) =>
+  const updateFile = (
+    id: SessionId,
+    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt">>,
+  ) =>
     inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
       if (!file.ok) return err(STORAGE_ERROR);
@@ -359,6 +396,8 @@ export const createSessions = (options: {
     provider: Provider;
     model: ModelRef["model"];
     effort: Effort | undefined;
+    /** Whether a completed turn is followed by titling the session: only its first turn. */
+    titleAfter: boolean;
   }) => {
     const session = runningSession(turn.id);
     const stopper = turn.stopper;
@@ -477,6 +516,61 @@ export const createSessions = (options: {
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
+    else if (turn.titleAfter && ending.type === "turn-completed") {
+      titleSession(turn.id).catch((error: unknown) =>
+        console.error(`Session ${turn.id}: titling it crashed`, error),
+      );
+    }
+  };
+
+  /**
+   * Titles a session after its first answer (docs/ai-conduct.md, Titling a session): the first
+   * model not at its usage limit, at its lowest effort, is given the first message and the start
+   * of the answer. Its title is written unless the owner or a starter set one, checked in the
+   * session's queue so a rename made meanwhile wins. Nobody waits on it, and when it fails the
+   * first line stays, with nothing shown and nothing retried.
+   */
+  const titleSession = async (id: SessionId) => {
+    const session = running.get(id);
+    const [file, events, offered] = await Promise.all([
+      readJsonFile(sessionFilePath(id), SessionFile),
+      readEvents(id),
+      modelsOnOffer(),
+    ]);
+    if (!file.ok || file.value === undefined || file.value.titledBy !== undefined) return;
+    const chosen = offered.find(({ model }) => model.limit === undefined);
+    const first = events.ok
+      ? events.value.find((event) => event.type === "owner-message")
+      : undefined;
+    if (session === undefined || chosen === undefined || first === undefined || !events.ok) return;
+    let answer = "";
+    for (const event of events.value) {
+      if (endsTurn(event)) break;
+      if (event.type === "text-delta") answer += event.text;
+    }
+    // Least first, so the first is the lowest; a model that takes none answers at its default.
+    const lowest = chosen.model.efforts[0]?.id;
+    const answered = await chosen.provider.answerOnce({
+      purpose: "title",
+      model: chosen.model.id,
+      ...(lowest === undefined ? {} : { effort: lowest }),
+      instructions: TITLING,
+      message: titleMessage({ message: first.text, answer }),
+      schema: TitleAnswer,
+      signal: AbortSignal.timeout(TITLING_TIMEOUT_MS),
+    });
+    const title = answered.ok ? modelTitle(answered.value) : undefined;
+    if (title === undefined) return;
+    await inOrder(session, async () => {
+      // Deleted or set aside by a fresh start meanwhile.
+      if (running.get(id) !== session) return;
+      const now = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!now.ok || now.value === undefined || now.value.titledBy !== undefined) return;
+      const written = await writeJsonFile(sessionFilePath(id), { ...now.value, title });
+      if (!written.ok) return;
+      const recorded = await writeEvent({ id, session, event: { type: "session-titled", title } });
+      if (!recorded.ok) console.error(`Session ${id}: its new title couldn't be recorded.`);
+    });
   };
 
   const startTurn = async (start: {
@@ -491,6 +585,8 @@ export const createSessions = (options: {
     carryingOn?: { turn: number };
     /** How many fresh starts there had been when the turn was asked for. */
     since: number;
+    /** The session's first turn, after which it's titled. */
+    first?: boolean;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -534,6 +630,7 @@ export const createSessions = (options: {
       provider: start.provider,
       model: start.message.model.model,
       effort: start.message.effort,
+      titleAfter: start.first ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
   };
@@ -549,6 +646,16 @@ export const createSessions = (options: {
   /** Every provider's status, with the usage limits its models are at. */
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
 
+  /** Every model on offer right now, in order, each with its provider. */
+  const modelsOnOffer = async () => {
+    const offers = await Promise.all(
+      options.providers.map(async (provider) => ({ provider, status: await provider.status() })),
+    );
+    return offers.flatMap(({ provider, status }) =>
+      status.available ? status.models.map((model) => ({ provider, model })) : [],
+    );
+  };
+
   /**
    * A first message with its model: the one it names, or else the first model on offer that isn't
    * at its usage limit (the first of all when every one is).
@@ -556,21 +663,14 @@ export const createSessions = (options: {
   const withModel = async (message: FirstMessage): Promise<Result<NewMessage, SessionError>> => {
     const { model } = message;
     if (model !== undefined) return ok({ ...message, model });
-    const offered = (await statuses()).flatMap((status) =>
-      status.available
-        ? status.models.map((info) => ({
-            ref: { provider: status.id, model: info.id },
-            limited: info.limit !== undefined,
-          }))
-        : [],
-    );
-    const chosen = offered.find((choice) => !choice.limited) ?? offered[0];
+    const offered = await modelsOnOffer();
+    const chosen = offered.find((offer) => offer.model.limit === undefined) ?? offered[0];
     return chosen
-      ? ok({ text: message.text, model: chosen.ref })
+      ? ok({ text: message.text, model: { provider: chosen.provider.id, model: chosen.model.id } })
       : err({ kind: "model-unavailable" });
   };
 
-  const summaryOf = (file: SessionFile): SessionSummary => ({
+  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => ({
     ...file,
     busy: (running.get(file.id)?.turn.kind ?? "idle") !== "idle",
   });
@@ -688,6 +788,8 @@ export const createSessions = (options: {
     create: async (start: {
       workspaceId: WorkspaceId;
       message: FirstMessage;
+      /** Started with a starter message, whose first line stays the title (Get to know). */
+      starter?: boolean;
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -701,6 +803,7 @@ export const createSessions = (options: {
         id,
         workspaceId: start.workspaceId,
         title: titleFrom(start.message.text),
+        ...(start.starter ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,
       };
@@ -717,6 +820,7 @@ export const createSessions = (options: {
             provider: provider.value,
             message: message.value,
             since,
+            first: true,
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -803,11 +907,14 @@ export const createSessions = (options: {
       return ok(summaryOf(session.value));
     },
 
-    /** Gives a session a new title, kept in its `session.json`. */
+    /**
+     * Gives a session a new title, kept in its `session.json`, marked as the owner's so no model
+     * titles it after that.
+     */
     rename: async (rawId: string, title: string): Promise<Result<SessionSummary, SessionError>> => {
       const session = await findSession(rawId);
       if (!session.ok) return session;
-      const renamed = await updateFile(session.value.id, { title });
+      const renamed = await updateFile(session.value.id, { title, titledBy: "owner" });
       return renamed.ok ? ok(summaryOf(renamed.value)) : renamed;
     },
 

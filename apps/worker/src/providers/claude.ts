@@ -605,6 +605,11 @@ export const createClaudeProvider = (
     },
 
     answerOnce: async (input) => {
+      // As for a turn: the worker only asks at a level the model listed.
+      const effort = input.effort === undefined ? undefined : ClaudeEffort.safeParse(input.effort);
+      if (effort?.success === false) {
+        return err({ kind: "unknown", message: "Claude doesn't take that effort." });
+      }
       const progress: Progress = {};
       const stop = new AbortController();
       const stopClaudeCode = () => stop.abort();
@@ -616,6 +621,7 @@ export const createClaudeProvider = (
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),
+            ...(effort === undefined ? {} : { effort: effort.data }),
             // Nowhere in particular: it has no tools to look with.
             cwd: tmpdir(),
             systemPrompt: input.instructions,

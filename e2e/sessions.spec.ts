@@ -25,8 +25,9 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await expect(session.getByRole("alert")).toHaveCount(2);
 
   await page.getByRole("link", { name: "Back to Garage gym" }).click();
+  // By its first line, or the title a model gave it after the first answer.
   await expect(page.getByRole("region", { name: "Sessions" })).toContainText(
-    "Where should the rack go?",
+    /where should the rack go/i,
   );
 });
 
@@ -38,4 +39,20 @@ test("the owner sees which files the model read", async ({ page }) => {
   await expect(page.getByRole("list", { name: "What the model did" })).toHaveText(
     "Read CONTEXT.md",
   );
+});
+
+test("a new session takes the model's title once its first answer is in", async ({ page }) => {
+  // A message of its own, so the test can run again on the same worker.
+  const stamp = Date.now();
+  const message = `plan the garage lighting ${stamp} please`;
+  const titled = `Plan The Garage Lighting ${stamp}`;
+  await page.goto("/workspaces/garage-gym");
+  await page.getByLabel("Message").fill(message);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);
+
+  // The fake titles a session with the first few words of its message, in title case.
+  await expect(page.getByRole("heading", { level: 1, name: titled })).toBeVisible();
+  const recent = page.getByRole("region", { name: "Recent in Garage gym" });
+  await expect(recent.getByRole("link", { name: titled })).toBeVisible();
 });

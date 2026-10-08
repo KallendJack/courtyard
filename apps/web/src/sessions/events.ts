@@ -51,13 +51,18 @@ export type Turn = {
     | { readonly kind: "failed"; readonly reason: FailureReason };
 };
 
-type Log = { readonly lastSeq: number; readonly turns: readonly Turn[] };
+type Log = {
+  readonly lastSeq: number;
+  readonly turns: readonly Turn[];
+  /** How many times a model titled the session since the page loaded it, so it can load the new title. */
+  readonly retitled: number;
+};
 
 /** Swaps in a new last turn and leaves every other turn object as it was. */
 const withLastTurn = (log: Log, update: { seq: number; change: (turn: Turn) => Turn }): Log => {
   const last = log.turns.at(-1);
   if (!last) return { ...log, lastSeq: update.seq };
-  return { lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
+  return { ...log, lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
 };
 
 /**
@@ -68,6 +73,7 @@ const withNote = (
   log: Log,
   update: { seq: number; save: number; change: (note: Note) => Note },
 ): Log => ({
+  ...log,
   lastSeq: update.seq,
   turns: log.turns.map((turn) =>
     turn.notes.some((note) => note.seq === update.save)
@@ -83,7 +89,10 @@ const withNote = (
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
  * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
  */
-const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }): Log => {
+const applyEvent = (
+  log: Log,
+  update: { event: SessionEvent; replayed: boolean; afterLoad: boolean },
+): Log => {
   const { event, replayed } = update;
   if (event.seq <= log.lastSeq) return log;
   const seq = event.seq;
@@ -91,6 +100,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     case "owner-message": {
       const before = log.turns.at(-1)?.model;
       return {
+        ...log,
         lastSeq: seq,
         turns: [
           ...log.turns,
@@ -114,6 +124,9 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     // The owner message after it shows the change; nothing else to show.
     case "model-changed":
       return { ...log, lastSeq: seq };
+    // The page loads the new title, unless it was already there when the page loaded.
+    case "session-titled":
+      return { ...log, lastSeq: seq, retitled: log.retitled + (update.afterLoad ? 1 : 0) };
     case "text-delta":
       return withLastTurn(log, {
         seq,
@@ -162,11 +175,22 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
   }
 };
 
-/** The events that arrived in one frame, and whether they were replayed from the event log. */
-type Batch = { readonly events: readonly SessionEvent[]; readonly replayed: boolean };
+/**
+ * The events that arrived in one frame, whether they were replayed from the event log, and
+ * whether they came after the page first caught up with it: news to what the page loaded.
+ */
+type Batch = {
+  readonly events: readonly SessionEvent[];
+  readonly replayed: boolean;
+  readonly afterLoad: boolean;
+};
 
 const applyBatch = (log: Log, batch: Batch): Log =>
-  batch.events.reduce((next, event) => applyEvent(next, { event, replayed: batch.replayed }), log);
+  batch.events.reduce(
+    (next, event) =>
+      applyEvent(next, { event, replayed: batch.replayed, afterLoad: batch.afterLoad }),
+    log,
+  );
 
 const parseJson = (text: string): unknown => {
   try {
@@ -191,7 +215,7 @@ const REPLAY_MS = 500;
  * once rather than revealed.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
-  const [log, dispatch] = useReducer(applyBatch, { lastSeq: 0, turns: [] });
+  const [log, dispatch] = useReducer(applyBatch, { lastSeq: 0, turns: [], retitled: 0 });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
   const lastSeen = useRef(0);
@@ -203,6 +227,8 @@ export const useSessionTurns = (sessionId: SessionId) => {
     let queued: SessionEvent[] = [];
     let frame: number | undefined;
     let replaying = true;
+    /** Set once the first replay is over: anything after it is news to what the page loaded. */
+    let caughtUp = false;
     let connectedAt = performance.now();
     // A hidden page draws no frames, so what arrives meanwhile waits for the owner's return, and
     // then shows at once like a replay.
@@ -218,14 +244,16 @@ export const useSessionTurns = (sessionId: SessionId) => {
       if (performance.now() - connectedAt > REPLAY_MS) replaying = false;
       if (queued.length === 0) {
         replaying = false;
+        caughtUp = true;
         hidden = false;
         return;
       }
-      dispatch({ events: queued, replayed: replaying || hidden });
+      dispatch({ events: queued, replayed: replaying || hidden, afterLoad: caughtUp });
       hidden = false;
       queued = [];
       // While replaying, look again next frame: a frame with nothing new ends the replay.
       if (replaying) frame = requestAnimationFrame(flush);
+      else caughtUp = true;
     };
 
     const connect = () => {
@@ -272,5 +300,5 @@ export const useSessionTurns = (sessionId: SessionId) => {
     };
   }, [sessionId]);
 
-  return { turns: log.turns, problem, reconnecting };
+  return { turns: log.turns, retitled: log.retitled, problem, reconnecting };
 };

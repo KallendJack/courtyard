@@ -2,11 +2,12 @@ import { setTimeout as wait } from "node:timers/promises";
 import {
   type Capabilities,
   Effort,
+  type FailureReason,
   ModelId,
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
-import { err, ok } from "../result.ts";
+import { err, ok, type Result } from "../result.ts";
 import type { Provider, SignIn } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
@@ -103,6 +104,29 @@ const scriptedTidy = (message: string) => {
   return { changes };
 };
 
+/** How many words of the owner's first message a scripted title keeps. */
+const TITLE_WORDS = 5;
+
+/**
+ * The title a session's first message scripts: its first few words in title case ("Where should
+ * the rack go?" is "Where Should The Rack Go"). "no title please" fails on purpose.
+ */
+const scriptedTitle = (message: string): Result<{ title: string }, FailureReason> => {
+  const first = /^Owner: (.*)$/m.exec(message)?.[1] ?? "";
+  if (/no title please/i.test(first)) {
+    return err({
+      kind: "unknown",
+      message: "The fake didn't title it, because it was asked not to.",
+    });
+  }
+  const words = first.match(/[\p{L}\p{N}']+/gu) ?? [];
+  const title = words
+    .slice(0, TITLE_WORDS)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  return ok({ title });
+};
+
 /**
  * A pretend sign-in, starting signed out, so signing in can be seen and tested with no real
  * provider: its link and code are made up, and it finishes after `finishAfterMs`, or never.
@@ -155,7 +179,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
- * `scriptedTidy`). "please hit Fake's limit" (or "Fake two's", for the second fake) acts out a
+ * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit Fake's limit" (or "Fake two's", for the second fake) acts out a
  * usage limit that resets two hours on, so overflow can be seen and tested.
  */
 export const createFakeProvider = (
@@ -234,6 +258,8 @@ export const createFakeProvider = (
       switch (purpose) {
         case "tidy":
           return ok(scriptedTidy(message));
+        case "title":
+          return scriptedTitle(message);
       }
     },
   };

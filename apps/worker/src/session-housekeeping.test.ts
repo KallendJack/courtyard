@@ -12,6 +12,7 @@ import {
   gatedProvider,
   postJson,
   type Requester,
+  renameSession,
   startSession,
   testWorker,
 } from "./testing.ts";
@@ -24,26 +25,19 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5 });
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
   return asOwner(testWorker({ root, providers }));
 };
-
+/** Starts a session and waits for its first answer and the title a model gives it after. */
 /** Starts a session and waits for its first turn to finish. */
 const finishedSession = async (request: Requester, text: string) => {
   const session = await startSession(request, text);
-  await followSession(request, { sessionId: session.id, until: "turn-completed" });
+  await followSession(request, { sessionId: session.id, until: "session-titled" });
   return session;
 };
-
-const renameSession = (request: Requester, id: string, title: unknown) =>
-  request(`/api/sessions/${id}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
 
 const deleteSession = (request: Requester, id: string) =>
   request(`/api/sessions/${id}`, {
@@ -108,7 +102,7 @@ describe("deleting a session", () => {
     expect(response.status).toBe(204);
     expect(await readdir(join(root, "data", "sessions"))).toEqual([kept.id]);
     expect((await request(`/api/sessions/${session.id}`)).status).toBe(404);
-    expect((await listSessions(request)).map((s) => s.title)).toEqual(["Keep me"]);
+    expect((await listSessions(request)).map((s) => s.title)).toEqual(["Keep Me"]);
   });
 
   it("refuses while a turn is running, saying to stop it first", async () => {

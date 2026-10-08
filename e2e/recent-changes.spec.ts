@@ -16,7 +16,8 @@ test("a save shows in Recent changes, and Undo there marks its chat note undone"
   await expect(changes).toContainText("Saved to Facts");
   await expect(changes).toContainText("The plot faces south.");
   await expect(
-    changes.getByRole("link", { name: "save fact: The plot faces south." }),
+    // The session's title, its first line or the title a model gave it after the answer.
+    changes.getByRole("link", { name: /save fact:? the plot faces/i }),
   ).toBeVisible();
 
   await changes.getByRole("button", { name: "Undo" }).click();
