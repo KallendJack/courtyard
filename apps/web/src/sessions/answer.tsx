@@ -1,6 +1,8 @@
 import { memo } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { finishForNow, splitBlocks } from "./blocks.ts";
+import { useReveal } from "./reveal.ts";
 
 const SUBHEADING = "font-display text-xl/7 font-semibold";
 const LINK = "font-medium text-primary-text underline underline-offset-2";
@@ -66,16 +68,39 @@ const ELEMENTS: Components = {
   td: ({ node: _, ...props }) => <td className="border-b px-2 py-1.5" {...props} />,
 };
 
+const PLUGINS = [remarkGfm];
+
+/** One block of an answer, memoised on its text, so finished blocks aren't formatted again. */
+const Block = memo(function Block(props: { text: string }) {
+  return (
+    <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+      {props.text}
+    </Markdown>
+  );
+});
+
 /**
- * A model's answer, formatted. Memoised on the text, so an answer only re-renders when it
- * changes (each new piece while it streams in).
+ * A model's answer, formatted. While it streams it's revealed at an even pace, and only its last
+ * block is formatted again as text arrives, shown with any half-written formatting closed.
  */
-export const Answer = memo(function Answer(props: { text: string }) {
+export const Answer = memo(function Answer(props: {
+  text: string;
+  /** The turn is still running, so more text may come. */
+  running: boolean;
+  /** How much of the text was replayed from the event log, which shows at once. */
+  replayed: number;
+}) {
+  const shown = useReveal(props.text, { running: props.running, replayed: props.replayed });
+  const blocks = splitBlocks(shown);
   return (
     <div className="space-y-4 text-base/[26px] wrap-anywhere">
-      <Markdown remarkPlugins={[remarkGfm]} components={ELEMENTS}>
-        {props.text}
-      </Markdown>
+      {blocks.map((block, index) => (
+        <Block
+          // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)
+          key={index}
+          text={props.running && index === blocks.length - 1 ? finishForNow(block) : block}
+        />
+      ))}
     </div>
   );
 });
