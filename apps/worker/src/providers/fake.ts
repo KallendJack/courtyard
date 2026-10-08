@@ -1,7 +1,13 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { type Capabilities, Effort, ModelId, ProviderId } from "@courtyard/contract";
+import {
+  type Capabilities,
+  Effort,
+  ModelId,
+  ProviderId,
+  type SignInState,
+} from "@courtyard/contract";
 import { err, ok } from "../result.ts";
-import type { Provider } from "./index.ts";
+import type { Provider, SignIn } from "./index.ts";
 
 const id = ProviderId.parse("fake");
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
@@ -98,6 +104,45 @@ const scriptedTidy = (message: string) => {
   return { changes };
 };
 
+/**
+ * A pretend sign-in, starting signed out, so signing in can be seen and tested with no real
+ * provider: its link and code are made up, and it finishes after `finishAfterMs`, or never.
+ */
+const fakeSignIn = (options: { finishAfterMs?: number }): SignIn => {
+  let state: SignInState = { kind: "signed-out" };
+  let finishing: ReturnType<typeof setTimeout> | undefined;
+  const stopFinishing = () => clearTimeout(finishing);
+  return {
+    service: "Fake",
+    state: async () => state,
+    start: async () => {
+      stopFinishing();
+      state = {
+        kind: "waiting",
+        link: "https://courtyard.example/device",
+        code: "FAKE-2026",
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      };
+      const { finishAfterMs } = options;
+      if (finishAfterMs !== undefined) {
+        finishing = setTimeout(() => {
+          state = { kind: "signed-in", email: "owner@courtyard.example", plan: "pretend" };
+        }, finishAfterMs);
+      }
+      return ok(state);
+    },
+    cancel: async () => {
+      stopFinishing();
+      if (state.kind !== "signed-in") state = { kind: "signed-out" };
+    },
+    signOut: async () => {
+      stopFinishing();
+      state = { kind: "signed-out" };
+      return ok(null);
+    },
+  };
+};
+
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
   wait(ms, undefined, { signal }).catch(() => undefined);
@@ -118,6 +163,8 @@ export const createFakeProvider = (
     beforeReply?: (signal: AbortSignal) => Promise<void>;
     /** Told the model and effort of each turn, so tests can see what reached the model. */
     heard?: (turn: { model: ModelId; effort: Effort | undefined }) => void;
+    /** A pretend sign-in, starting signed out (see `fakeSignIn`). The fake answers either way. */
+    signIn?: { finishAfterMs?: number };
   } = {},
 ): Provider => {
   const delayMs = options.delayMs ?? 40;
@@ -125,6 +172,7 @@ export const createFakeProvider = (
   return {
     id,
     capabilities: CAPABILITIES,
+    ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     status: async () => ({
       id,
       label: "Fake",

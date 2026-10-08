@@ -42,6 +42,7 @@ export {
   StopRequest,
   takesEffort,
 } from "./lib/session.ts";
+export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export {
   TidyChange,
   TidyChangeKind,
