@@ -1,7 +1,6 @@
-# The process is Matt Pocock's skills, as they are (on trial)
+# The process is Matt Pocock's skills, as they are
 
-Status: on trial from 2026-10-08. It becomes the house standard for every code workspace once it has held up and #88
-is grilled; until then it can change.
+Decided 2026-10-08 (#129). Whether this becomes the standard for every code workspace is #88's call.
 
 Courtyard's process had grown one ticket at a time: Matt Pocock's skills plus rules of our own around them, some
 repeating his, some going against him, and an installed copy three weeks behind his releases. From now on, **how the
