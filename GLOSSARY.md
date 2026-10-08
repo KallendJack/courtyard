@@ -180,6 +180,11 @@ _Avoid_: request, run, completion
 One recorded thing that happened in a session.
 _Avoid_: message, chunk, log line
 
+**Suggested reply**:
+A short reply a model offers under its question, two or three at a time, which the owner taps to send as their next
+message (ADR 0017).
+_Avoid_: quick reply, chip, option, tap answer
+
 **Stop**:
 The owner ending a running turn early. Whatever the model wrote so far stays, and the turn is
 recorded as stopped, apart from failures.
