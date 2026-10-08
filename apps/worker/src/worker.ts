@@ -18,6 +18,7 @@ import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { apiError, contextError, readBody } from "./http.ts";
+import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
@@ -109,19 +110,24 @@ export const createWorker = (options: {
     codexProvider,
     fakeProvider,
     fakeSignIn,
+    secondFakeProvider,
     liveCopy,
     updateTask,
   } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
   // Claude first, so it's the default model wherever it's available.
-  const providers = options.providers ?? [
-    ...(claudeProvider ? [createClaudeProvider()] : []),
-    ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
-    ...(fakeProvider
-      ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
-      : []),
-  ];
+  const providers = rememberingLimits(
+    options.providers ?? [
+      ...(claudeProvider ? [createClaudeProvider()] : []),
+      ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
+      ...(fakeProvider
+        ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
+        : []),
+      ...(secondFakeProvider ? [createFakeProvider({ second: true })] : []),
+    ],
+    now,
+  );
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
   const sessions = createSessions({ dataDir, providers, contextDir, contextFolder, now });
   const live = createLive({

@@ -1,9 +1,12 @@
-import type { Activity, FailureReason, SessionId } from "@courtyard/contract";
+import type { Activity, FailureReason, ProviderList, SessionId } from "@courtyard/contract";
+import { ArrowRightLeft } from "lucide-react";
 import { memo } from "react";
 import { Button } from "@/components/button";
 import { Notice } from "@/components/notice";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
+import { LimitNotice } from "./limit-notice.tsx";
+import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
 
 /** What a model did, in a few words. */
@@ -30,19 +33,30 @@ export const describeFailure = (reason: FailureReason) => {
 };
 
 /**
- * One turn: the owner's message, the answer, and a note for each save it made. Memoised, and a
- * turn's object only changes when an event belongs to it, so streaming text (or an Undo) only
- * re-renders that turn.
+ * One turn: the owner's message, the answer, and a note for each save it made, with a quiet line
+ * above it when it went to another model than the turn before. Memoised, and a turn's object only
+ * changes when an event belongs to it, so streaming text (or an Undo) only re-renders that turn.
  */
 export const TurnView = memo(function TurnView(props: {
   sessionId: SessionId;
   turn: Turn;
+  /** The providers on offer, which name the models and say where a session can carry on. */
+  providers: ProviderList["providers"];
   onRetry?: (turn: Turn) => void;
+  onCarryOn?: (turn: Turn) => Promise<string | undefined>;
 }) {
-  const { sessionId, turn, onRetry } = props;
+  const { sessionId, turn, providers, onRetry, onCarryOn } = props;
 
   return (
     <div className="space-y-4">
+      {turn.modelChanged && (
+        <p className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+          <ArrowRightLeft aria-hidden className="size-3.5 shrink-0" />
+          <span className="max-w-[70%]">
+            Now answering: {answeringWith(availableModels(providers), turn.model, turn.effort)}
+          </span>
+        </p>
+      )}
       <p className="ml-auto w-fit max-w-[85%] rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere text-accent-foreground md:text-base/[25px]">
         {turn.text}
       </p>
@@ -79,7 +93,15 @@ export const TurnView = memo(function TurnView(props: {
       {turn.state.kind === "stopped" && (
         <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>
       )}
-      {turn.state.kind === "failed" && (
+      {turn.state.kind === "failed" && turn.state.reason.kind === "rate-limited" && (
+        <LimitNotice
+          turn={turn}
+          reason={turn.state.reason}
+          providers={providers}
+          {...(onCarryOn ? { onCarryOn } : {})}
+        />
+      )}
+      {turn.state.kind === "failed" && turn.state.reason.kind !== "rate-limited" && (
         <Notice
           title="This turn didn't finish"
           {...(onRetry

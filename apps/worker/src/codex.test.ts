@@ -313,6 +313,45 @@ describe("Codex's status", () => {
   });
 });
 
+describe("Codex's usage limit, in its status", () => {
+  const window = (usedPercent: number, resetsAt: number) => ({
+    usedPercent,
+    windowDurationMins: 300,
+    resetsAt,
+  });
+  const limitsOf = async (rateLimits: unknown) => {
+    const codex = standIn({ rateLimits });
+    const status = await createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+    }).status();
+    return status.available ? status.models.map((model) => model.limit) : "unavailable";
+  };
+
+  it("is on every model while a window is used up, with the time it resets", async () => {
+    const limits = await limitsOf({
+      rateLimits: {
+        limitId: "codex",
+        primary: window(100, Date.UTC(2026, 9, 8, 14) / 1000),
+        secondary: window(40, Date.UTC(2026, 9, 12, 9) / 1000),
+      },
+      rateLimitsByLimitId: null,
+    });
+
+    const limit = { resetAt: "2026-10-08T14:00:00.000Z" };
+    expect(limits).toEqual([limit, limit]);
+  });
+
+  it("isn't there while every window has room", async () => {
+    const limits = await limitsOf({
+      rateLimits: { limitId: "codex", primary: window(60, Date.UTC(2026, 9, 8, 14) / 1000) },
+      rateLimitsByLimitId: null,
+    });
+
+    expect(limits).toEqual([undefined, undefined]);
+  });
+});
+
 describe("Codex's status, when it can't be used", () => {
   const statusWith = (codex: ReturnType<typeof standIn>) =>
     createCodexProvider({ dataDir, startAppServer: codex.startAppServer }).status();
@@ -327,6 +366,7 @@ describe("Codex's status, when it can't be used", () => {
       label: "Codex",
       available: false,
       reason: "Codex isn't signed in. Sign in to Codex on the home page.",
+      signedOut: true,
     });
   });
 

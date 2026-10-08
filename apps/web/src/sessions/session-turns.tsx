@@ -1,4 +1,4 @@
-import type { SessionId } from "@courtyard/contract";
+import type { ProviderList, SessionId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Turn } from "./events.ts";
@@ -26,9 +26,11 @@ const atTheEnd = () =>
 export function SessionTurns(props: {
   sessionId: SessionId;
   turns: readonly Turn[];
+  providers: ProviderList["providers"];
   onRetry: (turn: Turn) => void;
+  onCarryOn: (turn: Turn) => Promise<string | undefined>;
 }) {
-  const { sessionId, turns, onRetry } = props;
+  const { sessionId, turns, providers, onRetry, onCarryOn } = props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -99,8 +101,9 @@ export function SessionTurns(props: {
             <TurnView
               sessionId={sessionId}
               turn={turn}
-              // Only the last turn can be retried, so only it gets the handler.
-              {...(turn === last ? { onRetry } : {})}
+              providers={providers}
+              // Only the last turn can be retried or carried on, so only it gets the handlers.
+              {...(turn === last ? { onRetry, onCarryOn } : {})}
             />
           </li>
         );

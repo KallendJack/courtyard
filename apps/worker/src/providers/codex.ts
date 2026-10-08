@@ -700,6 +700,7 @@ export const createCodexProvider = (options: {
       label: LABEL,
       available: false,
       reason,
+      ...(reason === SIGNED_OUT ? { signedOut: true } : {}),
     });
     const started = await connection();
     if (!started.ok) return unavailable(START_FAILURES[started.error]);
@@ -723,6 +724,10 @@ export const createCodexProvider = (options: {
       cursor = parsed.data.nextCursor;
     } while (cursor !== null);
 
+    // Its usage limit, when one is used up: a status that can't say leaves it to the next turn.
+    const limits = await codex.request("account/rateLimits/read", undefined);
+    const resetAt = limits.ok ? resetTimeFrom(limits.value) : undefined;
+
     return {
       id,
       label: LABEL,
@@ -737,6 +742,7 @@ export const createCodexProvider = (options: {
             label: `${LABEL} · ${model.displayName}`,
             efforts,
             ...(defaultEffort ? { defaultEffort: defaultEffort.id } : {}),
+            ...(resetAt ? { limit: { resetAt } } : {}),
           };
         }),
       capabilities: CAPABILITIES,
