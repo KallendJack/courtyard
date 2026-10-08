@@ -132,10 +132,33 @@ test.describe("at the end of a long session", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 
-    const fromTheEnd = await page.evaluate(
-      () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
-    );
-    expect(fromTheEnd).toBeLessThan(2);
+    // It follows once a frame, so the last of the answer can take a frame or two to come into view.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
+        ),
+      )
+      .toBeLessThan(2);
+  });
+
+  test("stops following once the owner scrolls back up to read", async ({ page }) => {
+    await page.goto(LONG_SESSION);
+    const lines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n");
+    await page.getByLabel("Message").fill(lines);
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByRole("list", { name: "Session" })).toContainText("line 10");
+
+    const fromTheEnd = () =>
+      page.evaluate(
+        () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
+      );
+    await page.mouse.move(200, 300);
+    await page.mouse.wheel(0, -600);
+    await expect.poll(fromTheEnd).toBeGreaterThan(400);
+    const reading = await page.evaluate(() => window.scrollY);
+    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(await page.evaluate(() => window.scrollY)).toBe(reading);
   });
 
   test("scrolls a failed turn's reason into view", async ({ page }) => {

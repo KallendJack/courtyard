@@ -56,19 +56,20 @@ export function SessionTurns(props: {
     getItemKey: (index) => turns[index]?.seq ?? index,
   });
 
+  // Only scrolling up stops following. The page grows between scrolling to the end and the
+  // browser reporting it, by more than "near the end" on a slow frame, which isn't the owner
+  // reading back.
   useEffect(() => {
+    let before = window.scrollY;
     const onScroll = () => {
-      following.current = atTheEnd();
+      following.current = atTheEnd() || (following.current && window.scrollY >= before);
+      before = window.scrollY;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const last = turns.at(-1);
-  const lastLength =
-    (last?.answer.length ?? 0) + (last?.activities.length ?? 0) + (last?.notes.length ?? 0);
-  const lastState = last?.state.kind;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength, lastState and providers are the triggers, so the end stays in view while text streams in, a turn fails, or the providers are asked again (which redraws every turn)
+  // A new turn (or the session opening) goes to the end, which may not be drawn yet.
   useLayoutEffect(() => {
     if (turns.length === 0) return;
     if (!opened.current || following.current) {
@@ -76,7 +77,24 @@ export function SessionTurns(props: {
       virtualizer.scrollToIndex(turns.length - 1, { align: "end" });
       requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
     }
-  }, [turns.length, lastLength, lastState, providers, virtualizer]);
+  }, [turns.length, virtualizer]);
+
+  // While following, the end stays in view as the turns grow: an answer being revealed, a turn
+  // failing, or every turn redrawn. The browser reports a change of size at most once a frame, so
+  // this scrolls in step with the reveal.
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      if (opened.current && following.current) {
+        window.scrollTo({ top: document.documentElement.scrollHeight });
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const last = turns.at(-1);
 
   return (
     <ol
