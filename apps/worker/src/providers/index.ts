@@ -10,7 +10,7 @@ import type {
   ProviderStatus,
   SignInState,
 } from "@courtyard/contract";
-import type { z } from "zod";
+import { z } from "zod";
 import type { Result } from "../result.ts";
 
 export type { Activity };
@@ -144,6 +144,20 @@ export const offerFor = async (
   return model === undefined ? undefined : { provider, model };
 };
 
+/** Every model these providers offer right now, in order, each with its provider. */
+export const modelsOnOffer = async (providers: readonly Provider[]) => {
+  const offers = await Promise.all(
+    providers.map(async (provider) => ({ provider, status: await provider.status() })),
+  );
+  return offers.flatMap(({ provider, status }) =>
+    status.available ? status.models.map((model) => ({ provider, model })) : [],
+  );
+};
+
+/** The first model with room: on offer and not at its usage limit. */
+export const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly T[]) =>
+  offered.find(({ model }) => model.limit === undefined);
+
 /**
  * The first model on offer whose provider saves to context and isn't at its usage limit (the first
  * that saves, when every one is): what Get to know and Tidy use when no model is named.
@@ -152,16 +166,17 @@ export const offerFor = async (
 export const firstSavingModel = async (
   providers: readonly Provider[],
 ): Promise<ModelRef | undefined> => {
-  const offers = await Promise.all(
-    providers
-      .filter((provider) => provider.capabilities.savesContext)
-      .map(async (provider) => ({ provider: provider.id, status: await provider.status() })),
+  const offered = await modelsOnOffer(
+    providers.filter((provider) => provider.capabilities.savesContext),
   );
-  const offered = offers.flatMap(({ provider, status }) =>
-    status.available ? status.models.map((model) => ({ provider, model })) : [],
-  );
-  const chosen = offered.find(({ model }) => model.limit === undefined) ?? offered[0];
-  return chosen && { provider: chosen.provider, model: chosen.model.id };
+  const chosen = firstWithRoom(offered) ?? offered[0];
+  return chosen && { provider: chosen.provider.id, model: chosen.model.id };
+};
+
+/** A schema as Claude Code and Codex's app-server take it: JSON Schema without the `$schema` line. */
+export const jsonSchemaOf = (schema: z.ZodType) => {
+  const { $schema: _, ...rest } = z.toJSONSchema(schema);
+  return rest;
 };
 
 export { createClaudeProvider } from "./claude.ts";

@@ -622,7 +622,10 @@ describe("a one-off question to Codex", () => {
     });
 
   /** Codex finishing a message, as commentary on the way or as its answer. */
-  const message = (turn: Parameters<TurnScript>[0], text: string, phase: string) =>
+  const message = (
+    turn: Parameters<TurnScript>[0],
+    { text, phase }: { text: string; phase: string },
+  ) =>
     turn.notify("item/completed", {
       threadId: turn.threadId,
       turnId: turn.turnId,
@@ -632,8 +635,8 @@ describe("a one-off question to Codex", () => {
   it("asks on a fresh, unsaved thread with no tools, sending the answer's shape and the effort, and returns the answer", async () => {
     const codex = standIn({
       turn: (turn) => {
-        message(turn, "Thinking of a title.", "commentary");
-        message(turn, '{"title":"Rack position"}', "final_answer");
+        message(turn, { text: "Thinking of a title.", phase: "commentary" });
+        message(turn, { text: '{"title":"Rack position"}', phase: "final_answer" });
         turn.complete("completed");
       },
     });
@@ -694,7 +697,7 @@ describe("a one-off question to Codex", () => {
   it("fails, in plain words, on an answer that isn't the shape asked for", async () => {
     const codex = standIn({
       turn: (turn) => {
-        message(turn, "Rack position", "final_answer");
+        message(turn, { text: "Rack position", phase: "final_answer" });
         turn.complete("completed");
       },
     });

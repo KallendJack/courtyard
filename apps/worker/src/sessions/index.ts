@@ -8,7 +8,6 @@ import {
   endsTurn,
   type FailureReason,
   type FirstMessage,
-  type ModelInfo,
   type ModelRef,
   type NewMessage,
   type Overflow,
@@ -34,7 +33,13 @@ import {
   TitleAnswer,
   titleMessage,
 } from "../prompts/index.ts";
-import { offerFor, type Provider, type SaveReply } from "../providers/index.ts";
+import {
+  firstWithRoom,
+  modelsOnOffer,
+  offerFor,
+  type Provider,
+  type SaveReply,
+} from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
   createTurnSaves,
@@ -130,10 +135,6 @@ const modelTitle = (answer: unknown) => {
 
 /** How long titling a session can take before it's given up on: a few words shouldn't take long. */
 const TITLING_TIMEOUT_MS = 2 * 60 * 1000;
-
-/** The first model with room: on offer and not at its usage limit. */
-const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly T[]) =>
-  offered.find(({ model }) => model.limit === undefined);
 
 /** A session's file that no one has given a title the model mustn't change. */
 const titledByNobody = (
@@ -563,7 +564,7 @@ export const createSessions = (options: {
     const [file, events, offered] = await Promise.all([
       readJsonFile(sessionFilePath(id), SessionFile),
       readEvents(id),
-      modelsOnOffer(),
+      modelsOnOffer(options.providers),
     ]);
     const chosen = firstWithRoom(offered);
     const first = events.ok ? firstAnswer(events.value) : undefined;
@@ -666,16 +667,6 @@ export const createSessions = (options: {
   /** Every provider's status, with the usage limits its models are at. */
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
 
-  /** Every model on offer right now, in order, each with its provider. */
-  const modelsOnOffer = async () => {
-    const offers = await Promise.all(
-      options.providers.map(async (provider) => ({ provider, status: await provider.status() })),
-    );
-    return offers.flatMap(({ provider, status }) =>
-      status.available ? status.models.map((model) => ({ provider, model })) : [],
-    );
-  };
-
   /**
    * A first message with its model: the one it names, or else the first model on offer that isn't
    * at its usage limit (the first of all when every one is).
@@ -683,7 +674,7 @@ export const createSessions = (options: {
   const withModel = async (message: FirstMessage): Promise<Result<NewMessage, SessionError>> => {
     const { model } = message;
     if (model !== undefined) return ok({ ...message, model });
-    const offered = await modelsOnOffer();
+    const offered = await modelsOnOffer(options.providers);
     const chosen = firstWithRoom(offered) ?? offered[0];
     return chosen
       ? ok({ text: message.text, model: { provider: chosen.provider.id, model: chosen.model.id } })

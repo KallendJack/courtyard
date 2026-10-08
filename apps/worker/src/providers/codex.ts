@@ -19,7 +19,14 @@ import { z } from "zod";
 import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
-import type { CourtyardTool, FileReply, Provider, SignIn, TurnInput } from "./index.ts";
+import {
+  type CourtyardTool,
+  type FileReply,
+  jsonSchemaOf,
+  type Provider,
+  type SignIn,
+  type TurnInput,
+} from "./index.ts";
 
 const id = ProviderId.parse("codex");
 /**
@@ -591,12 +598,6 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
   return new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool]));
 };
 
-/** A schema as the app-server takes it: JSON Schema without the `$schema` line. */
-const jsonSchemaOf = (schema: z.ZodType) => {
-  const { $schema: _, ...rest } = z.toJSONSchema(schema);
-  return rest;
-};
-
 /** A tool as the app-server offers it to a thread (its dynamic tools), its inputs as JSON Schema. */
 const asDynamicTool = ({ tool }: TurnTool) => ({
   type: "function",
@@ -1053,7 +1054,7 @@ export const createCodexProvider = (options: {
     signIn,
 
     answerOnce: async (input) => {
-      const stopped = err({ kind: "unknown", message: "It was stopped." } as const);
+      const stopped = err<FailureReason>({ kind: "unknown", message: "It was stopped." });
       if (input.signal.aborted) return stopped;
       const started = await connection();
       if (!started.ok) {

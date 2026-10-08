@@ -254,10 +254,12 @@ describe("Carry on, while the session moves on", () => {
 describe("a new session with no model named", () => {
   const ownerModel = async (
     request: Requester,
-    path = "/api/workspaces/garage-gym/sessions",
-    body: object = { text: "Where should the rack go?" },
+    start: { path: string; body: object } = {
+      path: "/api/workspaces/garage-gym/sessions",
+      body: { text: "Where should the rack go?" },
+    },
   ) => {
-    const response = await postJson(request, path, body);
+    const response = await postJson(request, start.path, start.body);
     expect(response.status).toBe(201);
     const { id } = SessionSummary.parse(await response.json());
     const events: SessionEvent[] = await followSession(request, {
@@ -285,9 +287,11 @@ describe("a new session with no model named", () => {
     const request = await start();
     await hitLimit(request, FAKE_MODEL);
 
-    expect(await ownerModel(request, "/api/workspaces/garage-gym/get-to-know", {})).toEqual(
+    expect(
+      await ownerModel(request, { path: "/api/workspaces/garage-gym/get-to-know", body: {} }),
+    ).toEqual(FAKE_TWO_MODEL);
+    expect(await ownerModel(request, { path: "/api/owner-context/get-to-know", body: {} })).toEqual(
       FAKE_TWO_MODEL,
     );
-    expect(await ownerModel(request, "/api/owner-context/get-to-know", {})).toEqual(FAKE_TWO_MODEL);
   });
 });
