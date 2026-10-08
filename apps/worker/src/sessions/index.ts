@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type CarryOnRequest,
   type ChangeId,
   type Effort,
   endsTurn,
   type FailureReason,
+  type FirstMessage,
   type ModelRef,
   type NewMessage,
+  type Overflow,
+  overflowFrom,
   type PlacedLine,
   SessionEvent,
   SessionId,
@@ -46,6 +50,13 @@ export type SessionError =
   | { readonly kind: "model-unavailable" }
   /** The message names a level of effort its model doesn't take. */
   | { readonly kind: "effort-unavailable" }
+  /** Carry on named a turn that isn't the last one, or didn't fail on a usage limit. */
+  | { readonly kind: "nothing-to-carry-on" }
+  /** There's no other provider to carry on with right now, and why. */
+  | {
+      readonly kind: "no-overflow";
+      readonly overflow: Exclude<Overflow, { kind: "carry-on" }>;
+    }
   /** No save in the session has that event number. */
   | { readonly kind: "save-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
@@ -91,6 +102,22 @@ const saveStateOf = (events: readonly SessionEvent[], seq: number): SaveState | 
     if (event.type === "context-undone" && event.save === seq) undone = true;
   }
   return { save: saved.save, current, undone };
+};
+
+/**
+ * The owner's message numbered `turn`, when it's the session's last and its turn ended on a usage
+ * limit: the only turn Carry on can take on. `undefined` otherwise.
+ */
+const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
+  const message = events.findLast((event) => event.type === "owner-message");
+  const ending = events.findLast(endsTurn);
+  return message?.type === "owner-message" &&
+    message.seq === turn &&
+    ending?.type === "turn-failed" &&
+    ending.seq > message.seq &&
+    ending.reason.kind === "rate-limited"
+    ? message
+    : undefined;
 };
 
 /**
@@ -437,6 +464,11 @@ export const createSessions = (options: {
     workspaceId: WorkspaceId;
     provider: Provider;
     message: NewMessage;
+    /**
+     * Carry on from the turn with this number: checked again once the session is this turn's, in
+     * case a newer one ran meanwhile, and the move to the message's model recorded first.
+     */
+    carryingOn?: { turn: number };
   }): Promise<Result<null, SessionError>> => {
     const session = runningSession(start.id);
     if (session.turn.kind === "deleting") return err({ kind: "not-found" });
@@ -449,6 +481,17 @@ export const createSessions = (options: {
     };
     session.turn = starting;
 
+    if (start.carryingOn) {
+      const events = await readEvents(start.id);
+      const stillLimited = events.ok && limitedTurn(events.value, start.carryingOn.turn);
+      const changed = stillLimited
+        ? await append(start.id, { type: "model-changed", model: start.message.model })
+        : err<SessionError>(events.ok ? { kind: "nothing-to-carry-on" } : events.error);
+      if (!changed.ok) {
+        session.turn = { kind: "idle" };
+        return changed;
+      }
+    }
     const recorded = await append(start.id, {
       type: "owner-message",
       text: start.message.text,
@@ -478,6 +521,30 @@ export const createSessions = (options: {
     if (!offer) return err({ kind: "model-unavailable" });
     if (!takesEffort(offer.model, message.effort)) return err({ kind: "effort-unavailable" });
     return ok(offer.provider);
+  };
+
+  /** Every provider's status, with the usage limits its models are at. */
+  const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
+
+  /**
+   * A first message with its model: the one it names, or else the first model on offer that isn't
+   * at its usage limit (the first of all when every one is).
+   */
+  const withModel = async (message: FirstMessage): Promise<Result<NewMessage, SessionError>> => {
+    const { model } = message;
+    if (model !== undefined) return ok({ ...message, model });
+    const offered = (await statuses()).flatMap((status) =>
+      status.available
+        ? status.models.map((info) => ({
+            ref: { provider: status.id, model: info.id },
+            limited: info.limit !== undefined,
+          }))
+        : [],
+    );
+    const chosen = offered.find((choice) => !choice.limited) ?? offered[0];
+    return chosen
+      ? ok({ text: message.text, model: chosen.ref })
+      : err({ kind: "model-unavailable" });
   };
 
   const summaryOf = (file: SessionFile): SessionSummary => ({
@@ -586,9 +653,11 @@ export const createSessions = (options: {
     /** Starts a session with the owner's first message, so there are never empty ones. */
     create: async (start: {
       workspaceId: WorkspaceId;
-      message: NewMessage;
+      message: FirstMessage;
     }): Promise<Result<SessionSummary, SessionError>> => {
-      const provider = await providerFor(start.message);
+      const message = await withModel(start.message);
+      if (!message.ok) return message;
+      const provider = await providerFor(message.value);
       if (!provider.ok) return provider;
       const id = SessionId.parse(randomUUID());
       const at = stamp();
@@ -610,7 +679,7 @@ export const createSessions = (options: {
             id,
             workspaceId: start.workspaceId,
             provider: provider.value,
-            message: start.message,
+            message: message.value,
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -636,6 +705,39 @@ export const createSessions = (options: {
         workspaceId: session.value.workspaceId,
         provider: provider.value,
         message,
+      });
+    },
+
+    /**
+     * Carry on (spec, Overflow): after the session's last turn hit a usage limit, records the move
+     * to another provider's default model and sends the turn's message to it again, at its default
+     * effort. Only ever because the owner asked.
+     */
+    carryOn: async (
+      rawId: string,
+      request: CarryOnRequest,
+    ): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id, workspaceId } = found.value;
+      if (await isArchived(options.contextDir, workspaceId)) {
+        return err({ kind: "workspace-archived" });
+      }
+      await settled(id);
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      const message = limitedTurn(events.value, request.turn);
+      if (message === undefined) return err({ kind: "nothing-to-carry-on" });
+      const overflow = overflowFrom(await statuses(), message.model.provider);
+      if (overflow.kind !== "carry-on") return err({ kind: "no-overflow", overflow });
+      const provider = options.providers.find((p) => p.id === overflow.model.provider);
+      if (!provider) return err({ kind: "model-unavailable" });
+      return startTurn({
+        id,
+        workspaceId,
+        provider,
+        message: { text: message.text, model: overflow.model },
+        carryingOn: { turn: request.turn },
       });
     },
 

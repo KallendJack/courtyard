@@ -1,6 +1,7 @@
 import { Effort, type ModelRef, takesEffort } from "@courtyard/contract";
 import { useState } from "react";
 import { Select } from "@/components/select";
+import { limitLabel } from "./limits.ts";
 import { effortLabel, type OfferedModel } from "./models.ts";
 
 const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
@@ -10,7 +11,8 @@ const DEFAULT = "";
 
 /**
  * The model and effort a message goes with. Until the owner picks, they follow the session's last
- * message (once its events have replayed), else the first model at its default. A model change
+ * message (once its events have replayed), else the first model that isn't at its usage limit, at
+ * its default effort. A model change
  * keeps the effort if the new model takes it, and goes back to Default if not.
  */
 export const useModelChoice = (choice: {
@@ -26,7 +28,10 @@ export const useModelChoice = (choice: {
   const followedKey = choice.followModel ? keyOf(choice.followModel) : undefined;
   const following = chosenKey === undefined && models.some((m) => keyOf(m.ref) === followedKey);
   const modelKey = chosenKey ?? (following ? followedKey : undefined);
-  const model = models.find((m) => keyOf(m.ref) === modelKey) ?? models[0];
+  const model =
+    models.find((m) => keyOf(m.ref) === modelKey) ??
+    models.find((m) => m.limit === undefined) ??
+    models[0];
   const wanted = chosenEffort ? chosenEffort.effort : following ? choice.followEffort : undefined;
   const effort = model !== undefined && takesEffort(model, wanted) ? wanted : undefined;
 
@@ -44,6 +49,8 @@ export const useModelChoice = (choice: {
 };
 
 export type ModelChoice = ReturnType<typeof useModelChoice>;
+
+const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /** The model and its effort in a few words, as the chip on a phone shows them. */
 export const choiceSummary = ({ model, effort }: ModelChoice) =>
@@ -77,9 +84,13 @@ export function ModelPickers(props: {
         options={
           models.length === 0
             ? [{ value: "", label: "No models available" }]
-            : models.map((m) => ({ value: keyOf(m.ref), label: m.label }))
+            : models.map((m) => ({
+                value: keyOf(m.ref),
+                label: m.limit ? `${m.label} · ${limitLabel(m.limit)}` : m.label,
+              }))
         }
         onChange={choice.pickModel}
+        {...(model?.limit ? { warning: capitalised(limitLabel(model.limit)) } : {})}
       />
       {model && model.efforts.length > 0 && (
         <Select

@@ -49,6 +49,7 @@ const Env = z.object({
   COURTYARD_CODEX_PROVIDER: flag("1"),
   COURTYARD_FAKE_PROVIDER: flag("0"),
   COURTYARD_FAKE_SIGN_IN: flag("0"),
+  COURTYARD_SECOND_FAKE_PROVIDER: flag("0"),
   COURTYARD_WEB_DIR: z.preprocess(
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
@@ -87,6 +88,11 @@ export type Settings = {
    */
   readonly fakeSignIn: boolean;
   /**
+   * Whether to offer a second scripted fake, "Fake two", so there's another provider to carry on
+   * with after a pretend usage limit, with no real provider.
+   */
+  readonly secondFakeProvider: boolean;
+  /**
    * The live copy this worker runs from (ADR 0011), which the owner can update from the app.
    * Only the live scripts set it, so development and tests never update themselves.
    */
@@ -117,6 +123,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     codexProvider: parsed.data.COURTYARD_CODEX_PROVIDER,
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER,
     fakeSignIn: parsed.data.COURTYARD_FAKE_SIGN_IN,
+    secondFakeProvider: parsed.data.COURTYARD_SECOND_FAKE_PROVIDER,
     liveCopy:
       parsed.data.COURTYARD_LIVE_COPY === undefined
         ? null

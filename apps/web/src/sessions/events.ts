@@ -32,6 +32,8 @@ export type Turn = {
   readonly model: ModelRef;
   /** The effort it was sent with; `undefined` for the model's default. */
   readonly effort: Effort | undefined;
+  /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
+  readonly modelChanged: boolean;
   readonly answer: string;
   /** What the model did along the way, such as files it read. */
   readonly activities: readonly Activity[];
@@ -80,7 +82,8 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
   if (event.seq <= log.lastSeq) return log;
   const seq = event.seq;
   switch (event.type) {
-    case "owner-message":
+    case "owner-message": {
+      const before = log.turns.at(-1)?.model;
       return {
         lastSeq: seq,
         turns: [
@@ -90,6 +93,9 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
             text: event.text,
             model: event.model,
             effort: event.effort,
+            modelChanged:
+              before !== undefined &&
+              (before.provider !== event.model.provider || before.model !== event.model.model),
             answer: "",
             activities: [],
             notes: [],
@@ -97,6 +103,10 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
           },
         ],
       };
+    }
+    // The owner message after it shows the change; nothing else to show.
+    case "model-changed":
+      return { ...log, lastSeq: seq };
     case "text-delta":
       return withLastTurn(log, {
         seq,

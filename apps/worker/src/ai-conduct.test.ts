@@ -9,10 +9,12 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createFakeProvider } from "./providers/fake.ts";
 import type { OneOffInput, Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,
+  FAKE_MODEL,
   followSession,
   postJson,
   type Requester,
@@ -213,6 +215,50 @@ describe("the conversation a later turn gets", () => {
     await say("Where should the rack go?");
 
     expect(turns[1]?.framing.message).toContain("You: (this turn failed before you answered)");
+  });
+});
+
+describe("switching model mid-session", () => {
+  it("after Carry on, gives the new model the failed turn as failed and earlier answers as its own", async () => {
+    const { provider: recording, turns } = recorder(READS_FILES);
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 }), recording] }),
+    );
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: FAKE_MODEL,
+    });
+    const { id } = SessionSummary.parse(await started.json());
+    const first = await followSession(request, { sessionId: id, until: "turn-completed" });
+    await postJson(request, `/api/sessions/${id}/messages`, {
+      text: "please hit Fake's limit",
+      model: FAKE_MODEL,
+    });
+    const failed = await followSession(request, {
+      sessionId: id,
+      after: first.length,
+      until: "turn-failed",
+    });
+    const turn = failed.find((event) => event.type === "owner-message")?.seq;
+
+    await postJson(request, `/api/sessions/${id}/carry-on`, { turn });
+    await followSession(request, {
+      sessionId: id,
+      after: first.length + failed.length,
+      until: "turn-completed",
+    });
+
+    // The new model's first turn: everything said so far, in order, then the message again.
+    const message = turns[0]?.framing.message ?? "";
+    const order = [
+      "Owner: Where should the rack go?",
+      "You: You said: Where should the rack go?",
+      "Owner: please hit Fake's limit",
+      "You: (this turn failed before you answered)",
+    ].map((said) => message.indexOf(said));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(turns[0]?.framing.newMessage).toBe("please hit Fake's limit");
   });
 });
 

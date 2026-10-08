@@ -32,6 +32,13 @@ export type Effort = z.infer<typeof Effort>;
 export const EffortInfo = z.object({ id: Effort, label: z.string() });
 export type EffortInfo = z.infer<typeof EffortInfo>;
 
+/**
+ * A usage limit a model is at: it stops answering until its reset time, when the provider says
+ * one. The worker remembers it until then.
+ */
+export const UsageLimit = z.object({ resetAt: z.iso.datetime().optional() });
+export type UsageLimit = z.infer<typeof UsageLimit>;
+
 export const ModelInfo = z.object({
   id: ModelId,
   label: z.string(),
@@ -39,6 +46,8 @@ export const ModelInfo = z.object({
   efforts: z.array(EffortInfo),
   /** The level it uses when a message names none, when the provider says. */
   defaultEffort: Effort.optional(),
+  /** Its usage limit, while it's at one. It's still offered: a reset time can be an estimate. */
+  limit: UsageLimit.optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfo>;
 
@@ -71,6 +80,8 @@ export const ProviderStatus = z.discriminatedUnion("available", [
     label: z.string(),
     available: z.literal(false),
     reason: z.string(),
+    /** Unavailable only because it isn't signed in, which the owner can do from the home page. */
+    signedOut: z.boolean().optional(),
   }),
 ]);
 export type ProviderStatus = z.infer<typeof ProviderStatus>;
@@ -98,6 +109,16 @@ export const NewMessage = z.object({
   effort: Effort.optional(),
 });
 export type NewMessage = z.infer<typeof NewMessage>;
+
+/**
+ * A new session's first message. With no model named, the worker starts it on the first model
+ * that isn't at its usage limit, at its default effort.
+ */
+export const FirstMessage = NewMessage.extend({ model: ModelRef.optional() }).refine(
+  (message) => message.model !== undefined || message.effort === undefined,
+  { message: "Name the model the effort is for", path: ["effort"] },
+);
+export type FirstMessage = z.infer<typeof FirstMessage>;
 
 /**
  * Get to know a workspace or the owner context: a new session whose first message is the
@@ -239,6 +260,11 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner undid the save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("context-undone"), save: z.number().int().positive() }),
+  /**
+   * The owner chose Carry on after a usage limit: the session moves to this model, at its default
+   * effort, and the failed turn's message is sent to it again.
+   */
+  z.object({ ...eventBase, type: z.literal("model-changed"), model: ModelRef }),
   /** The owner edited the save numbered `save`: its line is now `now`. */
   z.object({
     ...eventBase,
@@ -259,3 +285,7 @@ export const endsTurn = (event: SessionEvent) =>
  */
 export const StopRequest = z.object({ turn: z.number().int().positive() });
 export type StopRequest = z.infer<typeof StopRequest>;
+
+/** What Carry on names: the turn that hit the usage limit, by its owner message's event number. */
+export const CarryOnRequest = z.object({ turn: z.number().int().positive() });
+export type CarryOnRequest = z.infer<typeof CarryOnRequest>;

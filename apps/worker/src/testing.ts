@@ -128,6 +128,29 @@ export const followSession = async (
 /** For tests: the scripted fake provider's model. */
 export const FAKE_MODEL = { provider: "fake", model: "echo" };
 
+/** For tests: the second fake's model, which "please hit Fake two's limit" sends to its usage limit. */
+export const FAKE_TWO_MODEL = { provider: "fake-two", model: "echo" };
+
+/** For tests: a provider that's there but not signed in, as Codex is before the owner signs in. */
+export const signedOutProvider = (): Provider => {
+  const id = ProviderId.parse("away");
+  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: false };
+  const notSignedIn = { kind: "provider-unavailable", message: "Not signed in." } as const;
+  return {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Away",
+      available: false,
+      reason: "Away isn't signed in.",
+      signedOut: true,
+    }),
+    runTurn: async () => err(notSignedIn),
+    answerOnce: async () => err(notSignedIn),
+  };
+};
+
 /** For tests and the context eval: sends JSON, the way the web app does. */
 export const postJson = (request: Requester, path: string, body: unknown) =>
   request(path, {

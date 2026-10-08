@@ -17,7 +17,7 @@ export function Notice(props: {
   region?: boolean;
 }) {
   const box =
-    "flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text";
+    "flex items-start justify-between gap-x-4 gap-y-3 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text max-md:flex-col";
   const content = (
     <>
       <div>

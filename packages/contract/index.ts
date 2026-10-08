@@ -10,14 +10,17 @@ export {
 } from "./lib/changes.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
+export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
   Activity,
   Capabilities,
+  CarryOnRequest,
   ChangeId,
   Effort,
   EffortInfo,
   endsTurn,
   FailureReason,
+  FirstMessage,
   GetToKnowRequest,
   LinePlace,
   MAX_MESSAGE_LENGTH,
@@ -41,6 +44,7 @@ export {
   SessionSummary,
   StopRequest,
   takesEffort,
+  UsageLimit,
 } from "./lib/session.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export {

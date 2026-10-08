@@ -6,7 +6,7 @@ import {
 } from "@courtyard/contract";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/back-link";
 import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
@@ -19,6 +19,7 @@ import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import {
+  carryOn,
   deleteSession,
   fromWorker,
   loadProviders,
@@ -90,6 +91,37 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
     },
     [session.id],
   );
+
+  const carryOnFrom = useCallback(
+    async (turn: Turn) => {
+      const carried = await carryOn(session.id, turn.seq);
+      return carried.kind === "loaded" ? undefined : describeProblem(carried).body;
+    },
+    [session.id],
+  );
+
+  // Once a turn the owner watched ends on a usage limit, or answers on a model shown at one, the
+  // providers are asked again: the model picker shows the limit (or not), and the notice knows
+  // where the session can carry on.
+  const watchedTurn = useRef<number>(undefined);
+  const lastSeq = last?.seq;
+  const limitChanged =
+    last?.state.kind === "failed"
+      ? last.state.reason.kind === "rate-limited"
+      : last?.state.kind === "done" &&
+        props.providers.some(
+          (provider) =>
+            provider.available &&
+            provider.id === last.model.provider &&
+            provider.models.some((model) => model.id === last.model.model && model.limit),
+        );
+  useEffect(() => {
+    if (running) watchedTurn.current = lastSeq;
+    else if (watchedTurn.current !== undefined && watchedTurn.current === lastSeq) {
+      watchedTurn.current = undefined;
+      if (limitChanged) void router.invalidate();
+    }
+  }, [running, lastSeq, limitChanged, router]);
 
   const above = <BackLink workspaceId={session.workspaceId} />;
   const toggle = (what: "rename" | "delete") =>
@@ -180,7 +212,13 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           <Notice>{problem}</Notice>
         </div>
       ) : (
-        <SessionTurns sessionId={session.id} turns={turns} onRetry={retry} />
+        <SessionTurns
+          sessionId={session.id}
+          turns={turns}
+          providers={props.providers}
+          onRetry={retry}
+          onCarryOn={carryOnFrom}
+        />
       )}
       {sendProblem && (
         <div className="mt-3">
