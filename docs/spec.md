@@ -441,9 +441,14 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | 5     | Tool connections (homelab first, then Paper and Blender) and floor plans                                     | Paper and Blender running on the worker machine    |
 | 6     | The web app served from the NAS, then wake-on-LAN for the worker machine                                    | A wired network connection to the worker machine   |
 
+**From 2026-10-08 the order of work is the repo's GitHub milestones** (`docs/agents/issue-tracker.md`), not this
+table. Phases 0-3 stand as written. The owner chose to do smoother daily use, the life-core features, reach, polish
+and install-and-move before code workspaces, so phases 4, 5 and 6 are now the milestones "Code workspaces",
+"Tool connections" and "NAS and wake-up". Where an older ADR or this spec says phase 4, 5 or 6, it means those.
+
 ### The order of the phases
 
-Each phase follows the last, without a pause to decide whether to carry on: the owner builds Courtyard to use it and
+Each phase (now each milestone) follows the last, without a pause to decide whether to carry on: the owner builds Courtyard to use it and
 because it's fun, and its value is in the later phases (Codex when Claude runs out, coding from a phone, the homelab
 and design tools). Each phase is designed before it's built, one decision at a time, with an ADR for anything that
 changes an earlier one. The directions in the phase table are proposals until then.
