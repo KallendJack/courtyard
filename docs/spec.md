@@ -256,8 +256,8 @@ nothing personal, so anyone can run their own.
 
 ### Shape
 
-- **Two parts and a contract.** A worker (Node, TypeScript, Hono) and a web app (Vite, React, TanStack Router, shadcn
-  on Tailwind v4), in one pnpm workspace with a shared contract package of Zod schemas and inferred types. Both sides
+- **Two parts and a contract.** A worker (Node, TypeScript, Hono) and a web app (Vite, React, TanStack Router and
+  Tailwind v4), in one pnpm workspace with a shared contract package of Zod schemas and inferred types. Both sides
   parse at the boundary. See ADR 0001.
 - **Same origin.** The web app's static files and the worker's API (under `/api`) share one origin: the worker serves
   the built files at first, and later the owner's reverse proxy serves them and forwards `/api`. In development, Vite
@@ -379,7 +379,7 @@ dimensions. Saving one writes it into the workspace as a file, an explicit actio
 
 Phase 0 happens in Paper before the first screen is built: Claude drafts two or three directions for the key screens
 (workspace switcher, session, approval, suggestions) through Paper's MCP, inspired by apps the owner names; the owner
-picks and adjusts one; its colours, type and spacing become the shadcn theme's tokens.
+picks and adjusts one; its colours, type and spacing become the theme's tokens.
 
 ## Testing Decisions
 

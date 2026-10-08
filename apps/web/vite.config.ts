@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react(), tailwindcss()],
-    // `@/` is the web app's src folder, as shadcn's components expect (see components.json).
+    // `@/` is the web app's src folder, so imports read the same from any depth.
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     // The build manifest lets finish-build.mjs measure the first load and list the app's files.
     build: { manifest: true },

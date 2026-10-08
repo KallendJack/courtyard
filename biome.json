@@ -26,18 +26,6 @@
       "quoteStyle": "double"
     }
   },
-  "overrides": [
-    {
-      "includes": ["apps/web/src/components/ui/**"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "useExhaustiveDependencies": "off"
-          }
-        }
-      }
-    }
-  ],
   "css": {
     "parser": {
       "tailwindDirectives": true
