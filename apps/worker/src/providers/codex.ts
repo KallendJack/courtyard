@@ -544,13 +544,20 @@ export const createCodexProvider = (options: {
   const requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
 
   let cached: { at: number; status: ProviderStatus } | undefined;
-  let checking: Promise<ProviderStatus> | undefined;
+  /** A check already running, which simultaneous callers share, and when the sign-in last changed. */
+  let checking: { since: number; status: Promise<ProviderStatus> } | undefined;
+  /** Counts changes to the sign-in, so a check that started before one is never kept. */
+  let signInChanges = 0;
+  const signInChanged = () => {
+    signInChanges += 1;
+    cached = undefined;
+  };
   /** The sign-in Courtyard started, which lives in the app-server running now. */
   let login: Login = { kind: "none" };
 
   /** Hears how a sign-in went, and that the account changed, so the status is asked again. */
   const heard = (notice: z.infer<typeof CodexNotice>) => {
-    cached = undefined;
+    signInChanged();
     const completed = LoginCompleted.safeParse(notice);
     if (!completed.success || login.kind !== "waiting") return;
     const { loginId, success, error } = completed.data.params;
@@ -570,7 +577,7 @@ export const createCodexProvider = (options: {
         const forget = () => {
           if (current === starting) current = undefined;
           // A sign-in in progress ends with the app-server it was started in.
-          if (login.kind === "waiting") login = { kind: "none" };
+          if (login.kind === "waiting") login = { kind: "not-finished", why: "failed" };
         };
         if (started.ok) {
           started.value.onOtherNotice(heard);
@@ -616,6 +623,20 @@ export const createCodexProvider = (options: {
       : { kind: "signed-in", email: signedIn.email, plan: signedIn.planType };
   };
 
+  /**
+   * Starting, giving up and signing out happen one at a time, so two at once (two devices, say)
+   * can't leave a sign-in Codex is still waiting for.
+   */
+  let changing = Promise.resolve();
+  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
+    const done = changing.then(change);
+    changing = done.then(
+      () => {},
+      () => {},
+    );
+    return done;
+  };
+
   const waitingState = (waiting: Extract<Login, { kind: "waiting" }>): SignInState => ({
     kind: "waiting",
     link: waiting.link,
@@ -638,37 +659,39 @@ export const createCodexProvider = (options: {
       return accountState();
     },
 
-    start: async () => {
-      await dropLogin();
-      const started = await connection();
-      if (!started.ok) return err(START_FAILURES[started.error]);
-      const asked = await started.value.request("account/login/start", {
-        type: "chatgptDeviceCode",
-      });
-      if (!asked.ok) return err(failureForRequest(asked.error).message);
-      const parsed = LoginStarted.safeParse(asked.value);
-      if (!parsed.success) return err(NOT_UNDERSTOOD);
-      const waiting = {
-        kind: "waiting",
-        loginId: parsed.data.loginId,
-        link: parsed.data.verificationUrl,
-        code: parsed.data.userCode,
-        expiresAt: now() + DEVICE_CODE_MS,
-      } as const;
-      login = waiting;
-      return ok(waitingState(waiting));
-    },
+    start: () =>
+      oneAtATime(async (): Promise<Result<SignInState, string>> => {
+        await dropLogin();
+        const started = await connection();
+        if (!started.ok) return err(START_FAILURES[started.error]);
+        const asked = await started.value.request("account/login/start", {
+          type: "chatgptDeviceCode",
+        });
+        if (!asked.ok) return err(failureForRequest(asked.error).message);
+        const parsed = LoginStarted.safeParse(asked.value);
+        if (!parsed.success) return err(NOT_UNDERSTOOD);
+        const waiting = {
+          kind: "waiting",
+          loginId: parsed.data.loginId,
+          link: parsed.data.verificationUrl,
+          code: parsed.data.userCode,
+          expiresAt: now() + DEVICE_CODE_MS,
+        } as const;
+        login = waiting;
+        return ok(waitingState(waiting));
+      }),
 
-    cancel: dropLogin,
+    cancel: () => oneAtATime(dropLogin),
 
-    signOut: async () => {
-      await dropLogin();
-      const started = await connection();
-      if (!started.ok) return err(START_FAILURES[started.error]);
-      const signedOut = await started.value.request("account/logout", undefined);
-      cached = undefined;
-      return signedOut.ok ? ok(null) : err(failureForRequest(signedOut.error).message);
-    },
+    signOut: () =>
+      oneAtATime(async (): Promise<Result<null, string>> => {
+        await dropLogin();
+        const started = await connection();
+        if (!started.ok) return err(START_FAILURES[started.error]);
+        const signedOut = await started.value.request("account/logout", undefined);
+        signInChanged();
+        return signedOut.ok ? ok(null) : err(failureForRequest(signedOut.error).message);
+      }),
   };
 
   const checkStatus = async (): Promise<ProviderStatus> => {
@@ -726,11 +749,17 @@ export const createCodexProvider = (options: {
 
     status: async () => {
       if (cached && now() - cached.at < STATUS_TTL_MS) return cached.status;
-      checking ??= checkStatus().finally(() => {
-        checking = undefined;
-      });
-      const status = await checking;
-      cached = { at: now(), status };
+      // A check that started before the sign-in last changed may have read the old account.
+      if (checking?.since !== signInChanges) {
+        const check = { since: signInChanges, status: checkStatus() };
+        checking = check;
+        void check.status.finally(() => {
+          if (checking === check) checking = undefined;
+        });
+      }
+      const { since, status: checked } = checking;
+      const status = await checked;
+      if (since === signInChanges) cached = { at: now(), status };
       return status;
     },
 

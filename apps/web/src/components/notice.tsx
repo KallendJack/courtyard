@@ -69,7 +69,7 @@ export function StatusPill(props: {
       )}
     >
       <p role="status" className="flex min-w-0 items-center gap-2">
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+        <WaitingDot />
         {props.children}
       </p>
       {props.action}
@@ -84,4 +84,9 @@ export function EmptyState(props: { children: ReactNode }) {
       {props.children}
     </div>
   );
+}
+
+/** The dot beside something being waited on: the worker reconnecting, a sign-in to finish. */
+export function WaitingDot() {
+  return <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />;
 }

@@ -107,6 +107,15 @@ describe("signing in from the home page", () => {
     expect((await signIns(restarted))[0]?.notNow).toBe(true);
   });
 
+  it("forgets Not now once the owner signs in after all, so a later lapse asks again", async () => {
+    const request = await asOwner(workerWith());
+    await postJson(request, "/api/sign-ins/fake/not-now", {});
+
+    await postJson(request, "/api/sign-ins/fake/start", {});
+
+    expect((await signIns(request))[0]?.notNow).toBe(false);
+  });
+
   it("says when a provider has no sign-in Courtyard handles", async () => {
     const request = await asOwner(testWorker({ root, providers: [createFakeProvider()] }));
 

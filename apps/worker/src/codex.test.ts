@@ -111,6 +111,8 @@ const standIn = (
   /** Who is signed in to this Codex home, changed by signing in and out. */
   let account = script.account ?? SIGNED_IN;
   let logins = 0;
+  /** The app-server running now ending without warning. */
+  let crashNow = () => {};
   /** Codex's notices from the app-server running now. */
   let notifyNow: (method: string, params: unknown) => void = () => {};
 
@@ -147,6 +149,7 @@ const standIn = (
         alive = false;
         launch.onExit();
       });
+    crashNow = crash;
 
     const handle = (message: Message) => {
       const { id, method } = message;
@@ -231,7 +234,15 @@ const standIn = (
   };
 
   const requests = (method: string) => received.filter((m) => m.method === method);
-  return { startAppServer, launches, received, answered, requests, finishLogin };
+  return {
+    startAppServer,
+    launches,
+    received,
+    answered,
+    requests,
+    finishLogin,
+    crash: () => crashNow(),
+  };
 };
 
 /** Runs one Codex turn and collects what it emitted. */
@@ -872,6 +883,45 @@ describe("signing in to Codex (ADR 0015)", () => {
     expect(codex.requests("account/logout")).toHaveLength(1);
     expect(await provider.signIn?.state()).toEqual({ kind: "signed-out" });
     expect(await provider.status()).toMatchObject({ available: false });
+  });
+
+  it("doesn't keep a status checked while the sign-in changed", async () => {
+    const codex = standIn();
+    let clock = START;
+    const provider = createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+      now: () => clock,
+    });
+    await provider.status();
+    clock += 2 * 60_000;
+
+    // A check that reads the account before the sign-out and finishes after it.
+    await Promise.all([provider.status(), provider.signIn?.signOut()]);
+
+    expect(await provider.status()).toMatchObject({ available: false });
+  });
+
+  it("starts one sign-in at a time, giving up the earlier one", async () => {
+    const { codex, signIn } = signedOut();
+
+    await Promise.all([signIn.start(), signIn.start()]);
+
+    expect(codex.requests("account/login/start")).toHaveLength(2);
+    expect(codex.requests("account/login/cancel").map((m) => m.params)).toEqual([
+      { loginId: "login-1" },
+    ]);
+  });
+
+  it("says the sign-in didn't finish when Codex stops partway", async () => {
+    const { codex, signIn } = signedOut();
+    await signIn.start();
+
+    codex.crash();
+
+    await vi.waitFor(async () =>
+      expect(await signIn.state()).toEqual({ kind: "not-finished", why: "failed" }),
+    );
   });
 
   it("says why when Codex can't be reached to sign in", async () => {

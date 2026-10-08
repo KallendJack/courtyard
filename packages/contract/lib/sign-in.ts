@@ -18,7 +18,7 @@ export const SignInState = z.discriminatedUnion("kind", [
   /** Waiting for the owner to open the link on any device and enter the code. */
   z.object({
     kind: z.literal("waiting"),
-    link: z.url({ protocol: /^https?$/ }),
+    link: z.url({ protocol: /^https$/ }),
     code: z.string(),
     expiresAt: z.iso.datetime({ offset: true }),
   }),

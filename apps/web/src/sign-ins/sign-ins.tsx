@@ -2,7 +2,7 @@ import type { ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
-import { InfoBox, Notice } from "@/components/notice";
+import { InfoBox, Notice, WaitingDot } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
@@ -29,8 +29,14 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener);
 };
 
+/** Counts each time the page asks, so an answer that comes back late never replaces a newer one. */
+let asked = 0;
+
 const reload = async () => {
+  asked += 1;
+  const thisAsk = asked;
   const [providers, signIns] = await Promise.all([loadProviders(), loadSignIns()]);
+  if (thisAsk !== asked) return;
   snapshot = {
     providers: providers.kind === "loaded" ? providers.data.providers : snapshot.providers,
     signIns: signIns.kind === "loaded" ? signIns.data.signIns : snapshot.signIns,
@@ -115,7 +121,7 @@ function Waiting(props: {
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+          <WaitingDot />
           Waiting for you to finish. The code works for 15 minutes.
         </p>
         <Button variant="quiet" size="xs" onClick={props.onCancel} disabled={props.busy}>
@@ -222,7 +228,7 @@ function SignInBoxes() {
 const planName = (plan: string) => `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
 
 /** Where a provider Courtyard signs in to stands, and what the owner can do about it. */
-function SignInRow(props: { models: Models; signIn: ProviderSignIn }) {
+function SignInRow(props: { models: Models; signIn: ProviderSignIn; provider: ProviderStatus }) {
   const { models, signIn } = props;
   const action = useSignInAction(models, signIn);
   const { state } = signIn;
@@ -234,7 +240,10 @@ function SignInRow(props: { models: Models; signIn: ProviderSignIn }) {
         ...(state.email === null ? [] : [`as ${state.email}`]),
         ...(state.plan === null ? [] : [planName(state.plan)]),
       ];
-      said = `signed in ${who.join(", ")}`.trim();
+      // Signed in, but still unavailable (Codex needing an update, say): why, as for any provider.
+      said = props.provider.available
+        ? `signed in ${who.join(", ")}`.trim()
+        : props.provider.reason;
       act = "sign-out";
       break;
     }
@@ -289,7 +298,9 @@ function ModelsList() {
         {providers.map((provider) => {
           const signIn = signIns.find((s) => s.provider === provider.id);
           if (signIn !== undefined) {
-            return <SignInRow key={provider.id} models={models} signIn={signIn} />;
+            return (
+              <SignInRow key={provider.id} models={models} signIn={signIn} provider={provider} />
+            );
           }
           return (
             <li key={provider.id} className="py-2.5">
