@@ -159,8 +159,8 @@ logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothi
   git checkout "HEAD^{/^Fresh start}~1" -- .
   ```
 
-  That takes the files from just before the latest fresh start, alongside anything made since; the
-  worker commits them as "Edited by hand". To bring back one workspace, name its folder instead of
+  That takes the files from just before the latest fresh start, replacing any made since at the
+  same paths; the worker commits them as "Edited by hand". To bring back one workspace, name its folder instead of
   `.`. Recent changes still begin at the fresh start.
 - **The sessions** move to `fresh-starts/<date>` in the data folder (`-2`, `-3` and so on for a
   second fresh start the same day), and are never tidied away. To bring them back, move the session

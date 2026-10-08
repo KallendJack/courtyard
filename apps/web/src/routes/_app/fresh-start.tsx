@@ -1,4 +1,4 @@
-import { FRESH_START_WORDS, type FreshStartSummary } from "@courtyard/contract";
+import { FRESH_START_WORDS, type RunningTurn } from "@courtyard/contract";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { BackLink } from "@/components/back-link";
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_app/fresh-start")({
 });
 
 /** A list under its heading: what goes, or what stays. */
-function Kept(props: { heading: string; goes?: boolean; items: readonly string[] }) {
+function GoesOrStays(props: { heading: string; goes?: boolean; items: readonly string[] }) {
   return (
     <section aria-label={props.heading} className="flex flex-col gap-2 text-sm/[22px]">
       <h2 className={props.goes ? "font-semibold text-destructive-text" : "font-semibold"}>
@@ -43,7 +43,7 @@ const tidiesWaiting = (count: number) =>
     : [count === 1 ? "A tidy waiting for review" : `${count} tidies waiting for review`];
 
 /** The turn that stops a fresh start, with a way to it. */
-function StillRunning(props: { running: NonNullable<FreshStartSummary["running"]> }) {
+function StillRunning(props: { running: RunningTurn }) {
   const { running } = props;
   return (
     <Notice
@@ -88,6 +88,7 @@ function FreshStart() {
 
   if (summary.kind !== "loaded") return <Problem result={summary} />;
   const { workspaces, sessions, tidies, running, folder } = summary.data;
+  // Any case: a phone capitalises the first letter. The worker gets the exact words either way.
   const matches = typed.trim().toLowerCase() === FRESH_START_WORDS;
 
   const submit = (event: FormEvent) => {
@@ -104,17 +105,18 @@ function FreshStart() {
       </p>
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
-        <Kept
+        <GoesOrStays
           heading="Goes"
           goes
           items={[
             `Every workspace (${workspaces}), archived ones too`,
             "Your owner context",
+            "Every other file in the context folder",
             `Every session (${sessions})`,
             ...tidiesWaiting(tidies),
           ]}
         />
-        <Kept
+        <GoesOrStays
           heading="Stays"
           items={[
             "Your password, and the devices logged in",
@@ -167,7 +169,8 @@ function FreshStart() {
         <p className="text-xs/[18px] text-muted-foreground">
           The button works once the words match.
         </p>
-        <FormError message={start.error} />
+        {/* A turn that stopped it is named in its notice above, so it's said once. */}
+        {running === null && <FormError message={start.error} />}
       </form>
     </Page>
   );

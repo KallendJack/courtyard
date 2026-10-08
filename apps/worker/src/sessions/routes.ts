@@ -88,7 +88,7 @@ export const sessionError = (c: Context, error: SessionError) => {
     case "starting-fresh":
       return apiError(c, {
         status: 409,
-        error: "Courtyard is starting fresh, so nothing new can start until it's done.",
+        error: "Courtyard is starting fresh, or just has, so this didn't start. Reload the page.",
       });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });

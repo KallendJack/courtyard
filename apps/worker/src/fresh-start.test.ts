@@ -219,6 +219,44 @@ describe("a fresh start", () => {
     await followSession(request, { sessionId: session.id, until: "turn-completed" });
   });
 
+  it("stops a session asked for just before it from starting after it", async () => {
+    const fake = createFakeProvider({ delayMs: 0, now });
+    let holding = false;
+    let asked = () => {};
+    const statusAsked = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Holds the new session at its provider's status, while the fresh start happens.
+    const held: Provider = {
+      ...fake,
+      status: async () => {
+        if (holding) {
+          asked();
+          await released;
+        }
+        return fake.status();
+      },
+    };
+    const request = await start([held]);
+    holding = true;
+    const starting = postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: FAKE_MODEL,
+    });
+    await statusAsked;
+    holding = false;
+
+    expect((await startFresh(request)).status).toBe(204);
+    release();
+
+    expect((await starting).status).toBe(409);
+    expect((await summaryOf(request)).sessions).toBe(0);
+  });
+
   it("is refused without the exact confirm words", async () => {
     const request = await start();
 

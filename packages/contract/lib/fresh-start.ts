@@ -11,6 +11,15 @@ export const FreshStartRequest = z.object({
 });
 export type FreshStartRequest = z.infer<typeof FreshStartRequest>;
 
+/** A session whose turn is running, which stops a fresh start: its title and its workspace's name. */
+export const RunningTurn = z.object({
+  id: SessionId,
+  title: z.string(),
+  workspaceId: WorkspaceId,
+  workspaceName: z.string(),
+});
+export type RunningTurn = z.infer<typeof RunningTurn>;
+
 /**
  * What a fresh start would clear now: how many workspaces (archived ones too), sessions and tidies
  * waiting for review; the session whose turn is running, which stops it; and the folder in the data
@@ -20,14 +29,7 @@ export const FreshStartSummary = z.object({
   workspaces: z.number().int().nonnegative(),
   sessions: z.number().int().nonnegative(),
   tidies: z.number().int().nonnegative(),
-  running: z
-    .object({
-      id: SessionId,
-      title: z.string(),
-      workspaceId: WorkspaceId,
-      workspaceName: z.string(),
-    })
-    .nullable(),
+  running: RunningTurn.nullable(),
   folder: z.string(),
 });
 export type FreshStartSummary = z.infer<typeof FreshStartSummary>;

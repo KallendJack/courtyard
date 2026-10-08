@@ -141,10 +141,10 @@ export type ContextFolder = {
   }): Promise<Result<{ changes: HistoryChange[]; more: ChangeId | null }, HistoryError>>;
   /**
    * Fresh start: once the owner's own edits are committed, removes every file in the folder as one
-   * change, which keeps them all in the history. Nothing is removed while git can't keep a change
-   * (`not-kept`); `storage` when the files couldn't all be removed or the change couldn't be made.
+   * change, which keeps them all in the history. Nothing is removed while git can't keep a change;
+   * when the files can't all be removed, or the change can't be made, they're put back.
    */
-  freshStart(): Promise<Result<ChangeId, "not-kept" | "storage">>;
+  freshStart(): Promise<Result<ChangeId, FreshStartRefusal>>;
   /** The changes Recent changes has undone, as their undos name them. */
   undone(): Promise<Result<ReadonlySet<ChangeId>, HistoryError>>;
   /** One change, or `undefined` when there's no such change. */
@@ -157,6 +157,9 @@ export type ContextFolder = {
     wanted: readonly { change: ChangeId; before?: boolean; path: string }[],
   ): Promise<Result<(string | null)[], HistoryError>>;
 };
+
+/** Why a fresh start left the folder as it was: git can't keep a change, or clearing it failed. */
+export type FreshStartRefusal = { readonly kind: "not-kept" } | { readonly kind: "not-cleared" };
 
 /** Why the history can't be read: a change it doesn't have, or git failing. */
 export type HistoryError = "unknown-change" | "storage";
@@ -470,28 +473,29 @@ export const createContextFolder = (options: {
       });
     },
     freshStart: () =>
-      inTurn(async (): Promise<Result<ChangeId, "not-kept" | "storage">> => {
-        if (!(await tryToKeep(prepare))) return err("not-kept");
-        const names = await listFolder(contextDir);
-        if (!names.ok) return err("storage");
-        try {
+      inTurn(async (): Promise<Result<ChangeId, FreshStartRefusal>> => {
+        if (!(await tryToKeep(prepare))) return err({ kind: "not-kept" });
+        let id: ChangeId | undefined;
+        const cleared = await tryToKeep(async () => {
+          const names = await listFolder(contextDir);
+          if (!names.ok) throw new Error("The context folder can't be read.");
           for (const name of names.value) {
             if (name !== ".git")
               await rm(join(contextDir, name), { recursive: true, maxRetries: 5 });
           }
-        } catch {
-          return err("storage");
-        }
-        let id: ChangeId | undefined;
-        const kept = await tryToKeep(async () => {
           id = await commitAs(
             { kind: "fresh-start", title: "Fresh start", places: [] },
             { evenIfNothing: true },
           );
         });
-        if (!kept || id === undefined) return err("storage");
-        void pushSoon();
-        return ok(id);
+        if (cleared && id !== undefined) {
+          void pushSoon();
+          return ok(id);
+        }
+        // Everything was committed first, so a half-cleared folder is put back as it was, rather
+        // than the next change taking what's gone for the owner's own edits.
+        await run("checkout", "HEAD", "--", ".").catch(() => undefined);
+        return err({ kind: "not-cleared" });
       }),
     undone: () =>
       readHistory(async () => {
