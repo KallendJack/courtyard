@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type CarryOnRequest,
   type ChangeId,
@@ -22,7 +22,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { ContextFolder } from "../context-folder/index.ts";
-import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
+import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
 import { offerFor, type Provider, type SaveReply } from "../providers/index.ts";
@@ -47,6 +47,8 @@ export type SessionError =
   /** A turn is running, so the session can't be deleted until it's stopped. */
   | { readonly kind: "delete-while-running" }
   | { readonly kind: "workspace-archived" }
+  /** A fresh start is setting every session aside, or did after the turn was asked for. */
+  | { readonly kind: "starting-fresh" }
   | { readonly kind: "model-unavailable" }
   /** The message names a level of effort its model doesn't take. */
   | { readonly kind: "effort-unavailable" }
@@ -62,6 +64,17 @@ export type SessionError =
   /** The owner's Undo or Edit of a save couldn't be done. */
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   | { readonly kind: "storage"; readonly message: string };
+
+/**
+ * Why a fresh start couldn't set the sessions aside: a turn running in one, another fresh start
+ * under way, or the sessions unreadable (all before anything changed); or the sessions not moved
+ * after the rest was cleared.
+ */
+export type SetAsideRefusal =
+  | { readonly kind: "running"; readonly session: SessionSummary }
+  | { readonly kind: "starting-fresh" }
+  | { readonly kind: "unreadable" }
+  | { readonly kind: "not-moved" };
 
 /** A session's own file, beside its event log. */
 const SessionFile = z.object({
@@ -162,6 +175,13 @@ export const createSessions = (options: {
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
+  /** Set while a fresh start sets every session aside: no turn starts meanwhile. */
+  let settingAside = false;
+  /**
+   * How many fresh starts this worker has made. A turn set up before one (its session found, its
+   * provider asked) doesn't start after it.
+   */
+  let freshStarts = 0;
   const stamp = () => new Date(options.now()).toISOString();
 
   const runningSession = (id: SessionId): RunningSession => {
@@ -469,7 +489,10 @@ export const createSessions = (options: {
      * case a newer one ran meanwhile, and the move to the message's model recorded first.
      */
     carryingOn?: { turn: number };
+    /** How many fresh starts there had been when the turn was asked for. */
+    since: number;
   }): Promise<Result<null, SessionError>> => {
+    if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
     if (session.turn.kind === "deleting") return err({ kind: "not-found" });
     if (session.turn.kind !== "idle") return err({ kind: "busy" });
@@ -558,6 +581,17 @@ export const createSessions = (options: {
     const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
     if (!file.ok) return err(STORAGE_ERROR);
     return file.value ? ok(file.value) : err({ kind: "not-found" });
+  };
+
+  /** A session whose turn is running, in any workspace, or `undefined` when none is. */
+  const busySession = async (): Promise<Result<SessionSummary | undefined, "unreadable">> => {
+    for (const [id, session] of running) {
+      if (session.turn.kind === "idle" || session.turn.kind === "deleting") continue;
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!file.ok) return file;
+      if (file.value) return ok(summaryOf(file.value));
+    }
+    return ok(undefined);
   };
 
   /** A workspace's sessions, most recently active first. */
@@ -655,6 +689,8 @@ export const createSessions = (options: {
       workspaceId: WorkspaceId;
       message: FirstMessage;
     }): Promise<Result<SessionSummary, SessionError>> => {
+      const since = freshStarts;
+      if (settingAside) return err({ kind: "starting-fresh" });
       const message = await withModel(start.message);
       if (!message.ok) return message;
       const provider = await providerFor(message.value);
@@ -680,6 +716,7 @@ export const createSessions = (options: {
             workspaceId: start.workspaceId,
             provider: provider.value,
             message: message.value,
+            since,
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -693,6 +730,7 @@ export const createSessions = (options: {
 
     /** Starts a turn; returns as soon as the owner's message is recorded. */
     send: async (rawId: string, message: NewMessage): Promise<Result<null, SessionError>> => {
+      const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
@@ -705,6 +743,7 @@ export const createSessions = (options: {
         workspaceId: session.value.workspaceId,
         provider: provider.value,
         message,
+        since,
       });
     },
 
@@ -717,6 +756,7 @@ export const createSessions = (options: {
       rawId: string,
       request: CarryOnRequest,
     ): Promise<Result<null, SessionError>> => {
+      const since = freshStarts;
       const found = await findSession(rawId);
       if (!found.ok) return found;
       const { id, workspaceId } = found.value;
@@ -738,6 +778,7 @@ export const createSessions = (options: {
         provider,
         message: { text: message.text, model: overflow.model },
         carryingOn: { turn: request.turn },
+        since,
       });
     },
 
@@ -800,6 +841,51 @@ export const createSessions = (options: {
 
     /** A workspace's sessions, most recently active first. */
     list: sessionsOf,
+
+    /** How many sessions there are, in every workspace. */
+    count: async (): Promise<Result<number, SessionError>> => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return err(STORAGE_ERROR);
+      return ok(folders.value.filter((folder) => SessionId.safeParse(folder).success).length);
+    },
+
+    /** A session whose turn is running, in any workspace, or `undefined` when none is. */
+    busy: busySession,
+
+    /**
+     * Fresh start: with no turn running and none able to start, runs `clear` (which says where the
+     * sessions go), then moves the folder of every session there. Refused, naming the session,
+     * while a turn is running; nothing moves when `clear` fails.
+     */
+    setAside: async <E>(aside: {
+      clear: () => Promise<Result<{ moveTo: string }, E>>;
+    }): Promise<Result<null, E | SetAsideRefusal>> => {
+      if (settingAside) return err({ kind: "starting-fresh" });
+      settingAside = true;
+      try {
+        // Anything already queued, such as the last event of a turn that just ended, is written.
+        await Promise.all([...running.values()].map((session) => inOrder(session, async () => {})));
+        const busy = await busySession();
+        if (!busy.ok) return err({ kind: "unreadable" });
+        if (busy.value !== undefined) return err({ kind: "running", session: busy.value });
+        const cleared = await aside.clear();
+        if (!cleared.ok) return cleared;
+        // Anything asked for before now belonged to what's just been cleared.
+        freshStarts += 1;
+        running.clear();
+        try {
+          if (await exists(sessionsDir).then((there) => !there.ok || there.value)) {
+            await mkdir(dirname(cleared.value.moveTo), { recursive: true });
+            await move(sessionsDir, cleared.value.moveTo);
+          }
+        } catch {
+          return err({ kind: "not-moved" });
+        }
+        return ok(null);
+      } finally {
+        settingAside = false;
+      }
+    },
 
     /**
      * Replays a session's events after `after`, then follows it live. Runs in the session's queue,

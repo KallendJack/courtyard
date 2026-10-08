@@ -222,6 +222,19 @@ export const listWorkspaces = async (
   return ok(every.value.map((listed) => listed.workspace.summary).sort(byName));
 };
 
+/** How many workspaces there are, archived ones too. */
+export const countWorkspaces = async (
+  contextDir: string,
+): Promise<Result<number, WorkspaceError>> => {
+  const current = await workspaceIds(contextDir);
+  if (!current.ok) return current;
+  const archivedFolder = join(contextDir, ARCHIVED_FOLDER);
+  const hasArchived = await isWorkspaceFolder(archivedFolder);
+  if (!hasArchived.ok) return hasArchived;
+  const archived = hasArchived.value ? await workspaceIds(archivedFolder) : ok([]);
+  return archived.ok ? ok(current.value.length + archived.value.length) : archived;
+};
+
 /** One workspace with its context file. */
 export const getWorkspace = async (
   contextDir: string,

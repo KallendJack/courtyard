@@ -242,6 +242,16 @@ nothing personal, so anyone can run their own.
 90. As a developer of Courtyard, I want a scripted fake provider, so that I can run and test everything end to end with
     no models and no usage.
 
+### Starting fresh
+
+105. As the owner, I want a fresh start that clears every workspace (archived ones too), my owner context and every
+     session, so that once I've finished trying Courtyard out it starts as on its first run.
+106. As the owner, I want a fresh start to keep my password, my devices' logins, the Claude and Codex sign-ins and the
+     usage limits Courtyard knows about, so that I don't have to set any of that up again.
+107. As the owner, I want a fresh start to need me to type "start fresh", to be refused while a turn is running, and
+     to lose nothing (the context folder's history keeps every file and the sessions move to a dated folder), so that
+     a mis-tap can't clear anything and I can bring things back by hand.
+
 ## Implementation Decisions
 
 ### Shape
@@ -272,8 +282,11 @@ Deep modules, each with a small interface at its root and its implementation pri
   above them); labels each line for a model to read; checks a save (validated with Zod: its place, section, text, and
   optionally the label of the line it changes or removes) and refuses it with a reason; applies saves, undos, edits and
   ticked tidy changes one at a time, each as a commit; commits hand edits first; lists recent changes from the git
-  history; makes the folder a git repository on first start; pushes to the backup, retrying and reporting failures.
-  Models never write context files (ADRs 0013, 0014).
+  history (back to the last fresh start); makes the folder a git repository on first start; pushes to the backup,
+  retrying and reporting failures. Models never write context files (ADRs 0013, 0014).
+- **Fresh start:** with no turn running, clears the context folder as one change, moves every session into
+  `fresh-starts/<date>` in the data folder, and drops any tidy waiting for review. The owner's login, sign-ins and
+  remembered usage limits stay.
 - **Providers:** the one seam. A provider reports its status (available, with models and capabilities, or unavailable
   with a reason) and runs one turn as a stream of events, returning a failure as a value, never a throw. Capabilities
   (reads files, can code, uses tools) drive the rules, not provider names. Each model lists the effort levels it

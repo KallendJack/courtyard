@@ -86,8 +86,8 @@ removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:
-One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, or a workspace added,
-renamed or archived in the app. The worker makes them one at a time.
+One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, a workspace added,
+renamed or archived in the app, or a fresh start. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:
@@ -104,6 +104,12 @@ _Avoid_: compact, clean up, summarise
 The context folder's copy on its git remote, pushed after every change: for the owner, a shared folder on the NAS
 (ADR 0014). The home page says when it's behind.
 _Avoid_: sync, mirror, remote (on its own)
+
+**Fresh start**:
+Clearing everything from trying Courtyard out, so it starts as on its first run: every workspace, the owner context
+and every session go; the owner's login, sign-ins and remembered usage limits stay. The context folder's history keeps
+the old files, and the sessions move to a dated folder in the data folder. Recent changes begin again after it.
+_Avoid_: reset, factory reset, wipe
 
 **Planning workspace**:
 A workspace whose files models may read but not change.

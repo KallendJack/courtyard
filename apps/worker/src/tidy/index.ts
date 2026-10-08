@@ -297,6 +297,12 @@ export const createTidying = (target: TidyTarget) => {
       if (saved.ok || saved.error.kind === "changed-since") proposed.delete(request.id);
       return saved.ok ? ok(null) : saved;
     },
+
+    /** How many tidies are waiting for review: held, with changes to review. */
+    waiting: () => [...proposed.values()].filter((tidy) => tidy.changes.length > 0).length,
+
+    /** Drops every tidy waiting for review, for a fresh start. */
+    dropAll: () => proposed.clear(),
   };
 };
 

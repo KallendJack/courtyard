@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ChangeId,
@@ -7,7 +8,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { exists } from "../files.ts";
+import { exists, listFolder } from "../files.ts";
 import { git, gitBytes, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -16,8 +17,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
 /**
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
  * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
- * owner context started from the app, a model's save and the owner undoing or editing one, or a
- * tidy the owner ticked.
+ * owner context started from the app, a model's save and the owner undoing or editing one, a
+ * tidy the owner ticked, or a fresh start clearing the whole folder.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -28,6 +29,7 @@ export const ChangeKind = z.enum([
   "undo",
   "edit",
   "tidy",
+  "fresh-start",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;
 
@@ -137,6 +139,12 @@ export type ContextFolder = {
     after?: ChangeId;
     limit: number;
   }): Promise<Result<{ changes: HistoryChange[]; more: ChangeId | null }, HistoryError>>;
+  /**
+   * Fresh start: once the owner's own edits are committed, removes every file in the folder as one
+   * change, which keeps them all in the history. Nothing is removed while git can't keep a change;
+   * when the files can't all be removed, or the change can't be made, they're put back.
+   */
+  freshStart(): Promise<Result<ChangeId, FreshStartRefusal>>;
   /** The changes Recent changes has undone, as their undos name them. */
   undone(): Promise<Result<ReadonlySet<ChangeId>, HistoryError>>;
   /** One change, or `undefined` when there's no such change. */
@@ -149,6 +157,9 @@ export type ContextFolder = {
     wanted: readonly { change: ChangeId; before?: boolean; path: string }[],
   ): Promise<Result<(string | null)[], HistoryError>>;
 };
+
+/** Why a fresh start left the folder as it was: git can't keep a change, or clearing it failed. */
+export type FreshStartRefusal = { readonly kind: "not-kept" } | { readonly kind: "not-cleared" };
 
 /** Why the history can't be read: a change it doesn't have, or git failing. */
 export type HistoryError = "unknown-change" | "storage";
@@ -433,6 +444,15 @@ export const createContextFolder = (options: {
       if (handEdited) await inTurn(() => tryToKeep(prepare));
       if (after !== undefined && !(await hasChange(after))) return err("unknown-change");
       return readHistory(async () => {
+        // Nothing from before the last fresh start: a file there now is a new one.
+        const freshStart = await run(
+          "log",
+          "-1",
+          "--format=%H",
+          "--grep=^Courtyard-Change: fresh-start$",
+          "HEAD",
+          "--",
+        );
         const log = await run(
           "log",
           `-n${limit + 1}`,
@@ -443,6 +463,7 @@ export const createContextFolder = (options: {
           LOG_FORMAT,
           // After a change: that change and older, skipping the change itself, which matches.
           ...(after === undefined ? ["HEAD"] : [after, "--skip=1"]),
+          ...(freshStart === "" ? [] : [`^${freshStart}`]),
           "--",
           placeFile(place),
         );
@@ -451,6 +472,31 @@ export const createContextFolder = (options: {
         return { changes: page, more: changes.length > limit ? (page.at(-1)?.id ?? null) : null };
       });
     },
+    freshStart: () =>
+      inTurn(async (): Promise<Result<ChangeId, FreshStartRefusal>> => {
+        if (!(await tryToKeep(prepare))) return err({ kind: "not-kept" });
+        let id: ChangeId | undefined;
+        const cleared = await tryToKeep(async () => {
+          const names = await listFolder(contextDir);
+          if (!names.ok) throw new Error("The context folder can't be read.");
+          for (const name of names.value) {
+            if (name !== ".git")
+              await rm(join(contextDir, name), { recursive: true, maxRetries: 5 });
+          }
+          id = await commitAs(
+            { kind: "fresh-start", title: "Fresh start", places: [] },
+            { evenIfNothing: true },
+          );
+        });
+        if (cleared && id !== undefined) {
+          void pushSoon();
+          return ok(id);
+        }
+        // Everything was committed first, so a half-cleared folder is put back as it was, rather
+        // than the next change taking what's gone for the owner's own edits.
+        await run("checkout", "HEAD", "--", ".").catch(() => undefined);
+        return err({ kind: "not-cleared" });
+      }),
     undone: () =>
       readHistory(async () => {
         const log = await run(
