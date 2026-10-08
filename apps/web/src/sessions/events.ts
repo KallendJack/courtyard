@@ -35,6 +35,11 @@ export type Turn = {
   /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
   readonly modelChanged: boolean;
   readonly answer: string;
+  /**
+   * How much of the answer was replayed from the event log (opening the session, or reconnecting)
+   * rather than streamed live. It shows at once; only the rest is revealed.
+   */
+  readonly replayed: number;
   /** What the model did along the way, such as files it read. */
   readonly activities: readonly Activity[];
   /** The saves it made, in order. */
@@ -46,13 +51,18 @@ export type Turn = {
     | { readonly kind: "failed"; readonly reason: FailureReason };
 };
 
-type Log = { readonly lastSeq: number; readonly turns: readonly Turn[] };
+type Log = {
+  readonly lastSeq: number;
+  readonly turns: readonly Turn[];
+  /** The title a model gave the session after its first answer, if one has. */
+  readonly modelTitle: string | undefined;
+};
 
 /** Swaps in a new last turn and leaves every other turn object as it was. */
 const withLastTurn = (log: Log, update: { seq: number; change: (turn: Turn) => Turn }): Log => {
   const last = log.turns.at(-1);
   if (!last) return { ...log, lastSeq: update.seq };
-  return { lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
+  return { ...log, lastSeq: update.seq, turns: [...log.turns.slice(0, -1), update.change(last)] };
 };
 
 /**
@@ -63,6 +73,7 @@ const withNote = (
   log: Log,
   update: { seq: number; save: number; change: (note: Note) => Note },
 ): Log => ({
+  ...log,
   lastSeq: update.seq,
   turns: log.turns.map((turn) =>
     turn.notes.some((note) => note.seq === update.save)
@@ -78,13 +89,15 @@ const withNote = (
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
  * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
  */
-export const applyEvent = (log: Log, event: SessionEvent): Log => {
+const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }): Log => {
+  const { event, replayed } = update;
   if (event.seq <= log.lastSeq) return log;
   const seq = event.seq;
   switch (event.type) {
     case "owner-message": {
       const before = log.turns.at(-1)?.model;
       return {
+        ...log,
         lastSeq: seq,
         turns: [
           ...log.turns,
@@ -97,6 +110,7 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
               before !== undefined &&
               (before.provider !== event.model.provider || before.model !== event.model.model),
             answer: "",
+            replayed: 0,
             activities: [],
             notes: [],
             state: { kind: "running" },
@@ -107,10 +121,15 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
     // The owner message after it shows the change; nothing else to show.
     case "model-changed":
       return { ...log, lastSeq: seq };
+    case "session-titled":
+      return { ...log, lastSeq: seq, modelTitle: event.title };
     case "text-delta":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, answer: turn.answer + event.text }),
+        change: (turn) => {
+          const answer = turn.answer + event.text;
+          return { ...turn, answer, replayed: replayed ? answer.length : turn.replayed };
+        },
       });
     case "activity":
       return withLastTurn(log, {
@@ -152,6 +171,12 @@ export const applyEvent = (log: Log, event: SessionEvent): Log => {
   }
 };
 
+/** The events that arrived in one frame, and whether they were replayed from the event log. */
+type Batch = { readonly events: readonly SessionEvent[]; readonly replayed: boolean };
+
+const applyBatch = (log: Log, batch: Batch): Log =>
+  batch.events.reduce((next, event) => applyEvent(next, { event, replayed: batch.replayed }), log);
+
 const parseJson = (text: string): unknown => {
   try {
     return JSON.parse(text);
@@ -162,13 +187,24 @@ const parseJson = (text: string): unknown => {
 
 /** How long to wait before opening a stream again after the browser gave up on one. */
 const RECONNECT_MS = 3000;
+/** The longest a replay of the event log is taken to last after (re)connecting. */
+const REPLAY_MS = 500;
 
 /**
  * Follows a session's events: its whole event log first, then live as the worker records them.
  * Also says when it's reconnecting, and the worker's reason when the stream can't start at all.
+ *
+ * Events are applied once per frame, however many arrive, so a burst redraws the page once. The
+ * worker sends what's already in the event log in one burst on (re)connecting, so everything up to
+ * the first quiet frame after it (and within `REPLAY_MS`) counts as replayed: its text shows at
+ * once rather than revealed.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
-  const [log, dispatch] = useReducer(applyEvent, { lastSeq: 0, turns: [] });
+  const [log, dispatch] = useReducer(applyBatch, {
+    lastSeq: 0,
+    turns: [],
+    modelTitle: undefined,
+  });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
   const lastSeen = useRef(0);
@@ -177,18 +213,51 @@ export const useSessionTurns = (sessionId: SessionId) => {
     let source: EventSource | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
+    let queued: SessionEvent[] = [];
+    let frame: number | undefined;
+    let replaying = true;
+    let connectedAt = performance.now();
+    // A hidden page draws no frames, so what arrives meanwhile waits for the owner's return, and
+    // then shows at once like a replay.
+    let hidden = document.hidden;
+    const onVisibility = () => {
+      hidden ||= document.hidden;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const flush = () => {
+      frame = undefined;
+      // However busy the stream, a replay is over within moments of (re)connecting.
+      if (performance.now() - connectedAt > REPLAY_MS) replaying = false;
+      if (queued.length === 0) {
+        replaying = false;
+        hidden = false;
+        return;
+      }
+      dispatch({ events: queued, replayed: replaying || hidden });
+      hidden = false;
+      queued = [];
+      // While replaying, look again next frame: a frame with nothing new ends the replay.
+      if (replaying) frame = requestAnimationFrame(flush);
+    };
 
     const connect = () => {
       // Starts after the last event seen, so a new connection carries on where the old one ended.
       const url = `/api/sessions/${encodeURIComponent(sessionId)}/events?after=${lastSeen.current}`;
       const opened = new EventSource(url);
       source = opened;
-      opened.onopen = () => setReconnecting(false);
+      // Also when the browser reconnects by itself: it's sent what was missed first.
+      opened.onopen = () => {
+        replaying = true;
+        connectedAt = performance.now();
+        setReconnecting(false);
+      };
       opened.onmessage = (message) => {
         const event = SessionEvent.safeParse(parseJson(message.data));
         if (!event.success) return;
         lastSeen.current = Math.max(lastSeen.current, event.data.seq);
-        dispatch(event.data);
+        queued.push(event.data);
+        frame ??= requestAnimationFrame(flush);
       };
       opened.addEventListener("problem", (message) => {
         const error = ApiError.safeParse(parseJson(message.data));
@@ -210,9 +279,11 @@ export const useSessionTurns = (sessionId: SessionId) => {
     return () => {
       stopped = true;
       clearTimeout(retry);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
       source?.close();
     };
   }, [sessionId]);
 
-  return { turns: log.turns, problem, reconnecting };
+  return { turns: log.turns, modelTitle: log.modelTitle, problem, reconnecting };
 };

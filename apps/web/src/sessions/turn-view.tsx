@@ -79,7 +79,11 @@ export const TurnView = memo(function TurnView(props: {
       {(turn.answer !== "" || turn.state.kind === "running") && (
         // Busy while it streams, so a screen reader reads the answer once, when it's whole.
         <div aria-live="polite" aria-busy={turn.state.kind === "running"}>
-          <Answer text={turn.answer} />
+          <Answer
+            text={turn.answer}
+            running={turn.state.kind === "running"}
+            replayed={turn.replayed}
+          />
           {turn.state.kind === "running" && (
             <span
               aria-hidden

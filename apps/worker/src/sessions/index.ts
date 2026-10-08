@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type CarryOnRequest,
   type ChangeId,
@@ -8,11 +8,13 @@ import {
   endsTurn,
   type FailureReason,
   type FirstMessage,
+  type ModelInfo,
   type ModelRef,
   type NewMessage,
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
   type SessionSummary,
@@ -22,9 +24,16 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { ContextFolder } from "../context-folder/index.ts";
-import { listFolder, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
+import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
-import { type FramingWorkspace, framingFor, saveReply } from "../prompts/index.ts";
+import {
+  type FramingWorkspace,
+  framingFor,
+  saveReply,
+  TITLING,
+  TitleAnswer,
+  titleMessage,
+} from "../prompts/index.ts";
 import { offerFor, type Provider, type SaveReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -47,6 +56,8 @@ export type SessionError =
   /** A turn is running, so the session can't be deleted until it's stopped. */
   | { readonly kind: "delete-while-running" }
   | { readonly kind: "workspace-archived" }
+  /** A fresh start is setting every session aside, or did after the turn was asked for. */
+  | { readonly kind: "starting-fresh" }
   | { readonly kind: "model-unavailable" }
   /** The message names a level of effort its model doesn't take. */
   | { readonly kind: "effort-unavailable" }
@@ -63,11 +74,27 @@ export type SessionError =
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
+/**
+ * Why a fresh start couldn't set the sessions aside: a turn running in one, another fresh start
+ * under way, or the sessions unreadable (all before anything changed); or the sessions not moved
+ * after the rest was cleared.
+ */
+export type SetAsideRefusal =
+  | { readonly kind: "running"; readonly session: SessionSummary }
+  | { readonly kind: "starting-fresh" }
+  | { readonly kind: "unreadable" }
+  | { readonly kind: "not-moved" };
+
 /** A session's own file, beside its event log. */
 const SessionFile = z.object({
   id: SessionId,
   workspaceId: WorkspaceId,
   title: z.string(),
+  /**
+   * Who set the title, when a model mustn't change it: the owner by renaming it, or a starter
+   * message whose first line is the title (Get to know). Left out otherwise, and in older files.
+   */
+  titledBy: z.enum(["owner", "starter"]).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -77,10 +104,58 @@ type SessionFile = z.infer<typeof SessionFile>;
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
 type NewEvent = WithoutNumbering<SessionEvent>;
 
-const TITLE_LENGTH = 60;
+/** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
 const titleFrom = (text: string) => {
   const firstLine = text.split("\n")[0]?.trim() ?? "";
-  return firstLine.length > TITLE_LENGTH ? `${firstLine.slice(0, TITLE_LENGTH - 1)}…` : firstLine;
+  return firstLine.length > SESSION_TITLE_MAX_LENGTH
+    ? `${firstLine.slice(0, SESSION_TITLE_MAX_LENGTH - 1)}…`
+    : firstLine;
+};
+
+/**
+ * A model's title as the session gets it: on one line, without the quotes or full stop it was
+ * told to leave off, and no longer than a title can be. `undefined` when nothing is left.
+ */
+const modelTitle = (answer: unknown) => {
+  const parsed = TitleAnswer.safeParse(answer);
+  if (!parsed.success) return undefined;
+  const tidied = parsed.data.title
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["'“‘]+|["'”’]+$/g, "")
+    .replace(/\.$/, "")
+    .trim();
+  return tidied === "" ? undefined : titleFrom(tidied);
+};
+
+/** How long titling a session can take before it's given up on: a few words shouldn't take long. */
+const TITLING_TIMEOUT_MS = 2 * 60 * 1000;
+
+/** The first model with room: on offer and not at its usage limit. */
+const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly T[]) =>
+  offered.find(({ model }) => model.limit === undefined);
+
+/** A session's file that no one has given a title the model mustn't change. */
+const titledByNobody = (
+  file: Result<SessionFile | undefined, unknown>,
+): file is { ok: true; value: SessionFile } =>
+  file.ok && file.value !== undefined && file.value.titledBy === undefined;
+
+/**
+ * The session's first message and its first answer: the text of the first turn that completed,
+ * which can be a carried-on one. `undefined` when no turn has completed.
+ */
+const firstAnswer = (events: readonly SessionEvent[]) => {
+  const message = events.find((event) => event.type === "owner-message");
+  let answer = "";
+  for (const event of events) {
+    if (event.type === "owner-message") answer = "";
+    if (event.type === "text-delta") answer += event.text;
+    if (event.type === "turn-completed") {
+      return message?.type === "owner-message" ? { message: message.text, answer } : undefined;
+    }
+  }
+  return undefined;
 };
 
 const STORAGE_ERROR: SessionError = {
@@ -162,6 +237,13 @@ export const createSessions = (options: {
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
+  /** Set while a fresh start sets every session aside: no turn starts meanwhile. */
+  let settingAside = false;
+  /**
+   * How many fresh starts this worker has made. A turn set up before one (its session found, its
+   * provider asked) doesn't start after it.
+   */
+  let freshStarts = 0;
   const stamp = () => new Date(options.now()).toISOString();
 
   const runningSession = (id: SessionId): RunningSession => {
@@ -288,7 +370,10 @@ export const createSessions = (options: {
    * Changes a session's own file. Runs in the session's queue, so two changes (a turn ending and
    * the owner renaming it, say) can't each read the file before the other writes it.
    */
-  const updateFile = (id: SessionId, change: Partial<Pick<SessionFile, "title" | "updatedAt">>) =>
+  const updateFile = (
+    id: SessionId,
+    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt">>,
+  ) =>
     inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
       if (!file.ok) return err(STORAGE_ERROR);
@@ -339,6 +424,8 @@ export const createSessions = (options: {
     provider: Provider;
     model: ModelRef["model"];
     effort: Effort | undefined;
+    /** Whether it answers the session's first message, so the session is titled once it completes. */
+    firstTurn: boolean;
   }) => {
     const session = runningSession(turn.id);
     const stopper = turn.stopper;
@@ -457,6 +544,53 @@ export const createSessions = (options: {
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
+    else if (turn.firstTurn && ending.type === "turn-completed") {
+      titleSession(turn.id).catch((error: unknown) =>
+        console.error(`Session ${turn.id}: titling it crashed`, error),
+      );
+    }
+  };
+
+  /**
+   * Titles a session after its first answer (docs/ai-conduct.md, Titling a session): the first
+   * model not at its usage limit, at its lowest effort, is given the first message and the start
+   * of the answer. Its title is written unless the owner or a starter set one, checked in the
+   * session's queue so a rename made meanwhile wins. Nobody waits on it, and when it fails the
+   * first line stays, with nothing shown and nothing retried.
+   */
+  const titleSession = async (id: SessionId) => {
+    const session = running.get(id);
+    const [file, events, offered] = await Promise.all([
+      readJsonFile(sessionFilePath(id), SessionFile),
+      readEvents(id),
+      modelsOnOffer(),
+    ]);
+    const chosen = firstWithRoom(offered);
+    const first = events.ok ? firstAnswer(events.value) : undefined;
+    if (!titledByNobody(file) || session === undefined || !chosen || !first) return;
+    // Least first, so the first is the lowest; a model that takes none answers at its default.
+    const lowest = chosen.model.efforts[0]?.id;
+    const answered = await chosen.provider.answerOnce({
+      purpose: "title",
+      model: chosen.model.id,
+      ...(lowest === undefined ? {} : { effort: lowest }),
+      instructions: TITLING,
+      message: titleMessage(first),
+      schema: TitleAnswer,
+      signal: AbortSignal.timeout(TITLING_TIMEOUT_MS),
+    });
+    const title = answered.ok ? modelTitle(answered.value) : undefined;
+    if (title === undefined) return;
+    await inOrder(session, async () => {
+      // Deleted, or set aside by a fresh start, meanwhile.
+      if (settingAside || running.get(id) !== session) return;
+      const now = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!titledByNobody(now)) return;
+      const written = await writeJsonFile(sessionFilePath(id), { ...now.value, title });
+      if (!written.ok) return;
+      const recorded = await writeEvent({ id, session, event: { type: "session-titled", title } });
+      if (!recorded.ok) console.error(`Session ${id}: its new title couldn't be recorded.`);
+    });
   };
 
   const startTurn = async (start: {
@@ -469,7 +603,12 @@ export const createSessions = (options: {
      * case a newer one ran meanwhile, and the move to the message's model recorded first.
      */
     carryingOn?: { turn: number };
+    /** How many fresh starts there had been when the turn was asked for. */
+    since: number;
+    /** It answers the session's first message, so the session is titled once it completes. */
+    firstTurn?: boolean;
   }): Promise<Result<null, SessionError>> => {
+    if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
     if (session.turn.kind === "deleting") return err({ kind: "not-found" });
     if (session.turn.kind !== "idle") return err({ kind: "busy" });
@@ -511,6 +650,7 @@ export const createSessions = (options: {
       provider: start.provider,
       model: start.message.model.model,
       effort: start.message.effort,
+      firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
   };
@@ -526,6 +666,16 @@ export const createSessions = (options: {
   /** Every provider's status, with the usage limits its models are at. */
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
 
+  /** Every model on offer right now, in order, each with its provider. */
+  const modelsOnOffer = async () => {
+    const offers = await Promise.all(
+      options.providers.map(async (provider) => ({ provider, status: await provider.status() })),
+    );
+    return offers.flatMap(({ provider, status }) =>
+      status.available ? status.models.map((model) => ({ provider, model })) : [],
+    );
+  };
+
   /**
    * A first message with its model: the one it names, or else the first model on offer that isn't
    * at its usage limit (the first of all when every one is).
@@ -533,21 +683,14 @@ export const createSessions = (options: {
   const withModel = async (message: FirstMessage): Promise<Result<NewMessage, SessionError>> => {
     const { model } = message;
     if (model !== undefined) return ok({ ...message, model });
-    const offered = (await statuses()).flatMap((status) =>
-      status.available
-        ? status.models.map((info) => ({
-            ref: { provider: status.id, model: info.id },
-            limited: info.limit !== undefined,
-          }))
-        : [],
-    );
-    const chosen = offered.find((choice) => !choice.limited) ?? offered[0];
+    const offered = await modelsOnOffer();
+    const chosen = firstWithRoom(offered) ?? offered[0];
     return chosen
-      ? ok({ text: message.text, model: chosen.ref })
+      ? ok({ text: message.text, model: { provider: chosen.provider.id, model: chosen.model.id } })
       : err({ kind: "model-unavailable" });
   };
 
-  const summaryOf = (file: SessionFile): SessionSummary => ({
+  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => ({
     ...file,
     busy: (running.get(file.id)?.turn.kind ?? "idle") !== "idle",
   });
@@ -558,6 +701,17 @@ export const createSessions = (options: {
     const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
     if (!file.ok) return err(STORAGE_ERROR);
     return file.value ? ok(file.value) : err({ kind: "not-found" });
+  };
+
+  /** A session whose turn is running, in any workspace, or `undefined` when none is. */
+  const busySession = async (): Promise<Result<SessionSummary | undefined, "unreadable">> => {
+    for (const [id, session] of running) {
+      if (session.turn.kind === "idle" || session.turn.kind === "deleting") continue;
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!file.ok) return file;
+      if (file.value) return ok(summaryOf(file.value));
+    }
+    return ok(undefined);
   };
 
   /** A workspace's sessions, most recently active first. */
@@ -654,7 +808,11 @@ export const createSessions = (options: {
     create: async (start: {
       workspaceId: WorkspaceId;
       message: FirstMessage;
+      /** Started with a starter message, whose first line stays the title (Get to know). */
+      starter?: boolean;
     }): Promise<Result<SessionSummary, SessionError>> => {
+      const since = freshStarts;
+      if (settingAside) return err({ kind: "starting-fresh" });
       const message = await withModel(start.message);
       if (!message.ok) return message;
       const provider = await providerFor(message.value);
@@ -665,6 +823,7 @@ export const createSessions = (options: {
         id,
         workspaceId: start.workspaceId,
         title: titleFrom(start.message.text),
+        ...(start.starter ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,
       };
@@ -680,6 +839,8 @@ export const createSessions = (options: {
             workspaceId: start.workspaceId,
             provider: provider.value,
             message: message.value,
+            since,
+            firstTurn: true,
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -693,6 +854,7 @@ export const createSessions = (options: {
 
     /** Starts a turn; returns as soon as the owner's message is recorded. */
     send: async (rawId: string, message: NewMessage): Promise<Result<null, SessionError>> => {
+      const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
@@ -705,6 +867,7 @@ export const createSessions = (options: {
         workspaceId: session.value.workspaceId,
         provider: provider.value,
         message,
+        since,
       });
     },
 
@@ -717,6 +880,7 @@ export const createSessions = (options: {
       rawId: string,
       request: CarryOnRequest,
     ): Promise<Result<null, SessionError>> => {
+      const since = freshStarts;
       const found = await findSession(rawId);
       if (!found.ok) return found;
       const { id, workspaceId } = found.value;
@@ -738,6 +902,9 @@ export const createSessions = (options: {
         provider,
         message: { text: message.text, model: overflow.model },
         carryingOn: { turn: request.turn },
+        // Carrying on the first message is still the session's first turn.
+        firstTurn: events.value.find((event) => event.type === "owner-message") === message,
+        since,
       });
     },
 
@@ -762,11 +929,14 @@ export const createSessions = (options: {
       return ok(summaryOf(session.value));
     },
 
-    /** Gives a session a new title, kept in its `session.json`. */
+    /**
+     * Gives a session a new title, kept in its `session.json`, marked as the owner's so no model
+     * titles it after that.
+     */
     rename: async (rawId: string, title: string): Promise<Result<SessionSummary, SessionError>> => {
       const session = await findSession(rawId);
       if (!session.ok) return session;
-      const renamed = await updateFile(session.value.id, { title });
+      const renamed = await updateFile(session.value.id, { title, titledBy: "owner" });
       return renamed.ok ? ok(summaryOf(renamed.value)) : renamed;
     },
 
@@ -800,6 +970,51 @@ export const createSessions = (options: {
 
     /** A workspace's sessions, most recently active first. */
     list: sessionsOf,
+
+    /** How many sessions there are, in every workspace. */
+    count: async (): Promise<Result<number, SessionError>> => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return err(STORAGE_ERROR);
+      return ok(folders.value.filter((folder) => SessionId.safeParse(folder).success).length);
+    },
+
+    /** A session whose turn is running, in any workspace, or `undefined` when none is. */
+    busy: busySession,
+
+    /**
+     * Fresh start: with no turn running and none able to start, runs `clear` (which says where the
+     * sessions go), then moves the folder of every session there. Refused, naming the session,
+     * while a turn is running; nothing moves when `clear` fails.
+     */
+    setAside: async <E>(aside: {
+      clear: () => Promise<Result<{ moveTo: string }, E>>;
+    }): Promise<Result<null, E | SetAsideRefusal>> => {
+      if (settingAside) return err({ kind: "starting-fresh" });
+      settingAside = true;
+      try {
+        // Anything already queued, such as the last event of a turn that just ended, is written.
+        await Promise.all([...running.values()].map((session) => inOrder(session, async () => {})));
+        const busy = await busySession();
+        if (!busy.ok) return err({ kind: "unreadable" });
+        if (busy.value !== undefined) return err({ kind: "running", session: busy.value });
+        const cleared = await aside.clear();
+        if (!cleared.ok) return cleared;
+        // Anything asked for before now belonged to what's just been cleared.
+        freshStarts += 1;
+        running.clear();
+        try {
+          if (await exists(sessionsDir).then((there) => !there.ok || there.value)) {
+            await mkdir(dirname(cleared.value.moveTo), { recursive: true });
+            await move(sessionsDir, cleared.value.moveTo);
+          }
+        } catch {
+          return err({ kind: "not-moved" });
+        }
+        return ok(null);
+      } finally {
+        settingAside = false;
+      }
+    },
 
     /**
      * Replays a session's events after `after`, then follows it live. Runs in the session's queue,

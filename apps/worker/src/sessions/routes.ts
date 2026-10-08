@@ -85,6 +85,11 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "This session's workspace is archived, so the session can't carry on.",
       });
+    case "starting-fresh":
+      return apiError(c, {
+        status: 409,
+        error: "Courtyard is starting fresh, or just has, so this didn't start. Reload the page.",
+      });
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
     case "effort-unavailable":
@@ -137,7 +142,7 @@ export const sessionRoutes = (options: {
   /** Starts a session in a workspace with its first message, and answers with the session. */
   const startIn = async (
     c: Context,
-    start: { workspaceId: WorkspaceId; message: FirstMessage },
+    start: { workspaceId: WorkspaceId; message: FirstMessage; starter?: boolean },
   ) => {
     const session = await sessions.create(start);
     if (!session.ok) return sessionError(c, session.error);
@@ -161,7 +166,7 @@ export const sessionRoutes = (options: {
     const body = await readBody(c, GetToKnowRequest);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const message = { text: start.text, model: body.value.model };
-    return startIn(c, { workspaceId: start.workspaceId, message });
+    return startIn(c, { workspaceId: start.workspaceId, message, starter: true });
   };
 
   routes.post("/workspaces/:id/get-to-know", async (c) => {

@@ -625,13 +625,14 @@ describe("stopping a Claude turn", () => {
   });
 });
 
-describe("a one-off question to Claude (a tidy)", () => {
+describe("a one-off question to Claude (a tidy, a session's title)", () => {
   const Answer = z.object({ changes: z.array(z.object({ kind: z.string() })) });
 
-  const ask = (claudeCode: ClaudeCode) =>
+  const ask = (claudeCode: ClaudeCode, options: { effort?: Effort } = {}) =>
     createClaudeProvider({ claudeCode }).answerOnce({
       purpose: "tidy",
       model: ModelId.parse("sonnet"),
+      ...options,
       instructions: "The tidy's instructions.",
       message: "The file.",
       schema: Answer,
@@ -658,6 +659,30 @@ describe("a one-off question to Claude (a tidy)", () => {
     // Claude Code refuses a schema that names its own draft.
     expect(run?.options.outputFormat?.schema).not.toHaveProperty("$schema");
     expect(run?.options.cwd).not.toContain("context");
+  });
+
+  it("sends the effort it's asked at, and none for the model's default", async () => {
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [{ ...success, structured_output: { changes: [] } }],
+    });
+
+    await ask(claudeCode, { effort: Effort.parse("low") });
+    await ask(claudeCode);
+
+    expect(runs[0]?.options.effort).toBe("low");
+    expect(runs[1]?.options).not.toHaveProperty("effort");
+  });
+
+  it("fails an effort Claude doesn't know, rather than send it", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    const answer = await ask(claudeCode, { effort: Effort.parse("ludicrous") });
+
+    expect(runs).toEqual([]);
+    expect(answer).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: expect.stringMatching(/effort/) },
+    });
   });
 
   it("fails in plain words when no answer comes back", async () => {

@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/figtree";
 
@@ -33,6 +31,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-soft: var(--destructive-soft);
   --color-destructive-text: var(--destructive-text);
   --color-border: var(--border);
@@ -78,6 +77,7 @@
   --accent: #eee6ee; /* a heather wash: the owner's messages */
   --accent-foreground: #231f22;
   --destructive: #9b2c2c;
+  --destructive-foreground: #ffffff;
   --destructive-soft: #f6e9e9;
   --destructive-text: #5e2424;
   --border: #e3dcdc;
@@ -118,6 +118,7 @@
     --accent-foreground: #eee8eb;
     /* The design has no dark failure colours; these keep its red readable on the dark ground. */
     --destructive: #e88a8a;
+    --destructive-foreground: #1b181a;
     --destructive-soft: #3a2224;
     --destructive-text: #f0c4c4;
     --border: #352f33;

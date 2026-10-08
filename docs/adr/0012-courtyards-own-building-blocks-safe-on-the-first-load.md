@@ -28,3 +28,9 @@ changes in one place.
   for (a dialog, say), added when one is needed.
 - **Courtyard's pieces don't get shadcn's updates.** They're small and follow the Moorland theme, so that's cheap.
 - **The standards review checks for it,** since AGENTS.md says so.
+
+## Update (2026-10-08)
+
+No shadcn component was ever needed after this: the dialog and every later piece (a sheet, a select, a tick box)
+were built in `components/` instead, so `components/ui/` stayed empty. shadcn's setup is removed (#122): its config,
+packages and CSS. A piece Courtyard needs is built as a shared piece in `components/`.

@@ -242,12 +242,22 @@ nothing personal, so anyone can run their own.
 90. As a developer of Courtyard, I want a scripted fake provider, so that I can run and test everything end to end with
     no models and no usage.
 
+### Starting fresh
+
+105. As the owner, I want a fresh start that clears every workspace (archived ones too), my owner context and every
+     session, so that once I've finished trying Courtyard out it starts as on its first run.
+106. As the owner, I want a fresh start to keep my password, my devices' logins, the Claude and Codex sign-ins and the
+     usage limits Courtyard knows about, so that I don't have to set any of that up again.
+107. As the owner, I want a fresh start to need me to type "start fresh", to be refused while a turn is running, and
+     to lose nothing (the context folder's history keeps every file and the sessions move to a dated folder), so that
+     a mis-tap can't clear anything and I can bring things back by hand.
+
 ## Implementation Decisions
 
 ### Shape
 
-- **Two parts and a contract.** A worker (Node, TypeScript, Hono) and a web app (Vite, React, TanStack Router, shadcn
-  on Tailwind v4), in one pnpm workspace with a shared contract package of Zod schemas and inferred types. Both sides
+- **Two parts and a contract.** A worker (Node, TypeScript, Hono) and a web app (Vite, React, TanStack Router and
+  Tailwind v4), in one pnpm workspace with a shared contract package of Zod schemas and inferred types. Both sides
   parse at the boundary. See ADR 0001.
 - **Same origin.** The web app's static files and the worker's API (under `/api`) share one origin: the worker serves
   the built files at first, and later the owner's reverse proxy serves them and forwards `/api`. In development, Vite
@@ -272,8 +282,11 @@ Deep modules, each with a small interface at its root and its implementation pri
   above them); labels each line for a model to read; checks a save (validated with Zod: its place, section, text, and
   optionally the label of the line it changes or removes) and refuses it with a reason; applies saves, undos, edits and
   ticked tidy changes one at a time, each as a commit; commits hand edits first; lists recent changes from the git
-  history; makes the folder a git repository on first start; pushes to the backup, retrying and reporting failures.
-  Models never write context files (ADRs 0013, 0014).
+  history (back to the last fresh start); makes the folder a git repository on first start; pushes to the backup,
+  retrying and reporting failures. Models never write context files (ADRs 0013, 0014).
+- **Fresh start:** with no turn running, clears the context folder as one change, moves every session into
+  `fresh-starts/<date>` in the data folder, and drops any tidy waiting for review. The owner's login, sign-ins and
+  remembered usage limits stay.
 - **Providers:** the one seam. A provider reports its status (available, with models and capabilities, or unavailable
   with a reason) and runs one turn as a stream of events, returning a failure as a value, never a throw. Capabilities
   (reads files, can code, uses tools) drive the rules, not provider names. Each model lists the effort levels it
@@ -366,7 +379,7 @@ dimensions. Saving one writes it into the workspace as a file, an explicit actio
 
 Phase 0 happens in Paper before the first screen is built: Claude drafts two or three directions for the key screens
 (workspace switcher, session, approval, suggestions) through Paper's MCP, inspired by apps the owner names; the owner
-picks and adjusts one; its colours, type and spacing become the shadcn theme's tokens.
+picks and adjusts one; its colours, type and spacing become the theme's tokens.
 
 ## Testing Decisions
 
@@ -428,9 +441,14 @@ Each phase leaves something usable. Owner-side setup steps are listed with the p
 | 5     | Tool connections (homelab first, then Paper and Blender) and floor plans                                     | Paper and Blender running on the worker machine    |
 | 6     | The web app served from the NAS, then wake-on-LAN for the worker machine                                    | A wired network connection to the worker machine   |
 
+**From 2026-10-08 the order of work is the repo's GitHub milestones** (`docs/agents/issue-tracker.md`), not this
+table. Phases 0-3 stand as written. The owner chose to do smoother daily use, the life-core features, reach, polish
+and install-and-move before code workspaces, so phases 4, 5 and 6 are now the milestones "Code workspaces",
+"Tool connections" and "NAS and wake-up". Where an older ADR or this spec says phase 4, 5 or 6, it means those.
+
 ### The order of the phases
 
-Each phase follows the last, without a pause to decide whether to carry on: the owner builds Courtyard to use it and
+Each phase (now each milestone) follows the last, without a pause to decide whether to carry on: the owner builds Courtyard to use it and
 because it's fun, and its value is in the later phases (Codex when Claude runs out, coding from a phone, the homelab
 and design tools). Each phase is designed before it's built, one decision at a time, with an ADR for anything that
 changes an earlier one. The directions in the phase table are proposals until then.

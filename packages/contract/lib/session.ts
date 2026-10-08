@@ -130,7 +130,10 @@ export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 export const SessionSummary = z.object({
   id: SessionId,
   workspaceId: WorkspaceId,
-  /** The start of the session's first message. */
+  /**
+   * The start of the session's first message, until a model titles it after its first answer; or
+   * the title the owner gave it.
+   */
   title: z.string(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -272,6 +275,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     save: z.number().int().positive(),
     now: PlacedLine,
   }),
+  /** A model gave the session this title after its first answer, in place of the first line. */
+  z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 

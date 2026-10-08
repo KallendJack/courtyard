@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppChangesRouteImport } from './routes/_app/changes'
+import { Route as AppFreshStartRouteImport } from './routes/_app/fresh-start'
 import { Route as AppNewWorkspaceRouteImport } from './routes/_app/new-workspace'
 import { Route as AppTidyRouteImport } from './routes/_app/tidy'
 import { Route as AppWorkspacesWorkspaceIdIndexRouteImport } from './routes/_app/workspaces.$workspaceId.index'
@@ -41,6 +42,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppChangesRoute = AppChangesRouteImport.update({
   id: '/changes',
   path: '/changes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFreshStartRoute = AppFreshStartRouteImport.update({
+  id: '/fresh-start',
+  path: '/fresh-start',
   getParentRoute: () => AppRoute,
 } as any)
 const AppNewWorkspaceRoute = AppNewWorkspaceRouteImport.update({
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/changes': typeof AppChangesRoute
+  '/fresh-start': typeof AppFreshStartRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
   '/tidy': typeof AppTidyRoute
   '/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/changes': typeof AppChangesRoute
+  '/fresh-start': typeof AppFreshStartRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
   '/tidy': typeof AppTidyRoute
   '/': typeof AppIndexRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/_app/changes': typeof AppChangesRoute
+  '/_app/fresh-start': typeof AppFreshStartRoute
   '/_app/new-workspace': typeof AppNewWorkspaceRoute
   '/_app/tidy': typeof AppTidyRoute
   '/_app/': typeof AppIndexRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/changes'
+    | '/fresh-start'
     | '/new-workspace'
     | '/tidy'
     | '/workspaces/$workspaceId/'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/changes'
+    | '/fresh-start'
     | '/new-workspace'
     | '/tidy'
     | '/'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup'
     | '/_app/changes'
+    | '/_app/fresh-start'
     | '/_app/new-workspace'
     | '/_app/tidy'
     | '/_app/'
@@ -175,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppChangesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/fresh-start': {
+      id: '/_app/fresh-start'
+      path: '/fresh-start'
+      fullPath: '/fresh-start'
+      preLoaderRoute: typeof AppFreshStartRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/new-workspace': {
       id: '/_app/new-workspace'
       path: '/new-workspace'
@@ -208,6 +227,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppChangesRoute: typeof AppChangesRoute
+  AppFreshStartRoute: typeof AppFreshStartRoute
   AppNewWorkspaceRoute: typeof AppNewWorkspaceRoute
   AppTidyRoute: typeof AppTidyRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -217,6 +237,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppChangesRoute: AppChangesRoute,
+  AppFreshStartRoute: AppFreshStartRoute,
   AppNewWorkspaceRoute: AppNewWorkspaceRoute,
   AppTidyRoute: AppTidyRoute,
   AppIndexRoute: AppIndexRoute,

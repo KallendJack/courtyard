@@ -86,8 +86,8 @@ removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:
-One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, or a workspace added,
-renamed or archived in the app. The worker makes them one at a time.
+One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, a workspace added,
+renamed or archived in the app, or a fresh start. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:
@@ -101,9 +101,15 @@ ticked by default, and the owner unticks any they don't want.
 _Avoid_: compact, clean up, summarise
 
 **Backup**:
-The context folder's copy on its git remote, pushed after every change: for the owner, a shared folder on the NAS
-(ADR 0014). The home page says when it's behind.
+The context folder's copy on a git remote the owner chooses, such as a shared folder on a NAS (ADR 0014), pushed
+after every change. The home page says when it's behind.
 _Avoid_: sync, mirror, remote (on its own)
+
+**Fresh start**:
+Clearing everything from trying Courtyard out, so it starts as on its first run: every workspace, the owner context
+and every session go; the owner's login, sign-ins and remembered usage limits stay. The context folder's history keeps
+the old files, and the sessions move to a dated folder in the data folder. Recent changes begin again after it.
+_Avoid_: reset, factory reset, wipe
 
 **Planning workspace**:
 A workspace whose files models may read but not change.
@@ -144,6 +150,17 @@ The point at which a provider stops answering until a reset time, under the owne
 it until then, and the model picker shows it.
 _Avoid_: quota, rate limit (except for the failure reason)
 
+**Skill**:
+A folder of instructions a model loads when it needs them, such as grilling a plan, in the open Agent Skills format.
+The owner starts one from a button or the skill picker, or a model loads one when its description fits. Courtyard
+loads them itself, never a provider's own skills (ADR 0016).
+_Avoid_: prompt, plugin, command, agent
+
+**House skill**:
+A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner's own skills, and a project's, with
+the same name replace it (ADR 0016).
+_Avoid_: built-in skill, default skill
+
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
 the failed turn; it never happens by itself, and the session stays on the new model until the owner switches back.
@@ -162,6 +179,11 @@ _Avoid_: request, run, completion
 **Event**:
 One recorded thing that happened in a session.
 _Avoid_: message, chunk, log line
+
+**Suggested reply**:
+A short reply a model offers under its question, two or three at a time, which the owner taps to send as their next
+message (ADR 0017).
+_Avoid_: quick reply, chip, option, tap answer
 
 **Stop**:
 The owner ending a running turn early. Whatever the model wrote so far stays, and the turn is

@@ -3,7 +3,8 @@
 A self-hosted hub for planning and coding with AI models, one workspace per area of the owner's life. Two parts: a
 worker that does all the work, and a web app that is static files. Read `GLOSSARY.md` before naming anything, and use
 its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. What is being built is in
-`docs/spec.md`; why it is built that way is in `docs/adr/`.
+`docs/spec.md`; why it is built that way is in `docs/adr/`. Before deciding where a change goes, read
+`docs/architecture.md`: which part does what, and how the parts connect.
 
 ## Where code goes
 
@@ -17,9 +18,8 @@ its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. Wha
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, Moorland, in `apps/web/src/styles.css` (the Paper design chosen in
-  issue #2). Colours, fonts and radii are used by name, never by value. `components/ui/` is shadcn's generated code:
-  change it by re-adding a component or through the theme (`biome.json` relaxes two rules for it). Components on the
-  first load join classes with `lib/classes.ts` rather than `cn`, which keeps the class-merging code off the first load.
+  issue #2). Colours, fonts and radii are used by name, never by value. Components join classes with
+  `lib/classes.ts`, which merges nothing, so no class-merging code reaches the first load.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
   feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece
@@ -62,10 +62,19 @@ This repo is public, and the app runs models that can change files on a real mac
 ## Process
 
 - One PR per ticket, branched from `main`. Check a PR's state before pushing more commits to it.
+- **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
+  agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
+  stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
 - The owner reviews every PR on GitHub. Write PR descriptions plain English first: what it does, how it works file by
   file, at most four new terms, how it was checked, then technical detail in a collapsed `<details>` block, then one
   explain-it-back question answerable from the plain text.
+- A word the owner would use (in UI text, the spec, or talking about Courtyard) goes into `GLOSSARY.md` in the same
+  PR; words for how the code works stay in the code. "How it was checked" says which glossary terms a PR added, or none.
+- A PR that adds a module or changes how the parts connect updates `docs/architecture.md`. "How it was checked" says
+  so, or that the map didn't need to change.
 - Issues don't close themselves reliably; close a ticket once its PR is merged.
+- The order of work is the GitHub milestones. Filing, finishing or moving an issue updates them in the same step (see
+  `docs/agents/issue-tracker.md`).
 
 ## Agent skills
 
