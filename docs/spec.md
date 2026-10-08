@@ -147,7 +147,9 @@ nothing personal, so anyone can run their own.
     so that a model can work on that codebase.
 48. As the owner, I want each coding session to work on its own session branch in its own folder, so that nothing
     reaches my branches until I've reviewed it and my own checkout is never disturbed.
-49. As the owner, I want two sessions in one repository not to interfere, so that I can run them side by side.
+49. As the owner, I want two sessions in one repository not to interfere, so that I can run them side by side. That
+    includes what their checks start: two sessions running the repo's tests at once mustn't fight over the same
+    ports.
 50. As the owner, I want file edits inside the session branch to apply without asking, so that the model makes
     progress while I'm away.
 51. As the owner, I want to list commands (test, lint, typecheck, build) that run without asking, so that the model can

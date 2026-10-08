@@ -1,9 +1,25 @@
+import { statSync } from "node:fs";
+import { basename, join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { OWNER_LOGIN } from "./e2e/owner.ts";
 
-const port = 8799;
+/**
+ * How far this copy's ports move up, so copies of the repo side by side (git worktrees, where
+ * `.git` is a file) can run their browser tests at the same time. The main checkout keeps 8799
+ * and 8798; a worktree moves both by a multiple of ten picked from its folder's name, so the same
+ * folder always gets the same ports.
+ */
+const portShift = (() => {
+  const dotGit = statSync(join(import.meta.dirname, ".git"), { throwIfNoEntry: false });
+  if (!dotGit?.isFile()) return 0;
+  let hash = 0;
+  for (const char of basename(import.meta.dirname)) hash = (hash * 31 + char.charCodeAt(0)) % 9973;
+  return 10 * ((hash % 90) + 1);
+})();
+
+const port = 8799 + portShift;
 /** A second worker, for the one test that clears everything: a fresh start. */
-const freshStartPort = 8798;
+const freshStartPort = 8798 + portShift;
 
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
