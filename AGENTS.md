@@ -1,9 +1,9 @@
 # Courtyard
 
 A self-hosted hub for planning and coding with AI models, one workspace per area of the owner's life. Two parts: a
-worker that does all the work, and a web app that is static files. Read `GLOSSARY.md` before naming anything, and use
-its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. What is being built is in
-`docs/spec.md`; why it is built that way is in `docs/adr/`. Before deciding where a change goes, read
+worker that does all the work, and a web app that is static files. Its words are in `GLOSSARY.md`, used in code,
+tests, UI text and commits. What is being built is in the spec issues on GitHub (`docs/spec.md` is the original spec,
+frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before deciding where a change goes, read
 `docs/architecture.md`: which part does what, and how the parts connect.
 
 ## Where code goes
@@ -61,29 +61,27 @@ This repo is public, and the app runs models that can change files on a real mac
 
 ## Process
 
-- One PR per ticket, branched from `main`. Check a PR's state before pushing more commits to it.
-- **Each ticket in its own worktree.** Work in the git worktree made for the ticket (a folder beside the main checkout,
-  on the ticket's branch), never in the main checkout, which stays on `main`, so several tickets can run side by side.
-  Its browser tests pick their own ports, so `pnpm verify` needs nothing extra. Once the PR is merged, the worktree
-  and its branch are removed.
+The process is Matt Pocock's skills (below), as they are. On top of them:
+
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
   stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
-- The owner reviews every PR on GitHub. Write PR descriptions plain English first: what it does, how it works file by
-  file, at most four new terms, how it was checked, then technical detail in a collapsed `<details>` block, then one
-  explain-it-back question answerable from the plain text.
-- A word the owner would use (in UI text, the spec, or talking about Courtyard) goes into `GLOSSARY.md` in the same
-  PR; words for how the code works stay in the code. "How it was checked" says which glossary terms a PR added, or none.
-- A PR that adds a module or changes how the parts connect updates `docs/architecture.md`. "How it was checked" says
-  so, or that the map didn't need to change.
-- Issues don't close themselves reliably; close a ticket once its PR is merged.
-- The order of work is the GitHub milestones. Filing, finishing or moving an issue updates them in the same step (see
-  `docs/agents/issue-tracker.md`).
+- The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
+- A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
+  `docs/architecture.md`.
+- A PR that changes how Courtyard is installed, set up, run or recovered updates `README.md`.
+- The order of work is the GitHub milestones: `docs/agents/roadmap.md`.
 
 ## Agent skills
 
-These docs are set up for [mattpocock/skills](https://github.com/mattpocock/skills).
+### Issue tracker
 
-- **Issue tracker:** GitHub Issues, see `docs/agents/issue-tracker.md`.
-- **Domain docs:** single context: `GLOSSARY.md` at the root (named so because `CONTEXT.md` is a product term here) and
-  `docs/adr/`.
+GitHub Issues on this repo, through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
