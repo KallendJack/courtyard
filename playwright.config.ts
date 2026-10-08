@@ -33,6 +33,10 @@ export default defineConfig({
       COURTYARD_CONTEXT_DIR: "test-results/e2e/context",
       COURTYARD_DATA_DIR: "test-results/e2e/data",
       COURTYARD_FAKE_PROVIDER: "1",
+      // The fake acts signed out, so signing in from the home page can be tested.
+      COURTYARD_FAKE_SIGN_IN: "1",
+      // A second fake, which acts out a usage limit, so overflow can be tested.
+      COURTYARD_SECOND_FAKE_PROVIDER: "1",
       // The browser tests never start the real Claude Code or Codex.
       COURTYARD_CLAUDE_PROVIDER: "0",
       COURTYARD_CODEX_PROVIDER: "0",

@@ -17,7 +17,7 @@ export function Notice(props: {
   region?: boolean;
 }) {
   const box =
-    "flex items-start justify-between gap-4 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text";
+    "flex items-start justify-between gap-x-4 gap-y-3 rounded-md bg-destructive-soft px-3.5 py-3 text-sm/[21px] text-destructive-text max-md:flex-col";
   const content = (
     <>
       <div>
@@ -69,7 +69,7 @@ export function StatusPill(props: {
       )}
     >
       <p role="status" className="flex min-w-0 items-center gap-2">
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+        <WaitingDot />
         {props.children}
       </p>
       {props.action}
@@ -84,4 +84,9 @@ export function EmptyState(props: { children: ReactNode }) {
       {props.children}
     </div>
   );
+}
+
+/** The dot beside something being waited on: the worker reconnecting, a sign-in to finish. */
+export function WaitingDot() {
+  return <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />;
 }

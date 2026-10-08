@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effort, ModelId, ProviderList, SessionSummary } from "@courtyard/contract";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   type AppServerLaunch,
@@ -120,6 +120,28 @@ const standIn = (
   let calls = 0;
   /** Codex's calls to Courtyard's tools, each waiting for the worker's answer. */
   const waiting = new Map<Message["id"], (answer: Message) => void>();
+  /** Who is signed in to this Codex home, changed by signing in and out. */
+  let account = script.account ?? SIGNED_IN;
+  let logins = 0;
+  /** The app-server running now ending without warning. */
+  let crashNow = () => {};
+  /** Codex's notices from the app-server running now. */
+  let notifyNow: (method: string, params: unknown) => void = () => {};
+
+  /**
+   * The owner finishing a sign-in on their device, or it failing: Codex's notice, as it sends it,
+   * with a token in it that must never go further.
+   */
+  const finishLogin = (success: boolean, error: string | null = null) => {
+    if (success) account = SIGNED_IN;
+    notifyNow("account/login/completed", {
+      loginId: `login-${logins}`,
+      success,
+      error,
+      onboardingEntrypoint: null,
+      accessToken: "sk-test-not-a-real-token",
+    });
+  };
 
   const startAppServer: StartAppServer = (launch) => {
     if (script.missing) return err("missing");
@@ -130,6 +152,7 @@ const standIn = (
       setImmediate(() => alive && launch.onLine(JSON.stringify(message)));
     };
     const notify = (method: string, params: unknown) => write({ method, params });
+    notifyNow = notify;
     const reply = (id: Message["id"], result: unknown) => write({ id, result });
     const fail = (id: Message["id"], message: string) =>
       write({ id, error: { code: -32603, message } });
@@ -138,6 +161,7 @@ const standIn = (
         alive = false;
         launch.onExit();
       });
+    crashNow = crash;
 
     const handle = (message: Message) => {
       const { id, method } = message;
@@ -153,7 +177,21 @@ const standIn = (
         case "initialize":
           return reply(id, { userAgent: "codex/0.161.0", codexHome: join(dataDir, "codex") });
         case "account/read":
-          return reply(id, script.account ?? SIGNED_IN);
+          return reply(id, account);
+        case "account/login/start":
+          logins += 1;
+          return reply(id, {
+            type: "chatgptDeviceCode",
+            loginId: `login-${logins}`,
+            verificationUrl: "https://auth.openai.com/codex/device",
+            userCode: "KQ7M-4821",
+          });
+        case "account/login/cancel":
+          return reply(id, { status: "canceled" });
+        case "account/logout":
+          account = { account: null, requiresOpenaiAuth: true };
+          reply(id, {});
+          return notify("account/updated", { authMode: null, planType: null });
         case "model/list":
           return reply(id, { data: script.models ?? MODELS, nextCursor: null });
         case "account/rateLimits/read":
@@ -228,7 +266,15 @@ const standIn = (
   };
 
   const requests = (method: string) => received.filter((m) => m.method === method);
-  return { startAppServer, launches, received, answered, requests };
+  return {
+    startAppServer,
+    launches,
+    received,
+    answered,
+    requests,
+    finishLogin,
+    crash: () => crashNow(),
+  };
 };
 
 /** Runs one Codex turn and collects what it emitted. */
@@ -300,6 +346,45 @@ describe("Codex's status", () => {
   });
 });
 
+describe("Codex's usage limit, in its status", () => {
+  const window = (usedPercent: number, resetsAt: number) => ({
+    usedPercent,
+    windowDurationMins: 300,
+    resetsAt,
+  });
+  const limitsOf = async (rateLimits: unknown) => {
+    const codex = standIn({ rateLimits });
+    const status = await createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+    }).status();
+    return status.available ? status.models.map((model) => model.limit) : "unavailable";
+  };
+
+  it("is on every model while a window is used up, with the time it resets", async () => {
+    const limits = await limitsOf({
+      rateLimits: {
+        limitId: "codex",
+        primary: window(100, Date.UTC(2026, 9, 8, 14) / 1000),
+        secondary: window(40, Date.UTC(2026, 9, 12, 9) / 1000),
+      },
+      rateLimitsByLimitId: null,
+    });
+
+    const limit = { resetAt: "2026-10-08T14:00:00.000Z" };
+    expect(limits).toEqual([limit, limit]);
+  });
+
+  it("isn't there while every window has room", async () => {
+    const limits = await limitsOf({
+      rateLimits: { limitId: "codex", primary: window(60, Date.UTC(2026, 9, 8, 14) / 1000) },
+      rateLimitsByLimitId: null,
+    });
+
+    expect(limits).toEqual([undefined, undefined]);
+  });
+});
+
 describe("Codex's status, when it can't be used", () => {
   const statusWith = (codex: ReturnType<typeof standIn>) =>
     createCodexProvider({ dataDir, startAppServer: codex.startAppServer }).status();
@@ -313,8 +398,8 @@ describe("Codex's status, when it can't be used", () => {
       id: "codex",
       label: "Codex",
       available: false,
-      reason:
-        "Codex isn't signed in. Sign in on the worker machine with Courtyard's own Codex home (see the README).",
+      reason: "Codex isn't signed in. Sign in to Codex on the home page.",
+      signedOut: true,
     });
   });
 
@@ -639,8 +724,7 @@ describe("what never passes between Codex and the worker", () => {
       ok: false,
       error: {
         kind: "provider-unavailable",
-        message:
-          "Codex isn't signed in. Sign in on the worker machine with Courtyard's own Codex home (see the README).",
+        message: "Codex isn't signed in. Sign in to Codex on the home page.",
       },
     });
     expect(
@@ -1070,5 +1154,191 @@ describe("Courtyard's tools on a Codex turn, after the review", () => {
       /to How to answer me in the owner context/,
     );
     expect(textOf(answers[0])).toMatch(/In a code workspace you can save only to How to answer me/);
+  });
+});
+
+describe("signing in to Codex (ADR 0015)", () => {
+  const SIGNED_OUT = { account: null, requiresOpenaiAuth: true };
+  const START = Date.parse("2026-10-08T09:00:00Z");
+
+  /** A Codex provider on a signed-out stand-in, with a clock the test moves. */
+  const signedOut = () => {
+    const codex = standIn({ account: SIGNED_OUT });
+    let clock = START;
+    const provider = createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+      now: () => clock,
+    });
+    const { signIn } = provider;
+    if (signIn === undefined) throw new Error("Codex has no sign-in");
+    return {
+      codex,
+      provider,
+      signIn,
+      later: (minutes: number) => {
+        clock += minutes * 60_000;
+      },
+    };
+  };
+
+  it("starts a sign-in with a device code, giving only its link and code", async () => {
+    const { codex, signIn } = signedOut();
+
+    expect(signIn.service).toBe("ChatGPT");
+    expect(await signIn.state()).toEqual({ kind: "signed-out" });
+    const started = await signIn.start();
+
+    const waiting = {
+      kind: "waiting",
+      link: "https://auth.openai.com/codex/device",
+      code: "KQ7M-4821",
+      // Codex's device codes work for 15 minutes.
+      expiresAt: new Date(START + 15 * 60_000).toISOString(),
+    };
+    expect(started).toEqual({ ok: true, value: waiting });
+    expect(await signIn.state()).toEqual(waiting);
+    expect(codex.requests("account/login/start").map((m) => m.params)).toEqual([
+      { type: "chatgptDeviceCode" },
+    ]);
+  });
+
+  it("says when the sign-in finishes, and offers Codex's models from then on", async () => {
+    const { codex, provider, signIn } = signedOut();
+    expect(await provider.status()).toMatchObject({ available: false });
+
+    await signIn.start();
+    codex.finishLogin(true);
+
+    await vi.waitFor(async () =>
+      expect(await signIn.state()).toEqual({
+        kind: "signed-in",
+        email: "owner@courtyard.example",
+        plan: "plus",
+      }),
+    );
+    // The status checked while signed out isn't kept once the sign-in changes.
+    expect(await provider.status()).toMatchObject({ available: true });
+  });
+
+  it("says when the code ran out, or the sign-in failed", async () => {
+    const expired = signedOut();
+    await expired.signIn.start();
+    expired.codex.finishLogin(false, "Device code expired before it was used");
+    const failed = signedOut();
+    await failed.signIn.start();
+    failed.codex.finishLogin(false, "Access denied");
+
+    await vi.waitFor(async () => {
+      expect(await expired.signIn.state()).toEqual({ kind: "not-finished", why: "expired" });
+      expect(await failed.signIn.state()).toEqual({ kind: "not-finished", why: "failed" });
+    });
+  });
+
+  it("counts a code as run out once its time is up, even if Codex doesn't say", async () => {
+    const { codex, signIn, later } = signedOut();
+    await signIn.start();
+
+    later(16);
+
+    expect(await signIn.state()).toEqual({ kind: "not-finished", why: "expired" });
+    // Codex is told to stop waiting for it.
+    expect(codex.requests("account/login/cancel").map((m) => m.params)).toEqual([
+      { loginId: "login-1" },
+    ]);
+  });
+
+  it("cancels a sign-in in progress, and forgets one that didn't finish", async () => {
+    const { codex, signIn } = signedOut();
+    await signIn.start();
+
+    await signIn.cancel();
+
+    expect(codex.requests("account/login/cancel").map((m) => m.params)).toEqual([
+      { loginId: "login-1" },
+    ]);
+    expect(await signIn.state()).toEqual({ kind: "signed-out" });
+  });
+
+  it("signs out, after which Codex isn't offered", async () => {
+    const codex = standIn();
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+    expect(await provider.status()).toMatchObject({ available: true });
+
+    expect(await provider.signIn?.signOut()).toEqual({ ok: true, value: null });
+
+    expect(codex.requests("account/logout")).toHaveLength(1);
+    expect(await provider.signIn?.state()).toEqual({ kind: "signed-out" });
+    expect(await provider.status()).toMatchObject({ available: false });
+  });
+
+  it("doesn't keep a status checked while the sign-in changed", async () => {
+    const codex = standIn();
+    let clock = START;
+    const provider = createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+      now: () => clock,
+    });
+    await provider.status();
+    clock += 2 * 60_000;
+
+    // A check that reads the account before the sign-out and finishes after it.
+    await Promise.all([provider.status(), provider.signIn?.signOut()]);
+
+    expect(await provider.status()).toMatchObject({ available: false });
+  });
+
+  it("starts one sign-in at a time, giving up the earlier one", async () => {
+    const { codex, signIn } = signedOut();
+
+    await Promise.all([signIn.start(), signIn.start()]);
+
+    expect(codex.requests("account/login/start")).toHaveLength(2);
+    expect(codex.requests("account/login/cancel").map((m) => m.params)).toEqual([
+      { loginId: "login-1" },
+    ]);
+  });
+
+  it("says the sign-in didn't finish when Codex stops partway", async () => {
+    const { codex, signIn } = signedOut();
+    await signIn.start();
+
+    codex.crash();
+
+    await vi.waitFor(async () =>
+      expect(await signIn.state()).toEqual({ kind: "not-finished", why: "failed" }),
+    );
+  });
+
+  it("says why when Codex can't be reached to sign in", async () => {
+    const { signIn } = createCodexProvider({
+      dataDir,
+      startAppServer: standIn({ missing: true }).startAppServer,
+    });
+
+    expect(await signIn?.state()).toEqual({
+      kind: "unavailable",
+      reason:
+        "Codex isn't installed on the worker machine. Run `pnpm install` in Courtyard's folder.",
+    });
+    expect(await signIn?.start()).toEqual({
+      ok: false,
+      error:
+        "Codex isn't installed on the worker machine. Run `pnpm install` in Courtyard's folder.",
+    });
+  });
+
+  it("never passes on anything Codex sends but the link and code", async () => {
+    const { codex, signIn } = signedOut();
+    const seen = [JSON.stringify(await signIn.start())];
+    codex.finishLogin(true);
+    await vi.waitFor(async () => expect(await signIn.state()).toMatchObject({ kind: "signed-in" }));
+    seen.push(JSON.stringify(await signIn.state()));
+
+    for (const shown of seen) {
+      expect(shown).not.toContain("sk-test-not-a-real-token");
+      expect(shown).not.toContain("login-1");
+    }
   });
 });

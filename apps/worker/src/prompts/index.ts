@@ -346,6 +346,8 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         break;
       }
       case "activity":
+      // The model isn't told the session moved to it (docs/ai-conduct.md).
+      case "model-changed":
         break;
     }
   }

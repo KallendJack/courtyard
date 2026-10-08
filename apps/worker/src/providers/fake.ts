@@ -1,9 +1,14 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { type Capabilities, Effort, ModelId, ProviderId } from "@courtyard/contract";
+import {
+  type Capabilities,
+  Effort,
+  ModelId,
+  ProviderId,
+  type SignInState,
+} from "@courtyard/contract";
 import { err, ok } from "../result.ts";
-import type { Provider } from "./index.ts";
+import type { Provider, SignIn } from "./index.ts";
 
-const id = ProviderId.parse("fake");
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
 const CAPABILITIES: Capabilities = {
   readsFiles: false,
@@ -98,6 +103,48 @@ const scriptedTidy = (message: string) => {
   return { changes };
 };
 
+/**
+ * A pretend sign-in, starting signed out, so signing in can be seen and tested with no real
+ * provider: its link and code are made up, and it finishes after `finishAfterMs`, or never.
+ */
+const fakeSignIn = (options: { finishAfterMs?: number }): SignIn => {
+  let state: SignInState = { kind: "signed-out" };
+  let finishing: ReturnType<typeof setTimeout> | undefined;
+  const stopFinishing = () => clearTimeout(finishing);
+  return {
+    service: "Fake",
+    state: async () => state,
+    start: async () => {
+      stopFinishing();
+      state = {
+        kind: "waiting",
+        link: "https://courtyard.example/device",
+        code: "FAKE-2026",
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      };
+      const { finishAfterMs } = options;
+      if (finishAfterMs !== undefined) {
+        finishing = setTimeout(() => {
+          state = { kind: "signed-in", email: "owner@courtyard.example", plan: "pretend" };
+        }, finishAfterMs);
+      }
+      return ok(state);
+    },
+    cancel: async () => {
+      stopFinishing();
+      if (state.kind !== "signed-in") state = { kind: "signed-out" };
+    },
+    signOut: async () => {
+      stopFinishing();
+      state = { kind: "signed-out" };
+      return ok(null);
+    },
+  };
+};
+
+/** How long after a pretend usage limit the fake says it resets. */
+const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
+
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
   wait(ms, undefined, { signal }).catch(() => undefined);
@@ -108,7 +155,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
- * `scriptedTidy`).
+ * `scriptedTidy`). "please hit Fake's limit" (or "Fake two's", for the second fake) acts out a
+ * usage limit that resets two hours on, so overflow can be seen and tested.
  */
 export const createFakeProvider = (
   options: {
@@ -118,21 +166,32 @@ export const createFakeProvider = (
     beforeReply?: (signal: AbortSignal) => Promise<void>;
     /** Told the model and effort of each turn, so tests can see what reached the model. */
     heard?: (turn: { model: ModelId; effort: Effort | undefined }) => void;
+    /** A pretend sign-in, starting signed out (see `fakeSignIn`). The fake answers either way. */
+    signIn?: { finishAfterMs?: number };
+    /** The second fake, "Fake two", so there's another provider to carry on with. */
+    second?: boolean;
+    /** The clock its pretend usage limit's reset time is set by. */
+    now?: () => number;
   } = {},
 ): Provider => {
   const delayMs = options.delayMs ?? 40;
+  const now = options.now ?? Date.now;
+  const id = ProviderId.parse(options.second ? "fake-two" : "fake");
+  const label = options.second ? "Fake two" : "Fake";
+  const hitsLimit = new RegExp(`please hit ${label}'s limit`, "i");
 
   return {
     id,
     capabilities: CAPABILITIES,
+    ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     status: async () => ({
       id,
-      label: "Fake",
+      label,
       available: true,
       models: [
         {
           id: ModelId.parse("echo"),
-          label: "Fake (echoes you)",
+          label: `${label} (echoes you)`,
           efforts: EFFORTS,
           defaultEffort: Effort.parse("medium"),
         },
@@ -148,6 +207,12 @@ export const createFakeProvider = (
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
       if (framing.saveTool !== null) {
         for (const request of scriptedSaves(last)) await save(request);
+      }
+      if (hitsLimit.test(last)) {
+        return err({
+          kind: "rate-limited",
+          resetAt: new Date(now() + LIMIT_RESETS_AFTER_MS).toISOString(),
+        });
       }
       if (/please fail/i.test(last)) {
         return err({

@@ -171,8 +171,12 @@ version, never a Codex you've installed elsewhere.
   folder (`COURTYARD_DATA_DIR`), separate from `~/.codex`, so none of your own Codex settings,
   skills, memories, plugins or connectors reach a workspace, and signing in or out of one doesn't
   touch the other.
-- **Sign in once on the worker machine,** with a ChatGPT plan, pointing Codex at Courtyard's home.
-  In PowerShell, from Courtyard's folder:
+- **Sign in from the home page,** on any device, with a ChatGPT plan. While Codex is signed out,
+  the home page offers Sign in to Codex: it shows a link and a one-time code to finish in any
+  browser, and carries on by itself once you have. The Models list at the foot of the home page
+  shows who Codex is signed in as, with Sign out. If ChatGPT refuses the code, switch on device
+  code sign-in at chatgpt.com (Settings, Security) first. To sign in on the worker machine
+  instead, in PowerShell from Courtyard's folder:
 
   ```powershell
   $env:CODEX_HOME = "C:\path\to\data\codex"
@@ -180,11 +184,8 @@ version, never a Codex you've installed elsewhere.
   Remove-Item Env:CODEX_HOME
   ```
 
-  It shows a link and a one-time code to finish in any browser. If ChatGPT refuses the code,
-  switch on device code sign-in at chatgpt.com (Settings, Security) first. Signing in from the
-  app itself comes later.
 - **Codex is on unless switched off.** Without a ChatGPT plan, set `COURTYARD_CODEX_PROVIDER=0`
-  to leave Codex out; otherwise the model picker says Codex isn't signed in.
+  to leave Codex out, or say Not now to the home page's sign-in, which it remembers.
 
 Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
 Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.

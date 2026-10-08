@@ -1,5 +1,6 @@
 import {
   ApiError,
+  type CarryOnRequest,
   type ChangeId,
   ContextBackup,
   type GetToKnowRequest,
@@ -203,6 +204,14 @@ export const stopTurn = (sessionId: SessionId, turn: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/stop`,
     body: { turn } satisfies StopRequest,
+    schema: z.unknown(),
+  });
+
+/** Carry on: the turn that hit a usage limit goes again to another provider (spec, Overflow). */
+export const carryOn = (sessionId: SessionId, turn: number) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/carry-on`,
+    body: { turn } satisfies CarryOnRequest,
     schema: z.unknown(),
   });
 

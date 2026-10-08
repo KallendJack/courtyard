@@ -1,4 +1,4 @@
-import type { SessionId } from "@courtyard/contract";
+import type { ProviderList, SessionId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Turn } from "./events.ts";
@@ -26,9 +26,11 @@ const atTheEnd = () =>
 export function SessionTurns(props: {
   sessionId: SessionId;
   turns: readonly Turn[];
+  providers: ProviderList["providers"];
   onRetry: (turn: Turn) => void;
+  onCarryOn: (turn: Turn) => Promise<string | undefined>;
 }) {
-  const { sessionId, turns, onRetry } = props;
+  const { sessionId, turns, providers, onRetry, onCarryOn } = props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -66,7 +68,7 @@ export function SessionTurns(props: {
   const lastLength =
     (last?.answer.length ?? 0) + (last?.activities.length ?? 0) + (last?.notes.length ?? 0);
   const lastState = last?.state.kind;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength and lastState are the triggers, so the end stays in view while text streams in or a turn fails
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength, lastState and providers are the triggers, so the end stays in view while text streams in, a turn fails, or the providers are asked again (which redraws every turn)
   useLayoutEffect(() => {
     if (turns.length === 0) return;
     if (!opened.current || following.current) {
@@ -74,7 +76,7 @@ export function SessionTurns(props: {
       virtualizer.scrollToIndex(turns.length - 1, { align: "end" });
       requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
     }
-  }, [turns.length, lastLength, lastState, virtualizer]);
+  }, [turns.length, lastLength, lastState, providers, virtualizer]);
 
   return (
     <ol
@@ -99,8 +101,9 @@ export function SessionTurns(props: {
             <TurnView
               sessionId={sessionId}
               turn={turn}
-              // Only the last turn can be retried, so only it gets the handler.
-              {...(turn === last ? { onRetry } : {})}
+              providers={providers}
+              // Only the last turn can be retried or carried on, so only it gets the handlers.
+              {...(turn === last ? { onRetry, onCarryOn } : {})}
             />
           </li>
         );

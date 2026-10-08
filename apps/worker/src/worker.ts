@@ -18,6 +18,7 @@ import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { apiError, contextError, readBody } from "./http.ts";
+import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
@@ -33,6 +34,8 @@ import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
+import { createSignIns } from "./sign-ins/index.ts";
+import { signInRoutes } from "./sign-ins/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -52,6 +55,9 @@ export type Worker = {
 
 /** The largest request body the API reads; nothing it accepts comes close. */
 const MAX_BODY_BYTES = 16 * 1024;
+
+/** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
+const FAKE_SIGN_IN_MS = 5000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
@@ -103,17 +109,25 @@ export const createWorker = (options: {
     claudeProvider,
     codexProvider,
     fakeProvider,
+    fakeSignIn,
+    secondFakeProvider,
     liveCopy,
     updateTask,
   } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
   // Claude first, so it's the default model wherever it's available.
-  const providers = options.providers ?? [
-    ...(claudeProvider ? [createClaudeProvider()] : []),
-    ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
-    ...(fakeProvider ? [createFakeProvider()] : []),
-  ];
+  const providers = rememberingLimits(
+    options.providers ?? [
+      ...(claudeProvider ? [createClaudeProvider()] : []),
+      ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
+      ...(fakeProvider
+        ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
+        : []),
+      ...(secondFakeProvider ? [createFakeProvider({ second: true })] : []),
+    ],
+    now,
+  );
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
   const sessions = createSessions({ dataDir, providers, contextDir, contextFolder, now });
   const live = createLive({
@@ -142,6 +156,7 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
+  api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

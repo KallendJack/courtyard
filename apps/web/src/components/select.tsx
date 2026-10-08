@@ -29,6 +29,8 @@ export function Select<T extends string>(props: {
   look: keyof typeof LOOKS;
   /** Only from tablet width up: on a narrow screen something else offers the choice. */
   wideOnly?: boolean;
+  /** A warning about the choice, under a field (a model at its usage limit). */
+  warning?: string;
 }) {
   const id = useId();
   const look = LOOKS[props.look];
@@ -73,6 +75,7 @@ export function Select<T extends string>(props: {
         {props.label}
       </label>
       {picker}
+      {props.warning && <p className="text-xs text-destructive-text">{props.warning}</p>}
     </div>
   );
 }

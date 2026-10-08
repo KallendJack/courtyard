@@ -1,6 +1,9 @@
 import {
+  CarryOnRequest,
+  FirstMessage,
   GetToKnowRequest,
   NewMessage,
+  type Overflow,
   type ProviderList,
   SaveEdit,
   SessionChange,
@@ -44,6 +47,22 @@ const noteRefused = (refusal: NoteRefusal, act: NoteAct) => {
   }
 };
 
+/** Why there's no other provider to carry on with, in the owner's words. */
+const noOverflow = (overflow: Exclude<Overflow, { kind: "carry-on" }>) => {
+  switch (overflow.kind) {
+    case "sign-in":
+      return `${overflow.label} isn't signed in. Sign in to ${overflow.label} on the home page to carry on there.`;
+    case "at-limit": {
+      const names = overflow.others.map((other) => other.label);
+      return names.length === 1
+        ? `${names.join("")} is at its usage limit too.`
+        : `${names.join(" and ")} are at their usage limits too.`;
+    }
+    case "none":
+      return "There's no other provider to carry on with.";
+  }
+};
+
 /** A session error as the API answers it, for every route that acts on a session. */
 export const sessionError = (c: Context, error: SessionError) => {
   switch (error.kind) {
@@ -70,6 +89,13 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, { status: 400, error: "That model isn't available right now." });
     case "effort-unavailable":
       return apiError(c, { status: 400, error: "That model doesn't take that effort." });
+    case "nothing-to-carry-on":
+      return apiError(c, {
+        status: 409,
+        error: "Only the session's last turn can carry on, once it has hit a usage limit.",
+      });
+    case "no-overflow":
+      return apiError(c, { status: 409, error: noOverflow(error.overflow) });
     case "save-not-found":
       return apiError(c, { status: 404, error: "No such save in this session." });
     case "note-refused":
@@ -109,7 +135,10 @@ export const sessionRoutes = (options: {
   });
 
   /** Starts a session in a workspace with its first message, and answers with the session. */
-  const startIn = async (c: Context, start: { workspaceId: WorkspaceId; message: NewMessage }) => {
+  const startIn = async (
+    c: Context,
+    start: { workspaceId: WorkspaceId; message: FirstMessage },
+  ) => {
     const session = await sessions.create(start);
     if (!session.ok) return sessionError(c, session.error);
     return c.json(session.value satisfies SessionSummary, 201);
@@ -118,7 +147,7 @@ export const sessionRoutes = (options: {
   routes.post("/workspaces/:id/sessions", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
-    const message = await readBody(c, NewMessage);
+    const message = await readBody(c, FirstMessage);
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
     return startIn(c, { workspaceId: workspace.value.summary.id, message: message.value });
   });
@@ -189,6 +218,14 @@ export const sessionRoutes = (options: {
     if (!message.ok) return apiError(c, { status: 400, error: message.error });
     const sent = await sessions.send(c.req.param("id"), message.value);
     if (!sent.ok) return sessionError(c, sent.error);
+    return c.body(null, 202);
+  });
+
+  routes.post("/sessions/:id/carry-on", async (c) => {
+    const request = await readBody(c, CarryOnRequest);
+    if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to carry on" });
+    const carried = await sessions.carryOn(c.req.param("id"), request.value);
+    if (!carried.ok) return sessionError(c, carried.error);
     return c.body(null, 202);
   });
 
