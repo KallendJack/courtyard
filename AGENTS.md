@@ -65,6 +65,8 @@ This repo is public, and the app runs models that can change files on a real mac
 - The owner reviews every PR on GitHub. Write PR descriptions plain English first: what it does, how it works file by
   file, at most four new terms, how it was checked, then technical detail in a collapsed `<details>` block, then one
   explain-it-back question answerable from the plain text.
+- A word the owner would use (in UI text, the spec, or talking about Courtyard) goes into `GLOSSARY.md` in the same
+  PR; words for how the code works stay in the code. "How it was checked" says which glossary terms a PR added, or none.
 - Issues don't close themselves reliably; close a ticket once its PR is merged.
 
 ## Agent skills
