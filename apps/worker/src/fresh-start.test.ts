@@ -305,5 +305,5 @@ describe("Recent changes after a fresh start", () => {
 
     expect(await listed("/api/workspaces/garage-gym/changes")).toEqual([]);
     expect(await listed("/api/owner-context/changes")).toEqual([]);
-  }, 20_000);
+  });
 });

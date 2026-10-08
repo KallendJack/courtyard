@@ -514,7 +514,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     expect(saver.framings[1]?.instructions).toMatch(
       /A save the owner undid was wrong: save it again only if the owner brings it up/,
     );
-  }, 20_000);
+  });
 });
 
 /**

@@ -134,7 +134,7 @@ describe("Recent changes", () => {
     });
     expect(changes[0]?.session).toBeUndefined();
     expect(Date.parse(changes[0]?.at ?? "")).toBeGreaterThan(Date.now() - 60_000);
-  }, 20_000);
+  });
 
   it("comes 30 at a time, the next page after the last change shown", async () => {
     const { request } = await workerSaving([]);
@@ -167,7 +167,7 @@ describe("Recent changes", () => {
 
     const unknown = await request(`/api/workspaces/garage-gym/changes?after=${"0".repeat(40)}`);
     expect(unknown.status).toBe(404);
-  }, 30_000);
+  });
 
   it("lists the owner context's changes on their own", async () => {
     const { request } = await workerSaving([
