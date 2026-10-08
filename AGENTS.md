@@ -68,6 +68,8 @@ This repo is public, and the app runs models that can change files on a real mac
 - A word the owner would use (in UI text, the spec, or talking about Courtyard) goes into `GLOSSARY.md` in the same
   PR; words for how the code works stay in the code. "How it was checked" says which glossary terms a PR added, or none.
 - Issues don't close themselves reliably; close a ticket once its PR is merged.
+- The order of work is the GitHub milestones. Filing, finishing or moving an issue updates them in the same step (see
+  `docs/agents/issue-tracker.md`).
 
 ## Agent skills
 
