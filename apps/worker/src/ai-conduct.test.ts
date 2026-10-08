@@ -14,6 +14,7 @@ import type { OneOffInput, Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,
+  FAKE_MODEL,
   followSession,
   postJson,
   type Requester,
@@ -223,16 +224,15 @@ describe("switching model mid-session", () => {
     const request = await asOwner(
       testWorker({ root, providers: [createFakeProvider({ delayMs: 0 }), recording] }),
     );
-    const fake = { provider: "fake", model: "echo" };
     const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
       text: "Where should the rack go?",
-      model: fake,
+      model: FAKE_MODEL,
     });
     const { id } = SessionSummary.parse(await started.json());
     const first = await followSession(request, { sessionId: id, until: "turn-completed" });
     await postJson(request, `/api/sessions/${id}/messages`, {
       text: "please hit Fake's limit",
-      model: fake,
+      model: FAKE_MODEL,
     });
     const failed = await followSession(request, {
       sessionId: id,

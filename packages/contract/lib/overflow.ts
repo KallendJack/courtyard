@@ -1,4 +1,4 @@
-import type { ModelInfo, ModelRef, ProviderId, ProviderStatus } from "./session.ts";
+import type { ModelRef, ProviderId, ProviderStatus } from "./session.ts";
 
 /**
  * What the owner can do after one provider hits its usage limit (spec, Overflow): carry on with
@@ -12,7 +12,6 @@ export type Overflow =
       readonly label: string;
       /** Its default model, which Carry on sends the message to at its default effort. */
       readonly model: ModelRef;
-      readonly modelInfo: ModelInfo;
     }
   | { readonly kind: "sign-in"; readonly label: string }
   | {
@@ -40,7 +39,6 @@ export const overflowFrom = (
         kind: "carry-on",
         label: provider.label,
         model: { provider: provider.id, model: model.id },
-        modelInfo: model,
       };
     }
   }

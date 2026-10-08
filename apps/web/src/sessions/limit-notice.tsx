@@ -27,7 +27,7 @@ export function LimitNotice(props: {
   onCarryOn?: (turn: Turn) => Promise<string | undefined>;
 }) {
   const { turn, reason, providers, onCarryOn } = props;
-  const carry = useAction(async () => onCarryOn?.(turn));
+  const carryOn = useAction(async () => onCarryOn?.(turn));
   const limited = turn.model.provider;
   const label = providers.find((provider) => provider.id === limited)?.label ?? limited;
   const title = `${label}'s usage limit is reached`;
@@ -39,11 +39,11 @@ export function LimitNotice(props: {
         <Notice
           title={title}
           action={
-            <Button size="sm" disabled={carry.busy} onClick={() => void carry.run()}>
+            <Button size="sm" disabled={carryOn.busy} onClick={() => void carryOn.run()}>
               Carry on with {overflow.label}
             </Button>
           }
-          {...(carry.error ? { footer: <FormError message={carry.error} /> } : {})}
+          {...(carryOn.error ? { footer: <FormError message={carryOn.error} /> } : {})}
         >
           {resets(reason.resetAt)}
         </Notice>

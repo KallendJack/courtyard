@@ -53,7 +53,12 @@ export const TurnView = memo(function TurnView(props: {
         <p className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
           <ArrowRightLeft aria-hidden className="size-3.5 shrink-0" />
           <span className="max-w-[70%]">
-            Now answering: {answeringWith(availableModels(providers), turn.model, turn.effort)}
+            Now answering:{" "}
+            {answeringWith({
+              models: availableModels(providers),
+              ref: turn.model,
+              effort: turn.effort,
+            })}
           </span>
         </p>
       )}

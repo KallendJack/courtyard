@@ -75,7 +75,7 @@ export function Select<T extends string>(props: {
         {props.label}
       </label>
       {picker}
-      {props.warning && <p className="text-xs text-destructive">{props.warning}</p>}
+      {props.warning && <p className="text-xs text-destructive-text">{props.warning}</p>}
     </div>
   );
 }

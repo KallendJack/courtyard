@@ -68,7 +68,7 @@ export function SessionTurns(props: {
   const lastLength =
     (last?.answer.length ?? 0) + (last?.activities.length ?? 0) + (last?.notes.length ?? 0);
   const lastState = last?.state.kind;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength and lastState are the triggers, so the end stays in view while text streams in or a turn fails
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lastLength, lastState and providers are the triggers, so the end stays in view while text streams in, a turn fails, or the providers are asked again (which redraws every turn)
   useLayoutEffect(() => {
     if (turns.length === 0) return;
     if (!opened.current || following.current) {
@@ -76,7 +76,7 @@ export function SessionTurns(props: {
       virtualizer.scrollToIndex(turns.length - 1, { align: "end" });
       requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
     }
-  }, [turns.length, lastLength, lastState, virtualizer]);
+  }, [turns.length, lastLength, lastState, providers, virtualizer]);
 
   return (
     <ol

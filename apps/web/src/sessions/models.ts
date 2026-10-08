@@ -25,11 +25,15 @@ export type OfferedModel = ReturnType<typeof availableModels>[number];
  * The model a message went to and its effort, as the line where the model changes says them:
  * "Codex · GPT-5.5, default effort". A model no longer on offer is named by its id.
  */
-export const answeringWith = (
-  models: readonly OfferedModel[],
-  ref: ModelRef,
-  effort: Effort | undefined,
-) => {
+export const answeringWith = ({
+  models,
+  ref,
+  effort,
+}: {
+  models: readonly OfferedModel[];
+  ref: ModelRef;
+  effort: Effort | undefined;
+}) => {
   const model = models.find((m) => m.ref.provider === ref.provider && m.ref.model === ref.model);
   if (model === undefined) return `${ref.provider} · ${ref.model}`;
   if (model.efforts.length === 0) return model.label;

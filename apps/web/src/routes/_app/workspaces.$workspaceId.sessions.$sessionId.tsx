@@ -100,18 +100,28 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
     [session.id],
   );
 
-  // A turn that hits a usage limit as the owner watches: the providers are asked again, so the
-  // limit shows in the model picker and the notice knows where the session can carry on.
-  const watched = useRef<number>(undefined);
+  // Once a turn the owner watched ends on a usage limit, or answers on a model shown at one, the
+  // providers are asked again: the model picker shows the limit (or not), and the notice knows
+  // where the session can carry on.
+  const watchedTurn = useRef<number>(undefined);
   const lastSeq = last?.seq;
-  const hitLimit = last?.state.kind === "failed" && last.state.reason.kind === "rate-limited";
+  const limitChanged =
+    last?.state.kind === "failed"
+      ? last.state.reason.kind === "rate-limited"
+      : last?.state.kind === "done" &&
+        props.providers.some(
+          (provider) =>
+            provider.available &&
+            provider.id === last.model.provider &&
+            provider.models.some((model) => model.id === last.model.model && model.limit),
+        );
   useEffect(() => {
-    if (running) watched.current = lastSeq;
-    else if (hitLimit && watched.current === lastSeq) {
-      watched.current = undefined;
-      void router.invalidate();
+    if (running) watchedTurn.current = lastSeq;
+    else if (watchedTurn.current !== undefined && watchedTurn.current === lastSeq) {
+      watchedTurn.current = undefined;
+      if (limitChanged) void router.invalidate();
     }
-  }, [running, hitLimit, lastSeq, router]);
+  }, [running, lastSeq, limitChanged, router]);
 
   const above = <BackLink workspaceId={session.workspaceId} />;
   const toggle = (what: "rename" | "delete") =>

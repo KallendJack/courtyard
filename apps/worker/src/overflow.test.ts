@@ -1,13 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  type Capabilities,
-  ProviderId,
-  ProviderList,
-  type SessionEvent,
-  SessionSummary,
-} from "@courtyard/contract";
+import { ProviderList, type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
@@ -16,9 +10,11 @@ import {
   asOwner,
   errorOf,
   FAKE_MODEL,
+  FAKE_TWO_MODEL,
   followSession,
   postJson,
   type Requester,
+  signedOutProvider,
   startSession,
   testWorker,
 } from "./testing.ts";
@@ -42,37 +38,10 @@ afterEach(async () => {
 const now = () => clock;
 const HOUR = 60 * 60 * 1000;
 
-/** The second fake, which "please hit Fake two's limit" sends to its usage limit. */
-const SECOND_MODEL = { provider: "fake-two", model: "echo" };
-
 const twoFakes = () => [
   createFakeProvider({ delayMs: 0, now }),
   createFakeProvider({ delayMs: 0, now, second: true }),
 ];
-
-/** A provider that's there but not signed in, as Codex is before the owner signs in. */
-const signedOut = (): Provider => {
-  const id = ProviderId.parse("away");
-  const capabilities: Capabilities = {
-    readsFiles: false,
-    codes: false,
-    usesTools: false,
-    savesContext: false,
-  };
-  return {
-    id,
-    capabilities,
-    status: async () => ({
-      id,
-      label: "Away",
-      available: false,
-      reason: "Away isn't signed in.",
-      signedOut: true,
-    }),
-    runTurn: async () => err({ kind: "provider-unavailable", message: "Not signed in." }),
-    answerOnce: async () => err({ kind: "provider-unavailable", message: "Not signed in." }),
-  };
-};
 
 const start = async (providers: readonly Provider[] = twoFakes()) =>
   asOwner(testWorker({ root, providers, now }));
@@ -88,7 +57,7 @@ const limitsIn = async (request: Requester) => {
 };
 
 /** Starts a session whose first turn hits the second fake's usage limit, and waits for it. */
-const hitLimit = async (request: Requester, model = SECOND_MODEL) => {
+const hitLimit = async (request: Requester, model = FAKE_TWO_MODEL) => {
   const words = model.provider === "fake" ? "Fake's" : "Fake two's";
   const session = await startSession(request, `please hit ${words} limit`, model);
   const events = await followSession(request, { sessionId: session.id, until: "turn-failed" });
@@ -122,7 +91,7 @@ describe("a usage limit", () => {
 
     await postJson(request, `/api/sessions/${session.id}/messages`, {
       text: "Try again",
-      model: SECOND_MODEL,
+      model: FAKE_TWO_MODEL,
     });
     await followSession(request, {
       sessionId: session.id,
@@ -132,16 +101,29 @@ describe("a usage limit", () => {
 
     expect(await limitsIn(request)).toEqual({ fake: undefined, "fake-two": undefined });
   });
+
+  it("with no reset time, is kept for an hour, as no provider stays out for good", async () => {
+    // Fake two, as a provider that doesn't say when its limit resets.
+    const fakeTwo = createFakeProvider({ delayMs: 0, now, second: true });
+    const unsure: Provider = { ...fakeTwo, runTurn: async () => err({ kind: "rate-limited" }) };
+    const request = await start([createFakeProvider({ delayMs: 0, now }), unsure]);
+    await hitLimit(request);
+
+    expect(await limitsIn(request)).toEqual({ fake: undefined, "fake-two": {} });
+
+    clock += HOUR;
+    expect(await limitsIn(request)).toEqual({ fake: undefined, "fake-two": undefined });
+  });
 });
 
 describe("Carry on", () => {
   it("records the model change and sends the message again to the other provider's default model, at its default effort", async () => {
     const request = await start();
-    const session = await startSession(request, "Where should the rack go?", SECOND_MODEL);
+    const session = await startSession(request, "Where should the rack go?", FAKE_TWO_MODEL);
     const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
     await postJson(request, `/api/sessions/${session.id}/messages`, {
       text: "please hit Fake two's limit",
-      model: SECOND_MODEL,
+      model: FAKE_TWO_MODEL,
       effort: "high",
     });
     const failed = await followSession(request, {
@@ -186,7 +168,7 @@ describe("Carry on", () => {
   it("is refused when the other provider isn't signed in, and says where to sign in", async () => {
     const request = await start([
       createFakeProvider({ delayMs: 0, now, second: true }),
-      signedOut(),
+      signedOutProvider(),
     ]);
     const { session, turn } = await hitLimit(request);
 
@@ -198,7 +180,7 @@ describe("Carry on", () => {
 
   it("is refused for a turn that didn't hit a usage limit", async () => {
     const request = await start();
-    const session = await startSession(request, "Where should the rack go?", SECOND_MODEL);
+    const session = await startSession(request, "Where should the rack go?", FAKE_TWO_MODEL);
     const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
     const turn = events.find((event) => event.type === "owner-message")?.seq ?? 0;
 
@@ -220,6 +202,52 @@ describe("Carry on", () => {
     const again = await carryOn(request, session.id, turn);
 
     expect(again.status).toBe(409);
+  });
+});
+
+describe("Carry on, while the session moves on", () => {
+  it("is refused when a newer turn ran while it asked the providers where to go", async () => {
+    // A provider slow to say how it is, as Codex can be: Carry on waits for it.
+    let asked: () => void = () => {};
+    const askedNow = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    let answer: () => void = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const away = signedOutProvider();
+    const slow: Provider = {
+      ...away,
+      status: async () => {
+        asked();
+        await answered;
+        return away.status();
+      },
+    };
+    const request = await start([...twoFakes(), slow]);
+    const { session, turn, events } = await hitLimit(request);
+
+    const carrying = carryOn(request, session.id, turn);
+    await askedNow;
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "Never mind, the bench instead",
+      model: FAKE_MODEL,
+    });
+    const newer = await followSession(request, {
+      sessionId: session.id,
+      after: events.length,
+      until: "turn-completed",
+    });
+    answer();
+
+    expect((await carrying).status).toBe(409);
+    const after = await followSession(request, {
+      sessionId: session.id,
+      after: 0,
+      until: (event) => event.seq === events.length + newer.length,
+    });
+    expect(after.some((event) => event.type === "model-changed")).toBe(false);
   });
 });
 
@@ -248,6 +276,6 @@ describe("a new session with no model named", () => {
     const request = await start();
     await hitLimit(request, FAKE_MODEL);
 
-    expect(await ownerModel(request)).toEqual(SECOND_MODEL);
+    expect(await ownerModel(request)).toEqual(FAKE_TWO_MODEL);
   });
 });

@@ -105,6 +105,22 @@ const saveStateOf = (events: readonly SessionEvent[], seq: number): SaveState | 
 };
 
 /**
+ * The owner's message numbered `turn`, when it's the session's last and its turn ended on a usage
+ * limit: the only turn Carry on can take on. `undefined` otherwise.
+ */
+const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
+  const message = events.findLast((event) => event.type === "owner-message");
+  const ending = events.findLast(endsTurn);
+  return message?.type === "owner-message" &&
+    message.seq === turn &&
+    ending?.type === "turn-failed" &&
+    ending.seq > message.seq &&
+    ending.reason.kind === "rate-limited"
+    ? message
+    : undefined;
+};
+
+/**
  * Where a session's current turn stands in this worker. A stop handle exists from the moment the
  * turn starts, and only while it can still be stopped: once the provider has finished, the turn
  * is ending and how it ended is already decided.
@@ -448,8 +464,11 @@ export const createSessions = (options: {
     workspaceId: WorkspaceId;
     provider: Provider;
     message: NewMessage;
-    /** Carry on: the move to the message's model is recorded first. */
-    carryingOn?: boolean;
+    /**
+     * Carry on from the turn with this number: checked again once the session is this turn's, in
+     * case a newer one ran meanwhile, and the move to the message's model recorded first.
+     */
+    carryingOn?: { turn: number };
   }): Promise<Result<null, SessionError>> => {
     const session = runningSession(start.id);
     if (session.turn.kind === "deleting") return err({ kind: "not-found" });
@@ -463,7 +482,11 @@ export const createSessions = (options: {
     session.turn = starting;
 
     if (start.carryingOn) {
-      const changed = await append(start.id, { type: "model-changed", model: start.message.model });
+      const events = await readEvents(start.id);
+      const stillLimited = events.ok && limitedTurn(events.value, start.carryingOn.turn);
+      const changed = stillLimited
+        ? await append(start.id, { type: "model-changed", model: start.message.model })
+        : err<SessionError>(events.ok ? { kind: "nothing-to-carry-on" } : events.error);
       if (!changed.ok) {
         session.turn = { kind: "idle" };
         return changed;
@@ -703,17 +726,8 @@ export const createSessions = (options: {
       await settled(id);
       const events = await readEvents(id);
       if (!events.ok) return events;
-      const message = events.value.findLast((event) => event.type === "owner-message");
-      const ending = events.value.findLast(endsTurn);
-      if (
-        message?.type !== "owner-message" ||
-        message.seq !== request.turn ||
-        ending?.type !== "turn-failed" ||
-        ending.seq < message.seq ||
-        ending.reason.kind !== "rate-limited"
-      ) {
-        return err({ kind: "nothing-to-carry-on" });
-      }
+      const message = limitedTurn(events.value, request.turn);
+      if (message === undefined) return err({ kind: "nothing-to-carry-on" });
       const overflow = overflowFrom(await statuses(), message.model.provider);
       if (overflow.kind !== "carry-on") return err({ kind: "no-overflow", overflow });
       const provider = options.providers.find((p) => p.id === overflow.model.provider);
@@ -723,7 +737,7 @@ export const createSessions = (options: {
         workspaceId,
         provider,
         message: { text: message.text, model: overflow.model },
-        carryingOn: true,
+        carryingOn: { turn: request.turn },
       });
     },
 
