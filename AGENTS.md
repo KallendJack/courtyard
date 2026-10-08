@@ -3,8 +3,8 @@
 A self-hosted hub for planning and coding with AI models, one workspace per area of the owner's life. Two parts: a
 worker that does all the work, and a web app that is static files. Read `GLOSSARY.md` before naming anything, and use
 its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. What is being built is in
-`docs/spec.md`; why it is built that way is in `docs/adr/`. Which part does what, and how the parts connect, is in
-`docs/architecture.md`: read it before deciding where a change goes.
+`docs/spec.md`; why it is built that way is in `docs/adr/`. Before deciding where a change goes, read
+`docs/architecture.md`: which part does what, and how the parts connect.
 
 ## Where code goes
 

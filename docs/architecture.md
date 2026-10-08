@@ -4,7 +4,7 @@ How Courtyard's parts fit together: a map for the owner and for any model workin
 in [`spec.md`](spec.md), why it's built this way is in [`adr/`](adr/), and how to run it is in the
 [README](../README.md). This map names the parts and how they connect, and links to those for the rest.
 
-A PR that adds a module or changes how the parts connect updates this map ([AGENTS.md](../AGENTS.md), Process).
+[AGENTS.md](../AGENTS.md) (Process) says when a PR updates this map.
 
 ## The big picture
 
@@ -29,7 +29,7 @@ flowchart LR
     codex["Codex app-server<br/>in its own Codex home"]
     fake["Fake providers<br/>tests and trying it out"]
   end
-  nas[("Backup<br/>shared folder on the NAS")]
+  backup[("Backup<br/>any git remote, such as<br/>a shared folder on a NAS")]
   anthropic["Anthropic<br/>owner's Claude plan"]
   openai["OpenAI<br/>owner's ChatGPT plan"]
 
@@ -38,7 +38,7 @@ flowchart LR
   worker --> context
   worker --> data
   worker -- "provider seam" --> claude & codex & fake
-  context -- "pushed after every change" --> nas
+  context -- "pushed after every change" --> backup
   claude --> anthropic
   codex --> openai
 ```
@@ -47,8 +47,8 @@ flowchart LR
   browser never talks to anything else.
 - **Two folders hold everything kept.** The context folder is what models know about the owner and their workspaces;
   the data folder is Courtyard's own working state (sessions, logins, sign-ins). Neither is inside this repo.
-- **Providers sit behind one seam.** Claude, Codex and the fakes look the same to the rest of the worker; each runs
-  on the owner's own subscription.
+- **Providers sit behind one seam.** Claude, Codex and the fakes look the same to the rest of the worker. Claude and
+  Codex run on the owner's own subscriptions.
 
 ## The parts
 
@@ -63,8 +63,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`main.ts`, `start.ts`:** start the worker: build it, then serve it on its port, or say which setting is wrong.
 - **`settings.ts`:** reads and checks the worker's settings from the environment.
 - **`worker.ts`:** builds every module and wires them together. Every API request passes its checks (body size,
-  same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the owner context, backup status and live
-  updates, and serves the web app's files.
+  same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the
+  owner context, backup status and live updates, and serves the web app's files.
 
 **The owner**
 
@@ -157,7 +157,7 @@ the web app parses every answer with these schemas.
 
 - **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers;
   `fixtures/context/` is the context folder they start from.
-- **`scripts/live/`:** the live copy's scripts: start the worker at log on, and update it (ADR 0011).
+- **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
 - **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
 
 ## How a turn flows
@@ -209,8 +209,8 @@ Where the rest fits:
 - **Carry on.** On the last turn, when it failed on a usage limit, the owner can carry on. The session records the
   model change and sends the last message again to another provider's model, with the conversation so far (spec,
   Overflow).
-- **Titles.** After the first turn completes, a model gives the session a short title, unless the owner renamed it first
-  or Get to know named it.
+- **Titles.** After the first turn completes, a model gives the session a short title, unless the owner renamed it
+  first or Get to know named it.
 - **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
   running is recorded as interrupted, so the session can carry on.
 
@@ -227,8 +227,8 @@ things live only in the worker's memory and go when it restarts.
 - `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour.
 - `archived/<workspace>/`: archived workspaces.
 - Every change is kept as a commit; hand edits are committed before the next change and every ten minutes. After each
-  change the folder is pushed to its backup, `COURTYARD_CONTEXT_REMOTE`: for the owner, a shared folder on the NAS
-  ([ADR 0014](adr/0014-the-context-backup-is-a-shared-folder-on-the-nas.md)).
+  change the folder is pushed to its backup, `COURTYARD_CONTEXT_REMOTE`: any git remote the owner chooses, such as a
+  shared folder on a NAS ([ADR 0014](adr/0014-the-context-backup-is-a-shared-folder-on-the-nas.md)).
 
 **The data folder** (`COURTYARD_DATA_DIR`):
 
@@ -243,9 +243,10 @@ things live only in the worker's memory and go when it restarts.
 
 **Only in the worker's memory:** usage limits, tidies waiting for review, and which turns are running.
 
-**The other settings** point at the web app's built files (`COURTYARD_WEB_DIR`), the live copy
-(`COURTYARD_LIVE_COPY`, set by `scripts/live/`) or switch providers on and off. [`.env.example`](../.env.example) and
-`settings.ts` list them all.
+**The other settings** set the worker's port (`COURTYARD_PORT`), point at the web app's built files
+(`COURTYARD_WEB_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
+`scripts/live/`), or switch providers on and off. `apps/worker/src/settings.ts` lists them all;
+[`.env.example`](../.env.example) explains the ones an owner sets.
 
 **A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
 moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
@@ -289,8 +290,7 @@ the owner talks to in a session) read what the second list builds; only an app t
   the order of work.
 - **Skills:** the process skills ([mattpocock/skills](https://github.com/mattpocock/skills)) come from the machine of
   whoever works on the repo; AGENTS.md's Agent skills section says which docs they read. Project skills will go in
-  `.agents/skills/` ([#89](https://github.com/KallendJack/courtyard/issues/89)). How every repo carries this is
-  [#88](https://github.com/KallendJack/courtyard/issues/88).
+  `.agents/skills/` (#89). How every repo carries this is #88.
 
 ### Models inside it
 
@@ -304,11 +304,12 @@ Everything Courtyard's models read is built in one place, from written rules, an
   - Claude gets it as the system prompt, with the save tool, and none of the worker machine's Claude Code setup
     (ADR 0003).
   - Codex gets it as its instructions, in its own Codex home with its own skills and `AGENTS.md` switched off
-    (ADR 0015). It has no file or save tools yet: [#71](https://github.com/KallendJack/courtyard/issues/71).
+    (ADR 0015). It has no file or save tools yet: #71. [`docs/real-codex-check.md`](real-codex-check.md) checks
+    what's switched off against a real Codex before its version changes.
   - The fake echoes, and saves when a test scripts it.
-- **`apps/worker/eval/`:** the context eval runs invented conversations against real models and scores their saves.
+- **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude and scores its saves.
   It runs on demand, never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
-- **Skills for Courtyard's models** will plug in here: [#89](https://github.com/KallendJack/courtyard/issues/89).
+- **Skills for Courtyard's models** will plug in here: #89.
 
 ## Where to read more
 
