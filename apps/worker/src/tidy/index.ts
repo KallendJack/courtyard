@@ -127,7 +127,11 @@ const addsNothing = (text: string, lines: readonly PlacedLine[]) => {
   return wordsOf(text).every((word) => comesFrom(word, from));
 };
 
-const ProposedChange = TidyAnswer.shape.changes.element;
+/** A proposed change as it's checked: a field it doesn't use may be empty, as told, or left out. */
+const ProposedChange = TidyAnswer.shape.changes.element.extend({
+  text: z.string().nullish(),
+  why: z.string().nullish(),
+});
 
 /**
  * A change the model proposed, checked against the file: its lines by label, each used once in a

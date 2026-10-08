@@ -218,6 +218,16 @@ describe("checking what a model proposes", () => {
     expect(changes.map((change) => change.kind)).toEqual(["merge", "shorten", "remove"]);
   });
 
+  it("keeps changes whose unused fields are empty, as fixed-shape answers send them", async () => {
+    const changes = await proposed([
+      { kind: "merge", labels: ["F1", "F2"], text: "Double garage, 5.4 m by 5.1 m", why: null },
+      { kind: "remove", labels: ["F3"], text: null, why: "Moved." },
+    ]);
+
+    expect(changes.map((change) => change.kind)).toEqual(["merge", "remove"]);
+    expect(changes[1]).not.toHaveProperty("text");
+  });
+
   it.each([
     ["a label the file hasn't got", { kind: "remove", labels: ["F9"], why: "Gone." }],
     ["a removal without why", { kind: "remove", labels: ["F1"] }],
