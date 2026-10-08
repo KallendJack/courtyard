@@ -150,6 +150,17 @@ The point at which a provider stops answering until a reset time, under the owne
 it until then, and the model picker shows it.
 _Avoid_: quota, rate limit (except for the failure reason)
 
+**Skill**:
+A folder of instructions a model loads when it needs them, such as grilling a plan, in the open Agent Skills format.
+The owner starts one from a button or the skill picker, or a model loads one when its description fits. Courtyard
+loads them itself, never a provider's own skills (ADR 0016).
+_Avoid_: prompt, plugin, command, agent
+
+**House skill**:
+A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner's own skills, and a project's, with
+the same name replace it (ADR 0016).
+_Avoid_: built-in skill, default skill
+
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
 the failed turn; it never happens by itself, and the session stays on the new model until the owner switches back.
