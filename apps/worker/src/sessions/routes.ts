@@ -16,9 +16,9 @@ import {
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { apiError, contextError, readBody } from "../http.ts";
+import { apiError, contextError, NO_SAVING_MODEL, readBody } from "../http.ts";
 import { GET_TO_KNOW } from "../prompts/index.ts";
-import type { Provider } from "../providers/index.ts";
+import { firstSavingModel, type Provider } from "../providers/index.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived, listWorkspaces } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
@@ -160,12 +160,14 @@ export const sessionRoutes = (options: {
   /**
    * Gets to know a workspace or the owner context: a session in `workspaceId` started with the
    * worker's own starter message (docs/ai-conduct.md, Getting to know a workspace), answered by
-   * the model the request names.
+   * the model the request names, or else the first that saves to context and isn't at its limit.
    */
   const getToKnow = async (c: Context, start: { workspaceId: WorkspaceId; text: string }) => {
     const body = await readBody(c, GetToKnowRequest);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const message = { text: start.text, model: body.value.model };
+    const model = body.value.model ?? (await firstSavingModel(providers));
+    if (model === undefined) return apiError(c, { status: 409, error: NO_SAVING_MODEL });
+    const message = { text: start.text, model };
     return startIn(c, { workspaceId: start.workspaceId, message, starter: true });
   };
 

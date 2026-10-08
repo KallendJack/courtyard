@@ -122,9 +122,10 @@ export type FirstMessage = z.infer<typeof FirstMessage>;
 
 /**
  * Get to know a workspace or the owner context: a new session whose first message is the
- * worker's starter (docs/ai-conduct.md), answered by this model.
+ * worker's starter (docs/ai-conduct.md), answered by this model. With no model named, the worker
+ * starts it on the first model that saves to context and isn't at its usage limit.
  */
-export const GetToKnowRequest = z.object({ model: ModelRef });
+export const GetToKnowRequest = z.object({ model: ModelRef.optional() });
 export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 
 export const SessionSummary = z.object({

@@ -144,6 +144,26 @@ export const offerFor = async (
   return model === undefined ? undefined : { provider, model };
 };
 
+/**
+ * The first model on offer whose provider saves to context and isn't at its usage limit (the first
+ * that saves, when every one is): what Get to know and Tidy use when no model is named.
+ * `undefined` when no provider that saves is available.
+ */
+export const firstSavingModel = async (
+  providers: readonly Provider[],
+): Promise<ModelRef | undefined> => {
+  const offers = await Promise.all(
+    providers
+      .filter((provider) => provider.capabilities.savesContext)
+      .map(async (provider) => ({ provider: provider.id, status: await provider.status() })),
+  );
+  const offered = offers.flatMap(({ provider, status }) =>
+    status.available ? status.models.map((model) => ({ provider, model })) : [],
+  );
+  const chosen = offered.find(({ model }) => model.limit === undefined) ?? offered[0];
+  return chosen && { provider: chosen.provider, model: chosen.model.id };
+};
+
 export { createClaudeProvider } from "./claude.ts";
 export { createCodexProvider } from "./codex.ts";
 export { createFakeProvider } from "./fake.ts";

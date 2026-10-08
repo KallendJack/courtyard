@@ -15,6 +15,10 @@ export const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Res
   return parsed.success ? ok(parsed.data) : err(parsed.error.issues[0]?.message ?? "Bad request");
 };
 
+/** Why Get to know or Tidy, with no model named, found none to ask. */
+export const NO_SAVING_MODEL =
+  "No model that saves to context is available. Check the providers' settings.";
+
 /** An error reading or changing the context folder, as an answer. */
 export const contextError = (c: Context, error: WorkspaceError) => {
   switch (error.kind) {

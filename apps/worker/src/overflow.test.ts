@@ -252,10 +252,12 @@ describe("Carry on, while the session moves on", () => {
 });
 
 describe("a new session with no model named", () => {
-  const ownerModel = async (request: Requester) => {
-    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
-      text: "Where should the rack go?",
-    });
+  const ownerModel = async (
+    request: Requester,
+    path = "/api/workspaces/garage-gym/sessions",
+    body: object = { text: "Where should the rack go?" },
+  ) => {
+    const response = await postJson(request, path, body);
     expect(response.status).toBe(201);
     const { id } = SessionSummary.parse(await response.json());
     const events: SessionEvent[] = await followSession(request, {
@@ -277,5 +279,15 @@ describe("a new session with no model named", () => {
     await hitLimit(request, FAKE_MODEL);
 
     expect(await ownerModel(request)).toEqual(FAKE_TWO_MODEL);
+  });
+
+  it("gets to know a workspace or the owner context on the first model that isn't at its limit", async () => {
+    const request = await start();
+    await hitLimit(request, FAKE_MODEL);
+
+    expect(await ownerModel(request, "/api/workspaces/garage-gym/get-to-know", {})).toEqual(
+      FAKE_TWO_MODEL,
+    );
+    expect(await ownerModel(request, "/api/owner-context/get-to-know", {})).toEqual(FAKE_TWO_MODEL);
   });
 });

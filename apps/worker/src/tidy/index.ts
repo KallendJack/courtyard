@@ -20,7 +20,7 @@ import {
 import { type ContextFolder, type Place, placeFile } from "../context-folder/index.ts";
 import { readTextFile, writeTextFile } from "../files.ts";
 import { TIDYING, TidyAnswer, tidyMessage } from "../prompts/index.ts";
-import { offerFor, type Provider } from "../providers/index.ts";
+import { firstSavingModel, offerFor, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /**
@@ -39,6 +39,8 @@ export type TidyTarget = {
 /** Why a tidy wasn't proposed or saved. */
 export type TidyRefusal =
   | { readonly kind: "model-unavailable" }
+  /** No model was named, and no provider that saves to context is available. */
+  | { readonly kind: "no-saving-model" }
   | { readonly kind: "failed"; readonly reason: FailureReason }
   /** No such tidy: it was saved, replaced by a newer one, or the worker has restarted since. */
   | { readonly kind: "not-found" }
@@ -210,10 +212,13 @@ export const createTidying = (target: TidyTarget) => {
     /** Asks the model for a tidy of a place's file and checks each change it proposes. */
     propose: async (request: {
       place: Place;
-      model: ModelRef;
+      /** The model to ask, or `undefined` for the first that saves and isn't at its limit. */
+      model: ModelRef | undefined;
       signal: AbortSignal;
     }): Promise<Result<TidyProposal, TidyRefusal>> => {
-      const { place, model, signal } = request;
+      const { place, signal } = request;
+      const model = request.model ?? (await firstSavingModel(target.providers));
+      if (model === undefined) return err({ kind: "no-saving-model" });
       const provider = (await offerFor(target.providers, model))?.provider;
       if (provider === undefined) return err({ kind: "model-unavailable" });
       const read = await readTextFile(fileOf(place));

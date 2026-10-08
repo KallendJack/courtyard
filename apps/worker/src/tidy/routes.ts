@@ -7,7 +7,7 @@ import {
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import type { Place } from "../context-folder/index.ts";
-import { apiError, contextError, readBody } from "../http.ts";
+import { apiError, contextError, NO_SAVING_MODEL, readBody } from "../http.ts";
 import { getWorkspace } from "../workspaces/index.ts";
 import type { Tidying, TidyRefusal } from "./index.ts";
 
@@ -28,6 +28,8 @@ const refused = (c: Context, refusal: TidyRefusal) => {
   switch (refusal.kind) {
     case "model-unavailable":
       return apiError(c, { status: 400, error: "That model isn't available right now." });
+    case "no-saving-model":
+      return apiError(c, { status: 409, error: NO_SAVING_MODEL });
     case "failed":
       return apiError(c, { status: 502, error: failedBecause(refusal.reason) });
     case "not-found":

@@ -18,8 +18,10 @@ import {
   changesIn,
   errorOf,
   FAKE_MODEL,
+  followSession,
   postJson,
   type Requester,
+  startSession,
   testWorker,
 } from "./testing.ts";
 
@@ -248,6 +250,29 @@ describe("checking what a model proposes", () => {
     ]);
 
     expect(changes.map((change) => change.kind)).toEqual(["remove"]);
+  });
+
+  it("with no model named, asks the first model that saves to context and isn't at its usage limit", async () => {
+    const asked: string[] = [];
+    const watched = (provider: Provider): Provider => ({
+      ...provider,
+      answerOnce: (input) => {
+        asked.push(provider.id);
+        return provider.answerOnce(input);
+      },
+    });
+    const request = await start([
+      watched(createFakeProvider({ delayMs: 0 })),
+      watched(createFakeProvider({ delayMs: 0, second: true })),
+    ]);
+    const limited = await startSession(request, "please hit Fake's limit");
+    await followSession(request, { sessionId: limited.id, until: "turn-failed" });
+    await writeFile(contextFile(), MESSY);
+
+    const response = await postJson(request, "/api/workspaces/garage-gym/tidy", {});
+
+    expect(response.status).toBe(200);
+    expect(asked).toEqual(["fake-two"]);
   });
 
   it("refuses a model that isn't available", async () => {
