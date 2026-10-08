@@ -1,7 +1,7 @@
 # Architecture
 
 How Courtyard's parts fit together: a map for the owner and for any model working on this repo. What Courtyard does is
-in [`spec.md`](spec.md), why it's built this way is in [`adr/`](adr/), and how to run it is in the
+in the spec issues on GitHub (the original is [`spec.md`](spec.md), frozen), why it's built this way is in [`adr/`](adr/), and how to run it is in the
 [README](../README.md). This map names the parts and how they connect, and links to those for the rest.
 
 [AGENTS.md](../AGENTS.md) (Process) says when a PR updates this map.
@@ -284,12 +284,15 @@ the owner talks to in a session) read what the second list builds; only an app t
 - **[`AGENTS.md`](../AGENTS.md):** start here: where code goes, TypeScript, tests, safety and process. `CLAUDE.md` only
   points to it, so every model reads the same file.
 - **[`GLOSSARY.md`](../GLOSSARY.md):** the words to use, and the words to avoid.
-- **[`docs/spec.md`](spec.md):** what is being built. **[`docs/adr/`](adr/):** why it is built that way.
+- **Spec issues on GitHub:** what is being built, written with Matt's `to-spec`; [`docs/spec.md`](spec.md) is the
+  original, frozen. **[`docs/adr/`](adr/):** why it is built that way.
 - **`docs/architecture.md`:** this map.
-- **[`docs/agents/issue-tracker.md`](agents/issue-tracker.md):** tickets, labels, and the GitHub milestones that hold
-  the order of work.
-- **Skills:** the process skills ([mattpocock/skills](https://github.com/mattpocock/skills)) come from the machine of
-  whoever works on the repo; AGENTS.md's Agent skills section says which docs they read. Project skills will go in
+- **[`docs/agents/`](agents/):** what Matt's setup writes, kept as he writes it (`issue-tracker.md`,
+  `triage-labels.md`, `domain.md`), and Courtyard's one addition, [`roadmap.md`](agents/roadmap.md): the GitHub
+  milestones that hold the order of work.
+- **Skills:** the process is [mattpocock/skills](https://github.com/mattpocock/skills) as it is, installed on the
+  machine of whoever works on the repo from Matt's own plugin list, so it updates itself; AGENTS.md's Agent skills
+  section says which docs they read. Project skills will go in
   `.agents/skills/` (#89). How every repo carries this is #88.
 
 ### Models inside it
@@ -313,7 +316,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 ## Where to read more
 
-- [`docs/spec.md`](spec.md): what Courtyard does, and the decisions behind how.
+- The spec issues on GitHub, and [`docs/spec.md`](spec.md), the original spec (frozen): what Courtyard does.
 - [`docs/adr/`](adr/): why each big choice was made.
 - [`GLOSSARY.md`](../GLOSSARY.md): Courtyard's words.
 - [`docs/ai-conduct.md`](ai-conduct.md): what models are told, and how it's checked.

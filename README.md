@@ -8,13 +8,25 @@ context, so you never re-explain your space, your constraints or your stack.
   commit, backed up wherever you choose.
 - **Your subscriptions, not per-token billing.** Claude through your own Claude Code login, with Codex on a ChatGPT plan
   for when Claude's usage limit hits.
-- **Real coding.** In a code workspace, Claude works on its own branch while you're away, asks before anything risky,
-  and you review and merge from your phone.
+- **Coding, planned.** Code workspaces, where a model works on its own branch while you're away, asks before anything
+  risky, and you review and merge from your phone, are [milestone 7](https://github.com/KallendJack/courtyard/milestone/7).
 - **Yours alone.** One owner, plain files, no database, private network only.
 
-Status: being built. What is being built is in [`docs/spec.md`](docs/spec.md).
+Status: being built, in the order of the repo's [milestones](https://github.com/KallendJack/courtyard/milestones).
 
-## Reaching it: HTTPS and a VPN
+## Before you start
+
+- **A Windows PC to run the worker.** The start and update scripts are Windows-only for now; any machine is
+  [#100](https://github.com/KallendJack/courtyard/issues/100).
+- **Node.js 24, pnpm and git** on that PC.
+- **Claude Code signed in on it** (see [Claude](#claude)), and optionally a **ChatGPT plan** for Codex.
+- **A reverse proxy with HTTPS and a mesh VPN** (see [Reaching it](#reaching-it-https-and-a-vpn)).
+- **Two folders outside the clone:** the context folder (your workspaces, kept in git) and the data folder (sessions,
+  logins and logs).
+
+## Setting up
+
+### Reaching it: HTTPS and a VPN
 
 Courtyard is for a private network only, and it needs HTTPS: phones only install a web app, or
 show its notifications, from a secure address. It doesn't bundle either piece; you bring two
@@ -39,7 +51,7 @@ On the worker machine:
    rules that allow add up, so also remove or narrow any rule that lets Node.js in from
    anywhere: Windows creates one if you ever clicked Allow when it asked about Node.js.
 
-### One example: Caddy and Tailscale on a NAS
+#### One example: Caddy and Tailscale on a NAS
 
 A NAS at `192.0.2.2` runs Caddy and Tailscale, and the worker runs on a PC at `192.0.2.10`.
 
@@ -71,7 +83,7 @@ A NAS at `192.0.2.2` runs Caddy and Tailscale, and the worker runs on a PC at `1
   Get-NetFirewallApplicationFilter | Where-Object Program -like "*node.exe" | Get-NetFirewallRule | Where-Object { $_.Direction -eq "Inbound" -and $_.Action -eq "Allow" -and $_.Enabled -eq "True" } | Select-Object DisplayName, Profile
   ```
 
-## Running it day to day (Windows)
+### The live copy (Windows)
 
 Run the everyday Courtyard from its own clone of `main`, the **live copy**, not from a checkout
 you develop in, so switching branches never changes the live app (ADR 0011). The scripts in
@@ -104,6 +116,12 @@ you develop in, so switching branches never changes the live app (ADR 0011). The
    A live copy set up before the Update button existed needs `update.ps1` run once, then
    `install-task.ps1` again, to get the second task.
 
+A step-by-step setup checklist, on any machine, is [#100](https://github.com/KallendJack/courtyard/issues/100).
+
+## Running it day to day
+
+The worker starts when you log on and again if it stops (the live copy's task, above).
+
 **To update** to the newest `main`, press **Update** on the home page when it says a new version
 is ready (it checks every few hours), or run:
 
@@ -123,51 +141,13 @@ is ready (it checks every few hours), or run:
 - **The result** is written to `live-update.json` in the data folder, and the home page shows it.
   From the button, the update's output goes to `live-update.log` there too.
 
-## Your context's history and backup
+## Settings
 
-The worker makes your context folder a git repository the first time it starts, and commits every
-change to it: a workspace added, renamed or archived in the app, and anything you edit by hand,
-which it commits as "Edited by hand" before its next change (and every ten minutes). Commits are
-Courtyard's own, not your git identity.
+Every setting, and what it does, is in [`.env.example`](.env.example). Copy it to `.env` in the live copy and fill it in.
 
-**To back it up,** set `COURTYARD_CONTEXT_REMOTE` to any git remote. Nothing needs to run there:
-a bare repository in a shared folder on a NAS works (`git init --bare` in the folder, then
-`//nas.example/courtyard/context.git`, signed in to once from the worker machine). The worker
-pushes after every change. When a push fails, the change is still kept, the home page says how
-long the backup has been behind and why, and the worker tries again after the next change and
-every ten minutes. Without a remote, the home page says the context isn't backed up.
+## Accounts it uses
 
-## Archived workspaces
-
-Archiving a workspace in the app moves its folder into an `archived` folder in your context folder,
-so it leaves every list but nothing in it is lost. Its sessions stay in the data folder, to read
-but not carry on. **To bring one back,** move its folder out of `archived`, back into the context
-folder: it reappears in the app with its sessions. No workspace can be called "archived", and a
-new one can't take an archived one's folder name.
-
-## Bringing back what a fresh start cleared
-
-**Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
-context and every session, so Courtyard starts as on its first run. Your password, your devices'
-logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothing is lost:
-
-- **The context folder** is cleared as one change titled "Fresh start", so its history (and your
-  backup) still has every file. To bring it all back, run this in the context folder, while no turn
-  is running:
-
-  ```sh
-  git checkout "HEAD^{/^Fresh start}~1" -- .
-  ```
-
-  That takes the files from just before the latest fresh start, replacing any made since at the
-  same paths; the worker commits them as "Edited by hand". To bring back one workspace, name its folder instead of
-  `.`. Recent changes still begin at the fresh start.
-- **The sessions** move to `fresh-starts/<date>` in the data folder (`-2`, `-3` and so on for a
-  second fresh start the same day), and are never tidied away. To bring them back, move the session
-  folders inside it back into the data folder's `sessions` folder. A session shows again once its
-  workspace is back.
-
-## Claude
+### Claude
 
 Courtyard talks to Claude through Claude Code on the machine its worker runs on (the Agent SDK),
 so it uses whatever that machine is signed in with:
@@ -183,7 +163,8 @@ to other people, so everyone who runs Courtyard signs in with their own. Set
 Each session sees only its own workspace's folder: none of the machine's Claude Code settings,
 memory, skills or connectors, and in planning workspaces it can only read.
 
-## Codex
+
+### Codex
 
 Courtyard also talks to Codex, on your ChatGPT plan, so a session can carry on when Claude's
 usage runs out. It uses the Codex program Courtyard installs itself (`pnpm install`), at a fixed
@@ -211,6 +192,76 @@ version, never a Codex you've installed elsewhere.
 
 Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
 Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.
-Courtyard never reads, stores or logs its sign-in. Before changing Codex's
-version, run [the real-Codex check](docs/real-codex-check.md). What is being built is in [`docs/spec.md`](docs/spec.md), the vocabulary in
-[`GLOSSARY.md`](GLOSSARY.md), and why it is built this way in [`docs/adr/`](docs/adr/).
+Courtyard never reads, stores or logs its sign-in.
+
+## Getting things back
+
+### Your context's history and backup
+
+The worker makes your context folder a git repository the first time it starts, and commits every
+change to it: a workspace added, renamed or archived in the app, and anything you edit by hand,
+which it commits as "Edited by hand" before its next change (and every ten minutes). Commits are
+Courtyard's own, not your git identity.
+
+**To back it up,** set `COURTYARD_CONTEXT_REMOTE` to any git remote. Nothing needs to run there:
+a bare repository in a shared folder on a NAS works (`git init --bare` in the folder, then
+`//nas.example/courtyard/context.git`, signed in to once from the worker machine). The worker
+pushes after every change. When a push fails, the change is still kept, the home page says how
+long the backup has been behind and why, and the worker tries again after the next change and
+every ten minutes. Without a remote, the home page says the context isn't backed up.
+
+
+### Archived workspaces
+
+Archiving a workspace in the app moves its folder into an `archived` folder in your context folder,
+so it leaves every list but nothing in it is lost. Its sessions stay in the data folder, to read
+but not carry on. **To bring one back,** move its folder out of `archived`, back into the context
+folder: it reappears in the app with its sessions. No workspace can be called "archived", and a
+new one can't take an archived one's folder name.
+
+
+### Bringing back what a fresh start cleared
+
+**Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
+context and every session, so Courtyard starts as on its first run. Your password, your devices'
+logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothing is lost:
+
+- **The context folder** is cleared as one change titled "Fresh start", so its history (and your
+  backup) still has every file. To bring it all back, run this in the context folder, while no turn
+  is running:
+
+  ```sh
+  git checkout "HEAD^{/^Fresh start}~1" -- .
+  ```
+
+  That takes the files from just before the latest fresh start, replacing any made since at the
+  same paths; the worker commits them as "Edited by hand". To bring back one workspace, name its folder instead of
+  `.`. Recent changes still begin at the fresh start.
+- **The sessions** move to `fresh-starts/<date>` in the data folder (`-2`, `-3` and so on for a
+  second fresh start the same day), and are never tidied away. To bring them back, move the session
+  folders inside it back into the data folder's `sessions` folder. A session shows again once its
+  workspace is back.
+
+
+## Moving to a new machine
+
+A step-by-step checklist is [#100](https://github.com/KallendJack/courtyard/issues/100). Until then: clone the context folder from its backup, copy the
+data folder as it is, and sign in to Claude Code on the new machine.
+
+## Working on it
+
+- **Start with [AGENTS.md](AGENTS.md).** The process is [Matt Pocock's skills](https://github.com/mattpocock/skills),
+  set up as `docs/agents/` says. How the parts connect is in [`docs/architecture.md`](docs/architecture.md).
+- **`pnpm verify`** runs every check: lint and format, types, tests, the build (with the first-load budget) and the
+  browser tests. Each git worktree's browser tests use their own ports, so copies can test side by side.
+- **`pnpm dev`** runs the worker and the web app with reloading. It needs a `.env` in the clone with its own context
+  and data folders, never the live ones, and its own `COURTYARD_PORT` if the live worker runs on the same machine.
+- **On Windows,** some worker tests can time out while the PC is busy: [#130](https://github.com/KallendJack/courtyard/issues/130).
+- **Before changing Codex's version,** run [the real-Codex check](docs/real-codex-check.md).
+
+## Where to read more
+
+- **What's being built:** the spec issues and [milestones](https://github.com/KallendJack/courtyard/milestones) on GitHub;
+  [`docs/spec.md`](docs/spec.md) is the original spec, frozen.
+- **Why it's built this way:** [`docs/adr/`](docs/adr/). **Its words:** [`GLOSSARY.md`](GLOSSARY.md).
+- **What its models are told:** [`docs/ai-conduct.md`](docs/ai-conduct.md).
