@@ -1,76 +1,46 @@
-# Issue tracker: GitHub Issues
+# Issue tracker: GitHub
 
-Tickets live as GitHub Issues on `KallendJack/courtyard`, read and written with the `gh` CLI. The spec lives in the
-repo (`docs/spec.md`); each Issue is one ticket from it, or an idea waiting to become one.
+Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
 ## Conventions
 
-- **Title:** `NN: <what it delivers>` for a ticket, numbered from `01` in build order. An idea has a plain title until
-  it becomes a ticket.
-- **Body:** what to build, `Blocked by: #N` when it depends on another ticket, and a checklist of acceptance criteria.
-- **Labels** say what kind of issue it is: `enhancement` or `bug`, a triage label from the table below, and `tracker`
-  for an issue that's checked at the end of each milestone rather than built (#111 parity). The `phase-0` to
-  `phase-3` labels are kept on closed issues as history; new issues don't get a phase label.
-- **Milestone** says where it sits in the roadmap (below).
-- **Status** is GitHub's own: open, then closed once the PR that finishes it is merged (`Closes #N` in the PR
-  description). Check it closed, and close it by hand if not.
-- **Conversation** happens in Issue and PR comments. Read them with `gh issue view N --comments` and
-  `gh pr view N --comments`, and review comments on code with `gh api repos/KallendJack/courtyard/pulls/N/comments`.
+- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Read an issue**: `gh issue view <number> --json number,title,body,labels,comments`.
+- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **Make an issue a sub-issue of a parent**: `gh issue create --parent <parent> ...`, or `gh issue edit <parent> --add-sub-issue <child>` afterwards (`gh` 2.94+). Older `gh`: `gh api --method POST repos/<owner>/<repo>/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>` (database id, as in **Blocking** below). Without sub-issues, put `Part of #<parent>` at the top of the child body.
+- **Comment on an issue**: `gh issue comment <number> --body "..."`
+- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Close**: `gh issue close <number> --comment "..."`
 
-## The roadmap
+Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
-The order of work is the repo's **milestones**: the one place it's kept. Not the spec, not a chat, not an agent's
-memory.
+## Pull requests as a triage surface
 
-- **Each milestone is a group of work** that leaves something usable, titled `N · <name>`, worked through in number
-  order. `Later` holds parked ideas, in no order.
-- **Its description gives the build order inside it:** `Build order: #A → #B → #C.`, with a note when something
-  waits on the owner.
-- **Every open issue is in exactly one milestone,** except trackers.
+**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
 
-### Keeping it current
+When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
 
-Whoever files, finishes or moves work updates the roadmap in the same step:
+- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
+- **List external PRs for triage**: `gh api --paginate 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.author_association | IN("OWNER","MEMBER","COLLABORATOR") | not) | {number, title, author: .user.login, author_association, labels: [.labels[].name]}'`.
+- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
-- **Filing an issue:** put it in a milestone (`Later` when unsure) and add it to that milestone's build order. Say in
-  the issue body or the hand-over which milestone it went into and why, so the owner can move it.
-- **Finishing a milestone:** close it once its issues are closed, and check the trackers (`--label tracker`).
-- **Moving work** (the owner reprioritises, or something new crops up): move the issue with
-  `gh issue edit N --milestone "<title>"`, and fix both milestones' build orders.
-- **A new group:** create it in the right place and renumber the titles after it. Milestones are matched by title, so
-  renumbering is a rename, nothing else.
-- **Checking it:** this should print nothing but trackers:
-
-  ```sh
-  gh issue list --state open --search "no:milestone" --json number,title,labels
-  ```
-
-  and this shows the roadmap in order:
-
-  ```sh
-  gh api "repos/KallendJack/courtyard/milestones?state=open&per_page=100" \
-    --jq 'sort_by((.title | split(" ")[0] | tonumber?) // 999)[] | "\(.title) (\(.closed_issues)/\(.open_issues + .closed_issues) done): \(.description)"'
-  ```
-
-Changing the order is the owner's call. An agent proposes a move with its reason, and makes it once the owner agrees.
-
-## Triage labels
-
-| Role in mattpocock/skills | Label             | Meaning                                  |
-| ------------------------- | ----------------- | ---------------------------------------- |
-| `needs-triage`            | `needs-triage`    | Needs evaluating                         |
-| `needs-info`              | `needs-info`      | Waiting on more information              |
-| `ready-for-agent`         | `ready-for-agent` | Fully specified, ready for an agent      |
-| `ready-for-human`         | `ready-for-human` | Needs the owner (a purchase, a NAS step) |
-| `wontfix`                 | `wontfix`         | Will not be actioned                     |
-
-The spec is a file, not an Issue, so its triage state is a `Status:` line at its top.
+GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
 ## When a skill says "publish to the issue tracker"
 
-`gh issue create --title "NN: ..." --label enhancement --label ready-for-agent --milestone "<title>" --body-file <file>`,
-then add it to that milestone's build order.
+Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-`gh issue view N --comments`.
+Read it as in **Read an issue** above.
+
+## Wayfinding operations
+
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+
+- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
+- **Child ticket**: an issue linked to the map as a GitHub sub-issue (see **Make an issue a sub-issue of a parent**). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
+- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
+- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
+- **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
+- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
