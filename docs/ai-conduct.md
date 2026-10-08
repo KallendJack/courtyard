@@ -254,7 +254,9 @@ is saved only if the file is still as the model read it.
 ## Titling a session
 
 Built with #104. A new session starts titled by its first message, cut to 60 characters. Once its first turn
-completes (not stopped, not failed), a model gives it a proper title. Later turns never retitle it. It's the first
+completes (not stopped, not failed), a model gives it a proper title. A first message carried on to another provider
+after a usage limit (Carry on) is still the first turn. Later turns never retitle it, even a resend after a failure.
+It's the first
 model not at its usage limit, as for a new session with no model named, at the lowest effort that model takes (its
 default when it takes none), so it costs little. Like a tidy, it's a one-off question with no tools. It's told:
 

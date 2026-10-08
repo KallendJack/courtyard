@@ -31,8 +31,8 @@ afterEach(async () => {
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
   return asOwner(testWorker({ root, providers }));
 };
+
 /** Starts a session and waits for its first answer and the title a model gives it after. */
-/** Starts a session and waits for its first turn to finish. */
 const finishedSession = async (request: Requester, text: string) => {
   const session = await startSession(request, text);
   await followSession(request, { sessionId: session.id, until: "session-titled" });

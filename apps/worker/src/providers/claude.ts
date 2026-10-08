@@ -21,7 +21,7 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { err, ok } from "../result.ts";
+import { err, ok, type Result } from "../result.ts";
 import type { Provider, SaveTool, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");
@@ -143,6 +143,20 @@ const EFFORT_LABELS: Record<z.infer<typeof ClaudeEffort>, string> = {
   high: "High",
   xhigh: "Extra high",
   max: "Max",
+};
+
+/**
+ * The effort to send Claude Code: none for the model's default, or the level as Claude takes it.
+ * The worker only sends a level the model listed, so one Claude doesn't know is a bug, and fails.
+ */
+const effortFor = (
+  effort: Effort | undefined,
+): Result<z.infer<typeof ClaudeEffort> | undefined, FailureReason> => {
+  if (effort === undefined) return ok(undefined);
+  const parsed = ClaudeEffort.safeParse(effort);
+  return parsed.success
+    ? ok(parsed.data)
+    : err({ kind: "unknown", message: "Claude doesn't take that effort." });
 };
 
 const ClaudeModel = z.object({
@@ -540,11 +554,8 @@ export const createClaudeProvider = (
     },
 
     runTurn: async (input) => {
-      // The worker only sends a level the model listed, so one Claude doesn't know is a bug.
-      const effort = input.effort === undefined ? undefined : ClaudeEffort.safeParse(input.effort);
-      if (effort?.success === false) {
-        return err({ kind: "unknown", message: "Claude doesn't take that effort." });
-      }
+      const effort = effortFor(input.effort);
+      if (!effort.ok) return effort;
       const folder = resolve(input.folder);
       const progress: Progress = {};
       // The owner stopping the turn stops Claude Code itself.
@@ -561,7 +572,7 @@ export const createClaudeProvider = (
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),
-            ...(effort === undefined ? {} : { effort: effort.data }),
+            ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
             systemPrompt: input.framing.instructions,
             tools: PLANNING_TOOLS,
@@ -605,11 +616,8 @@ export const createClaudeProvider = (
     },
 
     answerOnce: async (input) => {
-      // As for a turn: the worker only asks at a level the model listed.
-      const effort = input.effort === undefined ? undefined : ClaudeEffort.safeParse(input.effort);
-      if (effort?.success === false) {
-        return err({ kind: "unknown", message: "Claude doesn't take that effort." });
-      }
+      const effort = effortFor(input.effort);
+      if (!effort.ok) return effort;
       const progress: Progress = {};
       const stop = new AbortController();
       const stopClaudeCode = () => stop.abort();
@@ -621,7 +629,7 @@ export const createClaudeProvider = (
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),
-            ...(effort === undefined ? {} : { effort: effort.data }),
+            ...(effort.value === undefined ? {} : { effort: effort.value }),
             // Nowhere in particular: it has no tools to look with.
             cwd: tmpdir(),
             systemPrompt: input.instructions,

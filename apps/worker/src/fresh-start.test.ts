@@ -77,8 +77,8 @@ const summaryOf = async (request: Requester) => {
 
 const startFresh = (request: Requester, confirm: unknown = "start fresh") =>
   postJson(request, "/api/fresh-start", { confirm });
-/** Starts a session in garage-gym and waits for its turn to finish and the session to be titled. */
-/** Starts a session in garage-gym and waits for its turn to finish. */
+
+/** Starts a session in garage-gym and waits for its first answer and the title a model gives it after. */
 const finishedSession = async (request: Requester, text: string) => {
   const session = await startSession(request, text);
   await followSession(request, { sessionId: session.id, until: "session-titled" });

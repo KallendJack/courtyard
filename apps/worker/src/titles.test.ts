@@ -87,10 +87,18 @@ const listedTitles = async (request: Requester) =>
     await (await request("/api/workspaces/garage-gym/sessions")).json(),
   ).sessions.map((session) => session.title);
 
-/** Sends a later message and waits for its turn to end. */
-const sendAndFinish = async (request: Requester, id: string, text: string, after: number) => {
-  await postJson(request, `/api/sessions/${id}/messages`, { text, model: FAKE_MODEL });
-  return followSession(request, { sessionId: id, until: "turn-completed", after });
+/** Sends a later message and waits for its turn to end: events after `after` are its own. */
+const sendAndFinish = async (
+  request: Requester,
+  send: { sessionId: string; text: string; after: SessionEvent[] },
+) => {
+  const { sessionId, text, after } = send;
+  await postJson(request, `/api/sessions/${sessionId}/messages`, { text, model: FAKE_MODEL });
+  return followSession(request, {
+    sessionId,
+    until: "turn-completed",
+    after: after.at(-1)?.seq ?? 0,
+  });
 };
 
 const titledEvents = (events: readonly SessionEvent[]) =>
@@ -170,13 +178,34 @@ describe("a new session's title", () => {
     expect(second.asked).toEqual([]);
   });
 
+  it("comes after the first answer when the first message carried on to another provider", async () => {
+    const request = await asOwner(
+      testWorker({ root, providers: [fake(), createFakeProvider({ delayMs: 0, second: true })] }),
+    );
+    const session = await startSession(
+      request,
+      "Where should the rack go? please hit Fake's limit",
+    );
+    const failed = await followSession(request, { sessionId: session.id, until: "turn-failed" });
+
+    await postJson(request, `/api/sessions/${session.id}/carry-on`, { turn: 1 });
+    const events = await followSession(request, {
+      sessionId: session.id,
+      until: "session-titled",
+      after: failed.at(-1)?.seq ?? 0,
+    });
+
+    expect(events.map((event) => event.type)).toContain("turn-completed");
+    expect(events.at(-1)).toMatchObject({ title: "Where Should The Rack Go" });
+  });
+
   it("is never changed by a later turn", async () => {
     const watched = watching(fake());
     const request = await asOwner(testWorker({ root, providers: [watched.provider] }));
     const session = await startSession(request, "Where should the rack go?");
     const first = await followSession(request, { sessionId: session.id, until: "session-titled" });
 
-    await sendAndFinish(request, session.id, "And the bench?", first.at(-1)?.seq ?? 0);
+    await sendAndFinish(request, { sessionId: session.id, text: "And the bench?", after: first });
 
     expect(watched.asked).toHaveLength(1);
     expect(titledEvents(await allEvents(request, session.id))).toHaveLength(1);
@@ -194,7 +223,7 @@ describe("a title the owner set", () => {
     expect((await renameSession(request, session.id, "Rack position")).status).toBe(200);
     release();
     const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
-    await sendAndFinish(request, session.id, "And the bench?", first.at(-1)?.seq ?? 0);
+    await sendAndFinish(request, { sessionId: session.id, text: "And the bench?", after: first });
 
     expect(titledEvents(await allEvents(request, session.id))).toEqual([]);
     expect(await titleOf(request, session.id)).toBe("Rack position");
@@ -238,7 +267,11 @@ describe("a session that keeps its first line as its title", () => {
     const session = SessionSummary.parse(await response.json());
     const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
 
-    await sendAndFinish(request, session.id, "It's for lifting.", first.at(-1)?.seq ?? 0);
+    await sendAndFinish(request, {
+      sessionId: session.id,
+      text: "It's for lifting.",
+      after: first,
+    });
 
     expect(watched.asked).toEqual([]);
     expect(await titleOf(request, session.id)).toBe("Get to know this workspace.");
@@ -250,7 +283,7 @@ describe("a session that keeps its first line as its title", () => {
     const failed = await startSession(request, "Where should the rack go? please fail");
     const ended = await followSession(request, { sessionId: failed.id, until: "turn-failed" });
 
-    await sendAndFinish(request, failed.id, "And the bench?", ended.at(-1)?.seq ?? 0);
+    await sendAndFinish(request, { sessionId: failed.id, text: "And the bench?", after: ended });
 
     expect(watched.asked).toEqual([]);
     expect(await titleOf(request, failed.id)).toBe("Where should the rack go? please fail");

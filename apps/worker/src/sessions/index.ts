@@ -8,6 +8,7 @@ import {
   endsTurn,
   type FailureReason,
   type FirstMessage,
+  type ModelInfo,
   type ModelRef,
   type NewMessage,
   type Overflow,
@@ -129,6 +130,33 @@ const modelTitle = (answer: unknown) => {
 
 /** How long titling a session can take before it's given up on: a few words shouldn't take long. */
 const TITLING_TIMEOUT_MS = 2 * 60 * 1000;
+
+/** The first model with room: on offer and not at its usage limit. */
+const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly T[]) =>
+  offered.find(({ model }) => model.limit === undefined);
+
+/** A session's file that no one has given a title the model mustn't change. */
+const titledByNobody = (
+  file: Result<SessionFile | undefined, unknown>,
+): file is { ok: true; value: SessionFile } =>
+  file.ok && file.value !== undefined && file.value.titledBy === undefined;
+
+/**
+ * The session's first message and its first answer: the text of the first turn that completed,
+ * which can be a carried-on one. `undefined` when no turn has completed.
+ */
+const firstAnswer = (events: readonly SessionEvent[]) => {
+  const message = events.find((event) => event.type === "owner-message");
+  let answer = "";
+  for (const event of events) {
+    if (event.type === "owner-message") answer = "";
+    if (event.type === "text-delta") answer += event.text;
+    if (event.type === "turn-completed") {
+      return message?.type === "owner-message" ? { message: message.text, answer } : undefined;
+    }
+  }
+  return undefined;
+};
 
 const STORAGE_ERROR: SessionError = {
   kind: "storage",
@@ -396,8 +424,8 @@ export const createSessions = (options: {
     provider: Provider;
     model: ModelRef["model"];
     effort: Effort | undefined;
-    /** Whether a completed turn is followed by titling the session: only its first turn. */
-    titleAfter: boolean;
+    /** Whether it answers the session's first message, so the session is titled once it completes. */
+    firstTurn: boolean;
   }) => {
     const session = runningSession(turn.id);
     const stopper = turn.stopper;
@@ -516,7 +544,7 @@ export const createSessions = (options: {
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
-    else if (turn.titleAfter && ending.type === "turn-completed") {
+    else if (turn.firstTurn && ending.type === "turn-completed") {
       titleSession(turn.id).catch((error: unknown) =>
         console.error(`Session ${turn.id}: titling it crashed`, error),
       );
@@ -537,17 +565,9 @@ export const createSessions = (options: {
       readEvents(id),
       modelsOnOffer(),
     ]);
-    if (!file.ok || file.value === undefined || file.value.titledBy !== undefined) return;
-    const chosen = offered.find(({ model }) => model.limit === undefined);
-    const first = events.ok
-      ? events.value.find((event) => event.type === "owner-message")
-      : undefined;
-    if (session === undefined || chosen === undefined || first === undefined || !events.ok) return;
-    let answer = "";
-    for (const event of events.value) {
-      if (endsTurn(event)) break;
-      if (event.type === "text-delta") answer += event.text;
-    }
+    const chosen = firstWithRoom(offered);
+    const first = events.ok ? firstAnswer(events.value) : undefined;
+    if (!titledByNobody(file) || session === undefined || !chosen || !first) return;
     // Least first, so the first is the lowest; a model that takes none answers at its default.
     const lowest = chosen.model.efforts[0]?.id;
     const answered = await chosen.provider.answerOnce({
@@ -555,17 +575,17 @@ export const createSessions = (options: {
       model: chosen.model.id,
       ...(lowest === undefined ? {} : { effort: lowest }),
       instructions: TITLING,
-      message: titleMessage({ message: first.text, answer }),
+      message: titleMessage(first),
       schema: TitleAnswer,
       signal: AbortSignal.timeout(TITLING_TIMEOUT_MS),
     });
     const title = answered.ok ? modelTitle(answered.value) : undefined;
     if (title === undefined) return;
     await inOrder(session, async () => {
-      // Deleted or set aside by a fresh start meanwhile.
-      if (running.get(id) !== session) return;
+      // Deleted, or set aside by a fresh start, meanwhile.
+      if (settingAside || running.get(id) !== session) return;
       const now = await readJsonFile(sessionFilePath(id), SessionFile);
-      if (!now.ok || now.value === undefined || now.value.titledBy !== undefined) return;
+      if (!titledByNobody(now)) return;
       const written = await writeJsonFile(sessionFilePath(id), { ...now.value, title });
       if (!written.ok) return;
       const recorded = await writeEvent({ id, session, event: { type: "session-titled", title } });
@@ -585,8 +605,8 @@ export const createSessions = (options: {
     carryingOn?: { turn: number };
     /** How many fresh starts there had been when the turn was asked for. */
     since: number;
-    /** The session's first turn, after which it's titled. */
-    first?: boolean;
+    /** It answers the session's first message, so the session is titled once it completes. */
+    firstTurn?: boolean;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -630,7 +650,7 @@ export const createSessions = (options: {
       provider: start.provider,
       model: start.message.model.model,
       effort: start.message.effort,
-      titleAfter: start.first ?? false,
+      firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
   };
@@ -664,7 +684,7 @@ export const createSessions = (options: {
     const { model } = message;
     if (model !== undefined) return ok({ ...message, model });
     const offered = await modelsOnOffer();
-    const chosen = offered.find((offer) => offer.model.limit === undefined) ?? offered[0];
+    const chosen = firstWithRoom(offered) ?? offered[0];
     return chosen
       ? ok({ text: message.text, model: { provider: chosen.provider.id, model: chosen.model.id } })
       : err({ kind: "model-unavailable" });
@@ -820,7 +840,7 @@ export const createSessions = (options: {
             provider: provider.value,
             message: message.value,
             since,
-            first: true,
+            firstTurn: true,
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -882,6 +902,8 @@ export const createSessions = (options: {
         provider,
         message: { text: message.text, model: overflow.model },
         carryingOn: { turn: request.turn },
+        // Carrying on the first message is still the session's first turn.
+        firstTurn: events.value.find((event) => event.type === "owner-message") === message,
         since,
       });
     },

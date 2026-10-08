@@ -179,8 +179,9 @@ const pause = (ms: number, signal: AbortSignal) =>
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
- * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit Fake's limit" (or "Fake two's", for the second fake) acts out a
- * usage limit that resets two hours on, so overflow can be seen and tested.
+ * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
+ * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
+ * hours on, so overflow can be seen and tested.
  */
 export const createFakeProvider = (
   options: {

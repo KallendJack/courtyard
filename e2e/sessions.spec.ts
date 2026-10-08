@@ -52,7 +52,7 @@ test("a new session takes the model's title once its first answer is in", async 
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);
 
   // The fake titles a session with the first few words of its message, in title case.
-  await expect(page.getByRole("heading", { level: 1, name: titled })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: titled, exact: true })).toBeVisible();
   const recent = page.getByRole("region", { name: "Recent in Garage gym" });
-  await expect(recent.getByRole("link", { name: titled })).toBeVisible();
+  await expect(recent.getByRole("link", { name: titled, exact: true })).toBeVisible();
 });

@@ -54,7 +54,7 @@ function SessionPage() {
 
 function Session(props: { session: SessionDetail; providers: ProviderList["providers"] }) {
   const { session } = props;
-  const { turns, retitled, problem, reconnecting } = useSessionTurns(session.id);
+  const { turns, modelTitle, problem, reconnecting } = useSessionTurns(session.id);
   const [sendProblem, setSendProblem] = useState<string>();
   /** What the owner is doing to the session itself, if anything. */
   const [tidying, setTidying] = useState<"rename" | "delete">();
@@ -123,10 +123,15 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
     }
   }, [running, lastSeq, limitChanged, router]);
 
-  // A model titled the session after its first answer: the new title here and in the sidebar.
+  // A model titled the session after its first answer, after the page loaded it: the new title here
+  // and in the sidebar. Once per title, since one the owner gave later differs from it too.
+  const loadedTitleOf = useRef<string>(undefined);
   useEffect(() => {
-    if (retitled > 0) void router.invalidate();
-  }, [retitled, router]);
+    if (modelTitle === undefined || modelTitle === session.title) return;
+    if (loadedTitleOf.current === modelTitle) return;
+    loadedTitleOf.current = modelTitle;
+    void router.invalidate();
+  }, [modelTitle, session.title, router]);
 
   const above = <BackLink workspaceId={session.workspaceId} />;
   const toggle = (what: "rename" | "delete") =>
