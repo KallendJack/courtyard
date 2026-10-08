@@ -62,6 +62,9 @@ This repo is public, and the app runs models that can change files on a real mac
 ## Process
 
 - One PR per ticket, branched from `main`. Check a PR's state before pushing more commits to it.
+- **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
+  agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
+  stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
 - The owner reviews every PR on GitHub. Write PR descriptions plain English first: what it does, how it works file by
   file, at most four new terms, how it was checked, then technical detail in a collapsed `<details>` block, then one
   explain-it-back question answerable from the plain text.
