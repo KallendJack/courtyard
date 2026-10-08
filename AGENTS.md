@@ -18,9 +18,8 @@ its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. Wha
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, Moorland, in `apps/web/src/styles.css` (the Paper design chosen in
-  issue #2). Colours, fonts and radii are used by name, never by value. `components/ui/` is shadcn's generated code:
-  change it by re-adding a component or through the theme (`biome.json` relaxes two rules for it). Components on the
-  first load join classes with `lib/classes.ts` rather than `cn`, which keeps the class-merging code off the first load.
+  issue #2). Colours, fonts and radii are used by name, never by value. Components join classes with
+  `lib/classes.ts`, which merges nothing, so no class-merging code reaches the first load.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
   feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece
