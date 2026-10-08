@@ -101,8 +101,8 @@ ticked by default, and the owner unticks any they don't want.
 _Avoid_: compact, clean up, summarise
 
 **Backup**:
-The context folder's copy on its git remote, pushed after every change: for the owner, a shared folder on the NAS
-(ADR 0014). The home page says when it's behind.
+The context folder's copy on a git remote the owner chooses, such as a shared folder on a NAS (ADR 0014), pushed
+after every change. The home page says when it's behind.
 _Avoid_: sync, mirror, remote (on its own)
 
 **Fresh start**:

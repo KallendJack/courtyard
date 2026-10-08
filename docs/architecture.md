@@ -1,0 +1,321 @@
+# Architecture
+
+How Courtyard's parts fit together: a map for the owner and for any model working on this repo. What Courtyard does is
+in [`spec.md`](spec.md), why it's built this way is in [`adr/`](adr/), and how to run it is in the
+[README](../README.md). This map names the parts and how they connect, and links to those for the rest.
+
+[AGENTS.md](../AGENTS.md) (Process) says when a PR updates this map.
+
+## The big picture
+
+Courtyard is two parts. The **web app** is what the owner opens in a browser: it shows things and asks the worker,
+and keeps nothing itself. The **worker** does everything else: it checks the owner's login, keeps the context folder
+and the data folder, and runs sessions by talking to providers. Both run from one machine, and the owner reaches them
+through their own HTTPS proxy ([ADR 0001](adr/0001-the-worker-owns-everything-the-web-app-is-static-files.md),
+[ADR 0002](adr/0002-one-owner-private-network-https-through-the-owners-proxy.md)).
+
+```mermaid
+flowchart LR
+  subgraph device["Owner's phone or computer"]
+    browser["Web app, in a browser"]
+  end
+  proxy["Owner's HTTPS proxy"]
+  subgraph machine["Worker machine"]
+    worker["Worker<br/>apps/worker"]
+    built["Web app's built files<br/>apps/web/dist"]
+    context[("Context folder<br/>git")]
+    data[("Data folder")]
+    claude["Claude Code<br/>through the Agent SDK"]
+    codex["Codex app-server<br/>in its own Codex home"]
+    fake["Fake providers<br/>tests and trying it out"]
+  end
+  backup[("Backup<br/>any git remote, such as<br/>a shared folder on a NAS")]
+  anthropic["Anthropic<br/>owner's Claude plan"]
+  openai["OpenAI<br/>owner's ChatGPT plan"]
+
+  browser -- "pages, /api, events" --> proxy --> worker
+  worker -- serves --> built
+  worker --> context
+  worker --> data
+  worker -- "provider seam" --> claude & codex & fake
+  context -- "pushed after every change" --> backup
+  claude --> anthropic
+  codex --> openai
+```
+
+- **One origin.** The worker serves the web app's built files and its API (under `/api`) at the same address, so the
+  browser never talks to anything else.
+- **Two folders hold everything kept.** The context folder is what models know about the owner and their workspaces;
+  the data folder is Courtyard's own working state (sessions, logins, sign-ins). Neither is inside this repo.
+- **Providers sit behind one seam.** Claude, Codex and the fakes look the same to the rest of the worker. Claude and
+  Codex run on the owner's own subscriptions.
+
+## The parts
+
+The worker is split into modules, one folder each: `index.ts` is what the module does and `routes.ts`, when it has
+one, is its part of the API. `worker.ts` builds every module from the settings and wires them together. The web app is
+pages (`routes/`) built from feature folders and shared pieces. The contract package sits between them.
+
+### The worker: `apps/worker/src`
+
+**Starting up**
+
+- **`main.ts`, `start.ts`:** start the worker: build it, then serve it on its port, or say which setting is wrong.
+- **`settings.ts`:** reads and checks the worker's settings from the environment.
+- **`worker.ts`:** builds every module and wires them together. Every API request passes its checks (body size,
+  same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the
+  owner context, backup status and live updates, and serves the web app's files.
+
+**The owner**
+
+- **`owner/`:** the owner's password, each device login, and slowing down wrong guesses. Its routes are setup, login,
+  logout, and the login check every other request goes through. Keeps its files in the data folder.
+
+**Context**
+
+- **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
+  model, and adds, changes or removes one line. Text in, text out: it never touches the disk.
+- **`workspaces/`:** the list of workspaces: reads, creates, renames, recolours and archives workspace folders. Uses
+  `context-file/` to read each `CONTEXT.md`.
+- **`owner-context/`:** reads `OWNER.md` and starts a new one.
+- **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
+  that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
+  changes and Fresh start. Every module that changes the context folder goes through it.
+- **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
+  `context-file/` and `context-folder/`.
+- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and undoes one from that
+  page.
+- **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
+  changes as one change.
+
+**Models and sessions**
+
+- **`providers/`:** the provider seam. `index.ts` says what every provider does (its status, its models, one turn,
+  one-off questions, a sign-in when it has one). Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`.
+- **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
+  provider's models.
+- **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
+  (instructions, the conversation so far and the save tool), the replies to a save, and the text for Get to know, Tidy
+  and titling a session.
+- **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, follows each one live from any
+  position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
+  list of models and Get to know.
+- **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
+  Not now.
+
+**Running Courtyard**
+
+- **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
+- **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
+  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)).
+
+**Helpers**, to reuse before writing a new one (AGENTS.md):
+
+- **`http.ts`:** reads a request's body with a contract schema, and turns errors into answers.
+- **`files.ts`:** reads and writes files and JSON, checked with a schema.
+- **`git.ts`:** runs git, never stopping to ask for a password.
+- **`result.ts`:** the `Result` type.
+- **`testing.ts`:** a worker on temporary folders, and helpers for the tests and the context eval.
+
+Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#the-ai-setup)).
+
+### The web app: `apps/web/src`
+
+- **`main.tsx`** starts the router. **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
+  generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
+  workspaces down the side or across the top; the rest are pages.
+- **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
+  offline worker or a refusal comes back as a value to show. **`worker-watch.ts`** checks the worker's health while a
+  page needs it.
+- **Feature folders**, each one feature's parts:
+  - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
+    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), the turn list, the
+    message box with its model and effort pickers, save notes, the usage-limit notice with Carry on, and the Get to
+    know offer.
+  - **`changes/`:** the Recent changes list, with Undo.
+  - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
+  - **`sign-ins/`:** the home page's sign-in box and Models list.
+  - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
+- **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
+  notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
+  (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
+  (`problems.tsx`), and how dates read (`when.ts`).
+- **`components/`:** Courtyard's shared pieces (buttons, text fields, sheets, notices and so on), used on every page
+  ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small helpers shared by
+  pages. **`styles.css`:** the Moorland theme.
+- Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
+  runs after each build to stamp the service worker and check the first-load budget.
+
+### The contract: `packages/contract`
+
+Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
+topic in `lib/`: login, workspaces, sessions and their events, saves and changes, tidies, usage limits and overflow,
+sign-ins, backup, live updates, fresh start, health and errors. The worker's answers are checked against these types;
+the web app parses every answer with these schemas.
+
+### Outside the apps
+
+- **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers;
+  `fixtures/context/` is the context folder they start from.
+- **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
+- **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
+
+## How a turn flows
+
+When the owner presses Send, the worker writes the message down and answers at once. The turn then runs on the
+worker to the end, whether or not anyone is watching. Everything the model does is written to the session's event log
+first, and only then sent to the browsers following it. The browser draws the session from those events alone, so a
+page that reconnects, or opens later, asks for everything after the last event it saw and catches up
+([ADR 0006](adr/0006-sessions-are-event-logs-in-plain-files.md)).
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (sessions/)
+  participant S as Worker: sessions/
+  participant L as Event log (events.jsonl)
+  participant F as Worker: prompts/
+  participant P as Provider seam
+  participant M as Model
+
+  B->>S: POST /api/sessions/:id/messages
+  S->>L: owner-message
+  S-->>B: 202, at once
+  B->>S: GET /api/sessions/:id/events?after=N
+  Note over B,S: server-sent events, kept open
+  S->>F: owner context, context file, conversation so far
+  F-->>S: the turn's framing, with the save tool
+  S->>P: run the turn
+  P->>M: Agent SDK, Codex app-server or the fake
+  M-->>P: text, activity, saves
+  P->>S: each piece as it comes
+  S->>L: text-delta, activity, context-saved
+  L-->>B: each event once it's written, numbered
+  S->>L: turn-completed, turn-stopped or turn-failed
+  Note over B: replays events into turns,<br/>reveals text at an even pace
+```
+
+Where the rest fits:
+
+- **Saves.** The model calls the save tool its framing offered. `saves/` checks the line and writes it as a change
+  through `context-folder/` at once; the session records it and the browser shows a note. A refused save is explained
+  to the model, which may put it right once
+  ([ADR 0013](adr/0013-models-save-context-as-they-chat-and-the-owner-undoes.md)).
+- **Undo and Edit.** From a save's note, through `sessions/` to `saves/`; or from Recent changes, through `changes/`.
+  Each is a change of its own, and the session records what the owner did to its save.
+- **Stop.** The worker tells the provider to stop, stops waiting for it at once, and drops anything it sends
+  after. What was written so far stays, and the turn is recorded as stopped.
+- **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`
+  remembers that until the reset, and the model pickers show it. Nothing switches model by itself.
+- **Carry on.** On the last turn, when it failed on a usage limit, the owner can carry on. The session records the
+  model change and sends the last message again to another provider's model, with the conversation so far (spec,
+  Overflow).
+- **Titles.** After the first turn completes, a model gives the session a short title, unless the owner renamed it
+  first or Get to know named it.
+- **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
+  running is recorded as interrupted, so the session can carry on.
+
+## Where things live
+
+Everything Courtyard keeps is in two folders outside this repo, named by the worker's settings. The **context folder**
+is what models know, and the owner can edit it by hand. The **data folder** is Courtyard's own working state. A few
+things live only in the worker's memory and go when it restarts.
+
+**The context folder** (`COURTYARD_CONTEXT_DIR`) is a git repository
+([ADR 0009](adr/0009-the-context-folder-is-a-git-repo-with-its-main-copy-on-a-remote.md)):
+
+- `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
+- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour.
+- `archived/<workspace>/`: archived workspaces.
+- Every change is kept as a commit; hand edits are committed before the next change and every ten minutes. After each
+  change the folder is pushed to its backup, `COURTYARD_CONTEXT_REMOTE`: any git remote the owner chooses, such as a
+  shared folder on a NAS ([ADR 0014](adr/0014-the-context-backup-is-a-shared-folder-on-the-nas.md)).
+
+**The data folder** (`COURTYARD_DATA_DIR`):
+
+- `sessions/<session>/`: `session.json` (title and times) and `events.jsonl` (the event log).
+- `fresh-starts/<date>/`: sessions set aside by a fresh start.
+- `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
+  of its secret), and recent wrong guesses.
+- `codex/`: the Codex home, holding Codex's sign-in
+  ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
+  `sign-ins.json`: the providers the owner said Not now to.
+- `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
+
+**Only in the worker's memory:** usage limits, tidies waiting for review, and which turns are running.
+
+**The other settings** set the worker's port (`COURTYARD_PORT`), point at the web app's built files
+(`COURTYARD_WEB_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
+`scripts/live/`), or switch providers on and off. `apps/worker/src/settings.ts` lists them all;
+[`.env.example`](../.env.example) explains the ones an owner sets.
+
+**A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
+moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
+device logins, the sign-ins (the Codex home and Not now) and the usage limits. The README says how to bring things
+back.
+
+## The rules that hold it together
+
+Each one is written down once, where the link goes.
+
+- **The worker owns everything:** the web app is static files that show things and ask the worker
+  ([ADR 0001](adr/0001-the-worker-owns-everything-the-web-app-is-static-files.md)).
+- **One contract:** every shape crossing between web app and worker is a Zod schema in `packages/contract`
+  (AGENTS.md, Where code goes).
+- **One provider seam:** Claude, Codex and the fakes all sit behind `providers/index.ts`, and only an adapter knows
+  how its provider is signed in or billed (AGENTS.md;
+  [ADR 0003](adr/0003-claude-through-the-agent-sdk-with-the-owners-login-isolated-per-workspace.md)).
+- **Errors are values:** module interfaces return `Result` (`result.ts`); throwing is for bugs (AGENTS.md,
+  TypeScript).
+- **Dependencies passed in:** the clock, the providers, the update command and the repeating jobs are options to
+  `createWorker`, so tests control them (AGENTS.md, Where code goes).
+- **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
+  the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
+- **The first-load budget:** the build fails if what the home page needs first grows past its budget
+  (`apps/web/scripts/finish-build.mjs`; [ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)).
+
+## The AI setup
+
+Two kinds of model work with this repo, and each has its own files. **Models building Courtyard** (coding agents
+working on the repo) read the files in the first list; every repo has these. **Models inside Courtyard** (the ones
+the owner talks to in a session) read what the second list builds; only an app that runs models has these.
+
+### Building it with models
+
+- **[`AGENTS.md`](../AGENTS.md):** start here: where code goes, TypeScript, tests, safety and process. `CLAUDE.md` only
+  points to it, so every model reads the same file.
+- **[`GLOSSARY.md`](../GLOSSARY.md):** the words to use, and the words to avoid.
+- **[`docs/spec.md`](spec.md):** what is being built. **[`docs/adr/`](adr/):** why it is built that way.
+- **`docs/architecture.md`:** this map.
+- **[`docs/agents/issue-tracker.md`](agents/issue-tracker.md):** tickets, labels, and the GitHub milestones that hold
+  the order of work.
+- **Skills:** the process skills ([mattpocock/skills](https://github.com/mattpocock/skills)) come from the machine of
+  whoever works on the repo; AGENTS.md's Agent skills section says which docs they read. Project skills will go in
+  `.agents/skills/` (#89). How every repo carries this is #88.
+
+### Models inside it
+
+Everything Courtyard's models read is built in one place, from written rules, and every provider gets the same text.
+
+- **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
+  it.
+- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to a save, Get to know, Tidy and titling.
+  `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
+- **Each provider passes it on unchanged:**
+  - Claude gets it as the system prompt, with the save tool, and none of the worker machine's Claude Code setup
+    (ADR 0003).
+  - Codex gets it as its instructions, in its own Codex home with its own skills and `AGENTS.md` switched off
+    (ADR 0015). It has no file or save tools yet: #71. [`docs/real-codex-check.md`](real-codex-check.md) checks
+    what's switched off against a real Codex before its version changes.
+  - The fake echoes, and saves when a test scripts it.
+- **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude and scores its saves.
+  It runs on demand, never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
+- **Skills for Courtyard's models** will plug in here: #89.
+
+## Where to read more
+
+- [`docs/spec.md`](spec.md): what Courtyard does, and the decisions behind how.
+- [`docs/adr/`](adr/): why each big choice was made.
+- [`GLOSSARY.md`](../GLOSSARY.md): Courtyard's words.
+- [`docs/ai-conduct.md`](ai-conduct.md): what models are told, and how it's checked.
+- [README](../README.md): setting it up and running it.
+- [`AGENTS.md`](../AGENTS.md): the rules for working on the code.
