@@ -18,6 +18,9 @@ const VARIANTS = {
   /** Archiving, deleting, logging out. */
   destructive:
     "border-transparent bg-destructive/10 text-destructive-text hover:bg-destructive/20 focus-visible:ring-destructive/20",
+  /** The one action that clears everything, once the owner has typed to confirm it (Start fresh). */
+  destructiveFilled:
+    "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/85 focus-visible:ring-destructive/20",
   /** A small action beside text that shouldn't draw the eye, such as Undo on a save's note. */
   quiet:
     "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",

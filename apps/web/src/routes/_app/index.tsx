@@ -84,6 +84,14 @@ function Home() {
       <Suspense fallback={null}>
         <SignIns part="list" />
       </Suspense>
+      <div className="mt-7 flex justify-end">
+        <Link
+          to="/fresh-start"
+          className="text-xs font-medium text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
+        >
+          Fresh start…
+        </Link>
+      </div>
       <LogOutOthers />
     </Page>
   );

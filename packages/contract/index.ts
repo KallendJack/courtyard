@@ -8,6 +8,7 @@ export {
   RecentChanges,
   RecentChangeUndo,
 } from "./lib/changes.ts";
+export { FRESH_START_WORDS, FreshStartRequest, FreshStartSummary } from "./lib/fresh-start.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";

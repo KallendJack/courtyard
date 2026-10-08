@@ -145,6 +145,28 @@ but not carry on. **To bring one back,** move its folder out of `archived`, back
 folder: it reappears in the app with its sessions. No workspace can be called "archived", and a
 new one can't take an archived one's folder name.
 
+## Bringing back what a fresh start cleared
+
+**Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
+context and every session, so Courtyard starts as on its first run. Your password, your devices'
+logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothing is lost:
+
+- **The context folder** is cleared as one change titled "Fresh start", so its history (and your
+  backup) still has every file. To bring it all back, run this in the context folder, while no turn
+  is running:
+
+  ```sh
+  git checkout "HEAD^{/^Fresh start}~1" -- .
+  ```
+
+  That takes the files from just before the latest fresh start, alongside anything made since; the
+  worker commits them as "Edited by hand". To bring back one workspace, name its folder instead of
+  `.`. Recent changes still begin at the fresh start.
+- **The sessions** move to `fresh-starts/<date>` in the data folder (`-2`, `-3` and so on for a
+  second fresh start the same day), and are never tidied away. To bring them back, move the session
+  folders inside it back into the data folder's `sessions` folder. A session shows again once its
+  workspace is back.
+
 ## Claude
 
 Courtyard talks to Claude through Claude Code on the machine its worker runs on (the Agent SDK),

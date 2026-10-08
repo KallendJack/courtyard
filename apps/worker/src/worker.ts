@@ -17,6 +17,8 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
+import { createFreshStart } from "./fresh-start/index.ts";
+import { freshStartRoutes } from "./fresh-start/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
@@ -156,6 +158,12 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
+  api.route(
+    "/",
+    freshStartRoutes(
+      createFreshStart({ contextDir, dataDir, contextFolder, sessions, tidying, now }),
+    ),
+  );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
