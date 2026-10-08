@@ -62,6 +62,10 @@ This repo is public, and the app runs models that can change files on a real mac
 ## Process
 
 - One PR per ticket, branched from `main`. Check a PR's state before pushing more commits to it.
+- **Each ticket in its own worktree.** Work in the git worktree made for the ticket (a folder beside the main checkout,
+  on the ticket's branch), never in the main checkout, which stays on `main`, so several tickets can run side by side.
+  Its browser tests pick their own ports, so `pnpm verify` needs nothing extra. Once the PR is merged, the worktree
+  and its branch are removed.
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
   stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.

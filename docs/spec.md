@@ -147,7 +147,9 @@ nothing personal, so anyone can run their own.
     so that a model can work on that codebase.
 48. As the owner, I want each coding session to work on its own session branch in its own folder, so that nothing
     reaches my branches until I've reviewed it and my own checkout is never disturbed.
-49. As the owner, I want two sessions in one repository not to interfere, so that I can run them side by side.
+49. As the owner, I want two sessions in one repository not to interfere, so that I can run them side by side. That
+    includes what their checks start: two sessions running the repo's tests at once mustn't fight over the same
+    ports.
 50. As the owner, I want file edits inside the session branch to apply without asking, so that the model makes
     progress while I'm away.
 51. As the owner, I want to list commands (test, lint, typecheck, build) that run without asking, so that the model can
@@ -164,7 +166,8 @@ nothing personal, so anyone can run their own.
 57. As the owner, I want to see the session branch's diff against the branch it started from, so that I can review the
     work.
 58. As the owner, I want to merge or discard a session branch, with discard asking for confirmation, so that the final
-    decision is mine.
+    decision is mine. Either way its folder and branch are then cleared away, and so is one whose work was merged
+    some other way (a pull request merged on GitHub), so that finished sessions don't pile up on the worker machine.
 59. As the owner, I want a merge that would conflict, or would touch uncommitted work in my checkout, to be refused
     with the reason, so that nothing is forced.
 60. As the owner, I want a code workspace with a missing or non-git repository path to be unusable with a clear reason,
