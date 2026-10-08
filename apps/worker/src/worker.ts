@@ -33,6 +33,8 @@ import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
 import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
+import { createSignIns } from "./sign-ins/index.ts";
+import { signInRoutes } from "./sign-ins/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -52,6 +54,9 @@ export type Worker = {
 
 /** The largest request body the API reads; nothing it accepts comes close. */
 const MAX_BODY_BYTES = 16 * 1024;
+
+/** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
+const FAKE_SIGN_IN_MS = 5000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
@@ -103,6 +108,7 @@ export const createWorker = (options: {
     claudeProvider,
     codexProvider,
     fakeProvider,
+    fakeSignIn,
     liveCopy,
     updateTask,
   } = settings.value;
@@ -112,7 +118,9 @@ export const createWorker = (options: {
   const providers = options.providers ?? [
     ...(claudeProvider ? [createClaudeProvider()] : []),
     ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
-    ...(fakeProvider ? [createFakeProvider()] : []),
+    ...(fakeProvider
+      ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
+      : []),
   ];
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
   const sessions = createSessions({ dataDir, providers, contextDir, contextFolder, now });
@@ -142,6 +150,7 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
+  api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

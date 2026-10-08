@@ -133,6 +133,12 @@ The folder in the data folder where Courtyard's Codex keeps its sign-in, and not
 owner uses elsewhere on the machine (ADR 0015).
 _Avoid_: Codex config, profile, ~/.codex
 
+**Sign-in**:
+A provider's own login, for a provider whose sign-in Courtyard handles (Codex's): started from the home page with a
+link and a one-time code to finish on any device, and kept in the provider's own home. Courtyard sees only the link
+and code. The owner can say Not now to it (ADR 0015).
+_Avoid_: device login (that's the owner's login to Courtyard), token, credentials
+
 **Usage limit**:
 The point at which a provider stops answering until a reset time, under the owner's subscription. The worker remembers
 it until then, and the model picker shows it.

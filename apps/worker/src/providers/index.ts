@@ -8,6 +8,7 @@ import type {
   ModelRef,
   ProviderId,
   ProviderStatus,
+  SignInState,
 } from "@courtyard/contract";
 import type { z } from "zod";
 import type { Result } from "../result.ts";
@@ -76,6 +77,21 @@ export type OneOffInput = {
 };
 
 /**
+ * A provider's sign-in, for a provider whose sign-in Courtyard handles (Codex's, ADR 0015). It
+ * stays in the provider's own home: Courtyard only ever sees a sign-in's link and one-time code.
+ */
+export type SignIn = {
+  /** What the owner signs in to, by name: "ChatGPT". */
+  readonly service: string;
+  readonly state: () => Promise<SignInState>;
+  /** Starts a sign-in to finish on any device, or says why it couldn't. */
+  readonly start: () => Promise<Result<SignInState, string>>;
+  /** Gives up a sign-in in progress, or forgets one that didn't finish. */
+  readonly cancel: () => Promise<void>;
+  readonly signOut: () => Promise<Result<null, string>>;
+};
+
+/**
  * A source of models: the one seam in the worker (AGENTS.md). Claude, Codex and the scripted fake
  * each sit behind it. A turn's failure is returned, never thrown.
  */
@@ -87,6 +103,8 @@ export type Provider = {
   readonly runTurn: (input: TurnInput) => Promise<Result<null, FailureReason>>;
   /** Answers a one-off question: the answer unparsed, or why there's none. */
   readonly answerOnce: (input: OneOffInput) => Promise<Result<unknown, FailureReason>>;
+  /** Its sign-in, when Courtyard handles it; Claude's is the worker machine's own. */
+  readonly signIn?: SignIn;
 };
 
 /**

@@ -48,6 +48,7 @@ const Env = z.object({
   COURTYARD_CLAUDE_PROVIDER: flag("1"),
   COURTYARD_CODEX_PROVIDER: flag("1"),
   COURTYARD_FAKE_PROVIDER: flag("0"),
+  COURTYARD_FAKE_SIGN_IN: flag("0"),
   COURTYARD_WEB_DIR: z.preprocess(
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
@@ -81,6 +82,11 @@ export type Settings = {
   /** Whether to offer the scripted fake provider, for trying Courtyard with no models. */
   readonly fakeProvider: boolean;
   /**
+   * Whether the fake acts signed out, with a pretend sign-in that finishes a few seconds after it
+   * starts, so signing in can be tried and tested with no real provider.
+   */
+  readonly fakeSignIn: boolean;
+  /**
    * The live copy this worker runs from (ADR 0011), which the owner can update from the app.
    * Only the live scripts set it, so development and tests never update themselves.
    */
@@ -110,6 +116,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER,
     codexProvider: parsed.data.COURTYARD_CODEX_PROVIDER,
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER,
+    fakeSignIn: parsed.data.COURTYARD_FAKE_SIGN_IN,
     liveCopy:
       parsed.data.COURTYARD_LIVE_COPY === undefined
         ? null

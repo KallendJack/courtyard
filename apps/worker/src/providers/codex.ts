@@ -12,10 +12,11 @@ import {
   ModelId,
   ProviderId,
   type ProviderStatus,
+  type SignInState,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok, type Result } from "../result.ts";
-import type { Provider } from "./index.ts";
+import type { Provider, SignIn } from "./index.ts";
 
 const id = ProviderId.parse("codex");
 /**
@@ -192,6 +193,8 @@ type Connection = {
    * function is called.
    */
   readonly listen: (threadId: string, listener: ThreadListener) => () => void;
+  /** Hears every notice that names no thread, such as one about the sign-in. */
+  readonly onOtherNotice: (listener: (notice: z.infer<typeof CodexNotice>) => void) => void;
   /** Settles when the app-server ends. */
   readonly ended: Promise<void>;
 };
@@ -222,6 +225,7 @@ const connect = async (options: {
 }): Promise<Result<Connection, StartFailure>> => {
   const pending = new Map<number, (answer: Result<unknown, RequestFailure>) => void>();
   const listeners = new Map<string, ThreadListener>();
+  const otherListeners: ((notice: z.infer<typeof CodexNotice>) => void)[] = [];
   let nextId = 1;
   let markEnded = () => {};
   const ended = new Promise<void>((resolve) => {
@@ -259,6 +263,7 @@ const connect = async (options: {
     if (!notice.success) return;
     const about = AboutThread.safeParse(notice.data.params);
     if (about.success) listeners.get(about.data.threadId)?.heard(notice.data);
+    else for (const listener of otherListeners) listener(notice.data);
   };
 
   const send = (message: unknown) => {
@@ -310,6 +315,9 @@ const connect = async (options: {
 
   return ok({
     request,
+    onOtherNotice: (listener) => {
+      otherListeners.push(listener);
+    },
     listen: (threadId, listener) => {
       listeners.set(threadId, listener);
       return () => listeners.delete(threadId);
@@ -341,7 +349,48 @@ const CodexModel = z.object({
 });
 const ModelPage = z.object({ data: z.array(CodexModel), nextCursor: z.string().nullable() });
 
-const AccountAnswer = z.object({ account: z.object({ type: z.string() }).nullable() });
+/** Who is signed in to Courtyard's Codex home, if anyone. Nothing else of the sign-in is read. */
+const AccountAnswer = z.object({
+  account: z
+    .object({
+      type: z.string(),
+      email: z.string().nullable().catch(null).default(null),
+      planType: z.string().nullable().catch(null).default(null),
+    })
+    .nullable(),
+});
+
+/** A device-code sign-in Codex has started: where to go, and the code to enter there. */
+const LoginStarted = z.object({
+  type: z.literal("chatgptDeviceCode"),
+  loginId: z.string(),
+  verificationUrl: z.url({ protocol: /^https$/ }),
+  userCode: z.string().min(1).max(32),
+});
+const LoginCompleted = z.object({
+  method: z.literal("account/login/completed"),
+  params: z.object({
+    loginId: z.string().nullable(),
+    success: z.boolean(),
+    error: z.string().nullable().catch(null),
+  }),
+});
+/** How long Codex's device codes work for. */
+const DEVICE_CODE_MS = 15 * 60_000;
+/** Codex's words for a code that ran out; anything else that didn't finish counts as failed. */
+const EXPIRED = /expire|timed? ?out/i;
+
+/** Where the sign-in Courtyard started stands, while it isn't simply signed in or out. */
+type Login =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "waiting";
+      readonly loginId: string;
+      readonly link: string;
+      readonly code: string;
+      readonly expiresAt: number;
+    }
+  | { readonly kind: "not-finished"; readonly why: "expired" | "failed" };
 
 /** The levels of effort a model takes, the ones Courtyard knows, in Codex's order. */
 const effortsOf = (model: z.infer<typeof CodexModel>): EffortInfo[] => {
@@ -351,8 +400,7 @@ const effortsOf = (model: z.infer<typeof CodexModel>): EffortInfo[] => {
     .map((level) => ({ id: Effort.parse(level), label: EFFORT_LABELS[level] }));
 };
 
-const SIGNED_OUT =
-  "Codex isn't signed in. Sign in on the worker machine with Courtyard's own Codex home (see the README).";
+const SIGNED_OUT = "Codex isn't signed in. Sign in to Codex on the home page.";
 const NEEDS_UPDATING = "Codex needs updating.";
 /** Why Codex can't be reached, in plain words. */
 const START_FAILURES: Record<StartFailure, string> = {
@@ -495,6 +543,30 @@ export const createCodexProvider = (options: {
   const now = options.now ?? Date.now;
   const requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
 
+  let cached: { at: number; status: ProviderStatus } | undefined;
+  /** A check already running, which simultaneous callers share, and when the sign-in last changed. */
+  let checking: { since: number; status: Promise<ProviderStatus> } | undefined;
+  /** Counts changes to the sign-in, so a check that started before one is never kept. */
+  let signInChanges = 0;
+  const signInChanged = () => {
+    signInChanges += 1;
+    cached = undefined;
+  };
+  /** The sign-in Courtyard started, which lives in the app-server running now. */
+  let login: Login = { kind: "none" };
+
+  /** Hears how a sign-in went, and that the account changed, so the status is asked again. */
+  const heard = (notice: z.infer<typeof CodexNotice>) => {
+    signInChanged();
+    const completed = LoginCompleted.safeParse(notice);
+    if (!completed.success || login.kind !== "waiting") return;
+    const { loginId, success, error } = completed.data.params;
+    if (loginId !== null && loginId !== login.loginId) return;
+    login = success
+      ? { kind: "none" }
+      : { kind: "not-finished", why: EXPIRED.test(error ?? "") ? "expired" : "failed" };
+  };
+
   /** The app-server, started the first time Codex is needed and again after it ends. */
   let current: Promise<Result<Connection, StartFailure>> | undefined;
   const connection = () => {
@@ -504,16 +576,123 @@ export const createCodexProvider = (options: {
       void starting.then((started) => {
         const forget = () => {
           if (current === starting) current = undefined;
+          // A sign-in in progress ends with the app-server it was started in.
+          if (login.kind === "waiting") login = { kind: "not-finished", why: "failed" };
         };
-        if (started.ok) void started.value.ended.then(forget);
-        else forget();
+        if (started.ok) {
+          started.value.onOtherNotice(heard);
+          void started.value.ended.then(forget);
+        } else forget();
       });
     }
     return current;
   };
 
-  let cached: { at: number; status: ProviderStatus } | undefined;
-  let checking: Promise<ProviderStatus> | undefined;
+  /** A sign-in in progress whose code has run out counts as expired, and Codex stops waiting. */
+  const expireLogin = async () => {
+    if (login.kind !== "waiting" || now() < login.expiresAt) return;
+    const { loginId } = login;
+    login = { kind: "not-finished", why: "expired" };
+    const started = await connection();
+    if (started.ok) void started.value.request("account/login/cancel", { loginId });
+  };
+
+  /** Gives up a sign-in in progress, telling Codex, and forgets one that didn't finish. */
+  const dropLogin = async () => {
+    if (login.kind === "waiting") {
+      const { loginId } = login;
+      const started = await connection();
+      if (started.ok) await started.value.request("account/login/cancel", { loginId });
+    }
+    login = { kind: "none" };
+  };
+
+  /** Who is signed in to Courtyard's Codex home, read from Codex each time. */
+  const accountState = async (): Promise<SignInState> => {
+    const started = await connection();
+    if (!started.ok) return { kind: "unavailable", reason: START_FAILURES[started.error] };
+    const account = await started.value.request("account/read", { refreshToken: false });
+    if (!account.ok) {
+      return { kind: "unavailable", reason: failureForRequest(account.error).message };
+    }
+    const parsed = AccountAnswer.safeParse(account.value);
+    if (!parsed.success) return { kind: "unavailable", reason: NOT_UNDERSTOOD };
+    const signedIn = parsed.data.account;
+    return signedIn === null
+      ? { kind: "signed-out" }
+      : { kind: "signed-in", email: signedIn.email, plan: signedIn.planType };
+  };
+
+  /**
+   * Starting, giving up and signing out happen one at a time, so two at once (two devices, say)
+   * can't leave a sign-in Codex is still waiting for.
+   */
+  let changing = Promise.resolve();
+  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
+    const done = changing.then(change);
+    changing = done.then(
+      () => {},
+      () => {},
+    );
+    return done;
+  };
+
+  const waitingState = (waiting: Extract<Login, { kind: "waiting" }>): SignInState => ({
+    kind: "waiting",
+    link: waiting.link,
+    code: waiting.code,
+    expiresAt: new Date(waiting.expiresAt).toISOString(),
+  });
+
+  /**
+   * Signing in from the home page with a device code (ADR 0015): Codex gives a link and a
+   * one-time code to finish on any device, and keeps the sign-in in its own home. Only the link and
+   * code leave this file.
+   */
+  const signIn: SignIn = {
+    service: "ChatGPT",
+
+    state: async () => {
+      await expireLogin();
+      if (login.kind === "waiting") return waitingState(login);
+      if (login.kind === "not-finished") return { kind: "not-finished", why: login.why };
+      return accountState();
+    },
+
+    start: () =>
+      oneAtATime(async (): Promise<Result<SignInState, string>> => {
+        await dropLogin();
+        const started = await connection();
+        if (!started.ok) return err(START_FAILURES[started.error]);
+        const asked = await started.value.request("account/login/start", {
+          type: "chatgptDeviceCode",
+        });
+        if (!asked.ok) return err(failureForRequest(asked.error).message);
+        const parsed = LoginStarted.safeParse(asked.value);
+        if (!parsed.success) return err(NOT_UNDERSTOOD);
+        const waiting = {
+          kind: "waiting",
+          loginId: parsed.data.loginId,
+          link: parsed.data.verificationUrl,
+          code: parsed.data.userCode,
+          expiresAt: now() + DEVICE_CODE_MS,
+        } as const;
+        login = waiting;
+        return ok(waitingState(waiting));
+      }),
+
+    cancel: () => oneAtATime(dropLogin),
+
+    signOut: () =>
+      oneAtATime(async (): Promise<Result<null, string>> => {
+        await dropLogin();
+        const started = await connection();
+        if (!started.ok) return err(START_FAILURES[started.error]);
+        const signedOut = await started.value.request("account/logout", undefined);
+        signInChanged();
+        return signedOut.ok ? ok(null) : err(failureForRequest(signedOut.error).message);
+      }),
+  };
 
   const checkStatus = async (): Promise<ProviderStatus> => {
     const unavailable = (reason: string): ProviderStatus => ({
@@ -570,11 +749,17 @@ export const createCodexProvider = (options: {
 
     status: async () => {
       if (cached && now() - cached.at < STATUS_TTL_MS) return cached.status;
-      checking ??= checkStatus().finally(() => {
-        checking = undefined;
-      });
-      const status = await checking;
-      cached = { at: now(), status };
+      // A check that started before the sign-in last changed may have read the old account.
+      if (checking?.since !== signInChanges) {
+        const check = { since: signInChanges, status: checkStatus() };
+        checking = check;
+        void check.status.finally(() => {
+          if (checking === check) checking = undefined;
+        });
+      }
+      const { since, status: checked } = checking;
+      const status = await checked;
+      if (since === signInChanges) cached = { at: now(), status };
       return status;
     },
 
@@ -684,6 +869,8 @@ export const createCodexProvider = (options: {
         void codex.request("thread/unsubscribe", { threadId });
       }
     },
+
+    signIn,
 
     answerOnce: async () =>
       err({ kind: "unknown", message: "Codex can't answer one-off questions yet." }),

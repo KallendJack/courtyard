@@ -21,6 +21,11 @@ const VARIANTS = {
   /** A small action beside text that shouldn't draw the eye, such as Undo on a save's note. */
   quiet:
     "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+  /** A quiet action the owner most likely wants, such as Sign in in a list. */
+  quietPrimary: "border-transparent bg-transparent text-primary-text hover:bg-accent",
+  /** The way out of what a `Notice` says, such as Get a new code. */
+  notice:
+    "border-destructive-text bg-transparent text-destructive-text hover:bg-destructive/10 focus-visible:ring-destructive/20",
 } as const;
 
 const SIZES = {
