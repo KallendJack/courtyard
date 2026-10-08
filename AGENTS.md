@@ -3,7 +3,8 @@
 A self-hosted hub for planning and coding with AI models, one workspace per area of the owner's life. Two parts: a
 worker that does all the work, and a web app that is static files. Read `GLOSSARY.md` before naming anything, and use
 its terms (and avoid its _Avoid_ lists) in code, tests, UI text and commits. What is being built is in
-`docs/spec.md`; why it is built that way is in `docs/adr/`.
+`docs/spec.md`; why it is built that way is in `docs/adr/`. Which part does what, and how the parts connect, is in
+`docs/architecture.md`: read it before deciding where a change goes.
 
 ## Where code goes
 
@@ -70,6 +71,8 @@ This repo is public, and the app runs models that can change files on a real mac
   explain-it-back question answerable from the plain text.
 - A word the owner would use (in UI text, the spec, or talking about Courtyard) goes into `GLOSSARY.md` in the same
   PR; words for how the code works stay in the code. "How it was checked" says which glossary terms a PR added, or none.
+- A PR that adds a module or changes how the parts connect updates `docs/architecture.md`. "How it was checked" says
+  so, or that the map didn't need to change.
 - Issues don't close themselves reliably; close a ticket once its PR is merged.
 - The order of work is the GitHub milestones. Filing, finishing or moving an issue updates them in the same step (see
   `docs/agents/issue-tracker.md`).
