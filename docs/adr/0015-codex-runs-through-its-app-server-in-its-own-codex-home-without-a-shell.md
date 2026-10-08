@@ -15,7 +15,9 @@ files, browser and computer use. So every turn:
 - **Its own Codex home.** The adapter points Codex at a folder in the data folder that holds only Courtyard's Codex
   sign-in, never the machine's `~/.codex`.
 - **No shell.** Codex sees files only through Courtyard's own tools (list, read, search), which the worker serves and
-  confines to the workspace folder with the same check as Claude's reads, symlinks followed.
+  confines to the workspace folder with the same check as Claude's reads, symlinks followed. Codex's models call
+  every tool from code they write, run in Codex's code-mode host, so that host stays on: it's plain JavaScript with no
+  files, network or shell, and nothing to call but the tools the thread is offered (found building #71).
 - **Its extras off unless the owner chooses them.** Anything that reaches outside the workspace (connectors, browser
   and computer use, web search) or does Courtyard's job (memories, skills, `AGENTS.md`) is switched off. Harmless ones
   (image generation) are off until there's a reason and a way to show them.
@@ -33,15 +35,19 @@ files, browser and computer use. So every turn:
   relied on to keep reads inside one folder.
 - **Courtyard's tools as an MCP server over HTTP in the worker.** Kept as the fallback. The app-server can call tools
   its client offers (dynamic tools) over the same connection, each call naming its thread and turn: nothing new
-  listens on the network and there are no per-turn secrets. That feature is marked experimental.
+  listens on the network and there are no per-turn secrets. That feature is marked experimental. Either way the tools
+  are called from the code-mode host.
+- **Code mode off.** Tried first (ticket 29). Rejected: every model Codex lists takes tools only through code mode, so
+  with it off Codex can't call any tool, Courtyard's included.
 
 ## Consequences
 
 - **The app-server is marked experimental, and so are its dynamic tools.** The Codex version is pinned, every message
   from it is parsed with Zod, and only the Codex adapter knows about it, so a change shows as a clear failure and
   moving to the HTTP fallback, or to the SDK, touches nothing else.
-- **Upgrading Codex is a deliberate change.** A new version can add tools that are on by default, so a version bump
-  re-checks Codex's feature list against what's switched off and runs a real-Codex check. A Codex too old for
+- **Upgrading Codex is a deliberate change.** A new version can add tools that are on by default, or give its code
+  mode more reach, so a version bump re-checks Codex's feature list against what's switched off and runs a real-Codex
+  check, which asks what Codex's own code can reach. A Codex too old for
   OpenAI's servers shows as unavailable, "Codex needs updating", until then.
 - **The owner signs in to Codex from Courtyard.** Codex's own home is used by nothing else, so its sign-in can lapse
   unseen. The home page offers Sign in to Codex while it's signed out: Codex gives a link and a one-time code to finish

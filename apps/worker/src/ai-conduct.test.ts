@@ -159,6 +159,31 @@ describe("what every turn tells a model", () => {
   });
 });
 
+describe("Courtyard's file tools (ADR 0015)", () => {
+  it("offers list, read and search to a provider that reads files, each limited to the workspace folder", async () => {
+    const { framing } = await firstTurn();
+
+    const { fileTools } = framing;
+    expect([fileTools?.list, fileTools?.read, fileTools?.search].map((tool) => tool?.name)).toEqual(
+      ["list_folder", "read_file", "search_files"],
+    );
+    expect(fileTools?.list.description).toMatch(/^Lists the files and folders in a folder/);
+    expect(fileTools?.read.description).toMatch(/^Reads a file: its text, or an image/);
+    expect(fileTools?.search.description).toMatch(/^Searches the text of the files/);
+    for (const tool of [fileTools?.list, fileTools?.read, fileTools?.search]) {
+      expect(tool?.description).toMatch(/Only this workspace's folder can be reached\.$/);
+    }
+    // The access line is the same as Claude's: the tools are only how it's done.
+    expect(framing.instructions).toMatch(/read and search the files in this workspace/i);
+  });
+
+  it("offers none to a provider that reads no files", async () => {
+    const { framing } = await firstTurn({ ...READS_FILES, readsFiles: false });
+
+    expect(framing.fileTools).toBeNull();
+  });
+});
+
 describe("keeping the workspace's and the session's text from posing as instructions", () => {
   it("keeps the context file inside its markers, however a closing marker is spelt", async () => {
     await contextFile(

@@ -15,19 +15,21 @@ import {
   type SignInState,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { Provider, SignIn } from "./index.ts";
+import { workspaceFiles } from "../workspace-files/index.ts";
+import type { CourtyardTool, FileReply, Provider, SignIn, TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("codex");
 /**
- * Until Courtyard's own tools reach Codex (ticket 30), a Codex turn answers from the context file
- * and the conversation alone.
+ * Codex reads the workspace's files and saves to context, both through Courtyard's own tools
+ * (ADR 0015); coding and tool connections come later.
  */
 const CAPABILITIES: Capabilities = {
-  readsFiles: false,
+  readsFiles: true,
   codes: false,
   usesTools: false,
-  savesContext: false,
+  savesContext: true,
 };
 const LABEL = "Codex";
 
@@ -81,10 +83,10 @@ const SETTINGS: Readonly<Record<string, string>> = {
  * Re-check the list against it before changing that version (ADR 0015).
  */
 const FEATURES_OFF = [
-  // Its shell, and the code mode that runs code.
+  // Its shell. Its code-mode host stays on: Codex's models call every tool from code run there,
+  // which is plain JavaScript with no files, network or shell, and only the thread's tools.
   "shell_tool",
   "unified_exec",
-  "code_mode_host",
   // Connectors, plugins, skills and memories.
   "apps",
   "plugins",
@@ -173,10 +175,36 @@ const Answer = z.union([
   z.object({ id: z.number(), result: z.unknown() }),
   z.object({ id: z.number(), error: z.object({ message: z.string() }) }),
 ]);
-const CodexRequest = z.object({ id: z.union([z.number(), z.string()]), method: z.string() });
+const RequestId = z.union([z.number(), z.string()]);
+const CodexRequest = z.object({ id: RequestId, method: z.string() });
 const CodexNotice = z.object({ method: z.string(), params: z.unknown() });
 /** A notice about one thread names it. */
 const AboutThread = z.object({ threadId: z.string() });
+/** Codex calling one of the tools the worker offered its thread, naming the thread and turn. */
+const ToolCallRequest = z.object({
+  id: RequestId,
+  method: z.literal("item/tool/call"),
+  params: z.object({
+    threadId: z.string(),
+    turnId: z.string(),
+    tool: z.string(),
+    arguments: z.unknown(),
+  }),
+});
+/** What a call to a tool names: its thread, turn and tool, and the tool's input. */
+type ToolCall = z.infer<typeof ToolCallRequest>["params"];
+
+/** What a tool call gives Codex back, in the app-server's words. */
+type ToolAnswer = {
+  readonly contentItems: readonly (
+    | { readonly type: "inputText"; readonly text: string }
+    | { readonly type: "inputImage"; readonly imageUrl: string }
+  )[];
+  readonly success: boolean;
+};
+
+/** Codex's answer to anything it asks that isn't allowed, its own name for which is "method not found". */
+const REFUSED = { code: -32601, message: "Courtyard doesn't allow that here." };
 
 /** Why a request to Codex got no answer. */
 type RequestFailure =
@@ -201,6 +229,8 @@ type Connection = {
 
 type ThreadListener = {
   readonly heard: (notice: z.infer<typeof CodexNotice>) => void;
+  /** Answers a call to one of the thread's tools, or refuses it with `undefined`. */
+  readonly called: (call: ToolCall) => Promise<ToolAnswer | undefined>;
   readonly ended: () => void;
 };
 
@@ -215,8 +245,9 @@ const WIND_DOWN_MS = 2000;
 
 /**
  * Starts Codex's app-server and connects to it: one JSON-RPC message per line in each direction
- * (ADR 0015). Anything Codex asks of the worker is refused, since nothing it could ask for (an
- * approval, the owner's input) is allowed here.
+ * (ADR 0015). A call to a thread's tools goes to whoever is listening to that thread; anything
+ * else Codex asks of the worker is refused, since nothing else it could ask for (an approval, the
+ * owner's input) is allowed here.
  */
 const connect = async (options: {
   startAppServer: StartAppServer;
@@ -251,12 +282,26 @@ const connect = async (options: {
       );
       return;
     }
+    const call = ToolCallRequest.safeParse(message);
+    if (call.success) {
+      const { id, params } = call.data;
+      const listener = listeners.get(params.threadId);
+      void (listener?.called(params) ?? Promise.resolve(undefined))
+        .catch((error: unknown) => {
+          // A tool throwing is a bug: only the kind of error goes to the worker's log, and Codex
+          // is refused.
+          console.error(
+            "A tool for Codex threw:",
+            error instanceof Error ? error.name : typeof error,
+          );
+          return undefined;
+        })
+        .then((result) => send(result === undefined ? { id, error: REFUSED } : { id, result }));
+      return;
+    }
     const asked = CodexRequest.safeParse(message);
     if (asked.success) {
-      send({
-        id: asked.data.id,
-        error: { code: -32601, message: "Courtyard doesn't allow that here." },
-      });
+      send({ id: asked.data.id, error: REFUSED });
       return;
     }
     const notice = CodexNotice.safeParse(message);
@@ -485,6 +530,56 @@ const resetTimeFrom = (answer: unknown): string | undefined => {
       window && window.usedPercent >= 100 && window.resetsAt !== null ? [window.resetsAt] : [],
     );
   return resets.length === 0 ? undefined : new Date(Math.max(...resets) * 1000).toISOString();
+};
+
+/** One of Courtyard's tools on a turn: as it's offered, and what answers a call to it. */
+type TurnTool = {
+  readonly tool: CourtyardTool;
+  readonly answer: (args: unknown) => Promise<ToolAnswer>;
+};
+
+/** A file tool's reply, worded by the prompts module, as Codex takes it. */
+const fromFileReply = (reply: FileReply): ToolAnswer => ({
+  success: reply.found,
+  contentItems: reply.content.map((content) =>
+    content.kind === "text"
+      ? { type: "inputText", text: content.text }
+      : { type: "inputImage", imageUrl: content.dataUrl },
+  ),
+});
+
+/**
+ * The tools a turn's framing offers, by name: Courtyard's file tools, confined to the workspace
+ * folder, and the save tool, whose input goes to the worker as Codex sent it (ADR 0013).
+ */
+const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
+  const tools: TurnTool[] = [];
+  const { fileTools, saveTool } = input.framing;
+  if (fileTools !== null) {
+    const files = workspaceFiles({ folder: input.folder, report: input.report });
+    for (const kind of ["list", "read", "search"] as const) {
+      tools.push({
+        tool: fileTools[kind],
+        answer: async (args) => fromFileReply(fileToolReply(await files[kind](args))),
+      });
+    }
+  }
+  if (saveTool !== null) {
+    tools.push({
+      tool: saveTool,
+      answer: async (args) => {
+        const { saved, reply } = await input.save(args);
+        return { success: saved, contentItems: [{ type: "inputText", text: reply }] };
+      },
+    });
+  }
+  return new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool]));
+};
+
+/** A tool as the app-server offers it to a thread (its dynamic tools), its inputs as JSON Schema. */
+const asDynamicTool = ({ tool }: TurnTool) => {
+  const { $schema: _, ...inputSchema } = z.toJSONSchema(z.object(tool.input));
+  return { type: "function", name: tool.name, description: tool.description, inputSchema };
 };
 
 /** A failure Courtyard explains in its own words. */
@@ -776,8 +871,10 @@ export const createCodexProvider = (options: {
         return err({ kind: "provider-unavailable", message: START_FAILURES[started.error] });
       }
       const codex = started.value;
+      const tools = toolsFor(input);
 
       // A fresh, unsaved thread each turn: the session's event log is the only copy (ADR 0015).
+      // Courtyard's tools are the only ones it's given.
       const thread = await codex.request("thread/start", {
         model: input.model,
         cwd: resolve(input.folder),
@@ -786,6 +883,7 @@ export const createCodexProvider = (options: {
         sandbox: "read-only",
         approvalPolicy: "never",
         environments: [],
+        dynamicTools: [...tools.values()].map(asDynamicTool),
       });
       if (!thread.ok) return err(failureForRequest(thread.error));
       const startedThread = ThreadStarted.safeParse(thread.value);
@@ -799,7 +897,17 @@ export const createCodexProvider = (options: {
       const ended = new Promise<TurnEnd>((resolve) => {
         settle = resolve;
       });
+      // The turn's id, once Codex says it has started (or `undefined` if it didn't): a tool call
+      // can arrive before the worker has read that answer.
+      let learnTurnId: (turnId: string | undefined) => void = () => {};
+      const startedTurnId = new Promise<string | undefined>((resolve) => {
+        learnTurnId = resolve;
+      });
       const stopListening = codex.listen(threadId, {
+        called: async (call) =>
+          call.turnId === (await startedTurnId)
+            ? tools.get(call.tool)?.answer(call.arguments)
+            : undefined,
         heard: (notice) => {
           const text = TextDelta.safeParse(notice);
           if (text.success) {
@@ -838,6 +946,7 @@ export const createCodexProvider = (options: {
         const startedTurn = TurnStarted.safeParse(turn.value);
         if (!startedTurn.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
         const turnId = startedTurn.data.turn.id;
+        learnTurnId(turnId);
 
         // The owner stopping the turn stops Codex (its own name for that is `turn/interrupt`).
         // Codex says when it has stopped; if it doesn't say so soon, the turn ends anyway, so the
@@ -870,6 +979,8 @@ export const createCodexProvider = (options: {
           }
         }
       } finally {
+        // A call still waiting for the turn to start is refused.
+        learnTurnId(undefined);
         stopListening();
         // Codex forgets the thread; nothing of it is kept.
         void codex.request("thread/unsubscribe", { threadId });
