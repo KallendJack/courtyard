@@ -23,6 +23,7 @@ import { attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
 import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
+import { ThingNoteRow } from "./things.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -222,6 +223,13 @@ export const TurnView = memo(function TurnView(props: {
               workspaceId={workspaceId}
               note={note}
             />
+          ))}
+        </ul>
+      )}
+      {turn.things.length > 0 && (
+        <ul aria-label="Things saved" className="space-y-1.5">
+          {turn.things.map((note) => (
+            <ThingNoteRow key={note.seq} sessionId={sessionId} note={note} />
           ))}
         </ul>
       )}

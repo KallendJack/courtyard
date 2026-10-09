@@ -8,7 +8,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { exists, listFolder, readTextFile, removeFile, writeTextFileIn } from "../files.ts";
+import { exists, listFolder, readBytes, readTextFile, removeFile, writeBytesIn } from "../files.ts";
 import { git, gitBytes, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -18,8 +18,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
  * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
  * owner context started from the app, a model's save and the owner undoing or editing one, a
- * tidy the owner ticked, a document saved, updated, renamed or deleted (ADR 0020), or a fresh
- * start clearing the whole folder.
+ * tidy the owner ticked, a document saved, updated, renamed or deleted or a Thing added, changed
+ * or removed (ADR 0020), or a fresh start clearing the whole folder.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -31,6 +31,7 @@ export const ChangeKind = z.enum([
   "edit",
   "tidy",
   "document",
+  "thing",
   "fresh-start",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;
@@ -165,6 +166,10 @@ export type ContextFolder = {
   filesAt(
     wanted: readonly { change: ChangeId; before?: boolean; path: string }[],
   ): Promise<Result<(string | null)[], HistoryError>>;
+  /** Like `filesAt`, as bytes, for files that aren't text (a Thing's photo). */
+  bytesAt(
+    wanted: readonly { change: ChangeId; before?: boolean; path: string }[],
+  ): Promise<Result<(Buffer | null)[], HistoryError>>;
 };
 
 /** Why a fresh start left the folder as it was: git can't keep a change, or clearing it failed. */
@@ -191,9 +196,9 @@ export const placeFile = (place: Place) =>
 
 /**
  * The folders in a workspace's folder whose files are changed whole, rather than line by line, so
- * Recent changes lists their changes too: its documents (ADR 0020).
+ * Recent changes lists their changes too: its documents and its Things, photos included (ADR 0020).
  */
-export const WHOLE_FILE_FOLDERS = ["docs"] as const;
+export const WHOLE_FILE_FOLDERS = ["docs", "things"] as const;
 
 /** Every path whose changes Recent changes lists for a place, from the folder's top. */
 const historyPaths = (place: Place) =>
@@ -227,8 +232,8 @@ const BatchHeader = z.union([
  * The files `git cat-file --batch` printed, in the order asked: each is a header line then, for a
  * file that's there, that many bytes and a newline. `undefined` for output it can't read.
  */
-const readBatch = (output: Buffer, count: number): (string | null)[] | undefined => {
-  const files: (string | null)[] = [];
+const readBatch = (output: Buffer, count: number): (Buffer | null)[] | undefined => {
+  const files: (Buffer | null)[] = [];
   let at = 0;
   for (let index = 0; index < count; index += 1) {
     const end = output.indexOf(0x0a, at);
@@ -241,7 +246,7 @@ const readBatch = (output: Buffer, count: number): (string | null)[] | undefined
       continue;
     }
     const size = header.data[2];
-    files.push(output.toString("utf8", at, at + size));
+    files.push(output.subarray(at, at + size));
     at += size + 1;
   }
   return files;
@@ -410,6 +415,16 @@ export const createContextFolder = (options: {
     }
   };
 
+  const bytesAt: ContextFolder["bytesAt"] = async (wanted) => {
+    const names = wanted.map(({ change, before, path }) => `${change}${before ? "^" : ""}:${path}`);
+    const read = await readHistory(() =>
+      gitBytes(contextDir, { args: ["cat-file", "--batch"], input: `${names.join("\n")}\n` }),
+    );
+    if (!read.ok) return read;
+    const files = readBatch(read.value, wanted.length);
+    return files === undefined ? err("storage") : ok(files);
+  };
+
   const changeWithId: ContextFolder["changeWithId"] = (make, describe) =>
     inTurn(async () => {
       const ready = await tryToKeep(prepare);
@@ -542,16 +557,10 @@ export const createContextFolder = (options: {
       return readHistory(async () => parseLog(await run("log", "-1", LOG_FORMAT, id, "--"))[0]);
     },
     filesAt: async (wanted) => {
-      const names = wanted.map(
-        ({ change, before, path }) => `${change}${before ? "^" : ""}:${path}`,
-      );
-      const read = await readHistory(() =>
-        gitBytes(contextDir, { args: ["cat-file", "--batch"], input: `${names.join("\n")}\n` }),
-      );
-      if (!read.ok) return read;
-      const files = readBatch(read.value, wanted.length);
-      return files === undefined ? err("storage") : ok(files);
+      const files = await bytesAt(wanted);
+      return files.ok ? ok(files.value.map((file) => file?.toString("utf8") ?? null)) : files;
     },
+    bytesAt,
   };
 };
 
@@ -561,6 +570,13 @@ export const createContextFolder = (options: {
 /** Text compared as git keeps it, whatever line endings the file has on this machine. */
 export const sameFileText = (a: string | null, b: string | null) =>
   a === null || b === null ? a === b : a.replace(/\r\n/g, "\n") === b.replace(/\r\n/g, "\n");
+
+/** Files' bytes compared as git keeps them, whatever line endings a text file has on this machine. */
+const sameFileBytes = (a: Uint8Array | null, b: Uint8Array | null) => {
+  if (a === null || b === null) return a === b;
+  const lf = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1").replace(/\r\n/g, "\n");
+  return lf(a) === lf(b);
+};
 
 /** One whole file a change wrote or removed: its path from the folder's top, before and after. */
 export type WholeFile = {
@@ -643,17 +659,29 @@ export const undoWholeFiles = async (
   const undone = await contextFolder.undone();
   if (!undone.ok) return err({ kind: "storage" });
   if (undone.value.has(undo.id)) return err({ kind: "already-undone" });
-  const read = await wholeFilesOf(contextFolder, [change]);
-  const files = read.ok ? read.value[0] : undefined;
-  if (files === undefined) return err({ kind: "storage" });
+  // As bytes, so a photo goes back as it was.
+  const read = await contextFolder.bytesAt(
+    change.files.flatMap((path) => [
+      { change: undo.id, before: true, path },
+      { change: undo.id, path },
+    ]),
+  );
+  if (!read.ok) return err({ kind: "storage" });
+  const files = change.files.map((path, index) => ({
+    path,
+    before: read.value[index * 2] ?? null,
+    after: read.value[index * 2 + 1] ?? null,
+  }));
   return contextFolder.change(
     async (): Promise<Result<null, WholeFilesUndoRefusal>> => {
-      const unchanged = await stillAsLeft(contextDir, files);
-      if (!unchanged.ok) return err({ kind: "storage" });
-      if (!unchanged.value) return err({ kind: "changed-since" });
+      for (const { path, after } of files) {
+        const now = await readBytes(join(contextDir, path));
+        if (!now.ok) return err({ kind: "storage" });
+        if (!sameFileBytes(now.value ?? null, after)) return err({ kind: "changed-since" });
+      }
       for (const { path, before } of files) {
         const file = join(contextDir, path);
-        const put = before === null ? await removeFile(file) : await writeTextFileIn(file, before);
+        const put = before === null ? await removeFile(file) : await writeBytesIn(file, before);
         if (!put) return err({ kind: "storage" });
       }
       return ok(null);
