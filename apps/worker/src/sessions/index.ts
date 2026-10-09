@@ -58,7 +58,13 @@ import {
   type SaveTarget,
   undoSave,
 } from "../saves/index.ts";
-import { inUseTexts, type SkillsWorkspace, skillTool, workspaceSkills } from "../skills/index.ts";
+import {
+  inUseTexts,
+  type SkillsWorkspace,
+  skillTool,
+  type WorkspaceSkills,
+  workspaceSkills,
+} from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
@@ -410,26 +416,26 @@ export const createSessions = (options: {
     });
 
   /**
-   * What a turn needs from its workspace: its name, mode, folder and repo, its context file as
-   * written, and the owner context.
+   * What a turn needs from its workspace: its name, mode and folder, its context file as written,
+   * the owner context, and its skills.
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<FramingWorkspace & SkillsWorkspace, string>> => {
+  ): Promise<Result<FramingWorkspace & { folder: string; skills: WorkspaceSkills }, string>> => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(options.contextDir, workspaceId),
       readOwnerContext(options.contextDir),
     ]);
     if (!workspace.ok) return err("This session's workspace can't be read.");
     if (!ownerContext.ok) return err(ownerContext.error.message);
-    const { summary, folder, contextMarkdown, repoPath } = workspace.value;
+    const { summary, folder, contextMarkdown } = workspace.value;
     return ok({
       name: summary.name,
       mode: summary.mode,
       folder,
-      repoPath,
       contextFile: contextMarkdown,
       ownerContext: ownerContext.value,
+      skills: await skillsOf(workspace.value),
     });
   };
 
@@ -472,7 +478,7 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
       } else {
-        const skills = await skillsOf(workspace.value);
+        const { skills } = workspace.value;
         const inUse = skillsInUse(events.value);
         const framing = framingFor({
           workspace: workspace.value,
@@ -727,8 +733,7 @@ export const createSessions = (options: {
     if (message.skill === undefined) return ok(null);
     const workspace = await getWorkspace(options.contextDir, workspaceId);
     if (!workspace.ok) return err(STORAGE_ERROR);
-    const { folder, summary, repoPath } = workspace.value;
-    const skills = await skillsOf({ folder, mode: summary.mode, repoPath });
+    const skills = await skillsOf(workspace.value);
     return skills.usable.some((skill) => skill.name === message.skill)
       ? ok(null)
       : err({ kind: "skill-unavailable" });

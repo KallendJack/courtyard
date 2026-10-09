@@ -42,10 +42,10 @@ export type WorkspaceSkills = {
   readonly unusable: readonly SkillSummary[];
 };
 
-/** A workspace, as finding its skills needs it. */
+/** A workspace as `getWorkspace` reads it, as far as finding its skills needs it. */
 export type SkillsWorkspace = {
   readonly folder: string;
-  readonly mode: WorkspaceMode;
+  readonly summary: { readonly mode: WorkspaceMode };
   /** A code workspace's repo, whose `.agents/skills` holds the project's skills. */
   readonly repoPath: string | null;
 };
@@ -111,12 +111,13 @@ export const workspaceSkills = async (options: {
   houseFolder: string;
   workspace: SkillsWorkspace;
 }): Promise<WorkspaceSkills> => {
-  const { workspace } = options;
-  const house = await houseSkills(options.houseFolder, workspace.mode);
+  const { folder, repoPath, summary } = options.workspace;
+  const { mode } = summary;
+  const house = await houseSkills(options.houseFolder, mode);
   const places = await Promise.all([
-    foundIn(join(workspace.folder, SKILLS_FOLDER), "workspace"),
-    workspace.mode === "code" && workspace.repoPath !== null
-      ? foundIn(join(workspace.repoPath, SKILLS_FOLDER), "project")
+    foundIn(join(folder, SKILLS_FOLDER), "workspace"),
+    mode === "code" && repoPath !== null
+      ? foundIn(join(repoPath, SKILLS_FOLDER), "project")
       : Promise.resolve([]),
     foundIn(join(options.contextDir, SKILLS_FOLDER), "everywhere"),
   ]);
@@ -127,7 +128,7 @@ export const workspaceSkills = async (options: {
   for (const found of [...places.flat(), ...house.found]) {
     const problem: SkillProblem | undefined = !found.checked.ok
       ? { kind: "broken", reason: found.checked.error }
-      : found.checked.value.hasScripts && workspace.mode === "planning"
+      : found.checked.value.hasScripts && mode === "planning"
         ? { kind: "needs-code-workspace" }
         : undefined;
     const ownerOnly = house.ownerOnly.has(found.folderName);

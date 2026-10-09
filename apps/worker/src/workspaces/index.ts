@@ -55,7 +55,7 @@ type Config =
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
-type Workspace = {
+export type Workspace = {
   readonly summary: WorkspaceSummary;
   readonly contextFile: ContextFile | null;
   /** The workspace's folder on the worker machine. */
