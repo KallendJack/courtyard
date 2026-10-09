@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,6 +17,7 @@ import {
   FAKE_MODEL,
   followSession,
   postJson,
+  quotedInGuide,
   type Requester,
   SAVING_MODEL,
   savingProvider,
@@ -520,26 +521,6 @@ describe("saving context as a model answers (ADR 0013)", () => {
   });
 });
 
-/**
- * What docs/ai-conduct.md quotes, from the quote starting with `firstWords`: the quoted lines,
- * wrapped lines joined back up, list items and paragraphs kept.
- */
-const quotedInGuide = async (firstWords: string) => {
-  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
-  const lines = guide.replace(/\r\n/g, "\n").split("\n");
-  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
-  const quoted: string[] = [];
-  for (const line of lines.slice(start)) {
-    if (!line.startsWith(">")) break;
-    quoted.push(line.replace(/^> ?/, ""));
-  }
-  return quoted
-    .join("\n")
-    .split("\n\n")
-    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
-    .join("\n\n");
-};
-
 describe("getting to know a workspace (#127)", () => {
   /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */
   const gettingToKnow = async () => {
@@ -580,6 +561,21 @@ describe("getting to know a workspace (#127)", () => {
       "The owner started the get-to-know skill with their new message",
     );
     expect(framing?.instructions).toContain('<skill name="get-to-know">');
+  });
+
+  it("gives Get to know and Get to know me as the guide words them", async () => {
+    const { start, turns } = await gettingToKnow();
+
+    await start("/api/workspaces/garage-gym/get-to-know");
+    await start("/api/owner-context/get-to-know");
+
+    const [workspace, owner] = turns.map((turn) => turn.framing.instructions);
+    expect(workspace).toContain(
+      `description: ${await quotedInGuide("Gets to know a workspace")}\n`,
+    );
+    expect(workspace).toContain(`\n${await quotedInGuide("# Get to know")}\n</skill>`);
+    expect(owner).toContain(`description: ${await quotedInGuide("Gets to know the owner")}\n`);
+    expect(owner).toContain(`\n${await quotedInGuide("# Get to know me")}\n</skill>`);
   });
 
   it("gives Get to know what a new workspace is for, from What's it for?, to plan its topics from", async () => {

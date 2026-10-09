@@ -35,11 +35,13 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
 - **Skills.** A scenario can add skills (the workspace's, everywhere's, or house ones, an owner-only one among them),
   a turn can start one as the owner would (`skill`), and a turn can say which skills the model should load itself
   (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
+- **What an answer says.** A turn can give words its answer should have (`says`), such as a grilling's
+  recommendation or a wrap-up's decisions and open questions.
 - **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
   suggested replies. Every set a run suggested is printed under it.
 - **Get to know.** A scenario can give its context file an intro line (`intro`). A turn can say whether its answer
-  lists topics (`listsTopics`, a list of two or more), what it mustn't ask because it's known (`avoids`), and words
-  the answer has (`says`, such as what a wrap-up says was saved). A scenario that `printsTopics` isn't scored: it
+  lists topics (`listsTopics`, a list of two or more) and what it mustn't ask because it's known (`avoids`); a
+  wrap-up's `says` names what was saved. A scenario that `printsTopics` isn't scored: it
   prints the topics and questions of each answer, for the owner to read (`--only topics` prints Get to know's for six
   workspace names).
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
@@ -166,6 +168,57 @@ A skill's text is instructions, unlike the context file's, since only the owner 
 still can't close its markers. Known limits: the owner can't make one of their own skills owner-only (the format has no
 field for it, and Claude's and Codex's own fields fail the check), and skills with scripts wait for phase 4's shell.
 
+## Grilling
+
+Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning and code workspaces alike: a
+model stress-tests a plan one question at a time, recommending an answer with each, and saves each decision as the
+owner agrees it. It's Courtyard's own, taking Matt Pocock's ideas for grilling (one question at a time, a
+recommendation with each, one thread settled before the next, looking things up rather than asking) but not his text,
+which is written for coding agents.
+
+It starts in any of the ways a skill does (Skills, above): a model loads it when the owner asks for a plan to be
+grilled, or the owner picks it, or taps **Grill this plan** beside a Plan line on a workspace's page. That starts a new
+session whose first message is the plan line, as it's written, carrying the Grilling tag. The session keeps that line
+as its title, as Get to know's does, and is answered as Get to know is (the first model that saves to context and
+isn't at its usage limit, at its default effort). Only a planning workspace's plans have it, for now: not the owner
+context's, and not a code workspace's, whose models don't save to its context file. A plan that has changed since the
+page showed it is refused, and the owner reloads.
+
+Its description, as the skills list gives it:
+
+> Stress-tests a plan or an idea one question at a time, each with a recommended answer, and saves what's agreed.
+> Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
+
+Its text, which every later turn of the session carries once it's in use:
+
+> # Grilling
+>
+> Question the owner about their plan until it's clear enough to act on: what it depends on, what could go wrong,
+> what it costs and when it happens. Their message names the plan, often word for word as a Plan line of the context
+> file.
+>
+> - **One question per message,** the one that matters most next, asked once: don't follow your recommendation with a
+>   second question such as whether the owner agrees, since their reply says so. Settle what other decisions depend
+>   on first, and follow one thread until it's settled before starting another.
+> - **Recommend an answer** with each question. Write both in your message: the question, then the answer you'd
+>   recommend and why, in a sentence or two, so the owner can just agree. Suggested replies are only buttons under
+>   your message and never stand in for either: when you have the suggest_replies tool, call it once your message is
+>   written, with your recommendation as one of the replies.
+> - **Don't ask what's known.** Look in the context file, the owner context and the conversation first, and ask only
+>   what they don't answer.
+> - **Save each decision in the answer where the owner agrees it,** with the save tool, before your next question:
+>   once the owner agrees your recommendation or gives their own answer, never later in the wrap-up. A decision that
+>   sharpens the plan changes the plan's line; any other becomes a new line, a plan if it's decided but not done, a
+>   fact if it's true now. Your recommendation isn't a decision until the owner agrees to it. Where you can't save to
+>   the context file, the wrap-up is the record.
+> - **Wrap up** when the owner says that's enough, or when nothing important is left to ask: the decisions made, then
+>   the questions still open. Save nothing in the wrap-up. The decisions are saved already, and an open question is
+>   saved only if the owner asks.
+
+Its saves are ordinary saves (Saving context lines, below): checked by the worker, each shown as a note with Undo.
+The eval's `grill-*` scenarios check it on both providers: the first answer asks one question with a recommendation
+and suggested replies, an agreed decision changes the plan's line, and the wrap-up saves nothing.
+
 ## Suggested replies
 
 Built with #126 (ADR 0017). When a model asks the owner a question with a few likely answers, it can offer two or
@@ -191,12 +244,14 @@ them and refuses, saying why, when:
 - **the answer already suggested replies:** one set per answer, the first that's accepted;
 - **the owner stopped the turn.**
 
-An accepted set gets this reply, since a model told only that the buttons show sometimes wrote its answer again
-after the call (Claude takes what follows its last tool call as the answer), or, having called first, wrote only that
-there were buttons (#127): "They're shown as buttons under your answer. Everything you've written is shown too, so
-don't write it again or mention the buttons: if you've asked your question, you've finished; if not, write your
-answer now." A refusal shows nothing to the owner, and the model can put it right and call
-again. The replies show under the
+Replies it takes are answered with this, since a model can call the tool before it has written its question (Claude
+did in the Grilling eval, having asked it only in its thinking, #90):
+
+> The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the
+> buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to
+> say.
+
+A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
 own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
 later turn gets leaves suggested replies out: the owner's reply is there, as written.
@@ -312,29 +367,77 @@ session's title. It's answered by the first model that saves to context and isn'
 saves, when every one is), at its default effort, so it works while one provider is out (#74). A code workspace isn't
 offered it, since its models don't save to its context file.
 
-The skill tells the model to:
+It plans its topics from what the workspace is for, rather than following one script for every workspace, lists them
+first, then asks one question per message with suggested replies, saving each answer, and wraps up. Its description,
+as the Skills section and the picker show it (a model never sees it in its list):
 
-- **Plan its topics first,** four to six, from what it's given: the workspace's name, the context file's intro line
-  (What's it for?, Starter context file, above) and lines, and the owner context. It never plans a topic, or asks a
-  question, that these already answer.
-- **List the topics in its first answer,** asking whether there's anything to add or drop, then ask the first
-  question. It saves nothing in that answer, since the owner hasn't said anything yet.
-- **Ask one question per message,** put so it has a few likely answers wherever the topic allows, offered as
-  suggested replies (Suggested replies, above), and save each answer as it comes, by the rules above. Topics are
-  never saved.
-- **Wrap up** when every topic is answered or skipped, or the owner has had enough: what was saved and what was
-  skipped, with no new question.
+> Gets to know a workspace by asking the owner about it, one question at a time, from topics planned for what the
+> workspace is for, and saves what they say.
 
+Its text, which every later turn of the session carries:
+
+> # Get to know
+>
+> Fill in this workspace's context file by asking the owner about it, one question at a time, so that every later
+> answer here starts from what's true.
+>
+> - **Plan the topics first:** four to six, each a few words, that a model helping here would most need to know. Plan
+>   them from the workspace's name, its context file's intro line (the text under the title, which says what the
+>   workspace is for when the owner wrote one) and lines, and the owner context. Fit them to what the workspace is: a
+>   project with an end (where it stands, dates, budget, who's involved), something the owner does (how often,
+>   where, kit, level, goals), or something to keep track of (what there is, key dates, who to call).
+> - **Don't ask what's known.** Never plan a topic, or ask a question, that the context file, the owner context or the
+>   conversation already answers.
+> - **Your first answer lists the topics** as a short list, asks "Anything to add or drop?", then asks the first
+>   question, about the first topic. Write all of it in your message. Save nothing yet: the owner hasn't told you
+>   anything.
+> - **One question per message** after that, about the next topic not yet covered, with no second question tucked
+>   in. Keep your own words short: a sentence on their answer at most, then the question. Follow the owner's changes
+>   to the topics: an answer that covers a later topic covers it, and a topic the owner skips stays skipped.
+> - **Put each question so it has a few likely answers** wherever the topic allows (which kind, how often, how far
+>   along), so the owner can answer with a tap: when you have the suggest_replies tool, call it once your message is
+>   written. Ask for the owner's own words only when nothing else will do, such as a name.
+> - **Save what the owner tells you as they say it,** with the save tool, by the saving rules. A topic is never
+>   saved: only what the owner says about it.
+> - **Wrap up** when every topic is answered or skipped, or when the owner has had enough ("that's enough", "let's
+>   stop"): what you saved, in a few words a topic, then the topics skipped or not reached. Ask no new question in it.
 The owner can stop, or carry on chatting, whenever they like; saving follows the rules above, so nothing is saved that
 the owner didn't say. Since a skill replacing a house one keeps its "only the owner starts it", the owner can rewrite
 either skill for a workspace, or everywhere, and the button starts theirs.
 
 The home page offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). It's the same, with the
-house skill **Get to know me** (`get-to-know-me`) and the message "Get to know me.": its topics are the owner's life
-(where they live and who with, work, health, plans, how they like answers), leaving out what the owner context already
-says, and it saves to the owner context only. Its session runs in the first planning workspace, as a session needs a
-workspace and only a planning one's models save to About me; it's listed for planning workspaces only.
+house skill **Get to know me** (`get-to-know-me`) and the message "Get to know me.", saving to the owner context only.
+Its session runs in the first planning workspace, as a session needs a workspace and only a planning one's models save
+to About me; it's listed for planning workspaces only. Its description:
 
+> Gets to know the owner by asking about their life, one question at a time, from topics planned around what the
+> owner context already says, and saves what they say to the owner context.
+
+Its text:
+
+> # Get to know me
+>
+> Fill in the owner context, what the owner shares with every workspace, by asking them about their life, one
+> question at a time, so that every answer anywhere starts from what's true about them.
+>
+> - **Plan the topics first,** each a few words, from these: where they live and who with; work; health, as far as
+>   it shapes what they do; plans across their life; how they like answers.
+> - **Don't ask what's known.** Leave out a topic the owner context already covers, and never ask what it or the
+>   conversation already says.
+> - **Your first answer lists the topics** as a short list, asks "Anything to add or drop?", then asks the first
+>   question, about the first topic. Write all of it in your message. Save nothing yet: the owner hasn't told you
+>   anything.
+> - **One question per message** after that, about the next topic not yet covered, with no second question tucked
+>   in. Keep your own words short: a sentence on their answer at most, then the question. Follow the owner's changes
+>   to the topics: an answer that covers a later topic covers it, and a topic the owner skips stays skipped.
+> - **Put each question so it has a few likely answers** wherever the topic allows (which kind, how often, how far
+>   along), so the owner can answer with a tap: when you have the suggest_replies tool, call it once your message is
+>   written. Ask for the owner's own words only when nothing else will do, such as a name.
+> - **Save what the owner tells you as they say it,** with the save tool, to the owner context (place "owner"), never
+>   to this workspace's context file: what's true about them to About me, and how they like answers to How to answer
+>   me. A topic is never saved: only what the owner says about it.
+> - **Wrap up** when every topic is answered or skipped, or when the owner has had enough ("that's enough", "let's
+>   stop"): what you saved, in a few words a topic, then the topics skipped or not reached. Ask no new question in it.
 ### Tidying
 
 The owner asks for a tidy from the workspace page (or the home page for the owner context). The model is given the
