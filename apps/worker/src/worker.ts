@@ -19,6 +19,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
+import { createCode } from "./code/index.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
@@ -183,6 +184,7 @@ export const createWorker = (options: {
     contextDir,
     contextFolder,
     houseSkills,
+    code: createCode({ dataDir }),
     now,
   });
   const live = createLive({

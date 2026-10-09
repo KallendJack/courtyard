@@ -18,10 +18,10 @@ import { err, ok, type Result } from "../result.ts";
 import { pageRead, turnSources } from "../sources/index.ts";
 import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
 
-/** The fake reads nothing; it echoes, and saves when a message scripts it. */
+/** The fake reads nothing; it echoes, and saves and codes when a message scripts it. */
 const CAPABILITIES: Capabilities = {
   readsFiles: false,
-  codes: false,
+  codes: true,
   usesTools: false,
   savesContext: true,
   searchesWeb: true,

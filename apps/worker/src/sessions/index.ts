@@ -34,6 +34,7 @@ import {
   keepAttachments,
   type PreparedAttachment,
 } from "../attachments/index.ts";
+import type { BranchRefusal, Code } from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
   answerAsDocument,
@@ -145,6 +146,8 @@ export type SessionError =
   | { readonly kind: "document-refused"; readonly refusal: DocumentRefusal | DocumentUndoRefusal }
   /** Undoing a Thing save couldn't be done. */
   | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
+  /** A code session couldn't start its session branch (ADR 0007), and why. */
+  | { readonly kind: "branch-refused"; readonly refusal: BranchRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -170,6 +173,8 @@ const SessionFile = z.object({
   titledBy: z.enum(["owner", "starter"]).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  /** A code session's session branch (ADR 0007); left out in a planning workspace. */
+  branch: z.string().optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -320,6 +325,8 @@ export const createSessions = (options: {
   contextFolder: ContextFolder;
   /** The house skills' folder (ADR 0016). */
   houseSkills: string;
+  /** Code sessions' branches and worktrees (ADR 0007). */
+  code: Code;
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
@@ -546,11 +553,12 @@ export const createSessions = (options: {
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
     const callsUnderway = new Set<Promise<unknown>>();
     try {
-      const [events, workspace] = await Promise.all([
+      const [events, workspace, file] = await Promise.all([
         readEvents(turn.id),
         turnWorkspaceOf(turn.workspaceId),
+        readJsonFile(sessionFilePath(turn.id), SessionFile),
       ]);
-      if (!events.ok) {
+      if (!events.ok || !file.ok) {
         failure = { kind: "unknown", message: "The session's event log can't be read." };
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
@@ -695,12 +703,22 @@ export const createSessions = (options: {
             ? Promise.resolve(notOfferedReply(call.name))
             : answers[offered.name](call.input);
         };
+        const branch = file.value?.branch;
+        const worktree = branch === undefined ? undefined : options.code.worktreeOf(turn.id);
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
             effort: turn.effort,
-            folder: workspace.value.folder,
+            folder: worktree ?? workspace.value.folder,
+            code:
+              worktree === undefined
+                ? null
+                : {
+                    worktree,
+                    edit: async () => err("Not yet."),
+                    run: async () => err("Not yet."),
+                  },
             framing,
             callTool: (call) => {
               const calling = callTool(call);
@@ -900,6 +918,23 @@ export const createSessions = (options: {
     if (!offer) return err({ kind: "model-unavailable" });
     if (!takesEffort(offer.model, message.effort)) return err({ kind: "effort-unavailable" });
     return ok(offer.provider);
+  };
+
+  /**
+   * The provider to answer a message in a workspace, as `providerFor`; and in a code workspace,
+   * its repository.
+   */
+  const providerIn = async (
+    workspaceId: WorkspaceId,
+    message: NewMessage,
+  ): Promise<Result<{ provider: Provider; repoPath: string | undefined }, SessionError>> => {
+    const provider = await providerFor(message);
+    if (!provider.ok) return provider;
+    const workspace = await getWorkspace(options.contextDir, workspaceId);
+    if (!workspace.ok) return err(STORAGE_ERROR);
+    const { summary, repoPath } = workspace.value;
+    if (summary.mode === "planning") return ok({ provider: provider.value, repoPath: undefined });
+    return ok({ provider: provider.value, repoPath: repoPath ?? "" });
   };
 
   /** Every provider's status, with the usage limits its models are at. */
@@ -1153,10 +1188,20 @@ export const createSessions = (options: {
       if (!message.ok) return message;
       const usable = await skillUsable(start.workspaceId, message.value);
       if (!usable.ok) return usable;
-      const provider = await providerFor(message.value);
+      const provider = await providerIn(start.workspaceId, message.value);
       if (!provider.ok) return provider;
+      const { repoPath } = provider.value;
       const id = SessionId.parse(randomUUID());
       const at = stamp();
+      // A code session works on its own session branch from the start (ADR 0007).
+      const branched =
+        repoPath === undefined
+          ? undefined
+          : await options.code.startBranch({ repoPath, sessionId: id });
+      if (branched !== undefined && !branched.ok) {
+        return err({ kind: "branch-refused", refusal: branched.error });
+      }
+      const sessionBranch = branched?.value;
       const file: SessionFile = {
         id,
         workspaceId: start.workspaceId,
@@ -1164,10 +1209,17 @@ export const createSessions = (options: {
         ...(start.starter ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,
+        ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),
+      };
+      const unstarted = async () => {
+        if (repoPath !== undefined && sessionBranch !== undefined) {
+          await options.code.clearBranch({ repoPath, sessionBranch });
+        }
       };
       try {
         await mkdir(folderOf(id), { recursive: true });
       } catch {
+        await unstarted();
         return err(STORAGE_ERROR);
       }
       const written = await writeJsonFile(sessionFilePath(id), file);
@@ -1175,7 +1227,7 @@ export const createSessions = (options: {
         ? await startTurn({
             id,
             workspaceId: start.workspaceId,
-            provider: provider.value,
+            provider: provider.value.provider,
             message: message.value,
             since,
             firstTurn: true,
@@ -1185,6 +1237,7 @@ export const createSessions = (options: {
       if (!started.ok) {
         // Never leave a session behind without its first message.
         await rm(folderOf(id), { recursive: true, force: true });
+        await unstarted();
         running.delete(id);
         return started;
       }

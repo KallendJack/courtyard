@@ -82,6 +82,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
     model: ModelId.parse("sonnet"),
     effort: undefined,
     folder,
+    code: null,
     framing: {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",

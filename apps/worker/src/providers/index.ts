@@ -110,13 +110,32 @@ export type ToolContent =
  */
 export type ToolReply = { readonly ok: boolean; readonly content: readonly ToolContent[] };
 
+/**
+ * A code session's turn (ADR 0007): its session branch's worktree, and the worker's say on each
+ * edit and command. A provider asks before every edit and command, does only what's allowed, and
+ * tells the model the reason for anything refused.
+ */
+export type CodeTurn = {
+  /** The session branch's worktree: the turn's working directory, and the only place it edits. */
+  readonly worktree: string;
+  /** Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. */
+  readonly edit: (path: string) => Promise<Result<null, string>>;
+  /** Whether `command` may run in the worktree, or why not. */
+  readonly run: (command: string) => Promise<Result<null, string>>;
+};
+
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
   readonly model: ModelId;
   /** One of the levels of effort the model takes, or `undefined` for the model's default. */
   readonly effort: Effort | undefined;
-  /** The workspace's folder on the worker machine: the only place a model may look. */
+  /**
+   * The workspace's folder on the worker machine, or a code session's worktree: the only place a
+   * model may look.
+   */
   readonly folder: string;
+  /** A code session's turn, which only a provider that codes is given; `null` otherwise. */
+  readonly code: CodeTurn | null;
   /** Delivered as given: a provider never writes prompt text of its own. */
   readonly framing: Framing;
   /** Hands over the next piece of the answer as it's written. */

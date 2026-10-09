@@ -21,6 +21,7 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
+import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
 import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
@@ -77,6 +78,20 @@ const noOverflow = (overflow: Exclude<Overflow, { kind: "carry-on" }>) => {
     }
     case "none":
       return "There's no other provider to carry on with.";
+  }
+};
+
+/** Why a code session's branch couldn't start (ADR 0007), in the owner's words. */
+const branchRefused = (refusal: BranchRefusal) => {
+  switch (refusal.kind) {
+    case "repo-missing":
+      return `This code workspace's repository isn't there: nothing is at ${refusal.repoPath}. Fix repoPath in its workspace.json.`;
+    case "not-git":
+      return `This code workspace's repository, ${refusal.repoPath}, isn't a git repository. Fix repoPath in its workspace.json.`;
+    case "remote":
+      return `The session branch starts from the repository's default branch on its remote (origin), which couldn't be reached: ${refusal.reason}.`;
+    case "git":
+      return `The session branch couldn't be started: ${refusal.reason}.`;
   }
 };
 
@@ -141,6 +156,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return documentError(c, error.refusal);
     case "thing-refused":
       return thingError(c, error.refusal);
+    case "branch-refused":
+      return apiError(c, { status: 409, error: branchRefused(error.refusal) });
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
