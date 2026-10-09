@@ -154,9 +154,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, sheets, notices and so on), used on every page
-  ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small helpers shared by
-  pages. **`styles.css`:** the Moorland theme.
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, sheets, notices and so on), used
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker and check the first-load budget.
 
