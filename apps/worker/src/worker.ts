@@ -203,7 +203,7 @@ export const createWorker = (options: {
     const body = await readBody(c, NewWorkspace);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const workspace = await contextFolder.change(
-      () => createWorkspace(contextDir, body.value.name),
+      () => createWorkspace(contextDir, body.value),
       (made) => workspaceChange(`New workspace: ${made.name}`, made.id),
     );
     if (!workspace.ok) return contextError(c, workspace.error);

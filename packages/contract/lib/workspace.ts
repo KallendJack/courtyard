@@ -38,10 +38,6 @@ const WorkspaceName = z
   .min(1, "Give the workspace a name.")
   .max(WORKSPACE_NAME_MAX_LENGTH, `Keep the name to ${WORKSPACE_NAME_MAX_LENGTH} characters.`);
 
-/** Adding a workspace from the app. Its folder name comes from its name. */
-export const NewWorkspace = z.object({ name: WorkspaceName });
-export type NewWorkspace = z.infer<typeof NewWorkspace>;
-
 /** Changing a workspace from the app: its name, its colour, or both. Its folder stays as it is. */
 export const WorkspaceChange = z
   .object({ name: WorkspaceName.optional(), colour: WorkspaceColour.optional() })
@@ -87,6 +83,24 @@ export const ContextLine = z
     `Keep the line to ${CONTEXT_LINE_MAX_CHARACTERS} characters: longer is more than one fact.`,
   )
   .refine((line) => !/[\r\n]/.test(line), "Keep it to one line.");
+
+/**
+ * Adding a workspace from the app. Its folder name comes from its name; what it's for (What's it
+ * for?), when the owner says, is its context file's intro line (docs/ai-conduct.md).
+ */
+export const NewWorkspace = z.object({
+  name: WorkspaceName,
+  intro: z
+    .string()
+    .trim()
+    .max(
+      CONTEXT_LINE_MAX_CHARACTERS,
+      `Keep what it's for to ${CONTEXT_LINE_MAX_CHARACTERS} characters.`,
+    )
+    .refine((line) => !/[\r\n]/.test(line), "Keep what it's for to one line.")
+    .optional(),
+});
+export type NewWorkspace = z.infer<typeof NewWorkspace>;
 
 /** A context file, read into its sections. Each fact, plan or idea is one line. */
 export const ContextFile = z.object({

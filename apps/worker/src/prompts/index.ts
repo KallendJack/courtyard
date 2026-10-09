@@ -635,13 +635,34 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
   }
 };
 
-/** What a model is told about the replies it suggested: that the owner sees them, or why not. */
-export const suggestRepliesReply = (shown: Result<unknown, RepliesRefusal>): ToolReply =>
+/**
+ * Whether an answer, as written so far, has asked its question: once its replies are taken, it's
+ * finished, and anything more it writes is dropped (docs/ai-conduct.md, Suggested replies).
+ */
+export const asksItsQuestion = (written: string) => written.includes("?");
+
+/**
+ * What a model is told when its replies are taken, by what its answer has written so far
+ * (docs/ai-conduct.md, Suggested replies): Claude takes what it writes after its last tool call as
+ * its answer, so it's told whether that's nothing more, the rest, or all of it.
+ */
+const repliesTaken = (written: string) =>
+  asksItsQuestion(written)
+    ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: end here, without another word, not even about the buttons."
+    : written.trim() !== ""
+      ? "The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write only the rest, ending with your question."
+      : "The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write, never your thinking. Write your whole answer now, everything you meant to say and the question it ends with.";
+
+/**
+ * What a model is told about the replies it suggested, its answer having `written` so far: that
+ * the owner sees them, or why not.
+ */
+export const suggestRepliesReply = (
+  shown: Result<unknown, RepliesRefusal>,
+  written: string,
+): ToolReply =>
   shown.ok
-    ? textReply(
-        true,
-        "The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to say.",
-      )
+    ? textReply(true, repliesTaken(written))
     : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */
@@ -765,23 +786,6 @@ export const fileToolReply = (answer: FileToolAnswer): ToolReply =>
   answer.ok
     ? { ok: true, content: foundWords(answer.value) }
     : textReply(false, fileRefusalReason(answer.error));
-
-/**
- * The starter messages that get to know an empty workspace or owner context (docs/ai-conduct.md,
- * Getting to know a workspace), sent as the owner's first message. The first line is the title.
- */
-export const GET_TO_KNOW = {
-  workspace: [
-    "Get to know this workspace.",
-    "",
-    "Ask me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you as you go. Start with what it's for; later, where things stand, what I've decided and what I'm still considering. I'll say when I've had enough.",
-  ].join("\n"),
-  owner: [
-    "Get to know me.",
-    "",
-    "Ask me about my life in general one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you to my owner context as you go: where I live and who with, work, health, plans and how I like answers. I'll say when I've had enough.",
-  ].join("\n"),
-} as const;
 
 /**
  * What a tidy's model is told (docs/ai-conduct.md, Tidying, which quotes it): changes to propose,

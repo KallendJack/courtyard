@@ -50,6 +50,12 @@ _Avoid_: project, space, room, context (on its own)
 A workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first.
 _Avoid_: system prompt, memory, notes
 
+**Intro line**:
+The line under a context file's title, above its sections: what the workspace is for. The owner gives it as
+**What's it for?** when adding a workspace (or the starter puts a hint there), and the workspace page shows it under
+the workspace's name. Get to know plans its topics from it.
+_Avoid_: description, summary, purpose
+
 **Owner context**:
 `OWNER.md` at the top of the context folder: what's true across the owner's whole life (About me) and how they like
 answers (How to answer me). Every model reads it before the workspace's context file, except that a code workspace's
@@ -99,6 +105,18 @@ _Avoid_: history, log, activity (that's a model's doing in a session)
 The owner asking a model for a shorter context file. Unlike a save, it's proposed first: each change it proposes is
 ticked by default, and the owner unticks any they don't want.
 _Avoid_: compact, clean up, summarise
+
+**Get to know**:
+A house skill only the owner starts, from a button on an empty workspace's page. It plans the topics worth knowing
+from the workspace's name, intro line and the owner context, lists them, then asks one question per message, saving
+each answer, until the topics are covered or the owner has had enough, and wraps up.
+_Avoid_: onboarding, interview, starter, template
+
+**Get to know me**:
+Get to know for the owner context, from a button on the home page: the owner's life (where they live and who with,
+work, health, plans, how they like answers), saved to the owner context. Its session runs in the first planning
+workspace.
+_Avoid_: onboarding, profile setup
 
 **Backup**:
 The context folder's copy on a git remote the owner chooses, such as a shared folder on a NAS (ADR 0014), pushed

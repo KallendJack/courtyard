@@ -96,8 +96,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
   (instructions with the skills list and the skills in use, the conversation so far, and Courtyard's tools: the save
-  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Get to know, Tidy and
-  titling a session.
+  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Tidy and titling a session.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place from four places, the more specific
   winning by name: the workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context
   folder's top-level one, then the house skills for its kind of workspace from `packages/skills`. It keeps each
@@ -108,7 +107,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change), follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models, Get to know and Grill this plan.
+  list of models, Get to know (a session started with its house skill) and Grill this plan.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
 
@@ -326,8 +325,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
-- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Get to know, Tidy
-  and titling.
+- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
+  titling. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
 - **Each provider passes it on unchanged:**
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker

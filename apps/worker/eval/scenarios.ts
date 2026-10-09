@@ -1,5 +1,4 @@
 import type { OwnerSection, PlacedLine } from "@courtyard/contract";
-import { GET_TO_KNOW } from "../src/prompts/index.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
@@ -71,6 +70,10 @@ export type Turn = {
    * still printed).
    */
   readonly suggests?: boolean;
+  /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
+  readonly listsTopics?: boolean;
+  /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
+  readonly avoids?: readonly Words[];
 };
 
 /**
@@ -93,6 +96,8 @@ export type Scenario = {
   /** The saving rule it checks, in the eval's report. */
   readonly rule: string;
   readonly workspace: string;
+  /** The context file's intro line, what the workspace is for (What's it for?), when it has one. */
+  readonly intro?: string;
   readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
   /** A starting owner context, when there is one. */
   readonly owner?: { facts?: string[]; plans?: string[]; ideas?: string[]; answers?: string[] };
@@ -104,6 +109,11 @@ export type Scenario = {
   readonly skills?: readonly ScenarioSkill[];
   /** The conversation; none for a tidy. */
   readonly turns: readonly Turn[];
+  /**
+   * Printed for the owner to read, not scored: the topics each answer lists, such as Get to
+   * know's for a workspace name (#127).
+   */
+  readonly printsTopics?: boolean;
   /**
    * A tidy of the starting context file (docs/ai-conduct.md, Tidying), saved with every change
    * ticked: what must still be there afterwards, and lines that should be gone.
@@ -545,21 +555,87 @@ export const SCENARIOS: readonly Scenario[] = [
       },
     ],
   },
-  // Get to know a workspace or the owner context (docs/ai-conduct.md).
+  // Get to know and Get to know me, the house skills only the owner starts (#127).
   {
     name: "get-to-know-workspace",
-    rule: "getting to know a workspace starts with one or two questions and saves nothing it wasn't told",
+    rule: "Get to know lists its topics, asks one question at a time without asking what's known, saves each answer and wraps up when the owner has had enough",
     workspace: "Allotment",
+    intro: "A half plot at the Rosebank allotments, growing veg for the family",
     context: {},
-    turns: [{ say: GET_TO_KNOW.workspace, expect: [], questions: { atLeast: 1, atMost: 2 } }],
+    owner: { facts: ["Lives in Leeds with partner Sam and two kids"] },
+    turns: [
+      {
+        say: "Get to know this workspace.",
+        skill: "get-to-know",
+        expect: [],
+        listsTopics: true,
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+        avoids: [
+          ["where", "plot"],
+          ["how big", "plot"],
+          ["where", "you live"],
+        ],
+        loads: [],
+      },
+      {
+        say: "Mostly potatoes, onions and runner beans.",
+        expect: [{ action: "add", section: "facts", words: ["potato"] }],
+        questions: { atLeast: 1, atMost: 1 },
+        loads: [],
+      },
+      {
+        say: "That's enough for now, thanks.",
+        expect: [],
+        questions: { atLeast: 0, atMost: 0 },
+        says: ["potato"],
+        loads: [],
+      },
+    ],
   },
   {
-    name: "get-to-know-owner",
-    rule: "getting to know the owner starts with one or two questions and saves nothing it wasn't told",
-    workspace: "House",
+    name: "get-to-know-me",
+    rule: "Get to know me lists its topics, asks one question at a time without asking what's known, saves each answer to the owner context and wraps up when the owner has had enough",
+    workspace: "Home",
     context: {},
-    turns: [{ say: GET_TO_KNOW.owner, expect: [], questions: { atLeast: 1, atMost: 2 } }],
+    owner: { facts: ["Lives in Leeds with partner Sam"], answers: ["Metric units"] },
+    turns: [
+      {
+        say: "Get to know me.",
+        skill: "get-to-know-me",
+        expect: [],
+        listsTopics: true,
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+        avoids: [["where", "you live"], ["who", "live"], ["metric"]],
+        loads: [],
+      },
+      {
+        say: "I'm a nurse, mostly on night shifts.",
+        expect: [{ action: "add", place: "owner", section: "facts", words: ["nurse"] }],
+        questions: { atLeast: 1, atMost: 1 },
+        loads: [],
+      },
+      {
+        say: "That's enough for now.",
+        expect: [],
+        questions: { atLeast: 0, atMost: 0 },
+        says: [["nurse", "nursing"]],
+        loads: [],
+      },
+    ],
   },
+  // The topics Get to know plans from a workspace's name alone, printed for the owner (#127).
+  ...["Garage gym", "House move", "Padel", "Boiler admin", "Mountain biking", "Trip to Japan"].map(
+    (workspace): Scenario => ({
+      name: `topics-${workspace.toLowerCase().replaceAll(" ", "-")}`,
+      rule: "printed, not scored: the topics Get to know plans from the workspace's name",
+      workspace,
+      context: {},
+      turns: [{ say: "Get to know this workspace.", skill: "get-to-know", expect: [] }],
+      printsTopics: true,
+    }),
+  ),
   {
     name: "code-workspace-preference",
     rule: "a code workspace saves a lasting preference to How to answer me, and nothing about the owner",
@@ -784,6 +860,7 @@ export const contextFileFor = (scenario: Scenario) => {
   return [
     `# ${scenario.workspace}`,
     "",
+    ...(scenario.intro === undefined ? [] : [scenario.intro, ""]),
     ...section("## Facts", facts),
     ...section("## Plans", plans),
     ...section("## Ideas", ideas),

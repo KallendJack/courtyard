@@ -195,13 +195,18 @@ export const gatedProvider = () => {
 export type ScriptedStep =
   | Readonly<Record<string, unknown>>
   | { readonly call: string; readonly input: unknown }
+  /** Text the model writes at that point in its answer. */
+  | { readonly write: string }
   | (() => Promise<void>);
 
 /** For tests: what the worker told a model about one of its tool calls, a save or another. */
 export type SaveReply = { readonly saved: boolean; readonly reply: string };
 
 const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
-  typeof step !== "function" && typeof step.call === "string";
+  typeof step !== "function" && "call" in step && typeof step.call === "string";
+
+const isWrite = (step: ScriptedStep): step is { write: string } =>
+  typeof step !== "function" && "write" in step && typeof step.write === "string";
 
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
@@ -236,6 +241,7 @@ export const savingProvider = (
       framings.push(input.framing);
       for (const step of steps) {
         if (typeof step === "function") await step();
+        else if (isWrite(step)) await input.emit(step.write);
         else {
           const reply = await input.callTool(
             isCall(step)

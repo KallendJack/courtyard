@@ -42,6 +42,39 @@ const turnSuggesting = async (steps: readonly ScriptedStep[]) => {
 
 const suggest = (replies: unknown) => ({ call: "suggest_replies", input: { replies } });
 
+describe("what a model is told once its replies are taken (#127)", () => {
+  const REPLIES = ["Weekends", "Weekday evenings"];
+
+  it("tells a model that has written its question that it has finished", async () => {
+    const { replies } = await turnSuggesting([
+      { write: "Here's the plan. Which days are you free?" },
+      suggest(REPLIES),
+    ]);
+
+    expect(replies[0]?.reply).toBe(
+      await quotedInGuide("The owner sees them as buttons under your answer, and"),
+    );
+  });
+
+  it("drops anything written after that, so the answer isn't written twice", async () => {
+    const question = "Here's the plan. Which days are you free?";
+    const { events } = await turnSuggesting([
+      { write: question },
+      suggest(REPLIES),
+      { write: question },
+    ]);
+
+    const answer = events.flatMap((event) => (event.type === "text-delta" ? [event.text] : []));
+    expect(answer.join("")).toBe(question);
+  });
+
+  it("tells one that has written only part of its answer to write the rest, not again", async () => {
+    const { replies } = await turnSuggesting([{ write: "Here's the plan." }, suggest(REPLIES)]);
+
+    expect(replies[0]?.reply).toBe(await quotedInGuide("The owner sees them as buttons, and"));
+  });
+});
+
 describe("a model suggesting replies", () => {
   it("records two or three short replies for the chat to show", async () => {
     const { replies, events } = await turnSuggesting([

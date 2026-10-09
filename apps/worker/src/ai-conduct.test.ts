@@ -521,34 +521,82 @@ describe("saving context as a model answers (ADR 0013)", () => {
   });
 });
 
-describe("getting to know a workspace (#51)", () => {
+describe("getting to know a workspace (#127)", () => {
   /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */
   const gettingToKnow = async () => {
     const { provider, turns } = recorder(READS_FILES);
     const request = await asOwner(testWorker({ root, providers: [provider] }));
     const start = async (
       path: string,
-    ): Promise<{ started: true; session: SessionSummary } | { started: false; status: number }> => {
+    ): Promise<
+      | { started: true; session: SessionSummary; events: SessionEvent[] }
+      | { started: false; status: number }
+    > => {
       const response = await postJson(request, path, { model: MODEL });
       if (response.status !== 201) return { started: false, status: response.status };
       const session = SessionSummary.parse(await response.json());
-      await followSession(request, { sessionId: session.id, until: "turn-completed" });
-      return { started: true, session };
+      const events = await followSession(request, {
+        sessionId: session.id,
+        until: "turn-completed",
+      });
+      return { started: true, session, events };
     };
     return { start, turns };
   };
 
-  it("starts a session with the workspace's starter, as the guide words it, titled by its first line", async () => {
+  it("starts a session with the Get to know skill, the owner's message one line, which titles it", async () => {
     const { start, turns } = await gettingToKnow();
 
     const started = await start("/api/workspaces/garage-gym/get-to-know");
 
     expect(started.started && started.session.title).toBe("Get to know this workspace.");
-    expect(turns[0]?.framing.newMessage).toBe(await quotedInGuide("Get to know this workspace."));
-    expect(turns[0]?.framing.newMessage).toMatch(/one question per message, two at most/);
+    expect(started.started && started.events[0]).toMatchObject({
+      type: "owner-message",
+      text: "Get to know this workspace.",
+      skill: "get-to-know",
+    });
+    const framing = turns[0]?.framing;
+    expect(framing?.newMessage).toBe("Get to know this workspace.");
+    expect(framing?.instructions).toContain(
+      "The owner started the get-to-know skill with their new message",
+    );
+    expect(framing?.instructions).toContain('<skill name="get-to-know">');
   });
 
-  it("gets to know the owner, as the guide words it, in the first planning workspace", async () => {
+  it("gives Get to know and Get to know me as the guide words them", async () => {
+    const { start, turns } = await gettingToKnow();
+
+    await start("/api/workspaces/garage-gym/get-to-know");
+    await start("/api/owner-context/get-to-know");
+
+    const [workspace, owner] = turns.map((turn) => turn.framing.instructions);
+    expect(workspace).toContain(
+      `description: ${await quotedInGuide("Gets to know a workspace")}\n`,
+    );
+    expect(workspace).toContain(`\n${await quotedInGuide("# Get to know")}\n</skill>`);
+    expect(owner).toContain(`description: ${await quotedInGuide("Gets to know the owner")}\n`);
+    expect(owner).toContain(`\n${await quotedInGuide("# Get to know me")}\n</skill>`);
+  });
+
+  it("gives Get to know what a new workspace is for, from What's it for?, to plan its topics from", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const intro = "Turning the shed into a pottery studio by spring";
+    await postJson(request, "/api/workspaces", { name: "Pottery", intro });
+
+    const started = await postJson(request, "/api/workspaces/pottery/get-to-know", {
+      model: MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    await followSession(request, { sessionId, until: "turn-completed" });
+
+    expect(turns[0]?.framing.instructions).toContain(
+      `<context_file>\n# Pottery\n\n${intro}\n\n## Facts`,
+    );
+    expect(turns[0]?.framing.instructions).toContain('<skill name="get-to-know">');
+  });
+
+  it("gets to know the owner with the Get to know me skill, in the first planning workspace", async () => {
     await mkdir(join(root, "context", "attic"), { recursive: true });
     await writeFile(
       join(root, "context", "attic", "workspace.json"),
@@ -559,8 +607,9 @@ describe("getting to know a workspace (#51)", () => {
     const started = await start("/api/owner-context/get-to-know");
 
     expect(started.started && started.session.workspaceId).toBe("garage-gym");
-    expect(turns[0]?.framing.newMessage).toBe(await quotedInGuide("Get to know me."));
-    expect(turns[0]?.framing.newMessage).toMatch(/save what I tell you to my owner context/);
+    expect(started.started && started.session.title).toBe("Get to know me.");
+    expect(turns[0]?.framing.newMessage).toBe("Get to know me.");
+    expect(turns[0]?.framing.instructions).toContain('<skill name="get-to-know-me">');
   });
 
   it("isn't offered in a code workspace, whose models can't save to its context file", async () => {

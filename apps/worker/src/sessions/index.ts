@@ -28,6 +28,7 @@ import type { ContextFolder } from "../context-folder/index.ts";
 import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
+  asksItsQuestion,
   type FramingWorkspace,
   framingFor,
   notOfferedReply,
@@ -519,6 +520,13 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        /** What the answer has written so far in this turn. */
+        let written = "";
+        /**
+         * Whether the answer is finished: it had asked its question when its replies were taken,
+         * so anything more the model writes (Claude writes it all again) is dropped.
+         */
+        let finished = false;
         const suggest = createTurnReplies({
           stopped: () => stopper.signal.aborted || recordingLost,
           record: async (replies) => {
@@ -533,7 +541,12 @@ export const createSessions = (options: {
         const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
-          [SUGGEST_REPLIES_TOOL_NAME]: async (input) => suggestRepliesReply(await suggest(input)),
+          [SUGGEST_REPLIES_TOOL_NAME]: async (input) => {
+            const taken = await suggest(input);
+            // Its question asked and its replies taken, the answer is finished.
+            if (taken.ok && asksItsQuestion(written)) finished = true;
+            return suggestRepliesReply(taken, written);
+          },
         };
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
           const answer = answers[call.name];
@@ -557,7 +570,8 @@ export const createSessions = (options: {
             },
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
-              if (recordingLost || stopper.signal.aborted) return;
+              if (recordingLost || stopper.signal.aborted || finished) return;
+              written += text;
               const recorded = await append(turn.id, { type: "text-delta", text });
               if (!recorded.ok) recordingLost = true;
             },

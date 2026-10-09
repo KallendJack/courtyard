@@ -18,6 +18,8 @@ const SIZES = {
 export function TextField({
   label,
   hideLabel = false,
+  optional = false,
+  hint,
   error,
   size = "md",
   ...props
@@ -25,25 +27,47 @@ export function TextField({
   label: string;
   /** For a box whose place says what it is (a title being renamed): the label is for screen readers. */
   hideLabel?: boolean;
+  /** Says "Optional" beside the label, for a box the owner can leave empty. */
+  optional?: boolean;
+  /** A line under the box on what to put in it, which also describes it to screen readers. */
+  hint?: string;
   error?: string | undefined;
   size?: keyof typeof SIZES;
 }) {
   const id = useId();
+  const hintId = useId();
   const errorId = useId();
+  const describedBy = [hint && hintId, error && errorId].filter(Boolean).join(" ");
+  const labelled = (
+    <label htmlFor={id} className={hideLabel ? "sr-only" : "text-sm font-medium"}>
+      {label}
+    </label>
+  );
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className={hideLabel ? "sr-only" : "text-sm font-medium"}>
-        {label}
-      </label>
+      {optional ? (
+        <div className="flex items-baseline gap-2">
+          {labelled}
+          <span className="text-xs text-muted-foreground">Optional</span>
+        </div>
+      ) : (
+        labelled
+      )}
       <input
         id={id}
-        {...(error ? { "aria-invalid": true, "aria-describedby": errorId } : {})}
+        {...(error ? { "aria-invalid": true } : {})}
+        {...(describedBy ? { "aria-describedby": describedBy } : {})}
         className={classes(
           "w-full min-w-0 rounded-lg border border-input bg-field outline-none transition-colors placeholder:text-placeholder focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-accent disabled:opacity-50 aria-invalid:border-destructive",
           SIZES[size],
         )}
         {...props}
       />
+      {hint && (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
       <FormError id={errorId} message={error} />
     </div>
   );

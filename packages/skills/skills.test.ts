@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkHouseSkills, HOUSE_SKILLS_FOLDER } from "./index.ts";
+import { checkHouseSkills, HOUSE_SKILLS_FOLDER, readHouseManifest } from "./index.ts";
 
 // `pnpm verify` runs this: the house skills and their list, checked against the Agent Skills
 // format (ADR 0016). Each mistake is shown on a copy of the package.
@@ -38,6 +38,13 @@ describe("the check catches", () => {
 
   const GRILLING = { name: "grilling", workspaces: ["planning", "code"] };
 
+  /** skills.json as the house skills have it, with `more` after its own entries. */
+  const manifestWith = async (...more: unknown[]) => {
+    const house = await readHouseManifest();
+    if (!house.ok) throw new Error(house.error);
+    await manifest([...house.value.skills, ...more]);
+  };
+
   it("a skill folder that isn't in skills.json", async () => {
     await skill("packing", "---\nname: packing\ndescription: Packs a bag.\n---\nPack it.\n");
 
@@ -45,7 +52,7 @@ describe("the check catches", () => {
   });
 
   it("an entry in skills.json with no folder", async () => {
-    await manifest([GRILLING, { name: "packing", workspaces: ["planning"] }]);
+    await manifestWith({ name: "packing", workspaces: ["planning"] });
 
     expect(await checkHouseSkills(copy)).toEqual([
       "skills.json lists packing, which has no folder.",
@@ -53,14 +60,14 @@ describe("the check catches", () => {
   });
 
   it("a skill that fails the format check", async () => {
-    await manifest([GRILLING, { name: "packing", workspaces: ["planning"] }]);
+    await manifestWith({ name: "packing", workspaces: ["planning"] });
     await skill("packing", "---\nname: packing\n---\nPack it.\n");
 
     expect(await checkHouseSkills(copy)).toEqual(["packing: its SKILL.md has no description."]);
   });
 
   it("a skill with scripts listed for planning workspaces", async () => {
-    await manifest([GRILLING, { name: "packing", workspaces: ["planning", "code"] }]);
+    await manifestWith({ name: "packing", workspaces: ["planning", "code"] });
     await skill("packing", "---\nname: packing\ndescription: Packs a bag.\n---\nPack it.\n");
     await mkdir(join(copy, "packing", "scripts"));
     await writeFile(join(copy, "packing", "scripts", "pack.sh"), "echo packed\n");

@@ -106,6 +106,8 @@ type Verdict =
       /** What each turn did that isn't scored on its own, such as the skills it loaded. */
       readonly notes: readonly string[];
     }
+  /** A scenario that only prints what the model did, for the owner to read (`printsTopics`). */
+  | { readonly kind: "printed"; readonly scenario: Scenario; readonly notes: readonly string[] }
   | { readonly kind: "not-run"; readonly scenario: Scenario; readonly reason: string };
 
 const passed = (verdict: Verdict) =>
@@ -196,18 +198,28 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
 
 /**
  * The questions an answer asks, sentence by sentence. An example put as a question ("For
- * example, is it…?") belongs to the question before it rather than counting as one of its own.
+ * example, is it…?"), or the same question put again as its likely answers ("Is it X, Y or Z?",
+ * "Or not?"), belongs to the question before it rather than counting as one of its own.
  */
 const questionsIn = (answer: string) => {
   const questions: string[] = [];
   for (const sentence of answer.match(/[^.!?\n]*\?/g) ?? []) {
     const last = questions.at(-1);
     const example = /^[\s*_]*(for example|for instance|e\.g\.)/i.test(sentence);
-    if (example && last !== undefined) questions[questions.length - 1] = `${last} ${sentence}`;
-    else questions.push(sentence);
+    // The same question put again as its likely answers: "…? Is it X, Y or Z?", "…? Or not?"
+    const options = /^[\s*_]*or\b/i.test(sentence) || /,.*\bor\b/i.test(sentence);
+    if ((example || options) && last !== undefined) {
+      questions[questions.length - 1] = `${last} ${sentence}`;
+    } else questions.push(sentence);
   }
   return questions;
 };
+
+/** The items of the lists in an answer, such as the topics Get to know plans, in order. */
+const listItemsIn = (answer: string) =>
+  (answer.match(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+.+$/gm) ?? []).map((item) =>
+    item.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/, "").trim(),
+  );
 
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
@@ -303,7 +315,45 @@ const judgeTurn = (judge: {
                   : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said, ...replies];
+  const topics = listItemsIn(answer);
+  const listed: Check[] =
+    turn.listsTopics === undefined
+      ? []
+      : [
+          {
+            miss:
+              turn.listsTopics === topics.length >= 2
+                ? null
+                : turn.listsTopics
+                  ? `expected a list of topics; the answer starts "${answer.trim().slice(0, 160)}"`
+                  : `expected no list of topics; listed ${topics.join("; ")}`,
+          },
+        ];
+  const known = (turn.avoids ?? []).filter((words) =>
+    asked.some((one) => hasWords(one, { words })),
+  );
+  const avoided: Check[] =
+    turn.avoids === undefined
+      ? []
+      : [
+          {
+            miss:
+              known.length === 0
+                ? null
+                : `asked what's known (${known.map(describeWords).join("; ")}): ${asked.join(" ").trim()}`,
+          },
+        ];
+  return [
+    ...saveChecks,
+    nothingElse,
+    ...question,
+    ...howMany,
+    ...skills,
+    ...said,
+    ...replies,
+    ...listed,
+    ...avoided,
+  ];
 };
 
 /**
@@ -515,6 +565,15 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       if (replies.length > 0) {
         notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
       }
+      if (scenario.printsTopics || turn.listsTopics) {
+        const topics = listItemsIn(answer);
+        notes.push(
+          topics.length > 0
+            ? `${prefix}topics: ${topics.join(" | ")}`
+            : `${prefix}no topics listed; the answer: ${answer.trim().replace(/\s+/g, " ").slice(0, 600)}`,
+        );
+        notes.push(`${prefix}asked: ${questionsIn(answer).join(" ").trim() || "nothing"}`);
+      }
       const judged = judgeTurn({
         turn,
         saves: saves.map(({ save }) => save),
@@ -536,6 +595,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         }
       }
     }
+    if (scenario.printsTopics) return { kind: "printed", scenario, notes };
     return { kind: "judged", scenario, checks, notes };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -564,6 +624,11 @@ const pool = async <T>(jobs: readonly (() => Promise<T>)[], limit: number) => {
 const report = (verdict: Verdict) => {
   if (verdict.kind === "not-run") {
     console.log(`----  ${verdict.scenario.name}: didn't run to the end: ${verdict.reason}`);
+    return;
+  }
+  if (verdict.kind === "printed") {
+    console.log(`info  ${verdict.scenario.name} (not scored)`);
+    for (const note of verdict.notes) console.log(`      ${note}`);
     return;
   }
   console.log(`${passed(verdict) ? "pass" : "MISS"}  ${verdict.scenario.name}`);

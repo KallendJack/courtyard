@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ContextFile,
+  type NewWorkspace,
   WorkspaceColour,
   WorkspaceId,
   WorkspaceMode,
@@ -400,14 +401,16 @@ const nextColour = (every: readonly Listed[]) => {
 };
 
 /**
- * A new workspace's context file: its title, then empty Facts, Plans and Ideas, with a line on
- * how to fill them in (docs/ai-conduct.md, "Starter context file").
+ * A new workspace's context file: its title, its intro line (what it's for, when the owner said,
+ * or else a line on how to fill it in), then empty Facts, Plans and Ideas (docs/ai-conduct.md,
+ * "Starter context file").
  */
-export const starterContextFile = (name: string) =>
+export const starterContextFile = (name: string, intro?: string) =>
   [
     `# ${name}`,
     "",
-    "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+    intro ||
+      "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
     "",
     "## Facts",
     "",
@@ -420,14 +423,16 @@ export const starterContextFile = (name: string) =>
 /** Writes a new workspace's context file and config into its empty folder. */
 const writeStarterFiles = async (
   folder: string,
-  starter: { name: string; colour: WorkspaceColour },
+  starter: { name: string; intro: string | undefined; colour: WorkspaceColour },
 ): Promise<Result<null, WorkspaceError>> => {
   const problem: WorkspaceError = {
     kind: "storage",
     message: "The new workspace couldn't be saved.",
   };
   try {
-    await writeFile(join(folder, CONTEXT_FILE), starterContextFile(starter.name), { flag: "wx" });
+    await writeFile(join(folder, CONTEXT_FILE), starterContextFile(starter.name, starter.intro), {
+      flag: "wx",
+    });
   } catch {
     return err(problem);
   }
@@ -437,12 +442,13 @@ const writeStarterFiles = async (
 };
 
 /**
- * Adds a workspace called `name`: its folder, a starter context file, and the next colour, kept
- * in its config. Refuses a name that can't be a folder name or that another workspace has.
+ * Adds a workspace called `name`: its folder, a starter context file starting with `intro` when
+ * there is one, and the next colour, kept in its config. Refuses a name that can't be a folder
+ * name or that another workspace has.
  */
 export const createWorkspace = async (
   contextDir: string,
-  name: string,
+  { name, intro }: NewWorkspace,
 ): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
   const id = folderNameFor(name);
   if (!id.ok) return id;
@@ -466,7 +472,11 @@ export const createWorkspace = async (
       : err({ kind: "storage", message: "The context folder can't be written to." });
   }
 
-  const saved = await writeStarterFiles(folder, { name, colour: nextColour(every.value) });
+  const saved = await writeStarterFiles(folder, {
+    name,
+    intro,
+    colour: nextColour(every.value),
+  });
   if (!saved.ok) {
     // Half a workspace would just confuse things later.
     await rm(folder, { recursive: true, force: true }).catch(() => undefined);
