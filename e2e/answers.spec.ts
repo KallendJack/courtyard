@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
@@ -41,5 +41,57 @@ test.describe("copying", () => {
     expect(await clipboard(page)).toBe(code);
     await expect(block.getByRole("status")).toHaveText("Copied");
     await expect(block.getByRole("status")).toBeEmpty({ timeout: 5_000 });
+  });
+});
+
+/** Every script the page asks for from now on, by file name. */
+const watchScripts = (page: Page) => {
+  const scripts: string[] = [];
+  page.on("request", (request) => {
+    const file = new URL(request.url()).pathname.split("/").at(-1) ?? "";
+    if (file.endsWith(".js")) scripts.push(file);
+  });
+  return scripts;
+};
+
+const looksOf = (element: Locator) =>
+  element.evaluate((token) => {
+    const style = getComputedStyle(token);
+    return { colour: style.color, italic: style.fontStyle === "italic" };
+  });
+
+test("code is coloured by language from the theme, light and dark", async ({ page }) => {
+  const scripts = watchScripts(page);
+  const highlighter = () => scripts.filter((file) => /highlight|lowlight/.test(file));
+  await ask(page, "No code here, just words.");
+  expect(highlighter()).toEqual([]);
+
+  const code = 'def volume(sets):\n    # sets, reps and kg\n    return sum(sets) * 30, "kg"';
+  const session = await ask(page, `For your log:\n\n\`\`\`py\n${code}\n\`\`\``);
+  const block = session.getByRole("figure", { name: "Python" });
+  const token = (text: string) => block.locator("span", { hasText: new RegExp(`^${text}$`) });
+
+  // Moorland's colours, deepened to read on white.
+  await expect
+    .poll(() => looksOf(token("def")))
+    .toEqual({ colour: "rgb(106, 63, 110)", italic: false });
+  expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(79, 96, 114)", italic: false });
+  expect(await looksOf(token("30"))).toEqual({ colour: "rgb(138, 101, 48)", italic: false });
+  expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(86, 102, 58)", italic: false });
+  expect(await looksOf(token("# sets, reps and kg"))).toEqual({
+    colour: "rgb(98, 90, 96)",
+    italic: true,
+  });
+  expect(highlighter().length).toBeGreaterThan(0);
+
+  // The workspace colours as they are.
+  await page.emulateMedia({ colorScheme: "dark" });
+  expect(await looksOf(token("def"))).toEqual({ colour: "rgb(201, 155, 203)", italic: false });
+  expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(138, 155, 172)", italic: false });
+  expect(await looksOf(token("30"))).toEqual({ colour: "rgb(201, 162, 107)", italic: false });
+  expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(157, 176, 122)", italic: false });
+  expect(await looksOf(token("# sets, reps and kg"))).toEqual({
+    colour: "rgb(167, 158, 164)",
+    italic: true,
   });
 });
