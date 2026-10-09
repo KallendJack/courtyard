@@ -1,0 +1,9 @@
+/*
+ * The rich blocks' own classes (ADR 0021). Tailwind puts every class it finds into the first
+ * load's stylesheet, even one only lazily loaded code uses, so styles.css leaves this folder out
+ * and this stylesheet, loaded with the answer renderer, has its classes instead. The theme is
+ * Moorland's, by reference: its names, nothing of its own.
+ */
+@import "tailwindcss/utilities" source(none);
+@reference "../styles.css";
+@source "./**/*.tsx";

@@ -95,3 +95,34 @@ test("a model's update shows what changed in its note", async ({ page }) => {
   await expect(updated).toContainText("Packing list");
   await expect(updated).toContainText("(added grips)");
 });
+
+test("a document's tables sort on its page, as in an answer", async ({ page }) => {
+  const name = `Rackets ${Date.now()}`;
+  await newWorkspace(page, name);
+  await startSaving(
+    page,
+    [
+      "save document",
+      "# Which padel racket?",
+      "",
+      "| Racket | Price |",
+      "| --- | --- |",
+      "| Bullpadel Indiga CTR | £139 |",
+      "| Head Evo Speed | £95 |",
+      "| Babolat Contact | £110 |",
+    ].join("\n"),
+  );
+  const notes = page.getByRole("list", { name: "Documents saved" });
+  await expect(notes).toContainText("Saved document");
+  await notes.getByRole("link", { name: "Open" }).click();
+
+  const table = page.getByRole("main").getByRole("table");
+  const price = table.getByRole("columnheader", { name: "Price" });
+  await price.getByRole("button").click();
+  await expect(price).toHaveAttribute("aria-sort", "ascending");
+  expect(await table.locator("tbody tr td:first-child").allTextContents()).toEqual([
+    "Head Evo Speed",
+    "Babolat Contact",
+    "Bullpadel Indiga CTR",
+  ]);
+});

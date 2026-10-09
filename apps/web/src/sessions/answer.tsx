@@ -2,17 +2,18 @@ import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { WebLink } from "@/components/web-link";
+import { textOf } from "../rich-blocks/hast.ts";
+import {
+  MarkdownCell,
+  MarkdownHeading,
+  MarkdownRow,
+  MarkdownRows,
+  MarkdownTable,
+} from "../rich-blocks/table.tsx";
 import { finishForNow, splitBlocks } from "./blocks.ts";
 import { CodeBlock } from "./code-block.tsx";
 import { hasMaths, writeMathsForRemark } from "./maths.ts";
 import { useReveal } from "./reveal.ts";
-
-/** A node of formatted Markdown, as far as reading its text needs. */
-type Node = { readonly value?: string; readonly children?: readonly Node[] };
-
-/** All the text in a node, as written. */
-const textOf = (node: Node | undefined): string =>
-  node === undefined ? "" : (node.value ?? node.children?.map(textOf).join("") ?? "");
 
 const SUBHEADING = "font-display text-xl/7 font-semibold";
 
@@ -64,15 +65,12 @@ const ELEMENTS: Components = {
       {...props}
     />
   ),
-  table: ({ node: _, ...props }) => (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm" {...props} />
-    </div>
-  ),
-  th: ({ node: _, ...props }) => (
-    <th className="border-b px-2 py-1.5 text-left font-semibold" {...props} />
-  ),
-  td: ({ node: _, ...props }) => <td className="border-b px-2 py-1.5" {...props} />,
+  // Every table sorts by its columns (ADR 0021).
+  table: MarkdownTable,
+  th: MarkdownHeading,
+  tbody: MarkdownRows,
+  tr: MarkdownRow,
+  td: MarkdownCell,
 };
 
 const PLUGINS = [remarkGfm];
