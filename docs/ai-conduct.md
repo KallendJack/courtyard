@@ -40,9 +40,9 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   recommendation or a wrap-up's decisions and open questions.
 - **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
   suggested replies. Every set a run suggested is printed under it.
-- **Web search.** A turn can say whether its answer should search the web (`searches`), judged from its "searched
-  the web" activities; one that should search also needs sources listed under it. Every search and source a run had
-  is printed under it.
+- **Web search.** A turn can say whether its answer should use the web (`searches`), judged from its activities (a
+  search or a page read); one that should also needs sources listed under it. Every search, page read and source a
+  run had is printed under it.
 - **Get to know.** A scenario can give its context file an intro line (`intro`). A turn can say whether its answer
   lists topics (`listsTopics`, a list of two or more) and what it mustn't ask because it's known (`avoids`); a
   wrap-up's `says` names what was saved. A scenario that `printsTopics` isn't scored: it
@@ -365,8 +365,8 @@ turn that didn't search or read a page lists none. The sources are kept as an ev
 reload. No site icons are loaded, so no site learns the answer was shown. The conversation a later turn gets leaves
 them out: the answer's own links are there, as written.
 
-The eval's `search-*` scenarios check it on both providers: a current-facts question searches and lists sources, and
-an ordinary question doesn't search.
+The eval's `search-*` scenarios check it on both providers: a current-facts question searches and lists sources, a
+link the owner sends is read, and an ordinary question doesn't search.
 
 ## Starter context file
 

@@ -234,6 +234,8 @@ const judgeTurn = (judge: {
   loaded: readonly string[];
   /** The replies the answer suggested, if any. */
   replies: readonly string[];
+  /** What the turn searched for and the pages it read, and the sources listed under it. */
+  web: { searched: readonly string[]; read: readonly string[]; sources: readonly string[] };
 }): Check[] => {
   const { turn, answer } = judge;
   const left = [...judge.saves];
@@ -315,6 +317,25 @@ const judgeTurn = (judge: {
                   : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
           },
         ];
+  const { searches } = turn;
+  const { web } = judge;
+  const usedWeb = web.searched.length + web.read.length > 0;
+  const searched: Check[] =
+    searches === undefined
+      ? []
+      : [
+          {
+            miss: searches
+              ? !usedWeb
+                ? "expected a web search; searched nothing and read no page"
+                : web.sources.length === 0
+                  ? "searched the web, but listed no sources"
+                  : null
+              : usedWeb
+                ? `expected no web search; searched ${web.searched.map((query) => `"${query}"`).join(", ") || "nothing"}, read ${web.read.join(", ") || "nothing"}`
+                : null,
+          },
+        ];
   const topics = listItemsIn(answer);
   const listed: Check[] =
     turn.listsTopics === undefined
@@ -351,6 +372,7 @@ const judgeTurn = (judge: {
     ...skills,
     ...said,
     ...replies,
+    ...searched,
     ...listed,
     ...avoided,
   ];
@@ -565,6 +587,28 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       if (replies.length > 0) {
         notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
       }
+      const web = {
+        searched: events.flatMap((event) =>
+          event.type === "activity" && event.activity.kind === "web-searched"
+            ? [event.activity.query]
+            : [],
+        ),
+        read: events.flatMap((event) =>
+          event.type === "activity" && event.activity.kind === "page-read"
+            ? [event.activity.url]
+            : [],
+        ),
+        sources: events.flatMap((event) =>
+          event.type === "sources"
+            ? event.sources.map((source) => `${source.site} · ${source.title} <${source.url}>`)
+            : [],
+        ),
+      };
+      if (web.searched.length > 0) {
+        notes.push(`${prefix}searched ${web.searched.map((query) => `"${query}"`).join(", ")}`);
+      }
+      if (web.read.length > 0) notes.push(`${prefix}read ${web.read.join(", ")}`);
+      if (web.sources.length > 0) notes.push(`${prefix}sources: ${web.sources.join("; ")}`);
       if (scenario.printsTopics || turn.listsTopics) {
         const topics = listItemsIn(answer);
         notes.push(
@@ -580,6 +624,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         answer,
         loaded,
         replies,
+        web,
       });
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 

@@ -70,6 +70,12 @@ export type Turn = {
    * still printed).
    */
   readonly suggests?: boolean;
+  /**
+   * Whether the answer should use the web (ADR 0019): search it or read a page, and list sources
+   * under it; or neither, for an ordinary question. Left out, it isn't checked (what it searched,
+   * read and cited is still printed).
+   */
+  readonly searches?: boolean;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
@@ -150,7 +156,65 @@ const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
   },
 };
 
+/** A garage gym workspace for the web search scenarios. */
+const SEARCHING_GYM: Pick<Scenario, "workspace" | "context"> = {
+  workspace: "Garage gym",
+  context: {
+    facts: ["The garage is 5 m by 3 m", "Trains three mornings a week"],
+    plans: ["Buy a 20 kg Olympic barbell this month"],
+  },
+};
+
 export const SCENARIOS: readonly Scenario[] = [
+  {
+    name: "search-current-price",
+    rule: "a question about current prices and stock searches the web and lists sources",
+    ...SEARCHING_GYM,
+    turns: [
+      {
+        say: "What does a Rogue Ohio Bar cost in the UK right now, and is it in stock anywhere?",
+        expect: [],
+        searches: true,
+      },
+    ],
+  },
+  {
+    name: "search-opening-times",
+    rule: "a question about opening times searches the web and lists sources",
+    workspace: "Days out",
+    context: { facts: ["Lives about an hour from York"] },
+    turns: [
+      {
+        say: "Is the National Railway Museum in York open on Mondays at the moment?",
+        expect: [],
+        searches: true,
+      },
+    ],
+  },
+  {
+    name: "search-owner-link",
+    rule: "a link the owner sends is read, and listed as a source",
+    ...SEARCHING_GYM,
+    turns: [
+      {
+        say: "Would this one do for me? https://www.roguefitness.com/rogue-ohio-bar-black-zinc",
+        expect: [],
+        searches: true,
+      },
+    ],
+  },
+  {
+    name: "search-not-for-ordinary",
+    rule: "an ordinary question is answered without searching the web",
+    ...SEARCHING_GYM,
+    turns: [
+      {
+        say: "Roughly how many sets of squats a week should a beginner do for strength?",
+        expect: [],
+        searches: false,
+      },
+    ],
+  },
   {
     name: "grill-a-plan",
     rule: "Grill this plan asks one question with a recommendation and suggested replies, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
