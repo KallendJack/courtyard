@@ -15,6 +15,7 @@ import {
   type SessionChange,
   type SessionId,
   SessionSummary,
+  SkillList,
   type StopRequest,
   type WorkspaceChange,
   type WorkspaceId,
@@ -101,6 +102,10 @@ export const sendPassword = (path: "/setup" | "/login", form: PasswordForm) =>
 export const logOut = () => sendJson({ path: "/logout", body: {}, schema: z.unknown() });
 export const logOutOthers = () =>
   sendJson({ path: "/logout-others", body: {}, schema: z.unknown() });
+
+/** A workspace's skills, for the skill picker and its Skills section (ADR 0016). */
+export const loadSkills = (workspaceId: string) =>
+  fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/skills`, SkillList);
 
 /** The providers and their models, for the model picker. */
 export const loadProviders = () => fromWorker("/providers", ProviderList);

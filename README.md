@@ -6,6 +6,9 @@ context, so you never re-explain your space, your constraints or your stack.
 - **Workspaces are folders.** One per project or area, each with a short `CONTEXT.md` split into facts, plans and ideas.
 - **Context stays true.** Models save context as you chat; you see every change and can undo it, and each is a git
   commit, backed up wherever you choose.
+- **Skills.** Ways of working a model follows, such as grilling a plan: Courtyard's own, and yours, as folders in the
+  open Agent Skills format in your context folder (`.agents/skills/`, at its top or in a workspace's folder). Each
+  workspace's page lists the ones it gets.
 - **Your subscriptions, not per-token billing.** Claude through your own Claude Code login, with Codex on a ChatGPT plan
   for when Claude's usage limit hits.
 - **Coding, planned.** Code workspaces, where a model works on its own branch while you're away, asks before anything

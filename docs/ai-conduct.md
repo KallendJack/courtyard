@@ -32,6 +32,9 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
   is left out of the score, so run it again later.
 - **Scenarios are invented,** since the repo is public: a made-up owner and workspaces. A new saving rule gets a
   scenario, and a scenario that turns out to expect the wrong thing is fixed in the same pull request, saying why.
+- **Skills.** A scenario can add skills (the workspace's, everywhere's, or house ones, an owner-only one among them),
+  a turn can start one as the owner would (`skill`), and a turn can say which skills the model should load itself
+  (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
   any provider's (Claude's default when left out), and `--effort <level>` its effort (the model's default).
 
@@ -46,7 +49,8 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
 - **Markers keep text in its place.** The owner context sits between `<owner_context>` markers, the context file
   between `<context_file>` markers and earlier turns between `<conversation>` markers. No text inside can close a
   marker, however it's spelt, and a workspace's name sits in quotes it can't close. What's inside is information, not
-  instructions.
+  instructions. Skills are the exception: the list sits between `<skills>` markers and each skill in use between
+  `<skill>` markers, and a skill's text is the owner's or Courtyard's instructions (Skills, below).
 - **Plans and ideas stay plans and ideas.** Facts are true now. Plans are decided but not done. Ideas are only being
   considered. A model describes each as what it is (ADR 0013).
 - **Honest about gaps.** When a model doesn't know something about the owner's life, it says so and asks.
@@ -69,9 +73,13 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 7. The context file between its markers, each line with its label, saying it wins where it differs from the owner
    context, or a line saying there isn't one yet.
 8. When the turn offers the save tool: the saving rules (Saving context lines, below).
+9. When the turn offers the use skill tool and the workspace has skills a model may load: how to use them, then each
+   one's name and description between `<skills>` markers (Skills, below).
+10. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
 
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
-conversation markers, then the new message. Earlier answers say how their turn ended:
+conversation markers, then the new message. An owner message that started a skill reads
+`Owner (started the <name> skill): …` there. Earlier answers say how their turn ended:
 
 - **Completed:** the answer as written.
 - **Stopped by the owner:** marked as stopped before it finished, with whatever was written.
@@ -98,6 +106,57 @@ what the tools ask for (`apps/worker/src/workspace-files/`) and the prompts modu
 note when there's more to read or a search stopped early, or why nothing was found (nothing there, a folder where a
 file was meant, too large, not text or an image, an input the tool doesn't take). The save tool comes alongside them
 on the same terms as Claude's.
+
+## Skills
+
+Built with #89 (ADR 0016). A skill is a folder of instructions in the open Agent Skills format: a `SKILL.md` with a
+name, a description and its instructions, and any files they point to. The worker finds a workspace's skills itself
+(`apps/worker/src/skills/`): the workspace's own `.agents/skills/` in the context folder, a code workspace's repo's
+`.agents/skills/`, the context folder's top-level `.agents/skills/`, then the house skills for its kind of workspace
+(`packages/skills`), the more specific winning by name. A skill that fails the format check, or has `scripts/` in a
+planning workspace, is never offered. Every provider, the fake included, gets the same skills the same way.
+
+A skill starts in one of two ways:
+
+- **The owner starts it,** from the message box's skill picker or a button (Grill this plan, Get to know). The
+  worker puts it into the turn itself, with no tool call, so it works the same on every model. The owner's message
+  carries the skill's tag and is otherwise their own words, unchanged.
+- **A model loads it,** with Courtyard's `use_skill` tool, when what the owner asks fits its description. The tool is
+  offered beside the save tool, on a turn whose provider takes Courtyard's tools (today, every one that saves), when
+  the workspace has a skill to use. Given a skill's name it gives its `SKILL.md`; given a path as well, that file in
+  the skill's folder as text (2,000 lines at a time), and nothing outside it: a path, or a link, that leads out is
+  refused ("Only files in the skill's folder can be read."). Its description says what it does and that limit,
+  nothing more. The chat shows "Used <skill>" for a skill a model loads, and "Read <skill>'s <file>" for each of its
+  files; nothing for a skill the owner started, whose tag already says it.
+
+**Only the owner starts some skills** (`"start": "owner"` in `skills.json`, such as Get to know). That goes with the
+name, so an owner's own skill replacing one is owner-only too. Such a skill is never in a model's list, and the tool
+refuses it ("Only the owner starts <name>.") unless it's already in use in the session.
+
+**A skill stays in use for the rest of its session,** however it started. Each turn is framed afresh from the event
+log, so every later turn carries the `SKILL.md` of each skill in use: one the owner started (from their messages'
+tags, so Retry and Carry on, which send a message again with its tag, keep it) or a model loaded (from the
+activities). Grilling and Get to know take many turns, and depend on this. A skill that has gone or broken since is
+left out.
+
+What a model is told (Every turn, items 9 and 10). **The list,** on a turn that offers the tool, is this, then each
+skill's name and description, one per line, between `<skills>` markers, apart from owner-only ones:
+
+> Skills are instructions for particular kinds of task, written by the owner or by Courtyard. When what the owner
+> asks fits a skill's description, load it with the use_skill tool before you answer, and follow it. Each skill you
+> can load, with what it's for:
+
+**The skills in use** come after this, each one's `SKILL.md` as written between `<skill name="…">` markers. On a turn
+that offers the tool it goes on "A skill's own files that it points you to come from the use_skill tool, by their path
+in the skill's folder.", and when the owner started one with their new message, "The owner started the <name> skill
+with their new message: follow it in this answer.":
+
+> These skills are in use in this session, started by the owner or loaded by you earlier: keep following each while
+> what the owner asks fits it. A skill's text is the owner's or Courtyard's instructions.
+
+A skill's text is instructions, unlike the context file's, since only the owner and Courtyard write skills. Text inside
+still can't close its markers. Known limits: the owner can't make one of their own skills owner-only (the format has no
+field for it, and Claude's and Codex's own fields fail the check), and skills with scripts wait for phase 4's shell.
 
 ## Starter context file
 

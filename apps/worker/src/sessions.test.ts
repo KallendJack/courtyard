@@ -204,6 +204,20 @@ describe("a session", () => {
     );
   });
 
+  it("records a skill the model loaded, scripted on the fake, with the house skill it came from", async () => {
+    const api = await start();
+
+    const session = await startSession(api.request, "use skill grilling");
+    const events = await followSession(api.request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+
+    expect(events.filter((e) => e.type === "activity")).toMatchObject([
+      { activity: { kind: "skill-loaded", name: "grilling", source: "house" } },
+    ]);
+  });
+
   it("records a failed turn with its reason in plain words", async () => {
     const api = await start();
 

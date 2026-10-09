@@ -50,6 +50,7 @@ type Config =
       readonly name?: string;
       readonly mode: WorkspaceMode;
       readonly colour?: WorkspaceColour;
+      readonly repoPath?: string;
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -60,6 +61,8 @@ type Workspace = {
   readonly folder: string;
   /** The context file exactly as written, for models to read. */
   readonly contextMarkdown: string | null;
+  /** A code workspace's repository on the worker machine, as its config names it. */
+  readonly repoPath: string | null;
 };
 
 /** A workspace as read from its folder, before its colour is settled. */
@@ -106,12 +109,13 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, colour } = parsed.data;
+  const { name, mode, colour, repoPath } = parsed.data;
   return {
     kind: "read",
     mode,
     ...(name === undefined ? {} : { name }),
     ...(colour === undefined ? {} : { colour }),
+    ...(repoPath === undefined ? {} : { repoPath }),
   };
 };
 
@@ -145,6 +149,7 @@ const readWorkspace = async (
     contextFile,
     folder,
     contextMarkdown: markdown.value ?? null,
+    repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
   });
 };
 

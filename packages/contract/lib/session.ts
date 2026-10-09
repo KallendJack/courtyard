@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SkillName, SkillSource } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
   ContextLine,
@@ -102,11 +103,15 @@ export type SessionId = z.infer<typeof SessionId>;
 /** The longest message accepted. */
 export const MAX_MESSAGE_LENGTH = 20_000;
 
-/** What the owner sends: a message, the model to answer it, and its effort (none for the default). */
+/**
+ * What the owner sends: a message, the model to answer it, its effort (none for the default), and
+ * the skill they started with it, if any (ADR 0016).
+ */
 export const NewMessage = z.object({
   text: z.string().trim().min(1, "Write something first").max(MAX_MESSAGE_LENGTH),
   model: ModelRef,
   effort: Effort.optional(),
+  skill: SkillName.optional(),
 });
 export type NewMessage = z.infer<typeof NewMessage>;
 
@@ -180,6 +185,10 @@ export type FailureReason = z.infer<typeof FailureReason>;
 export const Activity = z.discriminatedUnion("kind", [
   /** A file it read, as a path inside the workspace folder. */
   z.object({ kind: z.literal("read-file"), path: z.string() }),
+  /** A skill it loaded itself, and where the skill came from (ADR 0016). */
+  z.object({ kind: z.literal("skill-loaded"), name: SkillName, source: SkillSource }),
+  /** One of a skill's own files it read, as a path inside the skill's folder. */
+  z.object({ kind: z.literal("skill-file-read"), name: SkillName, path: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 
@@ -247,6 +256,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     model: ModelRef,
     /** The effort it was sent with; none for the model's default. */
     effort: Effort.optional(),
+    /** The skill the owner started with it, which stays in use for the rest of the session. */
+    skill: SkillName.optional(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),

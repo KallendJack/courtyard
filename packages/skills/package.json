@@ -1,0 +1,23 @@
+{
+  "name": "@courtyard/skills",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@courtyard/contract": "workspace:*",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "vitest": "5.0.2"
+  }
+}

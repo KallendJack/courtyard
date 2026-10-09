@@ -3,8 +3,9 @@ import {
   type ProviderList,
   SESSION_TITLE_MAX_LENGTH,
   SessionDetail,
+  type SkillSummary,
 } from "@courtyard/contract";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/back-link";
@@ -23,6 +24,7 @@ import {
   deleteSession,
   fromWorker,
   loadProviders,
+  loadSkills,
   renameSession,
   sendMessage,
   stopTurn,
@@ -30,29 +32,50 @@ import {
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
-    const [session, providers] = await Promise.all([
+    const [session, providers, skills] = await Promise.all([
       fromWorker(`/sessions/${encodeURIComponent(params.sessionId)}`, SessionDetail),
       loadProviders(),
+      loadSkills(params.workspaceId),
     ]);
-    return { session, providers };
+    return { session, providers, skills };
   },
   component: SessionPage,
 });
 
+/** The workspaces the sidebar lists, which name the session's workspace. */
+const appRoute = getRouteApi("/_app");
+
 function SessionPage() {
-  const { session, providers } = Route.useLoaderData();
+  const { session, providers, skills } = Route.useLoaderData();
+  const workspaces = appRoute.useLoaderData();
   if (session.kind !== "loaded") return <Problem result={session} />;
+  const workspace =
+    workspaces.kind === "loaded"
+      ? workspaces.data.workspaces.find((w) => w.id === session.data.workspaceId)
+      : undefined;
   return (
     <Session
       // A new session starts from scratch, even when the router reuses this component.
       key={session.data.id}
       session={session.data}
       providers={providers.kind === "loaded" ? providers.data.providers : []}
+      {...(skills.kind === "loaded"
+        ? {
+            skills: {
+              workspaceName: workspace?.name ?? "this workspace",
+              list: skills.data.skills,
+            },
+          }
+        : {})}
     />
   );
 }
 
-function Session(props: { session: SessionDetail; providers: ProviderList["providers"] }) {
+function Session(props: {
+  session: SessionDetail;
+  providers: ProviderList["providers"];
+  skills?: { workspaceName: string; list: readonly SkillSummary[] };
+}) {
   const { session } = props;
   const { turns, modelTitle, problem, reconnecting } = useSessionTurns(session.id);
   const [sendProblem, setSendProblem] = useState<string>();
@@ -86,6 +109,8 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
         text: turn.text,
         model: turn.model,
         ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        // The skill the owner started goes again with it.
+        ...(turn.skill === undefined ? {} : { skill: turn.skill }),
       });
       setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
     },
@@ -245,6 +270,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}
           compactOnNarrow
+          {...(props.skills === undefined ? {} : { skills: props.skills })}
           send={send}
         />
       </div>

@@ -94,6 +94,11 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, { status: 400, error: "That model isn't available right now." });
     case "effort-unavailable":
       return apiError(c, { status: 400, error: "That model doesn't take that effort." });
+    case "skill-unavailable":
+      return apiError(c, {
+        status: 400,
+        error: "That skill can't be used in this workspace. Its Skills section says why.",
+      });
     case "nothing-to-carry-on":
       return apiError(c, {
         status: 409,

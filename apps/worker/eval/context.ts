@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -15,6 +15,7 @@ import {
   type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
+import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
 import { OWNER_FILE } from "../src/owner-context/index.ts";
 import {
@@ -22,7 +23,14 @@ import {
   createCodexProvider,
   type Provider,
 } from "../src/providers/index.ts";
-import { asOwner, followSession, postJson, type Requester, testWorker } from "../src/testing.ts";
+import {
+  asOwner,
+  followSession,
+  postJson,
+  type Requester,
+  testWorker,
+  writeSkill,
+} from "../src/testing.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
@@ -31,6 +39,7 @@ import {
   type Places,
   SCENARIOS,
   type Scenario,
+  type ScenarioSkill,
   type Sections,
   type Turn,
   type Words,
@@ -90,7 +99,13 @@ type Check = { readonly miss: string | null };
  * which leaves it out of the score.
  */
 type Verdict =
-  | { readonly kind: "judged"; readonly scenario: Scenario; readonly checks: readonly Check[] }
+  | {
+      readonly kind: "judged";
+      readonly scenario: Scenario;
+      readonly checks: readonly Check[];
+      /** What each turn did that isn't scored on its own, such as the skills it loaded. */
+      readonly notes: readonly string[];
+    }
   | { readonly kind: "not-run"; readonly scenario: Scenario; readonly reason: string };
 
 const passed = (verdict: Verdict) =>
@@ -199,7 +214,13 @@ const questionsIn = (answer: string) => {
  * question the answer should ask. Every exact match is paired up before any near one, so a save
  * that's wrong can't take the place of one that's right.
  */
-const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }): Check[] => {
+const judgeTurn = (judge: {
+  turn: Turn;
+  saves: readonly Save[];
+  answer: string;
+  /** The skills the model loaded itself in the turn, in order. */
+  loaded: readonly string[];
+}): Check[] => {
   const { turn, answer } = judge;
   const left = [...judge.saves];
   const take = (matches: (save: Save) => boolean) => {
@@ -241,7 +262,48 @@ const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }
                 : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany];
+  const { loads } = turn;
+  const loadedRight = (wanted: readonly string[]) =>
+    [...new Set(judge.loaded)].sort().join(",") === [...wanted].sort().join(",");
+  const skills: Check[] =
+    loads === undefined
+      ? []
+      : [
+          {
+            miss: loadedRight(loads)
+              ? null
+              : `expected to load ${loads.join(", ") || "no skill"}; loaded ${judge.loaded.join(", ") || "none"}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills];
+};
+
+/**
+ * A house skills folder for a scenario with house skills of its own: Courtyard's, with the
+ * scenario's beside them in skills.json. `undefined` when it adds none.
+ */
+const houseFor = async (root: string, skills: readonly ScenarioSkill[]) => {
+  const extra = skills.filter((skill) => skill.where === "house");
+  if (extra.length === 0) return undefined;
+  const folder = join(root, "house");
+  const manifest = await readHouseManifest();
+  if (!manifest.ok) throw new Error(manifest.error);
+  for (const { name } of manifest.value.skills) {
+    await cp(join(HOUSE_SKILLS_FOLDER, name), join(folder, name), { recursive: true });
+  }
+  for (const { name, description, body } of extra) {
+    await writeSkill(folder, name, { description, body });
+  }
+  const entries = extra.map(({ name, start }) => ({
+    name,
+    workspaces: ["planning", "code"],
+    ...(start === undefined ? {} : { start }),
+  }));
+  await writeFile(
+    join(folder, "skills.json"),
+    JSON.stringify({ skills: [...manifest.value.skills, ...entries] }),
+  );
+  return folder;
 };
 
 const withTimeout = <T>(work: Promise<T>, what: string) =>
@@ -258,13 +320,20 @@ const withTimeout = <T>(work: Promise<T>, what: string) =>
 /** Sends the owner's message, starting the session for the first, and returns the session's id. */
 const send = async (
   request: Requester,
-  to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; choice: Choice },
+  to: {
+    workspaceId: WorkspaceId;
+    sessionId: SessionId | undefined;
+    text: string;
+    skill: string | undefined;
+    choice: Choice;
+  },
 ): Promise<SessionId> => {
   const { provider, model, effort } = to.choice;
   const message = {
     text: to.text,
     model: { provider: provider.id, model },
     ...(effort === undefined ? {} : { effort }),
+    ...(to.skill === undefined ? {} : { skill: to.skill }),
   };
   if (to.sessionId === undefined) {
     const started = await postJson(request, `/api/workspaces/${to.workspaceId}/sessions`, message);
@@ -332,7 +401,12 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
   try {
     await mkdir(join(root, "context"));
-    const app = testWorker({ root, providers: [choice.provider] });
+    const houseSkills = await houseFor(root, scenario.skills ?? []);
+    const app = testWorker({
+      root,
+      providers: [choice.provider],
+      ...(houseSkills === undefined ? {} : { houseSkills }),
+    });
     const request = await asOwner(app);
     const made = await postJson(request, "/api/workspaces", { name: scenario.workspace });
     if (made.status !== 201) throw new Error(`adding the workspace failed (${made.status})`);
@@ -351,6 +425,14 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       await mkdir(dirname(join(folder, path)), { recursive: true });
       await writeFile(join(folder, path), text);
     }
+    for (const skill of scenario.skills ?? []) {
+      if (skill.where === "house") continue;
+      const skillsDir =
+        skill.where === "workspace"
+          ? join(folder, ".agents", "skills")
+          : join(root, "context", ".agents", "skills");
+      await writeSkill(skillsDir, skill.name, { description: skill.description, body: skill.body });
+    }
 
     if (scenario.tidy !== undefined) {
       const checks = await judgeTidy({
@@ -360,10 +442,11 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         tidy: scenario.tidy,
         choice,
       });
-      return { kind: "judged", scenario, checks };
+      return { kind: "judged", scenario, checks, notes: [] };
     }
 
     const checks: Check[] = [];
+    const notes: string[] = [];
     let sessionId: SessionId | undefined;
     let after = 0;
     for (const [index, turn] of scenario.turns.entries()) {
@@ -371,6 +454,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         workspaceId: workspace.id,
         sessionId,
         text: turn.say,
+        skill: turn.skill,
         choice,
       });
       const events = await withTimeout(
@@ -391,7 +475,13 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         .map((event) => (event.type === "text-delta" ? event.text : ""))
         .join("");
       const prefix = scenario.turns.length === 1 ? "" : `turn ${index + 1}: `;
-      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer });
+      const loaded = events.flatMap((event) =>
+        event.type === "activity" && event.activity.kind === "skill-loaded"
+          ? [event.activity.name]
+          : [],
+      );
+      if (loaded.length > 0) notes.push(`${prefix}loaded ${loaded.join(", ")}`);
+      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer, loaded });
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {
@@ -406,7 +496,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         }
       }
     }
-    return { kind: "judged", scenario, checks };
+    return { kind: "judged", scenario, checks, notes };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { kind: "not-run", scenario, reason };
@@ -438,6 +528,7 @@ const report = (verdict: Verdict) => {
   }
   console.log(`${passed(verdict) ? "pass" : "MISS"}  ${verdict.scenario.name}`);
   for (const { miss } of verdict.checks) if (miss !== null) console.log(`      ${miss}`);
+  for (const note of verdict.notes) console.log(`      (${note})`);
 };
 
 const summarise = (scenarios: readonly Scenario[], verdicts: readonly Verdict[]) => {

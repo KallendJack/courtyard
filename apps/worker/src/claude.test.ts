@@ -58,10 +58,10 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
-      saveTool: null,
+      tools: [],
       fileTools: null,
     },
-    save: async () => ({ saved: false, reply: "No saves in this test." }),
+    callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
     emit: async (text) => {
       emitted.push(text);
     },
@@ -297,7 +297,7 @@ describe("a Claude turn", () => {
         instructions: "Exactly these instructions.",
         message: "Exactly this message.",
         newMessage: "This message.",
-        saveTool: null,
+        tools: [],
         fileTools: null,
       },
     });
@@ -529,11 +529,11 @@ const SAVE_TOOL: CourtyardTool = {
   },
 };
 
-const framingWith = (saveTool: CourtyardTool | null) => ({
+const framingWith = (tools: readonly CourtyardTool[]) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
-  saveTool,
+  tools,
   fileTools: null,
 });
 
@@ -543,10 +543,10 @@ describe("the save tool on a Claude turn", () => {
     const handed: unknown[] = [];
 
     await runTurn(claudeCode, {
-      framing: framingWith(SAVE_TOOL),
-      save: async (input) => {
-        handed.push(input);
-        return { saved: false, reply: "That line is too long." };
+      framing: framingWith([SAVE_TOOL]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: false, content: [{ kind: "text", text: "That line is too long." }] };
       },
     });
 
@@ -569,17 +569,58 @@ describe("the save tool on a Claude turn", () => {
     const result = await client.callTool({ name: "save_to_context", arguments: input });
     await client.close();
 
-    expect(handed).toEqual([input]);
+    expect(handed).toEqual([{ name: "save_to_context", input }]);
     expect(result).toMatchObject({
       isError: true,
       content: [{ type: "text", text: "That line is too long." }],
     });
   });
 
+  it("comes with every other Courtyard tool of the turn, on the same server, each handed over by name", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const USE_SKILL: CourtyardTool = {
+      name: "use_skill",
+      description: "Loads a skill.",
+      input: { name: z.string(), path: z.string().optional() },
+    };
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, USE_SKILL]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: true, content: [{ kind: "text", text: "---\nname: grilling\n---" }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__use_skill", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual([
+      "save_to_context",
+      "use_skill",
+    ]);
+    const result = await client.callTool({ name: "use_skill", arguments: { name: "grilling" } });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "use_skill", input: { name: "grilling" } }]);
+    expect(result).toMatchObject({
+      isError: false,
+      content: [{ type: "text", text: "---\nname: grilling\n---" }],
+    });
+  });
+
   it("isn't offered, or allowed, on a turn whose framing has none", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
 
-    await runTurn(claudeCode, { framing: framingWith(null) });
+    await runTurn(claudeCode, { framing: framingWith([]) });
 
     const options = runs[0]?.options;
     if (!options) throw new Error("no run");

@@ -2,9 +2,15 @@ import { ChevronDown } from "lucide-react";
 import { useId } from "react";
 import { classes } from "@/lib/classes";
 
+/** A small pill's shape in a row of controls, without its colours or side padding. */
+export const PILL_SHAPE =
+  "rounded-full py-1.5 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+
+/** A pill's quiet colours: the composer's pickers, and a chip that isn't open. */
+export const PILL_QUIET = "bg-background font-medium text-muted-foreground";
+
 /** A small quiet pill in a row of controls: the composer's pickers, and the chip that opens them. */
-export const PILL =
-  "rounded-full bg-background py-1.5 pl-3 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+export const PILL = classes(PILL_SHAPE, PILL_QUIET, "pl-3");
 
 const LOOKS = {
   /** Small and quiet, in a row of controls (the composer's model and effort), sized to its choice. */

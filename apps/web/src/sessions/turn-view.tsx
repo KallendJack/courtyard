@@ -1,8 +1,15 @@
-import type { Activity, FailureReason, ProviderList, SessionId } from "@courtyard/contract";
+import {
+  type Activity,
+  type FailureReason,
+  type ProviderList,
+  type SessionId,
+  skillTitle,
+} from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
 import { memo } from "react";
 import { Button } from "@/components/button";
 import { Notice } from "@/components/notice";
+import { SkillTag } from "@/components/skill-tag";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
@@ -14,6 +21,10 @@ const describeActivity = (activity: Activity) => {
   switch (activity.kind) {
     case "read-file":
       return `Read ${activity.path}`;
+    case "skill-loaded":
+      return `Used ${skillTitle(activity.name)}`;
+    case "skill-file-read":
+      return `Read ${skillTitle(activity.name)}'s ${activity.path}`;
   }
 };
 
@@ -62,9 +73,12 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      <p className="ml-auto w-fit max-w-[85%] rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere text-accent-foreground md:text-base/[25px]">
-        {turn.text}
-      </p>
+      <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground">
+        {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
+        <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
+          {turn.text}
+        </p>
+      </div>
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
