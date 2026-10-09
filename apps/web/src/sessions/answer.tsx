@@ -1,8 +1,9 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { finishForNow, splitBlocks } from "./blocks.ts";
 import { CodeBlock } from "./code-block.tsx";
+import { hasMaths, writeMathsForRemark } from "./maths.ts";
 import { useReveal } from "./reveal.ts";
 
 /** A node of formatted Markdown, as far as reading its text needs. */
@@ -85,11 +86,51 @@ const ELEMENTS: Components = {
 
 const PLUGINS = [remarkGfm];
 
-/** One block of an answer, memoised on its text, so finished blocks aren't formatted again. */
+type MathsPlugins = typeof import("./maths-plugins.ts");
+
+/** Drawing formulas, once it has loaded, so later blocks draw theirs at once. */
+let mathsPlugins: MathsPlugins | undefined;
+
+/** Drawing formulas, loaded the first time a block has maths in it. */
+const useMathsPlugins = (needed: boolean) => {
+  const [loaded, setLoaded] = useState(mathsPlugins);
+  useEffect(() => {
+    if (!needed || loaded) return;
+    let current = true;
+    void import("./maths-plugins.ts")
+      .then((plugins) => {
+        mathsPlugins = plugins;
+        if (current) setLoaded(plugins);
+      })
+      // The formulas stay as the model wrote them, which still reads.
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [needed, loaded]);
+  return needed ? loaded : undefined;
+};
+
+/**
+ * One block of an answer, memoised on its text, so finished blocks aren't formatted again. A
+ * block with maths in it is drawn with formulas once they've loaded.
+ */
 const Block = memo(function Block(props: { text: string }) {
+  const maths = useMathsPlugins(hasMaths(props.text));
+  if (maths === undefined) {
+    return (
+      <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+        {props.text}
+      </Markdown>
+    );
+  }
   return (
-    <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
-      {props.text}
+    <Markdown
+      remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}
+      rehypePlugins={maths.rehypePlugins}
+      components={ELEMENTS}
+    >
+      {writeMathsForRemark(props.text)}
     </Markdown>
   );
 });
@@ -108,7 +149,8 @@ export const Answer = memo(function Answer(props: {
   const shown = useReveal(props.text, { running: props.running, replayed: props.replayed });
   const blocks = splitBlocks(shown);
   return (
-    <div className="space-y-4 text-base/[26px] wrap-anywhere">
+    // Spaced by gaps, not margins, so a formula (whose margins come from KaTeX) spaces like the rest.
+    <div className="flex flex-col gap-4 text-base/[26px] wrap-anywhere">
       {blocks.map((block, index) => (
         <Block
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)

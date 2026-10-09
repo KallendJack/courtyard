@@ -95,3 +95,47 @@ test("code is coloured by language from the theme, light and dark", async ({ pag
     italic: true,
   });
 });
+
+test("maths is drawn as formulas, in all three forms, and prices stay text", async ({ page }) => {
+  const scripts = watchScripts(page);
+  const maths = () => scripts.filter((file) => /katex|maths/i.test(file));
+  await ask(page, "It costs £5 or $10, maybe $20 with $$ signs and no formulas.");
+  expect(maths()).toEqual([]);
+
+  const session = await ask(
+    page,
+    [
+      "Epley's estimate, \\(w(1 + r/30)\\), holds up to about ten reps:",
+      "$$1RM = w\\left(1 + \\frac{r}{30}\\right)$$",
+      "Last week's volume:\n\n\\[V = 3 \\times 5 \\times 80\\]",
+      "The bar was £5 or $10, and the plates $20.",
+    ].join("\n\n"),
+  );
+  const answer = session.locator("[aria-live]").last();
+
+  await expect(answer.getByRole("math")).toHaveCount(3);
+  // `$$…$$` on its own line and `\[…\]` are centred formulas of their own.
+  await expect(answer.locator('math[display="block"]')).toHaveCount(2);
+  await expect(answer).toContainText("The bar was £5 or $10, and the plates $20.");
+  await expect(answer).not.toContainText("\\(");
+  await expect(answer).not.toContainText("$$");
+  expect(maths().length).toBeGreaterThan(0);
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a long formula scrolls sideways, not the page", async ({ page }) => {
+    const long = Array.from({ length: 12 }, (_, i) => `${i + 2} \\times 5 \\times 80`).join(" + ");
+    const session = await ask(page, `Last week's volume:\n\n$$V = ${long}$$`);
+    const formula = session.locator("[aria-live]").last().locator(".katex-display");
+
+    await expect(formula).toBeVisible();
+    const sizes = await formula.evaluate((element) => ({
+      scrolls: element.scrollWidth > element.clientWidth,
+      overflow: getComputedStyle(element).overflowX,
+      page: document.documentElement.scrollWidth <= window.innerWidth,
+    }));
+    expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+  });
+});
