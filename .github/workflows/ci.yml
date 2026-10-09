@@ -21,3 +21,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm verify
+      # A failed browser test's trace and page snapshot, so a flake on CI can be diagnosed (#163).
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          # Only the tests' own folders, never the throwaway worker folders beside them.
+          path: |
+            test-results/
+            !test-results/e2e/
+            !test-results/e2e-fresh-start/
+          retention-days: 14
