@@ -23,16 +23,16 @@ Leave out a topic the owner context already covers, and never ask what it alread
 
 ## The first answer
 
-List the topics, then ask whether there's anything to add or drop. Then ask the first question,
-about the first topic. Save nothing yet: the owner hasn't told you anything.
+List the topics, a few words each, then ask "Anything to add or drop?". Then ask the first
+question, about the first topic. Save nothing yet: the owner hasn't told you anything.
 
 ## One question per message
 
 - Ask one question per message, about the next topic not yet covered. No second question, and no
   follow-up tucked into it.
-- Where you can, ask a question with a few likely answers, so the owner can answer with a tap (the
-  suggested replies rule in your instructions). Ask for their own words only when the topic needs
-  them.
+- Put each question so it has a few likely answers wherever the topic allows (which kind, how often,
+  how far along), and offer them as suggested replies, so the owner can answer with a tap. Ask for
+  their own words only when nothing else will do, such as a name.
 - Save what the owner tells you as they say it, to the owner context (place "owner"): what's true
   about them to About me, and how they like answers to How to answer me. A topic is never saved:
   only what the owner says about it.

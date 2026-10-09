@@ -562,7 +562,12 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
       }
       if (scenario.printsTopics || turn.listsTopics) {
-        notes.push(`${prefix}topics: ${listItemsIn(answer).join(" | ") || "none listed"}`);
+        const topics = listItemsIn(answer);
+        notes.push(
+          topics.length > 0
+            ? `${prefix}topics: ${topics.join(" | ")}`
+            : `${prefix}no topics listed; the answer: ${answer.trim().replace(/\s+/g, " ").slice(0, 600)}`,
+        );
         notes.push(`${prefix}asked: ${questionsIn(answer).join(" ").trim() || "nothing"}`);
       }
       const judged = judgeTurn({

@@ -314,8 +314,9 @@ The skill tells the model to:
   question, that these already answer.
 - **List the topics in its first answer,** asking whether there's anything to add or drop, then ask the first
   question. It saves nothing in that answer, since the owner hasn't said anything yet.
-- **Ask one question per message,** with suggested replies where the question has likely answers (Suggested
-  replies, above), and save each answer as it comes, by the rules above. Topics are never saved.
+- **Ask one question per message,** put so it has a few likely answers wherever the topic allows, offered as
+  suggested replies (Suggested replies, above), and save each answer as it comes, by the rules above. Topics are
+  never saved.
 - **Wrap up** when every topic is answered or skipped, or the owner has had enough: what was saved and what was
   skipped, with no new question.
 
