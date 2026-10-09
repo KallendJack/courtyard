@@ -28,11 +28,13 @@ export {
 export {
   DOCUMENT_MAX_CHARACTERS,
   DOCUMENT_NAME_MAX_LENGTH,
+  DocumentChange,
   DocumentChanged,
   DocumentDetail,
   DocumentList,
   DocumentName,
   DocumentRename,
+  DocumentRenamed,
   DocumentSlug,
   DocumentSummary,
   SaveAsDocument,

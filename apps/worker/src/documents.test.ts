@@ -1,7 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DocumentList, type SessionEvent, SessionSummary } from "@courtyard/contract";
+import {
+  DocumentChanged,
+  DocumentDetail,
+  DocumentList,
+  DocumentRenamed,
+  RecentChanges,
+  type SessionEvent,
+  SessionSummary,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/index.ts";
 import {
@@ -328,5 +336,170 @@ describe("the document tool", () => {
       "That input doesn't fit this tool: it takes a document's whole text, and its path to update one.",
     ]);
     expect(savedEvents(events)).toHaveLength(1);
+  });
+});
+
+const sendJson = (request: Requester, path: string, method: string, body: unknown) =>
+  request(path, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** Recent changes as the page lists them: an undo shows as its change marked undone. */
+const changesListed = async (request: Requester) =>
+  RecentChanges.parse(await (await request("/api/workspaces/padel/changes")).json()).changes.filter(
+    (change) => change.kind !== "undo",
+  );
+
+const undoChange = (request: Requester, change: string) =>
+  postJson(request, `/api/changes/${change}/undo`, {});
+
+describe("a document's page", () => {
+  it("gives the document's name, path and text below its heading", async () => {
+    await withPackingList();
+    const request = await asOwner(testWorker({ root }));
+
+    const response = await request("/api/workspaces/padel/documents/packing-list-for-bilbao");
+
+    expect(DocumentDetail.parse(await response.json())).toMatchObject({
+      document: { name: "Packing list for Bilbao", path: "docs/packing-list-for-bilbao.md" },
+      body: "- Two rackets\n- Trainers",
+    });
+    expect((await request("/api/workspaces/padel/documents/nothing-here")).status).toBe(404);
+  });
+
+  it("renames a document, its heading and file together, as one change Recent changes can undo", async () => {
+    await withPackingList();
+    await writeFile(join(docsDir(), "notes.md"), "# Notes\n");
+    const request = await asOwner(testWorker({ root }));
+    const path = "/api/workspaces/padel/documents/packing-list-for-bilbao";
+
+    const clash = await sendJson(request, path, "PATCH", { name: "Notes" });
+    expect(clash.status).toBe(409);
+    const renamed = await sendJson(request, path, "PATCH", { name: "Bilbao kit" });
+
+    expect(renamed.status).toBe(200);
+    const { change, document } = DocumentRenamed.parse(await renamed.json());
+    expect(document).toMatchObject({ slug: "bilbao-kit", name: "Bilbao kit" });
+    expect(await documentFile("bilbao-kit")).toBe("# Bilbao kit\n\n- Two rackets\n- Trainers\n");
+    expect((await listed(request)).map((each) => each.slug).sort()).toEqual([
+      "bilbao-kit",
+      "notes",
+    ]);
+    expect((await changesListed(request))[0]).toMatchObject({
+      kind: "document",
+      document: {
+        did: "renamed",
+        name: "Bilbao kit",
+        was: "Packing list for Bilbao",
+        slug: "bilbao-kit",
+      },
+      undo: "available",
+    });
+
+    expect((await undoChange(request, change ?? "")).status).toBe(204);
+    expect(await documentFile("packing-list-for-bilbao")).toBe(PACKING);
+    expect((await listed(request)).map((each) => each.slug).sort()).toEqual([
+      "notes",
+      "packing-list-for-bilbao",
+    ]);
+  });
+
+  it("deletes a document as one change, which Undo brings back", async () => {
+    await withPackingList();
+    const request = await asOwner(testWorker({ root }));
+
+    const deleted = await sendJson(
+      request,
+      "/api/workspaces/padel/documents/packing-list-for-bilbao",
+      "DELETE",
+      {},
+    );
+
+    expect(deleted.status).toBe(200);
+    const { change } = DocumentChanged.parse(await deleted.json());
+    expect(await listed(request)).toEqual([]);
+    expect((await changesIn(contextDir))[0]?.title).toBe(
+      "Delete document: Packing list for Bilbao",
+    );
+    expect((await changesListed(request))[0]).toMatchObject({
+      kind: "document",
+      document: { did: "deleted", name: "Packing list for Bilbao", slug: null },
+      undo: "available",
+    });
+    expect((await undoChange(request, change ?? "")).status).toBe(204);
+    expect(await documentFile("packing-list-for-bilbao")).toBe(PACKING);
+    expect((await changesListed(request))[0]).toMatchObject({ undo: "undone" });
+  });
+
+  it("is only in a planning workspace", async () => {
+    await mkdir(join(contextDir, "site"), { recursive: true });
+    await writeFile(
+      join(contextDir, "site", "workspace.json"),
+      JSON.stringify({ mode: "code", repoPath: "/path/to/repo" }),
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await request("/api/workspaces/site/documents")).status).toBe(409);
+  });
+});
+
+describe("documents in Recent changes", () => {
+  it("lists each change to a document, and undoes a model's save through its session", async () => {
+    await withPackingList();
+    const { request, session } = await sessionWith([
+      [
+        documentTool({ text: "# Bike fit notes\n\nSaddle up 5 mm." }),
+        { read: "docs/packing-list-for-bilbao.md" },
+        documentTool({
+          path: "docs/packing-list-for-bilbao.md",
+          text: `${PACKING}- Grips\n`,
+          change: "added grips",
+        }),
+      ],
+    ]);
+
+    const [updated, saved] = await changesListed(request);
+    expect(updated).toMatchObject({
+      kind: "document",
+      document: {
+        did: "updated",
+        name: "Packing list for Bilbao",
+        slug: "packing-list-for-bilbao",
+      },
+      session: { id: session.id },
+      undo: "available",
+    });
+    expect(saved).toMatchObject({
+      document: { did: "saved", name: "Bike fit notes", slug: "bike-fit-notes" },
+    });
+
+    expect((await undoChange(request, saved?.id ?? "")).status).toBe(204);
+    const events = await followSession(request, {
+      sessionId: session.id,
+      until: "document-undone",
+    });
+    expect(events.at(-1)).toMatchObject({ type: "document-undone" });
+    expect(await listed(request)).toHaveLength(1);
+    const [, nowSaved] = await changesListed(request);
+    expect(nowSaved?.undo).toBe("undone");
+
+    // Edited by hand since: Undo would lose that, so it isn't offered.
+    await writeFile(join(docsDir(), "packing-list-for-bilbao.md"), "# Packing list for Bilbao\n");
+    expect((await changesListed(request))[0]).toMatchObject({ kind: "document", undo: "none" });
+  });
+
+  it("go with everything else at a fresh start", async () => {
+    await withPackingList();
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await postJson(request, "/api/fresh-start", { confirm: "start fresh" })).status).toBe(
+      204,
+    );
+
+    expect(
+      await readFile(join(docsDir(), "packing-list-for-bilbao.md"), "utf8").catch(() => null),
+    ).toBe(null);
   });
 });

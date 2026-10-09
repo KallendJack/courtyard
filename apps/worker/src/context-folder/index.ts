@@ -189,6 +189,18 @@ export type HistoryChange = {
 export const placeFile = (place: Place) =>
   place.kind === "owner-context" ? OWNER_FILE : `${place.id}/${CONTEXT_FILE}`;
 
+/**
+ * The folders in a workspace's folder whose files are changed whole, rather than line by line, so
+ * Recent changes lists their changes too: its documents (ADR 0020).
+ */
+export const WHOLE_FILE_FOLDERS = ["docs"] as const;
+
+/** Every path whose changes Recent changes lists for a place, from the folder's top. */
+const historyPaths = (place: Place) =>
+  place.kind === "owner-context"
+    ? [placeFile(place)]
+    : [placeFile(place), ...WHOLE_FILE_FOLDERS.map((folder) => `${place.id}/${folder}`)];
+
 /** Commit fields, and commits, as `git log` prints them here. */
 const FIELD = "\x1f";
 const RECORD = "\x1e";
@@ -477,7 +489,7 @@ export const createContextFolder = (options: {
           ...(after === undefined ? ["HEAD"] : [after, "--skip=1"]),
           ...(freshStart === "" ? [] : [`^${freshStart}`]),
           "--",
-          placeFile(place),
+          ...historyPaths(place),
         );
         const changes = parseLog(log);
         const page = changes.slice(0, limit);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type ChangeId,
   DOCUMENT_MAX_CHARACTERS,
+  type DocumentChange,
   type DocumentSave,
   DocumentSlug,
   type DocumentSummary,
@@ -15,6 +16,7 @@ import {
   type ContextFolder,
   sameFileText,
   undoWholeFiles,
+  type WholeFile,
   type WholeFilesUndoRefusal,
 } from "../context-folder/index.ts";
 import { listFolder, readTextFile, removeFile, writeTextFileIn } from "../files.ts";
@@ -304,6 +306,121 @@ const replaceDocument = async (
       }),
   );
   return saved.ok ? ok({ save: saved.value.value, change: saved.value.id }) : saved;
+};
+
+/** One document for its page: what lists show, and its text below its heading. */
+export const getDocument = async (
+  target: Pick<DocumentTarget, "contextDir" | "workspaceId">,
+  slug: DocumentSlug,
+): Promise<Result<{ document: DocumentSummary; body: string }, DocumentRefusal>> => {
+  const folder = await documentsFolder(target);
+  if (!folder.ok) return folder;
+  const summary = await summaryOf(folder.value, slug);
+  if (!summary.ok) return summary;
+  if (summary.value === undefined) return err({ kind: "not-found", path: documentPath(slug) });
+  const text = await readDocumentText(folder.value, slug);
+  if (!text.ok) return text;
+  return ok({ document: summary.value, body: bodyOf(text.value ?? "") });
+};
+
+/** A document's text with a new name: its first heading replaced, or one put above it. */
+const renamed = (markdown: string, name: string) => {
+  const lines = markdown.split(/\r?\n/);
+  const at = headingLine(lines);
+  if (at === -1) return `# ${name}\n\n${markdown}`;
+  return [...lines.slice(0, at), `# ${name}`, ...lines.slice(at + 1)].join("\n");
+};
+
+/**
+ * Renames a document, as one change: its heading and its file's name change together. Refused
+ * when another document has the new file name.
+ */
+export const renameDocument = async (
+  target: DocumentTarget,
+  rename: { slug: DocumentSlug; name: string },
+): Promise<Result<DocumentSaved, DocumentRefusal>> => {
+  const folder = await documentsFolder(target);
+  if (!folder.ok) return folder;
+  const text = await readDocumentText(folder.value, rename.slug);
+  if (!text.ok) return text;
+  if (text.value === undefined) return err({ kind: "not-found", path: documentPath(rename.slug) });
+  const was = text.value;
+  return replaceDocument(target, {
+    slug: rename.slug,
+    markdown: renamed(was, rename.name),
+    title: (before, now) => `Rename document: ${before.name} to ${now.name}`,
+    // Renamed as it was read just now, so a model's update meanwhile isn't lost.
+    check: (now) =>
+      sameFileText(now, was) ? undefined : { kind: "stale", path: documentPath(rename.slug) },
+  });
+};
+
+/** Deletes a document, as one change that Undo brings back. */
+export const deleteDocument = async (
+  target: DocumentTarget,
+  slug: DocumentSlug,
+): Promise<Result<ChangeId | undefined, DocumentRefusal>> => {
+  let name: string = slug;
+  const deleted = await target.contextFolder.changeWithId(
+    async (): Promise<Result<null, DocumentRefusal>> => {
+      const folder = await documentsFolder(target);
+      if (!folder.ok) return folder;
+      const text = await readDocumentText(folder.value, slug);
+      if (!text.ok) return text;
+      if (text.value === undefined) return err({ kind: "not-found", path: documentPath(slug) });
+      name = nameOf(text.value) ?? slug;
+      return (await removeFile(fileOf(folder.value, slug))) ? ok(null) : err({ kind: "storage" });
+    },
+    () =>
+      documentChange(target, {
+        title: `Delete document: ${name}`,
+        paths: [pathInFolder(target.workspaceId, slug)],
+      }),
+  );
+  return deleted.ok ? ok(deleted.value.id) : deleted;
+};
+
+/**
+ * What a change did to a document, from the whole files it wrote or removed (see
+ * `ChangeNote.files`), for Recent changes: and the path of the document it left, if any.
+ */
+export const documentChangeOf = (
+  files: readonly WholeFile[],
+): { document: DocumentChange; path: string | null } => {
+  const made = files.find((file) => file.before === null && file.after !== null);
+  const gone = files.find((file) => file.before !== null && file.after === null);
+  const kept = files.find((file) => file.before !== null && file.after !== null);
+  const slugAt = (path: string) => slugOfPath(path.split("/").slice(1).join("/")) ?? null;
+  const named = (text: string | null, path: string) => nameOf(text ?? "") ?? slugAt(path) ?? path;
+  if (made !== undefined && gone !== undefined) {
+    const sameBody = bodyOf(made.after ?? "") === bodyOf(gone.before ?? "");
+    return {
+      document: {
+        did: sameBody ? "renamed" : "updated",
+        name: named(made.after, made.path),
+        was: named(gone.before, gone.path),
+        slug: slugAt(made.path),
+      },
+      path: made.path,
+    };
+  }
+  if (made !== undefined) {
+    return {
+      document: { did: "saved", name: named(made.after, made.path), slug: slugAt(made.path) },
+      path: made.path,
+    };
+  }
+  if (kept !== undefined) {
+    return {
+      document: { did: "updated", name: named(kept.after, kept.path), slug: slugAt(kept.path) },
+      path: kept.path,
+    };
+  }
+  const path = gone?.path ?? files[0]?.path ?? "";
+  return {
+    document: { did: "deleted", name: named(gone?.before ?? null, path), slug: null },
+    path: null,
+  };
 };
 
 /** The document a path in the workspace's folder names (`docs/<slug>.md`), if it names one. */

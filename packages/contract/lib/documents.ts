@@ -59,3 +59,19 @@ export type SaveAsDocument = z.infer<typeof SaveAsDocument>;
 /** A change the owner made to a document, which Undo names: `null` when git couldn't keep it. */
 export const DocumentChanged = z.object({ change: ChangeId.nullable() });
 export type DocumentChanged = z.infer<typeof DocumentChanged>;
+
+/** A renamed document, as it is now, and the change that renamed it. */
+export const DocumentRenamed = DocumentChanged.extend({ document: DocumentSummary });
+export type DocumentRenamed = z.infer<typeof DocumentRenamed>;
+
+/**
+ * A change to a document as Recent changes lists it: what it did, the document's name (and, for a
+ * rename, its name before), and its file's name while it's still there to open.
+ */
+export const DocumentChange = z.object({
+  did: z.enum(["saved", "updated", "renamed", "deleted"]),
+  name: z.string(),
+  was: z.string().optional(),
+  slug: DocumentSlug.nullable(),
+});
+export type DocumentChange = z.infer<typeof DocumentChange>;
