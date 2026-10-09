@@ -225,7 +225,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
-  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
+  heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
+  the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it

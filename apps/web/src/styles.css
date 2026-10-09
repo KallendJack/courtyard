@@ -4,10 +4,11 @@
 
 /*
  * The rich blocks' and Things' classes go in their own stylesheets, off the first load
- * (rich-blocks.css, things.css).
+ * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses.
  */
 @source not "./rich-blocks";
 @source not "./things";
+@source not "./components/sort-button.tsx";
 
 /*
  * Moorland: Courtyard's theme, from the Paper design chosen in issue #2. Every colour, font and
