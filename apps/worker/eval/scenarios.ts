@@ -83,6 +83,23 @@ export type Turn = {
   readonly avoids?: readonly Words[];
   /** Photos and PDFs the owner attaches to this message (#78). */
   readonly attach?: readonly TestFile[];
+  /**
+   * The documents this message should end with saved or updated (ADR 0020), each judged on its
+   * text afterwards; none means it saves none. Left out, it isn't checked (they're still printed).
+   */
+  readonly documents?: readonly ExpectedDocument[];
+  /**
+   * An edit by hand to a file in the workspace, made the moment the model reads it in this turn,
+   * so the document it read is out of date when it saves: its update should be refused, then
+   * read again and retried, keeping the edit.
+   */
+  readonly editsAfterRead?: { readonly path: string; readonly text: string };
+};
+
+/** A document a turn should save or update, and words its text must have afterwards. */
+export type ExpectedDocument = {
+  readonly action: "save" | "update";
+  readonly words: Words;
 };
 
 /**
@@ -935,6 +952,48 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
         questions: { atLeast: 1, atMost: 2 },
         suggests: false,
+      },
+    ],
+  },
+  {
+    name: "document-saved-when-asked",
+    rule: "a model offers to save a longer answer as a document, but saves it only once the owner asks",
+    workspace: "Padel",
+    context: {
+      facts: ["Plays padel on Tuesdays and Saturdays", "Has a weak left knee"],
+      plans: ["Play the club tournament on 14 November"],
+    },
+    turns: [
+      {
+        say: "Can you make me a four-week training plan up to the tournament, two sessions a week? Keep my knee in mind.",
+        expect: [],
+        documents: [],
+      },
+      {
+        say: "Save it as a document please.",
+        expect: [],
+        documents: [{ action: "save", words: ["week", "knee"] }],
+      },
+    ],
+  },
+  {
+    name: "document-stale-update",
+    rule: "an update to a document changed since the model read it is refused, read again and retried, keeping the change",
+    workspace: "Padel",
+    context: { facts: ["Going to Bilbao for a padel weekend in November"] },
+    files: {
+      "docs/packing-list-for-bilbao.md":
+        "# Packing list for Bilbao\n\n- Two rackets\n- Trainers\n- Shorts\n",
+    },
+    turns: [
+      {
+        say: "Add grips to my packing list for Bilbao, please.",
+        expect: [],
+        documents: [{ action: "update", words: ["grips", "sun cream", "two rackets"] }],
+        editsAfterRead: {
+          path: "docs/packing-list-for-bilbao.md",
+          text: "# Packing list for Bilbao\n\n- Two rackets\n- Trainers\n- Shorts\n- Sun cream\n",
+        },
       },
     ],
   },

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  type DocumentSave,
   Effort,
   endsTurn,
   ModelId,
@@ -17,6 +18,7 @@ import {
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
+import { DOCS_FOLDER, documentPath } from "../src/documents/index.ts";
 import { OWNER_FILE } from "../src/owner-context/index.ts";
 import {
   createClaudeProvider,
@@ -36,6 +38,7 @@ import {
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
+  type ExpectedDocument,
   type ExpectedSave,
   ownerContextFor,
   type Places,
@@ -380,6 +383,46 @@ const judgeTurn = (judge: {
   ];
 };
 
+const describeDocument = (save: DocumentSave) =>
+  `${save.action === "save" ? "saved" : "updated"} ${documentPath(save.document.slug)}${save.summary === undefined ? "" : ` (${save.summary})`}`;
+
+/**
+ * A turn's document checks (ADR 0020): one for each document it should save or update, judged on
+ * the document's text afterwards, and one for saving no other. Nothing when the turn doesn't say.
+ */
+const judgeDocuments = async (judge: {
+  expected: readonly ExpectedDocument[] | undefined;
+  saved: readonly DocumentSave[];
+  /** The workspace's folder, where the documents are. */
+  folder: string;
+}): Promise<Check[]> => {
+  const { expected, saved, folder } = judge;
+  if (expected === undefined) return [];
+  const left = [...saved];
+  const checks: Check[] = [];
+  for (const wanted of expected) {
+    const index = left.findLastIndex((save) => save.action === wanted.action);
+    const save = index === -1 ? undefined : left.splice(index, 1)[0];
+    if (save === undefined) {
+      checks.push({
+        miss: `expected to ${wanted.action} a document; ${saved.length === 0 ? "saved none" : saved.map(describeDocument).join("; ")}`,
+      });
+      continue;
+    }
+    const path = documentPath(save.document.slug);
+    const text = await readFile(join(folder, path), "utf8").catch(() => "");
+    checks.push({
+      miss: hasWords(text, { words: wanted.words })
+        ? null
+        : `expected ${path} to have ${describeWords(wanted.words)}; it reads "${text.replace(/\s+/g, " ").slice(0, 300)}"`,
+    });
+  }
+  checks.push({
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeDocument).join("; ")}`,
+  });
+  return checks;
+};
+
 /**
  * A house skills folder for a scenario with house skills of its own: Courtyard's, with the
  * scenario's beside them in skills.json. `undefined` when it adds none.
@@ -566,10 +609,27 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         attach: turn.attach ?? [],
         choice,
       });
+      // An edit by hand the moment the model reads the file, once (editsAfterRead).
+      const { editsAfterRead } = turn;
+      let edited: Promise<void> | undefined;
       const events = await withTimeout(
-        followSession(request, { sessionId, after, until: endsTurn }),
+        followSession(request, {
+          sessionId,
+          after,
+          until: endsTurn,
+          onEvent: (event) => {
+            const read =
+              event.type === "activity" &&
+              event.activity.kind === "read-file" &&
+              event.activity.path === editsAfterRead?.path;
+            if (read && edited === undefined && editsAfterRead !== undefined) {
+              edited = writeFile(join(folder, editsAfterRead.path), editsAfterRead.text);
+            }
+          },
+        }),
         `turn ${index + 1}`,
       );
+      await edited;
       after = events.at(-1)?.seq ?? after;
       const ended = events.at(-1);
       if (ended?.type !== "turn-completed") {
@@ -635,6 +695,34 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         replies,
         web,
       });
+      const documents = events.flatMap((event) =>
+        event.type === "document-saved" ? [event.save] : [],
+      );
+      if (documents.length > 0)
+        notes.push(`${prefix}${documents.map(describeDocument).join("; ")}`);
+      const reads = events.flatMap((event) =>
+        event.type === "activity" &&
+        event.activity.kind === "read-file" &&
+        event.activity.path.startsWith(`${DOCS_FOLDER}/`)
+          ? [event.activity.path]
+          : [],
+      );
+      if (reads.length > 0) notes.push(`${prefix}read ${reads.join(", ")}`);
+      if (editsAfterRead !== undefined) {
+        notes.push(
+          `${prefix}${edited === undefined ? "never read" : "edited by hand after reading"} ${editsAfterRead.path}`,
+        );
+      }
+      const documentChecks = await judgeDocuments({
+        expected: turn.documents,
+        saved: documents,
+        folder,
+      });
+      // A document missed: how the answer ended says why (it asked, or gave up after a refusal).
+      if (documentChecks.some((check) => check.miss !== null)) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...documentChecks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

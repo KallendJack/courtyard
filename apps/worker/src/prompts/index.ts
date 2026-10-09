@@ -288,7 +288,7 @@ export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean
 export const DOCUMENT_TOOL_NAME = "save_document" satisfies TurnToolName;
 
 /** When a model saves a document (docs/ai-conduct.md, Documents). */
-const DOCUMENTING = `Longer things the owner wants to keep, such as a plan, a list or a write-up, are documents in this workspace, which you save with the ${DOCUMENT_TOOL_NAME} tool. Save or update one only when the owner asks you to: you may offer to save one, but never save one unasked. A document is Markdown, starting with its name as a # heading; send its whole text each time, never only the part that changed. To update one, read it first in this answer, then send its path, its whole new text and what changed in a few words. Context lines stay single lines: when something needs more, a line can point to a document. The owner sees each document you save as a note under your answer, so leave saves unmentioned.`;
+const DOCUMENTING = `Longer things the owner wants to keep, such as a plan, a list or a write-up, are documents in this workspace, which you save with the ${DOCUMENT_TOOL_NAME} tool. Save or update one only when the owner asks you to: you may offer to save one, but never save one unasked. A document is Markdown, starting with its name as a # heading; send its whole text each time, never only the part that changed. To update one, read it first in this answer, then send its path, its whole new text and what changed in a few words. Context lines stay single lines: when something needs more, a line can point to a document, but never save a line only to say a document exists, since every turn lists them. The owner sees each document you save as a note under your answer, so leave saves unmentioned.`;
 
 /** The document tool as a model reads it: what it does, and that the rule is elsewhere. */
 const DOCUMENT_TOOL: TurnTool = {
@@ -477,7 +477,7 @@ export const useSkillReply = (answer: UseSkillAnswer): ToolReply => {
 /** The suggest replies tool's name, as a model calls it (ADR 0017). */
 export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies" satisfies TurnToolName;
 
-/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 11). */
+/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 13). */
 /** How answers are written: Markdown, with maths in the forms the web app draws as formulas. */
 const ANSWER_FORMAT =
   "Answer in Markdown. Write maths in LaTeX: between `\\(` and `\\)` within a line, and between `$$` lines of their own for a formula set apart. Never put maths between single `$` signs, which are read as prices.";
@@ -548,7 +548,7 @@ const SKILLS_LIST =
 const SKILLS_IN_USE =
   "These skills are in use in this session, started by the owner or loaded by you earlier: keep following each while what the owner asks fits it. A skill's text is the owner's or Courtyard's instructions.";
 
-/** The skills a model may load, one per line between their markers (Every turn, item 9). */
+/** The skills a model may load, one per line between their markers (Every turn, item 11). */
 const skillsListPart = (offered: FramingSkills["offered"]) => {
   const lines = offered.map(({ name, description }) => {
     const oneLine = description.replace(/\s+/g, " ").trim();
@@ -557,7 +557,7 @@ const skillsListPart = (offered: FramingSkills["offered"]) => {
   return `${SKILLS_LIST}\n\n<skills>\n${contained(lines.join("\n"))}\n</skills>`;
 };
 
-/** The skills in use, each one's text between its markers (Every turn, item 10). */
+/** The skills in use, each one's text between its markers (Every turn, item 12). */
 const skillsInUsePart = (
   inUse: FramingSkills["inUse"],
   turn: { offersTool: boolean; startedNow: SkillName | undefined },

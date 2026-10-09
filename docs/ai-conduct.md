@@ -45,6 +45,9 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
 - **Web search.** A turn can say whether its answer should use the web (`searches`), judged from its activities (a
   search or a page read); one that should also needs sources listed under it. Every search, page read and source a
   run had is printed under it.
+- **Documents.** A turn can say which documents it should save or update (`documents`, none for none), each judged
+  on its text afterwards, and edit a file by hand the moment the model reads it (`editsAfterRead`), so its update is
+  refused and retried. Every document a run saved, and every one it read, is printed under it.
 - **Get to know.** A scenario can give its context file an intro line (`intro`). A turn can say whether its answer
   lists topics (`listsTopics`, a list of two or more) and what it mustn't ask because it's known (`avoids`); a
   wrap-up's `says` names what was saved. A scenario that `printsTopics` isn't scored: it
@@ -228,7 +231,7 @@ tags, so Retry and Carry on, which send a message again with its tag, keep it) o
 activities). Grilling and Get to know take many turns, and depend on this. A skill that has gone or broken since is
 left out.
 
-What a model is told (Every turn, items 9 and 10). **The list,** on every turn, is this, then each skill's name and
+What a model is told (Every turn, items 11 and 12). **The list,** on every turn, is this, then each skill's name and
 description, one per line, between `<skills>` markers, apart from owner-only ones:
 
 > Skills are instructions for particular kinds of task, written by the owner or by Courtyard. When what the owner
@@ -306,7 +309,7 @@ offers them through Courtyard's `suggest_replies` tool, never in its own text, s
 every model. The tool is offered beside the save tool in a planning workspace, on a turn whose provider takes
 Courtyard's tools (today, every one that saves). A code workspace's models aren't offered it.
 
-What a model is told (Every turn, item 11), on a turn that offers the tool:
+What a model is told (Every turn, item 13), on a turn that offers the tool:
 
 > Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or
 > another, which days they're free), call the suggest_replies tool with two or three of them before you finish, so
@@ -386,7 +389,7 @@ and where its facts came from. Always on: the model decides when. A code workspa
 - **Codex** searches on cached mode (`web_search = "cached"`, set for its thread): results from OpenAI's index, with
   no live fetching, since Courtyard can't limit what Codex opens.
 
-What a model is told (Every turn, item 12), on a turn that offers web search, the same on every provider:
+What a model is told (Every turn, item 14), on a turn that offers web search, the same on every provider:
 
 > You can search the web, and read the pages you find; when the owner sends a link, read that page if you can.
 > Search when the question needs current facts, such as prices, stock, reviews, opening times, or what fits or works
@@ -439,8 +442,8 @@ workspace, on a turn whose provider takes Courtyard's tools.
 > one, but never save one unasked. A document is Markdown, starting with its name as a # heading; send its whole text
 > each time, never only the part that changed. To update one, read it first in this answer, then send its path, its
 > whole new text and what changed in a few words. Context lines stay single lines: when something needs more, a line
-> can point to a document. The owner sees each document you save as a note under your answer, so leave saves
-> unmentioned.
+> can point to a document, but never save a line only to say a document exists, since every turn lists them. The
+> owner sees each document you save as a note under your answer, so leave saves unmentioned.
 
 **The save_document tool,** as a model reads it, and its inputs:
 
@@ -761,8 +764,8 @@ The rules for a context file's lines, whether the owner writes them or a model s
 - **A plan is never a fact.** Once it's done, a save moves it to Facts.
 - **No duplicates.** A save that repeats a line changes that line instead.
 - **Stale lines get removed.** A line that's no longer true goes, rather than contradicting the rest.
-- **Longer things go in a document** (Documents, above): a line stays one line, and can point to a document ("The
-  padel plan to Christmas is in docs/padel-plan-to-christmas.md").
+- **Longer things go in a document** (Documents, above): a line stays one line, and can point to a document where
+  it needs more, but no line is saved only to say a document exists, since every turn lists them.
 - **Dates only where time matters:** "Sold the old bike in Sep 2026", "The quote is valid until Nov 2026". Most lines
   don't age, and git knows when each was saved.
 - **Short:** a line over `CONTEXT_LINE_MAX_CHARACTERS` (about 250, in the contract) is more than one fact.
