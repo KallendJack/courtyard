@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
@@ -300,6 +300,26 @@ export const writeHouseSkills = async (
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "skills.json"), JSON.stringify({ skills }));
   for (const { name } of skills) await writeSkill(dir, name);
+};
+
+/**
+ * For tests: what docs/ai-conduct.md quotes, from the quote starting with `firstWords`: the quoted
+ * lines, wrapped lines joined back up, list items and paragraphs kept.
+ */
+export const quotedInGuide = async (firstWords: string) => {
+  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
+  const lines = guide.replace(/\r\n/g, "\n").split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
+  const quoted: string[] = [];
+  for (const line of lines.slice(start)) {
+    if (!line.startsWith(">")) break;
+    quoted.push(line.replace(/^> ?/, ""));
+  }
+  return quoted
+    .join("\n")
+    .split("\n\n")
+    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
+    .join("\n\n");
 };
 
 /** For tests: the context folder's changes, newest first: each one's title and trailers. */

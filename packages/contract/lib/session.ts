@@ -133,6 +133,10 @@ export type FirstMessage = z.infer<typeof FirstMessage>;
 export const GetToKnowRequest = z.object({ model: ModelRef.optional() });
 export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 
+/** Grill this plan: a new session grilling one of a workspace's plans, answered as Get to know is. */
+export const GrillRequest = GetToKnowRequest.extend({ plan: NewMessage.shape.text });
+export type GrillRequest = z.infer<typeof GrillRequest>;
+
 export const SessionSummary = z.object({
   id: SessionId,
   workspaceId: WorkspaceId,

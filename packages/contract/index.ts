@@ -28,6 +28,7 @@ export {
   FailureReason,
   FirstMessage,
   GetToKnowRequest,
+  GrillRequest,
   LinePlace,
   MAX_MESSAGE_LENGTH,
   ModelId,

@@ -277,6 +277,17 @@ const judgeTurn = (judge: {
               : `expected to load ${loads.join(", ") || "no skill"}; loaded ${judge.loaded.join(", ") || "none"}`,
           },
         ];
+  const { says } = turn;
+  const said: Check[] =
+    says === undefined
+      ? []
+      : [
+          {
+            miss: hasWords(answer, { words: says })
+              ? null
+              : `expected the answer to say ${describeWords(says)}; it began ${answer.slice(0, 300).replace(/\s+/g, " ")}`,
+          },
+        ];
   const { suggests } = turn;
   const suggested = judge.replies.length > 0;
   const replies: Check[] =
@@ -292,7 +303,7 @@ const judgeTurn = (judge: {
                   : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...replies];
+  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said, ...replies];
 };
 
 /**

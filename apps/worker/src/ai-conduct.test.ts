@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,6 +17,7 @@ import {
   FAKE_MODEL,
   followSession,
   postJson,
+  quotedInGuide,
   type Requester,
   SAVING_MODEL,
   savingProvider,
@@ -519,26 +520,6 @@ describe("saving context as a model answers (ADR 0013)", () => {
     );
   });
 });
-
-/**
- * What docs/ai-conduct.md quotes, from the quote starting with `firstWords`: the quoted lines,
- * wrapped lines joined back up, list items and paragraphs kept.
- */
-const quotedInGuide = async (firstWords: string) => {
-  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
-  const lines = guide.replace(/\r\n/g, "\n").split("\n");
-  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
-  const quoted: string[] = [];
-  for (const line of lines.slice(start)) {
-    if (!line.startsWith(">")) break;
-    quoted.push(line.replace(/^> ?/, ""));
-  }
-  return quoted
-    .join("\n")
-    .split("\n\n")
-    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
-    .join("\n\n");
-};
 
 describe("getting to know a workspace (#51)", () => {
   /** A worker on a recorder, and a way to start a get-to-know session at a path on it. */

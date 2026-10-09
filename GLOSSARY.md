@@ -168,6 +168,16 @@ A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner
 the same name replace it (ADR 0016).
 _Avoid_: built-in skill, default skill
 
+**Grilling**:
+A house skill: a model stress-tests a plan or an idea one question at a time, recommending an answer with each, saves
+each decision as the owner agrees it, and ends with a wrap-up of the decisions and the questions still open.
+_Avoid_: interview, review, critique
+
+**Grill this plan**:
+The flame button beside each Plan line on a planning workspace's page. It starts a new session grilling that plan:
+the first message is the plan line with the Grilling tag, and the session is titled after it.
+_Avoid_: challenge, stress test (as a button name)
+
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
 the failed turn; it never happens by itself, and the session stays on the new model until the owner switches back.

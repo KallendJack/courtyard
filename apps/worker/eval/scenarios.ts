@@ -54,6 +54,8 @@ export type Turn = {
   readonly asks?: Words;
   /** How many questions the answer should ask, at least and at most. */
   readonly questions?: { readonly atLeast: number; readonly atMost: number };
+  /** Words the answer should have, such as a recommendation or a wrap-up's decisions. */
+  readonly says?: Words;
   /** After the answer, the owner undoes every save it made. */
   readonly undoSaves?: boolean;
   /** A skill the owner starts with this message, by name (ADR 0016). */
@@ -126,7 +128,69 @@ const PACKING_LIST: ScenarioSkill = {
   where: "workspace",
 };
 
+/** A grilling's answer recommends an answer to its question (docs/ai-conduct.md, Grilling). */
+const RECOMMENDS: Words = [["recommend", "suggest", "i'd ", "i’d ", "i would", "my pick"]];
+
+/** The garage gym a grilling questions: a plan to grill, and facts it shouldn't ask about. */
+const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
+  workspace: "Garage gym",
+  context: {
+    facts: ["The garage is 5 m by 3 m", "The ceiling is 2.4 m high"],
+    plans: ["Put the squat rack on the left wall", "Buy a second-hand barbell by November"],
+  },
+};
+
 export const SCENARIOS: readonly Scenario[] = [
+  {
+    name: "grill-a-plan",
+    rule: "Grill this plan asks one question with a recommendation and suggested replies, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
+    ...GRILLED_GYM,
+    turns: [
+      {
+        say: "Put the squat rack on the left wall",
+        skill: "grilling",
+        expect: [],
+        questions: { atLeast: 1, atMost: 1 },
+        says: RECOMMENDS,
+        suggests: true,
+      },
+      {
+        say: "I've decided: the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
+        expect: [
+          {
+            action: "change",
+            was: "Put the squat rack on the left wall",
+            section: "plans",
+            words: ["back wall"],
+          },
+        ],
+      },
+      {
+        say: "That's enough for now, wrap it up.",
+        expect: [],
+        says: [
+          ["decided", "decision", "agreed"],
+          ["open", "undecided", "still to decide", "unresolved"],
+        ],
+        suggests: false,
+      },
+    ],
+  },
+  {
+    name: "grill-on-request",
+    rule: "a model loads Grilling itself when asked to grill a plan, and asks one question with a recommendation and suggested replies",
+    ...GRILLED_GYM,
+    turns: [
+      {
+        say: "Grill me on the barbell plan before I commit to it.",
+        expect: [],
+        loads: ["grilling"],
+        questions: { atLeast: 1, atMost: 1 },
+        says: RECOMMENDS,
+        suggests: true,
+      },
+    ],
+  },
   {
     name: "fact-in-passing",
     rule: "a fact stated in passing is saved",
