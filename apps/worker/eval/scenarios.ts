@@ -65,6 +65,12 @@ export type Turn = {
    * loads none. Left out, whatever it loads isn't checked (it's still printed).
    */
   readonly loads?: readonly string[];
+  /**
+   * Whether the answer should suggest replies (ADR 0017): two or three, after a question with a
+   * few likely answers; or none, with an ordinary answer. Left out, it isn't checked (they're
+   * still printed).
+   */
+  readonly suggests?: boolean;
 };
 
 /**
@@ -139,7 +145,7 @@ const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
 export const SCENARIOS: readonly Scenario[] = [
   {
     name: "grill-a-plan",
-    rule: "Grill this plan asks one question with a recommendation, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
+    rule: "Grill this plan asks one question with a recommendation and suggested replies, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
     ...GRILLED_GYM,
     turns: [
       {
@@ -148,6 +154,7 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
         questions: { atLeast: 1, atMost: 1 },
         says: RECOMMENDS,
+        suggests: true,
       },
       {
         say: "Agreed, the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
@@ -167,12 +174,13 @@ export const SCENARIOS: readonly Scenario[] = [
           ["decided", "decision", "agreed"],
           ["open", "undecided", "still to decide", "unresolved"],
         ],
+        suggests: false,
       },
     ],
   },
   {
     name: "grill-on-request",
-    rule: "a model loads Grilling itself when asked to grill a plan, and asks one question with a recommendation",
+    rule: "a model loads Grilling itself when asked to grill a plan, and asks one question with a recommendation and suggested replies",
     ...GRILLED_GYM,
     turns: [
       {
@@ -181,6 +189,7 @@ export const SCENARIOS: readonly Scenario[] = [
         loads: ["grilling"],
         questions: { atLeast: 1, atMost: 1 },
         says: RECOMMENDS,
+        suggests: true,
       },
     ],
   },
@@ -666,6 +675,61 @@ export const SCENARIOS: readonly Scenario[] = [
         asks: ["bed"],
         questions: { atLeast: 1, atMost: 2 },
         loads: [],
+      },
+    ],
+  },
+  {
+    name: "replies-which-day",
+    rule: "a question with a few likely answers comes with two or three suggested replies",
+    workspace: "Running",
+    context: { plans: ["A long run once a week, building up to a half marathon in Apr 2027"] },
+    turns: [
+      {
+        say: "Help me pick a day for the weekly long run. Ask me first which days I'm free.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-check-a-plan",
+    rule: "checking a plan one question at a time suggests replies to the question",
+    workspace: "Garden",
+    context: { plans: ["Paint the shed this weekend"] },
+    turns: [
+      {
+        say: "Check my plan to paint the shed with me, one question at a time.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-none-with-an-answer",
+    rule: "an ordinary answer comes with no suggested replies",
+    workspace: "Garage gym",
+    context: { facts: ["Squat rack bolted to the back wall"] },
+    turns: [
+      {
+        say: "What's a good warm-up before squats? Just the warm-up, please.",
+        expect: [],
+        suggests: false,
+      },
+    ],
+  },
+  {
+    name: "replies-none-for-an-open-question",
+    rule: "a question only the owner can answer in their own words comes with no suggested replies",
+    workspace: "Family",
+    context: { plans: ["Give a short toast at my sister Amy's wedding on 12 Dec 2026"] },
+    turns: [
+      {
+        say: "Help me write a short toast for Amy's wedding. First, ask me for a favourite memory of her.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: false,
       },
     ],
   },

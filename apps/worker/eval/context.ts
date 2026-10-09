@@ -220,6 +220,8 @@ const judgeTurn = (judge: {
   answer: string;
   /** The skills the model loaded itself in the turn, in order. */
   loaded: readonly string[];
+  /** The replies the answer suggested, if any. */
+  replies: readonly string[];
 }): Check[] => {
   const { turn, answer } = judge;
   const left = [...judge.saves];
@@ -259,7 +261,7 @@ const judgeTurn = (judge: {
             miss:
               asked.length >= questions.atLeast && asked.length <= questions.atMost
                 ? null
-                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
+                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim() || `the answer ends "${answer.trim().slice(-160)}"`}`,
           },
         ];
   const { loads } = turn;
@@ -286,7 +288,22 @@ const judgeTurn = (judge: {
               : `expected the answer to say ${describeWords(says)}; it began ${answer.slice(0, 300).replace(/\s+/g, " ")}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said];
+  const { suggests } = turn;
+  const suggested = judge.replies.length > 0;
+  const replies: Check[] =
+    suggests === undefined
+      ? []
+      : [
+          {
+            miss:
+              suggests === suggested
+                ? null
+                : suggests
+                  ? `expected suggested replies; suggested none after: ${asked.join(" ").trim() || "no question"}`
+                  : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said, ...replies];
 };
 
 /**
@@ -492,7 +509,19 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
           : [],
       );
       if (loaded.length > 0) notes.push(`${prefix}loaded ${loaded.join(", ")}`);
-      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer, loaded });
+      const replies = events.flatMap((event) =>
+        event.type === "suggested-replies" ? event.replies : [],
+      );
+      if (replies.length > 0) {
+        notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
+      }
+      const judged = judgeTurn({
+        turn,
+        saves: saves.map(({ save }) => save),
+        answer,
+        loaded,
+        replies,
+      });
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

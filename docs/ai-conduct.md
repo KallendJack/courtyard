@@ -37,6 +37,8 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
   (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - **What an answer says.** A turn can give words its answer should have (`says`), such as a grilling's
   recommendation or a wrap-up's decisions and open questions.
+- **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
+  suggested replies. Every set a run suggested is printed under it.
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
   any provider's (Claude's default when left out), and `--effort <level>` its effort (the model's default).
 
@@ -78,6 +80,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 9. When the turn offers the use skill tool and the workspace has skills a model may load: how to use them, then each
    one's name and description between `<skills>` markers (Skills, below).
 10. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
+11. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
 
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
 conversation markers, then the new message. An owner message that started a skill reads
@@ -193,7 +196,7 @@ Its text, which every later turn of the session carries once it's in use:
 >   second question such as whether the owner agrees, since their reply says so. Settle what other decisions depend
 >   on first, and follow one thread until it's settled before starting another.
 > - **Recommend an answer** with each question: the one you'd pick and why, in a sentence or two, so the owner can
->   just agree. If you have a tool for suggesting replies, offer your recommendation as one of them.
+>   just agree. When you have the suggest_replies tool, make your recommendation one of the replies.
 > - **Don't ask what's known.** Look in the context file, the owner context and the conversation first, and ask only
 >   what they don't answer.
 > - **Save each decision in the answer where the owner agrees it,** with the save tool, before your next question:
@@ -206,8 +209,38 @@ Its text, which every later turn of the session carries once it's in use:
 >   saved only if the owner asks.
 
 Its saves are ordinary saves (Saving context lines, below): checked by the worker, each shown as a note with Undo.
-The eval's `grill-*` scenarios check it on both providers: the first answer asks one question with a recommendation,
-an agreed decision changes the plan's line, and the wrap-up saves nothing.
+The eval's `grill-*` scenarios check it on both providers: the first answer asks one question with a recommendation
+and suggested replies, an agreed decision changes the plan's line, and the wrap-up saves nothing.
+
+## Suggested replies
+
+Built with #126 (ADR 0017). When a model asks the owner a question with a few likely answers, it can offer two or
+three of them as **suggested replies**: buttons under its answer that send one as the owner's reply with a tap. It
+offers them through Courtyard's `suggest_replies` tool, never in its own text, so they look and work the same on
+every model. The tool is offered beside the save tool in a planning workspace, on a turn whose provider takes
+Courtyard's tools (today, every one that saves). A code workspace's models aren't offered it.
+
+What a model is told (Every turn, item 11), on a turn that offers the tool:
+
+> Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or
+> another, which days they're free), call the suggest_replies tool with two or three of them before you finish, so
+> the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an
+> ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what
+> something looks like).
+
+The tool's description says what it does and points to that rule; its one input is the replies. The worker checks
+them and refuses, saying why, when:
+
+- **there aren't two or three,** or the input isn't a list of texts;
+- **a reply is empty, more than one line, or longer than `SUGGESTED_REPLY_MAX_CHARACTERS`** (60, in the contract);
+- **two replies are the same,** ignoring case and spacing;
+- **the answer already suggested replies:** one set per answer, the first that's accepted;
+- **the owner stopped the turn.**
+
+A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
+latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
+own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
+later turn gets leaves suggested replies out: the owner's reply is there, as written.
 
 ## Starter context file
 
