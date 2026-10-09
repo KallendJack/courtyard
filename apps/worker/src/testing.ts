@@ -13,7 +13,7 @@ import type { Hono } from "hono";
 import { git } from "./git.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
 import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
-import { err, ok } from "./result.ts";
+import { err, ok, type Result } from "./result.ts";
 import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -303,6 +303,50 @@ export const savingProvider = (
     answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
   };
   return { provider, replies, framings };
+};
+
+/** For tests: the model the coding provider offers. */
+export const CODING_MODEL = { provider: "coder", model: "one" };
+
+/**
+ * For tests: a provider that codes (ADR 0007). In each turn it asks the worker about each edit
+ * (`edit`, a path) and command (`run`) scripted for it, in order, keeps the worker's answers, and
+ * answers "Done." It never edits or runs anything itself, so any command can be asked about.
+ */
+export const codingProvider = (
+  steps: readonly ({ readonly edit: string } | { readonly run: string })[],
+) => {
+  const answers: Result<null, string>[] = [];
+  const id = ProviderId.parse("coder");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Coder",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      for (const step of steps) {
+        answers.push("edit" in step ? await code.edit(step.edit) : await code.run(step.run));
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The coder only codes." }),
+  };
+  return { provider, answers };
 };
 
 /**

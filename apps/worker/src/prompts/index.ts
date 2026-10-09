@@ -1193,6 +1193,16 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
       return "The owner stopped this turn, so nothing more is done.";
     case "outside":
       return OUTSIDE_WORKTREE;
+    case "chained":
+      return "Run one command at a time: a command that chains, pipes, redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own.";
+    case "unreadable":
+      return "That command couldn't be read: check its quotes close.";
+    case "off-allowlist":
+      return "That command isn't on this workspace's command allowlist, so it didn't run. The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another way with those, or tell the owner what you need run.";
+    case "reaches-out":
+      return "That command names a path outside your session branch's worktree, so it didn't run.";
+    case "off-branch":
+      return `Commits go on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
   }
 };
 

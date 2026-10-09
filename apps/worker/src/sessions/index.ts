@@ -34,7 +34,13 @@ import {
   keepAttachments,
   type PreparedAttachment,
 } from "../attachments/index.ts";
-import { type BranchRefusal, type Code, type CodeRefusal, editableIn } from "../code/index.ts";
+import {
+  type BranchRefusal,
+  type Code,
+  type CodeRefusal,
+  commandAllowed,
+  editableIn,
+} from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
   answerAsDocument,
@@ -721,7 +727,7 @@ export const createSessions = (options: {
           return ok(null);
         };
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
-        const codeTurn = (worktree: string): CodeTurn => ({
+        const codeTurn = (worktree: string, branch: string): CodeTurn => ({
           worktree,
           edit: async (path) => {
             const shown = await editableIn(worktree, path);
@@ -731,7 +737,10 @@ export const createSessions = (options: {
                 : ok({ kind: "edited-file", path: shown }),
             );
           },
-          run: async () => decide(err({ kind: "outside" })),
+          run: async (command) => {
+            const allowed = await commandAllowed({ worktree, branch }, command);
+            return decide(allowed.ok ? ok({ kind: "ran-command", command }) : allowed);
+          },
         });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
@@ -739,7 +748,8 @@ export const createSessions = (options: {
             model: turn.model,
             effort: turn.effort,
             folder: worktree ?? workspace.value.folder,
-            code: worktree === undefined ? null : codeTurn(worktree),
+            code:
+              worktree === undefined || branch === undefined ? null : codeTurn(worktree, branch),
             framing,
             callTool: (call) => {
               const calling = callTool(call);

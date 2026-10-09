@@ -4,6 +4,7 @@ import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
+import { type CommandRule, DEFAULT_ALLOWLIST, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -50,7 +51,41 @@ export type CodeRefusal =
   /** The owner stopped the turn: nothing more is done. */
   | { readonly kind: "stopped" }
   /** An edit outside the session branch's worktree. */
-  | { readonly kind: "outside" };
+  | { readonly kind: "outside" }
+  /** A command that chains, pipes, redirects or substitutes, so it could run something else. */
+  | { readonly kind: "chained" }
+  /** A command whose quotes don't close. */
+  | { readonly kind: "unreadable" }
+  /** A command that isn't on the command allowlist. */
+  | { readonly kind: "off-allowlist" }
+  /** A command naming a path outside the worktree. */
+  | { readonly kind: "reaches-out" }
+  /** A command for the session branch only, such as committing, while the worktree is off it. */
+  | { readonly kind: "off-branch"; readonly branch: string };
+
+/**
+ * Whether a command may run in a session's worktree without asking: one command, on the command
+ * allowlist, naming no path outside the worktree, and, for committing, with the worktree on the
+ * session branch.
+ */
+export const commandAllowed = async (
+  session: { readonly worktree: string; readonly branch: string },
+  command: string,
+  allowlist: readonly CommandRule[] = DEFAULT_ALLOWLIST,
+): Promise<Result<null, CodeRefusal>> => {
+  const words = wordsOf(command);
+  if (!words.ok) return err({ kind: words.error });
+  const rule = ruleFor(allowlist, words.value);
+  if (rule === undefined) return err({ kind: "off-allowlist" });
+  if (reachesOut(session.worktree, words.value.slice(rule.words.length))) {
+    return err({ kind: "reaches-out" });
+  }
+  if (rule.onSessionBranch) {
+    const on = await gitOrNothing(session.worktree, ["branch", "--show-current"]);
+    if (on !== session.branch) return err({ kind: "off-branch", branch: session.branch });
+  }
+  return ok(null);
+};
 
 /** Git's own file in a worktree, which says where the repository is: never a model's to change. */
 const GIT_FILE = ".git";

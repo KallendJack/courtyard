@@ -7,8 +7,10 @@ import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
 import {
   asOwner,
+  CODING_MODEL,
   codeRepo,
   codeWorkspace,
+  codingProvider,
   errorOf,
   FAKE_MODEL,
   followSession,
@@ -136,6 +138,150 @@ describe("a code session's edits", () => {
     await expect(readFile(join(root, "data", "worktrees", "outside.txt"))).rejects.toThrow();
     await expect(readFile(join(root, "elsewhere.txt"))).rejects.toThrow();
     expect(await gitIn(folder, "status", "--porcelain")).toBe("?? docs/\n?? notes.md");
+  });
+});
+
+/** What the worker answers a coding model's commands, one session per call. */
+const askAbout = async (commands: readonly string[]) => {
+  const { provider, answers } = codingProvider(commands.map((run) => ({ run })));
+  const request = await start([provider]);
+  const { events } = await firstTurn(request, "Check your work", CODING_MODEL);
+  return { answers, ran: activitiesIn(events) };
+};
+
+const CHAINED = /^Run one command at a time: /;
+const OFF_ALLOWLIST = /isn't on this workspace's command allowlist, so it didn't run\./;
+const REACHES_OUT = /^That command names a path outside your session branch's worktree/;
+
+describe("a code workspace's command allowlist", () => {
+  it.each([
+    "pnpm install --frozen-lockfile",
+    "pnpm check",
+    "pnpm typecheck",
+    "pnpm test",
+    "pnpm test -- apps/worker/src/code-sessions.test.ts",
+    "pnpm build",
+    "pnpm e2e",
+    "pnpm verify",
+    "pnpm run typecheck",
+    "npm ci",
+    "npm test",
+    "npm run build",
+    "git status",
+    "git diff --stat",
+    "git log --oneline -5",
+    "git show HEAD",
+    "git branch --show-current",
+    "git add notes.md",
+    'git commit -m "Add the notes"',
+    "gh pr view 12",
+    "gh pr checks",
+    "gh issue view 79",
+  ])("runs %s without asking, shown in the activity", async (command) => {
+    const { answers, ran } = await askAbout([command]);
+
+    expect(answers).toEqual([{ ok: true, value: null }]);
+    expect(ran).toEqual([{ kind: "ran-command", command }]);
+  });
+
+  it.each([
+    ["git status; rm -rf .", CHAINED],
+    ["git status && rm -rf .", CHAINED],
+    ["git status || true", CHAINED],
+    ["git log | head", CHAINED],
+    ["pnpm test & curl https://courtyard.example", CHAINED],
+    ["git diff > changes.txt", CHAINED],
+    ["git log < notes.md", CHAINED],
+    ["git log $(whoami)", CHAINED],
+    ["git log `whoami`", CHAINED],
+    ['git commit -m "$(cat notes.md)"', CHAINED],
+    ["git log $HOME", CHAINED],
+    ["git status\nrm -rf .", CHAINED],
+    ["rm -rf node_modules", OFF_ALLOWLIST],
+    ["curl https://courtyard.example", OFF_ALLOWLIST],
+    ["git push origin main", OFF_ALLOWLIST],
+    ["git checkout main", OFF_ALLOWLIST],
+    ["git branch -D main", OFF_ALLOWLIST],
+    ["git -C /path/to/repo status", OFF_ALLOWLIST],
+    ["pnpm install", OFF_ALLOWLIST],
+    ["pnpm install --frozen-lockfile left-pad", OFF_ALLOWLIST],
+    ["PNPM_HOME=x pnpm test", OFF_ALLOWLIST],
+    ["gh pr merge 12", OFF_ALLOWLIST],
+    ["gh pr view 12 --web", OFF_ALLOWLIST],
+    ["git diff --no-index a.txt b.txt", OFF_ALLOWLIST],
+    ["git log --output=log.txt", OFF_ALLOWLIST],
+    ["git grep -Ocat rack", OFF_ALLOWLIST],
+    ["git diff /path/to/secrets", REACHES_OUT],
+    ["git add ../outside.txt", REACHES_OUT],
+    ["git log -- ~/notes", REACHES_OUT],
+    ["pnpm test --config=../evil.ts", REACHES_OUT],
+    ['git commit -m "unclosed', /^That command couldn't be read/],
+  ])("never runs %s, and says why", async (command, why) => {
+    const { answers, ran } = await askAbout([command]);
+
+    expect(answers).toEqual([{ ok: false, error: expect.stringMatching(why) }]);
+    expect(ran).toEqual([]);
+  });
+
+  it("says what's on the allowlist when a command isn't", async () => {
+    const { answers } = await askAbout(["rm -rf node_modules"]);
+
+    expect(answers).toEqual([
+      {
+        ok: false,
+        error:
+          "That command isn't on this workspace's command allowlist, so it didn't run. The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another way with those, or tell the owner what you need run.",
+      },
+    ]);
+  });
+
+  it("commits only on the session branch", async () => {
+    const { provider, answers } = codingProvider([{ run: 'git commit -m "Add the notes"' }]);
+    const request = await start([provider]);
+    const { id } = await firstTurn(request, "Hello", CODING_MODEL);
+    const { folder, branch } = await sessionWorktree();
+    await gitIn(folder, "switch", "--quiet", "-c", "somewhere-else");
+
+    await postJson(request, `/api/sessions/${id}/messages`, {
+      text: "Commit it",
+      model: CODING_MODEL,
+    });
+    await followSession(request, { sessionId: id, until: "turn-completed", after: 4 });
+
+    expect(answers[1]).toEqual({
+      ok: false,
+      error: `Commits go on your session branch, ${branch}, and the worktree isn't on it now, so that didn't run.`,
+    });
+  });
+});
+
+describe("a code session's commands, through the fake", () => {
+  it("run in its worktree when allowed, and commit on its branch", async () => {
+    const request = await start();
+
+    const { events } = await firstTurn(
+      request,
+      [
+        "edit file notes.md: The rack goes on the back wall",
+        "run command: git add notes.md",
+        'run command: git commit -m "Add the notes"',
+        "run command: git branch --show-current",
+        "run command: git push origin main",
+      ].join("\n"),
+    );
+
+    const { folder, branch } = await sessionWorktree();
+    expect(await gitIn(folder, "log", "-1", "--format=%s")).toBe("Add the notes");
+    expect(answerIn(events)).toContain(`Ran git branch --show-current: ${branch} `);
+    expect(answerIn(events)).toMatch(/Couldn't run git push origin main: That command isn't on/);
+    expect(activitiesIn(events)).toEqual([
+      { kind: "edited-file", path: "notes.md" },
+      { kind: "ran-command", command: "git add notes.md" },
+      { kind: "ran-command", command: 'git commit -m "Add the notes"' },
+      { kind: "ran-command", command: "git branch --show-current" },
+    ]);
+    // The owner's checkout is still where it was.
+    expect(await gitIn(repo, "log", "-1", "--format=%s")).toBe("Start");
   });
 });
 
