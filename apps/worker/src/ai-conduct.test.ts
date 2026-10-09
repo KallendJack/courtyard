@@ -363,7 +363,7 @@ describe("attachments (#78)", () => {
       '<attachment kind="photo" name="IMG_2041.jpg">Image 1 with this message.</attachment>',
     );
     expect(message).toMatch(
-      /<attachment kind="pdf" name="rack-manual.pdf">\n[^]*Titan T-3 J-hooks[^]*The cup is 64 mm across\.[^]*\n<\/attachment>/,
+      /<attachment kind="pdf" name="rack-manual.pdf">\n[\s\S]*Titan T-3 J-hooks[\s\S]*The cup is 64 mm across\.[\s\S]*\n<\/attachment>/,
     );
     expect(message).toMatch(
       /<\/attachments>\n\nThe owner's new message \(attached "IMG_2041.jpg", "rack-manual.pdf"\):\n\nWill a 50 mm bar sit in these\?$/,
