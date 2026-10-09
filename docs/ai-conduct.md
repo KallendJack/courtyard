@@ -256,6 +256,9 @@ With a question written (a question mark in the answer so far):
 > The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its
 > question, so you've finished: end here, without another word, not even about the buttons.
 
+Claude often writes its whole answer again even so, so the worker drops anything a model writes after that: the
+answer is finished once it has asked its question and its replies are taken.
+
 With some of the answer written but no question yet:
 
 > The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write

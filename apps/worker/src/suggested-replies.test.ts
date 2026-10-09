@@ -56,6 +56,18 @@ describe("what a model is told once its replies are taken (#127)", () => {
     );
   });
 
+  it("drops anything written after that, so the answer isn't written twice", async () => {
+    const question = "Here's the plan. Which days are you free?";
+    const { events } = await turnSuggesting([
+      { write: question },
+      suggest(REPLIES),
+      { write: question },
+    ]);
+
+    const answer = events.flatMap((event) => (event.type === "text-delta" ? [event.text] : []));
+    expect(answer.join("")).toBe(question);
+  });
+
   it("tells one that has written only part of its answer to write the rest, not again", async () => {
     const { replies } = await turnSuggesting([{ write: "Here's the plan." }, suggest(REPLIES)]);
 

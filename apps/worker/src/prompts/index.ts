@@ -636,12 +636,18 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
 };
 
 /**
+ * Whether an answer, as written so far, has asked its question: once its replies are taken, it's
+ * finished, and anything more it writes is dropped (docs/ai-conduct.md, Suggested replies).
+ */
+export const asksItsQuestion = (written: string) => written.includes("?");
+
+/**
  * What a model is told when its replies are taken, by what its answer has written so far
  * (docs/ai-conduct.md, Suggested replies): Claude takes what it writes after its last tool call as
  * its answer, so it's told whether that's nothing more, the rest, or all of it.
  */
 const repliesTaken = (written: string) =>
-  written.includes("?")
+  asksItsQuestion(written)
     ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: end here, without another word, not even about the buttons."
     : written.trim() !== ""
       ? "The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write only the rest, ending with your question."
