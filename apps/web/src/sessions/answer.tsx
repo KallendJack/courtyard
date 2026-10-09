@@ -1,8 +1,17 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { finishForNow, splitBlocks } from "./blocks.ts";
+import { CodeBlock } from "./code-block.tsx";
+import { hasMaths, writeMathsForRemark } from "./maths.ts";
 import { useReveal } from "./reveal.ts";
+
+/** A node of formatted Markdown, as far as reading its text needs. */
+type Node = { readonly value?: string; readonly children?: readonly Node[] };
+
+/** All the text in a node, as written. */
+const textOf = (node: Node | undefined): string =>
+  node === undefined ? "" : (node.value ?? node.children?.map(textOf).join("") ?? "");
 
 const SUBHEADING = "font-display text-xl/7 font-semibold";
 const LINK = "font-medium text-primary-text underline underline-offset-2";
@@ -43,14 +52,21 @@ const ELEMENTS: Components = {
     </a>
   ),
   code: ({ node: _, className: __, ...props }) => (
-    <code
-      className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em] [pre_&]:bg-transparent [pre_&]:p-0"
-      {...props}
-    />
+    <code className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em]" {...props} />
   ),
-  pre: ({ node: _, ...props }) => (
-    <pre className="overflow-x-auto rounded-md border bg-field p-3 text-sm/6" {...props} />
-  ),
+  pre: ({ node }) => {
+    const code = node?.children.find((child) => child.type === "element");
+    const language = code?.properties.className;
+    const written = Array.isArray(language)
+      ? language.find((name) => String(name).startsWith("language-"))
+      : undefined;
+    return (
+      <CodeBlock
+        language={written === undefined ? undefined : String(written).slice("language-".length)}
+        code={textOf(code).replace(/\n$/, "")}
+      />
+    );
+  },
   blockquote: ({ node: _, ...props }) => (
     <blockquote
       className="border-l-2 border-primary-text/40 pl-4 text-muted-foreground"
@@ -70,11 +86,51 @@ const ELEMENTS: Components = {
 
 const PLUGINS = [remarkGfm];
 
-/** One block of an answer, memoised on its text, so finished blocks aren't formatted again. */
+type MathsPlugins = typeof import("./maths-plugins.ts");
+
+/** Drawing formulas, once it has loaded, so later blocks draw theirs at once. */
+let mathsPlugins: MathsPlugins | undefined;
+
+/** Drawing formulas, loaded the first time a block has maths in it. */
+const useMathsPlugins = (needed: boolean) => {
+  const [loaded, setLoaded] = useState(mathsPlugins);
+  useEffect(() => {
+    if (!needed || loaded) return;
+    let current = true;
+    void import("./maths-plugins.ts")
+      .then((plugins) => {
+        mathsPlugins = plugins;
+        if (current) setLoaded(plugins);
+      })
+      // The formulas stay as the model wrote them, which still reads.
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [needed, loaded]);
+  return needed ? loaded : undefined;
+};
+
+/**
+ * One block of an answer, memoised on its text, so finished blocks aren't formatted again. A
+ * block with maths in it is drawn with formulas once they've loaded.
+ */
 const Block = memo(function Block(props: { text: string }) {
+  const maths = useMathsPlugins(hasMaths(props.text));
+  if (maths === undefined) {
+    return (
+      <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+        {props.text}
+      </Markdown>
+    );
+  }
   return (
-    <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
-      {props.text}
+    <Markdown
+      remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}
+      rehypePlugins={maths.rehypePlugins}
+      components={ELEMENTS}
+    >
+      {writeMathsForRemark(props.text)}
     </Markdown>
   );
 });
@@ -93,7 +149,8 @@ export const Answer = memo(function Answer(props: {
   const shown = useReveal(props.text, { running: props.running, replayed: props.replayed });
   const blocks = splitBlocks(shown);
   return (
-    <div className="space-y-4 text-base/[26px] wrap-anywhere">
+    // Spaced by gaps, not margins, so a formula (whose margins come from KaTeX) spaces like the rest.
+    <div className="flex flex-col gap-4 text-base/[26px] wrap-anywhere">
       {blocks.map((block, index) => (
         <Block
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)

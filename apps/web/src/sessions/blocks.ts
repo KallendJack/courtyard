@@ -90,6 +90,39 @@ export const splitBlocks = (text: string): string[] => {
   return blocks;
 };
 
+/** Inline code: a run of backticks, then anything up to the same run again. */
+const INLINE_CODE = /(`+)[\s\S]*?[^`]\1(?!`)/g;
+
+/**
+ * A block's Markdown in pieces, code (fenced or inline) apart from the rest, so a change to the
+ * text around code (maths, say) leaves code as written. The pieces joined are the block again.
+ */
+export const splitCode = (block: string): { code: boolean; text: string }[] => {
+  const lines: { code: boolean; text: string }[] = [];
+  let fence: Fence | undefined;
+  for (const line of block.split("\n")) {
+    const inCode = fence !== undefined || opensFence(line) !== undefined;
+    if (fence !== undefined) {
+      if (closesFence(line, fence)) fence = undefined;
+    } else fence = opensFence(line);
+    const last = lines.at(-1);
+    if (last?.code === inCode) last.text += `\n${line}`;
+    else lines.push({ code: inCode, text: last === undefined ? line : `\n${line}` });
+  }
+  return lines.flatMap((piece) => {
+    if (piece.code) return [piece];
+    const pieces: { code: boolean; text: string }[] = [];
+    let from = 0;
+    for (const match of piece.text.matchAll(INLINE_CODE)) {
+      pieces.push({ code: false, text: piece.text.slice(from, match.index) });
+      pieces.push({ code: true, text: match[0] });
+      from = match.index + match[0].length;
+    }
+    pieces.push({ code: false, text: piece.text.slice(from) });
+    return pieces;
+  });
+};
+
 /** Marks that open formatting the rest of the line closes, longest first. */
 const EMPHASIS = ["**", "__", "~~", "*", "_"] as const;
 

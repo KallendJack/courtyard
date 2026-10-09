@@ -1,0 +1,20 @@
+/*
+ * Formulas in answers, loaded with KaTeX (maths-plugins.ts), never on the first load. They're in
+ * the body text colour; sizes are the Paper board's: 17px inline and 21px centred, on 16px text.
+ */
+.katex {
+  font-size: 1.06em;
+}
+
+/* A centred formula is a block of the answer, spaced like the others; a long one scrolls
+   sideways on a phone, like a table, rather than the page. */
+.katex-display {
+  margin: 0;
+  padding-block: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display > .katex {
+  font-size: 1.31em;
+}

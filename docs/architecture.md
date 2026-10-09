@@ -143,7 +143,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
-    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), the turn list, the
+    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), code blocks with
+    their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
+    block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
+    finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
     message box with its model, effort and skill pickers, save notes, the usage-limit notice with Carry on, the
     Get to know offer, Grill this plan beside each plan (`grill-plan.tsx`), and an answer's Sources
     (`sources.tsx`).
@@ -155,9 +158,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, text fields, sheets, notices and so on), used on every page
-  ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small helpers shared by
-  pages. **`styles.css`:** the Moorland theme.
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, sheets, notices and so on), used
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker and check the first-load budget.
 
