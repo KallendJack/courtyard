@@ -7,6 +7,7 @@ import {
   type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceDetail,
+  type WorkspaceId,
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
@@ -24,6 +25,7 @@ import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
+import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { describeWhen } from "../../when.ts";
 import {
   archiveWorkspace,
@@ -210,7 +212,10 @@ function Workspace() {
               </StatusPill>
             </div>
           )}
-          <ContextFileSections contextFile={contextFile} />
+          <ContextFileSections
+            contextFile={contextFile}
+            {...(workspace.mode === "planning" && { workspaceId: workspace.id })}
+          />
         </>
       )}
       {ownerContextShared !== "none" && (
@@ -305,11 +310,20 @@ function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
   );
 }
 
-/** The context file's sections. Its intro is shown under the workspace's title instead. */
-function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
+/**
+ * The context file's sections. Its intro is shown under the workspace's title instead. Given the
+ * workspace (a planning one), each plan has Grill this plan.
+ */
+function ContextFileSections(props: { contextFile: ContextFile; workspaceId?: WorkspaceId }) {
+  const { contextFile, workspaceId } = props;
   return (
     <div className="mt-4 space-y-6">
-      <FactsPlansIdeas {...contextFile} />
+      <FactsPlansIdeas
+        {...contextFile}
+        {...(workspaceId !== undefined && {
+          plan: (plan: string) => <GrillablePlan workspaceId={workspaceId} plan={plan} />,
+        })}
+      />
       {contextFile.other !== "" && (
         <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
           {contextFile.other}

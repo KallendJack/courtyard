@@ -176,8 +176,8 @@ page showed it is refused, and the owner reloads.
 
 Its description, as the skills list gives it:
 
-> Stress-tests a plan, a decision or an idea by asking about it one question at a time, each with a recommended
-> answer, and saves what's agreed. Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
+> Stress-tests a plan or an idea one question at a time, each with a recommended answer, and saves what's agreed.
+> Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
 
 Its text, which every later turn of the session carries once it's in use:
 

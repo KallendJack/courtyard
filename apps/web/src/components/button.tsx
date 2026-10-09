@@ -96,6 +96,12 @@ const ICON_SIZES = {
   md: "size-9 [&_svg:not([class*='size-'])]:size-[18px]",
 } as const;
 
+const ICON_LOOKS = {
+  quiet: "text-muted-foreground hover:bg-muted hover:text-foreground",
+  pressed: "bg-muted text-foreground",
+  filled: "bg-background text-primary-text hover:bg-accent",
+} as const;
+
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */
 export function IconButton({
   label,
@@ -104,6 +110,7 @@ export function IconButton({
   square = false,
   expanded,
   active = false,
+  filled = false,
   hint,
   type = "button",
   ...props
@@ -117,6 +124,8 @@ export function IconButton({
   expanded?: boolean;
   /** Shown pressed, while what it opened is open on the page (a confirm step, say). */
   active?: boolean;
+  /** On a disc in heather, rather than quiet: an action beside each line of a list (Grill this plan). */
+  filled?: boolean;
   /** Added to the hover text, such as a keyboard shortcut. */
   hint?: string;
 }) {
@@ -127,9 +136,9 @@ export function IconButton({
       title={hint === undefined ? label : `${label} (${hint})`}
       {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
       className={classes(
-        "inline-flex shrink-0 items-center justify-center transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:shrink-0",
+        "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:shrink-0",
         square ? "rounded-md" : "rounded-full",
-        active ? "bg-muted text-foreground" : "text-muted-foreground",
+        ICON_LOOKS[active ? "pressed" : filled ? "filled" : "quiet"],
         ICON_SIZES[size],
       )}
       {...props}

@@ -105,7 +105,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change), follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models and Get to know.
+  list of models, Get to know and Grill this plan.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
 
@@ -136,8 +136,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
     revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), the turn list, the
-    message box with its model, effort and skill pickers, save notes, the usage-limit notice with Carry on, and the
-    Get to know offer.
+    message box with its model, effort and skill pickers, save notes, the usage-limit notice with Carry on, the
+    Get to know offer, and Grill this plan beside each plan (`grill-plan.tsx`).
   - **`changes/`:** the Recent changes list, with Undo.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.

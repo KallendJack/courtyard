@@ -64,7 +64,7 @@ describe("Grill this plan", () => {
     await followSession(request, { sessionId: id, until: "turn-completed" });
 
     const instructions = saver.framings[0]?.instructions;
-    expect(instructions).toContain(`description: ${await quotedInGuide("Stress-tests a plan")}\n`);
+    expect(instructions).toContain(`description: ${await quotedInGuide("Stress-tests a plan or an idea")}\n`);
     expect(instructions).toContain(`\n${await quotedInGuide("# Grilling")}\n</skill>`);
   });
 

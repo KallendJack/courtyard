@@ -1,6 +1,6 @@
 ---
 name: grilling
-description: Stress-tests a plan, a decision or an idea by asking about it one question at a time, each with a recommended answer, and saves what's agreed. Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
+description: Stress-tests a plan or an idea one question at a time, each with a recommended answer, and saves what's agreed. Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
 ---
 
 # Grilling
