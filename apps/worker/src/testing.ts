@@ -214,6 +214,8 @@ export type ScriptedStep =
   | { readonly call: string; readonly input: unknown }
   /** Text the model writes at that point in its answer. */
   | { readonly write: string }
+  /** A file in the workspace the model reads at that point, by its path there, reported as read. */
+  | { readonly read: string }
   | (() => Promise<void>);
 
 /** For tests: what the worker told a model about one of its tool calls: whether it did it, and what it said. */
@@ -224,6 +226,9 @@ const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
 
 const isWrite = (step: ScriptedStep): step is { write: string } =>
   typeof step !== "function" && "write" in step && typeof step.write === "string";
+
+const isRead = (step: ScriptedStep): step is { read: string } =>
+  typeof step !== "function" && "read" in step && typeof step.read === "string";
 
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
@@ -265,6 +270,7 @@ export const savingProvider = (
       for (const step of steps) {
         if (typeof step === "function") await step();
         else if (isWrite(step)) await input.emit(step.write);
+        else if (isRead(step)) await input.report({ kind: "read-file", path: step.read });
         else {
           const reply = await input.callTool(
             isCall(step)

@@ -20,6 +20,7 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
+import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
@@ -181,6 +182,7 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
+  api.route("/", documentRoutes({ contextDir, contextFolder }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(

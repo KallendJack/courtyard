@@ -26,6 +26,18 @@ export {
   RecentChangeUndo,
 } from "./lib/changes.ts";
 export {
+  DOCUMENT_MAX_CHARACTERS,
+  DOCUMENT_NAME_MAX_LENGTH,
+  DocumentChanged,
+  DocumentDetail,
+  DocumentList,
+  DocumentName,
+  DocumentRename,
+  DocumentSlug,
+  DocumentSummary,
+  SaveAsDocument,
+} from "./lib/documents.ts";
+export {
   FRESH_START_WORDS,
   FreshStartRequest,
   FreshStartSummary,
@@ -67,6 +79,7 @@ export {
 } from "./lib/session.ts";
 export {
   Activity,
+  DocumentSave,
   endsTurn,
   FailureReason,
   Save,
