@@ -117,6 +117,20 @@ function Session(props: {
     [session.id],
   );
 
+  // A suggested reply goes as the owner's message, with the model and effort of the turn it answers.
+  const reply = useCallback(
+    async (turn: Turn, text: string) => {
+      const sent = await sendMessage(session.id, {
+        text,
+        model: turn.model,
+        ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+      });
+      setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
+      return sent.kind === "loaded";
+    },
+    [session.id],
+  );
+
   const carryOnFrom = useCallback(
     async (turn: Turn) => {
       const carried = await carryOn(session.id, turn.seq);
@@ -253,6 +267,7 @@ function Session(props: {
           providers={props.providers}
           onRetry={retry}
           onCarryOn={carryOnFrom}
+          {...(session.workspaceArchived ? {} : { onReply: reply })}
         />
       )}
       {sendProblem && (
