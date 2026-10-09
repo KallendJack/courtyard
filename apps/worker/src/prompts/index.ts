@@ -642,10 +642,10 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
  */
 const repliesTaken = (written: string) =>
   written.includes("?")
-    ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: write nothing more."
+    ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: end here, without another word, not even about the buttons."
     : written.trim() !== ""
       ? "The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write only the rest, ending with your question."
-      : "The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to say.";
+      : "The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write, never your thinking. Write your whole answer now, everything you meant to say and the question it ends with.";
 
 /**
  * What a model is told about the replies it suggested, its answer having `written` so far: that
