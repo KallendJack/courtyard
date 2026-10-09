@@ -655,13 +655,14 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "replies-none-for-an-open-question",
-    rule: "a question with no likely answers comes with no suggested replies",
+    rule: "a question only the owner can answer in their own words comes with no suggested replies",
     workspace: "Family",
-    context: { facts: ["My sister Amy is getting married on 12 Dec 2026"] },
+    context: { plans: ["Give a short toast at my sister Amy's wedding on 12 Dec 2026"] },
     turns: [
       {
-        say: "Help me write a short toast for Amy's wedding. Ask me for anything you need first.",
+        say: "Help me write a short toast for Amy's wedding. First, ask me for a favourite memory of her.",
         expect: [],
+        questions: { atLeast: 1, atMost: 2 },
         suggests: false,
       },
     ],

@@ -261,7 +261,7 @@ const judgeTurn = (judge: {
             miss:
               asked.length >= questions.atLeast && asked.length <= questions.atMost
                 ? null
-                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
+                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim() || `the answer ends "${answer.trim().slice(-160)}"`}`,
           },
         ];
   const { loads } = turn;
@@ -288,7 +288,7 @@ const judgeTurn = (judge: {
               suggests === suggested
                 ? null
                 : suggests
-                  ? "expected suggested replies; suggested none"
+                  ? `expected suggested replies; suggested none after: ${asked.join(" ").trim() || "no question"}`
                   : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
           },
         ];

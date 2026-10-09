@@ -171,9 +171,11 @@ Courtyard's tools (today, every one that saves). A code workspace's models aren'
 
 What a model is told (Every turn, item 11), on a turn that offers the tool:
 
-> When your answer ends by asking the owner a question that has a few likely answers, offer two or three of them
-> with the suggest_replies tool, so the owner can answer with a tap: each a few words, as the owner would say it.
-> Never suggest replies with an ordinary answer, or after a question with no likely answers.
+> Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or
+> another, which days they're free), call the suggest_replies tool with two or three of them before you finish, so
+> the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an
+> ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what
+> something looks like).
 
 The tool's description says what it does and points to that rule; its one input is the replies. The worker checks
 them and refuses, saying why, when:

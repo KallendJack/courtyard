@@ -702,7 +702,9 @@ describe("suggested replies (#126, ADR 0017)", () => {
     const tool = framing.tools.find((offered) => offered.name === "suggest_replies");
     expect(tool?.description).toMatch(/buttons/);
     expect(Object.keys(tool?.input ?? {})).toEqual(["replies"]);
-    expect(framing.instructions).toContain(await quotedInGuide("When your answer ends by asking"));
+    expect(framing.instructions).toContain(
+      await quotedInGuide("Whenever your answer ends by asking"),
+    );
   });
 
   it("offers it neither in a code workspace nor to a provider that takes none of Courtyard's tools", async () => {
