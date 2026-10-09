@@ -106,8 +106,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
   writes after them apart from lines it repeats.
 - **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
-  links to and the pages the model read, each with its site's name and title. Also finds the web addresses in the
-  owner's messages, the only pages besides search results that Claude may read.
+  links to and the pages the model read, each with its site's name and title; when it used none, the search results
+  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
+  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
+  results that Claude may read.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the

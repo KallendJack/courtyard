@@ -23,7 +23,7 @@ import { z } from "zod";
 import { readBytes } from "../files.ts";
 import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { pageKey, turnSources } from "../sources/index.ts";
+import { pageKey, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
@@ -428,11 +428,11 @@ const WebSearchOutput = z.object({
 
 /**
  * Web search on a turn, as the hooks keep track of it (ADR 0019): the pages that may be read
- * (the owner's links, then each search's results), their titles, and the pages read.
+ * (the owner's links, then each search's results), each search's results, and the pages read.
  */
 type WebTurn = {
   readonly allowed: Set<string>;
-  readonly titles: Map<string, string>;
+  readonly searches: SearchHit[][];
   readonly read: string[];
   searched: boolean;
 };
@@ -442,7 +442,7 @@ const webTurnFor = (webSearch: WebSearch | null): WebTurn | null =>
     ? null
     : {
         allowed: new Set(webSearch.ownerLinks.flatMap((link) => pageKey(link) ?? [])),
-        titles: new Map(),
+        searches: [],
         read: [],
         searched: false,
       };
@@ -535,8 +535,8 @@ const confineTo =
   };
 
 /**
- * Checked after every tool call: a search's results become pages the turn may read, with their
- * titles for its Sources (ADR 0019). Run before the results reach the model, so a fetch of one of
+ * Checked after every tool call: a search's results become pages the turn may read, and are kept
+ * for its Sources (ADR 0019). Run before the results reach the model, so a fetch of one of
  * them always finds it allowed.
  */
 const noteResults =
@@ -545,11 +545,11 @@ const noteResults =
     if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "WebSearch") return {};
     const output = WebSearchOutput.safeParse(input.tool_response);
     if (!output.success) return {};
-    for (const hit of output.data.results.flatMap((result) => result.content)) {
+    const hits = output.data.results.flatMap((result) => result.content);
+    web.searches.push(hits);
+    for (const hit of hits) {
       const key = pageKey(hit.url);
-      if (key === undefined) continue;
-      web.allowed.add(key);
-      if (!web.titles.has(key)) web.titles.set(key, hit.title);
+      if (key !== undefined) web.allowed.add(key);
     }
     return {};
   };
@@ -730,7 +730,7 @@ export const createClaudeProvider = (
         (progress.result === undefined ? failureFor("unknown", progress.resetAt) : undefined);
       if (failure) return err(failure);
       if (web !== null && (web.searched || web.read.length > 0)) {
-        const sources = turnSources({ answer, read: web.read, titles: web.titles });
+        const sources = turnSources({ answer, read: web.read, searches: web.searches });
         if (sources.length > 0) await input.cite(sources);
       }
       return ok(null);

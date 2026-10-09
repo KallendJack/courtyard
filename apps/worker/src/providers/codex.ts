@@ -1136,7 +1136,7 @@ export const createCodexProvider = (options: {
       switch (end.value.kind) {
         case "completed": {
           // Codex gives no list of results, so its sources are the links its answer gives.
-          const sources = usedWeb ? turnSources({ answer, read, titles: new Map() }) : [];
+          const sources = usedWeb ? turnSources({ answer, read, searches: [] }) : [];
           if (sources.length > 0) await input.cite(sources);
           return ok(null);
         }

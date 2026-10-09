@@ -131,7 +131,7 @@ const scriptedWeb = (message: string) => {
   }
   return {
     activities,
-    sources: turnSources({ answer: cited.join("\n"), read: [], titles: new Map() }),
+    sources: turnSources({ answer: cited.join("\n"), read: [], searches: [] }),
   };
 };
 
