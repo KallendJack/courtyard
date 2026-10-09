@@ -234,6 +234,8 @@ export const createSessions = (options: {
   contextDir: string;
   /** Where saves are written, one change at a time. */
   contextFolder: ContextFolder;
+  /** The house skills' folder (ADR 0016). */
+  houseSkills: string;
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
