@@ -9,5 +9,6 @@
 @source "./**/*.tsx";
 
 :where([data-rich-block]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
   @tailwind utilities source(none);
 }
