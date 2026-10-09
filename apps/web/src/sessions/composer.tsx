@@ -82,6 +82,21 @@ function AttachButtons(props: {
   );
 }
 
+/**
+ * Whether a paste is files to attach rather than text (#78). A screenshot comes with no text, and a
+ * picture copied from a web page with HTML that's only an `<img>` (and perhaps its address as
+ * text): those attach. Word and Excel copy a selection's text with a picture of it, and their HTML
+ * has that text: the text is what's meant, so it pastes as text.
+ */
+const pastesFiles = (clipboard: DataTransfer) => {
+  if (clipboard.files.length === 0) return false;
+  const html = clipboard.getData("text/html");
+  if (html === "") return clipboard.getData("text/plain").trim() === "";
+  // Parsed, never shown: a parsed document runs no scripts and loads nothing.
+  const words = new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+  return words.trim() === "";
+};
+
 /** A `/` at the start of the box, and what's typed after it: what opens and narrows the skill list. */
 const SLASH = /^\/(\S*)$/;
 
@@ -441,11 +456,9 @@ export const Composer = memo(function Composer(props: {
               }}
               // A pasted photo or screenshot attaches (#78); pasted text goes in as usual.
               onPaste={(event) => {
-                const files = [...event.clipboardData.files];
-                // Text copied with a picture of itself (from a document, say) is pasted as text.
-                if (files.length === 0 || event.clipboardData.getData("text/plain") !== "") return;
+                if (!pastesFiles(event.clipboardData)) return;
                 event.preventDefault();
-                void attach(files);
+                void attach([...event.clipboardData.files]);
               }}
               placeholder={props.placeholder}
               rows={1}
