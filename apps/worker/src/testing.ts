@@ -1,6 +1,15 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
+import { crc32, deflateSync } from "node:zlib";
+import {
+  ApiError,
+  ATTACHMENTS_FIELD,
+  MESSAGE_FIELD,
+  ModelId,
+  ProviderId,
+  SessionEvent,
+  SessionSummary,
+} from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
@@ -351,4 +360,91 @@ export const changesIn = async (contextDir: string) => {
       const [title = "", body = ""] = entry.split("\x1f");
       return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
     });
+};
+
+/** For tests and the eval: a file to attach, as the browser sends it. */
+export type TestFile = { readonly name: string; readonly type: string; readonly bytes: Uint8Array };
+
+/**
+ * For tests and the eval: a PNG of `width` by `height`, each pixel's colour from `colour`. Real
+ * enough for a browser to open and a model to look at.
+ */
+export const pngOf = (
+  width: number,
+  height: number,
+  colour: (x: number, y: number) => readonly [number, number, number],
+): Uint8Array => {
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const named = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(named));
+    return Buffer.concat([length, named, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const rows = Buffer.alloc(height * (1 + width * 3));
+  for (let y = 0; y < height; y++) {
+    const start = y * (1 + width * 3);
+    for (let x = 0; x < width; x++) rows.set(colour(x, y), start + 1 + x * 3);
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+};
+
+/**
+ * For tests and the eval: a one-page PDF with these lines of text on it, or none (a page with no
+ * text, as a scan is to a model).
+ */
+export const pdfOf = (lines: readonly string[]): Uint8Array => {
+  const escaped = (line: string) => line.replace(/[\\()]/g, (char) => `\\${char}`);
+  const stream =
+    lines.length === 0
+      ? ""
+      : ["BT /F1 12 Tf 72 720 Td 16 TL", ...lines.map((line) => `(${escaped(line)}) '`), "ET"].join(
+          "\n",
+        );
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+};
+
+/**
+ * For tests and the eval: sends a message with files attached, the way the web app does: its JSON
+ * in one field of a multipart form and each file in another.
+ */
+export const postWithFiles = (
+  request: Requester,
+  path: string,
+  message: unknown,
+  files: readonly TestFile[],
+) => {
+  const form = new FormData();
+  form.set(MESSAGE_FIELD, JSON.stringify(message));
+  for (const file of files) {
+    form.append(ATTACHMENTS_FIELD, new File([file.bytes], file.name, { type: file.type }));
+  }
+  return request(path, { method: "POST", body: form });
 };

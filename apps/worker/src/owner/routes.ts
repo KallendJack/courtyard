@@ -54,17 +54,28 @@ const setLoginCookie = (c: Context, secret: LoginSecret) => {
  * site a request came from, so a mismatch is refused. This is what stops another website setting
  * up a fresh install, which needs no cookie.
  */
-export const sameSiteJsonOnly: MiddlewareHandler = async (c, next) => {
-  if (c.req.method === "GET" || c.req.method === "HEAD") return next();
-  const origin = c.req.header("origin");
-  if (origin !== undefined && origin !== ownOrigin(c)) {
-    return apiError(c, { status: 403, error: "Requests must come from Courtyard itself" });
-  }
-  if (!c.req.header("content-type")?.startsWith("application/json")) {
-    return apiError(c, { status: 415, error: "Send JSON" });
-  }
-  return next();
-};
+export const sameSiteJsonOnly =
+  (options: {
+    /**
+     * The requests that may send a multipart form instead: a message with files attached (#78).
+     * Another site's page can send a form without asking, but the login cookie is SameSite=Strict,
+     * so it arrives logged out, and only routes behind the login take files.
+     */
+    takesFiles: (c: Context) => boolean;
+  }): MiddlewareHandler =>
+  async (c, next) => {
+    if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+    const origin = c.req.header("origin");
+    if (origin !== undefined && origin !== ownOrigin(c)) {
+      return apiError(c, { status: 403, error: "Requests must come from Courtyard itself" });
+    }
+    const type = c.req.header("content-type");
+    const files = type?.startsWith("multipart/form-data") && options.takesFiles(c);
+    if (!files && !type?.startsWith("application/json")) {
+      return apiError(c, { status: 415, error: "Send JSON" });
+    }
+    return next();
+  };
 
 /** Only the owner gets in (ADR 0002): everything but the public paths needs a device login. */
 export const requireLogin =

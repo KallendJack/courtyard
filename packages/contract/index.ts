@@ -1,4 +1,18 @@
 export { ApiError } from "./lib/api-error.ts";
+export {
+  ATTACHMENTS,
+  ATTACHMENTS_FIELD,
+  Attachment,
+  AttachmentFile,
+  AttachmentId,
+  AttachmentMediaType,
+  attachmentKind,
+  MESSAGE_FIELD,
+  PDF_TYPE,
+  PHOTO_TYPES,
+  sizeInWords,
+  TOO_MANY_ATTACHMENTS,
+} from "./lib/attachment.ts";
 export { AuthState, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
 export { ContextBackup } from "./lib/backup.ts";
 export {

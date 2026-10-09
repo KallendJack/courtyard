@@ -3,6 +3,7 @@ import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type Activity,
+  type Attachment,
   type CarryOnRequest,
   type ChangeId,
   type Effort,
@@ -24,8 +25,22 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
+import {
+  attachmentPath,
+  attachmentsOf,
+  keepAttachments,
+  type PreparedAttachment,
+} from "../attachments/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
-import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
+import {
+  exists,
+  listFolder,
+  move,
+  readBytes,
+  readJsonFile,
+  readTextFile,
+  writeJsonFile,
+} from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
   type FramingWorkspace,
@@ -95,6 +110,8 @@ export type SessionError =
     }
   /** No save in the session has that event number. */
   | { readonly kind: "save-not-found" }
+  /** No message in the session carried an attachment with that id, or its file is gone. */
+  | { readonly kind: "attachment-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   | { readonly kind: "storage"; readonly message: string };
@@ -674,6 +691,10 @@ export const createSessions = (options: {
     since: number;
     /** It answers the session's first message, so the session is titled once it completes. */
     firstTurn?: boolean;
+    /** The files the owner attached, checked, to keep in the session's folder (#78). */
+    attachments?: readonly PreparedAttachment[];
+    /** Attachments already kept that the message carries again (Carry on). */
+    keptAttachments?: readonly Attachment[];
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -698,12 +719,22 @@ export const createSessions = (options: {
         return changed;
       }
     }
+    const kept = await keepAttachments(folderOf(start.id), start.attachments ?? []);
+    if (!kept.ok) {
+      session.turn = { kind: "idle" };
+      return err(STORAGE_ERROR);
+    }
+    const attachments = [
+      ...(start.keptAttachments ?? []),
+      ...(start.attachments ?? []).map((prepared) => prepared.attachment),
+    ];
     const recorded = await append(start.id, {
       type: "owner-message",
       text: start.message.text,
       model: start.message.model,
       ...(start.message.effort === undefined ? {} : { effort: start.message.effort }),
       ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
+      ...(attachments.length === 0 ? {} : { attachments }),
     });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
@@ -885,6 +916,8 @@ export const createSessions = (options: {
       message: FirstMessage;
       /** Started with a starter message, whose first line stays the title (Get to know). */
       starter?: boolean;
+      /** The files attached to the first message, checked (#78). */
+      attachments?: readonly PreparedAttachment[];
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -918,6 +951,7 @@ export const createSessions = (options: {
             message: message.value,
             since,
             firstTurn: true,
+            ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
           })
         : err(STORAGE_ERROR);
       if (!started.ok) {
@@ -930,7 +964,12 @@ export const createSessions = (options: {
     },
 
     /** Starts a turn; returns as soon as the owner's message is recorded. */
-    send: async (rawId: string, message: NewMessage): Promise<Result<null, SessionError>> => {
+    send: async (
+      rawId: string,
+      message: NewMessage,
+      /** The files attached to it, checked (#78). */
+      attachments: readonly PreparedAttachment[] = [],
+    ): Promise<Result<null, SessionError>> => {
       const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;
@@ -947,6 +986,7 @@ export const createSessions = (options: {
         provider: provider.value,
         message,
         since,
+        attachments,
       });
     },
 
@@ -986,6 +1026,8 @@ export const createSessions = (options: {
           ...(message.skill === undefined ? {} : { skill: message.skill }),
         },
         carryingOn: { turn: request.turn },
+        // Its attachments go again too, already in the session's folder.
+        ...(message.attachments === undefined ? {} : { keptAttachments: message.attachments }),
         // Carrying on the first message is still the session's first turn.
         firstTurn: events.value.find((event) => event.type === "owner-message") === message,
         since,
@@ -1003,6 +1045,24 @@ export const createSessions = (options: {
       }
       current.stopper.abort();
       return ok(null);
+    },
+
+    /** One of the session's attachments (#78) and its bytes, by its id. */
+    attachment: async (
+      rawId: string,
+      rawAttachmentId: string,
+    ): Promise<Result<{ attachment: Attachment; bytes: Buffer }, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const events = await readEvents(found.value.id);
+      if (!events.ok) return events;
+      const attachment = attachmentsOf(events.value).find(({ id }) => id === rawAttachmentId);
+      if (attachment === undefined) return err({ kind: "attachment-not-found" });
+      const bytes = await readBytes(attachmentPath(folderOf(found.value.id), attachment));
+      if (!bytes.ok) return err(STORAGE_ERROR);
+      return bytes.value === undefined
+        ? err({ kind: "attachment-not-found" })
+        : ok({ attachment, bytes: bytes.value });
     },
 
     get: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
