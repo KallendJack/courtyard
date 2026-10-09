@@ -38,6 +38,8 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - **What an answer says.** A turn can give words its answer should have (`says`), such as a grilling's
   recommendation or a wrap-up's decisions and open questions.
+- **Attachments.** A turn can attach made-up photos and PDFs (`attach`, #78), and `says` checks the answer used
+  them: the `attached-*` scenarios describe a photo and use a PDF's contents, then find each again a turn later.
 - **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
   suggested replies. Every set a run suggested is printed under it.
 - **Get to know.** A scenario can give its context file an intro line (`intro`). A turn can say whether its answer
