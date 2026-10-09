@@ -41,7 +41,9 @@ type FencedKind = {
  * entry here and a module whose default export takes `DrawingProps`, in this folder, plus its
  * rule in docs/ai-conduct.md; a block of any other language is code.
  */
-const FENCED_KINDS = new Map<string, FencedKind>([]);
+const FENCED_KINDS = new Map<string, FencedKind>([
+  ["chart", { noun: "chart", load: () => import("./chart.tsx") }],
+]);
 
 /** The kind of block a fence is, by its language, when it's one Courtyard draws. */
 export const fencedKind = (language: string | undefined) =>

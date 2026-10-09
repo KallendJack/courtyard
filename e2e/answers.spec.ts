@@ -230,6 +230,58 @@ test.describe("tables", () => {
   });
 });
 
+/** A `chart` block holding `chart` as JSON, as a model writes one. */
+const chartBlock = (chart: unknown) => `\`\`\`chart\n${JSON.stringify(chart, null, 2)}\n\`\`\``;
+
+const SPENDING = {
+  kind: "bar",
+  title: "Spent on the bike, by month",
+  unit: "£",
+  labels: ["Jun", "Jul", "Aug", "Sep", "Oct"],
+  series: [{ name: "Spent", values: [40, 25, 60, 185, 30] }],
+};
+
+/** The fill or stroke each of a chart's marks is drawn in. */
+const coloursOf = (marks: Locator, property: "fill" | "stroke") =>
+  marks.evaluateAll(
+    (elements, which) => elements.map((element) => getComputedStyle(element)[which]),
+    property,
+  );
+
+test.describe("charts", () => {
+  test("a bar chart is drawn in the theme's colours, its code loaded only for an answer with one", async ({
+    page,
+  }) => {
+    const scripts = watchScripts(page);
+    const chartCode = () => scripts.filter((file) => /^chart/.test(file));
+    await ask(page, "No chart here, just words.");
+    expect(chartCode()).toEqual([]);
+
+    const session = await ask(
+      page,
+      `September was the drivetrain:\n\n${chartBlock(SPENDING)}\n\nThat's the lot.`,
+    );
+    const chart = session.getByRole("figure", { name: "Spent on the bike, by month" });
+    await expect(chart).toContainText("£");
+    const bars = chart.locator("svg [data-series]");
+    await expect(bars).toHaveCount(5);
+    // Each value sits on its bar, and each month under it.
+    for (const text of ["40", "25", "60", "185", "30", "Jun", "Sep", "Oct"])
+      await expect(chart.locator("svg text", { hasText: new RegExp(`^${text}$`) })).toHaveCount(1);
+    // The axis counts up in round steps past the highest value.
+    for (const text of ["0", "50", "100", "150", "200"])
+      await expect(chart.locator("svg text", { hasText: new RegExp(`^${text}$`) })).not.toHaveCount(
+        0,
+      );
+    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill("rgb(106, 63, 110)"));
+    await expect(session.locator("[aria-live]").last()).toContainText("That's the lot.");
+    expect(chartCode().length).toBe(1);
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill("rgb(142, 94, 147)"));
+  });
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
