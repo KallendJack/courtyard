@@ -23,7 +23,8 @@ Courtyard's Codex home, in the data folder `COURTYARD_DATA_DIR` names), and prin
 section, whether it adds, changes or removes, and the line it changes; its wording only needs the scenario's key words,
 and an answer that should ask has a question with them in. Where a scenario says how many questions an answer asks,
 they're counted by question mark, an example put as a question ("For example, is it…?") counting with the question
-before it. It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
+before it, and so does the same question put again as its likely answers ("Is it X, Y or Z?", "Or not?"; #127, as
+Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the owner's login and uses their plan's allowance.
 
 - **Before merging any change to the saving rules,** run it on both providers and put each score in the pull request,
   with each miss left and why. Run the changed scenarios with `--times 3` too: a verdict that flips is noted, not

@@ -198,15 +198,19 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
 
 /**
  * The questions an answer asks, sentence by sentence. An example put as a question ("For
- * example, is it…?") belongs to the question before it rather than counting as one of its own.
+ * example, is it…?"), or the same question put again as its likely answers ("Is it X, Y or Z?",
+ * "Or not?"), belongs to the question before it rather than counting as one of its own.
  */
 const questionsIn = (answer: string) => {
   const questions: string[] = [];
   for (const sentence of answer.match(/[^.!?\n]*\?/g) ?? []) {
     const last = questions.at(-1);
     const example = /^[\s*_]*(for example|for instance|e\.g\.)/i.test(sentence);
-    if (example && last !== undefined) questions[questions.length - 1] = `${last} ${sentence}`;
-    else questions.push(sentence);
+    // The same question put again as its likely answers: "…? Is it X, Y or Z?", "…? Or not?"
+    const options = /^[\s*_]*or\b/i.test(sentence) || /,.*\bor\b/i.test(sentence);
+    if ((example || options) && last !== undefined) {
+      questions[questions.length - 1] = `${last} ${sentence}`;
+    } else questions.push(sentence);
   }
   return questions;
 };
