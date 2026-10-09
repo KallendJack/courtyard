@@ -7,7 +7,11 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
-import { SAVE_TOOL_NAME, USE_SKILL_TOOL_NAME } from "../prompts/index.ts";
+import {
+  SAVE_TOOL_NAME,
+  SUGGEST_REPLIES_TOOL_NAME,
+  USE_SKILL_TOOL_NAME,
+} from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { Provider, SignIn } from "./index.ts";
 
@@ -82,6 +86,15 @@ const scriptedSkillLoads = (message: string): Record<string, string>[] =>
   message.split("\n").flatMap((line) => {
     const [, name, path] = USE_SKILL.exec(line.trim()) ?? [];
     return name === undefined ? [] : [{ name, ...(path === undefined ? {} : { path }) }];
+  });
+
+const SUGGEST_REPLIES = /^suggest replies: (.+)$/i;
+
+/** The replies a message scripts suggesting, on a line "suggest replies: Back wall | By the door". */
+const scriptedReplies = (message: string): { replies: string[] }[] =>
+  message.split("\n").flatMap((line) => {
+    const [, replies] = SUGGEST_REPLIES.exec(line.trim()) ?? [];
+    return replies === undefined ? [] : [{ replies: replies.split("|").map((r) => r.trim()) }];
   });
 
 /** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
@@ -192,8 +205,9 @@ const pause = (ms: number, signal: AbortSignal) =>
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool, and "use skill …" loads a skill (see
- * `scriptedSkillLoads`) when it offers the use skill tool. A tidy follows markers in the file (see
- * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
+ * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
+ * replies (see `scriptedReplies`) when it offers that tool. A tidy follows markers in the file
+ * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested.
  */
@@ -252,6 +266,11 @@ export const createFakeProvider = (
       }
       if (offers(SAVE_TOOL_NAME)) {
         for (const input of scriptedSaves(last)) await callTool({ name: SAVE_TOOL_NAME, input });
+      }
+      if (offers(SUGGEST_REPLIES_TOOL_NAME)) {
+        for (const input of scriptedReplies(last)) {
+          await callTool({ name: SUGGEST_REPLIES_TOOL_NAME, input });
+        }
       }
       if (hitsLimit.test(last)) {
         return err({

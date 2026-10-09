@@ -49,6 +49,8 @@ export {
   SessionList,
   SessionSummary,
   StopRequest,
+  SUGGESTED_REPLIES,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
   takesEffort,
   UsageLimit,
 } from "./lib/session.ts";

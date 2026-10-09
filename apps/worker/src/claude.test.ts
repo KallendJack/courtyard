@@ -617,6 +617,44 @@ describe("the save tool on a Claude turn", () => {
     });
   });
 
+  it("hands a list over unchanged, as suggested replies are, even one the worker will refuse", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const SUGGEST_REPLIES: CourtyardTool = {
+      name: "suggest_replies",
+      description: "Offers the owner replies to tap.",
+      input: { replies: z.array(z.string()) },
+    };
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, SUGGEST_REPLIES]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: false, content: [{ kind: "text", text: "Suggest two or three replies." }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__suggest_replies", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    const input = { replies: ["One", "Two", "Three", "Four"] };
+    const result = await client.callTool({ name: "suggest_replies", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "suggest_replies", input }]);
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: "Suggest two or three replies." }],
+    });
+  });
+
   it("isn't offered, or allowed, on a turn whose framing has none", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
 

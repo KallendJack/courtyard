@@ -96,12 +96,15 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
   (instructions with the skills list and the skills in use, the conversation so far, and Courtyard's tools: the save
-  tool and use skill), the replies to Courtyard's tools, and the text for Get to know, Tidy and titling a session.
+  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Get to know, Tidy and
+  titling a session.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place from four places, the more specific
   winning by name: the workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context
   folder's top-level one, then the house skills for its kind of workspace from `packages/skills`. It keeps each
   skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
   skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
+- **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
+  three, each a few words on one line, all different, one set per answer.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change), follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
@@ -213,6 +216,10 @@ Where the rest fits:
   through `context-folder/` at once; the session records it and the browser shows a note. A refused save is explained
   to the model, which may put it right once
   ([ADR 0013](adr/0013-models-save-context-as-they-chat-and-the-owner-undoes.md)).
+- **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
+  `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
+  the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
+  ([ADR 0017](adr/0017-models-offer-suggested-replies-through-a-courtyard-tool.md)).
 - **Undo and Edit.** From a save's note, through `sessions/` to `saves/`; or from Recent changes, through `changes/`.
   Each is a change of its own, and the session records what the owner did to its save.
 - **Stop.** The worker tells the provider to stop, stops waiting for it at once, and drops anything it sends
@@ -329,10 +336,10 @@ Everything Courtyard's models read is built in one place, from written rules, an
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
     finds itself turned off. [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a
     real Codex before its version changes.
-  - The fake echoes, and saves or loads a skill when a test scripts it.
+  - The fake echoes, and saves, loads a skill or suggests replies when a test scripts it.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
-  their saves and the skills they load. It runs on demand, never in CI (`pnpm eval:context`; ai-conduct.md, The eval
-  set).
+  their saves, the skills they load and the replies they suggest. It runs on demand, never in CI (`pnpm eval:context`;
+  ai-conduct.md, The eval set).
 - **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
   folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started
   by the owner, the same on every provider (ai-conduct.md, Skills).
