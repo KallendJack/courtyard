@@ -291,10 +291,10 @@ const runTurn = async (
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
-      saveTool: null,
+      tools: [],
       fileTools: null,
     },
-    save: async () => ({ saved: false, reply: "No saves in this test." }),
+    callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
     emit: async (text) => {
       emitted.push(text);
     },

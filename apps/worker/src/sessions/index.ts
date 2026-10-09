@@ -28,6 +28,8 @@ import { readOwnerContext } from "../owner-context/index.ts";
 import {
   type FramingWorkspace,
   framingFor,
+  notOfferedReply,
+  SAVE_TOOL_NAME,
   saveReply,
   TITLING,
   TitleAnswer,
@@ -38,7 +40,7 @@ import {
   modelsOnOffer,
   offerFor,
   type Provider,
-  type SaveReply,
+  type ToolReply,
 } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -438,8 +440,8 @@ export const createSessions = (options: {
     let failure: FailureReason | undefined;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
-    /** Saves still being written, which finish (and are recorded) before the turn ends. */
-    const savesUnderway = new Set<Promise<unknown>>();
+    /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
+    const callsUnderway = new Set<Promise<unknown>>();
     try {
       const [events, workspace] = await Promise.all([
         readEvents(turn.id),
@@ -466,12 +468,11 @@ export const createSessions = (options: {
         });
         /** Whether the last save was refused, so this one is its retry. */
         let retrying = false;
-        const save = async (input: unknown): Promise<SaveReply> => {
+        const save = async (input: unknown): Promise<ToolReply> => {
           // A provider winding down after a stop saves nothing more; one already saving finishes.
           if (stopper.signal.aborted || recordingLost) {
             return saveReply(err({ kind: "stopped" }), true);
           }
-          if (framing.saveTool === null) return saveReply(err({ kind: "not-offered" }), true);
           const saved = await turnSaves(input);
           if (saved.ok) {
             const { value: save, change } = saved.value;
@@ -486,6 +487,17 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        /** What answers each of Courtyard's tools, by name: only those the framing offers. */
+        const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
+          [SAVE_TOOL_NAME]: save,
+        };
+        const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
+          const answer = answers[call.name];
+          if (answer === undefined || !framing.tools.some((tool) => tool.name === call.name)) {
+            return Promise.resolve(notOfferedReply(call.name));
+          }
+          return answer(call.input);
+        };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
@@ -493,11 +505,11 @@ export const createSessions = (options: {
             effort: turn.effort,
             folder: workspace.value.folder,
             framing,
-            save: (input) => {
-              const saving = save(input);
-              savesUnderway.add(saving);
-              void saving.finally(() => savesUnderway.delete(saving));
-              return saving;
+            callTool: (call) => {
+              const calling = callTool(call);
+              callsUnderway.add(calling);
+              void calling.finally(() => callsUnderway.delete(calling));
+              return calling;
             },
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
@@ -522,8 +534,9 @@ export const createSessions = (options: {
       console.error(`Session ${turn.id}: the provider threw`, error);
       failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
     }
-    // A save already being written stays, whatever happens to the turn (ADR 0013).
-    await Promise.allSettled(savesUnderway);
+    // A save already being written stays, whatever happens to the turn (ADR 0013), and a tool
+    // call under way finishes, recording what it did.
+    await Promise.allSettled(callsUnderway);
     if (!failure && recordingLost) {
       failure = {
         kind: "unknown",

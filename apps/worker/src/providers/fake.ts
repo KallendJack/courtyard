@@ -7,6 +7,7 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
+import { SAVE_TOOL_NAME } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { Provider, SignIn } from "./index.ts";
 
@@ -224,14 +225,15 @@ export const createFakeProvider = (
       capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ model, effort, framing, emit, report, save, signal }) => {
+    runTurn: async ({ model, effort, framing, emit, report, callTool, signal }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
+      const offers = (name: string) => framing.tools.some((tool) => tool.name === name);
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
-      if (framing.saveTool !== null) {
-        for (const request of scriptedSaves(last)) await save(request);
+      if (offers(SAVE_TOOL_NAME)) {
+        for (const input of scriptedSaves(last)) await callTool({ name: SAVE_TOOL_NAME, input });
       }
       if (hitsLimit.test(last)) {
         return err({

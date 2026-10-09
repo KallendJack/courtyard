@@ -2,12 +2,8 @@ import { join } from "node:path";
 import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
-import {
-  createFakeProvider,
-  type Framing,
-  type Provider,
-  type SaveReply,
-} from "./providers/index.ts";
+import { SAVE_TOOL_NAME } from "./prompts/index.ts";
+import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -194,6 +190,9 @@ export const gatedProvider = () => {
 /** For tests: one step of a scripted turn, a save the model asks for or something to do mid-turn. */
 export type ScriptedStep = Readonly<Record<string, unknown>> | (() => Promise<void>);
 
+/** For tests: what the worker told a model about one of its saves. */
+export type SaveReply = { readonly saved: boolean; readonly reply: string };
+
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
 
@@ -227,7 +226,13 @@ export const savingProvider = (
       framings.push(input.framing);
       for (const step of steps) {
         if (typeof step === "function") await step();
-        else turnReplies.push(await input.save(step));
+        else {
+          const reply = await input.callTool({ name: SAVE_TOOL_NAME, input: step });
+          const text = reply.content
+            .map((part) => (part.kind === "text" ? part.text : ""))
+            .join("");
+          turnReplies.push({ saved: reply.ok, reply: text });
+        }
       }
       if (options.holdAfterSaves) {
         await new Promise((resolve) =>

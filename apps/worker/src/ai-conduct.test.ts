@@ -405,7 +405,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     await turnOn(saver.provider);
 
     const framing = saver.framings[0];
-    expect(framing?.saveTool?.name).toBe("save_to_context");
+    expect(framing?.tools.map((tool) => tool.name)).toContain("save_to_context");
     expect(framing?.instructions).toMatch(
       /keep this workspace's context file and the owner context current yourself, with the save_to_context tool/,
     );
@@ -447,7 +447,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     const { provider, turns } = recorder(READS_FILES);
     await (await sessionOn(provider)).say("Where should the rack go?");
 
-    expect(turns[0]?.framing.saveTool).toBeNull();
+    expect(turns[0]?.framing.tools.map((tool) => tool.name)).not.toContain("save_to_context");
     expect(turns[0]?.framing.instructions).not.toMatch(/save_to_context/);
   });
 
@@ -460,7 +460,8 @@ describe("saving context as a model answers (ADR 0013)", () => {
     await turnOn(saver.provider);
 
     const framing = saver.framings[0];
-    expect(framing?.saveTool?.description).toMatch(/to How to answer me in the owner context/);
+    const saveTool = framing?.tools.find((tool) => tool.name === "save_to_context");
+    expect(saveTool?.description).toMatch(/to How to answer me in the owner context/);
     expect(framing?.instructions).toMatch(
       /It saves to the owner context's How to answer me \(place "owner", section answers\), the only place you can save to/,
     );

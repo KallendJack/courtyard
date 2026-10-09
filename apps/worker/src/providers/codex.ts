@@ -21,10 +21,10 @@ import { err, ok, type Result } from "../result.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
-  type FileReply,
   jsonSchemaOf,
   type Provider,
   type SignIn,
+  type ToolReply,
   type TurnInput,
 } from "./index.ts";
 
@@ -560,9 +560,9 @@ type TurnTool = {
   readonly answer: (args: unknown) => Promise<ToolAnswer>;
 };
 
-/** A file tool's reply, worded by the prompts module, as Codex takes it. */
-const fromFileReply = (reply: FileReply): ToolAnswer => ({
-  success: reply.found,
+/** A tool's reply, worded by the prompts module, as Codex takes it. */
+const fromToolReply = (reply: ToolReply): ToolAnswer => ({
+  success: reply.ok,
   contentItems: reply.content.map((content) =>
     content.kind === "text"
       ? { type: "inputText", text: content.text }
@@ -572,27 +572,25 @@ const fromFileReply = (reply: FileReply): ToolAnswer => ({
 
 /**
  * The tools a turn's framing offers, by name: Courtyard's file tools, confined to the workspace
- * folder, and the save tool, whose input goes to the worker as Codex sent it (ADR 0013).
+ * folder, and Courtyard's other tools (the save tool, use skill…), each call's input going to the
+ * worker as Codex sent it (ADRs 0013, 0016).
  */
 const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
   const tools: TurnTool[] = [];
-  const { fileTools, saveTool } = input.framing;
+  const { fileTools } = input.framing;
   if (fileTools !== null) {
     const files = workspaceFiles({ folder: input.folder, report: input.report });
     for (const kind of ["list", "read", "search"] as const) {
       tools.push({
         tool: fileTools[kind],
-        answer: async (args) => fromFileReply(fileToolReply(await files[kind](args))),
+        answer: async (args) => fromToolReply(fileToolReply(await files[kind](args))),
       });
     }
   }
-  if (saveTool !== null) {
+  for (const tool of input.framing.tools) {
     tools.push({
-      tool: saveTool,
-      answer: async (args) => {
-        const { saved, reply } = await input.save(args);
-        return { success: saved, contentItems: [{ type: "inputText", text: reply }] };
-      },
+      tool,
+      answer: async (args) => fromToolReply(await input.callTool({ name: tool.name, input: args })),
     });
   }
   return new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool]));

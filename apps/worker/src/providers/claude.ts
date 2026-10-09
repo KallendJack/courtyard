@@ -23,7 +23,13 @@ import { z } from "zod";
 import { OUTSIDE_WORKSPACE } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import { type CourtyardTool, jsonSchemaOf, type Provider, type TurnInput } from "./index.ts";
+import {
+  type CourtyardTool,
+  jsonSchemaOf,
+  type Provider,
+  type ToolReply,
+  type TurnInput,
+} from "./index.ts";
 
 const id = ProviderId.parse("claude");
 /** Claude reads the workspace's files and saves to context; coding and tools come later. */
@@ -54,25 +60,38 @@ const COURTYARD_SERVER = "courtyard";
 /** A tool from Courtyard's server, by the name Claude Code calls it. */
 const courtyardTool = (name: string) => `mcp__${COURTYARD_SERVER}__${name}`;
 
+/** An image a tool gives back, from its data URL, as MCP takes it. */
+const DataUrl = /^data:([^;,]+);base64,(.*)$/s;
+
+/** A reply from one of Courtyard's tools, as MCP gives it to Claude Code. */
+const asToolResult = (reply: ToolReply) => ({
+  content: reply.content.map((part) => {
+    const image = part.kind === "image" ? DataUrl.exec(part.dataUrl) : null;
+    if (part.kind === "image" && image?.[1] && image[2] !== undefined) {
+      return { type: "image" as const, mimeType: image[1], data: image[2] };
+    }
+    return { type: "text" as const, text: part.kind === "text" ? part.text : "" };
+  }),
+  isError: !reply.ok,
+});
+
 /**
- * The save tool as an in-process tool (ADR 0013). Its input goes to the worker as Claude sent it,
- * and the worker's reply comes back as the tool's result.
+ * Courtyard's tools for the turn (the save tool, use skill…) as in-process tools on one server
+ * (ADRs 0013, 0016). Each call's input goes to the worker as Claude sent it, and the worker's
+ * reply comes back as the tool's result.
  */
-const saveServer = (saveTool: CourtyardTool, save: TurnInput["save"]) =>
+const courtyardServer = (tools: readonly CourtyardTool[], callTool: TurnInput["callTool"]) =>
   createSdkMcpServer({
     name: COURTYARD_SERVER,
-    tools: [
+    tools: tools.map((courtyard) =>
       tool(
-        saveTool.name,
-        saveTool.description,
-        saveTool.input,
-        async (input) => {
-          const { saved, reply } = await save(input);
-          return { content: [{ type: "text", text: reply }], isError: !saved };
-        },
+        courtyard.name,
+        courtyard.description,
+        courtyard.input,
+        async (input) => asToolResult(await callTool({ name: courtyard.name, input })),
         { alwaysLoad: true },
       ),
-    ],
+    ),
   });
 
 /** How long a status check may take before Claude counts as unavailable. */
@@ -532,8 +551,8 @@ export const createClaudeProvider = (
       if (input.signal.aborted) stop.abort();
       input.signal.addEventListener("abort", stopClaudeCode);
 
-      const { saveTool } = input.framing;
-      const courtyardTools = saveTool === null ? [] : [courtyardTool(saveTool.name)];
+      const { tools } = input.framing;
+      const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
       try {
         const messages = claudeCode.run({
           prompt: input.framing.message,
@@ -546,9 +565,9 @@ export const createClaudeProvider = (
             tools: PLANNING_TOOLS,
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
-            ...(saveTool === null
+            ...(tools.length === 0
               ? {}
-              : { mcpServers: { [COURTYARD_SERVER]: saveServer(saveTool, input.save) } }),
+              : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
             hooks: {
               PreToolUse: [
                 { hooks: [confineTo({ folder, report: input.report, courtyardTools })] },

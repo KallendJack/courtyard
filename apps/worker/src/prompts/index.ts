@@ -15,11 +15,10 @@ import { z } from "zod";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import type {
   CourtyardTool,
-  FileContent,
-  FileReply,
   FileTools,
   Framing,
-  SaveReply,
+  ToolContent,
+  ToolReply,
 } from "../providers/index.ts";
 import type { Result } from "../result.ts";
 import type { SaveRefusal } from "../saves/index.ts";
@@ -121,7 +120,8 @@ const contextFilePart = (
   ].join("\n\n");
 };
 
-const SAVE_TOOL_NAME = "save_to_context";
+/** The save tool's name, as a model calls it (ADR 0013). */
+export const SAVE_TOOL_NAME = "save_to_context";
 
 /** What every save follows, wherever it's made: the note the owner sees, and earlier saves. */
 const SAVES_SHOWN = [
@@ -423,7 +423,7 @@ export const framingFor = (turn: {
     instructions: instructionsFor({ ...turn, saves }),
     message: messageFor(newest?.speaker === "owner" ? said.slice(0, -1) : said, newMessage),
     newMessage,
-    saveTool: saves ? SAVE_TOOLS[turn.workspace.mode] : null,
+    tools: saves ? [SAVE_TOOLS[turn.workspace.mode]] : [],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
   };
 };
@@ -460,15 +460,25 @@ const refusalReason = (refusal: SaveRefusal) => {
  * What a model is told about its save. A refused save can be put right once; after a second
  * refusal in a row it carries on without it.
  */
-export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean): SaveReply => {
-  if (saved.ok) return { saved: true, reply: "Saved." };
+export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean): ToolReply => {
+  if (saved.ok) return textReply(true, "Saved.");
   const reason = refusalReason(saved.error);
   const final = retrying || ["stopped", "not-offered", "storage"].includes(saved.error.kind);
-  return {
-    saved: false,
-    reply: `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
-  };
+  return textReply(
+    false,
+    `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
+  );
 };
+
+/** A tool's reply that's only words. */
+const textReply = (ok: boolean, text: string): ToolReply => ({
+  ok,
+  content: [{ kind: "text", text }],
+});
+
+/** What a model is told when it calls one of Courtyard's tools that this turn doesn't offer. */
+export const notOfferedReply = (name: string) =>
+  textReply(false, `This turn has no tool called ${name}.`);
 
 /**
  * What a model is told when it reaches outside the workspace folder, by Claude Code's tools or
@@ -501,7 +511,7 @@ const fileRefusalReason = (refusal: FileToolRefusal) => {
 };
 
 /** What a file tool found, as the model reads it. */
-const foundWords = (found: FileToolFound): FileContent[] => {
+const foundWords = (found: FileToolFound): ToolContent[] => {
   switch (found.kind) {
     case "listing": {
       if (found.names.length === 0) return [{ kind: "text", text: "The folder is empty." }];
@@ -535,10 +545,10 @@ const foundWords = (found: FileToolFound): FileContent[] => {
 };
 
 /** What a model is told about a call to one of Courtyard's file tools: what it found, or why not. */
-export const fileToolReply = (answer: FileToolAnswer): FileReply =>
+export const fileToolReply = (answer: FileToolAnswer): ToolReply =>
   answer.ok
-    ? { found: true, content: foundWords(answer.value) }
-    : { found: false, content: [{ kind: "text", text: fileRefusalReason(answer.error) }] };
+    ? { ok: true, content: foundWords(answer.value) }
+    : textReply(false, fileRefusalReason(answer.error));
 
 /**
  * The starter messages that get to know an empty workspace or owner context (docs/ai-conduct.md,
