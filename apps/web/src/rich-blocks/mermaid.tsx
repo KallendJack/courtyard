@@ -21,8 +21,8 @@ const colour = (name: string) =>
 
 /**
  * Mermaid's settings: strict, its labels drawn as text and never as HTML, laid out by dagre (ELK
- * costs about 425 KB more), and Moorland's colours and font. Every setting is in `secure`, so
- * nothing a diagram says (`%%{init}%%`, front matter) can change any of them.
+ * isn't even built: vite.config.ts), and Moorland's colours and font. Every setting is in
+ * `secure`, so nothing a diagram says (`%%{init}%%`, front matter) can change any of them.
  */
 const configure = (dark: boolean) => {
   const muted = colour("muted-foreground");
