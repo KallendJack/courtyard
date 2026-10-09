@@ -160,6 +160,12 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toMatch(/don't know .* say so and ask, rather than guessing/i);
   });
 
+  it("asks for Markdown, with maths in the forms the web app draws and never a price's single $", async () => {
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(await quotedInGuide("Answer in Markdown."));
+  });
+
   it("sends the owner's new message on its own for a session's first turn", async () => {
     const { framing } = await firstTurn();
 

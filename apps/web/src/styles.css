@@ -44,6 +44,11 @@
   --color-workspace-slate: var(--workspace-slate);
   --color-workspace-moss: var(--workspace-moss);
   --color-workspace-peat: var(--workspace-peat);
+  --color-code-keyword: var(--code-keyword);
+  --color-code-name: var(--code-name);
+  --color-code-number: var(--code-number);
+  --color-code-string: var(--code-string);
+  --color-code-comment: var(--code-comment);
 
   /* The design's type sizes (Paper tokens): labels 13, interface 14, body 16, headings 20+. */
   --text-xs: 13px;
@@ -96,6 +101,13 @@
   --workspace-slate: #5e6e7e;
   --workspace-moss: #7c8f5a;
   --workspace-peat: #7a6556;
+
+  /* Code in answers: the workspace colours, each deepened to read at code size on white. */
+  --code-keyword: #6a3f6e; /* heather */
+  --code-name: #4f6072; /* slate */
+  --code-number: #8a6530; /* bracken */
+  --code-string: #56663a; /* moss */
+  --code-comment: #625a60;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -132,6 +144,13 @@
     --workspace-slate: #8a9bac;
     --workspace-moss: #9db07a;
     --workspace-peat: #a48e7e;
+
+    /* Code in answers: the workspace colours as they are. */
+    --code-keyword: #c99bcb;
+    --code-name: #8a9bac;
+    --code-number: #c9a26b;
+    --code-string: #9db07a;
+    --code-comment: #a79ea4;
   }
 }
 
