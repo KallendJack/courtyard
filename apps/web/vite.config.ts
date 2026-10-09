@@ -33,8 +33,19 @@ export default defineConfig(({ mode }) => {
     ],
     // `@/` is the web app's src folder, so imports read the same from any depth.
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-    // The build manifest lets finish-build.mjs measure the first load and list the app's files.
-    build: { manifest: true },
+    build: {
+      // The build manifest lets finish-build.mjs measure the first load and list the app's files.
+      manifest: true,
+      rolldownOptions: {
+        output: {
+          // Everything the first load needs stays in one file. Otherwise a lazily loaded module
+          // that is itself loaded by lazy code (a chart, loaded by the answer renderer) splits
+          // what it shares with the first load, such as React and Zod, into files of their own,
+          // which costs the first load bytes.
+          codeSplitting: { groups: [{ name: "first-load", tags: ["$initial"] }] },
+        },
+      },
+    },
     server: {
       // The worker owns the API; in development Vite serves the page and forwards `/api` to it.
       proxy: { "/api": `http://localhost:${COURTYARD_PORT || "8787"}` },

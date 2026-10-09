@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  Chart,
   type DocumentSave,
   Effort,
   endsTurn,
@@ -244,6 +245,27 @@ const firstTable = (answer: string) => {
 };
 
 /**
+ * An answer's first `chart` block (ADR 0021): the text written before it, and its JSON checked by
+ * the contract's `Chart` schema, as the web app checks it: the chart, or why it can't be drawn.
+ */
+const firstChart = (answer: string) => {
+  const found = /^[ \t]*```[ \t]*chart[ \t]*\n([\s\S]*?)\n[ \t]*```/im.exec(answer);
+  if (found === null) return undefined;
+  const before = answer.slice(0, found.index).trim();
+  const source = found[1] ?? "";
+  let json: unknown;
+  try {
+    json = JSON.parse(source);
+  } catch {
+    return { before, problem: `its JSON doesn't parse: ${source.slice(0, 160)}` };
+  }
+  const chart = Chart.safeParse(json);
+  return chart.success
+    ? { before, chart: chart.data }
+    : { before, problem: `the web app can't draw it (${chart.error.issues[0]?.message})` };
+};
+
+/**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
  * that's wrong can't take the place of one that's right.
@@ -375,6 +397,25 @@ const judgeTurn = (judge: {
                 : `expected no table; it has one headed ${table.heading}`,
           },
         ];
+  const chart = firstChart(answer);
+  const charted: Check[] =
+    turn.charts === undefined
+      ? []
+      : [
+          {
+            miss: turn.charts
+              ? chart === undefined
+                ? `expected a chart; the answer starts "${answer.trim().slice(0, 160)}"`
+                : "problem" in chart
+                  ? `expected a chart it can draw; ${chart.problem}`
+                  : chart.before === ""
+                    ? "expected a sentence before the chart; the answer starts with it"
+                    : null
+              : chart === undefined
+                ? null
+                : "expected no chart; it has one",
+          },
+        ];
   const topics = listItemsIn(answer);
   const listed: Check[] =
     turn.listsTopics === undefined
@@ -413,6 +454,7 @@ const judgeTurn = (judge: {
     ...replies,
     ...searched,
     ...tabled,
+    ...charted,
     ...listed,
     ...avoided,
   ];

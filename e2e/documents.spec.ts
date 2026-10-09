@@ -127,3 +127,25 @@ test("a document's tables sort on its page, as in an answer", async ({ page }) =
     "Bullpadel Indiga CTR",
   ]);
 });
+
+test("a document's charts are drawn on its page, as in an answer", async ({ page }) => {
+  const name = `Bike ${Date.now()}`;
+  await newWorkspace(page, name);
+  const chart = {
+    kind: "bar",
+    title: "Spent on the bike, by month",
+    unit: "£",
+    labels: ["Jun", "Jul", "Aug"],
+    series: [{ name: "Spent", values: [40, 25, 60] }],
+  };
+  await startSaving(
+    page,
+    ["save document", "# Bike costs", "", "```chart", JSON.stringify(chart), "```"].join("\n"),
+  );
+  const notes = page.getByRole("list", { name: "Documents saved" });
+  await expect(notes).toContainText("Saved document");
+  await notes.getByRole("link", { name: "Open" }).click();
+
+  const drawn = page.getByRole("main").getByRole("figure", { name: "Spent on the bike, by month" });
+  await expect(drawn.locator("svg [data-series]")).toHaveCount(3);
+});
