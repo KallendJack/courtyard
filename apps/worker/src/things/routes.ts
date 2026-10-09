@@ -63,6 +63,11 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
         status: 409,
         error: `Its parts come first: delete ${refusal.parts.join(", ")}, or make them part of something else.`,
       });
+    case "stale":
+      return apiError(c, {
+        status: 409,
+        error: "That Thing has changed since, so this would lose the newer change.",
+      });
     case "unchanged":
       return apiError(c, { status: 400, error: "That changes nothing." });
     case "bad-photo":

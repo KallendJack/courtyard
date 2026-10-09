@@ -11,6 +11,7 @@ import {
   DOCUMENT_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
+  THING_TOOL_NAME,
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -134,14 +135,39 @@ const scriptedReads = (message: string) =>
     return path === undefined ? [] : [path];
   });
 
+const THING = /^thing (\S+?): *(.*)$/i;
+const THING_FIELD =
+  /^(name|status|brand|bought|price|condition|size|where|part of|history|photo|remove)\b *(.*)$/i;
+
+/**
+ * The Thing saves a message scripts (ADR 0020), one per line: "thing add: name Tyres | status
+ * have | part of T1" adds one, and "thing T2: history Swapped | price £32", "thing T2: photo 1" or
+ * "thing T2: remove" changes or removes the Thing labelled T2. Each field is its name, then its
+ * value; an empty value clears it.
+ */
+const scriptedThings = (message: string): Record<string, unknown>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, which = "", rest = ""] = THING.exec(line.trim()) ?? [];
+    if (which === "") return [];
+    const input: Record<string, unknown> = which.toLowerCase() === "add" ? {} : { thing: which };
+    for (const part of rest.split("|")) {
+      const [, field = "", value = ""] = THING_FIELD.exec(part.trim()) ?? [];
+      const key = field.toLowerCase().replace(" ", "_");
+      if (key === "") continue;
+      input[key] = key === "remove" ? true : key === "photo" ? Number(value) : value.trim();
+    }
+    return [input];
+  });
+
 /**
  * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
- * skills loaded first, then saves and documents, then suggested replies.
+ * skills loaded first, then saves, documents and Things, then suggested replies.
  */
 const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
   [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
+  [THING_TOOL_NAME, scriptedThings],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
 ];
 
@@ -296,7 +322,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
  * replies (see `scriptedReplies`) when it offers that tool, and "save document" or "update
  * document …" saves a document (see `scriptedDocuments`) when it offers the document tool, after
- * any "read file: …" it acts out reading (see `scriptedReads`). On a turn with web search, "search the
+ * any "read file: …" it acts out reading (see `scriptedReads`), and "thing add: …" or "thing T2:
+ * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two

@@ -402,6 +402,16 @@ export const sessionRoutes = (options: {
     return c.body(null, 204);
   });
 
+  // Undo from a Thing save's note (ADR 0020).
+  routes.post("/sessions/:id/things/:save/undo", async (c) => {
+    const undone = await sessions.undoThing({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
+    return c.body(null, 204);
+  });
+
   routes.post("/sessions/:id/saves/:save/undo", async (c) => {
     const undone = await sessions.undoSave({
       rawId: c.req.param("id"),

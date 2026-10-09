@@ -12,14 +12,16 @@ import {
   type ThingProblem,
   type ThingSave,
   ThingSlug,
-  type ThingStatus,
+  ThingStatus,
   type ThingSummary,
   type WorkspaceId,
 } from "@courtyard/contract";
 import sharp from "sharp";
+import { z } from "zod";
 import {
   type ChangeNote,
   type ContextFolder,
+  sameFileText,
   undoWholeFiles,
   type WholeFile,
   type WholeFilesUndoRefusal,
@@ -27,6 +29,7 @@ import {
 import {
   exists,
   listFolder,
+  readBytes,
   readTextFile,
   removeFile,
   writeBytesIn,
@@ -93,7 +96,9 @@ export type ThingRefusal =
   /** A Thing with parts can't be removed until they're removed or moved. */
   | { readonly kind: "has-parts"; readonly parts: readonly string[] }
   /** It would change nothing. */
-  | { readonly kind: "unchanged" }
+  | { readonly kind: "unchanged"; readonly name: string }
+  /** It has changed since the model was shown it. */
+  | { readonly kind: "stale" }
   /** A photo that can't be read as one. */
   | { readonly kind: "bad-photo" }
   | { readonly kind: "storage" };
@@ -486,7 +491,7 @@ export const saveThing = async (
       }
       const text = thingText(fields.data, history);
       if (current !== undefined && text === current.text.replace(/\r\n/g, "\n") && !edit.photo) {
-        return err({ kind: "unchanged" });
+        return err({ kind: "unchanged", name: fields.data.name });
       }
       if (edit.photo !== undefined) {
         if (!(await writeBytesIn(photoOf(folder.value, slug), edit.photo))) {
@@ -562,3 +567,153 @@ export const thingChangeOf = (
 /** Whether a change's files are a Thing's (rather than a document's). */
 export const isThingChange = (files: readonly Pick<WholeFile, "path">[]) =>
   files.some(({ path }) => path.split("/")[1] === THINGS_FOLDER);
+
+/** A Thing with the label a model knows it by (`T1`), in list order. */
+export type LabelledThing = { readonly label: string; readonly thing: ThingSummary };
+
+/** Labels for a workspace's Things, `T1` first, in list order. */
+export const labelledThings = (things: readonly ReadThing[]): LabelledThing[] =>
+  things.map(({ summary }, index) => ({ label: `T${index + 1}`, thing: summary }));
+
+/** A label as a model might write it: `T2`, `[T2]` or `t2`. */
+const asLabel = (raw: string) =>
+  raw
+    .trim()
+    .replace(/^\[(.*)\]$/, "$1")
+    .toUpperCase();
+
+/** What a model sends the Things tool, checked like anything else a model sends. */
+const ThingRequest = z
+  .object({
+    thing: z.string().optional(),
+    remove: z.boolean().optional(),
+    name: z.string().optional(),
+    status: ThingStatus.optional(),
+    brand: z.string().optional(),
+    bought: z.string().optional(),
+    price: z.string().optional(),
+    condition: z.string().optional(),
+    size: z.string().optional(),
+    where: z.string().optional(),
+    part_of: z.string().optional(),
+    history: z.string().optional(),
+    photo: z.number().int().optional(),
+  })
+  .strict();
+
+/** Why the Things tool didn't save: the input doesn't fit, a label or photo is wrong, or it was refused. */
+export type ThingToolRefusal =
+  | Exclude<ThingRefusal, { kind: "stale" }>
+  | { readonly kind: "malformed" }
+  /** No Thing has that label (or it's been removed since). */
+  | { readonly kind: "unknown-label"; readonly label: string }
+  /** The Thing changed since the model was shown it: the Things now, labelled afresh. */
+  | {
+      readonly kind: "stale";
+      readonly label: string;
+      readonly things: readonly LabelledThing[];
+    }
+  /** No photo with this message has that number. */
+  | { readonly kind: "unknown-photo"; readonly number: number }
+  /** The owner stopped the turn, so nothing more is saved. */
+  | { readonly kind: "stopped" };
+
+/** A Thing the tool saved, and the label it has now (none once removed). */
+export type ThingToolSaved = ThingSaved & { readonly label: string | undefined };
+
+/**
+ * One turn's Things tool (docs/ai-conduct.md, Things): adds, changes or removes a Thing by the
+ * label the model was shown, sets its fields, adds a line to its history, or sets its photo from
+ * one of the turn's photos by its number. It keeps each Thing's file as the model was shown it, or
+ * last saved it, so a change to one that's changed since is refused, with the Things as they are
+ * now, labelled afresh.
+ */
+export const createTurnThings = (
+  target: ThingTarget & {
+    /** The Things as the turn's instructions listed them. */
+    readonly shown: readonly ReadThing[];
+    /** The photos that come with the turn's message, Image 1 first, by their files. */
+    readonly photos: readonly { readonly path: string }[];
+    readonly now: number;
+  },
+) => {
+  let labels = new Map<string, ThingSlug>();
+  const seen = new Map<ThingSlug, string>();
+  const show = (things: readonly ReadThing[]) => {
+    labels = new Map(labelledThings(things).map(({ label, thing }) => [label, thing.slug]));
+    for (const { summary, text } of things) seen.set(summary.slug, text);
+  };
+  show(target.shown);
+  const labelOf = (slug: ThingSlug) => [...labels].find(([, of]) => of === slug)?.[0];
+
+  return async (raw: unknown): Promise<Result<ThingToolSaved, ThingToolRefusal>> => {
+    const request = ThingRequest.safeParse(raw);
+    if (!request.success) return err({ kind: "malformed" });
+    const { thing, remove, part_of, history, photo, ...set } = request.data;
+    const label = thing === undefined || thing.trim() === "" ? undefined : asLabel(thing);
+    const slug = label === undefined ? undefined : labels.get(label);
+    if (label !== undefined && slug === undefined) return err({ kind: "unknown-label", label });
+    if (label === undefined && remove) return err({ kind: "malformed" });
+
+    const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {};
+    for (const [field, value] of Object.entries(set)) {
+      if (value === undefined) continue;
+      const cleared = typeof value === "string" && value.trim() === "";
+      if (field === "name" || field === "status") {
+        if (cleared) return err({ kind: "incomplete" });
+      }
+      Object.assign(fields, { [field]: cleared ? null : value });
+    }
+    if (part_of !== undefined) {
+      const parentLabel = asLabel(part_of);
+      const parent = parentLabel === "" ? null : labels.get(parentLabel);
+      if (parent === undefined) return err({ kind: "unknown-label", label: parentLabel });
+      fields.partOf = parent;
+    }
+    let kept: Uint8Array | undefined;
+    if (photo !== undefined) {
+      const file = target.photos[photo - 1];
+      if (file === undefined) return err({ kind: "unknown-photo", number: photo });
+      const bytes = await readBytes(file.path);
+      if (!bytes.ok || bytes.value === undefined)
+        return err({ kind: "unknown-photo", number: photo });
+      kept = await keptPhoto(bytes.value);
+      if (kept === undefined) return err({ kind: "bad-photo" });
+    }
+
+    const saved = await saveThing(
+      target,
+      {
+        ...(slug === undefined ? {} : { slug }),
+        ...(remove ? { remove: true } : {}),
+        fields,
+        ...(history === undefined ? {} : { history }),
+        ...(kept === undefined ? {} : { photo: kept }),
+      },
+      {
+        now: target.now,
+        check: (now) =>
+          sameFileText(now.text, seen.get(now.summary.slug) ?? null)
+            ? undefined
+            : { kind: "stale" },
+      },
+    );
+    if (!saved.ok) {
+      if (saved.error.kind !== "stale" || label === undefined) {
+        return saved.error.kind === "stale" ? err({ kind: "storage" }) : err(saved.error);
+      }
+      const now = await readThings(target);
+      if (!now.ok) return err({ kind: "storage" });
+      show(now.value.things);
+      return err({ kind: "stale", label, things: labelledThings(now.value.things) });
+    }
+    const { slug: savedSlug } = saved.value.save.thing;
+    if (saved.value.text === null) {
+      seen.delete(savedSlug);
+      return ok({ ...saved.value, label: undefined });
+    }
+    seen.set(savedSlug, saved.value.text);
+    if (labelOf(savedSlug) === undefined) labels.set(`T${labels.size + 1}`, savedSlug);
+    return ok({ ...saved.value, label: labelOf(savedSlug) });
+  };
+};

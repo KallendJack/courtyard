@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   RecentChanges,
+  type SessionEvent,
+  SessionSummary,
   THING_PHOTO_FIELD,
   ThingChanged,
   ThingDeleted,
@@ -11,13 +13,20 @@ import {
 } from "@courtyard/contract";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pdfOf, pngOf } from "./test-files.ts";
+import { createFakeProvider } from "./providers/index.ts";
+import { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 import {
   asOwner,
   changesIn,
   errorOf,
+  FAKE_MODEL,
+  followSession,
   postJson,
+  postWithFiles,
   type Requester,
+  SAVING_MODEL,
+  type ScriptedStep,
+  savingProvider,
   sendJson,
   testWorker,
 } from "./testing.ts";
@@ -315,5 +324,234 @@ describe("a Thing's photo", () => {
 
     expect(await errorFrom(pdf)).toEqual([400, "A Thing's photo is a photo, not a PDF."]);
     expect(await errorFrom(fake)).toEqual([400, "chain.jpg isn't the kind of file its name says."]);
+  });
+});
+
+/** 9 October 2026, midday: the day the tool dates history lines. */
+const TODAY = Date.UTC(2026, 9, 9, 12);
+
+const thingTool = (input: unknown): ScriptedStep => ({ call: "save_thing", input });
+
+/** A session in mountain biking whose turns follow the scripted steps, the first sent with `files`. */
+const sessionWith = async (
+  turns: readonly (readonly ScriptedStep[])[],
+  files: readonly TestFile[] = [],
+) => {
+  const saver = savingProvider(turns);
+  const request = await asOwner(
+    testWorker({ root, providers: [saver.provider], now: () => TODAY }),
+  );
+  const started = await postWithFiles(
+    request,
+    "/api/workspaces/mountain-biking/sessions",
+    { text: "Swapped the chain today.", model: SAVING_MODEL },
+    files,
+  );
+  const session = SessionSummary.parse(await started.json());
+  const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+  for (const _ of turns.slice(1)) {
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "And then?",
+      model: SAVING_MODEL,
+    });
+    events.push(
+      ...(await followSession(request, {
+        sessionId: session.id,
+        until: "turn-completed",
+        after: events.at(-1)?.seq ?? 0,
+      })),
+    );
+  }
+  return { request, session, events, saver };
+};
+
+const thingSaves = (events: readonly SessionEvent[]) =>
+  events.flatMap((event) => (event.type === "thing-saved" ? [event] : []));
+
+const reasons = (replies: readonly { reply: string }[] | undefined) =>
+  (replies ?? []).map(({ reply }) => reply);
+
+describe("the Things tool", () => {
+  it("changes the Thing a label names, adding a history line dated today, as one change with a note", async () => {
+    await withKit();
+    // Whyte T-140 is T1 and its chain T2, straight after it.
+    const { saver, events, session } = await sessionWith([
+      [
+        thingTool({
+          thing: "T2",
+          bought: "2026-10-09",
+          price: "£32",
+          history: "Swapped, the old one was past 0.75%",
+        }),
+      ],
+    ]);
+
+    expect(saver.replies[0]).toEqual([{ ok: true, reply: "Changed [T2] Chain." }]);
+    expect(await thingFile("chain")).toBe(
+      "---\nname: Chain\nstatus: have\nbrand: KMC X11\nbought: 2026-10-09\nprice: £32\npart of: whyte-t-140\n---\n\n- 2026-03-14: fitted with the new cassette\n- 2026-10-09: Swapped, the old one was past 0.75%\n",
+    );
+    expect(thingSaves(events)).toMatchObject([
+      {
+        save: {
+          action: "change",
+          thing: { slug: "chain", name: "Chain" },
+          fields: { bought: "2026-10-09", price: "£32" },
+          history: "Swapped, the old one was past 0.75%",
+        },
+        change: expect.any(String),
+      },
+    ]);
+    expect((await changesIn(contextDir))[0]).toEqual({
+      title: "Change Thing: Chain",
+      trailers: [
+        "Courtyard-Change: thing",
+        "Courtyard-Place: workspace/mountain-biking",
+        `Courtyard-Session: ${session.id}`,
+        "Courtyard-File: mountain-biking/things/chain.md",
+      ],
+    });
+  });
+
+  it("adds a Thing, then a part of it by the label it was given, and removes one", async () => {
+    await withKit();
+    const { saver } = await sessionWith([
+      [
+        thingTool({ name: "Trek Fuel EX", status: "want", price: "about £3,000" }),
+        thingTool({ name: "Dropper post", status: "want", part_of: "T3" }),
+        thingTool({ thing: "T2", remove: true }),
+      ],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual([
+      "Added [T3] Trek Fuel EX.",
+      "Added [T4] Dropper post.",
+      "Removed Chain.",
+    ]);
+    expect(await thingFile("dropper-post")).toBe(
+      "---\nname: Dropper post\nstatus: want\npart of: trek-fuel-ex\n---\n",
+    );
+    expect(await thingFile("chain").catch(() => null)).toBe(null);
+  });
+
+  it("refuses a bad label, a part of a part and a new Thing with no status, then takes one retry", async () => {
+    await withKit();
+    const { saver, events } = await sessionWith([
+      [
+        thingTool({ thing: "T9", history: "Cleaned" }),
+        thingTool({ thing: "T1", history: "Cleaned" }),
+        thingTool({ name: "Chain link", status: "have", part_of: "T2" }),
+        thingTool({ name: "Chain link", part_of: "T2" }),
+        thingTool({ name: "Pump", status: "have" }),
+      ],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual([
+      "There's no Thing labelled T9: the Things are listed in your instructions.\n\nYou can put it right and try once more.",
+      "Changed [T1] Whyte T-140.",
+      "A Thing can be part of only one that isn't a part itself, and a Thing with parts can't be part of another.\n\nYou can put it right and try once more.",
+      "A new Thing needs a name and a status: have, want or replace.\n\nCarry on without saving it.",
+      "Added [T3] Pump.",
+    ]);
+    expect(thingSaves(events)).toHaveLength(2);
+  });
+
+  it("refuses a label whose Thing changed since the model was shown it, giving the Things as they are now", async () => {
+    await withKit();
+    const { saver } = await sessionWith([
+      [
+        () =>
+          writeFile(
+            join(thingsDir(), "chain.md"),
+            CHAIN.replace("status: have", "status: replace"),
+          ),
+        thingTool({ thing: "T2", history: "Waxed" }),
+        thingTool({ thing: "T2", history: "Waxed" }),
+      ],
+    ]);
+
+    const [stale, retried] = reasons(saver.replies[0]);
+    expect(stale).toBe(
+      "T2 has changed since you were shown it. The Things now, whose labels count from here on:\n[T1] Whyte T-140, have, bought 2026-10, price £1,400 (things/whyte-t-140.md)\n[T2] Chain, replace, KMC X11, bought 2026-03, part of [T1] (things/chain.md)\n\nYou can put it right and try once more.",
+    );
+    expect(retried).toBe("Changed [T2] Chain.");
+    expect(await thingFile("chain")).toContain("status: replace");
+  });
+
+  it("sets a Thing's photo from one the owner attached in the session, by its number", async () => {
+    await withKit();
+    const photo = {
+      name: "chain.png",
+      type: "image/png",
+      bytes: pngOf(64, 48, () => [40, 90, 200]),
+    };
+    const { saver } = await sessionWith(
+      [[thingTool({ thing: "T2", photo: 2 }), thingTool({ thing: "T2", photo: 1 })]],
+      [photo],
+    );
+
+    expect(reasons(saver.replies[0])).toEqual([
+      "There's no photo 2 with this message: give the number of one of the images that come with it, as Image 1 is 1.\n\nYou can put it right and try once more.",
+      "Changed [T2] Chain.",
+    ]);
+    const { width, format } = await sharp(await photoFile()).metadata();
+    expect([format, width]).toEqual(["jpeg", 64]);
+    expect(await thingFile("chain")).toContain("photo: photos/chain.jpg\n");
+  });
+
+  it("is undone from its note, photo and all, unless the Thing has changed since", async () => {
+    await withKit();
+    const { request, session, events } = await sessionWith([
+      [
+        thingTool({ thing: "T2", history: "Waxed" }),
+        thingTool({ thing: "T1", condition: "Muddy" }),
+      ],
+    ]);
+    const [waxed, muddy] = thingSaves(events);
+
+    const undone = await postJson(
+      request,
+      `/api/sessions/${session.id}/things/${waxed?.seq ?? 0}/undo`,
+      {},
+    );
+    await writeFile(join(thingsDir(), "whyte-t-140.md"), BIKE);
+    const refused = await postJson(
+      request,
+      `/api/sessions/${session.id}/things/${muddy?.seq ?? 0}/undo`,
+      {},
+    );
+
+    expect(undone.status).toBe(204);
+    expect(await thingFile("chain")).toBe(CHAIN);
+    const after = await followSession(request, { sessionId: session.id, until: "thing-undone" });
+    expect(after.at(-1)).toMatchObject({ type: "thing-undone", save: waxed?.seq });
+    expect(await errorFrom(refused)).toEqual([
+      409,
+      "That Thing has changed since, so undoing this would lose the newer change.",
+    ]);
+  });
+
+  it("is scripted on the fake, one line a save", async () => {
+    await withKit();
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })], now: () => TODAY }),
+    );
+    const started = await postJson(request, "/api/workspaces/mountain-biking/sessions", {
+      text: [
+        "thing add: name Tyres | status have | brand Maxxis Minion DHF | part of T1",
+        "thing T2: history Swapped | price £32",
+        "thing T9: remove",
+      ].join("\n"),
+      model: FAKE_MODEL,
+    });
+    const session = SessionSummary.parse(await started.json());
+    const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+
+    expect(thingSaves(events).map(({ save }) => [save.action, save.thing.name])).toEqual([
+      ["add", "Tyres"],
+      ["change", "Chain"],
+    ]);
+    expect(await thingFile("tyres")).toBe(
+      "---\nname: Tyres\nstatus: have\nbrand: Maxxis Minion DHF\npart of: whyte-t-140\n---\n",
+    );
   });
 });

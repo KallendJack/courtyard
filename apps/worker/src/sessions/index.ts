@@ -66,8 +66,10 @@ import {
   saveReply,
   skillsInUse,
   suggestRepliesReply,
+  THING_TOOL_NAME,
   TITLING,
   TitleAnswer,
+  thingReply,
   titleMessage,
   USE_SKILL_TOOL_NAME,
   useSkillReply,
@@ -77,6 +79,7 @@ import {
   modelsOnOffer,
   offerFor,
   type Provider,
+  photosOf,
   type ToolReply,
   type TurnToolName,
 } from "../providers/index.ts";
@@ -97,7 +100,13 @@ import {
   workspaceSkills,
 } from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
-import { type ThingRefusal, type ThingUndoRefusal, undoThingChange } from "../things/index.ts";
+import {
+  createTurnThings,
+  readThings,
+  type ThingRefusal,
+  type ThingUndoRefusal,
+  undoThingChange,
+} from "../things/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
@@ -490,6 +499,11 @@ export const createSessions = (options: {
         ? await listDocuments({ contextDir: options.contextDir, workspaceId })
         : ok([]);
     if (!documents.ok) return err("This session's workspace's documents can't be read.");
+    const things =
+      summary.mode === "planning"
+        ? await readThings({ contextDir: options.contextDir, workspaceId })
+        : ok({ things: [], problems: [] });
+    if (!things.ok) return err("This session's workspace's Things can't be read.");
     return ok({
       name: summary.name,
       mode: summary.mode,
@@ -497,6 +511,7 @@ export const createSessions = (options: {
       contextFile: contextMarkdown,
       ownerContext: ownerContext.value,
       documents: documents.value,
+      things: things.value,
       skills: await skillsOf(workspace.value),
     });
   };
@@ -622,6 +637,32 @@ export const createSessions = (options: {
           retryingDocument = !saved.ok && !retryingDocument;
           return reply;
         };
+        const turnThings = createTurnThings({
+          ...targetOf(turn),
+          shown: workspace.value.things.things,
+          photos: photosOf(framing.attachments),
+          now: options.now(),
+        });
+        /** Whether the last Thing save was refused, so this one is its retry. */
+        let retryingThing = false;
+        const saveThingTool = async (input: unknown): Promise<ToolReply> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return thingReply(err({ kind: "stopped" }), true);
+          }
+          const saved = await turnThings(input);
+          if (saved.ok) {
+            const { save, change } = saved.value;
+            const recorded = await append(turn.id, {
+              type: "thing-saved",
+              save,
+              ...(change === undefined ? {} : { change }),
+            });
+            if (!recorded.ok) recordingLost = true;
+          }
+          const reply = thingReply(saved, retryingThing);
+          retryingThing = !saved.ok && !retryingThing;
+          return reply;
+        };
         /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
         const write = async (text: string) => {
           if (text === "" || recordingLost || stopper.signal.aborted) return;
@@ -642,6 +683,7 @@ export const createSessions = (options: {
         const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [DOCUMENT_TOOL_NAME]: saveDocument,
+          [THING_TOOL_NAME]: saveThingTool,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
