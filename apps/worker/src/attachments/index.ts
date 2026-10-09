@@ -8,6 +8,7 @@ import {
   AttachmentId,
   AttachmentMediaType,
   attachmentKind,
+  PhotoMediaType,
   type SessionEvent,
   TOO_MANY_ATTACHMENTS,
 } from "@courtyard/contract";
@@ -28,7 +29,7 @@ export type TurnAttachment =
       readonly kind: "photo";
       readonly name: string;
       readonly path: string;
-      readonly mediaType: AttachmentMediaType;
+      readonly mediaType: PhotoMediaType;
     }
   | { readonly kind: "pdf"; readonly name: string; readonly text: string };
 
@@ -171,11 +172,12 @@ export const carriedAttachments = async (
   const carried = attachmentsOf(events).slice(-ATTACHMENTS.carried);
   const found = await Promise.all(
     carried.map(async (attachment): Promise<TurnAttachment[]> => {
-      if (attachment.kind === "photo") {
+      const photo = PhotoMediaType.safeParse(attachment.mediaType);
+      if (photo.success) {
         const path = attachmentPath(sessionFolder, attachment);
         const there = await entryAt(path);
         return there.ok && there.value?.kind === "file"
-          ? [{ kind: "photo", name: attachment.name, path, mediaType: attachment.mediaType }]
+          ? [{ kind: "photo", name: attachment.name, path, mediaType: photo.data }]
           : [];
       }
       const text = await readTextFile(textPath(sessionFolder, attachment));

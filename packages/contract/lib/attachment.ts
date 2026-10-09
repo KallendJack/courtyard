@@ -15,6 +15,9 @@ export const ATTACHMENTS = {
 export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 export const PDF_TYPE = "application/pdf";
 
+export const PhotoMediaType = z.enum(PHOTO_TYPES);
+export type PhotoMediaType = z.infer<typeof PhotoMediaType>;
+
 export const AttachmentMediaType = z.enum([...PHOTO_TYPES, PDF_TYPE]);
 export type AttachmentMediaType = z.infer<typeof AttachmentMediaType>;
 

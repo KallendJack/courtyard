@@ -10,6 +10,7 @@ export {
   MESSAGE_FIELD,
   PDF_TYPE,
   PHOTO_TYPES,
+  PhotoMediaType,
   sizeInWords,
   TOO_MANY_ATTACHMENTS,
 } from "./lib/attachment.ts";

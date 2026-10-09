@@ -1,12 +1,12 @@
 import type {
   Activity,
-  AttachmentMediaType,
   Capabilities,
   Effort,
   FailureReason,
   ModelId,
   ModelInfo,
   ModelRef,
+  PhotoMediaType,
   ProviderId,
   ProviderStatus,
   SignInState,
@@ -49,7 +49,7 @@ export type FramedAttachment =
       readonly kind: "photo";
       readonly name: string;
       readonly path: string;
-      readonly mediaType: AttachmentMediaType;
+      readonly mediaType: PhotoMediaType;
     }
   | { readonly kind: "pdf"; readonly name: string };
 
