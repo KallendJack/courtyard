@@ -46,7 +46,8 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   search or a page read); one that should also needs sources listed under it. Every search, page read and source a
   run had is printed under it.
 - **Rich blocks.** A turn can say whether its answer should hold a table (`tables`), judged from its Markdown: a
-  table, with a sentence of its own before it; or none.
+  table, with a sentence of its own before it; or none. Likewise a chart (`charts`): a `chart` block the contract's
+  `Chart` schema accepts, after a sentence of its own; or none.
 - **Documents.** A turn can say which documents it should save or update (`documents`, none for none), each judged
   on its text afterwards, and edit a file by hand the moment the model reads it (`editsAfterRead`), so its update is
   refused and retried. Every document a run saved, and every one it read, is printed under it.
@@ -178,6 +179,22 @@ What a model is told (Every turn, item 4), on every turn, the same for every pro
 
 The eval's `table-*` scenario checks it on both providers: a comparison of options is answered with a table after a
 sentence of its own, and a question that isn't one gets none.
+
+Built with #147: a `chart` block is JSON the web app draws as a bar, line or pie chart in the theme's colours, its
+values written on it. The contract's `Chart` schema checks it, and one that fails shows its source under "Couldn't
+draw this chart". Told on every turn, after the table rule:
+
+> When numbers compare or change over time, such as spending by month or a lift's weight week by week, Courtyard
+> draws them as a chart: write a code block whose language is `chart`, holding only JSON, such as
+> `{"kind": "bar", "title": "Spent on the bike, by month", "unit": "£", "labels": ["Jun", "Jul", "Aug"], "series":
+> [{"name": "Spent", "values": [40, 25, 60]}]}`. Its kind is `bar` to compare amounts, `line` for values that change
+> over time, or `pie` for the parts of a whole (one series, at most five slices). Each series has a number for every
+> label, with at most five series, each named when there's more than one, and at most 50 labels; the title and unit
+> are optional. Write a sentence or two of your own before it, saying what it shows, and never use one for show: a
+> number or two read better as text.
+
+The eval's `chart-*` scenario checks it on both providers: numbers over time are answered with a chart the schema
+accepts, after a sentence of its own, and a question without numbers gets none.
 
 ## Courtyard's file tools
 
