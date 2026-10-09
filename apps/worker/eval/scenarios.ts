@@ -129,9 +129,7 @@ const PACKING_LIST: ScenarioSkill = {
 };
 
 /** A grilling's answer recommends an answer to its question (docs/ai-conduct.md, Grilling). */
-const RECOMMENDS: Words = [
-  ["recommend", "suggest", "i'd go", "i’d go", "my pick", "i'd pick", "i’d pick"],
-];
+const RECOMMENDS: Words = [["recommend", "suggest", "i'd ", "i’d ", "i would", "my pick"]];
 
 /** The garage gym a grilling questions: a plan to grill, and facts it shouldn't ask about. */
 const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
@@ -157,7 +155,7 @@ export const SCENARIOS: readonly Scenario[] = [
         suggests: true,
       },
       {
-        say: "Agreed, the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
+        say: "I've decided: the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
         expect: [
           {
             action: "change",

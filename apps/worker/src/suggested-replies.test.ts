@@ -7,6 +7,7 @@ import {
   asOwner,
   followSession,
   postJson,
+  quotedInGuide,
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
@@ -48,7 +49,7 @@ describe("a model suggesting replies", () => {
     ]);
 
     expect(replies).toEqual([
-      { saved: true, reply: "The owner sees them as buttons under your answer." },
+      { saved: true, reply: await quotedInGuide("The owner sees them as buttons") },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
       {

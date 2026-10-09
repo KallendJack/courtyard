@@ -195,8 +195,10 @@ Its text, which every later turn of the session carries once it's in use:
 > - **One question per message,** the one that matters most next, asked once: don't follow your recommendation with a
 >   second question such as whether the owner agrees, since their reply says so. Settle what other decisions depend
 >   on first, and follow one thread until it's settled before starting another.
-> - **Recommend an answer** with each question: the one you'd pick and why, in a sentence or two, so the owner can
->   just agree. When you have the suggest_replies tool, make your recommendation one of the replies.
+> - **Recommend an answer** with each question. Write both in your message: the question, then the answer you'd
+>   recommend and why, in a sentence or two, so the owner can just agree. Suggested replies are only buttons under
+>   your message and never stand in for either: when you have the suggest_replies tool, call it once your message is
+>   written, with your recommendation as one of the replies.
 > - **Don't ask what's known.** Look in the context file, the owner context and the conversation first, and ask only
 >   what they don't answer.
 > - **Save each decision in the answer where the owner agrees it,** with the save tool, before your next question:
@@ -236,6 +238,13 @@ them and refuses, saying why, when:
 - **two replies are the same,** ignoring case and spacing;
 - **the answer already suggested replies:** one set per answer, the first that's accepted;
 - **the owner stopped the turn.**
+
+Replies it takes are answered with this, since a model can call the tool before it has written its question (Claude
+did in the Grilling eval, having asked it only in its thinking, #90):
+
+> The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the
+> buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to
+> say.
 
 A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their

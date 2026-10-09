@@ -638,7 +638,10 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
 /** What a model is told about the replies it suggested: that the owner sees them, or why not. */
 export const suggestRepliesReply = (shown: Result<unknown, RepliesRefusal>): ToolReply =>
   shown.ok
-    ? textReply(true, "The owner sees them as buttons under your answer.")
+    ? textReply(
+        true,
+        "The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to say.",
+      )
     : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */
