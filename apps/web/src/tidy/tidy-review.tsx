@@ -16,8 +16,6 @@ import { TickBox } from "@/components/tick-box";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { firstSavingModel } from "../sessions/models.ts";
-import { loadProviders } from "../worker.ts";
 import { proposeTidy, saveTidy } from "./api.ts";
 
 /** Whose file is tidied: a workspace's, or the owner context for `undefined`. */
@@ -29,23 +27,16 @@ type Asking =
   | { readonly kind: "failed"; readonly message: string }
   | { readonly kind: "proposed"; readonly proposal: TidyProposal };
 
-/** Asks the first model on offer that saves to context for a tidy of the file. */
+/**
+ * Asks for a tidy of the file, by the model the worker picks: the first that saves to context and
+ * isn't at its usage limit.
+ */
 const askForTidy = async (workspace: Whose, signal: AbortSignal): Promise<Asking> => {
-  const providers = await loadProviders();
-  if (providers.kind !== "loaded")
-    return { kind: "failed", message: describeProblem(providers).body };
-  const model = firstSavingModel(providers.data.providers);
-  if (model === undefined) {
-    return {
-      kind: "failed",
-      message: "No model that saves to context is available. Check the providers' settings.",
-    };
-  }
   const about =
     workspace === undefined
       ? { kind: "owner" as const }
       : { kind: "workspace" as const, id: workspace };
-  const proposal = await proposeTidy(about, { model }, signal);
+  const proposal = await proposeTidy(about, {}, signal);
   return proposal.kind === "loaded"
     ? { kind: "proposed", proposal: proposal.data }
     : { kind: "failed", message: describeProblem(proposal).body };

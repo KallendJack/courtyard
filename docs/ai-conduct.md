@@ -202,7 +202,9 @@ and that an edit shows how the owner wants such lines written.
 Built with #51. When a planning workspace's context file has no lines, its page offers **Get to know this
 workspace**. It starts a new session with a starter message, written here and not by a model (`GET_TO_KNOW` in the
 prompts module), in the owner's voice, asking the model to learn the workspace by asking one or two questions at a
-time, about five rounds, and saving the answers as it goes. Its first line is the session's title. The owner can stop,
+time, about five rounds, and saving the answers as it goes. Its first line is the session's title. It's answered by
+the first model that saves to context and isn't at its usage limit (the first that saves, when every one is), at its
+default effort, so it works while one provider is out (#74). The owner can stop,
 or carry on chatting, whenever they like; saving follows the rules above, so nothing is saved that the owner didn't
 say. A code workspace isn't offered it, since its models don't save to its context file.
 
@@ -228,7 +230,8 @@ whole file with its labels and proposes changes, never a rewritten file: merge t
 dropped idea, shorten this one. Each follows the context-line rules, and none may add something new. The owner sees
 each change, ticked by default, and the ones they leave ticked are saved as one change.
 
-A tidy is a one-off question, outside any session, with no tools: its model has only the file. It's told:
+A tidy is a one-off question, outside any session, with no tools: its model has only the file. Its model is chosen as
+Get to know's is. It's told:
 
 > You tidy one context file in Courtyard: a workspace's, which keeps facts, plans and ideas about one area of the
 > owner's life, or the owner context, which keeps facts, plans and ideas about the owner and how they like answers. It

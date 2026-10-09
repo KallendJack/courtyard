@@ -23,7 +23,7 @@ import { z } from "zod";
 import { OUTSIDE_WORKSPACE } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import type { CourtyardTool, Provider, TurnInput } from "./index.ts";
+import { type CourtyardTool, jsonSchemaOf, type Provider, type TurnInput } from "./index.ts";
 
 const id = ProviderId.parse("claude");
 /** Claude reads the workspace's files and saves to context; coding and tools come later. */
@@ -308,12 +308,6 @@ const claudeCodeStopped = (error: unknown): FailureReason => {
     kind: "provider-unavailable",
     message: "Claude Code stopped unexpectedly on the worker machine.",
   };
-};
-
-/** A schema as Claude Code takes it: JSON Schema without the `$schema` line, which it refuses. */
-const jsonSchemaOf = (schema: z.ZodType) => {
-  const { $schema: _, ...rest } = z.toJSONSchema(schema);
-  return rest;
 };
 
 /** Turns a one-off question may take: answering in its shape can take a retry. */

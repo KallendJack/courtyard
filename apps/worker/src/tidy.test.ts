@@ -18,8 +18,10 @@ import {
   changesIn,
   errorOf,
   FAKE_MODEL,
+  followSession,
   postJson,
   type Requester,
+  startSession,
   testWorker,
 } from "./testing.ts";
 
@@ -216,6 +218,16 @@ describe("checking what a model proposes", () => {
     expect(changes.map((change) => change.kind)).toEqual(["merge", "shorten", "remove"]);
   });
 
+  it("keeps changes whose unused fields are empty, as fixed-shape answers send them", async () => {
+    const changes = await proposed([
+      { kind: "merge", labels: ["F1", "F2"], text: "Double garage, 5.4 m by 5.1 m", why: null },
+      { kind: "remove", labels: ["F3"], text: null, why: "Moved." },
+    ]);
+
+    expect(changes.map((change) => change.kind)).toEqual(["merge", "remove"]);
+    expect(changes[1]).not.toHaveProperty("text");
+  });
+
   it.each([
     ["a label the file hasn't got", { kind: "remove", labels: ["F9"], why: "Gone." }],
     ["a removal without why", { kind: "remove", labels: ["F1"] }],
@@ -248,6 +260,29 @@ describe("checking what a model proposes", () => {
     ]);
 
     expect(changes.map((change) => change.kind)).toEqual(["remove"]);
+  });
+
+  it("with no model named, asks the first model that saves to context and isn't at its usage limit", async () => {
+    const asked: string[] = [];
+    const watched = (provider: Provider): Provider => ({
+      ...provider,
+      answerOnce: (input) => {
+        asked.push(provider.id);
+        return provider.answerOnce(input);
+      },
+    });
+    const request = await start([
+      watched(createFakeProvider({ delayMs: 0 })),
+      watched(createFakeProvider({ delayMs: 0, second: true })),
+    ]);
+    const limited = await startSession(request, "please hit Fake's limit");
+    await followSession(request, { sessionId: limited.id, until: "turn-failed" });
+    await writeFile(contextFile(), MESSY);
+
+    const response = await postJson(request, "/api/workspaces/garage-gym/tidy", {});
+
+    expect(response.status).toBe(200);
+    expect(asked).toEqual(["fake-two"]);
   });
 
   it("refuses a model that isn't available", async () => {

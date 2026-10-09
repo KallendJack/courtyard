@@ -568,7 +568,10 @@ export const TIDYING = [
   `Never add anything: every word of a merged or shortened line comes from the lines it replaces. Keep each fact, number and date that matters, never change what a line means, and never turn a plan or an idea into a fact. Each line stays under ${CONTEXT_LINE_MAX_CHARACTERS} characters. When unsure, leave the line alone; when nothing needs changing, propose nothing.`,
 ].join("\n\n");
 
-/** What a tidy's model answers, as it's told: the changes it proposes. */
+/**
+ * What a tidy's model answers, as it's told: the changes it proposes. Every field is there, empty
+ * (null) where a change doesn't use it, since Codex's fixed-shape answers need every field.
+ */
 export const TidyAnswer = z.object({
   changes: z
     .array(
@@ -583,12 +586,16 @@ export const TidyAnswer = z.object({
           ),
         text: z
           .string()
-          .optional()
-          .describe("For merge and shorten: the line that replaces them, without a label."),
+          .nullable()
+          .describe(
+            "For merge and shorten: the line that replaces them, without a label. Null for remove.",
+          ),
         why: z
           .string()
-          .optional()
-          .describe("For remove: why, in a few words the owner reads before agreeing."),
+          .nullable()
+          .describe(
+            "For remove: why, in a few words the owner reads before agreeing. Null otherwise.",
+          ),
       }),
     )
     .describe("Each change proposed, or none."),

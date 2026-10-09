@@ -5,8 +5,11 @@ import { ModelRef, PlacedLine } from "./session.ts";
 export const TidyId = z.uuid().brand<"TidyId">();
 export type TidyId = z.infer<typeof TidyId>;
 
-/** Asks for a tidy of a workspace's context file or the owner context, by this model. */
-export const TidyRequest = z.object({ model: ModelRef });
+/**
+ * Asks for a tidy of a workspace's context file or the owner context, by this model. With no model
+ * named, the worker asks the first model that saves to context and isn't at its usage limit.
+ */
+export const TidyRequest = z.object({ model: ModelRef.optional() });
 export type TidyRequest = z.infer<typeof TidyRequest>;
 
 /** What a proposed change does: merges lines into one, removes one, or shortens one. */

@@ -5,13 +5,12 @@ import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { type ContextPlace, loadProviders, startGettingToKnow } from "../worker.ts";
-import { firstSavingModel } from "./models.ts";
+import { type ContextPlace, startGettingToKnow } from "../worker.ts";
 
 /**
  * An offer to get to know an empty workspace or owner context (docs/ai-conduct.md, Getting to
  * know a workspace): a new session the worker starts with its own message, answered by the first
- * model on offer that saves to context. Providers are only asked once it's tapped.
+ * model that saves to context and isn't at its usage limit, which the worker picks.
  */
 export function GetToKnow(props: {
   about: ContextPlace;
@@ -21,12 +20,7 @@ export function GetToKnow(props: {
 }) {
   const navigate = useNavigate();
   const start = useAction(async () => {
-    const providers = await loadProviders();
-    if (providers.kind !== "loaded") return describeProblem(providers).body;
-    const model = firstSavingModel(providers.data.providers);
-    if (model === undefined)
-      return "No model that saves to context is available. Check the providers' settings.";
-    const session = await startGettingToKnow(props.about, { model });
+    const session = await startGettingToKnow(props.about, {});
     if (session.kind !== "loaded") return describeProblem(session).body;
     await navigate({
       to: "/workspaces/$workspaceId/sessions/$sessionId",

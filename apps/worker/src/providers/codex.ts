@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { setTimeout as wait } from "node:timers/promises";
@@ -18,7 +19,14 @@ import { z } from "zod";
 import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
-import type { CourtyardTool, FileReply, Provider, SignIn, TurnInput } from "./index.ts";
+import {
+  type CourtyardTool,
+  type FileReply,
+  jsonSchemaOf,
+  type Provider,
+  type SignIn,
+  type TurnInput,
+} from "./index.ts";
 
 const id = ProviderId.parse("codex");
 /**
@@ -470,6 +478,20 @@ const TextDelta = z.object({
   method: z.literal("item/agentMessage/delta"),
   params: z.object({ delta: z.string() }),
 });
+/**
+ * A message Codex finished in a turn. With an answer's shape asked for, the answer is the last one
+ * that isn't commentary on the way (a phase Codex doesn't always give).
+ */
+const MessageCompleted = z.object({
+  method: z.literal("item/completed"),
+  params: z.object({
+    item: z.object({
+      type: z.literal("agentMessage"),
+      text: z.string(),
+      phase: z.string().nullish().catch(null),
+    }),
+  }),
+});
 /** The ways a turn fails that Courtyard tells apart; anything else counts as "other". */
 const CodexErrorCode = z
   .enum([
@@ -577,10 +599,12 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
 };
 
 /** A tool as the app-server offers it to a thread (its dynamic tools), its inputs as JSON Schema. */
-const asDynamicTool = ({ tool }: TurnTool) => {
-  const { $schema: _, ...inputSchema } = z.toJSONSchema(z.object(tool.input));
-  return { type: "function", name: tool.name, description: tool.description, inputSchema };
-};
+const asDynamicTool = ({ tool }: TurnTool) => ({
+  type: "function",
+  name: tool.name,
+  description: tool.description,
+  inputSchema: jsonSchemaOf(z.object(tool.input)),
+});
 
 /** A failure Courtyard explains in its own words. */
 type ExplainedFailure = Extract<FailureReason, { message: string }>;
@@ -618,6 +642,124 @@ const failureForTurn = (error: TurnError | null): ExplainedFailure => {
       };
     default:
       return failureForRequest({ kind: "refused", message: error?.message ?? "" });
+  }
+};
+
+/**
+ * A failed turn as a failure: a usage limit with when it resets, which Codex is asked for, and
+ * anything else in plain words.
+ */
+const failedTurn = async (codex: Connection, error: TurnError | null): Promise<FailureReason> => {
+  if (error?.codexErrorInfo !== "usageLimitExceeded") return failureForTurn(error);
+  const limits = await codex.request("account/rateLimits/read", undefined);
+  const resetAt = limits.ok ? resetTimeFrom(limits.value) : undefined;
+  return { kind: "rate-limited", ...(resetAt ? { resetAt } : {}) };
+};
+
+/** One turn on a thread of its own, as a session's turn or a one-off question needs it. */
+type ThreadTurn = {
+  readonly model: ModelId;
+  readonly effort: Effort | undefined;
+  /** Where Codex is: a turn's workspace folder, or nowhere in particular. */
+  readonly cwd: string;
+  readonly instructions: string;
+  readonly message: string;
+  /** Courtyard's tools, the only ones the thread is given. */
+  readonly tools: ReadonlyMap<string, TurnTool>;
+  /** The shape the answer must have, as JSON Schema, for a one-off question. */
+  readonly outputSchema?: unknown;
+  /** Hears each of the turn's notices but its end. */
+  readonly heard: (notice: z.infer<typeof CodexNotice>) => void;
+  /** Aborted when the turn is to stop: Codex is told, and the turn ends soon either way. */
+  readonly signal: AbortSignal;
+};
+
+/**
+ * Runs one turn on a fresh, unsaved thread, which Codex forgets afterwards (ADR 0015): how the
+ * turn ended, or why it didn't start.
+ */
+const turnOnThread = async (
+  codex: Connection,
+  turn: ThreadTurn,
+): Promise<Result<TurnEnd, ExplainedFailure>> => {
+  const thread = await codex.request("thread/start", {
+    model: turn.model,
+    cwd: turn.cwd,
+    ephemeral: true,
+    baseInstructions: turn.instructions,
+    sandbox: "read-only",
+    approvalPolicy: "never",
+    environments: [],
+    dynamicTools: [...turn.tools.values()].map(asDynamicTool),
+  });
+  if (!thread.ok) return err(failureForRequest(thread.error));
+  const startedThread = ThreadStarted.safeParse(thread.value);
+  if (!startedThread.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+  const threadId = startedThread.data.thread.id;
+
+  let settle: (end: TurnEnd) => void = () => {};
+  const ended = new Promise<TurnEnd>((resolve) => {
+    settle = resolve;
+  });
+  // The turn's id, once Codex says it has started (or `undefined` if it didn't): a tool call
+  // can arrive before the worker has read that answer.
+  let learnTurnId: (turnId: string | undefined) => void = () => {};
+  const startedTurnId = new Promise<string | undefined>((resolve) => {
+    learnTurnId = resolve;
+  });
+  const stopListening = codex.listen(threadId, {
+    called: async (call) =>
+      call.turnId === (await startedTurnId)
+        ? turn.tools.get(call.tool)?.answer(call.arguments)
+        : undefined,
+    heard: (notice) => {
+      const completed = TurnCompleted.safeParse(notice);
+      if (!completed.success) return turn.heard(notice);
+      const { status, error } = completed.data.params.turn;
+      switch (status) {
+        case "completed":
+          return settle({ kind: "completed" });
+        case "interrupted":
+          return settle({ kind: "stopped" });
+        case "failed":
+          return settle({ kind: "failed", error });
+      }
+    },
+    ended: () => settle({ kind: "crashed" }),
+  });
+
+  try {
+    const started = await codex.request("turn/start", {
+      threadId,
+      input: [{ type: "text", text: turn.message, text_elements: [] }],
+      ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+      sandboxPolicy: { type: "readOnly", networkAccess: false },
+      approvalPolicy: "never",
+      ...(turn.outputSchema === undefined ? {} : { outputSchema: turn.outputSchema }),
+    });
+    if (!started.ok) return err(failureForRequest(started.error));
+    const startedTurn = TurnStarted.safeParse(started.value);
+    if (!startedTurn.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+    const turnId = startedTurn.data.turn.id;
+    learnTurnId(turnId);
+
+    // Stopping the turn stops Codex (its own name for that is `turn/interrupt`). Codex says when
+    // it has stopped; if it doesn't say so soon, the turn ends anyway, so nothing is held up.
+    const stopTurn = () => {
+      void codex.request("turn/interrupt", { threadId, turnId });
+      void wait(WIND_DOWN_MS).then(() => settle({ kind: "stopped" }));
+    };
+    if (turn.signal.aborted) stopTurn();
+    else turn.signal.addEventListener("abort", stopTurn, { once: true });
+    const end = await ended;
+    turn.signal.removeEventListener("abort", stopTurn);
+    return ok(end);
+  } finally {
+    // A call still waiting for the turn to start is refused.
+    learnTurnId(undefined);
+    stopListening();
+    // Codex forgets the thread; nothing of it is kept.
+    void codex.request("thread/unsubscribe", { threadId });
   }
 };
 
@@ -871,125 +1013,91 @@ export const createCodexProvider = (options: {
         return err({ kind: "provider-unavailable", message: START_FAILURES[started.error] });
       }
       const codex = started.value;
-      const tools = toolsFor(input);
-
-      // A fresh, unsaved thread each turn: the session's event log is the only copy (ADR 0015).
-      // Courtyard's tools are the only ones it's given.
-      const thread = await codex.request("thread/start", {
-        model: input.model,
-        cwd: resolve(input.folder),
-        ephemeral: true,
-        baseInstructions: input.framing.instructions,
-        sandbox: "read-only",
-        approvalPolicy: "never",
-        environments: [],
-        dynamicTools: [...tools.values()].map(asDynamicTool),
-      });
-      if (!thread.ok) return err(failureForRequest(thread.error));
-      const startedThread = ThreadStarted.safeParse(thread.value);
-      if (!startedThread.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
-      const threadId = startedThread.data.thread.id;
 
       // The answer goes out a piece at a time, in order, however fast Codex sends it.
       let emitting = Promise.resolve();
       let lost = false;
-      let settle: (end: TurnEnd) => void = () => {};
-      const ended = new Promise<TurnEnd>((resolve) => {
-        settle = resolve;
-      });
-      // The turn's id, once Codex says it has started (or `undefined` if it didn't): a tool call
-      // can arrive before the worker has read that answer.
-      let learnTurnId: (turnId: string | undefined) => void = () => {};
-      const startedTurnId = new Promise<string | undefined>((resolve) => {
-        learnTurnId = resolve;
-      });
-      const stopListening = codex.listen(threadId, {
-        called: async (call) =>
-          call.turnId === (await startedTurnId)
-            ? tools.get(call.tool)?.answer(call.arguments)
-            : undefined,
+      const end = await turnOnThread(codex, {
+        model: input.model,
+        effort: input.effort,
+        cwd: resolve(input.folder),
+        instructions: input.framing.instructions,
+        message: input.framing.message,
+        tools: toolsFor(input),
         heard: (notice) => {
           const text = TextDelta.safeParse(notice);
-          if (text.success) {
-            const piece = text.data.params.delta;
-            emitting = emitting
-              .then(() => input.emit(piece))
-              .catch(() => {
-                lost = true;
-              });
-            return;
-          }
-          const completed = TurnCompleted.safeParse(notice);
-          if (!completed.success) return;
-          const { status, error } = completed.data.params.turn;
-          switch (status) {
-            case "completed":
-              return settle({ kind: "completed" });
-            case "interrupted":
-              return settle({ kind: "stopped" });
-            case "failed":
-              return settle({ kind: "failed", error });
-          }
+          if (!text.success) return;
+          const piece = text.data.params.delta;
+          emitting = emitting
+            .then(() => input.emit(piece))
+            .catch(() => {
+              lost = true;
+            });
         },
-        ended: () => settle({ kind: "crashed" }),
+        signal: input.signal,
       });
-
-      try {
-        const turn = await codex.request("turn/start", {
-          threadId,
-          input: [{ type: "text", text: input.framing.message, text_elements: [] }],
-          ...(input.effort === undefined ? {} : { effort: input.effort }),
-          sandboxPolicy: { type: "readOnly", networkAccess: false },
-          approvalPolicy: "never",
-        });
-        if (!turn.ok) return err(failureForRequest(turn.error));
-        const startedTurn = TurnStarted.safeParse(turn.value);
-        if (!startedTurn.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
-        const turnId = startedTurn.data.turn.id;
-        learnTurnId(turnId);
-
-        // The owner stopping the turn stops Codex (its own name for that is `turn/interrupt`).
-        // Codex says when it has stopped; if it doesn't say so soon, the turn ends anyway, so the
-        // session isn't held up.
-        const stopTurn = () => {
-          void codex.request("turn/interrupt", { threadId, turnId });
-          void wait(WIND_DOWN_MS).then(() => settle({ kind: "stopped" }));
-        };
-        if (input.signal.aborted) stopTurn();
-        else input.signal.addEventListener("abort", stopTurn, { once: true });
-        const end = await ended;
-        input.signal.removeEventListener("abort", stopTurn);
-        await emitting;
-        if (input.signal.aborted) return ok(null);
-        if (lost)
-          return err({ kind: "unknown", message: "Courtyard couldn't keep Codex's answer." });
-        switch (end.kind) {
-          case "completed":
-          case "stopped":
-            return ok(null);
-          case "crashed":
-            return err(CRASHED);
-          case "failed": {
-            if (end.error?.codexErrorInfo !== "usageLimitExceeded") {
-              return err(failureForTurn(end.error));
-            }
-            const limits = await codex.request("account/rateLimits/read", undefined);
-            const resetAt = limits.ok ? resetTimeFrom(limits.value) : undefined;
-            return err({ kind: "rate-limited", ...(resetAt ? { resetAt } : {}) });
-          }
-        }
-      } finally {
-        // A call still waiting for the turn to start is refused.
-        learnTurnId(undefined);
-        stopListening();
-        // Codex forgets the thread; nothing of it is kept.
-        void codex.request("thread/unsubscribe", { threadId });
+      await emitting;
+      if (!end.ok) return end;
+      if (input.signal.aborted) return ok(null);
+      if (lost) return err({ kind: "unknown", message: "Courtyard couldn't keep Codex's answer." });
+      switch (end.value.kind) {
+        case "completed":
+        case "stopped":
+          return ok(null);
+        case "crashed":
+          return err(CRASHED);
+        case "failed":
+          return err(await failedTurn(codex, end.value.error));
       }
     },
 
     signIn,
 
-    answerOnce: async () =>
-      err({ kind: "unknown", message: "Codex can't answer one-off questions yet." }),
+    answerOnce: async (input) => {
+      const stopped = err<FailureReason>({ kind: "unknown", message: "It was stopped." });
+      if (input.signal.aborted) return stopped;
+      const started = await connection();
+      if (!started.ok) {
+        return err({ kind: "provider-unavailable", message: START_FAILURES[started.error] });
+      }
+      const codex = started.value;
+
+      let answer: string | undefined;
+      const end = await turnOnThread(codex, {
+        model: input.model,
+        effort: input.effort,
+        // Nowhere in particular: it has no tools to look with.
+        cwd: tmpdir(),
+        instructions: input.instructions,
+        message: input.message,
+        tools: new Map(),
+        outputSchema: jsonSchemaOf(input.schema),
+        heard: (notice) => {
+          const message = MessageCompleted.safeParse(notice);
+          if (message.success && message.data.params.item.phase !== "commentary") {
+            answer = message.data.params.item.text;
+          }
+        },
+        signal: input.signal,
+      });
+      if (!end.ok) return end;
+      if (input.signal.aborted) return stopped;
+      switch (end.value.kind) {
+        case "stopped":
+          return stopped;
+        case "crashed":
+          return err(CRASHED);
+        case "failed":
+          return err(await failedTurn(codex, end.value.error));
+        case "completed":
+          try {
+            return answer === undefined
+              ? err({ kind: "unknown", message: NOT_UNDERSTOOD })
+              : ok(JSON.parse(answer));
+          } catch {
+            return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+          }
+      }
+    },
   };
 };

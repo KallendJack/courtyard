@@ -621,6 +621,10 @@ describe("tidying a context file (#52)", () => {
     expect(told[0]?.message).toMatch(/^Today is \w+day, \d+ \w+ \d{4}\./);
     expect(told[0]?.message).toContain("- [F1] Double garage");
     expect(told[0]?.message).toContain("- [I1] A rowing machine");
+    // Every field there, empty (null) where a change doesn't use it, as the guide says.
+    const remove = { kind: "remove", labels: ["I1"], why: "Dropped." };
+    expect(told[0]?.schema.safeParse({ changes: [{ ...remove, text: null }] }).success).toBe(true);
+    expect(told[0]?.schema.safeParse({ changes: [remove] }).success).toBe(false);
   });
 });
 
