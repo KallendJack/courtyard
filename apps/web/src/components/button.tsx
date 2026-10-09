@@ -98,6 +98,12 @@ export function Button({
 const ICON_SIZES = {
   /** Around a colour dot. */
   xs: "size-5",
+  /** On the corner of a thumbnail (removing an attachment). */
+  badge: "size-5 [&_svg:not([class*='size-'])]:size-2.5",
+  /** The message box's paperclip, on its disc. */
+  disc: "size-7 [&_svg:not([class*='size-'])]:size-[15px]",
+  /** Alone over a full-screen view, a thumb's tap target (closing the photo viewer). */
+  lg: "size-11 [&_svg:not([class*='size-'])]:size-[22px]",
   /** In a list row. */
   sm: "size-7 [&_svg:not([class*='size-'])]:size-3.5",
   md: "size-9 [&_svg:not([class*='size-'])]:size-[18px]",
@@ -113,6 +119,12 @@ const ICON_LOOKS = {
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */
   inPill: "text-current hover:bg-primary/10",
+  /** On a quiet disc among the message box's pills (the paperclip). */
+  disc: "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+  /** A dark badge ringed in the box's colour, on the corner of a thumbnail (Remove). */
+  badge: "border-2 border-field bg-foreground text-background [&_svg]:stroke-3",
+  /** Light on the photo viewer's dark ground. */
+  onViewer: "text-viewer-foreground hover:bg-viewer-foreground/10",
 } as const;
 
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */
@@ -145,7 +157,7 @@ export function IconButton({
       title={hint === undefined ? label : `${label} (${hint})`}
       {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
       className={classes(
-        "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:shrink-0",
+        "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:shrink-0",
         square ? "rounded-md" : "rounded-full",
         ICON_LOOKS[look],
         ICON_SIZES[size],

@@ -44,6 +44,10 @@
   --color-workspace-slate: var(--workspace-slate);
   --color-workspace-moss: var(--workspace-moss);
   --color-workspace-peat: var(--workspace-peat);
+  --color-viewer: var(--viewer);
+  --color-viewer-foreground: var(--viewer-foreground);
+  --color-viewer-muted: var(--viewer-muted);
+  --color-viewer-dot: var(--viewer-dot);
 
   /* The design's type sizes (Paper tokens): labels 13, interface 14, body 16, headings 20+. */
   --text-xs: 13px;
@@ -90,6 +94,12 @@
   --mark-tile: #6a3f6e;
   --mark-walls: #f3f0ec;
   --mark-tree: #c9a26b;
+
+  /* The full-size photo viewer is dark in both modes, so a photo stands out (#78). */
+  --viewer: #1b181a;
+  --viewer-foreground: #eee8eb;
+  --viewer-muted: #a79ea4;
+  --viewer-dot: #5a5257;
 
   --workspace-bracken: #b08a55;
   --workspace-heather: #6a3f6e;

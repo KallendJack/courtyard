@@ -90,8 +90,8 @@ function Session(props: {
   const running = last?.state.kind === "running";
 
   const send = useCallback(
-    async (message: NewMessage) => {
-      const sent = await sendMessage(session.id, message);
+    async (message: NewMessage, files: readonly File[]) => {
+      const sent = await sendMessage(session.id, message, files);
       return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
     },
     [session.id],

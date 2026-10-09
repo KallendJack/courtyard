@@ -1,10 +1,13 @@
 import {
   ApiError,
+  ATTACHMENTS_FIELD,
+  type AttachmentId,
   type CarryOnRequest,
   type ChangeId,
   ContextBackup,
   type GetToKnowRequest,
   LiveStatus,
+  MESSAGE_FIELD,
   type NewMessage,
   type NewWorkspace,
   OwnerContextDetail,
@@ -98,6 +101,33 @@ export const sendJson = async <T>(request: {
   }
 };
 
+/**
+ * Sends a message to the worker's API, with any files attached (#78): JSON on its own, or a
+ * multipart form with the message's JSON in one field and the files in another.
+ */
+const sendMessageWithFiles = async <T>(request: {
+  path: string;
+  message: NewMessage;
+  files: readonly File[];
+  schema: z.ZodType<T>;
+}): Promise<FromWorker<T>> => {
+  const { path, message, files, schema } = request;
+  if (files.length === 0) return sendJson({ path, body: message, schema });
+  const form = new FormData();
+  form.set(MESSAGE_FIELD, JSON.stringify(message));
+  for (const file of files) form.append(ATTACHMENTS_FIELD, file);
+  try {
+    const response = await fetch(`/api${path}`, { method: "POST", body: form });
+    return await readResponse({ response, schema, unauthorised: "logged-out" });
+  } catch {
+    return { kind: "offline" };
+  }
+};
+
+/** Where one of a session's attachments is served from: for a thumbnail, or a PDF in a new tab. */
+export const attachmentUrl = (sessionId: SessionId, id: AttachmentId) =>
+  `/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(id)}`;
+
 /** Setup and login: a 401 here means a wrong password, so it carries the worker's message. */
 export const sendPassword = (path: "/setup" | "/login", form: PasswordForm) =>
   sendJson({ path, body: form, schema: z.unknown(), unauthorised: "failed" });
@@ -169,11 +199,16 @@ export const deleteSession = (id: SessionId) =>
     schema: z.unknown(),
   });
 
-/** Starts a session in a workspace with the owner's first message. */
-export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
-  sendJson({
+/** Starts a session in a workspace with the owner's first message and any files attached. */
+export const startSession = (
+  workspaceId: WorkspaceId,
+  message: NewMessage,
+  files: readonly File[] = [],
+) =>
+  sendMessageWithFiles({
     path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
-    body: message,
+    message,
+    files,
     schema: SessionSummary,
   });
 
@@ -223,11 +258,16 @@ export const carryOn = (sessionId: SessionId, turn: number) =>
     schema: z.unknown(),
   });
 
-/** Sends the next message in a session. */
-export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
-  sendJson({
+/** Sends the next message in a session, with any files attached. */
+export const sendMessage = (
+  sessionId: SessionId,
+  message: NewMessage,
+  files: readonly File[] = [],
+) =>
+  sendMessageWithFiles({
     path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
-    body: message,
+    message,
+    files,
     schema: z.unknown(),
   });
 

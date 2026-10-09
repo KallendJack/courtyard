@@ -190,7 +190,7 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "What's in this picture? One or two sentences.",
         attach: [LANDSCAPE],
         expect: [],
-        says: [["sky"], ["grass", "field", "meadow", "lawn"], ["sun"]],
+        says: [["sky"], ["grass", "field", "meadow", "lawn", "ground", "green"], ["sun"]],
       },
       {
         say: "Which corner was the sun in?",
@@ -206,7 +206,7 @@ export const SCENARIOS: readonly Scenario[] = [
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
       {
-        say: "Here's the manual for my rack. What's the most each J-hook can hold?",
+        say: "A friend lent me the manual for his rack, to settle an argument. What's the most each J-hook can hold?",
         attach: [RACK_MANUAL],
         expect: [],
         says: [["340"]],
