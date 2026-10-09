@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { WebLink } from "@/components/web-link";
+import { Arriving, FencedBlock, fencedKind } from "../rich-blocks/fenced.tsx";
 import { textOf } from "../rich-blocks/hast.ts";
 import {
   MarkdownCell,
@@ -48,15 +49,18 @@ const ELEMENTS: Components = {
   ),
   pre: ({ node }) => {
     const code = node?.children.find((child) => child.type === "element");
-    const language = code?.properties.className;
-    const written = Array.isArray(language)
-      ? language.find((name) => String(name).startsWith("language-"))
+    const names = code?.properties.className;
+    const written = Array.isArray(names)
+      ? names.find((name) => String(name).startsWith("language-"))
       : undefined;
-    return (
-      <CodeBlock
-        language={written === undefined ? undefined : String(written).slice("language-".length)}
-        code={textOf(code).replace(/\n$/, "")}
-      />
+    const language = written === undefined ? undefined : String(written).slice("language-".length);
+    const source = textOf(code).replace(/\n$/, "");
+    // A fence Courtyard draws (ADR 0021), when its language is one; otherwise code.
+    const kind = fencedKind(language);
+    return kind === undefined || language === undefined ? (
+      <CodeBlock language={language} code={source} />
+    ) : (
+      <FencedBlock kind={kind} language={language} source={source} />
     );
   },
   blockquote: ({ node: _, ...props }) => (
@@ -104,23 +108,28 @@ const useMathsPlugins = (needed: boolean) => {
  * One block of an answer, memoised on its text, so finished blocks aren't formatted again. A
  * block with maths in it is drawn with formulas once they've loaded.
  */
-const Block = memo(function Block(props: { text: string }) {
+const Block = memo(function Block(props: {
+  text: string;
+  /** It's the last block of a streaming answer, so it may be half written. */
+  arriving: boolean;
+}) {
   const maths = useMathsPlugins(hasMaths(props.text));
-  if (maths === undefined) {
-    return (
-      <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
-        {props.text}
-      </Markdown>
-    );
-  }
   return (
-    <Markdown
-      remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}
-      rehypePlugins={maths.rehypePlugins}
-      components={ELEMENTS}
-    >
-      {writeMathsForRemark(props.text)}
-    </Markdown>
+    <Arriving value={props.arriving}>
+      {maths === undefined ? (
+        <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+          {props.text}
+        </Markdown>
+      ) : (
+        <Markdown
+          remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}
+          rehypePlugins={maths.rehypePlugins}
+          components={ELEMENTS}
+        >
+          {writeMathsForRemark(props.text)}
+        </Markdown>
+      )}
+    </Arriving>
   );
 });
 
@@ -140,13 +149,17 @@ export const Answer = memo(function Answer(props: {
   return (
     // Spaced by gaps, not margins, so a formula (whose margins come from KaTeX) spaces like the rest.
     <div className="flex flex-col gap-4 text-base/[26px] wrap-anywhere">
-      {blocks.map((block, index) => (
-        <Block
-          // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)
-          key={index}
-          text={props.running && index === blocks.length - 1 ? finishForNow(block) : block}
-        />
-      ))}
+      {blocks.map((block, index) => {
+        const arriving = props.running && index === blocks.length - 1;
+        return (
+          <Block
+            // biome-ignore lint/suspicious/noArrayIndexKey: blocks only grow, in order (a definition arriving makes the answer one block, which just draws it again)
+            key={index}
+            text={arriving ? finishForNow(block) : block}
+            arriving={arriving}
+          />
+        );
+      })}
     </div>
   );
 });
