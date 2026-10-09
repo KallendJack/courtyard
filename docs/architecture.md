@@ -160,7 +160,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
-    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), code blocks with
+    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced
+    blocks Courtyard draws come from `rich-blocks/`), code blocks with
     their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
     block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
     finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
@@ -169,6 +170,18 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
     plan (`grill-plan.tsx`), an answer's Sources (`sources.tsx`), and Save as document with each document's note
     (`documents.tsx`).
+  - **`rich-blocks/`:** the blocks Courtyard draws in answers and documents
+    ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
+    document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,
+    prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
+    `answer.tsx`, a fence whose language is a kind in its `FENCED_KINDS` (a `chart`, a `mermaid`) becomes a
+    `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
+    whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
+    fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
+    just the source while the block is still arriving; a drawing that throws shows it too. The folder's classes are
+    in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
+    by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
+    the first load.
   - **`changes/`:** the Recent changes list, with Undo, and its calls (`api.ts`).
   - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
     a document's page is in `routes/`, drawn with the answer renderer.

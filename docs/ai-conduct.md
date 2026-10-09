@@ -45,6 +45,8 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
 - **Web search.** A turn can say whether its answer should use the web (`searches`), judged from its activities (a
   search or a page read); one that should also needs sources listed under it. Every search, page read and source a
   run had is printed under it.
+- **Rich blocks.** A turn can say whether its answer should hold a table (`tables`), judged from its Markdown: a
+  table, with a sentence of its own before it; or none.
 - **Documents.** A turn can say which documents it should save or update (`documents`, none for none), each judged
   on its text afterwards, and edit a file by hand the moment the model reads it (`editsAfterRead`), so its update is
   refused and retried. Every document a run saved, and every one it read, is printed under it.
@@ -90,6 +92,8 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 
    > Answer in Markdown. Write maths in LaTeX: between `\(` and `\)` within a line, and between `$$` lines of their
    > own for a formula set apart. Never put maths between single `$` signs, which are read as prices.
+
+   Then when to use the blocks Courtyard draws, on every turn for every provider (Rich blocks, below).
 5. How to read Facts, Plans and Ideas, when there's a context file or the workspace gets all of the owner context.
 6. The owner context between its markers, each line with its label, when there is one and the workspace gets some of
    it: answer the way it asks; otherwise it's information.
@@ -152,6 +156,22 @@ model gets the same framing as any turn, nothing more: the context file and the 
 answers still marked "You" whichever model wrote them, so it carries on rather than commenting on another model's
 work. After Carry on, the failed turn reads as failed and the owner's message follows it again, as a retry. The owner
 sees which model answered from a line in the chat; the model isn't told.
+
+## Rich blocks
+
+Built with #146 (ADR 0021). The web app draws some of an answer's Markdown as more than text, the same for every
+provider and in a saved document: every table sorts by its columns. A model writes ordinary Markdown for it, never
+HTML, and a new kind of block is a change to the web app and this guide, never something a model invents.
+
+What a model is told (Every turn, item 4), on every turn, the same for every provider:
+
+> Courtyard draws some of what you write as more than text. Every Markdown table sorts by its columns, so when you
+> compare options side by side, such as three rackets by price, weight and feel, put them in a table, one option a
+> row. Write a sentence or two of your own before it, saying what it shows or which you'd pick, and never use one for
+> show: one or two things, or points that don't share the same details, read better as text.
+
+The eval's `table-*` scenario checks it on both providers: a comparison of options is answered with a table after a
+sentence of its own, and a question that isn't one gets none.
 
 ## Courtyard's file tools
 

@@ -482,6 +482,10 @@ export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies" satisfies TurnToolNam
 const ANSWER_FORMAT =
   "Answer in Markdown. Write maths in LaTeX: between `\\(` and `\\)` within a line, and between `$$` lines of their own for a formula set apart. Never put maths between single `$` signs, which are read as prices.";
 
+/** When to use the blocks Courtyard draws (docs/ai-conduct.md, Rich blocks; ADR 0021). */
+const RICH_BLOCKS =
+  "Courtyard draws some of what you write as more than text. Every Markdown table sorts by its columns, so when you compare options side by side, such as three rackets by price, weight and feel, put them in a table, one option a row. Write a sentence or two of your own before it, saying what it shows or which you'd pick, and never use one for show: one or two things, or points that don't share the same details, read better as text.";
+
 const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them before you finish, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
 
 /** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
@@ -620,6 +624,7 @@ const instructionsFor = (turn: {
     accessFor(capabilities),
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
+    RICH_BLOCKS,
     ...(hasSections ? [READING_LINES] : []),
     ...(fromOwner.text === null ? [] : [ownerContextPart(fromOwner.shared, fromOwner.text)]),
     contextFilePart(workspace, {

@@ -77,6 +77,11 @@ export type Turn = {
    * read and cited is still printed).
    */
   readonly searches?: boolean;
+  /**
+   * Whether the answer should hold a Markdown table (ADR 0021), with a sentence of its own before
+   * it, as a comparison of options should; or none. Left out, it isn't checked.
+   */
+  readonly tables?: boolean;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
@@ -277,6 +282,24 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Roughly how many sets of squats a week should a beginner do for strength?",
         expect: [],
         searches: false,
+      },
+    ],
+  },
+  {
+    name: "table-comparison",
+    rule: "options compared side by side are answered with a table after a sentence, and an ordinary question with none (ADR 0021)",
+    workspace: "Padel",
+    context: { facts: ["Plays padel twice a week", "Has a sore right elbow"] },
+    turns: [
+      {
+        say: "How do the Head Evo Speed, the Babolat Contact and the Bullpadel Indiga CTR compare on weight, shape and how soft they feel?",
+        expect: [],
+        tables: true,
+      },
+      {
+        say: "What's a bandeja, anyway?",
+        expect: [],
+        tables: false,
       },
     ],
   },
