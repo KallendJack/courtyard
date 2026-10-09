@@ -230,7 +230,7 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
           />
         ))}
       </ul>
-      <div className="sticky bottom-0 -mx-4 mt-6 border-t bg-card px-4 pt-3 pb-6 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+      <div className="sticky bottom-0 -mx-4 mt-6 border-t bg-card px-4 pt-3 pb-[calc(--spacing(6)+env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
         <div className="flex gap-2">
           {stale ? (
             <Button size="lg" onClick={again}>

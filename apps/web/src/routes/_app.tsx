@@ -32,7 +32,7 @@ function LoggedIn() {
       <AppSidebar workspaces={list} onLogOut={logOut} />
       <div className="flex min-w-0 flex-1 flex-col">
         <WorkspaceStrip workspaces={list} onLogOut={logOut} />
-        <div className="min-w-0 flex-1 rounded-t-lg border border-b-0 bg-card md:my-3 md:mr-3 md:rounded-lg md:border-b">
+        <div className="min-w-0 flex-1 rounded-t-lg border border-b-0 bg-card pb-[env(safe-area-inset-bottom)] md:mt-3 md:mr-3 md:mb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:rounded-lg md:border-b md:pb-0">
           {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
         </div>
       </div>
