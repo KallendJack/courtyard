@@ -680,6 +680,48 @@ describe("titling a session (#104)", () => {
   });
 });
 
+describe("suggested replies (#126, ADR 0017)", () => {
+  /** What the first turn of a session gives a provider that saves, in garage-gym. */
+  const savingTurn = async () => {
+    const saver = savingProvider([[]]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    await followSession(request, { sessionId, until: "turn-completed" });
+    const framing = saver.framings[0];
+    if (!framing) throw new Error("no turn reached the provider");
+    return framing;
+  };
+
+  it("offers the tool in a planning workspace, with when to use it", async () => {
+    const framing = await savingTurn();
+
+    const tool = framing.tools.find((offered) => offered.name === "suggest_replies");
+    expect(tool?.description).toMatch(/buttons/);
+    expect(Object.keys(tool?.input ?? {})).toEqual(["replies"]);
+    expect(framing.instructions).toContain(await quotedInGuide("When your answer ends by asking"));
+  });
+
+  it("offers it neither in a code workspace nor to a provider that takes none of Courtyard's tools", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    await (await sessionOn(provider)).say("Where should the rack go?");
+    await rm(join(root, "data"), { recursive: true, force: true });
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const inCode = await savingTurn();
+
+    for (const framing of [turns[0]?.framing, inCode]) {
+      expect(framing?.tools.map((tool) => tool.name)).not.toContain("suggest_replies");
+      expect(framing?.instructions).not.toMatch(/suggest_replies/);
+    }
+  });
+});
+
 describe("skills (#89, ADR 0016)", () => {
   const houseDir = () => join(root, "house");
   const workspaceSkills = () => join(root, "context", "garage-gym", ".agents", "skills");

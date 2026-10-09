@@ -10,6 +10,8 @@ import {
   type Save,
   type SessionEvent,
   type SkillName,
+  SUGGESTED_REPLIES,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -288,6 +290,26 @@ const USE_SKILL_TOOL: CourtyardTool = {
   },
 };
 
+/** The suggest replies tool's name, as a model calls it (ADR 0017). */
+export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies";
+
+/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 11). */
+const SUGGESTING = `When your answer ends by asking the owner a question that has a few likely answers, offer two or three of them with the ${SUGGEST_REPLIES_TOOL_NAME} tool, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question with no likely answers.`;
+
+/** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
+const SUGGEST_REPLIES_TOOL: CourtyardTool = {
+  name: SUGGEST_REPLIES_TOOL_NAME,
+  description:
+    "Offers the owner two or three replies to the question your answer ends with, shown as buttons under your answer that send one with a tap. Follow the rule for suggested replies in your instructions.",
+  input: {
+    replies: z
+      .array(z.string())
+      .describe(
+        `Two or three different replies, each a few words on one line (at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters), as the owner would say it.`,
+      ),
+  },
+};
+
 /** The skills a turn's framing needs: those a model may load, and those in use in the session. */
 export type FramingSkills = {
   /** Each skill a model may load, by name with what it's for: none only the owner starts. */
@@ -361,6 +383,7 @@ const instructionsFor = (turn: {
   skills: FramingSkills;
   offersSkillTool: boolean;
   startedNow: SkillName | undefined;
+  suggests: boolean;
 }) => {
   const { workspace, capabilities } = turn;
   const fromOwner = sharedOwnerContext(workspace);
@@ -389,6 +412,7 @@ const instructionsFor = (turn: {
           }),
         ]
       : []),
+    ...(turn.suggests ? [SUGGESTING] : []),
   ].join("\n\n");
 };
 
@@ -461,6 +485,8 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       }
       case "activity":
       case "session-titled":
+      // The owner's reply follows, as written (docs/ai-conduct.md, Suggested replies).
+      case "suggested-replies":
       // The model isn't told the session moved to it (docs/ai-conduct.md).
       case "model-changed":
         break;
@@ -542,10 +568,13 @@ export const framingFor = (turn: {
   const saves = turn.capabilities.savesContext;
   const offersSkillTool = saves && (turn.skills.offered.length > 0 || turn.skills.inUse.length > 0);
   const startedNow = newest?.speaker === "owner" ? newest.skill : undefined;
+  // Offered beside the save tool in a planning workspace (ADR 0017).
+  const suggests = saves && turn.workspace.mode === "planning";
   return {
     instructions: instructionsFor({
       ...turn,
       saves,
+      suggests,
       offersSkillTool,
       startedNow: turn.skills.inUse.some((skill) => skill.name === startedNow)
         ? startedNow
@@ -556,6 +585,7 @@ export const framingFor = (turn: {
     tools: [
       ...(saves ? [SAVE_TOOLS[turn.workspace.mode]] : []),
       ...(offersSkillTool ? [USE_SKILL_TOOL] : []),
+      ...(suggests ? [SUGGEST_REPLIES_TOOL] : []),
     ],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
   };

@@ -76,6 +76,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 9. When the turn offers the use skill tool and the workspace has skills a model may load: how to use them, then each
    one's name and description between `<skills>` markers (Skills, below).
 10. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
+11. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
 
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
 conversation markers, then the new message. An owner message that started a skill reads
@@ -157,6 +158,34 @@ with their new message: follow it in this answer.":
 A skill's text is instructions, unlike the context file's, since only the owner and Courtyard write skills. Text inside
 still can't close its markers. Known limits: the owner can't make one of their own skills owner-only (the format has no
 field for it, and Claude's and Codex's own fields fail the check), and skills with scripts wait for phase 4's shell.
+
+## Suggested replies
+
+Built with #126 (ADR 0017). When a model asks the owner a question with a few likely answers, it can offer two or
+three of them as **suggested replies**: buttons under its answer that send one as the owner's reply with a tap. It
+offers them through Courtyard's `suggest_replies` tool, never in its own text, so they look and work the same on
+every model. The tool is offered beside the save tool in a planning workspace, on a turn whose provider takes
+Courtyard's tools (today, every one that saves). A code workspace's models aren't offered it.
+
+What a model is told (Every turn, item 11), on a turn that offers the tool:
+
+> When your answer ends by asking the owner a question that has a few likely answers, offer two or three of them
+> with the suggest_replies tool, so the owner can answer with a tap: each a few words, as the owner would say it.
+> Never suggest replies with an ordinary answer, or after a question with no likely answers.
+
+The tool's description says what it does and points to that rule; its one input is the replies. The worker checks
+them and refuses, saying why, when:
+
+- **there aren't two or three,** or the input isn't a list of texts;
+- **a reply is empty, more than one line, or longer than `SUGGESTED_REPLY_MAX_CHARACTERS`** (60, in the contract);
+- **two replies are the same,** ignoring case and spacing;
+- **the answer already suggested replies:** one set per answer, the first that's accepted;
+- **the owner stopped the turn.**
+
+A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
+latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
+own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
+later turn gets leaves suggested replies out: the owner's reply is there, as written.
 
 ## Starter context file
 

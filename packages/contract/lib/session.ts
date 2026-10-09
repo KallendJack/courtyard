@@ -245,6 +245,12 @@ export const SaveEdit = z.discriminatedUnion("place", [
 ]);
 export type SaveEdit = z.infer<typeof SaveEdit>;
 
+/** How many suggested replies a model offers at once, at least and at most (ADR 0017). */
+export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
+
+/** The longest suggested reply: a few words, on one line on a phone. */
+export const SUGGESTED_REPLY_MAX_CHARACTERS = 60;
+
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
@@ -289,6 +295,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
+  /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
+  z.object({ ...eventBase, type: z.literal("suggested-replies"), replies: z.array(z.string()) }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 
