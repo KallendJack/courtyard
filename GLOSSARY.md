@@ -236,9 +236,18 @@ The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
 **Activity**:
-An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a command it
-ran, a tool connection it used.
+An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a web search
+or a page it read, a command it ran, a tool connection it used.
 _Avoid_: tool call, step, trace
+
+**Web search**:
+A model in a planning workspace looking things up on the web when a question needs current facts, and reading the
+pages it finds or a link the owner sent (ADR 0019).
+_Avoid_: browsing, research, grounding
+
+**Source**:
+A web page an answer used, listed under it, numbered, with its site's name and its title (ADR 0019).
+_Avoid_: citation, reference, footnote
 
 **Approval**:
 The owner's yes or no to something a model wants to do that could change things: a command outside the command

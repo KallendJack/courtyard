@@ -10,6 +10,7 @@ import {
   SessionEvent,
   type SessionId,
   type SkillName,
+  type Source,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 
@@ -52,6 +53,8 @@ export type Turn = {
   readonly notes: readonly Note[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
+  /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
+  readonly sources: readonly Source[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -124,6 +127,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             activities: [],
             notes: [],
             replies: [],
+            sources: [],
             state: { kind: "running" },
           },
         ],
@@ -149,6 +153,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       });
     case "suggested-replies":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
+    case "sources":
+      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":

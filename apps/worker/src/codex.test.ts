@@ -1,7 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effort, ModelId, ProviderList, SessionSummary } from "@courtyard/contract";
+import {
+  type Activity,
+  Effort,
+  ModelId,
+  ProviderList,
+  SessionSummary,
+  type Source,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -299,6 +306,8 @@ const runTurn = async (
   overrides: Partial<TurnInput> = {},
 ) => {
   const emitted: string[] = [];
+  const activities: Activity[] = [];
+  const sources: Source[] = [];
   const result = await provider.runTurn({
     model: ModelId.parse("gpt-6.1-sol"),
     effort: undefined,
@@ -310,16 +319,22 @@ const runTurn = async (
       attachments: [],
       tools: [],
       fileTools: null,
+      webSearch: null,
     },
     callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
     emit: async (text) => {
       emitted.push(text);
     },
-    report: async () => {},
+    report: async (activity) => {
+      activities.push(activity);
+    },
+    cite: async (found) => {
+      sources.push(...found);
+    },
     signal: new AbortController().signal,
     ...overrides,
   });
-  return { result, emitted };
+  return { result, emitted, activities, sources };
 };
 
 describe("Codex's status", () => {
@@ -335,7 +350,13 @@ describe("Codex's status", () => {
       id: "codex",
       label: "Codex",
       available: true,
-      capabilities: { readsFiles: true, codes: false, usesTools: false, savesContext: true },
+      capabilities: {
+        readsFiles: true,
+        codes: false,
+        usesTools: false,
+        savesContext: true,
+        searchesWeb: true,
+      },
       models: [
         {
           id: "gpt-6.1-sol",
@@ -605,6 +626,7 @@ describe("a Codex turn", () => {
         ],
         tools: [],
         fileTools: null,
+        webSearch: null,
       },
     });
 
@@ -638,6 +660,97 @@ describe("a Codex turn", () => {
 
     expect(result).toEqual({ ok: true, value: null });
     expect(emitted).toEqual(["Against ", "the back wall."]);
+  });
+});
+
+/** Codex finishing a web search item, as it notifies it: a search, or a page it opened. */
+const webSearchItem = (turn: Parameters<TurnScript>[0], query: string, action: unknown) =>
+  turn.notify("item/completed", {
+    threadId: turn.threadId,
+    turnId: turn.turnId,
+    item: { type: "webSearch", id: `ws-${query}`, query, action, results: null },
+  });
+
+describe("web search on a Codex turn (ADR 0019)", () => {
+  const searchingFraming = {
+    instructions: "The turn's instructions.",
+    message: "What do Titan's J-hooks cost?",
+    newMessage: "What do Titan's J-hooks cost?",
+    attachments: [],
+    tools: [],
+    fileTools: null,
+    webSearch: { ownerLinks: [] },
+  };
+
+  it("searches on cached mode, set for the thread, only when the framing offers web search", async () => {
+    const codex = standIn();
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+
+    await runTurn(provider, { framing: searchingFraming });
+    await runTurn(provider);
+
+    const [searching, without] = codex.requests("thread/start");
+    expect(searching?.params).toMatchObject({
+      config: { "skills.config": [], web_search: "cached" },
+    });
+    expect(without?.params).toMatchObject({ config: { "skills.config": [] } });
+    expect(without?.params).not.toMatchObject({ config: { web_search: expect.anything() } });
+  });
+
+  it("shows each search and page Codex opens as an activity, and lists the links its answer gives as sources", async () => {
+    const codex = standIn({
+      turn: (turn) => {
+        webSearchItem(turn, "Titan T-3 J-hooks price", {
+          type: "search",
+          query: "Titan T-3 J-hooks price",
+          queries: null,
+        });
+        webSearchItem(turn, "", { type: "openPage", url: "https://titan.fitness/j-hooks" });
+        // Looking for words in a page it opened, as Codex does with a price, isn't a search.
+        webSearchItem(turn, "'£45'", {
+          type: "findInPage",
+          url: "https://titan.fitness/j-hooks",
+          pattern: "£45",
+        });
+        delta(turn, "About £45 a pair ([Titan Fitness](https://titan.fitness/j-hooks)), ");
+        delta(turn, "or see https://www.garagegymreviews.com/titan-t3.");
+        turn.complete("completed");
+      },
+    });
+
+    const { activities, sources } = await runTurn(
+      createCodexProvider({ dataDir, startAppServer: codex.startAppServer }),
+      { framing: searchingFraming },
+    );
+
+    expect(activities).toEqual([
+      { kind: "web-searched", query: "Titan T-3 J-hooks price" },
+      { kind: "page-read", url: "https://titan.fitness/j-hooks" },
+    ]);
+    expect(sources).toEqual([
+      { site: "titan.fitness", title: "Titan Fitness", url: "https://titan.fitness/j-hooks" },
+      {
+        site: "garagegymreviews.com",
+        title: "",
+        url: "https://www.garagegymreviews.com/titan-t3",
+      },
+    ]);
+  });
+
+  it("lists no sources when Codex didn't search, whatever its answer links", async () => {
+    const codex = standIn({
+      turn: (turn) => {
+        delta(turn, "See [the manual](https://titan.fitness/manual).");
+        turn.complete("completed");
+      },
+    });
+
+    const { sources } = await runTurn(
+      createCodexProvider({ dataDir, startAppServer: codex.startAppServer }),
+      { framing: searchingFraming },
+    );
+
+    expect(sources).toEqual([]);
   });
 });
 

@@ -10,6 +10,7 @@ import type {
   ProviderId,
   ProviderStatus,
   SignInState,
+  Source,
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { Result } from "../result.ts";
@@ -41,6 +42,17 @@ export type Framing = {
    * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
    */
   readonly fileTools: FileTools | null;
+  /** Web search (ADR 0019), or `null` when the turn doesn't offer it. */
+  readonly webSearch: WebSearch | null;
+};
+
+/**
+ * Web search on a turn (ADR 0019): the model searches, and reads pages from its search results or
+ * the links the owner sent, and nothing else.
+ */
+export type WebSearch = {
+  /** Every web address in the owner's messages in the session, as they wrote it. */
+  readonly ownerLinks: readonly string[];
 };
 
 /** An attachment a turn carries: a photo by its file on the worker machine, or a PDF by its name. */
@@ -105,6 +117,8 @@ export type TurnInput = {
   readonly emit: (text: string) => Promise<void>;
   /** Says what the model is doing, such as reading a file. */
   readonly report: (activity: Activity) => Promise<void>;
+  /** Lists the web pages the answer used, its Sources, once the answer is written. */
+  readonly cite: (sources: readonly Source[]) => Promise<void>;
   /**
    * Hands a call to one of the framing's `tools` to the worker, by the tool's name, its input
    * exactly as the model sent it. The worker checks it, does it, and says what to tell the model.

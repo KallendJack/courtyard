@@ -105,6 +105,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
   three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
   writes after them apart from lines it repeats.
+- **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
+  links to and the pages the model read, each with its site's name and title. Also finds the web addresses in the
+  owner's messages, the only pages besides search results that Claude may read.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
@@ -151,8 +154,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
     message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
     and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
-    load), save notes, the usage-limit notice with Carry on, the Get to know offer, and Grill this plan beside each
-    plan (`grill-plan.tsx`).
+    load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
+    plan (`grill-plan.tsx`), and an answer's Sources (`sources.tsx`).
   - **`changes/`:** the Recent changes list, with Undo.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
@@ -218,7 +221,7 @@ sequenceDiagram
   P->>M: Agent SDK, Codex app-server or the fake
   M-->>P: text, activity, saves
   P->>S: each piece as it comes
-  S->>L: text-delta, activity, context-saved
+  S->>L: text-delta, activity, context-saved, sources
   L-->>B: each event once it's written, numbered
   S->>L: turn-completed, turn-stopped or turn-failed
   Note over B: replays events into turns,<br/>reveals text at an even pace
@@ -234,6 +237,11 @@ Where the rest fits:
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
   ([ADR 0017](adr/0017-models-offer-suggested-replies-through-a-courtyard-tool.md)).
+- **Web search.** In a planning workspace, a model searches the web with its provider's own search and reads pages
+  (ADR 0019): Claude through Claude Code's `WebSearch` and `WebFetch`, the adapter's hook allowing a fetch only for a
+  page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each search
+  and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
+  (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (the only requests that aren't JSON, and the only ones allowed past the small body limit).
   `attachments/` checks them and keeps them in the session's folder; the owner message's event records each one, and
@@ -353,17 +361,18 @@ Everything Courtyard's models read is built in one place, from written rules, an
 - **Each provider passes it on unchanged:**
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
     machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
-    message from the owner, its text then each photo as an image.
+    message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
+    and `WebFetch`, confined as ADR 0019 says.
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
-    finds itself turned off. [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a
-    real Codex before its version changes. Each photo goes with the message as `localImage` input, by its path in
-    the data folder.
-  - The fake echoes, and saves, loads a skill or suggests replies when a test scripts it, or says which
-    attachments it was given ("please look").
+    finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
+    [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
+    version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
+  - The fake echoes, and saves, loads a skill, suggests replies or acts out a web search when a test scripts it, or
+    says which attachments it was given ("please look").
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
-  their saves, the skills they load and the replies they suggest. It runs on demand, never in CI (`pnpm eval:context`;
-  ai-conduct.md, The eval set).
+  their saves, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
+  never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
 - **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
   folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started
   by the owner, the same on every provider (ai-conduct.md, Skills).

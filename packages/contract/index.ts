@@ -61,6 +61,8 @@ export {
   SessionId,
   SessionList,
   SessionSummary,
+  SOURCES_MAX,
+  Source,
   StopRequest,
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,

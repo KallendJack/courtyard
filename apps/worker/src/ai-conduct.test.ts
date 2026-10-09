@@ -9,6 +9,7 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { PAGE_NOT_ALLOWED } from "./prompts/index.ts";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
@@ -51,6 +52,7 @@ const READS_FILES: Capabilities = {
   codes: false,
   usesTools: false,
   savesContext: false,
+  searchesWeb: false,
 };
 const MODEL = { provider: "recorder", model: "one" };
 const FAIL = Symbol("fail");
@@ -893,6 +895,52 @@ describe("suggested replies (#126, ADR 0017)", () => {
       expect(framing?.tools.map((tool) => tool.name)).not.toContain("suggest_replies");
       expect(framing?.instructions).not.toMatch(/suggest_replies/);
     }
+  });
+});
+
+describe("web search (#108, ADR 0019)", () => {
+  const SEARCHES: Capabilities = { ...READS_FILES, searchesWeb: true };
+
+  it("is offered in a planning workspace to a provider that searches, with when to search, and the links from every owner message", async () => {
+    const { provider, turns } = recorder(SEARCHES, [
+      "It's in the [manual](https://model.example/manual).",
+    ]);
+    const { say } = await sessionOn(provider);
+    await say("Is this the right part? https://titan.fitness/j-hooks.");
+    await say("And this one: <https://courtyard.example/hooks?size=50#specs>");
+
+    const second = turns[1]?.framing;
+    expect(second?.instructions).toContain(await quotedInGuide("You can search the web"));
+    // The model's own links aren't the owner's.
+    expect(second?.webSearch).toEqual({
+      ownerLinks: [
+        "https://titan.fitness/j-hooks",
+        "https://courtyard.example/hooks?size=50#specs",
+      ],
+    });
+  });
+
+  it("isn't offered in a code workspace, or to a provider that doesn't search", async () => {
+    const { provider: without, turns: withoutTurns } = recorder(READS_FILES);
+    await (await sessionOn(without)).say("What does a J-hook cost?");
+    await rm(join(root, "data"), { recursive: true, force: true });
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const { provider: inCode, turns: codeTurns } = recorder(SEARCHES);
+    await (await sessionOn(inCode)).say("What does a J-hook cost?");
+
+    for (const framing of [withoutTurns[0]?.framing, codeTurns[0]?.framing]) {
+      expect(framing?.webSearch).toBeNull();
+      expect(framing?.instructions).not.toMatch(/search the web/);
+    }
+  });
+
+  it("refuses a page outside the search results and the owner's links with the guide's reason", async () => {
+    expect(PAGE_NOT_ALLOWED).toBe(
+      await quotedInGuide("Only pages from this turn's search results"),
+    );
   });
 });
 

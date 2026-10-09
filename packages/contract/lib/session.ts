@@ -66,6 +66,8 @@ export const Capabilities = z.object({
   usesTools: z.boolean(),
   /** Offers the save tool, so it can save to context as it answers (ADR 0013). */
   savesContext: z.boolean(),
+  /** Searches the web, and reads the pages it finds, in a planning workspace (ADR 0019). */
+  searchesWeb: z.boolean(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 
@@ -194,8 +196,26 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("skill-loaded"), name: SkillName, source: SkillSource }),
   /** One of a skill's own files it read, as a path inside the skill's folder. */
   z.object({ kind: z.literal("skill-file-read"), name: SkillName, path: z.string() }),
+  /** A web search it made, by what it searched for (ADR 0019). */
+  z.object({ kind: z.literal("web-searched"), query: z.string() }),
+  /** A web page it read, by its address. */
+  z.object({ kind: z.literal("page-read"), url: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
+
+/** The most sources one answer lists. */
+export const SOURCES_MAX = 20;
+
+/**
+ * A web page an answer used (ADR 0019): its site's name, its title (empty when it isn't known)
+ * and its address, which is only ever a web page's.
+ */
+export const Source = z.object({
+  site: z.string().min(1),
+  title: z.string(),
+  url: z.url({ protocol: /^https?$/ }),
+});
+export type Source = z.infer<typeof Source>;
 
 /** Which file a line is written in: the workspace's context file, or the owner context (ADR 0013). */
 export const LinePlace = z.enum(["workspace", "owner"]);
@@ -304,6 +324,12 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
   z.object({ ...eventBase, type: z.literal("suggested-replies"), replies: z.array(z.string()) }),
+  /** The web pages the answer used, listed under it as its Sources (ADR 0019). */
+  z.object({
+    ...eventBase,
+    type: z.literal("sources"),
+    sources: z.array(Source).min(1).max(SOURCES_MAX),
+  }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 

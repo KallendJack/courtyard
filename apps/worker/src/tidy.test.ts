@@ -163,7 +163,13 @@ const SCRIPTED_MODEL = { provider: "scripted", model: "one" };
 const scripted = (answer: unknown) => {
   const told: { instructions: string; message: string }[] = [];
   const id = ProviderId.parse("scripted");
-  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: true,
+    searchesWeb: false,
+  };
   const provider: Provider = {
     ...createFakeProvider({ delayMs: 0 }),
     id,

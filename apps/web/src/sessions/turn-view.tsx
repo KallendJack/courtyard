@@ -20,6 +20,7 @@ import { LimitNotice } from "./limit-notice.tsx";
 import { attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
+import { SourceList, siteOf, sourcesAsMarkdown } from "./sources.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -30,6 +31,10 @@ const describeActivity = (activity: Activity) => {
       return `Used ${skillTitle(activity.name)}`;
     case "skill-file-read":
       return `Read ${skillTitle(activity.name)}'s ${activity.path}`;
+    case "web-searched":
+      return `Searched the web for “${activity.query}”`;
+    case "page-read":
+      return `Read ${siteOf(activity.url)}`;
   }
 };
 
@@ -116,7 +121,10 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
  * anywhere that reads Markdown. Anything shown with the answer that belongs in a copy (its
  * Sources, say) is added here, as Markdown at the end.
  */
-const answerToCopy = (turn: Turn) => turn.answer.trim();
+const answerToCopy = (turn: Turn) =>
+  turn.sources.length === 0
+    ? turn.answer.trim()
+    : `${turn.answer.trim()}\n\n${sourcesAsMarkdown(turn.sources)}`;
 
 /**
  * One turn: the owner's message, the answer, and a note for each save it made, with a quiet line
@@ -178,6 +186,7 @@ export const TurnView = memo(function TurnView(props: {
           )}
         </div>
       )}
+      {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
       {turn.answer !== "" && turn.state.kind !== "running" && (
         <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
       )}
