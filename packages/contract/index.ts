@@ -54,6 +54,15 @@ export {
 } from "./lib/session.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export {
+  SKILL_SOURCE_NAMES,
+  SkillList,
+  SkillName,
+  SkillProblem,
+  SkillSource,
+  SkillSummary,
+  skillTitle,
+} from "./lib/skills.ts";
+export {
   TidyChange,
   TidyChangeKind,
   TidyId,
