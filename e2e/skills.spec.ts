@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // Skills (ADR 0016), with the fixtures' skills: Programme check and a broken warm-up in Garage
 // gym, Shopping list and Ride log chart (which has a script) for every workspace, and the house
-// Grilling.
+// Get to know, Get to know me and Grilling.
 
 test("the owner picks a skill with / and starts a session with it, shown as a tag", async ({
   page,
@@ -13,6 +13,8 @@ test("the owner picks a skill with / and starts a session with it, shown as a ta
   await box.fill("/");
   const list = page.getByRole("listbox", { name: "Skills in Garage gym" });
   await expect(list.getByRole("option")).toHaveText([
+    /^Get to knowGets to know a workspace.*House$/,
+    /^Get to know meGets to know the owner.*House$/,
     /^Grilling.*House$/,
     /^Programme checkChecks a training week against my kit and timeYours$/,
     /^Shopping listTurns a plan into a list of things to buyYours, everywhere$/,
@@ -79,6 +81,8 @@ test("the workspace page lists its skills, where each comes from, and why any ca
 
   const section = page.getByRole("region", { name: "Skills" });
   await expect(section.getByRole("listitem")).toHaveText([
+    /^Get to knowGets to know a workspace.*Only you start it\.House$/,
+    /^Get to know meGets to know the owner.*Only you start it\.House$/,
     /^Grilling.*House$/,
     /^Programme checkChecks a training week against my kit and timeYours$/,
     /^Shopping listTurns a plan into a list of things to buyYours, everywhere$/,

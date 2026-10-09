@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace } from "./saving.ts";
 
-test("an empty workspace offers Get to know, which opens a session with the starter sent, until a line is saved", async ({
+test("an empty workspace offers Get to know, which opens a session with the skill started, until a line is saved", async ({
   page,
 }) => {
   const name = `Garden ${Date.now()}`;
@@ -10,7 +10,7 @@ test("an empty workspace offers Get to know, which opens a session with the star
   await page.getByRole("button", { name: "Get to know this workspace", exact: true }).click();
 
   const session = page.getByRole("list", { name: "Session" });
-  await expect(session).toContainText("Ask me about it one question per message");
+  await expect(session.getByText("Skill: Get to know")).toBeVisible();
   await expect(session).toContainText("You said: Get to know this workspace.");
   await expect(page.getByRole("heading", { name: "Get to know this workspace." })).toBeVisible();
 

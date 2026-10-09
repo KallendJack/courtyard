@@ -197,10 +197,13 @@ Built with #24. A workspace added from the app starts with a context file from a
 `apps/worker/src/workspaces/`), no model involved:
 
 1. The workspace's name as the title.
-2. One line on how to write lines, following the context-line rules below: one line each, facts true now, plans
-   decided but not done, ideas being considered. It sits where the intro goes, so the owner replaces it with what
-   the workspace covers.
+2. The **intro line**: what the owner wrote in **What's it for?** when adding the workspace (#127), one line, which
+   Get to know plans its topics from. Left empty, one line on how to write lines instead, following the
+   context-line rules below: one line each, facts true now, plans decided but not done, ideas being considered. It
+   sits where the intro goes, so the owner replaces it with what the workspace covers.
 3. Empty Facts, Plans and Ideas sections.
+
+A save that meets a workspace with no context file writes the starter without an intro line of the owner's.
 
 ## Starter owner context
 
@@ -291,29 +294,35 @@ and that an edit shows how the owner wants such lines written.
 
 ### Getting to know a workspace
 
-Built with #51. When a planning workspace's context file has no lines, its page offers **Get to know this
-workspace**. It starts a new session with a starter message, written here and not by a model (`GET_TO_KNOW` in the
-prompts module), in the owner's voice, asking the model to learn the workspace by asking one or two questions at a
-time, about five rounds, and saving the answers as it goes. Its first line is the session's title. It's answered by
-the first model that saves to context and isn't at its usage limit (the first that saves, when every one is), at its
-default effort, so it works while one provider is out (#74). The owner can stop,
-or carry on chatting, whenever they like; saving follows the rules above, so nothing is saved that the owner didn't
-say. A code workspace isn't offered it, since its models don't save to its context file.
+Built with #51, rebuilt as skills with #127. When a planning workspace's context file has no lines, its page offers
+**Get to know this workspace**. It starts a new session with the house skill **Get to know** (`get-to-know` in
+`packages/skills`), which only the owner starts (Skills, above). The owner's message is one line, "Get to know this
+workspace.", carrying the skill's tag; the skill does the rest, and stays in use for the session. That line is the
+session's title. It's answered by the first model that saves to context and isn't at its usage limit (the first that
+saves, when every one is), at its default effort, so it works while one provider is out (#74). A code workspace isn't
+offered it, since its models don't save to its context file.
 
-> Get to know this workspace.
->
-> Ask me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell
-> you as you go. Start with what it's for; later, where things stand, what I've decided and what I'm still
-> considering. I'll say when I've had enough.
+The skill tells the model to:
 
-The home page offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). Its session runs in
-the first planning workspace, as a session needs a workspace and only a planning one's models save to About me:
+- **Plan its topics first,** four to six, from what it's given: the workspace's name, the context file's intro line
+  (What's it for?, Starter context file, above) and lines, and the owner context. It never plans a topic, or asks a
+  question, that these already answer.
+- **List the topics in its first answer,** asking whether there's anything to add or drop, then ask the first
+  question. It saves nothing in that answer, since the owner hasn't said anything yet.
+- **Ask one question per message,** with suggested replies where the question has likely answers (Suggested
+  replies, above), and save each answer as it comes, by the rules above. Topics are never saved.
+- **Wrap up** when every topic is answered or skipped, or the owner has had enough: what was saved and what was
+  skipped, with no new question.
 
-> Get to know me.
->
-> Ask me about my life in general one question per message, two at most and no follow-ups, for about five rounds,
-> and save what I tell you to my owner context as you go: where I live and who with, work, health, plans and how I
-> like answers. I'll say when I've had enough.
+The owner can stop, or carry on chatting, whenever they like; saving follows the rules above, so nothing is saved that
+the owner didn't say. Since a skill replacing a house one keeps its "only the owner starts it", the owner can rewrite
+either skill for a workspace, or everywhere, and the button starts theirs.
+
+The home page offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). It's the same, with the
+house skill **Get to know me** (`get-to-know-me`) and the message "Get to know me.": its topics are the owner's life
+(where they live and who with, work, health, plans, how they like answers), leaving out what the owner context already
+says, and it saves to the owner context only. Its session runs in the first planning workspace, as a session needs a
+workspace and only a planning one's models save to About me; it's listed for planning workspaces only.
 
 ### Tidying
 
@@ -372,7 +381,7 @@ Its message is the owner's first message and the first 1,000 characters of the a
 markers. It answers once, in a fixed shape: the title. The worker puts the title on one line, takes off any quotes or
 full stop, and cuts it to 60 characters. The title is written only if nobody else has set one. A title the owner gave
 by renaming the session always wins, even one given while the model was still answering. A Get to know session keeps
-its starter's first line. When the title can't be had (no model with room, a failed answer, one in the wrong shape, or
+its one-line message. When the title can't be had (no model with room, a failed answer, one in the wrong shape, or
 an empty title), the first line stays. Nothing is shown and nothing is retried. Saving isn't involved, so a change here
 doesn't run the eval set.
 

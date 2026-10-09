@@ -10,6 +10,7 @@ import {
   type SessionDetail,
   type SessionList,
   type SessionSummary,
+  SkillName,
   StopRequest,
   type WorkspaceId,
 } from "@courtyard/contract";
@@ -17,7 +18,6 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { apiError, contextError, NO_SAVING_MODEL, readBody } from "../http.ts";
-import { GET_TO_KNOW } from "../prompts/index.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived, listWorkspaces } from "../workspaces/index.ts";
@@ -163,16 +163,20 @@ export const sessionRoutes = (options: {
   });
 
   /**
-   * Gets to know a workspace or the owner context: a session in `workspaceId` started with the
-   * worker's own starter message (docs/ai-conduct.md, Getting to know a workspace), answered by
-   * the model the request names, or else the first that saves to context and isn't at its limit.
+   * Gets to know a workspace or the owner context: a session in `workspaceId` that the owner's
+   * one-line message starts with the house skill for it (docs/ai-conduct.md, Getting to know a
+   * workspace), answered by the model the request names, or else the first that saves to context
+   * and isn't at its limit.
    */
-  const getToKnow = async (c: Context, start: { workspaceId: WorkspaceId; text: string }) => {
+  const getToKnow = async (
+    c: Context,
+    start: { workspaceId: WorkspaceId; text: string; skill: SkillName },
+  ) => {
     const body = await readBody(c, GetToKnowRequest);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const model = body.value.model ?? (await firstSavingModel(providers));
     if (model === undefined) return apiError(c, { status: 409, error: NO_SAVING_MODEL });
-    const message = { text: start.text, model };
+    const message = { text: start.text, model, skill: start.skill };
     return startIn(c, { workspaceId: start.workspaceId, message, starter: true });
   };
 
@@ -187,7 +191,11 @@ export const sessionRoutes = (options: {
           "A code workspace's models don't save to its context file, so it can't get to know it.",
       });
     }
-    return getToKnow(c, { workspaceId: summary.id, text: GET_TO_KNOW.workspace });
+    return getToKnow(c, {
+      workspaceId: summary.id,
+      text: "Get to know this workspace.",
+      skill: SkillName.parse("get-to-know"),
+    });
   });
 
   routes.post("/owner-context/get-to-know", async (c) => {
@@ -201,7 +209,11 @@ export const sessionRoutes = (options: {
         error: "Add a planning workspace first: getting to know you happens in a session in one.",
       });
     }
-    return getToKnow(c, { workspaceId: home.id, text: GET_TO_KNOW.owner });
+    return getToKnow(c, {
+      workspaceId: home.id,
+      text: "Get to know me.",
+      skill: SkillName.parse("get-to-know-me"),
+    });
   });
 
   routes.get("/sessions/:id", async (c) => {
