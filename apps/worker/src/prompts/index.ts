@@ -636,33 +636,21 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
 };
 
 /**
- * Whether an answer, as written so far, has asked its question: once its replies are taken, it's
- * finished, and anything more it writes is dropped (docs/ai-conduct.md, Suggested replies).
- */
-export const asksItsQuestion = (written: string) => written.includes("?");
-
-/**
- * What a model is told when its replies are taken, by what its answer has written so far
+ * What a model is told when its replies are taken, by what its answer had written by then
  * (docs/ai-conduct.md, Suggested replies): Claude takes what it writes after its last tool call as
- * its answer, so it's told whether that's nothing more, the rest, or all of it.
+ * its answer, so it's told whether that's all of it or only what's missing.
  */
 const repliesTaken = (written: string) =>
-  asksItsQuestion(written)
-    ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: end here, without another word, not even about the buttons."
-    : written.trim() !== ""
-      ? "The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write only the rest, ending with your question."
-      : "The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write, never your thinking. Write your whole answer now, everything you meant to say and the question it ends with.";
+  written.trim() === ""
+    ? "The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write, never your thinking. Write your whole answer now, everything you meant to say and the question it ends with."
+    : "The owner sees them as buttons under your answer, with everything you've written above them, so don't write any of it again. If anything you meant to say isn't there yet, such as your question, write only that now; if it's all there, end here, without another word, not even about the buttons.";
 
-/**
- * What a model is told about the replies it suggested, its answer having `written` so far: that
- * the owner sees them, or why not.
- */
+/** What a model is told about the replies it suggested: that the owner sees them, or why not. */
 export const suggestRepliesReply = (
-  shown: Result<unknown, RepliesRefusal>,
-  written: string,
+  shown: Result<{ readonly written: string }, RepliesRefusal>,
 ): ToolReply =>
   shown.ok
-    ? textReply(true, repliesTaken(written))
+    ? textReply(true, repliesTaken(shown.value.written))
     : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */

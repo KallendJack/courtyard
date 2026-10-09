@@ -252,18 +252,15 @@ called after, it often wrote its whole answer again (#127). With nothing written
 > The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write,
 > never your thinking. Write your whole answer now, everything you meant to say and the question it ends with.
 
-With a question written (a question mark in the answer so far):
+With some of the answer written:
 
-> The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its
-> question, so you've finished: end here, without another word, not even about the buttons.
+> The owner sees them as buttons under your answer, with everything you've written above them, so don't write any of
+> it again. If anything you meant to say isn't there yet, such as your question, write only that now; if it's all
+> there, end here, without another word, not even about the buttons.
 
-Claude often writes its whole answer again even so, so the worker drops anything a model writes after that: the
-answer is finished once it has asked its question and its replies are taken.
-
-With some of the answer written but no question yet:
-
-> The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write
-> only the rest, ending with your question.
+Whatever a model writes after that is kept, starting a new paragraph (a recommendation after the question, Get to
+know's first question after "Anything to add or drop?"), apart from any line that repeats one the answer had already
+written: Claude often writes its whole answer again even so (#127), and the worker drops the repeat (#133).
 
 A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
