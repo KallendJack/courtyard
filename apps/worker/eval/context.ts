@@ -106,6 +106,8 @@ type Verdict =
       /** What each turn did that isn't scored on its own, such as the skills it loaded. */
       readonly notes: readonly string[];
     }
+  /** A scenario that only prints what the model did, for the owner to read (`printsTopics`). */
+  | { readonly kind: "printed"; readonly scenario: Scenario; readonly notes: readonly string[] }
   | { readonly kind: "not-run"; readonly scenario: Scenario; readonly reason: string };
 
 const passed = (verdict: Verdict) =>
@@ -209,6 +211,12 @@ const questionsIn = (answer: string) => {
   return questions;
 };
 
+/** The items of the lists in an answer, such as the topics Get to know plans, in order. */
+const listItemsIn = (answer: string) =>
+  (answer.match(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+.+$/gm) ?? []).map((item) =>
+    item.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/, "").trim(),
+  );
+
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
@@ -292,7 +300,56 @@ const judgeTurn = (judge: {
                   : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...replies];
+  const topics = listItemsIn(answer);
+  const listed: Check[] =
+    turn.listsTopics === undefined
+      ? []
+      : [
+          {
+            miss:
+              turn.listsTopics === topics.length >= 2
+                ? null
+                : turn.listsTopics
+                  ? `expected a list of topics; the answer starts "${answer.trim().slice(0, 160)}"`
+                  : `expected no list of topics; listed ${topics.join("; ")}`,
+          },
+        ];
+  const known = (turn.avoids ?? []).filter((words) =>
+    asked.some((one) => hasWords(one, { words })),
+  );
+  const avoided: Check[] =
+    turn.avoids === undefined
+      ? []
+      : [
+          {
+            miss:
+              known.length === 0
+                ? null
+                : `asked what's known (${known.map(describeWords).join("; ")}): ${asked.join(" ").trim()}`,
+          },
+        ];
+  const { says } = turn;
+  const said: Check[] =
+    says === undefined
+      ? []
+      : [
+          {
+            miss: hasWords(answer, { words: says })
+              ? null
+              : `expected the answer to say ${describeWords(says)}; it ends "${answer.trim().slice(-200)}"`,
+          },
+        ];
+  return [
+    ...saveChecks,
+    nothingElse,
+    ...question,
+    ...howMany,
+    ...skills,
+    ...replies,
+    ...listed,
+    ...avoided,
+    ...said,
+  ];
 };
 
 /**
@@ -504,6 +561,10 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       if (replies.length > 0) {
         notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
       }
+      if (scenario.printsTopics || turn.listsTopics) {
+        notes.push(`${prefix}topics: ${listItemsIn(answer).join(" | ") || "none listed"}`);
+        notes.push(`${prefix}asked: ${questionsIn(answer).join(" ").trim() || "nothing"}`);
+      }
       const judged = judgeTurn({
         turn,
         saves: saves.map(({ save }) => save),
@@ -525,6 +586,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         }
       }
     }
+    if (scenario.printsTopics) return { kind: "printed", scenario, notes };
     return { kind: "judged", scenario, checks, notes };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -553,6 +615,11 @@ const pool = async <T>(jobs: readonly (() => Promise<T>)[], limit: number) => {
 const report = (verdict: Verdict) => {
   if (verdict.kind === "not-run") {
     console.log(`----  ${verdict.scenario.name}: didn't run to the end: ${verdict.reason}`);
+    return;
+  }
+  if (verdict.kind === "printed") {
+    console.log(`info  ${verdict.scenario.name} (not scored)`);
+    for (const note of verdict.notes) console.log(`      ${note}`);
     return;
   }
   console.log(`${passed(verdict) ? "pass" : "MISS"}  ${verdict.scenario.name}`);

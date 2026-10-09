@@ -37,6 +37,11 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
   (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
   suggested replies. Every set a run suggested is printed under it.
+- **Get to know.** A scenario can give its context file an intro line (`intro`). A turn can say whether its answer
+  lists topics (`listsTopics`, a list of two or more), what it mustn't ask because it's known (`avoids`), and words
+  the answer has (`says`, such as what a wrap-up says was saved). A scenario that `printsTopics` isn't scored: it
+  prints the topics and questions of each answer, for the owner to read (`--only topics` prints Get to know's for six
+  workspace names).
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
   any provider's (Claude's default when left out), and `--effort <level>` its effort (the model's default).
 
