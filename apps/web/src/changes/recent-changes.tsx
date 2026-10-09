@@ -5,7 +5,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, ListChecks, Pencil, Undo2 } from "lucide-react";
+import { BookmarkCheck, FileText, ListChecks, Pencil, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
@@ -146,6 +146,42 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
         Undo
       </Button>
     ) : undefined;
+
+  if (change.document !== undefined) {
+    const { did, name, was, slug } = change.document;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} document`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <FileText />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          was={did === "renamed" ? was : undefined}
+          muted={muted}
+          struck={did === "deleted"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <Link
+            to="/workspaces/$workspaceId/documents/$slug"
+            params={{ workspaceId: workspace, slug }}
+            className="text-[13px]/5 text-foreground underline"
+          >
+            Open
+          </Link>
+        )}
+      </NoteRow>
+    );
+  }
 
   if (change.kind === "hand-edit" || change.kind === "tidy") {
     const { pairs, gone } = pairedLines(change);

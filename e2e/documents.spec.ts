@@ -68,6 +68,13 @@ test("a document's page renames it, and Delete goes at once with Undo on the wor
   await documents.getByRole("button", { name: "Undo" }).click();
   await expect(documents.getByRole("link", { name: /Bilbao kit/ })).toBeVisible();
   await expect(documents).not.toContainText("Deleted");
+
+  // Each change is in Recent changes too, the delete marked undone.
+  await page.getByRole("link", { name: "Recent changes" }).click();
+  const changes = page.getByRole("list", { name: "Recent changes" });
+  await expect(changes).toContainText("Renamed documentBilbao kit (was Packing list)");
+  await expect(changes).toContainText("Saved documentPacking list");
+  await expect(changes.getByRole("listitem").first()).toContainText("Undone");
 });
 
 test("a model's update shows what changed in its note", async ({ page }) => {
