@@ -749,8 +749,8 @@ describe("web search on a Claude turn (ADR 0019)", () => {
       });
     }
     expect(reported).toEqual([
-      { kind: "page-read", url: "https://courtyard.example/manual.pdf" },
-      { kind: "page-read", url: "https://titan.fitness/j-hooks" },
+      { kind: "page-read", url: "https://courtyard.example/manual.pdf", site: "courtyard.example" },
+      { kind: "page-read", url: "https://titan.fitness/j-hooks", site: "titan.fitness" },
     ]);
   });
 

@@ -19,7 +19,7 @@ import {
 import { z } from "zod";
 import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { pageKey, turnSources } from "../sources/index.ts";
+import { pageRead, turnSources } from "../sources/index.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
@@ -524,8 +524,7 @@ const webActivity = (notice: unknown): Activity | undefined => {
   if (!parsed.success) return undefined;
   const { query, action } = parsed.data.params.item;
   if (action?.type === "openPage") {
-    const url = pageKey(action.url ?? "");
-    return url === undefined ? undefined : { kind: "page-read", url };
+    return pageRead(action.url ?? "");
   }
   // Looking for words in a page already open (`findInPage`), or anything new, isn't a search.
   if (action !== null && action.type !== "search") return undefined;

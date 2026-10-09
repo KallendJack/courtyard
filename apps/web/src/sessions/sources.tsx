@@ -1,13 +1,5 @@
 import type { Source } from "@courtyard/contract";
-
-/** A web page's site as the chat names it: its host, without "www.". */
-export const siteOf = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-};
+import { WebLink } from "@/components/web-link";
 
 /** Text as a Markdown link's words, so brackets in it can't end the link early. */
 const linkWords = (text: string) => text.replace(/[[\]\\]/g, "\\$&");
@@ -44,14 +36,7 @@ export function SourceList(props: { sources: readonly Source[] }) {
         {props.sources.map((source) => (
           <li key={source.url} className="text-sm/[22px]">
             <span className="block truncate">
-              <a
-                href={source.url}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-primary-text underline underline-offset-2"
-              >
-                {source.site}
-              </a>
+              <WebLink href={source.url}>{source.site}</WebLink>
               {source.title !== "" && (
                 <span className="text-muted-foreground"> · {source.title}</span>
               )}

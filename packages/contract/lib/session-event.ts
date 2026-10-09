@@ -26,8 +26,8 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("skill-file-read"), name: SkillName, path: z.string() }),
   /** A web search it made, by what it searched for (ADR 0019). */
   z.object({ kind: z.literal("web-searched"), query: z.string() }),
-  /** A web page it read, by its address. */
-  z.object({ kind: z.literal("page-read"), url: z.string() }),
+  /** A web page it read, by its address, and its site as the chat names it (its host). */
+  z.object({ kind: z.literal("page-read"), url: z.string(), site: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 

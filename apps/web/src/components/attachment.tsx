@@ -82,7 +82,7 @@ export function PdfChip(props: { name: string; size: number; href?: string } & W
     <a
       href={props.href}
       target="_blank"
-      rel="noopener"
+      rel="noreferrer"
       className={classes(
         "flex max-w-full min-w-0 items-center gap-2 self-start rounded-md bg-field py-1.5 pr-3 pl-2 text-foreground",
         "outline-none hover:bg-background focus-visible:ring-3 focus-visible:ring-ring/50",

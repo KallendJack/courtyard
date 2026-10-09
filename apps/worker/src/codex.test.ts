@@ -725,7 +725,7 @@ describe("web search on a Codex turn (ADR 0019)", () => {
 
     expect(activities).toEqual([
       { kind: "web-searched", query: "Titan T-3 J-hooks price" },
-      { kind: "page-read", url: "https://titan.fitness/j-hooks" },
+      { kind: "page-read", url: "https://titan.fitness/j-hooks", site: "titan.fitness" },
     ]);
     expect(sources).toEqual([
       { site: "titan.fitness", title: "Titan Fitness", url: "https://titan.fitness/j-hooks" },

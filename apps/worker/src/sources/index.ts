@@ -1,4 +1,4 @@
-import { SOURCES_MAX, Source } from "@courtyard/contract";
+import { type Activity, SOURCES_MAX, Source } from "@courtyard/contract";
 
 /**
  * Sources (ADR 0019): the web pages an answer used, worked out the same way for every provider
@@ -23,7 +23,13 @@ export const pageKey = (address: string): string | undefined => {
 };
 
 /** A web page's site as the chat names it when nothing better is known: its host, without "www.". */
-export const hostOf = (key: string) => new URL(key).hostname.replace(/^www\./, "");
+const hostOf = (key: string) => new URL(key).hostname.replace(/^www\./, "");
+
+/** A page read, as the activity the chat shows ("Read titan.fitness"), when it's a web page's. */
+export const pageRead = (address: string): Extract<Activity, { kind: "page-read" }> | undefined => {
+  const key = pageKey(address);
+  return key === undefined ? undefined : { kind: "page-read", url: key, site: hostOf(key) };
+};
 
 /** A Markdown link, `[text](address "title")`, or an address on its own. */
 const MARKDOWN_LINK = /\[([^\]\n]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?(?:\s+"[^"\n]*")?\s*\)/gi;

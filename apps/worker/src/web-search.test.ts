@@ -45,7 +45,13 @@ describe("a turn that searches the web", () => {
       );
       expect(shown).toMatchObject([
         { activity: { kind: "web-searched", query: "Titan T-3 J-hooks price" } },
-        { activity: { kind: "page-read", url: "https://titan.fitness/j-hooks" } },
+        {
+          activity: {
+            kind: "page-read",
+            url: "https://titan.fitness/j-hooks",
+            site: "titan.fitness",
+          },
+        },
         {
           type: "sources",
           sources: [

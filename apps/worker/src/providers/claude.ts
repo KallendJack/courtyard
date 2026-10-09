@@ -23,7 +23,7 @@ import { z } from "zod";
 import { readBytes } from "../files.ts";
 import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { pageKey, type SearchHit, turnSources } from "../sources/index.ts";
+import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
@@ -514,10 +514,12 @@ const confineTo =
       }
       if (web !== null && input.tool_name === "WebFetch") {
         const fetch = WebFetchInput.safeParse(input.tool_input);
-        const key = fetch.success ? pageKey(fetch.data.url) : undefined;
-        if (key === undefined || !web.allowed.has(key)) return decision(false, PAGE_NOT_ALLOWED);
-        web.read.push(key);
-        await report({ kind: "page-read", url: key });
+        const read = fetch.success ? pageRead(fetch.data.url) : undefined;
+        if (read === undefined || !web.allowed.has(read.url)) {
+          return decision(false, PAGE_NOT_ALLOWED);
+        }
+        web.read.push(read.url);
+        await report(read);
         return decision(true);
       }
       const reach = reachOf(input.tool_name, input.tool_input);
