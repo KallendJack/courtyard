@@ -14,7 +14,8 @@ import { EmptyState } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { describeWhen } from "../when.ts";
-import { type ContextPlace, loadChanges, undoChange } from "../worker.ts";
+import type { ContextPlace } from "../worker.ts";
+import { loadChanges, undoChange } from "./api.ts";
 
 const loggedIn = getRouteApi("/_app");
 

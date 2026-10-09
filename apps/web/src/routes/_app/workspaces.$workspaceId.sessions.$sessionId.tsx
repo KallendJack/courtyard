@@ -18,6 +18,7 @@ import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
+import type { DocumentsHere } from "../../sessions/documents.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { sendMessage } from "../../sessions/messages.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
@@ -61,6 +62,15 @@ function SessionPage() {
       // A new session starts from scratch, even when the router reuses this component.
       key={session.data.id}
       session={session.data}
+      {...(workspace?.mode === "planning" && !session.data.workspaceArchived
+        ? {
+            documents: {
+              workspaceId: workspace.id,
+              workspaceName: workspace.name,
+              sessionTitle: session.data.title,
+            },
+          }
+        : {})}
       providers={providers.kind === "loaded" ? providers.data.providers : []}
       {...(skills.kind === "loaded"
         ? {
@@ -78,6 +88,8 @@ function Session(props: {
   session: SessionDetail;
   providers: ProviderList["providers"];
   skills?: { workspaceName: string; list: readonly SkillSummary[] };
+  /** Where Save as document saves: a planning workspace that isn't archived. */
+  documents?: DocumentsHere;
 }) {
   const { session } = props;
   const { turns, modelTitle, problem, reconnecting } = useSessionTurns(session.id);
@@ -268,6 +280,8 @@ function Session(props: {
           onRetry={retry}
           onCarryOn={carryOnFrom}
           {...(session.workspaceArchived ? {} : { onReply: reply })}
+          workspaceId={session.workspaceId}
+          {...(props.documents === undefined ? {} : { documents: props.documents })}
         />
       )}
       {sendProblem && (

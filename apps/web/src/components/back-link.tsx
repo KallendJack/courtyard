@@ -10,9 +10,13 @@ const BACK = "flex w-fit items-center gap-2 text-xs font-medium text-primary-tex
  * The way back above a page's title: to a workspace, named and in its colour, or with no
  * workspace, to the home page's list of them.
  */
-export function BackLink(props: { workspaceId: WorkspaceId | undefined }) {
+export function BackLink(props: {
+  workspaceId: WorkspaceId | undefined;
+  /** Where the page sits in the workspace, after its name: "Documents". */
+  within?: string;
+}) {
   const workspaces = loggedIn.useLoaderData();
-  const { workspaceId } = props;
+  const { workspaceId, within } = props;
   if (workspaceId === undefined) {
     return (
       <Link to="/" aria-label="Back to Workspaces" className={BACK}>
@@ -31,7 +35,7 @@ export function BackLink(props: { workspaceId: WorkspaceId | undefined }) {
       className={BACK}
     >
       {workspace && <WorkspaceDot colour={workspace.colour} small />}
-      {name}
+      {within === undefined ? name : `${name} · ${within}`}
     </Link>
   );
 }
