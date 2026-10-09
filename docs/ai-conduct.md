@@ -438,8 +438,8 @@ saves one unasked, since a document is the owner's to keep. The tool is offered 
 workspace, on a turn whose provider takes Courtyard's tools.
 
 > Longer things the owner wants to keep, such as a plan, a list or a write-up, are documents in this workspace, which
-> you save with the save_document tool. Save or update one only when the owner asks you to: you may offer to save
-> one, but never save one unasked. A document is Markdown, starting with its name as a # heading; send its whole text
+> you save with the save_document tool: the one way you change its files. Save or update one only when the owner asks
+> you to, and then do, rather than say you can't: you may offer to save one, but never save one unasked. A document is Markdown, starting with its name as a # heading; send its whole text
 > each time, never only the part that changed. To update one, read it first in this answer, then send its path, its
 > whole new text and what changed in a few words. Context lines stay single lines: when something needs more, a line
 > can point to a document, but never save a line only to say a document exists, since every turn lists them. The
