@@ -90,7 +90,10 @@ export function AppSidebar(props: {
         collapsed ? "w-16" : "w-[212px] xl:w-62",
       )}
     >
-      <nav aria-label="Workspaces" className="flex h-full flex-col gap-6 overflow-y-auto px-2 py-4">
+      <nav
+        aria-label="Workspaces"
+        className="flex h-full flex-col gap-6 overflow-y-auto px-2 pt-4 pb-[calc(--spacing(4)+env(safe-area-inset-bottom))]"
+      >
         <div className="flex h-9 items-center justify-between pl-2 group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:pl-0">
           <Link to="/" className="group-data-[collapsed=true]/sidebar:hidden">
             <CourtyardLockup />

@@ -190,6 +190,8 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* The page draws to the screen's edges (viewport-fit=cover, #157): keep clear of a camera cutout in landscape. */
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
   }
   ::placeholder {
     color: var(--placeholder);

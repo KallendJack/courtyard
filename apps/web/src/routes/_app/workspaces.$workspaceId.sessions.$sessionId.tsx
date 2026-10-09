@@ -290,7 +290,7 @@ function Session(props: {
         </div>
       )}
 
-      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">
+      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:pb-[calc(--spacing(6)+env(safe-area-inset-bottom))]">
         <Composer
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}

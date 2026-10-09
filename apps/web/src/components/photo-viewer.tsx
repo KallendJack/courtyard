@@ -73,7 +73,7 @@ export function PhotoViewer(props: {
               onClick={props.onClose}
             />
           </div>
-          <div className="flex min-h-0 grow items-center justify-center pb-14">
+          <div className="flex min-h-0 grow items-center justify-center pb-[calc(--spacing(14)+env(safe-area-inset-bottom))]">
             <img
               src={photo.src}
               alt={photo.name}
@@ -82,7 +82,7 @@ export function PhotoViewer(props: {
             />
           </div>
           {photos.length > 1 && (
-            <div className="absolute inset-x-0 bottom-9 flex justify-center gap-1.5">
+            <div className="absolute inset-x-0 bottom-[calc(--spacing(9)+env(safe-area-inset-bottom))] flex justify-center gap-1.5">
               {photos.map((each, index) => (
                 <button
                   key={each.src}
