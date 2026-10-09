@@ -18,10 +18,10 @@ import { describeProblem } from "../problems.tsx";
 import { Answer } from "../sessions/answer.tsx";
 import { preparePhoto } from "../sessions/attaching.ts";
 import { changeThing, deleteThing, uploadThingPhoto } from "./api.ts";
+import { ThingsScope } from "./scope.tsx";
 import { ThingForm } from "./thing-form.tsx";
 import { StatusChip, ThingPhoto, ThingRows } from "./thing-rows.tsx";
 import { boughtInWords } from "./words.ts";
-import "./stylesheet.ts";
 
 /**
  * A Thing's card (ADR 0020): its photo and the details it has, the Thing it's part of and its
@@ -71,7 +71,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
   ] as const;
 
   return (
-    <>
+    <ThingsScope>
       <PageTitle
         above={
           <BackLink
@@ -184,7 +184,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
           </section>
         )}
       </div>
-    </>
+    </ThingsScope>
   );
 }
 

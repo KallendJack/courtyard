@@ -8,10 +8,10 @@ import { SegmentedChoice } from "@/components/segmented-choice";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { describeProblem } from "../problems.tsx";
 import { addThing, uploadThingPhoto } from "./api.ts";
+import { ThingsScope } from "./scope.tsx";
 import { ThingForm } from "./thing-form.tsx";
 import { ThingRows } from "./thing-rows.tsx";
 import { STATUS_WORDS } from "./words.ts";
-import "./stylesheet.ts";
 
 type Filter = "all" | ThingStatus;
 
@@ -47,48 +47,54 @@ export function ThingsSection(props: {
   const shown = filter === "all" ? things : things.filter((thing) => thing.status === filter);
 
   return (
-    <section aria-label="Things" className="mt-12">
-      <div className="flex items-center justify-between gap-3">
-        <SectionTitle>Things</SectionTitle>
-        <Button variant="outline" size="sm" onClick={() => setAdding((was) => !was)}>
-          <Plus className="size-3.5" />
-          <span className="max-md:hidden">Add Thing</span>
-          <span className="md:hidden">Add</span>
-        </Button>
-      </div>
-      {adding && (
-        <div className="mt-3 mb-2">
-          <ThingForm
-            parents={things.filter((thing) => thing.partOf === undefined)}
-            hasParts={false}
-            save={async (form, photo) => {
-              const added = await addThing(workspaceId, form);
-              if (added.kind !== "loaded") return describeProblem(added).body;
-              if (photo !== undefined) {
-                const uploaded = await uploadThingPhoto(workspaceId, added.data.thing.slug, photo);
-                if (uploaded.kind !== "loaded") return describeProblem(uploaded).body;
-              }
-              await router.invalidate();
-              return undefined;
-            }}
-            onDone={() => setAdding(false)}
-          />
+    <ThingsScope>
+      <section aria-label="Things" className="mt-12">
+        <div className="flex items-center justify-between gap-3">
+          <SectionTitle>Things</SectionTitle>
+          <Button variant="outline" size="sm" onClick={() => setAdding((was) => !was)}>
+            <Plus className="size-3.5" />
+            <span className="max-md:hidden">Add Thing</span>
+            <span className="md:hidden">Add</span>
+          </Button>
         </div>
-      )}
-      {deleted !== undefined && (
-        <JustDeleted name={deleted.name} change={deleted.change} onUndone={props.onUndone} />
-      )}
-      {things.length > 0 && (
-        <div className="pt-3 pb-3">
-          <SegmentedChoice label="Show" options={options} value={filter} onChange={setFilter} />
-        </div>
-      )}
-      <ThingRows workspaceId={workspaceId} things={shown} all={things} label="Things" />
-      {list.problems.map((problem) => (
-        <p key={problem.path} className="mt-2 text-xs text-muted-foreground wrap-anywhere">
-          {problem.path} can't be read as a Thing: {problem.problem}
-        </p>
-      ))}
-    </section>
+        {adding && (
+          <div className="mt-3 mb-2">
+            <ThingForm
+              parents={things.filter((thing) => thing.partOf === undefined)}
+              hasParts={false}
+              save={async (form, photo) => {
+                const added = await addThing(workspaceId, form);
+                if (added.kind !== "loaded") return describeProblem(added).body;
+                if (photo !== undefined) {
+                  const uploaded = await uploadThingPhoto(
+                    workspaceId,
+                    added.data.thing.slug,
+                    photo,
+                  );
+                  if (uploaded.kind !== "loaded") return describeProblem(uploaded).body;
+                }
+                await router.invalidate();
+                return undefined;
+              }}
+              onDone={() => setAdding(false)}
+            />
+          </div>
+        )}
+        {deleted !== undefined && (
+          <JustDeleted name={deleted.name} change={deleted.change} onUndone={props.onUndone} />
+        )}
+        {things.length > 0 && (
+          <div className="pt-3 pb-3">
+            <SegmentedChoice label="Show" options={options} value={filter} onChange={setFilter} />
+          </div>
+        )}
+        <ThingRows workspaceId={workspaceId} things={shown} all={things} label="Things" />
+        {list.problems.map((problem) => (
+          <p key={problem.path} className="mt-2 text-xs text-muted-foreground wrap-anywhere">
+            {problem.path} can't be read as a Thing: {problem.problem}
+          </p>
+        ))}
+      </section>
+    </ThingsScope>
   );
 }

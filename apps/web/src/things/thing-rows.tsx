@@ -4,7 +4,6 @@ import { Tag } from "lucide-react";
 import { classes } from "@/lib/classes";
 import { thingPhotoUrl } from "./api.ts";
 import { STATUS_WORDS, thingLine } from "./words.ts";
-import "./stylesheet.ts";
 
 const STATUS_COLOURS: Readonly<Record<ThingStatus, string>> = {
   have: "text-muted-foreground",
@@ -32,11 +31,8 @@ const PHOTO_SIZES = {
   row: "size-12 rounded-[8px] [&_svg]:size-[18px]",
   /** A part's row, under its Thing. */
   part: "size-9 rounded-[6px] [&_svg]:size-4",
-  /**
-   * A Thing's card: the width of a phone, a square beside the details from tablet width. Each size
-   * is set for its own screen width, so a plain `w-full` in a later stylesheet can't win.
-   */
-  card: "rounded-[12px] max-md:h-60 max-md:w-full md:size-55 [&_svg]:size-8",
+  /** A Thing's card: the width of a phone, a square beside the details from tablet width. */
+  card: "h-60 w-full rounded-[12px] md:size-55 [&_svg]:size-8",
 } as const;
 
 /** A Thing's photo, or a plain tag where it has none. */

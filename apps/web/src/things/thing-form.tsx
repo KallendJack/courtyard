@@ -15,7 +15,6 @@ import { TextField } from "@/components/text-field";
 import { useAction } from "@/lib/use-action";
 import { preparePhoto } from "../sessions/attaching.ts";
 import { boughtFromWords, boughtInWords, STATUS_WORDS } from "./words.ts";
-import "./stylesheet.ts";
 
 const STATUSES = (["have", "want", "replace"] as const).map((status) => ({
   value: status,

@@ -203,7 +203,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     in, parts under their Thing (`thing-rows.tsx`), Add Thing's and Edit's form (`thing-form.tsx`), Things' calls
     (`api.ts`) and how their fields read (`words.ts`). Like `rich-blocks/`, its classes are in a stylesheet of its
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
-    first loads.
+    first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
