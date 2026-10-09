@@ -107,6 +107,9 @@ const ICON_SIZES = {
   /** In a list row. */
   sm: "size-7 [&_svg:not([class*='size-'])]:size-3.5",
   md: "size-9 [&_svg:not([class*='size-'])]:size-[18px]",
+  /** Under an answer: a full-size tap target on a phone, smaller on a desktop (Copy answer). */
+  action:
+    "size-9 md:size-7 [&_svg:not([class*='size-'])]:size-[17px] md:[&_svg:not([class*='size-'])]:size-[15px]",
   /** Inside a small pill, without making it taller (a skill's tag in the message box). */
   inline: "-my-1 size-[18px] [&_svg:not([class*='size-'])]:size-3.5",
 } as const;
@@ -125,6 +128,8 @@ const ICON_LOOKS = {
   badge: "border-2 border-field bg-foreground text-background [&_svg]:stroke-3",
   /** Light on the photo viewer's dark ground. */
   onViewer: "text-viewer-foreground hover:bg-viewer-foreground/10",
+  /** On a heather wash: what it does has just been done (Copied). */
+  done: "bg-accent text-primary-text",
 } as const;
 
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */

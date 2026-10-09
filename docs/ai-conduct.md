@@ -77,7 +77,11 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
    file and the owner.
 3. Today's date.
-4. Say so and ask rather than guess, and answer in Markdown.
+4. Say so and ask rather than guess, and answer in Markdown, with maths in the forms the web app draws as formulas
+   (#140). A single `$` is never maths, so prices stay text:
+
+   > Answer in Markdown. Write maths in LaTeX: between `\(` and `\)` within a line, and between `$$` lines of their
+   > own for a formula set apart. Never put maths between single `$` signs, which are read as prices.
 5. How to read Facts, Plans and Ideas, when there's a context file or the workspace gets all of the owner context.
 6. The owner context between its markers, each line with its label, when there is one and the workspace gets some of
    it: answer the way it asks; otherwise it's information.

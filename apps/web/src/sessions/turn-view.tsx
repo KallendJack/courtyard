@@ -9,6 +9,7 @@ import { ArrowRightLeft } from "lucide-react";
 import { memo, useState } from "react";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
+import { CopyButton } from "@/components/copy-button";
 import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
@@ -111,6 +112,13 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
 }
 
 /**
+ * What Copy answer copies: the answer's Markdown as the model wrote it, so it pastes formatted
+ * anywhere that reads Markdown. Anything shown with the answer that belongs in a copy (its
+ * Sources, say) is added here, as Markdown at the end.
+ */
+const answerToCopy = (turn: Turn) => turn.answer.trim();
+
+/**
  * One turn: the owner's message, the answer, and a note for each save it made, with a quiet line
  * above it when it went to another model than the turn before. Memoised, and a turn's object only
  * changes when an event belongs to it, so streaming text (or an Undo) only re-renders that turn.
@@ -169,6 +177,9 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.answer !== "" && turn.state.kind !== "running" && (
+        <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
       )}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
