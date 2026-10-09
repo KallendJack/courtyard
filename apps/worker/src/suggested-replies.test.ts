@@ -48,7 +48,7 @@ describe("a model suggesting replies", () => {
     ]);
 
     expect(replies).toEqual([
-      { saved: true, reply: "They're shown as buttons under your answer, so don't mention them. If your answer already asks the question, you've finished; if not, write your answer now, asking the question once." },
+      { saved: true, reply: "They're shown as buttons under your answer. Everything you've written is shown too, so don't write it again or mention the buttons: if you've asked your question, you've finished; if not, write your answer now." },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
       {

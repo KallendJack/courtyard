@@ -191,10 +191,11 @@ them and refuses, saying why, when:
 - **the answer already suggested replies:** one set per answer, the first that's accepted;
 - **the owner stopped the turn.**
 
-An accepted set gets this reply, since a model told only that the buttons show sometimes wrote its question again
-after the call, or, having called first, wrote only that there were buttons (#127): "They're shown as buttons under
-your answer, so don't mention them. If your answer already asks the question, you've finished; if not, write your
-answer now, asking the question once." A refusal shows nothing to the owner, and the model can put it right and call
+An accepted set gets this reply, since a model told only that the buttons show sometimes wrote its answer again
+after the call (Claude takes what follows its last tool call as the answer), or, having called first, wrote only that
+there were buttons (#127): "They're shown as buttons under your answer. Everything you've written is shown too, so
+don't write it again or mention the buttons: if you've asked your question, you've finished; if not, write your
+answer now." A refusal shows nothing to the owner, and the model can put it right and call
 again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
 own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
