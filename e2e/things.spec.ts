@@ -203,17 +203,21 @@ test("the owner adds, edits and deletes Things themselves, and Undo brings a del
   await expect(main).toContainText("Price£110 the pair");
   await expect(main).not.toContainText("Bought");
 
-  // A Thing with parts can't go first.
+  // A Thing with parts can't go first. Each Delete waits for its card, since the card before
+  // stays on screen (its Delete too) until the next one has loaded.
   await main.getByRole("link", { name: "Whyte T-140" }).click();
+  const bike = page.getByRole("heading", { level: 1, name: "Whyte T-140" });
+  await expect(bike).toBeVisible();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(main).toContainText("Its parts come first");
-  await expect(page.getByRole("heading", { level: 1, name: "Whyte T-140" })).toBeVisible();
+  await expect(bike).toBeVisible();
 
   // Delete goes at once, and the workspace page offers Undo.
   await page
     .getByRole("list", { name: "Parts of Whyte T-140" })
     .getByRole("link", { name: /Tyres/ })
     .click();
+  await expect(page.getByRole("heading", { level: 1, name: "Tyres" })).toBeVisible();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await expect(things).toContainText("DeletedTyres");
