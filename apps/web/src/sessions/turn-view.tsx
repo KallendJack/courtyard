@@ -16,6 +16,7 @@ import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
+import { SourceList, siteOf } from "./sources.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -26,6 +27,10 @@ const describeActivity = (activity: Activity) => {
       return `Used ${skillTitle(activity.name)}`;
     case "skill-file-read":
       return `Read ${skillTitle(activity.name)}'s ${activity.path}`;
+    case "web-searched":
+      return `Searched the web for “${activity.query}”`;
+    case "page-read":
+      return `Read ${siteOf(activity.url)}`;
   }
 };
 
@@ -109,6 +114,7 @@ export const TurnView = memo(function TurnView(props: {
           )}
         </div>
       )}
+      {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
           {turn.notes.map((note) => (
