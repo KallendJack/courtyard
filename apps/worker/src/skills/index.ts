@@ -189,16 +189,18 @@ const UseSkillInput = z.strictObject({
  */
 export const skillTool = (options: {
   readonly skills: readonly UsableSkill[];
-  /** The skills in use in the session so far, which the tool adds to as a model loads one. */
-  readonly inUse: SkillName[];
+  /** The skills in use in the session when the turn started. */
+  readonly inUse: readonly SkillName[];
   readonly report: (activity: Activity) => Promise<void>;
 }) => {
+  /** The skills in use so far, with those a model has loaded in this turn. */
+  const inUseNow = new Set(options.inUse);
   return async (input: unknown): Promise<UseSkillAnswer> => {
     const parsed = UseSkillInput.safeParse(input);
     if (!parsed.success) return err({ kind: "malformed" });
     const skill = options.skills.find((usable) => usable.name === parsed.data.name);
     if (skill === undefined) return err({ kind: "unknown", name: parsed.data.name });
-    const inUse = options.inUse.includes(skill.name);
+    const inUse = inUseNow.has(skill.name);
     if (skill.ownerOnly && !inUse) return err({ kind: "owner-only", name: skill.name });
 
     const { path, start_line } = parsed.data;
@@ -206,7 +208,7 @@ export const skillTool = (options: {
       const text = await readSkillFile(skill.folder);
       if (text === undefined) return err({ kind: "unreadable" });
       if (!inUse) {
-        options.inUse.push(skill.name);
+        inUseNow.add(skill.name);
         await options.report({ kind: "skill-loaded", name: skill.name, source: skill.source });
       }
       return ok({ kind: "instructions", text });
