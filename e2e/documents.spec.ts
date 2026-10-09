@@ -13,7 +13,8 @@ test("Save as document keeps an answer as a document, listed on the workspace pa
 
   await page.getByRole("button", { name: "Save as document" }).click();
   const box = page.getByRole("textbox", { name: "Document name" });
-  await expect(box).toHaveValue(/Twelve weeks/);
+  // The session's title: its first message, or the title a model gives it once the turn is done.
+  await expect(box).toHaveValue(/Twelve weeks/i);
   await expect(page.getByText(`Saves the whole answer to ${name}'s documents.`)).toBeVisible();
   await box.fill("Padel plan to Christmas");
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -94,4 +95,35 @@ test("a model's update shows what changed in its note", async ({ page }) => {
   await expect(updated).toContainText("Updated document");
   await expect(updated).toContainText("Packing list");
   await expect(updated).toContainText("(added grips)");
+});
+
+test("a document's tables sort on its page, as in an answer", async ({ page }) => {
+  const name = `Rackets ${Date.now()}`;
+  await newWorkspace(page, name);
+  await startSaving(
+    page,
+    [
+      "save document",
+      "# Which padel racket?",
+      "",
+      "| Racket | Price |",
+      "| --- | --- |",
+      "| Bullpadel Indiga CTR | £139 |",
+      "| Head Evo Speed | £95 |",
+      "| Babolat Contact | £110 |",
+    ].join("\n"),
+  );
+  const notes = page.getByRole("list", { name: "Documents saved" });
+  await expect(notes).toContainText("Saved document");
+  await notes.getByRole("link", { name: "Open" }).click();
+
+  const table = page.getByRole("main").getByRole("table");
+  const price = table.getByRole("columnheader", { name: "Price" });
+  await price.getByRole("button").click();
+  await expect(price).toHaveAttribute("aria-sort", "ascending");
+  expect(await table.locator("tbody tr td:first-child").allTextContents()).toEqual([
+    "Head Evo Speed",
+    "Babolat Contact",
+    "Bullpadel Indiga CTR",
+  ]);
 });

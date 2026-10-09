@@ -2,6 +2,9 @@
 @import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/figtree";
 
+/* The rich blocks' classes go in their own stylesheet, off the first load (rich-blocks.css). */
+@source not "./rich-blocks";
+
 /*
  * Moorland: Courtyard's theme, from the Paper design chosen in issue #2. Every colour, font and
  * radius the app uses is defined here once; components use the names, never the values.

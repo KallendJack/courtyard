@@ -226,6 +226,19 @@ const listItemsIn = (answer: string) =>
     item.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/, "").trim(),
   );
 
+/** A Markdown table's delimiter row, under its heading row: `| --- | :---: |`. */
+const TABLE_DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** An answer's first Markdown table: its heading row, and the text written before it. */
+const firstTable = (answer: string) => {
+  const lines = answer.split("\n");
+  const at = lines.findIndex(
+    (line, index) => line.includes("|") && TABLE_DELIMITER.test(lines[index + 1] ?? ""),
+  );
+  if (at === -1) return undefined;
+  return { heading: (lines[at] ?? "").trim(), before: lines.slice(0, at).join("\n").trim() };
+};
+
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
@@ -341,6 +354,23 @@ const judgeTurn = (judge: {
                 : null,
           },
         ];
+  const table = firstTable(answer);
+  const tabled: Check[] =
+    turn.tables === undefined
+      ? []
+      : [
+          {
+            miss: turn.tables
+              ? table === undefined
+                ? `expected a table; the answer starts "${answer.trim().slice(0, 160)}"`
+                : table.before === ""
+                  ? "expected a sentence before the table; the answer starts with it"
+                  : null
+              : table === undefined
+                ? null
+                : `expected no table; it has one headed ${table.heading}`,
+          },
+        ];
   const topics = listItemsIn(answer);
   const listed: Check[] =
     turn.listsTopics === undefined
@@ -378,6 +408,7 @@ const judgeTurn = (judge: {
     ...said,
     ...replies,
     ...searched,
+    ...tabled,
     ...listed,
     ...avoided,
   ];

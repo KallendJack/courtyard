@@ -122,6 +122,114 @@ test("maths is drawn as formulas, in all three forms, and prices stay text", asy
   expect(maths().length).toBeGreaterThan(0);
 });
 
+/** A Markdown table, a row per line of cells. */
+const markdownTable = (rows: readonly (readonly string[])[]) => {
+  const [heading = [], ...body] = rows;
+  return [heading, heading.map(() => "---"), ...body]
+    .map((cells) => `| ${cells.join(" | ")} |`)
+    .join("\n");
+};
+
+/** Each row's cell in one column, top to bottom. */
+const column = (table: Locator, index: number) =>
+  table.locator(`tbody tr td:nth-child(${index + 1})`).allTextContents();
+
+const RACKETS = [
+  ["Racket", "Price", "Weight", "Feel"],
+  ["Bullpadel Indiga CTR", "£139", "365 g", "Control, kind to the elbow"],
+  ["Head Evo Speed", "£95", "360 g", "Light, round, forgiving"],
+  ["Adidas Match 3.3", "£149", "360 g", "Teardrop, a bit stiffer"],
+  ["Babolat Contact", "£110", "355 g", "Soft foam, big sweet spot"],
+];
+
+test.describe("tables", () => {
+  test("a table sorts by a column: up, then down, then back as written, prices as numbers", async ({
+    page,
+  }) => {
+    const session = await ask(
+      page,
+      `Four rackets that suit a soft-arm player:\n\n${markdownTable(RACKETS)}`,
+    );
+    const table = session.getByRole("table");
+    const price = table.getByRole("columnheader", { name: "Price" });
+    const asWritten = [
+      "Bullpadel Indiga CTR",
+      "Head Evo Speed",
+      "Adidas Match 3.3",
+      "Babolat Contact",
+    ];
+    expect(await column(table, 0)).toEqual(asWritten);
+
+    await price.getByRole("button").click();
+    await expect(price).toHaveAttribute("aria-sort", "ascending");
+    expect(await column(table, 1)).toEqual(["£95", "£110", "£139", "£149"]);
+
+    await price.getByRole("button").click();
+    await expect(price).toHaveAttribute("aria-sort", "descending");
+    expect(await column(table, 1)).toEqual(["£149", "£139", "£110", "£95"]);
+
+    await price.getByRole("button").click();
+    await expect(price).not.toHaveAttribute("aria-sort");
+    expect(await column(table, 0)).toEqual(asWritten);
+  });
+
+  test("dates sort as dates and measures as numbers, text ignores case, and blanks go last", async ({
+    page,
+  }) => {
+    const session = await ask(
+      page,
+      `The bike's parts:\n\n${markdownTable([
+        ["Part", "Bought", "Weight"],
+        ["Chain", "9 Oct 2026", "250 g"],
+        ["cassette", "Mar 2025", "1,050 g"],
+        ["Tyres", "2024-11-02", "980 g"],
+        ["Fork", "", "1,850 g"],
+      ])}`,
+    );
+    const table = session.getByRole("table");
+    const sortBy = (name: string) =>
+      table.getByRole("columnheader", { name }).getByRole("button").click();
+
+    await sortBy("Bought");
+    expect(await column(table, 0)).toEqual(["Tyres", "cassette", "Chain", "Fork"]);
+    await sortBy("Bought");
+    expect(await column(table, 0)).toEqual(["Chain", "cassette", "Tyres", "Fork"]);
+
+    await sortBy("Weight");
+    expect(await column(table, 0)).toEqual(["Chain", "Tyres", "cassette", "Fork"]);
+
+    await sortBy("Part");
+    expect(await column(table, 0)).toEqual(["cassette", "Chain", "Fork", "Tyres"]);
+  });
+
+  test("a table sorted while its answer streams keeps its sort as rows arrive", async ({
+    page,
+  }) => {
+    const prices = [139, 95, 149, 110, 120, 99, 160, 105, 130, 115, 145, 125];
+    await page.goto("/workspaces/garage-gym");
+    await page
+      .getByLabel("Message")
+      .fill(
+        `Rackets:\n\n${markdownTable([
+          ["Racket", "Price"],
+          ...prices.map((price, index) => [`Racket number ${index + 1}`, `£${price}`]),
+        ])}\n\nThat's the lot.`,
+      );
+    await page.getByRole("button", { name: "Start" }).click();
+    const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
+    const table = answer.getByRole("table");
+    const price = table.getByRole("columnheader", { name: "Price" });
+
+    await price.getByRole("button").click();
+    await expect(answer).toHaveAttribute("aria-busy", "true");
+    await expect(answer).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+    await expect(price).toHaveAttribute("aria-sort", "ascending");
+    expect(await column(table, 1)).toEqual(
+      prices.toSorted((a, b) => a - b).map((value) => `£${value}`),
+    );
+  });
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -137,5 +245,21 @@ test.describe("on a phone", () => {
       page: document.documentElement.scrollWidth <= window.innerWidth,
     }));
     expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+  });
+
+  test("a wide table scrolls sideways, not the page, and still sorts", async ({ page }) => {
+    const session = await ask(page, `Four rackets:\n\n${markdownTable(RACKETS)}`);
+    const table = session.getByRole("table");
+    const scroller = table.locator("xpath=../..");
+
+    const sizes = await scroller.evaluate((element) => ({
+      scrolls: element.scrollWidth > element.clientWidth,
+      overflow: getComputedStyle(element).overflowX,
+      page: document.documentElement.scrollWidth <= window.innerWidth,
+    }));
+    expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+
+    await table.getByRole("columnheader", { name: "Weight" }).getByRole("button").click();
+    expect(await column(table, 2)).toEqual(["355 g", "360 g", "360 g", "365 g"]);
   });
 });
