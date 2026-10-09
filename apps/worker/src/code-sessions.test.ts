@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
@@ -94,6 +95,47 @@ describe("a code session's branch", () => {
     expect(await gitIn(repo, "branch", "--show-current")).toBe("owner-work");
     expect(await gitIn(repo, "status", "--porcelain")).toBe("?? scratch.txt");
     expect(await readFile(join(repo, "scratch.txt"), "utf8")).toBe("The owner's own work\n");
+  });
+});
+
+/** What the fake answered in a turn's events. */
+const answerIn = (events: readonly SessionEvent[]) =>
+  events.flatMap((event) => (event.type === "text-delta" ? [event.text] : [])).join("");
+
+/** The activities in a turn's events. */
+const activitiesIn = (events: readonly SessionEvent[]) =>
+  events.flatMap((event) => (event.type === "activity" ? [event.activity] : []));
+
+describe("a code session's edits", () => {
+  it("apply inside its worktree, each shown in the activity, and are refused outside it", async () => {
+    const request = await start();
+
+    const { events } = await firstTurn(
+      request,
+      [
+        "edit file notes.md: The rack goes on the back wall",
+        "edit file docs/plan.md: Bolt it down",
+        "edit file ../outside.txt: Escaped",
+        `edit file ${join(root, "elsewhere.txt")}: Escaped`,
+        "edit file .git: gitdir: /somewhere/else",
+      ].join("\n"),
+    );
+
+    const { folder } = await sessionWorktree();
+    expect(await readFile(join(folder, "notes.md"), "utf8")).toBe(
+      "The rack goes on the back wall\n",
+    );
+    expect(await readFile(join(folder, "docs", "plan.md"), "utf8")).toBe("Bolt it down\n");
+    expect(activitiesIn(events)).toEqual([
+      { kind: "edited-file", path: "notes.md" },
+      { kind: "edited-file", path: "docs/plan.md" },
+    ]);
+    const refused = "Only files in your session branch's worktree can be changed.";
+    expect(answerIn(events)).toContain(`Couldn't edit ../outside.txt: ${refused}`);
+    expect(answerIn(events)).toContain(`Couldn't edit .git: ${refused}`);
+    await expect(readFile(join(root, "data", "worktrees", "outside.txt"))).rejects.toThrow();
+    await expect(readFile(join(root, "elsewhere.txt"))).rejects.toThrow();
+    expect(await gitIn(folder, "status", "--porcelain")).toBe("?? docs/\n?? notes.md");
   });
 });
 

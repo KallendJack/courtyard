@@ -1,3 +1,5 @@
+import { exec } from "node:child_process";
+import { resolve } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   type Capabilities,
@@ -7,6 +9,7 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
+import { writeTextFileIn } from "../files.ts";
 import {
   DOCUMENT_TOOL_NAME,
   SAVE_TOOL_NAME,
@@ -16,7 +19,14 @@ import {
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageRead, turnSources } from "../sources/index.ts";
-import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
+import type {
+  Activity,
+  CodeTurn,
+  FramedAttachment,
+  Provider,
+  SignIn,
+  TurnToolName,
+} from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves and codes when a message scripts it. */
 const CAPABILITIES: Capabilities = {
@@ -306,6 +316,55 @@ const seen = (attachments: readonly FramedAttachment[]) => {
   return `I see ${named.length === 0 ? last : `${named.join(", ")} and ${last}`}. `;
 };
 
+const EDIT_FILE = /^edit file (\S+): (.*)$/i;
+const RUN_COMMAND = /^run command: (.+)$/i;
+
+/** The first line a command printed, or nothing. */
+const firstLine = (output: string) =>
+  output
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line !== "");
+
+/** Runs a command the worker allowed in the worktree, as a shell would, and says how it went. */
+const runIn = (worktree: string, command: string) =>
+  new Promise<string>((resolve) => {
+    exec(
+      command,
+      { cwd: worktree, windowsHide: true, timeout: 60_000 },
+      (error, stdout, stderr) => {
+        const said = firstLine(error ? `${stderr}\n${stdout}` : stdout);
+        const how = error ? `${command} failed` : `Ran ${command}`;
+        resolve(said === undefined ? `${how}. ` : `${how}: ${said} `);
+      },
+    );
+  });
+
+/**
+ * What a message scripts the fake doing in a code session (ADR 0007), one per line, in order:
+ * "edit file notes.md: The rack goes on the back wall" writes that line as the file, and "run
+ * command: git status" runs the command in the worktree, each only once the worker allows it.
+ * Says how each went, or why it was refused.
+ */
+const scriptedCoding = async (code: CodeTurn, message: string) => {
+  let said = "";
+  for (const line of message.split("\n").map((each) => each.trim())) {
+    const [, path, text] = EDIT_FILE.exec(line) ?? [];
+    const [, command] = RUN_COMMAND.exec(line) ?? [];
+    if (path !== undefined && text !== undefined) {
+      const allowed = await code.edit(path);
+      if (!allowed.ok) said += `Couldn't edit ${path}: ${allowed.error} `;
+      else await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
+    } else if (command !== undefined) {
+      const allowed = await code.run(command);
+      said += allowed.ok
+        ? await runIn(code.worktree, command)
+        : `Couldn't run ${command}: ${allowed.error} `;
+    }
+  }
+  return said;
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -371,7 +430,7 @@ export const createFakeProvider = (
       capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ model, effort, framing, emit, report, cite, callTool, signal }) => {
+    runTurn: async ({ model, effort, framing, code, emit, report, cite, callTool, signal }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
@@ -396,8 +455,9 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
+      const coded = code === null ? "" : await scriptedCoding(code, last);
       const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
-      for (const word of `${saw}You said: ${last}`.split(/(?<= )/)) {
+      for (const word of `${coded}${saw}You said: ${last}`.split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);

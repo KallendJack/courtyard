@@ -38,6 +38,10 @@ const describeActivity = (activity: Activity) => {
       return `Searched the web for “${activity.query}”`;
     case "page-read":
       return `Read ${activity.site}`;
+    case "edited-file":
+      return `Edited ${activity.path}`;
+    case "ran-command":
+      return `Ran ${activity.command}`;
   }
 };
 

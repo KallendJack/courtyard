@@ -30,6 +30,10 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("web-searched"), query: z.string() }),
   /** A web page it read, by its address, and its site as the chat names it (its host). */
   z.object({ kind: z.literal("page-read"), url: z.string(), site: z.string() }),
+  /** A file it changed or added in a code session's worktree, as a path inside it (ADR 0007). */
+  z.object({ kind: z.literal("edited-file"), path: z.string() }),
+  /** A command it ran in a code session's worktree, exactly as it ran it (ADR 0007). */
+  z.object({ kind: z.literal("ran-command"), command: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 

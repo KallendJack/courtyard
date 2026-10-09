@@ -3,6 +3,7 @@ import type { SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
+import { shownPath, staysInside } from "../workspace-files/index.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -42,6 +43,28 @@ const defaultBranchOf = async (repoPath: string): Promise<Result<string, BranchR
   } catch (error) {
     return err({ kind: "remote", reason: gitFailureReason(error) });
   }
+};
+
+/** Why a code session's edit or command didn't happen, for the prompts module to word. */
+export type CodeRefusal =
+  /** The owner stopped the turn: nothing more is done. */
+  | { readonly kind: "stopped" }
+  /** An edit outside the session branch's worktree. */
+  | { readonly kind: "outside" };
+
+/** Git's own file in a worktree, which says where the repository is: never a model's to change. */
+const GIT_FILE = ".git";
+
+/**
+ * Whether a model may edit the file at `path` (from the worktree, or absolute) in a session's
+ * worktree: only inside it, once symlinks are followed, and never git's own file there. Its path as
+ * the owner sees it in the activity, or `undefined` when it may not.
+ */
+export const editableIn = async (worktree: string, path: string) => {
+  if (!(await staysInside(worktree, { paths: [path], globs: [] }))) return undefined;
+  const shown = shownPath(worktree, path);
+  const [first] = shown.split("/");
+  return shown === "" || first === GIT_FILE ? undefined : shown;
 };
 
 export const createCode = (options: { dataDir: string }) => {

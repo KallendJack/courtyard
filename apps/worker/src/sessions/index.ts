@@ -34,7 +34,7 @@ import {
   keepAttachments,
   type PreparedAttachment,
 } from "../attachments/index.ts";
-import type { BranchRefusal, Code } from "../code/index.ts";
+import { type BranchRefusal, type Code, type CodeRefusal, editableIn } from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
   answerAsDocument,
@@ -57,6 +57,7 @@ import {
 } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
+  codeRefusalReason,
   DOCUMENT_TOOL_NAME,
   documentReply,
   type FramingWorkspace,
@@ -76,6 +77,7 @@ import {
   useSkillReply,
 } from "../prompts/index.ts";
 import {
+  type CodeTurn,
   firstWithRoom,
   modelsOnOffer,
   offerFor,
@@ -707,20 +709,37 @@ export const createSessions = (options: {
         };
         const branch = file.value?.branch;
         const worktree = branch === undefined ? undefined : options.code.worktreeOf(turn.id);
+        /** Says whether something may happen in a code session, telling the owner when it does. */
+        const decide = async (
+          decided: Result<Activity, CodeRefusal>,
+        ): Promise<Result<null, string>> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return err(codeRefusalReason({ kind: "stopped" }));
+          }
+          if (!decided.ok) return err(codeRefusalReason(decided.error));
+          await report(decided.value);
+          return ok(null);
+        };
+        /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
+        const codeTurn = (worktree: string): CodeTurn => ({
+          worktree,
+          edit: async (path) => {
+            const shown = await editableIn(worktree, path);
+            return decide(
+              shown === undefined
+                ? err({ kind: "outside" })
+                : ok({ kind: "edited-file", path: shown }),
+            );
+          },
+          run: async () => decide(err({ kind: "outside" })),
+        });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
             effort: turn.effort,
             folder: worktree ?? workspace.value.folder,
-            code:
-              worktree === undefined
-                ? null
-                : {
-                    worktree,
-                    edit: async () => err("Not yet."),
-                    run: async () => err("Not yet."),
-                  },
+            code: worktree === undefined ? null : codeTurn(worktree),
             framing,
             callTool: (call) => {
               const calling = callTool(call);

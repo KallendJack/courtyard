@@ -22,6 +22,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { TurnAttachment } from "../attachments/index.ts";
+import type { CodeRefusal } from "../code/index.ts";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import { type DocumentToolRefusal, documentPath } from "../documents/index.ts";
 import type {
@@ -1181,6 +1182,19 @@ export const notOfferedReply = (name: string) =>
  * Courtyard's: the same reason whichever provider it's on.
  */
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
+
+/** What a model in a code session is told when it edits outside its worktree (ADR 0007). */
+export const OUTSIDE_WORKTREE = "Only files in your session branch's worktree can be changed.";
+
+/** Why a code session's edit or command didn't happen, as its model is told (ADR 0007). */
+export const codeRefusalReason = (refusal: CodeRefusal) => {
+  switch (refusal.kind) {
+    case "stopped":
+      return "The owner stopped this turn, so nothing more is done.";
+    case "outside":
+      return OUTSIDE_WORKTREE;
+  }
+};
 
 /**
  * What a model is told when it tries to read a web page it may not (ADR 0019): one that's neither
