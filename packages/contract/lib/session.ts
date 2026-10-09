@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SkillName, SkillSource } from "./skills.ts";
+import { SkillName, SkillSource } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
   ContextLine,
