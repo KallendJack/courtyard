@@ -4,7 +4,7 @@
 // The worker runs as a live copy whose main has moved on, with a stand-in for the update script.
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
 
@@ -99,6 +99,26 @@ const standInUpdate = () => {
     result("updated", to, `Updated to ${to.title}. Courtyard is running.`, true);
   }, 1500);
 };
+
+// A code workspace, Side project, on a repository of its own whose remote stands in for GitHub
+// (#170): each session there gets a branch of its own from the remote's main.
+const codeDir = resolve(dataDir, "..", "code");
+rmSync(codeDir, { recursive: true, force: true });
+mkdirSync(codeDir, { recursive: true });
+git(codeDir, "init", "-q", "--bare", "-b", "main", "origin.git");
+git(codeDir, "clone", "-q", "origin.git", "repo");
+const repo = join(codeDir, "repo");
+git(repo, "config", "user.name", "Test");
+git(repo, "config", "user.email", "test@example.com");
+writeFileSync(join(repo, "README.md"), "# Side project\n");
+git(repo, "add", ".");
+git(repo, "commit", "-qm", "Start");
+git(repo, "push", "-q", "origin", "main");
+mkdirSync(join(contextDir, "side-project"), { recursive: true });
+writeFileSync(
+  join(contextDir, "side-project", "workspace.json"),
+  JSON.stringify({ name: "Side project", mode: "code", repoPath: repo }),
+);
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
 // A context backup that isn't there, so the home page says the backup is behind and why.

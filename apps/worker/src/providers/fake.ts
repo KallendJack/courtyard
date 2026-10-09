@@ -387,7 +387,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
- * (see `seen`).
+ * (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
+ * allows (see `scriptedCoding`); Fake two doesn't code.
  */
 export const createFakeProvider = (
   options: {
@@ -410,10 +411,12 @@ export const createFakeProvider = (
   const id = ProviderId.parse(options.second ? "fake-two" : "fake");
   const label = options.second ? "Fake two" : "Fake";
   const hitsLimit = new RegExp(`please hit ${label}'s limit`, "i");
+  // Fake two doesn't code, so a model that can't is there to be refused in a code workspace.
+  const capabilities = options.second ? { ...CAPABILITIES, codes: false } : CAPABILITIES;
 
   return {
     id,
-    capabilities: CAPABILITIES,
+    capabilities,
     ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     status: async () => ({
       id,
@@ -427,7 +430,7 @@ export const createFakeProvider = (
           defaultEffort: Effort.parse("medium"),
         },
       ],
-      capabilities: CAPABILITIES,
+      capabilities,
     }),
 
     runTurn: async ({ model, effort, framing, code, emit, report, cite, callTool, signal }) => {
