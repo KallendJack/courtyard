@@ -327,8 +327,7 @@ export const sessionRoutes = (options: {
   routes.post("/sessions/:id/messages", async (c) => {
     const message = await readMessageWithAttachments(c, NewMessage);
     if (!message.ok) return message.error;
-    const { message: text, attachments } = message.value;
-    const sent = await sessions.send(c.req.param("id"), text, attachments);
+    const sent = await sessions.send({ rawId: c.req.param("id"), ...message.value });
     if (!sent.ok) return sessionError(c, sent.error);
     return c.body(null, 202);
   });

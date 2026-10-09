@@ -37,16 +37,18 @@ export type TurnAttachment =
 const STARTS: Readonly<Record<AttachmentMediaType, (bytes: Uint8Array) => boolean>> = {
   "image/jpeg": (bytes) => startsWith(bytes, [0xff, 0xd8, 0xff]),
   "image/png": (bytes) => startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  "image/gif": (bytes) => ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a",
-  "image/webp": (bytes) => ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP",
-  "application/pdf": (bytes) => ascii(bytes, 0, 5) === "%PDF-",
+  "image/gif": (bytes) =>
+    ascii(bytes.subarray(0, 6)) === "GIF87a" || ascii(bytes.subarray(0, 6)) === "GIF89a",
+  "image/webp": (bytes) =>
+    ascii(bytes.subarray(0, 4)) === "RIFF" && ascii(bytes.subarray(8, 12)) === "WEBP",
+  "application/pdf": (bytes) => ascii(bytes.subarray(0, 5)) === "%PDF-",
 };
 
 const startsWith = (bytes: Uint8Array, start: readonly number[]) =>
   start.every((byte, index) => bytes[index] === byte);
 
-const ascii = (bytes: Uint8Array, from: number, to: number) =>
-  String.fromCharCode(...bytes.subarray(from, to));
+/** Some bytes as the characters they spell. */
+const ascii = (bytes: Uint8Array) => String.fromCharCode(...bytes);
 
 /** Each kind's file ending in the session's folder. */
 const ENDINGS: Readonly<Record<AttachmentMediaType, string>> = {
