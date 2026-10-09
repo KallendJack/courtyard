@@ -56,6 +56,12 @@ a file just outside the workspace folder (in the context folder, next to it) hol
       Courtyard's `use_skill` (the chat shows "Used …"), never by itself, and never the one in `$HOME`. Its bundled
       skills aren't listed either.
 
+- [ ] **Web search is cached, and only where it's offered** (ADR 0019). With the app-server started as Courtyard
+      starts it (`web_search="disabled"`), a turn in a planning workspace, whose thread starts with
+      `web_search: "cached"` in `thread/start`'s `config`, searches for a current-facts question: the chat shows
+      "Searched the web for …" and the answer lists sources. A turn whose thread starts without it (a code
+      workspace) doesn't search.
+
 ## Runs
 
 | Date       | Codex   | Result                                                                               |
