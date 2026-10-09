@@ -5,6 +5,7 @@ import type {
   SkillProblem,
   SkillSource,
   SkillSummary,
+  UsableSkillSummary,
   WorkspaceMode,
 } from "@courtyard/contract";
 import { checkSkill, type HouseSkill, readHouseManifest, readSkillFile } from "@courtyard/skills";
@@ -27,14 +28,7 @@ import {
 export const SKILLS_FOLDER = join(".agents", "skills");
 
 /** A skill a workspace's models can use: what the app shows of it, and its folder. */
-export type UsableSkill = {
-  readonly name: SkillName;
-  readonly description: string;
-  readonly source: SkillSource;
-  readonly ownerOnly: boolean;
-  readonly replacesHouse: boolean;
-  readonly folder: string;
-};
+export type UsableSkill = UsableSkillSummary & { readonly folder: string };
 
 /** A workspace's skills: the ones it can use, one per name, and the ones it can't. */
 export type WorkspaceSkills = {
@@ -126,31 +120,34 @@ export const workspaceSkills = async (options: {
   const usable = new Map<string, UsableSkill>();
   const unusable: SkillSummary[] = [];
   for (const found of [...places.flat(), ...house.found]) {
-    const problem: SkillProblem | undefined = !found.checked.ok
-      ? { kind: "broken", reason: found.checked.error }
-      : found.checked.value.hasScripts && mode === "planning"
-        ? { kind: "needs-code-workspace" }
-        : undefined;
-    const ownerOnly = house.ownerOnly.has(found.folderName);
-    if (problem !== undefined || !found.checked.ok) {
+    const { checked, folderName, source } = found;
+    const ownerOnly = house.ownerOnly.has(folderName);
+    const cantUse = (problem: SkillProblem, description: string) =>
       unusable.push({
-        name: found.folderName,
-        description: found.checked.ok ? found.checked.value.description : "",
-        source: found.source,
+        kind: "unusable",
+        name: folderName,
+        description,
+        source,
         ownerOnly,
-        replacesHouse: false,
-        ...(problem === undefined ? {} : { problem }),
+        problem,
       });
+    if (!checked.ok) {
+      cantUse({ kind: "broken", reason: checked.error }, "");
       continue;
     }
-    const { name, description } = found.checked.value;
+    const { name, description, hasScripts } = checked.value;
+    if (hasScripts && mode === "planning") {
+      cantUse({ kind: "needs-code-workspace" }, description);
+      continue;
+    }
     if (usable.has(name)) continue;
     usable.set(name, {
+      kind: "usable",
       name,
       description,
-      source: found.source,
+      source,
       ownerOnly,
-      replacesHouse: found.source !== "house" && houseNames.has(name),
+      replacesHouse: source !== "house" && houseNames.has(name),
       folder: found.folder,
     });
   }

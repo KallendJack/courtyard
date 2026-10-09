@@ -11,8 +11,6 @@ import { PILL_QUIET, PILL_SHAPE } from "./select.tsx";
 export function Chip(props: {
   children: string;
   onClick: () => void;
-  /** Only on a narrow screen: from tablet width up the choice sits elsewhere. */
-  narrowOnly?: boolean;
   /** Only from tablet width up: on a narrow screen another chip offers the choice. */
   wideOnly?: boolean;
   /** An icon before its text, in place of the chevron after it (the Skill pill's book). */
@@ -35,7 +33,6 @@ export function Chip(props: {
         // The Skill pill keeps its size; a chip naming a long choice gives way and truncates.
         withIcon ? "shrink-0 pr-3 pl-2.5" : "pr-2.5 pl-3",
         "inline-flex max-w-full min-w-0 items-center gap-1.5 self-start hover:text-foreground [&_svg]:size-3.5 [&_svg]:shrink-0",
-        props.narrowOnly && "md:hidden",
         props.wideOnly && "max-md:hidden",
       )}
     >

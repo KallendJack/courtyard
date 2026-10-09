@@ -55,7 +55,7 @@ const skillsOf = async (request: Requester, workspace = "garage-gym") => {
 };
 
 const usable = (skills: readonly SkillSummary[]) =>
-  skills.filter((s) => s.problem === undefined).map((s) => [s.name, s.source]);
+  skills.filter((s) => s.kind === "usable").map((s) => [s.name, s.source]);
 
 describe("a workspace's skills", () => {
   it("are the house skills for its kind of workspace, until the owner adds their own", async () => {
@@ -63,6 +63,7 @@ describe("a workspace's skills", () => {
 
     expect(skills).toEqual([
       {
+        kind: "usable",
         name: "get-to-know",
         description: "What get-to-know does.",
         source: "house",
@@ -70,6 +71,7 @@ describe("a workspace's skills", () => {
         replacesHouse: false,
       },
       {
+        kind: "usable",
         name: "grilling",
         description: "What grilling does.",
         source: "house",
@@ -103,7 +105,7 @@ describe("a workspace's skills", () => {
       replacesHouse: true,
     });
     expect(byName.get("programme-check")?.description).toBe("The project's.");
-    expect(byName.get("code-review")?.replacesHouse).toBe(true);
+    expect(byName.get("code-review")).toMatchObject({ replacesHouse: true });
   });
 
   it("keep a house skill only the owner starts that way, even when the owner's replaces it", async () => {
@@ -132,27 +134,27 @@ describe("a workspace's skills", () => {
     // Can't-be-used ones come after the rest.
     expect(skills.slice(2)).toEqual([
       {
+        kind: "unusable",
         name: "grilling",
         description: "",
         source: "everywhere",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "its SKILL.md has no description" },
       },
       {
+        kind: "unusable",
         name: "Notes",
         description: "",
         source: "workspace",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "it has no SKILL.md" },
       },
       {
+        kind: "unusable",
         name: "warm-up",
         description: "",
         source: "workspace",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "its SKILL.md has no description" },
       },
     ]);
@@ -163,13 +165,14 @@ describe("a workspace's skills", () => {
 
     const request = await owner();
     const planning = await skillsOf(request);
-    expect(planning.find((s) => s.name === "ride-log-chart")?.problem).toEqual({
-      kind: "needs-code-workspace",
+    expect(planning.find((s) => s.name === "ride-log-chart")).toMatchObject({
+      kind: "unusable",
+      problem: { kind: "needs-code-workspace" },
     });
 
     await asCode();
     const code = await skillsOf(request);
-    expect(code.find((s) => s.name === "ride-log-chart")?.problem).toBeUndefined();
+    expect(code.find((s) => s.name === "ride-log-chart")?.kind).toBe("usable");
   });
 
   it("are only the house's and the owner's when a code workspace's repo isn't there", async () => {

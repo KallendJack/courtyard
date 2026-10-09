@@ -42,7 +42,7 @@ export function GrillablePlan(props: { workspaceId: WorkspaceId; plan: string })
         label="Grill this plan"
         icon={<Flame />}
         size="sm"
-        filled
+        look="filled"
         disabled={grill.busy}
         onClick={() => void grill.run()}
       />

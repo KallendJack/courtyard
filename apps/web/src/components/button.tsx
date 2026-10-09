@@ -7,7 +7,7 @@ import { classes } from "@/lib/classes";
  * no two classes here may set the same thing: each variant sets its own border colour, say.
  */
 const BASE =
-  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border font-semibold whitespace-nowrap transition-colors outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border transition-colors outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 const VARIANTS = {
   /** The main action. */
@@ -29,16 +29,23 @@ const VARIANTS = {
   /** The way out of what a `Notice` says, such as Get a new code. */
   notice:
     "border-destructive-text bg-transparent text-destructive-text hover:bg-destructive/10 focus-visible:ring-destructive/20",
+  /** A suggested reply under an answer, sent with a tap. */
+  reply: "border-border bg-field text-primary-text hover:bg-accent",
 } as const;
+
+/** One line of bold text, at a set height. */
+const ONE_LINE = "font-semibold whitespace-nowrap";
 
 const SIZES = {
   /** A quiet action in a line of text: a full-size tap target on a phone. */
-  xs: "h-9 px-3 text-sm md:h-7 md:px-2",
+  xs: classes(ONE_LINE, "h-9 px-3 text-sm md:h-7 md:px-2"),
   /** Beside text or in a box (a notice, a form in a list). */
-  sm: "h-8 px-4 text-sm",
-  md: "h-9 px-5 text-sm",
+  sm: classes(ONE_LINE, "h-8 px-4 text-sm"),
+  md: classes(ONE_LINE, "h-9 px-5 text-sm"),
   /** A form's only action on its own page (logging in). */
-  lg: "h-11 px-5 text-sm",
+  lg: classes(ONE_LINE, "h-11 px-5 text-sm"),
+  /** Words that wrap when they're long, as tall as they need (a suggested reply). */
+  wraps: "max-w-full px-4 py-2 text-left text-sm font-medium wrap-anywhere",
 } as const;
 
 /** A Button's look, for a link that looks like one (ButtonLink). */
@@ -94,12 +101,18 @@ const ICON_SIZES = {
   /** In a list row. */
   sm: "size-7 [&_svg:not([class*='size-'])]:size-3.5",
   md: "size-9 [&_svg:not([class*='size-'])]:size-[18px]",
+  /** Inside a small pill, without making it taller (a skill's tag in the message box). */
+  inline: "-my-1 size-[18px] [&_svg:not([class*='size-'])]:size-3.5",
 } as const;
 
 const ICON_LOOKS = {
   quiet: "text-muted-foreground hover:bg-muted hover:text-foreground",
+  /** Shown pressed, while what it opened is open on the page (a confirm step, say). */
   pressed: "bg-muted text-foreground",
+  /** On a disc in heather: an action beside each line of a list (Grill this plan). */
   filled: "bg-background text-primary-text hover:bg-accent",
+  /** In the colour of the pill it's inside (a skill's tag). */
+  inPill: "text-current hover:bg-primary/10",
 } as const;
 
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */
@@ -109,8 +122,7 @@ export function IconButton({
   size = "md",
   square = false,
   expanded,
-  active = false,
-  filled = false,
+  look = "quiet",
   hint,
   type = "button",
   ...props
@@ -122,10 +134,7 @@ export function IconButton({
   square?: boolean;
   /** For a button that opens or shows something: whether it's open, for screen readers. */
   expanded?: boolean;
-  /** Shown pressed, while what it opened is open on the page (a confirm step, say). */
-  active?: boolean;
-  /** On a disc in heather, rather than quiet: an action beside each line of a list (Grill this plan). */
-  filled?: boolean;
+  look?: keyof typeof ICON_LOOKS;
   /** Added to the hover text, such as a keyboard shortcut. */
   hint?: string;
 }) {
@@ -138,7 +147,7 @@ export function IconButton({
       className={classes(
         "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:shrink-0",
         square ? "rounded-md" : "rounded-full",
-        ICON_LOOKS[active ? "pressed" : filled ? "filled" : "quiet"],
+        ICON_LOOKS[look],
         ICON_SIZES[size],
       )}
       {...props}

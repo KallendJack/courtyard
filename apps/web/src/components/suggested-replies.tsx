@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "./button.tsx";
 
 /**
  * The replies a model suggested under its latest answer (ADR 0017), as outlined pills that send
@@ -23,14 +24,9 @@ export function SuggestedReplies(props: {
     >
       {props.replies.map((reply) => (
         <li key={reply} className="max-w-full">
-          <button
-            type="button"
-            disabled={sending}
-            onClick={() => void pick(reply)}
-            className="max-w-full rounded-full border border-border bg-field px-4 py-2 text-left text-sm font-medium wrap-anywhere text-primary-text outline-none transition-colors select-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
-          >
+          <Button variant="reply" size="wraps" disabled={sending} onClick={() => void pick(reply)}>
             {reply}
-          </button>
+          </Button>
         </li>
       ))}
     </ul>

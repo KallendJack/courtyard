@@ -207,7 +207,7 @@ function Session(props: {
                 label="Delete session"
                 icon={<Trash2 />}
                 expanded={tidying === "delete"}
-                active={tidying === "delete"}
+                look={tidying === "delete" ? "pressed" : "quiet"}
                 onClick={() => toggle("delete")}
               />
             </>

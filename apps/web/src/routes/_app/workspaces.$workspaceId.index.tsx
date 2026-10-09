@@ -116,7 +116,7 @@ function Workspace() {
                 label="Archive workspace"
                 icon={<Archive />}
                 expanded={tidying === "archive"}
-                active={tidying === "archive"}
+                look={tidying === "archive" ? "pressed" : "quiet"}
                 onClick={() => toggle("archive")}
               />
             </>
