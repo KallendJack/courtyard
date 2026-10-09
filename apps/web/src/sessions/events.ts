@@ -47,6 +47,8 @@ export type Turn = {
   readonly activities: readonly Activity[];
   /** The saves it made, in order. */
   readonly notes: readonly Note[];
+  /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
+  readonly replies: readonly string[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -117,6 +119,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             replayed: 0,
             activities: [],
             notes: [],
+            replies: [],
             state: { kind: "running" },
           },
         ],
@@ -140,6 +143,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({ ...turn, activities: [...turn.activities, event.activity] }),
       });
+    case "suggested-replies":
+      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":

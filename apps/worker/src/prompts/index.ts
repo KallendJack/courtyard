@@ -10,7 +10,6 @@ import {
   type Save,
   type SessionEvent,
   type SkillName,
-  SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
   type WorkspaceMode,
 } from "@courtyard/contract";
@@ -26,6 +25,7 @@ import type {
 import type { Result } from "../result.ts";
 import type { SaveRefusal } from "../saves/index.ts";
 import type { UseSkillAnswer, UseSkillRefusal } from "../skills/index.ts";
+import type { RepliesRefusal } from "../suggested-replies/index.ts";
 import {
   type FileToolAnswer,
   type FileToolFound,
@@ -616,6 +616,30 @@ export const useSkillReply = (answer: UseSkillAnswer): ToolReply => {
     ? textReply(true, answer.value.text)
     : fileToolReply({ ok: true, value: answer.value.found });
 };
+
+/** Why suggested replies were refused, in the model's terms. */
+const repliesRefusalReason = (refusal: RepliesRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That input doesn't fit this tool: it takes replies, a list of two or three texts.";
+    case "count":
+      return `Suggest two or three replies, not ${refusal.count}.`;
+    case "not-short":
+      return `Each reply is a few words on one line, at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters.`;
+    case "repeated":
+      return "Two of those replies are the same: make each one different.";
+    case "already":
+      return "You've already suggested replies in this answer.";
+    case "stopped":
+      return "The owner stopped this turn, so no replies are shown.";
+  }
+};
+
+/** What a model is told about the replies it suggested: that the owner sees them, or why not. */
+export const suggestRepliesReply = (shown: Result<unknown, RepliesRefusal>): ToolReply =>
+  shown.ok
+    ? textReply(true, "The owner sees them as buttons under your answer.")
+    : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */
 const refusalReason = (refusal: SaveRefusal) => {

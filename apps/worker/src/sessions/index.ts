@@ -33,7 +33,9 @@ import {
   notOfferedReply,
   SAVE_TOOL_NAME,
   saveReply,
+  SUGGEST_REPLIES_TOOL_NAME,
   skillsInUse,
+  suggestRepliesReply,
   TITLING,
   TitleAnswer,
   titleMessage,
@@ -57,6 +59,7 @@ import {
   undoSave,
 } from "../saves/index.ts";
 import { inUseTexts, type SkillsWorkspace, skillTool, workspaceSkills } from "../skills/index.ts";
+import { createTurnReplies } from "../suggested-replies/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
@@ -516,10 +519,21 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        const suggest = createTurnReplies({
+          stopped: () => stopper.signal.aborted || recordingLost,
+          record: async (replies) => {
+            const recorded = await append(turn.id, {
+              type: "suggested-replies",
+              replies: [...replies],
+            });
+            if (!recorded.ok) recordingLost = true;
+          },
+        });
         /** What answers each of Courtyard's tools, by name: only those the framing offers. */
         const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
+          [SUGGEST_REPLIES_TOOL_NAME]: async (input) => suggestRepliesReply(await suggest(input)),
         };
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
           const answer = answers[call.name];
