@@ -283,7 +283,7 @@ const judgeTurn = (judge: {
           {
             miss: hasWords(answer, { words: says })
               ? null
-              : `expected the answer to say ${describeWords(says)}`,
+              : `expected the answer to say ${describeWords(says)}; it began ${answer.slice(0, 300).replace(/\s+/g, " ")}`,
           },
         ];
   return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said];
