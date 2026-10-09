@@ -9,8 +9,8 @@ import { type ContextPlace, startGettingToKnow } from "../worker.ts";
 
 /**
  * An offer to get to know an empty workspace or owner context (docs/ai-conduct.md, Getting to
- * know a workspace): a new session the worker starts with its own message, answered by the first
- * model that saves to context and isn't at its usage limit, which the worker picks.
+ * know a workspace): a new session the worker starts with the Get to know or Get to know me skill,
+ * answered by the first model that saves to context and isn't at its usage limit.
  */
 export function GetToKnow(props: {
   about: ContextPlace;

@@ -9,20 +9,25 @@ import {
   placeName,
   type Save,
   type SessionEvent,
+  type SkillName,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import type {
   CourtyardTool,
-  FileContent,
-  FileReply,
   FileTools,
   Framing,
-  SaveReply,
+  ToolContent,
+  ToolReply,
+  TurnTool,
+  TurnToolName,
 } from "../providers/index.ts";
 import type { Result } from "../result.ts";
 import type { SaveRefusal } from "../saves/index.ts";
+import type { UseSkillAnswer, UseSkillRefusal } from "../skills/index.ts";
+import type { RepliesRefusal } from "../suggested-replies/index.ts";
 import {
   type FileToolAnswer,
   type FileToolFound,
@@ -66,8 +71,11 @@ export const sharedOwnerContext = (
     : { shared: "none", text: null };
 };
 
-/** The markers that keep the owner's, the workspace's and the session's text apart from the instructions. */
-const MARKERS = ["owner_context", "context_file", "conversation"] as const;
+/**
+ * The markers that keep the owner's, the workspace's and the session's text apart from the
+ * instructions, and each skill's text apart from the rest (ADR 0016).
+ */
+const MARKERS = ["owner_context", "context_file", "conversation", "skills", "skill"] as const;
 const CLOSING_MARKER = new RegExp(`<\\s*/\\s*(${MARKERS.join("|")})\\s*>`, "gi");
 
 /** Stops text from closing a marker, in any spelling a model might read as one. */
@@ -121,7 +129,8 @@ const contextFilePart = (
   ].join("\n\n");
 };
 
-const SAVE_TOOL_NAME = "save_to_context";
+/** The save tool's name, as a model calls it (ADR 0013). */
+export const SAVE_TOOL_NAME = "save_to_context" satisfies TurnToolName;
 
 /** What every save follows, wherever it's made: the note the owner sees, and earlier saves. */
 const SAVES_SHOWN = [
@@ -185,7 +194,7 @@ const SAVE_INPUT: CourtyardTool["input"] = {
 };
 
 /** The save tool's description and inputs, as the model reads them, in each kind of workspace. */
-const SAVE_TOOLS: Record<WorkspaceMode, CourtyardTool> = {
+const SAVE_TOOLS: Record<WorkspaceMode, TurnTool> = {
   planning: {
     name: SAVE_TOOL_NAME,
     description:
@@ -198,6 +207,48 @@ const SAVE_TOOLS: Record<WorkspaceMode, CourtyardTool> = {
       "Saves one line to How to answer me in the owner context: adds a preference, changes the line a label names, or removes it. Follow the saving rules in your instructions.",
     input: SAVE_INPUT,
   },
+};
+
+/** Why a save was refused, in the model's terms. */
+const refusalReason = (refusal: SaveRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That save is missing something: add takes a section and text, change takes a section, a label and text, and remove takes a label. The answers section is only in the owner context.";
+    case "unknown-label":
+      return `There's no line labelled ${refusal.label}.`;
+    case "stale": {
+      const lines = refusal.lines.map(({ label, line }) => `[${label}] ${line}`);
+      return `That line has changed since you were shown it. The lines now, whose labels count from here on:\n${lines.length === 0 ? "(none)" : lines.join("\n")}`;
+    }
+    case "duplicate":
+      return `That's already saved: "${refusal.line}". Change that line if it needs to change.`;
+    case "not-one-line":
+      return "A save is one line of text.";
+    case "too-long":
+      return `That line is over ${CONTEXT_LINE_MAX_CHARACTERS} characters, which is more than one fact. Save it as shorter lines.`;
+    case "code-workspace":
+      return 'In a code workspace you can save only to How to answer me in the owner context (place "owner", section answers).';
+    case "stopped":
+      return "The owner stopped this turn, so nothing more is saved.";
+    case "not-offered":
+      return "This turn has no save tool.";
+    case "storage":
+      return "The context couldn't be saved just now.";
+  }
+};
+
+/**
+ * What a model is told about its save. A refused save can be put right once; after a second
+ * refusal in a row it carries on without it.
+ */
+export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean): ToolReply => {
+  if (saved.ok) return textReply(true, "Saved.");
+  const reason = refusalReason(saved.error);
+  const final = retrying || ["stopped", "not-offered", "storage"].includes(saved.error.kind);
+  return textReply(
+    false,
+    `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
+  );
 };
 
 /** Ends every file tool's description: the one limit a model is told about. */
@@ -253,11 +304,192 @@ const FILE_TOOLS: FileTools = {
   },
 };
 
+/** The use skill tool's name, as a model calls it (ADR 0016). */
+export const USE_SKILL_TOOL_NAME = "use_skill" satisfies TurnToolName;
+
+/** What a model is told when it reaches outside a skill's folder for one of its files. */
+const OUTSIDE_SKILL = "Only files in the skill's folder can be read.";
+
+/**
+ * The use skill tool as a model reads it (docs/ai-conduct.md, Skills): a skill's instructions, or
+ * one of its own files, and that only the skill's folder can be reached.
+ */
+const USE_SKILL_TOOL: TurnTool = {
+  name: USE_SKILL_TOOL_NAME,
+  description: `Loads one of the skills listed in your instructions: its instructions (its SKILL.md), or, given a path as well, one of the skill's own files, as text. ${OUTSIDE_SKILL}`,
+  input: {
+    name: z.string().describe("The skill's name, as listed."),
+    path: z
+      .string()
+      .optional()
+      .describe(
+        "One of the skill's own files, from the skill's folder, such as references/notes.md. Leave it out for the skill's instructions.",
+      ),
+    start_line: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("For a long file, the line to read on from; 1 is the first."),
+  },
+};
+
+/** Why the use skill tool gave nothing, in the model's terms. */
+const useSkillRefusalReason = (refusal: UseSkillRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That input doesn't fit this tool: it takes a skill's name, and a path for one of its files.";
+    case "unknown":
+      return `There's no skill called ${refusal.name} here: the skills you can load are in your instructions.`;
+    case "owner-only":
+      return `Only the owner starts ${refusal.name}.`;
+    case "unreadable":
+      return "That skill couldn't be read just now.";
+    case "file":
+      return refusal.refusal.kind === "outside"
+        ? OUTSIDE_SKILL
+        : fileRefusalReason(refusal.refusal);
+  }
+};
+
+/** What a model is told about a call to the use skill tool: the skill's text, or why not. */
+export const useSkillReply = (answer: UseSkillAnswer): ToolReply => {
+  if (!answer.ok) return textReply(false, useSkillRefusalReason(answer.error));
+  return answer.value.kind === "instructions"
+    ? textReply(true, answer.value.text)
+    : fileToolReply({ ok: true, value: answer.value.found });
+};
+
+/** The suggest replies tool's name, as a model calls it (ADR 0017). */
+export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies" satisfies TurnToolName;
+
+/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 11). */
+const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them before you finish, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
+
+/** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
+const SUGGEST_REPLIES_TOOL: TurnTool = {
+  name: SUGGEST_REPLIES_TOOL_NAME,
+  description:
+    "Offers the owner two or three replies to the question your answer ends with, shown as buttons under your answer that send one with a tap. Follow the rule for suggested replies in your instructions.",
+  input: {
+    replies: z
+      .array(z.string())
+      .describe(
+        `Two or three different replies, each a few words on one line (at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters), as the owner would say it.`,
+      ),
+  },
+};
+
+/** Why suggested replies were refused, in the model's terms. */
+const repliesRefusalReason = (refusal: RepliesRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That input doesn't fit this tool: it takes replies, a list of two or three texts.";
+    case "count":
+      return `Suggest two or three replies, not ${refusal.count}.`;
+    case "not-short":
+      return `Each reply is a few words on one line, at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters.`;
+    case "repeated":
+      return "Two of those replies are the same: make each one different.";
+    case "already":
+      return "You've already suggested replies in this answer.";
+    case "stopped":
+      return "The owner stopped this turn, so no replies are shown.";
+  }
+};
+
+/**
+ * What a model is told when its replies are taken, by what its answer had written by then
+ * (docs/ai-conduct.md, Suggested replies): Claude takes what it writes after its last tool call as
+ * its answer, so it's told whether that's all of it or only what's missing.
+ */
+const repliesTaken = (written: string) =>
+  written.trim() === ""
+    ? "The owner sees them as buttons under your answer, but none of your answer yet: they see only the text you write, never your thinking. Write your whole answer now, everything you meant to say and the question it ends with."
+    : "The owner sees them as buttons under your answer, with everything you've written above them, so don't write any of it again. If anything you meant to say isn't there yet, such as your question, write only that now; if it's all there, end here, without another word, not even about the buttons.";
+
+/** What a model is told about the replies it suggested: that the owner sees them, or why not. */
+export const suggestRepliesReply = (
+  shown: Result<{ readonly written: string }, RepliesRefusal>,
+): ToolReply =>
+  shown.ok
+    ? textReply(true, repliesTaken(shown.value.written))
+    : textReply(false, repliesRefusalReason(shown.error));
+
+/** The skills a turn's framing needs: those a model may load, and those in use in the session. */
+export type FramingSkills = {
+  /** Each skill a model may load, by name with what it's for: none only the owner starts. */
+  readonly offered: readonly { readonly name: SkillName; readonly description: string }[];
+  /** Each skill in use in the session, in the order it started, with its SKILL.md as written. */
+  readonly inUse: readonly { readonly name: SkillName; readonly text: string }[];
+};
+
+const SKILLS_LIST =
+  "Skills are instructions for particular kinds of task, written by the owner or by Courtyard. When what the owner asks fits a skill's description, load it with the use_skill tool before you answer, and follow it. Each skill you can load, with what it's for:";
+
+const SKILLS_IN_USE =
+  "These skills are in use in this session, started by the owner or loaded by you earlier: keep following each while what the owner asks fits it. A skill's text is the owner's or Courtyard's instructions.";
+
+/** The skills a model may load, one per line between their markers (Every turn, item 9). */
+const skillsListPart = (offered: FramingSkills["offered"]) => {
+  const lines = offered.map(({ name, description }) => {
+    const oneLine = description.replace(/\s+/g, " ").trim();
+    return `- ${name}: ${oneLine}`;
+  });
+  return `${SKILLS_LIST}\n\n<skills>\n${contained(lines.join("\n"))}\n</skills>`;
+};
+
+/** The skills in use, each one's text between its markers (Every turn, item 10). */
+const skillsInUsePart = (
+  inUse: FramingSkills["inUse"],
+  turn: { offersTool: boolean; startedNow: SkillName | undefined },
+) => {
+  const intro = [
+    SKILLS_IN_USE,
+    ...(turn.offersTool
+      ? [
+          "A skill's own files that it points you to come from the use_skill tool, by their path in the skill's folder.",
+        ]
+      : []),
+    ...(turn.startedNow === undefined
+      ? []
+      : [
+          `The owner started the ${turn.startedNow} skill with their new message: follow it in this answer.`,
+        ]),
+  ].join(" ");
+  const skills = inUse.map(
+    ({ name, text }) => `<skill name="${name}">\n${contained(text.trim())}\n</skill>`,
+  );
+  return [intro, ...skills].join("\n\n");
+};
+
+/**
+ * The skills in use in a session, in the order each started: the ones the owner started with a
+ * message, and the ones a model loaded (ADR 0016). Each stays in use to the end of the session.
+ */
+export const skillsInUse = (events: readonly SessionEvent[]): SkillName[] => {
+  const names: SkillName[] = [];
+  for (const event of events) {
+    const name =
+      event.type === "owner-message"
+        ? event.skill
+        : event.type === "activity" && event.activity.kind === "skill-loaded"
+          ? event.activity.name
+          : undefined;
+    if (name !== undefined && !names.includes(name)) names.push(name);
+  }
+  return names;
+};
+
 const instructionsFor = (turn: {
   workspace: FramingWorkspace;
   capabilities: Capabilities;
   now: number;
   saves: boolean;
+  skills: FramingSkills;
+  offersSkillTool: boolean;
+  startedNow: SkillName | undefined;
+  suggests: boolean;
 }) => {
   const { workspace, capabilities } = turn;
   const fromOwner = sharedOwnerContext(workspace);
@@ -275,6 +507,16 @@ const instructionsFor = (turn: {
       ownerContext: fromOwner.text !== null,
     }),
     ...(turn.saves ? [workspace.mode === "planning" ? SAVING : SAVING_IN_CODE] : []),
+    ...(turn.skills.offered.length > 0 ? [skillsListPart(turn.skills.offered)] : []),
+    ...(turn.skills.inUse.length > 0
+      ? [
+          skillsInUsePart(turn.skills.inUse, {
+            offersTool: turn.offersSkillTool,
+            startedNow: turn.startedNow,
+          }),
+        ]
+      : []),
+    ...(turn.suggests ? [SUGGESTING] : []),
   ].join("\n\n");
 };
 
@@ -289,7 +531,7 @@ type SaidSave = {
 
 /** One thing said in a session, and for an answer, how its turn ended and what it saved. */
 type Said =
-  | { readonly speaker: "owner"; readonly text: string }
+  | { readonly speaker: "owner"; readonly text: string; readonly skill: SkillName | undefined }
   | {
       readonly speaker: "model";
       readonly text: string;
@@ -315,7 +557,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   for (const event of events) {
     switch (event.type) {
       case "owner-message":
-        said.push({ speaker: "owner", text: event.text });
+        said.push({ speaker: "owner", text: event.text, skill: event.skill });
         break;
       case "text-delta":
         answer((current) => ({ text: current.text + event.text }));
@@ -347,6 +589,8 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       }
       case "activity":
       case "session-titled":
+      // The owner's reply follows, as written (docs/ai-conduct.md, Suggested replies).
+      case "suggested-replies":
       // The model isn't told the session moved to it (docs/ai-conduct.md).
       case "model-changed":
         break;
@@ -392,7 +636,11 @@ const answerLine = (said: ModelSaid) => {
 };
 
 const lineFor = (said: Said) => {
-  if (said.speaker === "owner") return `Owner: ${said.text}`;
+  if (said.speaker === "owner") {
+    return said.skill === undefined
+      ? `Owner: ${said.text}`
+      : `Owner (started the ${said.skill} skill): ${said.text}`;
+  }
   if (said.saves.length === 0) return answerLine(said);
   return `${answerLine(said)}\n\nYour saves in this answer:\n${said.saves.map(saveLine).join("\n")}`;
 };
@@ -405,13 +653,16 @@ const messageFor = (earlier: readonly Said[], newest: string) => {
 
 /**
  * What a model is told for the turn that the session's last owner message starts: the
- * instructions for this workspace and provider, the conversation ending with that message, and
- * the save tool when the turn offers it: to a provider that saves.
+ * instructions for this workspace and provider, the skills it may load (on every turn) and those in
+ * use, the conversation ending with that message, and Courtyard's tools the turn offers. A provider
+ * that saves takes Courtyard's tools, so it's offered the save tool, and the use skill tool when
+ * there's a skill to use.
  */
 export const framingFor = (turn: {
   workspace: FramingWorkspace;
   capabilities: Capabilities;
   events: readonly SessionEvent[];
+  skills: FramingSkills;
   /** The time now, for today's date. */
   now: number;
 }): Framing => {
@@ -419,56 +670,40 @@ export const framingFor = (turn: {
   const newest = said.at(-1);
   const newMessage = newest?.speaker === "owner" ? newest.text : "";
   const saves = turn.capabilities.savesContext;
+  const offersSkillTool = saves && (turn.skills.offered.length > 0 || turn.skills.inUse.length > 0);
+  const startedNow = newest?.speaker === "owner" ? newest.skill : undefined;
+  // Offered beside the save tool in a planning workspace (ADR 0017).
+  const suggests = saves && turn.workspace.mode === "planning";
   return {
-    instructions: instructionsFor({ ...turn, saves }),
+    instructions: instructionsFor({
+      ...turn,
+      saves,
+      suggests,
+      offersSkillTool,
+      startedNow: turn.skills.inUse.some((skill) => skill.name === startedNow)
+        ? startedNow
+        : undefined,
+    }),
     message: messageFor(newest?.speaker === "owner" ? said.slice(0, -1) : said, newMessage),
     newMessage,
-    saveTool: saves ? SAVE_TOOLS[turn.workspace.mode] : null,
+    tools: [
+      ...(saves ? [SAVE_TOOLS[turn.workspace.mode]] : []),
+      ...(offersSkillTool ? [USE_SKILL_TOOL] : []),
+      ...(suggests ? [SUGGEST_REPLIES_TOOL] : []),
+    ],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
   };
 };
 
-/** Why a save was refused, in the model's terms. */
-const refusalReason = (refusal: SaveRefusal) => {
-  switch (refusal.kind) {
-    case "malformed":
-      return "That save is missing something: add takes a section and text, change takes a section, a label and text, and remove takes a label. The answers section is only in the owner context.";
-    case "unknown-label":
-      return `There's no line labelled ${refusal.label}.`;
-    case "stale": {
-      const lines = refusal.lines.map(({ label, line }) => `[${label}] ${line}`);
-      return `That line has changed since you were shown it. The lines now, whose labels count from here on:\n${lines.length === 0 ? "(none)" : lines.join("\n")}`;
-    }
-    case "duplicate":
-      return `That's already saved: "${refusal.line}". Change that line if it needs to change.`;
-    case "not-one-line":
-      return "A save is one line of text.";
-    case "too-long":
-      return `That line is over ${CONTEXT_LINE_MAX_CHARACTERS} characters, which is more than one fact. Save it as shorter lines.`;
-    case "code-workspace":
-      return 'In a code workspace you can save only to How to answer me in the owner context (place "owner", section answers).';
-    case "stopped":
-      return "The owner stopped this turn, so nothing more is saved.";
-    case "not-offered":
-      return "This turn has no save tool.";
-    case "storage":
-      return "The context couldn't be saved just now.";
-  }
-};
+/** A tool's reply that's only words. */
+const textReply = (ok: boolean, text: string): ToolReply => ({
+  ok,
+  content: [{ kind: "text", text }],
+});
 
-/**
- * What a model is told about its save. A refused save can be put right once; after a second
- * refusal in a row it carries on without it.
- */
-export const saveReply = (saved: Result<unknown, SaveRefusal>, retrying: boolean): SaveReply => {
-  if (saved.ok) return { saved: true, reply: "Saved." };
-  const reason = refusalReason(saved.error);
-  const final = retrying || ["stopped", "not-offered", "storage"].includes(saved.error.kind);
-  return {
-    saved: false,
-    reply: `${reason}\n\n${final ? "Carry on without saving it." : "You can put it right and try once more."}`,
-  };
-};
+/** What a model is told when it calls one of Courtyard's tools that this turn doesn't offer. */
+export const notOfferedReply = (name: string) =>
+  textReply(false, `This turn has no tool called ${name}.`);
 
 /**
  * What a model is told when it reaches outside the workspace folder, by Claude Code's tools or
@@ -501,7 +736,7 @@ const fileRefusalReason = (refusal: FileToolRefusal) => {
 };
 
 /** What a file tool found, as the model reads it. */
-const foundWords = (found: FileToolFound): FileContent[] => {
+const foundWords = (found: FileToolFound): ToolContent[] => {
   switch (found.kind) {
     case "listing": {
       if (found.names.length === 0) return [{ kind: "text", text: "The folder is empty." }];
@@ -535,27 +770,10 @@ const foundWords = (found: FileToolFound): FileContent[] => {
 };
 
 /** What a model is told about a call to one of Courtyard's file tools: what it found, or why not. */
-export const fileToolReply = (answer: FileToolAnswer): FileReply =>
+export const fileToolReply = (answer: FileToolAnswer): ToolReply =>
   answer.ok
-    ? { found: true, content: foundWords(answer.value) }
-    : { found: false, content: [{ kind: "text", text: fileRefusalReason(answer.error) }] };
-
-/**
- * The starter messages that get to know an empty workspace or owner context (docs/ai-conduct.md,
- * Getting to know a workspace), sent as the owner's first message. The first line is the title.
- */
-export const GET_TO_KNOW = {
-  workspace: [
-    "Get to know this workspace.",
-    "",
-    "Ask me about it one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you as you go. Start with what it's for; later, where things stand, what I've decided and what I'm still considering. I'll say when I've had enough.",
-  ].join("\n"),
-  owner: [
-    "Get to know me.",
-    "",
-    "Ask me about my life in general one question per message, two at most and no follow-ups, for about five rounds, and save what I tell you to my owner context as you go: where I live and who with, work, health, plans and how I like answers. I'll say when I've had enough.",
-  ].join("\n"),
-} as const;
+    ? { ok: true, content: foundWords(answer.value) }
+    : textReply(false, fileRefusalReason(answer.error));
 
 /**
  * What a tidy's model is told (docs/ai-conduct.md, Tidying, which quotes it): changes to propose,

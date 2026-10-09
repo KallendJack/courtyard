@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -15,6 +15,7 @@ import {
   type WorkspaceId,
   WorkspaceSummary,
 } from "@courtyard/contract";
+import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
 import { OWNER_FILE } from "../src/owner-context/index.ts";
 import {
@@ -22,7 +23,14 @@ import {
   createCodexProvider,
   type Provider,
 } from "../src/providers/index.ts";
-import { asOwner, followSession, postJson, type Requester, testWorker } from "../src/testing.ts";
+import {
+  asOwner,
+  followSession,
+  postJson,
+  type Requester,
+  testWorker,
+  writeSkill,
+} from "../src/testing.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
@@ -31,6 +39,7 @@ import {
   type Places,
   SCENARIOS,
   type Scenario,
+  type ScenarioSkill,
   type Sections,
   type Turn,
   type Words,
@@ -90,7 +99,15 @@ type Check = { readonly miss: string | null };
  * which leaves it out of the score.
  */
 type Verdict =
-  | { readonly kind: "judged"; readonly scenario: Scenario; readonly checks: readonly Check[] }
+  | {
+      readonly kind: "judged";
+      readonly scenario: Scenario;
+      readonly checks: readonly Check[];
+      /** What each turn did that isn't scored on its own, such as the skills it loaded. */
+      readonly notes: readonly string[];
+    }
+  /** A scenario that only prints what the model did, for the owner to read (`printsTopics`). */
+  | { readonly kind: "printed"; readonly scenario: Scenario; readonly notes: readonly string[] }
   | { readonly kind: "not-run"; readonly scenario: Scenario; readonly reason: string };
 
 const passed = (verdict: Verdict) =>
@@ -181,25 +198,43 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
 
 /**
  * The questions an answer asks, sentence by sentence. An example put as a question ("For
- * example, is it…?") belongs to the question before it rather than counting as one of its own.
+ * example, is it…?"), or the same question put again as its likely answers ("Is it X, Y or Z?",
+ * "Or not?"), belongs to the question before it rather than counting as one of its own.
  */
 const questionsIn = (answer: string) => {
   const questions: string[] = [];
   for (const sentence of answer.match(/[^.!?\n]*\?/g) ?? []) {
     const last = questions.at(-1);
     const example = /^[\s*_]*(for example|for instance|e\.g\.)/i.test(sentence);
-    if (example && last !== undefined) questions[questions.length - 1] = `${last} ${sentence}`;
-    else questions.push(sentence);
+    // The same question put again as its likely answers: "…? Is it X, Y or Z?", "…? Or not?"
+    const options = /^[\s*_]*or\b/i.test(sentence) || /,.*\bor\b/i.test(sentence);
+    if ((example || options) && last !== undefined) {
+      questions[questions.length - 1] = `${last} ${sentence}`;
+    } else questions.push(sentence);
   }
   return questions;
 };
+
+/** The items of the lists in an answer, such as the topics Get to know plans, in order. */
+const listItemsIn = (answer: string) =>
+  (answer.match(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+.+$/gm) ?? []).map((item) =>
+    item.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/, "").trim(),
+  );
 
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
  * that's wrong can't take the place of one that's right.
  */
-const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }): Check[] => {
+const judgeTurn = (judge: {
+  turn: Turn;
+  saves: readonly Save[];
+  answer: string;
+  /** The skills the model loaded itself in the turn, in order. */
+  loaded: readonly string[];
+  /** The replies the answer suggested, if any. */
+  replies: readonly string[];
+}): Check[] => {
   const { turn, answer } = judge;
   const left = [...judge.saves];
   const take = (matches: (save: Save) => boolean) => {
@@ -238,10 +273,115 @@ const judgeTurn = (judge: { turn: Turn; saves: readonly Save[]; answer: string }
             miss:
               asked.length >= questions.atLeast && asked.length <= questions.atMost
                 ? null
-                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim()}`,
+                : `expected ${questions.atLeast} to ${questions.atMost} questions; asked ${asked.length}: ${asked.join(" ").trim() || `the answer ends "${answer.trim().slice(-160)}"`}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany];
+  const { loads } = turn;
+  const loadedRight = (wanted: readonly string[]) =>
+    [...new Set(judge.loaded)].sort().join(",") === [...wanted].sort().join(",");
+  const skills: Check[] =
+    loads === undefined
+      ? []
+      : [
+          {
+            miss: loadedRight(loads)
+              ? null
+              : `expected to load ${loads.join(", ") || "no skill"}; loaded ${judge.loaded.join(", ") || "none"}`,
+          },
+        ];
+  const { says } = turn;
+  const said: Check[] =
+    says === undefined
+      ? []
+      : [
+          {
+            miss: hasWords(answer, { words: says })
+              ? null
+              : `expected the answer to say ${describeWords(says)}; it began ${answer.slice(0, 300).replace(/\s+/g, " ")}`,
+          },
+        ];
+  const { suggests } = turn;
+  const suggested = judge.replies.length > 0;
+  const replies: Check[] =
+    suggests === undefined
+      ? []
+      : [
+          {
+            miss:
+              suggests === suggested
+                ? null
+                : suggests
+                  ? `expected suggested replies; suggested none after: ${asked.join(" ").trim() || "no question"}`
+                  : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
+          },
+        ];
+  const topics = listItemsIn(answer);
+  const listed: Check[] =
+    turn.listsTopics === undefined
+      ? []
+      : [
+          {
+            miss:
+              turn.listsTopics === topics.length >= 2
+                ? null
+                : turn.listsTopics
+                  ? `expected a list of topics; the answer starts "${answer.trim().slice(0, 160)}"`
+                  : `expected no list of topics; listed ${topics.join("; ")}`,
+          },
+        ];
+  const known = (turn.avoids ?? []).filter((words) =>
+    asked.some((one) => hasWords(one, { words })),
+  );
+  const avoided: Check[] =
+    turn.avoids === undefined
+      ? []
+      : [
+          {
+            miss:
+              known.length === 0
+                ? null
+                : `asked what's known (${known.map(describeWords).join("; ")}): ${asked.join(" ").trim()}`,
+          },
+        ];
+  return [
+    ...saveChecks,
+    nothingElse,
+    ...question,
+    ...howMany,
+    ...skills,
+    ...said,
+    ...replies,
+    ...listed,
+    ...avoided,
+  ];
+};
+
+/**
+ * A house skills folder for a scenario with house skills of its own: Courtyard's, with the
+ * scenario's beside them in skills.json. `undefined` when it adds none.
+ */
+const houseFor = async (root: string, skills: readonly ScenarioSkill[]) => {
+  const extra = skills.filter((skill) => skill.where === "house");
+  if (extra.length === 0) return undefined;
+  const folder = join(root, "house");
+  const manifest = await readHouseManifest();
+  if (!manifest.ok) throw new Error(manifest.error);
+  for (const { name } of manifest.value.skills) {
+    await cp(join(HOUSE_SKILLS_FOLDER, name), join(folder, name), { recursive: true });
+  }
+  for (const { name, description, body } of extra) {
+    await writeSkill(folder, name, { description, body });
+  }
+  const entries = extra.map(({ name, start }) => ({
+    name,
+    workspaces: ["planning", "code"],
+    ...(start === undefined ? {} : { start }),
+  }));
+  await writeFile(
+    join(folder, "skills.json"),
+    JSON.stringify({ skills: [...manifest.value.skills, ...entries] }),
+  );
+  return folder;
 };
 
 const withTimeout = <T>(work: Promise<T>, what: string) =>
@@ -258,13 +398,20 @@ const withTimeout = <T>(work: Promise<T>, what: string) =>
 /** Sends the owner's message, starting the session for the first, and returns the session's id. */
 const send = async (
   request: Requester,
-  to: { workspaceId: WorkspaceId; sessionId: SessionId | undefined; text: string; choice: Choice },
+  to: {
+    workspaceId: WorkspaceId;
+    sessionId: SessionId | undefined;
+    text: string;
+    skill: string | undefined;
+    choice: Choice;
+  },
 ): Promise<SessionId> => {
   const { provider, model, effort } = to.choice;
   const message = {
     text: to.text,
     model: { provider: provider.id, model },
     ...(effort === undefined ? {} : { effort }),
+    ...(to.skill === undefined ? {} : { skill: to.skill }),
   };
   if (to.sessionId === undefined) {
     const started = await postJson(request, `/api/workspaces/${to.workspaceId}/sessions`, message);
@@ -332,7 +479,12 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
   const root = await mkdtemp(join(tmpdir(), "courtyard-eval-"));
   try {
     await mkdir(join(root, "context"));
-    const app = testWorker({ root, providers: [choice.provider] });
+    const houseSkills = await houseFor(root, scenario.skills ?? []);
+    const app = testWorker({
+      root,
+      providers: [choice.provider],
+      ...(houseSkills === undefined ? {} : { houseSkills }),
+    });
     const request = await asOwner(app);
     const made = await postJson(request, "/api/workspaces", { name: scenario.workspace });
     if (made.status !== 201) throw new Error(`adding the workspace failed (${made.status})`);
@@ -351,6 +503,14 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       await mkdir(dirname(join(folder, path)), { recursive: true });
       await writeFile(join(folder, path), text);
     }
+    for (const skill of scenario.skills ?? []) {
+      if (skill.where === "house") continue;
+      const skillsDir =
+        skill.where === "workspace"
+          ? join(folder, ".agents", "skills")
+          : join(root, "context", ".agents", "skills");
+      await writeSkill(skillsDir, skill.name, { description: skill.description, body: skill.body });
+    }
 
     if (scenario.tidy !== undefined) {
       const checks = await judgeTidy({
@@ -360,10 +520,11 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         tidy: scenario.tidy,
         choice,
       });
-      return { kind: "judged", scenario, checks };
+      return { kind: "judged", scenario, checks, notes: [] };
     }
 
     const checks: Check[] = [];
+    const notes: string[] = [];
     let sessionId: SessionId | undefined;
     let after = 0;
     for (const [index, turn] of scenario.turns.entries()) {
@@ -371,6 +532,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         workspaceId: workspace.id,
         sessionId,
         text: turn.say,
+        skill: turn.skill,
         choice,
       });
       const events = await withTimeout(
@@ -391,7 +553,34 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         .map((event) => (event.type === "text-delta" ? event.text : ""))
         .join("");
       const prefix = scenario.turns.length === 1 ? "" : `turn ${index + 1}: `;
-      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer });
+      const loaded = events.flatMap((event) =>
+        event.type === "activity" && event.activity.kind === "skill-loaded"
+          ? [event.activity.name]
+          : [],
+      );
+      if (loaded.length > 0) notes.push(`${prefix}loaded ${loaded.join(", ")}`);
+      const replies = events.flatMap((event) =>
+        event.type === "suggested-replies" ? event.replies : [],
+      );
+      if (replies.length > 0) {
+        notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
+      }
+      if (scenario.printsTopics || turn.listsTopics) {
+        const topics = listItemsIn(answer);
+        notes.push(
+          topics.length > 0
+            ? `${prefix}topics: ${topics.join(" | ")}`
+            : `${prefix}no topics listed; the answer: ${answer.trim().replace(/\s+/g, " ").slice(0, 600)}`,
+        );
+        notes.push(`${prefix}asked: ${questionsIn(answer).join(" ").trim() || "nothing"}`);
+      }
+      const judged = judgeTurn({
+        turn,
+        saves: saves.map(({ save }) => save),
+        answer,
+        loaded,
+        replies,
+      });
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {
@@ -406,7 +595,8 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         }
       }
     }
-    return { kind: "judged", scenario, checks };
+    if (scenario.printsTopics) return { kind: "printed", scenario, notes };
+    return { kind: "judged", scenario, checks, notes };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { kind: "not-run", scenario, reason };
@@ -436,8 +626,14 @@ const report = (verdict: Verdict) => {
     console.log(`----  ${verdict.scenario.name}: didn't run to the end: ${verdict.reason}`);
     return;
   }
+  if (verdict.kind === "printed") {
+    console.log(`info  ${verdict.scenario.name} (not scored)`);
+    for (const note of verdict.notes) console.log(`      ${note}`);
+    return;
+  }
   console.log(`${passed(verdict) ? "pass" : "MISS"}  ${verdict.scenario.name}`);
   for (const { miss } of verdict.checks) if (miss !== null) console.log(`      ${miss}`);
+  for (const note of verdict.notes) console.log(`      (${note})`);
 };
 
 const summarise = (scenarios: readonly Scenario[], verdicts: readonly Verdict[]) => {

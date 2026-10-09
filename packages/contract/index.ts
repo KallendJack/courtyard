@@ -28,6 +28,7 @@ export {
   FailureReason,
   FirstMessage,
   GetToKnowRequest,
+  GrillRequest,
   LinePlace,
   MAX_MESSAGE_LENGTH,
   ModelId,
@@ -49,10 +50,21 @@ export {
   SessionList,
   SessionSummary,
   StopRequest,
+  SUGGESTED_REPLIES,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
   takesEffort,
   UsageLimit,
 } from "./lib/session.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
+export { SkillName, SkillSource } from "./lib/skill-name.ts";
+export {
+  SKILL_SOURCE_NAMES,
+  SkillList,
+  SkillProblem,
+  SkillSummary,
+  skillTitle,
+  UsableSkillSummary,
+} from "./lib/skills.ts";
 export {
   TidyChange,
   TidyChangeKind,

@@ -67,7 +67,7 @@ test("a save to the owner context names its place, shows on the home page, and E
   await expect(panel.getByRole("region", { name: "Facts" })).not.toContainText("left knee");
 });
 
-test("an empty owner context offers Get to know me, which opens a session with the starter sent, until a line is saved", async ({
+test("an empty owner context offers Get to know me, which opens a session with the skill started, until a line is saved", async ({
   page,
 }) => {
   rmSync(OWNER_FILE, { force: true });
@@ -77,7 +77,7 @@ test("an empty owner context offers Get to know me, which opens a session with t
   await panel.getByRole("button", { name: "Get to know me", exact: true }).click();
 
   const session = page.getByRole("list", { name: "Session" });
-  await expect(session).toContainText("Ask me about my life in general one question per message");
+  await expect(session.getByText("Skill: Get to know me")).toBeVisible();
   await expect(session).toContainText("You said: Get to know me.");
   await page.getByLabel("Message").fill("save owner fact: Lives in Leeds.");
   await page.getByRole("button", { name: "Send" }).click();

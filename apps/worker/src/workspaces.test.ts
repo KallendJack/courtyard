@@ -295,6 +295,40 @@ describe("adding a workspace", () => {
     expect(contextFile?.intro).toContain("one line");
   });
 
+  it("starts the context file with what it's for, when the owner says, as its intro line", async () => {
+    const response = await postJson(request, "/api/workspaces", {
+      name: "Garage gym",
+      intro: "  Turning the garage into a home gym by Christmas  ",
+    });
+
+    expect(response.status).toBe(201);
+    const { contextFile } = await openWorkspace("garage-gym");
+    expect(contextFile).toMatchObject({
+      title: "Garage gym",
+      intro: "Turning the garage into a home gym by Christmas",
+      facts: [],
+      plans: [],
+      ideas: [],
+    });
+  });
+
+  it("starts with the hint when what it's for is left empty, and refuses more than one line", async () => {
+    await postJson(request, "/api/workspaces", { name: "Garage gym", intro: "   " });
+    const tooLong = await postJson(request, "/api/workspaces", {
+      name: "Shed",
+      intro: "x".repeat(251),
+    });
+    const twoLines = await postJson(request, "/api/workspaces", {
+      name: "Shed",
+      intro: "A shed.\nA big one.",
+    });
+
+    expect((await openWorkspace("garage-gym")).contextFile?.intro).toContain("one line");
+    expect([tooLong.status, twoLines.status]).toEqual([400, 400]);
+    expect(await errorOf(twoLines)).toContain("one line");
+    expect((await listWorkspaces()).map((w) => w.id)).toEqual(["garage-gym"]);
+  });
+
   it("makes a folder name from the name, keeping the name as written", async () => {
     const birthday = await added("  Nan's 80th Birthday!  ");
     const cafe = await added("Café plans");

@@ -1,13 +1,10 @@
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
-import {
-  createFakeProvider,
-  type Framing,
-  type Provider,
-  type SaveReply,
-} from "./providers/index.ts";
+import { SAVE_TOOL_NAME } from "./prompts/index.ts";
+import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -191,22 +188,39 @@ export const gatedProvider = () => {
   return { provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }), release };
 };
 
-/** For tests: one step of a scripted turn, a save the model asks for or something to do mid-turn. */
-export type ScriptedStep = Readonly<Record<string, unknown>> | (() => Promise<void>);
+/**
+ * For tests: one step of a scripted turn: a save the model asks for (its input), a call to another
+ * of Courtyard's tools by name (`call`), or something to do mid-turn.
+ */
+export type ScriptedStep =
+  | Readonly<Record<string, unknown>>
+  | { readonly call: string; readonly input: unknown }
+  /** Text the model writes at that point in its answer. */
+  | { readonly write: string }
+  | (() => Promise<void>);
+
+/** For tests: what the worker told a model about one of its tool calls: whether it did it, and what it said. */
+export type ToolCallReply = { readonly ok: boolean; readonly reply: string };
+
+const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
+  typeof step !== "function" && "call" in step && typeof step.call === "string";
+
+const isWrite = (step: ScriptedStep): step is { write: string } =>
+  typeof step !== "function" && "write" in step && typeof step.write === "string";
 
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
 
 /**
- * For tests: a provider that, in each turn, hands the worker the saves scripted for that turn in
- * order (running any function steps between them), keeps the worker's replies, and answers
- * "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
+ * For tests: a provider that, in each turn, hands the worker the saves and tool calls scripted for
+ * that turn in order (running any function steps between them), keeps the worker's replies, and
+ * answers "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
  */
 export const savingProvider = (
   turns: readonly (readonly ScriptedStep[])[],
   options: { holdAfterSaves?: boolean } = {},
 ) => {
-  const replies: SaveReply[][] = [];
+  const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
   const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
@@ -221,13 +235,24 @@ export const savingProvider = (
       capabilities,
     }),
     runTurn: async (input) => {
-      const turnReplies: SaveReply[] = [];
+      const turnReplies: ToolCallReply[] = [];
       const steps = turns[replies.length] ?? [];
       replies.push(turnReplies);
       framings.push(input.framing);
       for (const step of steps) {
         if (typeof step === "function") await step();
-        else turnReplies.push(await input.save(step));
+        else if (isWrite(step)) await input.emit(step.write);
+        else {
+          const reply = await input.callTool(
+            isCall(step)
+              ? { name: step.call, input: step.input }
+              : { name: SAVE_TOOL_NAME, input: step },
+          );
+          const text = reply.content
+            .map((part) => (part.kind === "text" ? part.text : ""))
+            .join("");
+          turnReplies.push({ ok: reply.ok, reply: text });
+        }
       }
       if (options.holdAfterSaves) {
         await new Promise((resolve) =>
@@ -241,6 +266,78 @@ export const savingProvider = (
     answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
   };
   return { provider, replies, framings };
+};
+
+/**
+ * For tests: writes a skill's folder in `skillsDir`: a SKILL.md with its name and description
+ * (none when it's empty) and `body`, any other files given, and a script when it has one.
+ */
+export const writeSkill = async (
+  skillsDir: string,
+  name: string,
+  options: {
+    description?: string;
+    body?: string;
+    files?: Readonly<Record<string, string>>;
+    scripts?: boolean;
+  } = {},
+) => {
+  const folder = join(skillsDir, name);
+  await mkdir(folder, { recursive: true });
+  const description = options.description ?? `What ${name} does.`;
+  const fields = [`name: ${name}`, ...(description === "" ? [] : [`description: ${description}`])];
+  const body = options.body ?? "Do it.";
+  await writeFile(join(folder, "SKILL.md"), `---\n${fields.join("\n")}\n---\n\n${body}\n`);
+  for (const [path, text] of Object.entries(options.files ?? {})) {
+    await mkdir(dirname(join(folder, path)), { recursive: true });
+    await writeFile(join(folder, path), text);
+  }
+  if (options.scripts) {
+    await mkdir(join(folder, "scripts"));
+    await writeFile(join(folder, "scripts", "run.sh"), "echo done\n");
+  }
+};
+
+/** For tests: a house skills package in `dir`, with `skills.json` and a stand-in for each skill. */
+export const writeHouseSkills = async (
+  dir: string,
+  skills: readonly { name: string; workspaces: readonly string[]; start?: string }[],
+) => {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "skills.json"), JSON.stringify({ skills }));
+  for (const { name } of skills) await writeSkill(dir, name);
+};
+
+/**
+ * For tests: what docs/ai-conduct.md quotes, from the quote starting with `firstWords` (inside a
+ * list item too): the quoted lines, wrapped lines joined back up, list items and paragraphs kept.
+ * Each `<placeholder>` in it is filled in from `filled`, as the model would read it.
+ */
+export const quotedInGuide = async (
+  firstWords: string,
+  filled: Readonly<Record<string, string>> = {},
+) => {
+  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
+  const lines = guide
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimStart());
+  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
+  if (start === -1) throw new Error(`docs/ai-conduct.md quotes nothing starting "${firstWords}"`);
+  const quoted: string[] = [];
+  for (const line of lines.slice(start)) {
+    if (!line.startsWith(">")) break;
+    quoted.push(line.replace(/^> ?/, ""));
+  }
+  const text = quoted
+    .join("\n")
+    .split("\n\n")
+    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
+    .join("\n\n");
+  return Object.entries(filled).reduce(
+    (quote, [name, value]) => quote.replaceAll(`<${name}>`, value),
+    text,
+  );
 };
 
 /** For tests: the context folder's changes, newest first: each one's title and trailers. */

@@ -29,8 +29,10 @@ export function SessionTurns(props: {
   providers: ProviderList["providers"];
   onRetry: (turn: Turn) => void;
   onCarryOn: (turn: Turn) => Promise<string | undefined>;
+  /** Sends a suggested reply; left out when the session can't be carried on. */
+  onReply?: (turn: Turn, reply: string) => Promise<boolean>;
 }) {
-  const { sessionId, turns, providers, onRetry, onCarryOn } = props;
+  const { sessionId, turns, providers, onRetry, onCarryOn, onReply } = props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -120,8 +122,9 @@ export function SessionTurns(props: {
               sessionId={sessionId}
               turn={turn}
               providers={providers}
-              // Only the last turn can be retried or carried on, so only it gets the handlers.
-              {...(turn === last ? { onRetry, onCarryOn } : {})}
+              // Only the last turn can be retried, carried on or replied to, so only it gets the
+              // handlers.
+              {...(turn === last ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}) } : {})}
             />
           </li>
         );

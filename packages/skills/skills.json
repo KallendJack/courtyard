@@ -1,0 +1,7 @@
+{
+  "skills": [
+    { "name": "grilling", "workspaces": ["planning", "code"] },
+    { "name": "get-to-know", "workspaces": ["planning"], "start": "owner" },
+    { "name": "get-to-know-me", "workspaces": ["planning"], "start": "owner" }
+  ]
+}

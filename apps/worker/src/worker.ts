@@ -6,12 +6,14 @@ import {
   type LiveStatus,
   NewWorkspace,
   type OwnerContextDetail,
+  type SkillList,
   WorkspaceChange,
   type WorkspaceDetail,
   WorkspaceId,
   type WorkspaceList,
   type WorkspaceSummary,
 } from "@courtyard/contract";
+import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -38,6 +40,7 @@ import { sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
 import { signInRoutes } from "./sign-ins/routes.ts";
+import { skillList, workspaceSkills } from "./skills/index.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -99,6 +102,8 @@ export const createWorker = (options: {
   startUpdate?: (command: UpdateCommand) => void | Promise<void>;
   /** Runs a job now and every `everyMs`. Tests run it themselves when they want it. */
   repeat?: Repeat;
+  /** The house skills' folder: the `@courtyard/skills` package, unless a test gives its own. */
+  houseSkills?: string;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -131,7 +136,15 @@ export const createWorker = (options: {
     now,
   );
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
-  const sessions = createSessions({ dataDir, providers, contextDir, contextFolder, now });
+  const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
+  const sessions = createSessions({
+    dataDir,
+    providers,
+    contextDir,
+    contextFolder,
+    houseSkills,
+    now,
+  });
   const live = createLive({
     liveCopy,
     updateTask,
@@ -190,7 +203,7 @@ export const createWorker = (options: {
     const body = await readBody(c, NewWorkspace);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const workspace = await contextFolder.change(
-      () => createWorkspace(contextDir, body.value.name),
+      () => createWorkspace(contextDir, body.value),
       (made) => workspaceChange(`New workspace: ${made.name}`, made.id),
     );
     if (!workspace.ok) return contextError(c, workspace.error);
@@ -242,6 +255,16 @@ export const createWorker = (options: {
       contextFile: workspace.value.contextFile,
       ownerContextShared: shared,
     } satisfies WorkspaceDetail);
+  });
+  api.get("/workspaces/:id/skills", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const skills = await workspaceSkills({
+      contextDir,
+      houseFolder: houseSkills,
+      workspace: workspace.value,
+    });
+    return c.json({ skills: skillList(skills) } satisfies SkillList);
   });
   api.get("/owner-context", async (c) => {
     const read = await readOwnerContext(contextDir);

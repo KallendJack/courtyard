@@ -1,5 +1,4 @@
 import type { OwnerSection, PlacedLine } from "@courtyard/contract";
-import { GET_TO_KNOW } from "../src/prompts/index.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
@@ -54,8 +53,41 @@ export type Turn = {
   readonly asks?: Words;
   /** How many questions the answer should ask, at least and at most. */
   readonly questions?: { readonly atLeast: number; readonly atMost: number };
+  /** Words the answer should have, such as a recommendation or a wrap-up's decisions. */
+  readonly says?: Words;
   /** After the answer, the owner undoes every save it made. */
   readonly undoSaves?: boolean;
+  /** A skill the owner starts with this message, by name (ADR 0016). */
+  readonly skill?: string;
+  /**
+   * The skills the model should load itself in this turn, by name, and no others; none means it
+   * loads none. Left out, whatever it loads isn't checked (it's still printed).
+   */
+  readonly loads?: readonly string[];
+  /**
+   * Whether the answer should suggest replies (ADR 0017): two or three, after a question with a
+   * few likely answers; or none, with an ordinary answer. Left out, it isn't checked (they're
+   * still printed).
+   */
+  readonly suggests?: boolean;
+  /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
+  readonly listsTopics?: boolean;
+  /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
+  readonly avoids?: readonly Words[];
+};
+
+/**
+ * A skill a scenario adds: in the workspace's .agents/skills, the context folder's top-level one
+ * (everywhere), or the house skills alongside Courtyard's own, where one can be owner-only.
+ */
+export type ScenarioSkill = {
+  readonly name: string;
+  readonly description: string;
+  /** What it says to do, after its frontmatter. */
+  readonly body: string;
+  readonly where: "workspace" | "everywhere" | "house";
+  /** Only the owner starts it (a house skill only). */
+  readonly start?: "owner";
 };
 
 export type Scenario = {
@@ -64,6 +96,8 @@ export type Scenario = {
   /** The saving rule it checks, in the eval's report. */
   readonly rule: string;
   readonly workspace: string;
+  /** The context file's intro line, what the workspace is for (What's it for?), when it has one. */
+  readonly intro?: string;
   readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
   /** A starting owner context, when there is one. */
   readonly owner?: { facts?: string[]; plans?: string[]; ideas?: string[]; answers?: string[] };
@@ -71,8 +105,15 @@ export type Scenario = {
   readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
+  /** Skills it adds to the workspace's, beyond Courtyard's house skills (ADR 0016). */
+  readonly skills?: readonly ScenarioSkill[];
   /** The conversation; none for a tidy. */
   readonly turns: readonly Turn[];
+  /**
+   * Printed for the owner to read, not scored: the topics each answer lists, such as Get to
+   * know's for a workspace name (#127).
+   */
+  readonly printsTopics?: boolean;
   /**
    * A tidy of the starting context file (docs/ai-conduct.md, Tidying), saved with every change
    * ticked: what must still be there afterwards, and lines that should be gone.
@@ -88,7 +129,78 @@ export type Scenario = {
   };
 };
 
+/** A skill of the owner's for one workspace, used by the skills scenarios. */
+const PACKING_LIST: ScenarioSkill = {
+  name: "packing-list",
+  description:
+    "Makes a packing list for a trip, from what the context file says about it. Use it when the owner asks what to take, bring or pack.",
+  body: "List what the trip needs, grouped by where it goes (sleeping, cooking, clothes), one thing per line, from what the context file says about the trip. Ask about anything that changes the list.",
+  where: "workspace",
+};
+
+/** A grilling's answer recommends an answer to its question (docs/ai-conduct.md, Grilling). */
+const RECOMMENDS: Words = [["recommend", "suggest", "i'd ", "i’d ", "i would", "my pick"]];
+
+/** The garage gym a grilling questions: a plan to grill, and facts it shouldn't ask about. */
+const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
+  workspace: "Garage gym",
+  context: {
+    facts: ["The garage is 5 m by 3 m", "The ceiling is 2.4 m high"],
+    plans: ["Put the squat rack on the left wall", "Buy a second-hand barbell by November"],
+  },
+};
+
 export const SCENARIOS: readonly Scenario[] = [
+  {
+    name: "grill-a-plan",
+    rule: "Grill this plan asks one question with a recommendation and suggested replies, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
+    ...GRILLED_GYM,
+    turns: [
+      {
+        say: "Put the squat rack on the left wall",
+        skill: "grilling",
+        expect: [],
+        questions: { atLeast: 1, atMost: 1 },
+        says: RECOMMENDS,
+        suggests: true,
+      },
+      {
+        say: "I've decided: the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
+        expect: [
+          {
+            action: "change",
+            was: "Put the squat rack on the left wall",
+            section: "plans",
+            words: ["back wall"],
+          },
+        ],
+      },
+      {
+        say: "That's enough for now, wrap it up.",
+        expect: [],
+        says: [
+          ["decided", "decision", "agreed"],
+          ["open", "undecided", "still to decide", "unresolved"],
+        ],
+        suggests: false,
+      },
+    ],
+  },
+  {
+    name: "grill-on-request",
+    rule: "a model loads Grilling itself when asked to grill a plan, and asks one question with a recommendation and suggested replies",
+    ...GRILLED_GYM,
+    turns: [
+      {
+        say: "Grill me on the barbell plan before I commit to it.",
+        expect: [],
+        loads: ["grilling"],
+        questions: { atLeast: 1, atMost: 1 },
+        says: RECOMMENDS,
+        suggests: true,
+      },
+    ],
+  },
   {
     name: "fact-in-passing",
     rule: "a fact stated in passing is saved",
@@ -443,21 +555,87 @@ export const SCENARIOS: readonly Scenario[] = [
       },
     ],
   },
-  // Get to know a workspace or the owner context (docs/ai-conduct.md).
+  // Get to know and Get to know me, the house skills only the owner starts (#127).
   {
     name: "get-to-know-workspace",
-    rule: "getting to know a workspace starts with one or two questions and saves nothing it wasn't told",
+    rule: "Get to know lists its topics, asks one question at a time without asking what's known, saves each answer and wraps up when the owner has had enough",
     workspace: "Allotment",
+    intro: "A half plot at the Rosebank allotments, growing veg for the family",
     context: {},
-    turns: [{ say: GET_TO_KNOW.workspace, expect: [], questions: { atLeast: 1, atMost: 2 } }],
+    owner: { facts: ["Lives in Leeds with partner Sam and two kids"] },
+    turns: [
+      {
+        say: "Get to know this workspace.",
+        skill: "get-to-know",
+        expect: [],
+        listsTopics: true,
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+        avoids: [
+          ["where", "plot"],
+          ["how big", "plot"],
+          ["where", "you live"],
+        ],
+        loads: [],
+      },
+      {
+        say: "Mostly potatoes, onions and runner beans.",
+        expect: [{ action: "add", section: "facts", words: ["potato"] }],
+        questions: { atLeast: 1, atMost: 1 },
+        loads: [],
+      },
+      {
+        say: "That's enough for now, thanks.",
+        expect: [],
+        questions: { atLeast: 0, atMost: 0 },
+        says: ["potato"],
+        loads: [],
+      },
+    ],
   },
   {
-    name: "get-to-know-owner",
-    rule: "getting to know the owner starts with one or two questions and saves nothing it wasn't told",
-    workspace: "House",
+    name: "get-to-know-me",
+    rule: "Get to know me lists its topics, asks one question at a time without asking what's known, saves each answer to the owner context and wraps up when the owner has had enough",
+    workspace: "Home",
     context: {},
-    turns: [{ say: GET_TO_KNOW.owner, expect: [], questions: { atLeast: 1, atMost: 2 } }],
+    owner: { facts: ["Lives in Leeds with partner Sam"], answers: ["Metric units"] },
+    turns: [
+      {
+        say: "Get to know me.",
+        skill: "get-to-know-me",
+        expect: [],
+        listsTopics: true,
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+        avoids: [["where", "you live"], ["who", "live"], ["metric"]],
+        loads: [],
+      },
+      {
+        say: "I'm a nurse, mostly on night shifts.",
+        expect: [{ action: "add", place: "owner", section: "facts", words: ["nurse"] }],
+        questions: { atLeast: 1, atMost: 1 },
+        loads: [],
+      },
+      {
+        say: "That's enough for now.",
+        expect: [],
+        questions: { atLeast: 0, atMost: 0 },
+        says: [["nurse", "nursing"]],
+        loads: [],
+      },
+    ],
   },
+  // The topics Get to know plans from a workspace's name alone, printed for the owner (#127).
+  ...["Garage gym", "House move", "Padel", "Boiler admin", "Mountain biking", "Trip to Japan"].map(
+    (workspace): Scenario => ({
+      name: `topics-${workspace.toLowerCase().replaceAll(" ", "-")}`,
+      rule: "printed, not scored: the topics Get to know plans from the workspace's name",
+      workspace,
+      context: {},
+      turns: [{ say: "Get to know this workspace.", skill: "get-to-know", expect: [] }],
+      printsTopics: true,
+    }),
+  ),
   {
     name: "code-workspace-preference",
     rule: "a code workspace saves a lasting preference to How to answer me, and nothing about the owner",
@@ -473,6 +651,159 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         say: "I moved to Leeds last month, so I'm a bit slow this week. Which file does the sitemap go in?",
         expect: [],
+      },
+    ],
+  },
+  {
+    name: "skill-fits-a-request",
+    rule: "a plain-words request that fits a skill's description loads it",
+    workspace: "Camping",
+    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "Can you put together what I need to take on the Lake District trip?",
+        expect: [],
+        loads: ["packing-list"],
+      },
+    ],
+  },
+  {
+    name: "skill-house-grilling",
+    rule: "a request to stress-test a plan loads the house Grilling",
+    workspace: "Garage gym",
+    context: { plans: ["Put the squat rack against the back wall"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "Grill me on my plan for where the squat rack goes, before I bolt it down.",
+        expect: [],
+        loads: ["grilling"],
+      },
+    ],
+  },
+  {
+    name: "skill-unrelated-question",
+    rule: "an unrelated question loads no skill",
+    workspace: "Camping",
+    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "How long does it take to drive from Leeds to Keswick, roughly?",
+        expect: [],
+        loads: [],
+      },
+    ],
+  },
+  {
+    name: "skill-owner-only",
+    rule: "a skill only the owner starts never loads by itself, even when the request fits it",
+    workspace: "Allotment",
+    context: { facts: ["The plot is a half plot with four raised beds"] },
+    skills: [
+      {
+        name: "plot-survey",
+        description:
+          "Surveys the allotment by asking the owner about each bed, one question at a time.",
+        body: "Ask the owner about each bed in turn, one question per message, and save what they say.",
+        where: "house",
+        start: "owner",
+      },
+    ],
+    turns: [
+      {
+        say: "Could you survey my allotment, bed by bed?",
+        expect: [],
+        loads: [],
+      },
+    ],
+  },
+  {
+    name: "skill-started-by-owner",
+    rule: "a skill the owner starts is followed, without the model loading it, and still in the next turn",
+    workspace: "Allotment",
+    context: { facts: ["The plot is a half plot with four raised beds"] },
+    skills: [
+      {
+        name: "plot-survey",
+        description:
+          "Surveys the allotment by asking the owner about each bed, one question at a time.",
+        body: "Ask the owner about the beds one question per message, starting with the first bed. Don't give advice until every bed is covered.",
+        where: "house",
+        start: "owner",
+      },
+    ],
+    turns: [
+      {
+        say: "Let's go through the plot.",
+        skill: "plot-survey",
+        expect: [],
+        asks: ["bed"],
+        questions: { atLeast: 1, atMost: 2 },
+        loads: [],
+      },
+      {
+        say: "Bed one has garlic in it at the moment.",
+        expect: [{ action: "add", section: "facts", words: ["garlic"] }],
+        asks: ["bed"],
+        questions: { atLeast: 1, atMost: 2 },
+        loads: [],
+      },
+    ],
+  },
+  {
+    name: "replies-which-day",
+    rule: "a question with a few likely answers comes with two or three suggested replies",
+    workspace: "Running",
+    context: { plans: ["A long run once a week, building up to a half marathon in Apr 2027"] },
+    turns: [
+      {
+        say: "Help me pick a day for the weekly long run. Ask me first which days I'm free.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-check-a-plan",
+    rule: "checking a plan one question at a time suggests replies to the question",
+    workspace: "Garden",
+    context: { plans: ["Paint the shed this weekend"] },
+    turns: [
+      {
+        say: "Check my plan to paint the shed with me, one question at a time.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-none-with-an-answer",
+    rule: "an ordinary answer comes with no suggested replies",
+    workspace: "Garage gym",
+    context: { facts: ["Squat rack bolted to the back wall"] },
+    turns: [
+      {
+        say: "What's a good warm-up before squats? Just the warm-up, please.",
+        expect: [],
+        suggests: false,
+      },
+    ],
+  },
+  {
+    name: "replies-none-for-an-open-question",
+    rule: "a question only the owner can answer in their own words comes with no suggested replies",
+    workspace: "Family",
+    context: { plans: ["Give a short toast at my sister Amy's wedding on 12 Dec 2026"] },
+    turns: [
+      {
+        say: "Help me write a short toast for Amy's wedding. First, ask me for a favourite memory of her.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: false,
       },
     ],
   },
@@ -529,6 +860,7 @@ export const contextFileFor = (scenario: Scenario) => {
   return [
     `# ${scenario.workspace}`,
     "",
+    ...(scenario.intro === undefined ? [] : [scenario.intro, ""]),
     ...section("## Facts", facts),
     ...section("## Plans", plans),
     ...section("## Ideas", ideas),

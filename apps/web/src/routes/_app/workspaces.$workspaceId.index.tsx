@@ -4,8 +4,11 @@ import {
   hasLines,
   SessionList,
   type SessionSummary,
+  type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceDetail,
+  WorkspaceId,
+  type WorkspaceMode,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
@@ -17,34 +20,40 @@ import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
+import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
+import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { describeWhen } from "../../when.ts";
 import {
   archiveWorkspace,
   changeWorkspace,
   fromWorker,
   loadProviders,
+  loadSkills,
+  NOT_FOUND,
   startSession,
 } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
     const id = encodeURIComponent(params.workspaceId);
-    const [detail, sessions, providers] = await Promise.all([
+    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
+    const [detail, sessions, providers, skills] = await Promise.all([
       fromWorker(`/workspaces/${id}`, WorkspaceDetail),
       fromWorker(`/workspaces/${id}/sessions`, SessionList),
       loadProviders(),
+      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     ]);
-    return { detail, sessions, providers };
+    return { detail, sessions, providers, skills };
   },
   component: Workspace,
 });
 
 function Workspace() {
-  const { detail, sessions, providers } = Route.useLoaderData();
+  const { detail, sessions, providers, skills } = Route.useLoaderData();
   const navigate = useNavigate();
   const router = useRouter();
   /** What the owner is doing to the workspace itself, if anything. */
@@ -107,7 +116,7 @@ function Workspace() {
                 label="Archive workspace"
                 icon={<Archive />}
                 expanded={tidying === "archive"}
-                active={tidying === "archive"}
+                look={tidying === "archive" ? "pressed" : "quiet"}
                 onClick={() => toggle("archive")}
               />
             </>
@@ -155,6 +164,9 @@ function Workspace() {
             providers={providers.data.providers}
             placeholder="Start a new session…"
             submitLabel="Start"
+            {...(skills.kind === "loaded"
+              ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
+              : {})}
             send={async (message) => {
               const session = await startSession(workspace.id, message);
               if (session.kind !== "loaded") return describeProblem(session).body;
@@ -202,7 +214,10 @@ function Workspace() {
               </StatusPill>
             </div>
           )}
-          <ContextFileSections contextFile={contextFile} />
+          <ContextFileSections
+            contextFile={contextFile}
+            {...(workspace.mode === "planning" && { workspaceId: workspace.id })}
+          />
         </>
       )}
       {ownerContextShared !== "none" && (
@@ -240,7 +255,35 @@ function Workspace() {
             </>
           )}
       </p>
+      {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
     </Page>
+  );
+}
+
+/**
+ * The workspace's skills (ADR 0016), below its context file: each one models here can use, where
+ * it comes from, and why any can't be used, then how to add one. Nothing here is a setting:
+ * skills are files.
+ */
+function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode }) {
+  return (
+    <section aria-label="Skills" className="mt-12">
+      <div className="flex flex-col gap-1">
+        <SectionTitle>Skills</SectionTitle>
+        <p className="text-sm/[21px] text-muted-foreground">
+          What models here can use. Pick one with <span className="md:hidden">Skill</span>
+          <span className="max-md:hidden">/</span> in the message box.
+        </p>
+      </div>
+      <div className="mt-2">
+        <SkillList skills={props.skills} label="Skills" />
+      </div>
+      <p className="mt-4 text-sm/[21px] text-muted-foreground">
+        Add your own: a folder with a <code>SKILL.md</code>, in an <code>.agents/skills</code>{" "}
+        folder in this workspace's folder, {props.mode === "code" && "or its repo's, "}or at the top
+        of your context folder for every workspace.
+      </p>
+    </section>
   );
 }
 
@@ -269,11 +312,20 @@ function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
   );
 }
 
-/** The context file's sections. Its intro is shown under the workspace's title instead. */
-function ContextFileSections({ contextFile }: { contextFile: ContextFile }) {
+/**
+ * The context file's sections. Its intro is shown under the workspace's title instead. Given the
+ * workspace (a planning one), each plan has Grill this plan.
+ */
+function ContextFileSections(props: { contextFile: ContextFile; workspaceId?: WorkspaceId }) {
+  const { contextFile, workspaceId } = props;
   return (
     <div className="mt-4 space-y-6">
-      <FactsPlansIdeas {...contextFile} />
+      <FactsPlansIdeas
+        {...contextFile}
+        {...(workspaceId !== undefined && {
+          plan: (plan: string) => <GrillablePlan workspaceId={workspaceId} plan={plan} />,
+        })}
+      />
       {contextFile.other !== "" && (
         <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
           {contextFile.other}

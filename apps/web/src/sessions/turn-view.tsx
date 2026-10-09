@@ -1,8 +1,16 @@
-import type { Activity, FailureReason, ProviderList, SessionId } from "@courtyard/contract";
+import {
+  type Activity,
+  type FailureReason,
+  type ProviderList,
+  type SessionId,
+  skillTitle,
+} from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
 import { memo } from "react";
 import { Button } from "@/components/button";
 import { Notice } from "@/components/notice";
+import { SkillTag } from "@/components/skill-tag";
+import { SuggestedReplies } from "@/components/suggested-replies";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
@@ -14,6 +22,10 @@ const describeActivity = (activity: Activity) => {
   switch (activity.kind) {
     case "read-file":
       return `Read ${activity.path}`;
+    case "skill-loaded":
+      return `Used ${skillTitle(activity.name)}`;
+    case "skill-file-read":
+      return `Read ${skillTitle(activity.name)}'s ${activity.path}`;
   }
 };
 
@@ -44,8 +56,10 @@ export const TurnView = memo(function TurnView(props: {
   providers: ProviderList["providers"];
   onRetry?: (turn: Turn) => void;
   onCarryOn?: (turn: Turn) => Promise<string | undefined>;
+  /** Sends a suggested reply to this turn (the latest only): whether it was sent. */
+  onReply?: (turn: Turn, reply: string) => Promise<boolean>;
 }) {
-  const { sessionId, turn, providers, onRetry, onCarryOn } = props;
+  const { sessionId, turn, providers, onRetry, onCarryOn, onReply } = props;
 
   return (
     <div className="space-y-4">
@@ -62,9 +76,12 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      <p className="ml-auto w-fit max-w-[85%] rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere text-accent-foreground md:text-base/[25px]">
-        {turn.text}
-      </p>
+      <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground">
+        {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
+        <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
+          {turn.text}
+        </p>
+      </div>
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
@@ -98,6 +115,9 @@ export const TurnView = memo(function TurnView(props: {
             <SaveNote key={note.seq} sessionId={sessionId} note={note} />
           ))}
         </ul>
+      )}
+      {onReply && turn.state.kind === "done" && turn.replies.length > 0 && (
+        <SuggestedReplies replies={turn.replies} onPick={(reply) => onReply(turn, reply)} />
       )}
       {turn.state.kind === "stopped" && (
         <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>

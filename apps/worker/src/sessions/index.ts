@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  type Activity,
   type CarryOnRequest,
   type ChangeId,
   type Effort,
@@ -17,6 +18,7 @@ import {
   SessionEvent,
   SessionId,
   type SessionSummary,
+  type SkillName,
   type StopRequest,
   takesEffort,
   WorkspaceId,
@@ -28,17 +30,25 @@ import { readOwnerContext } from "../owner-context/index.ts";
 import {
   type FramingWorkspace,
   framingFor,
+  notOfferedReply,
+  SAVE_TOOL_NAME,
+  SUGGEST_REPLIES_TOOL_NAME,
   saveReply,
+  skillsInUse,
+  suggestRepliesReply,
   TITLING,
   TitleAnswer,
   titleMessage,
+  USE_SKILL_TOOL_NAME,
+  useSkillReply,
 } from "../prompts/index.ts";
 import {
   firstWithRoom,
   modelsOnOffer,
   offerFor,
   type Provider,
-  type SaveReply,
+  type ToolReply,
+  type TurnToolName,
 } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -49,6 +59,14 @@ import {
   type SaveTarget,
   undoSave,
 } from "../saves/index.ts";
+import {
+  inUseTexts,
+  type SkillsWorkspace,
+  skillTool,
+  type WorkspaceSkills,
+  workspaceSkills,
+} from "../skills/index.ts";
+import { createTurnReplies } from "../suggested-replies/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
@@ -66,6 +84,8 @@ export type SessionError =
   | { readonly kind: "model-unavailable" }
   /** The message names a level of effort its model doesn't take. */
   | { readonly kind: "effort-unavailable" }
+  /** The message starts a skill its workspace can't use, or hasn't got. */
+  | { readonly kind: "skill-unavailable" }
   /** Carry on named a turn that isn't the last one, or didn't fail on a usage limit. */
   | { readonly kind: "nothing-to-carry-on" }
   /** There's no other provider to carry on with right now, and why. */
@@ -234,6 +254,8 @@ export const createSessions = (options: {
   contextDir: string;
   /** Where saves are written, one change at a time. */
   contextFolder: ContextFolder;
+  /** The house skills' folder (ADR 0016). */
+  houseSkills: string;
   now: () => number;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
@@ -386,13 +408,21 @@ export const createSessions = (options: {
 
   const markUpdated = (id: SessionId) => updateFile(id, { updatedAt: stamp() });
 
+  /** A workspace's skills (ADR 0016), as its folder, mode and repo give them. */
+  const skillsOf = (workspace: SkillsWorkspace) =>
+    workspaceSkills({
+      contextDir: options.contextDir,
+      houseFolder: options.houseSkills,
+      workspace,
+    });
+
   /**
    * What a turn needs from its workspace: its name, mode and folder, its context file as written,
-   * and the owner context.
+   * the owner context, and its skills.
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<FramingWorkspace & { folder: string }, string>> => {
+  ): Promise<Result<FramingWorkspace & { folder: string; skills: WorkspaceSkills }, string>> => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(options.contextDir, workspaceId),
       readOwnerContext(options.contextDir),
@@ -406,6 +436,7 @@ export const createSessions = (options: {
       folder,
       contextFile: contextMarkdown,
       ownerContext: ownerContext.value,
+      skills: await skillsOf(workspace.value),
     });
   };
 
@@ -436,8 +467,8 @@ export const createSessions = (options: {
     let failure: FailureReason | undefined;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
-    /** Saves still being written, which finish (and are recorded) before the turn ends. */
-    const savesUnderway = new Set<Promise<unknown>>();
+    /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
+    const callsUnderway = new Set<Promise<unknown>>();
     try {
       const [events, workspace] = await Promise.all([
         readEvents(turn.id),
@@ -448,12 +479,24 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
       } else {
+        const { skills } = workspace.value;
+        const inUse = skillsInUse(events.value);
         const framing = framingFor({
           workspace: workspace.value,
           capabilities: turn.provider.capabilities,
           events: events.value,
+          skills: {
+            offered: skills.usable.filter((skill) => !skill.ownerOnly),
+            inUse: await inUseTexts(skills.usable, inUse),
+          },
           now: options.now(),
         });
+        const report = async (activity: Activity) => {
+          if (recordingLost || stopper.signal.aborted) return;
+          const recorded = await append(turn.id, { type: "activity", activity });
+          if (!recorded.ok) recordingLost = true;
+        };
+        const useSkill = skillTool({ skills: skills.usable, inUse, report });
         const turnSaves = createTurnSaves({
           ...targetOf(turn),
           shown: {
@@ -464,12 +507,11 @@ export const createSessions = (options: {
         });
         /** Whether the last save was refused, so this one is its retry. */
         let retrying = false;
-        const save = async (input: unknown): Promise<SaveReply> => {
+        const save = async (input: unknown): Promise<ToolReply> => {
           // A provider winding down after a stop saves nothing more; one already saving finishes.
           if (stopper.signal.aborted || recordingLost) {
             return saveReply(err({ kind: "stopped" }), true);
           }
-          if (framing.saveTool === null) return saveReply(err({ kind: "not-offered" }), true);
           const saved = await turnSaves(input);
           if (saved.ok) {
             const { value: save, change } = saved.value;
@@ -484,6 +526,36 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
+        const write = async (text: string) => {
+          if (text === "" || recordingLost || stopper.signal.aborted) return;
+          const recorded = await append(turn.id, { type: "text-delta", text });
+          if (!recorded.ok) recordingLost = true;
+        };
+        const replies = createTurnReplies({
+          stopped: () => stopper.signal.aborted || recordingLost,
+          record: async (replies) => {
+            const recorded = await append(turn.id, {
+              type: "suggested-replies",
+              replies: [...replies],
+            });
+            if (!recorded.ok) recordingLost = true;
+          },
+        });
+        /** What answers each of Courtyard's tools, by name: every one a turn can offer. */
+        const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
+          [SAVE_TOOL_NAME]: save,
+          [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
+          [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
+            suggestRepliesReply(await replies.suggest(input)),
+        };
+        /** A model's call to one of Courtyard's tools, answered only when the framing offers it. */
+        const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
+          const offered = framing.tools.find((tool) => tool.name === call.name);
+          return offered === undefined
+            ? Promise.resolve(notOfferedReply(call.name))
+            : answers[offered.name](call.input);
+        };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
@@ -491,28 +563,21 @@ export const createSessions = (options: {
             effort: turn.effort,
             folder: workspace.value.folder,
             framing,
-            save: (input) => {
-              const saving = save(input);
-              savesUnderway.add(saving);
-              void saving.finally(() => savesUnderway.delete(saving));
-              return saving;
+            callTool: (call) => {
+              const calling = callTool(call);
+              callsUnderway.add(calling);
+              void calling.finally(() => callsUnderway.delete(calling));
+              return calling;
             },
-            emit: async (text) => {
-              // Anything a provider writes after the owner stopped the turn is dropped.
-              if (recordingLost || stopper.signal.aborted) return;
-              const recorded = await append(turn.id, { type: "text-delta", text });
-              if (!recorded.ok) recordingLost = true;
-            },
-            report: async (activity) => {
-              if (recordingLost || stopper.signal.aborted) return;
-              const recorded = await append(turn.id, { type: "activity", activity });
-              if (!recorded.ok) recordingLost = true;
-            },
+            emit: (text) => write(replies.kept(text)),
+            report,
             signal: stopper.signal,
           }),
           stoppedByOwner,
         ]);
         if (outcome !== "stopped" && !outcome.ok) failure = outcome.error;
+        // The last line, held back in case it repeated the answer, when it didn't.
+        else if (outcome !== "stopped") await write(replies.end());
       }
     } catch (error) {
       // A provider throwing is a bug in its adapter: the details go to the worker's log, and the
@@ -520,8 +585,9 @@ export const createSessions = (options: {
       console.error(`Session ${turn.id}: the provider threw`, error);
       failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
     }
-    // A save already being written stays, whatever happens to the turn (ADR 0013).
-    await Promise.allSettled(savesUnderway);
+    // A save already being written stays, whatever happens to the turn (ADR 0013), and a tool
+    // call under way finishes, recording what it did.
+    await Promise.allSettled(callsUnderway);
     if (!failure && recordingLost) {
       failure = {
         kind: "unknown",
@@ -637,6 +703,7 @@ export const createSessions = (options: {
       text: start.message.text,
       model: start.message.model,
       ...(start.message.effort === undefined ? {} : { effort: start.message.effort }),
+      ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
     });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
@@ -654,6 +721,23 @@ export const createSessions = (options: {
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
+  };
+
+  /**
+   * Whether the skill a message starts, if any, is one its workspace can use: one of its skills,
+   * not broken, and without scripts in a planning workspace.
+   */
+  const skillUsable = async (
+    workspaceId: WorkspaceId,
+    message: { skill?: SkillName | undefined },
+  ): Promise<Result<null, SessionError>> => {
+    if (message.skill === undefined) return ok(null);
+    const workspace = await getWorkspace(options.contextDir, workspaceId);
+    if (!workspace.ok) return err(STORAGE_ERROR);
+    const skills = await skillsOf(workspace.value);
+    return skills.usable.some((skill) => skill.name === message.skill)
+      ? ok(null)
+      : err({ kind: "skill-unavailable" });
   };
 
   /** The provider to answer a message: its model must be on offer, and take its effort. */
@@ -806,6 +890,8 @@ export const createSessions = (options: {
       if (settingAside) return err({ kind: "starting-fresh" });
       const message = await withModel(start.message);
       if (!message.ok) return message;
+      const usable = await skillUsable(start.workspaceId, message.value);
+      if (!usable.ok) return usable;
       const provider = await providerFor(message.value);
       if (!provider.ok) return provider;
       const id = SessionId.parse(randomUUID());
@@ -853,6 +939,8 @@ export const createSessions = (options: {
       }
       const provider = await providerFor(message);
       if (!provider.ok) return provider;
+      const usable = await skillUsable(session.value.workspaceId, message);
+      if (!usable.ok) return usable;
       return startTurn({
         id: session.value.id,
         workspaceId: session.value.workspaceId,
@@ -891,7 +979,12 @@ export const createSessions = (options: {
         id,
         workspaceId,
         provider,
-        message: { text: message.text, model: overflow.model },
+        // The owner's skill goes with it, so the new model follows it too.
+        message: {
+          text: message.text,
+          model: overflow.model,
+          ...(message.skill === undefined ? {} : { skill: message.skill }),
+        },
         carryingOn: { turn: request.turn },
         // Carrying on the first message is still the session's first turn.
         firstTurn: events.value.find((event) => event.type === "owner-message") === message,

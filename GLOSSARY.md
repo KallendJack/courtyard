@@ -50,6 +50,12 @@ _Avoid_: project, space, room, context (on its own)
 A workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first.
 _Avoid_: system prompt, memory, notes
 
+**Intro line**:
+The line under a context file's title, above its sections: what the workspace is for. The owner gives it as
+**What's it for?** when adding a workspace (or the starter puts a hint there), and the workspace page shows it under
+the workspace's name. Get to know plans its topics from it.
+_Avoid_: description, summary, purpose
+
 **Owner context**:
 `OWNER.md` at the top of the context folder: what's true across the owner's whole life (About me) and how they like
 answers (How to answer me). Every model reads it before the workspace's context file, except that a code workspace's
@@ -99,6 +105,18 @@ _Avoid_: history, log, activity (that's a model's doing in a session)
 The owner asking a model for a shorter context file. Unlike a save, it's proposed first: each change it proposes is
 ticked by default, and the owner unticks any they don't want.
 _Avoid_: compact, clean up, summarise
+
+**Get to know**:
+A house skill only the owner starts, from a button on an empty workspace's page. It plans the topics worth knowing
+from the workspace's name, intro line and the owner context, lists them, then asks one question per message, saving
+each answer, until the topics are covered or the owner has had enough, and wraps up.
+_Avoid_: onboarding, interview, starter, template
+
+**Get to know me**:
+Get to know for the owner context, from a button on the home page: the owner's life (where they live and who with,
+work, health, plans, how they like answers), saved to the owner context. Its session runs in the first planning
+workspace.
+_Avoid_: onboarding, profile setup
 
 **Backup**:
 The context folder's copy on a git remote the owner chooses, such as a shared folder on a NAS (ADR 0014), pushed
@@ -153,13 +171,30 @@ _Avoid_: quota, rate limit (except for the failure reason)
 **Skill**:
 A folder of instructions a model loads when it needs them, such as grilling a plan, in the open Agent Skills format.
 The owner starts one from a button or the skill picker, or a model loads one when its description fits. Courtyard
-loads them itself, never a provider's own skills (ADR 0016).
+loads them itself, never a provider's own skills (ADR 0016). Once started or loaded, a skill stays in use for the rest
+of its session. Each comes from one of four places, its **source**: the owner's for one workspace (Yours), a code
+workspace's project, the owner's for every workspace (Yours, everywhere), or a house skill.
 _Avoid_: prompt, plugin, command, agent
+
+**Skill picker**:
+The list of a workspace's skills that opens from the message box (a `/` at its start, or the Skill pill), or as a
+sheet on a phone. A picked skill sits in the box as a tag and goes with the message.
+_Avoid_: slash command, skill menu
 
 **House skill**:
 A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner's own skills, and a project's, with
 the same name replace it (ADR 0016).
 _Avoid_: built-in skill, default skill
+
+**Grilling**:
+A house skill: a model stress-tests a plan or an idea one question at a time, recommending an answer with each, saves
+each decision as the owner agrees it, and ends with a wrap-up of the decisions and the questions still open.
+_Avoid_: interview, review, critique
+
+**Grill this plan**:
+The flame button beside each Plan line on a planning workspace's page. It starts a new session grilling that plan:
+the first message is the plan line with the Grilling tag, and the session is titled after it.
+_Avoid_: challenge, stress test (as a button name)
 
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
@@ -195,7 +230,8 @@ The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
 **Activity**:
-An event saying what a model is doing: a file it read, a command it ran, a tool connection it used.
+An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a command it
+ran, a tool connection it used.
 _Avoid_: tool call, step, trace
 
 **Approval**:

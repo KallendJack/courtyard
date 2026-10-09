@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SkillName, SkillSource } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
   ContextLine,
@@ -102,11 +103,15 @@ export type SessionId = z.infer<typeof SessionId>;
 /** The longest message accepted. */
 export const MAX_MESSAGE_LENGTH = 20_000;
 
-/** What the owner sends: a message, the model to answer it, and its effort (none for the default). */
+/**
+ * What the owner sends: a message, the model to answer it, its effort (none for the default), and
+ * the skill they started with it, if any (ADR 0016).
+ */
 export const NewMessage = z.object({
   text: z.string().trim().min(1, "Write something first").max(MAX_MESSAGE_LENGTH),
   model: ModelRef,
   effort: Effort.optional(),
+  skill: SkillName.optional(),
 });
 export type NewMessage = z.infer<typeof NewMessage>;
 
@@ -127,6 +132,10 @@ export type FirstMessage = z.infer<typeof FirstMessage>;
  */
 export const GetToKnowRequest = z.object({ model: ModelRef.optional() });
 export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
+
+/** Grill this plan: a new session grilling one of a workspace's plans, answered as Get to know is. */
+export const GrillRequest = GetToKnowRequest.extend({ plan: NewMessage.shape.text });
+export type GrillRequest = z.infer<typeof GrillRequest>;
 
 export const SessionSummary = z.object({
   id: SessionId,
@@ -180,6 +189,10 @@ export type FailureReason = z.infer<typeof FailureReason>;
 export const Activity = z.discriminatedUnion("kind", [
   /** A file it read, as a path inside the workspace folder. */
   z.object({ kind: z.literal("read-file"), path: z.string() }),
+  /** A skill it loaded itself, and where the skill came from (ADR 0016). */
+  z.object({ kind: z.literal("skill-loaded"), name: SkillName, source: SkillSource }),
+  /** One of a skill's own files it read, as a path inside the skill's folder. */
+  z.object({ kind: z.literal("skill-file-read"), name: SkillName, path: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 
@@ -236,6 +249,12 @@ export const SaveEdit = z.discriminatedUnion("place", [
 ]);
 export type SaveEdit = z.infer<typeof SaveEdit>;
 
+/** How many suggested replies a model offers at once, at least and at most (ADR 0017). */
+export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
+
+/** The longest suggested reply: a few words, on one line on a phone. */
+export const SUGGESTED_REPLY_MAX_CHARACTERS = 60;
+
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
@@ -247,6 +266,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     model: ModelRef,
     /** The effort it was sent with; none for the model's default. */
     effort: Effort.optional(),
+    /** The skill the owner started with it, which stays in use for the rest of the session. */
+    skill: SkillName.optional(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
@@ -278,6 +299,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
+  /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
+  z.object({ ...eventBase, type: z.literal("suggested-replies"), replies: z.array(z.string()) }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 

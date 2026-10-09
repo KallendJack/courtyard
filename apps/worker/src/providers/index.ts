@@ -23,8 +23,12 @@ export type Framing = {
   readonly message: string;
   /** The owner's new message on its own, for a provider that needs only that (the fake). */
   readonly newMessage: string;
-  /** The save tool to offer, or `null` when this turn has none (ADR 0013). */
-  readonly saveTool: CourtyardTool | null;
+  /**
+   * Courtyard's own tools this turn offers, such as the save tool (ADR 0013) and the use skill
+   * tool (ADR 0016). Every provider offers each one in its own tool format, and hands each call to
+   * the worker through `callTool`, which answers it.
+   */
+  readonly tools: readonly TurnTool[];
   /**
    * Courtyard's file tools, or `null` when the provider reads no files. Only a provider that
    * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
@@ -40,6 +44,15 @@ export type CourtyardTool = {
   readonly input: Readonly<Record<string, z.ZodType>>;
 };
 
+/**
+ * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
+ * the save tool (ADR 0013), the use skill tool (ADR 0016) and the suggest replies tool (ADR 0017).
+ */
+export type TurnToolName = "save_to_context" | "use_skill" | "suggest_replies";
+
+/** One of Courtyard's tools that a turn can offer. */
+export type TurnTool = CourtyardTool & { readonly name: TurnToolName };
+
 /** Courtyard's tools for looking at the workspace's files, each confined to its folder. */
 export type FileTools = {
   readonly list: CourtyardTool;
@@ -47,16 +60,16 @@ export type FileTools = {
   readonly search: CourtyardTool;
 };
 
-/** What the worker made of a save: whether it saved, and what to tell the model. */
-export type SaveReply = { readonly saved: boolean; readonly reply: string };
-
-/** Part of what a file tool gives a model: text, or an image. */
-export type FileContent =
+/** Part of what one of Courtyard's tools gives a model: text, or an image. */
+export type ToolContent =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "image"; readonly dataUrl: string };
 
-/** What a file tool found, or why it found nothing, as the model is told. */
-export type FileReply = { readonly found: boolean; readonly content: readonly FileContent[] };
+/**
+ * What one of Courtyard's tools did, as the model is told: whether it did what was asked (a save
+ * saved, a file was found), and what to say.
+ */
+export type ToolReply = { readonly ok: boolean; readonly content: readonly ToolContent[] };
 
 export type TurnInput = {
   /** The model to answer with, one of the provider's own. */
@@ -72,10 +85,13 @@ export type TurnInput = {
   /** Says what the model is doing, such as reading a file. */
   readonly report: (activity: Activity) => Promise<void>;
   /**
-   * Hands a save to the worker, its input exactly as the model sent it. The worker checks it,
-   * writes it, and says what to tell the model. Only for a framing with a save tool.
+   * Hands a call to one of the framing's `tools` to the worker, by the tool's name, its input
+   * exactly as the model sent it. The worker checks it, does it, and says what to tell the model.
    */
-  readonly save: (input: unknown) => Promise<SaveReply>;
+  readonly callTool: (call: {
+    readonly name: string;
+    readonly input: unknown;
+  }) => Promise<ToolReply>;
   /** Aborted when the owner stops the turn: the provider stops working as soon as it can. */
   readonly signal: AbortSignal;
 };

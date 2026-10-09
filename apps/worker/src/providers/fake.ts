@@ -7,8 +7,13 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
+import {
+  SAVE_TOOL_NAME,
+  SUGGEST_REPLIES_TOOL_NAME,
+  USE_SKILL_TOOL_NAME,
+} from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { Provider, SignIn } from "./index.ts";
+import type { Provider, SignIn, TurnToolName } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
 const CAPABILITIES: Capabilities = {
@@ -70,6 +75,37 @@ const scriptedSaves = (message: string): Record<string, string>[] =>
     const remove = REMOVE.exec(text);
     return remove?.[1] ? [{ action: "remove", label: remove[1] }] : [];
   });
+
+const USE_SKILL = /^use skill ([a-z0-9-]+)(?: (\S+))?$/i;
+
+/**
+ * The skills a message scripts loading, one per line: "use skill grilling" for its instructions,
+ * "use skill programme-check references/deload-weeks.md" for one of its files.
+ */
+const scriptedSkillLoads = (message: string): Record<string, string>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, name, path] = USE_SKILL.exec(line.trim()) ?? [];
+    return name === undefined ? [] : [{ name, ...(path === undefined ? {} : { path }) }];
+  });
+
+const SUGGEST_REPLIES = /^suggest replies: (.+)$/i;
+
+/** The replies a message scripts suggesting, on a line "suggest replies: Back wall | By the door". */
+const scriptedReplies = (message: string): { replies: string[] }[] =>
+  message.split("\n").flatMap((line) => {
+    const [, replies] = SUGGEST_REPLIES.exec(line.trim()) ?? [];
+    return replies === undefined ? [] : [{ replies: replies.split("|").map((r) => r.trim()) }];
+  });
+
+/**
+ * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
+ * skills loaded first, then saves, then suggested replies.
+ */
+const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
+  [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
+  [SAVE_TOOL_NAME, scriptedSaves],
+  [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
+];
 
 /** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
 const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
@@ -178,8 +214,10 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (story 90). It answers "You said: …" a word at a time, and fails on purpose when a message asks
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
- * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
- * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
+ * `scriptedSaves`) when the turn offers the save tool, and "use skill …" loads a skill (see
+ * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
+ * replies (see `scriptedReplies`) when it offers that tool. A tidy follows markers in the file
+ * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested.
  */
@@ -224,14 +262,15 @@ export const createFakeProvider = (
       capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ model, effort, framing, emit, report, save, signal }) => {
+    runTurn: async ({ model, effort, framing, emit, report, callTool, signal }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
-      if (framing.saveTool !== null) {
-        for (const request of scriptedSaves(last)) await save(request);
+      for (const [name, scripted] of SCRIPTED_CALLS) {
+        if (!framing.tools.some((tool) => tool.name === name)) continue;
+        for (const input of scripted(last)) await callTool({ name, input });
       }
       if (hitsLimit.test(last)) {
         return err({

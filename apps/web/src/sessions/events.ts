@@ -8,6 +8,7 @@ import {
   type Save,
   SessionEvent,
   type SessionId,
+  type SkillName,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 
@@ -32,6 +33,8 @@ export type Turn = {
   readonly model: ModelRef;
   /** The effort it was sent with; `undefined` for the model's default. */
   readonly effort: Effort | undefined;
+  /** The skill the owner started with it, if any (ADR 0016). */
+  readonly skill: SkillName | undefined;
   /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
   readonly modelChanged: boolean;
   readonly answer: string;
@@ -44,6 +47,8 @@ export type Turn = {
   readonly activities: readonly Activity[];
   /** The saves it made, in order. */
   readonly notes: readonly Note[];
+  /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
+  readonly replies: readonly string[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -106,6 +111,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             text: event.text,
             model: event.model,
             effort: event.effort,
+            skill: event.skill,
             modelChanged:
               before !== undefined &&
               (before.provider !== event.model.provider || before.model !== event.model.model),
@@ -113,6 +119,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             replayed: 0,
             activities: [],
             notes: [],
+            replies: [],
             state: { kind: "running" },
           },
         ],
@@ -136,6 +143,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({ ...turn, activities: [...turn.activities, event.activity] }),
       });
+    case "suggested-replies":
+      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":

@@ -95,11 +95,22 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
-  (instructions, the conversation so far and the save tool), the replies to a save, and the text for Get to know, Tidy
-  and titling a session.
-- **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, follows each one live from any
-  position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models and Get to know.
+  (instructions with the skills list and the skills in use, the conversation so far, and Courtyard's tools: the save
+  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Tidy and titling a session.
+- **`skills/`:** a workspace's skills (ADR 0016), worked out in one place from four places, the more specific
+  winning by name: the workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context
+  folder's top-level one, then the house skills for its kind of workspace from `packages/skills`. It keeps each
+  skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
+  skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
+- **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
+  three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
+  writes after them apart from lines it repeats.
+- **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
+  Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
+  is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
+  turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
+  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
+  list of models, Get to know (a session started with its house skill) and Grill this plan.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
 
@@ -130,8 +141,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
     revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), the turn list, the
-    message box with its model and effort pickers, save notes, the usage-limit notice with Carry on, and the Get to
-    know offer.
+    message box with its model, effort and skill pickers, save notes, the usage-limit notice with Carry on, the
+    Get to know offer, and Grill this plan beside each plan (`grill-plan.tsx`).
   - **`changes/`:** the Recent changes list, with Undo.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
@@ -146,11 +157,18 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker and check the first-load budget.
 
+### The house skills: `packages/skills`
+
+`@courtyard/skills` holds Courtyard's own skills, a folder each in the Agent Skills format, and `skills.json`: the
+kinds of workspace that get each one and whether only the owner starts it (ADR 0016). It also holds the format check
+(`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the house skills in
+`pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
+
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
-topic in `lib/`: login, workspaces, sessions and their events, saves and changes, tidies, usage limits and overflow,
-sign-ins, backup, live updates, fresh start, health and errors. The worker's answers are checked against these types;
+topic in `lib/`: login, workspaces, sessions and their events, skills, saves and changes, tidies, usage limits and
+overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's answers are checked against these types;
 the web app parses every answer with these schemas.
 
 ### Outside the apps
@@ -200,6 +218,10 @@ Where the rest fits:
   through `context-folder/` at once; the session records it and the browser shows a note. A refused save is explained
   to the model, which may put it right once
   ([ADR 0013](adr/0013-models-save-context-as-they-chat-and-the-owner-undoes.md)).
+- **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
+  `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
+  the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
+  ([ADR 0017](adr/0017-models-offer-suggested-replies-through-a-courtyard-tool.md)).
 - **Undo and Edit.** From a save's note, through `sessions/` to `saves/`; or from Recent changes, through `changes/`.
   Each is a change of its own, and the session records what the owner did to its save.
 - **Stop.** The worker tells the provider to stop, stops waiting for it at once, and drops anything it sends
@@ -226,7 +248,10 @@ things live only in the worker's memory and go when it restarts.
 ([ADR 0009](adr/0009-the-context-folder-is-a-git-repo-with-its-main-copy-on-a-remote.md)):
 
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
-- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour.
+- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour
+  (and a code workspace's repo).
+- `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
+  their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.
 - Every change is kept as a commit; hand edits are committed before the next change and every ten minutes. After each
   change the folder is pushed to its backup, `COURTYARD_CONTEXT_REMOTE`: any git remote the owner chooses, such as a
@@ -294,8 +319,8 @@ the owner talks to in a session) read what the second list builds; only an app t
   milestones that hold the order of work.
 - **Skills:** the process is [mattpocock/skills](https://github.com/mattpocock/skills) as it is, installed on the
   machine of whoever works on the repo from Matt's own plugin list, so it updates itself; AGENTS.md's Agent skills
-  section says which docs they read. Project skills will go in
-  `.agents/skills/` (#89). How every repo carries this is #88.
+  section says which docs they read. Skills for building Courtyard would go in `.agents/skills/` at the repo's top
+  (none yet); how every repo carries this is #88.
 
 ### Models inside it
 
@@ -303,18 +328,23 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
-- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to a save, Get to know, Tidy and titling.
+- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
+  titling. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
 - **Each provider passes it on unchanged:**
-  - Claude gets it as the system prompt, with the save tool, and none of the worker machine's Claude Code setup
-    (ADR 0003).
-  - Codex gets it as its instructions, in its own Codex home with its own skills and `AGENTS.md` switched off
-    (ADR 0015). It has no file or save tools yet: #71. [`docs/real-codex-check.md`](real-codex-check.md) checks
-    what's switched off against a real Codex before its version changes.
-  - The fake echoes, and saves when a test scripts it.
-- **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude and scores its saves.
-  It runs on demand, never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
-- **Skills for Courtyard's models** will plug in here: #89.
+  - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
+    machine's Claude Code setup, its skills included (ADR 0003).
+  - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
+    Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
+    finds itself turned off. [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a
+    real Codex before its version changes.
+  - The fake echoes, and saves, loads a skill or suggests replies when a test scripts it.
+- **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
+  their saves, the skills they load and the replies they suggest. It runs on demand, never in CI (`pnpm eval:context`;
+  ai-conduct.md, The eval set).
+- **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
+  folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started
+  by the owner, the same on every provider (ai-conduct.md, Skills).
 
 ## Where to read more
 

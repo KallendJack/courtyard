@@ -3,8 +3,10 @@ import {
   type ProviderList,
   SESSION_TITLE_MAX_LENGTH,
   SessionDetail,
+  type SkillSummary,
+  WorkspaceId,
 } from "@courtyard/contract";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/back-link";
@@ -23,6 +25,8 @@ import {
   deleteSession,
   fromWorker,
   loadProviders,
+  loadSkills,
+  NOT_FOUND,
   renameSession,
   sendMessage,
   stopTurn,
@@ -30,29 +34,51 @@ import {
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
-    const [session, providers] = await Promise.all([
+    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
+    const [session, providers, skills] = await Promise.all([
       fromWorker(`/sessions/${encodeURIComponent(params.sessionId)}`, SessionDetail),
       loadProviders(),
+      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     ]);
-    return { session, providers };
+    return { session, providers, skills };
   },
   component: SessionPage,
 });
 
+/** The workspaces the sidebar lists, which name the session's workspace. */
+const appRoute = getRouteApi("/_app");
+
 function SessionPage() {
-  const { session, providers } = Route.useLoaderData();
+  const { session, providers, skills } = Route.useLoaderData();
+  const workspaces = appRoute.useLoaderData();
   if (session.kind !== "loaded") return <Problem result={session} />;
+  const workspace =
+    workspaces.kind === "loaded"
+      ? workspaces.data.workspaces.find((w) => w.id === session.data.workspaceId)
+      : undefined;
   return (
     <Session
       // A new session starts from scratch, even when the router reuses this component.
       key={session.data.id}
       session={session.data}
       providers={providers.kind === "loaded" ? providers.data.providers : []}
+      {...(skills.kind === "loaded"
+        ? {
+            skills: {
+              workspaceName: workspace?.name ?? "this workspace",
+              list: skills.data.skills,
+            },
+          }
+        : {})}
     />
   );
 }
 
-function Session(props: { session: SessionDetail; providers: ProviderList["providers"] }) {
+function Session(props: {
+  session: SessionDetail;
+  providers: ProviderList["providers"];
+  skills?: { workspaceName: string; list: readonly SkillSummary[] };
+}) {
   const { session } = props;
   const { turns, modelTitle, problem, reconnecting } = useSessionTurns(session.id);
   const [sendProblem, setSendProblem] = useState<string>();
@@ -80,16 +106,26 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
       stopped.kind === "loaded" || finishedAnyway ? undefined : describeProblem(stopped).body,
     );
   }, [session.id, runningTurn]);
-  const retry = useCallback(
-    async (turn: Turn) => {
+  /** Sends a message with the model and effort of `turn`, the one it retries or answers. */
+  const sendAfter = useCallback(
+    async (turn: Turn, message: Pick<Turn, "text" | "skill">) => {
       const sent = await sendMessage(session.id, {
-        text: turn.text,
+        text: message.text,
         model: turn.model,
         ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        ...(message.skill === undefined ? {} : { skill: message.skill }),
       });
       setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
+      return sent.kind === "loaded";
     },
     [session.id],
+  );
+  // A retry sends the turn's message again, the skill the owner started with it included.
+  const retry = useCallback((turn: Turn) => void sendAfter(turn, turn), [sendAfter]);
+  // A suggested reply goes as the owner's message, with no skill tag.
+  const reply = useCallback(
+    (turn: Turn, text: string) => sendAfter(turn, { text, skill: undefined }),
+    [sendAfter],
   );
 
   const carryOnFrom = useCallback(
@@ -171,7 +207,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
                 label="Delete session"
                 icon={<Trash2 />}
                 expanded={tidying === "delete"}
-                active={tidying === "delete"}
+                look={tidying === "delete" ? "pressed" : "quiet"}
                 onClick={() => toggle("delete")}
               />
             </>
@@ -228,6 +264,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           providers={props.providers}
           onRetry={retry}
           onCarryOn={carryOnFrom}
+          {...(session.workspaceArchived ? {} : { onReply: reply })}
         />
       )}
       {sendProblem && (
@@ -245,6 +282,7 @@ function Session(props: { session: SessionDetail; providers: ProviderList["provi
           {...(running ? { stop } : {})}
           placeholder={running ? "Waiting for the answer…" : "Reply…"}
           compactOnNarrow
+          {...(props.skills === undefined ? {} : { skills: props.skills })}
           send={send}
         />
       </div>
