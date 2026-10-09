@@ -220,6 +220,8 @@ const judgeTurn = (judge: {
   answer: string;
   /** The skills the model loaded itself in the turn, in order. */
   loaded: readonly string[];
+  /** The replies the answer suggested, if any. */
+  replies: readonly string[];
 }): Check[] => {
   const { turn, answer } = judge;
   const left = [...judge.saves];
@@ -275,7 +277,22 @@ const judgeTurn = (judge: {
               : `expected to load ${loads.join(", ") || "no skill"}; loaded ${judge.loaded.join(", ") || "none"}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills];
+  const { suggests } = turn;
+  const suggested = judge.replies.length > 0;
+  const replies: Check[] =
+    suggests === undefined
+      ? []
+      : [
+          {
+            miss:
+              suggests === suggested
+                ? null
+                : suggests
+                  ? "expected suggested replies; suggested none"
+                  : `expected no suggested replies; suggested ${judge.replies.map((reply) => `"${reply}"`).join(", ")}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...replies];
 };
 
 /**
@@ -481,7 +498,19 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
           : [],
       );
       if (loaded.length > 0) notes.push(`${prefix}loaded ${loaded.join(", ")}`);
-      const judged = judgeTurn({ turn, saves: saves.map(({ save }) => save), answer, loaded });
+      const replies = events.flatMap((event) =>
+        event.type === "suggested-replies" ? event.replies : [],
+      );
+      if (replies.length > 0) {
+        notes.push(`${prefix}suggested ${replies.map((reply) => `"${reply}"`).join(", ")}`);
+      }
+      const judged = judgeTurn({
+        turn,
+        saves: saves.map(({ save }) => save),
+        answer,
+        loaded,
+        replies,
+      });
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

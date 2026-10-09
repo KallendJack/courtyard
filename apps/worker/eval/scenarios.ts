@@ -63,6 +63,12 @@ export type Turn = {
    * loads none. Left out, whatever it loads isn't checked (it's still printed).
    */
   readonly loads?: readonly string[];
+  /**
+   * Whether the answer should suggest replies (ADR 0017): two or three, after a question with a
+   * few likely answers; or none, with an ordinary answer. Left out, it isn't checked (they're
+   * still printed).
+   */
+  readonly suggests?: boolean;
 };
 
 /**
@@ -603,6 +609,60 @@ export const SCENARIOS: readonly Scenario[] = [
         asks: ["bed"],
         questions: { atLeast: 1, atMost: 2 },
         loads: [],
+      },
+    ],
+  },
+  {
+    name: "replies-which-day",
+    rule: "a question with a few likely answers comes with two or three suggested replies",
+    workspace: "Running",
+    context: { plans: ["A long run once a week, building up to a half marathon in Apr 2027"] },
+    turns: [
+      {
+        say: "Help me pick a day for the weekly long run. Ask me first which days I'm free.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-check-a-plan",
+    rule: "checking a plan one question at a time suggests replies to the question",
+    workspace: "Garden",
+    context: { plans: ["Paint the shed this weekend"] },
+    turns: [
+      {
+        say: "Check my plan to paint the shed with me, one question at a time.",
+        expect: [],
+        questions: { atLeast: 1, atMost: 2 },
+        suggests: true,
+      },
+    ],
+  },
+  {
+    name: "replies-none-with-an-answer",
+    rule: "an ordinary answer comes with no suggested replies",
+    workspace: "Garage gym",
+    context: { facts: ["Squat rack bolted to the back wall"] },
+    turns: [
+      {
+        say: "What's a good warm-up before squats? Just the warm-up, please.",
+        expect: [],
+        suggests: false,
+      },
+    ],
+  },
+  {
+    name: "replies-none-for-an-open-question",
+    rule: "a question with no likely answers comes with no suggested replies",
+    workspace: "Family",
+    context: { facts: ["My sister Amy is getting married on 12 Dec 2026"] },
+    turns: [
+      {
+        say: "Help me write a short toast for Amy's wedding. Ask me for anything you need first.",
+        expect: [],
+        suggests: false,
       },
     ],
   },
