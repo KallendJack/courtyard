@@ -32,6 +32,9 @@ before it. It never runs in CI or `pnpm verify`, since it needs the owner's logi
   is left out of the score, so run it again later.
 - **Scenarios are invented,** since the repo is public: a made-up owner and workspaces. A new saving rule gets a
   scenario, and a scenario that turns out to expect the wrong thing is fixed in the same pull request, saying why.
+- **Skills.** A scenario can add skills (the workspace's, everywhere's, or house ones, an owner-only one among them),
+  a turn can start one as the owner would (`skill`), and a turn can say which skills the model should load itself
+  (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - `--only <name,name>` runs some, `--parallel <n>` sets how many run at once (4), `--model <id>` picks the model,
   any provider's (Claude's default when left out), and `--effort <level>` its effort (the model's default).
 

@@ -56,6 +56,27 @@ export type Turn = {
   readonly questions?: { readonly atLeast: number; readonly atMost: number };
   /** After the answer, the owner undoes every save it made. */
   readonly undoSaves?: boolean;
+  /** A skill the owner starts with this message, by name (ADR 0016). */
+  readonly skill?: string;
+  /**
+   * The skills the model should load itself in this turn, by name, and no others; none means it
+   * loads none. Left out, whatever it loads isn't checked (it's still printed).
+   */
+  readonly loads?: readonly string[];
+};
+
+/**
+ * A skill a scenario adds: in the workspace's .agents/skills, the context folder's top-level one
+ * (everywhere), or the house skills alongside Courtyard's own, where one can be owner-only.
+ */
+export type ScenarioSkill = {
+  readonly name: string;
+  readonly description: string;
+  /** What it says to do, after its frontmatter. */
+  readonly body: string;
+  readonly where: "workspace" | "everywhere" | "house";
+  /** Only the owner starts it (a house skill only). */
+  readonly start?: "owner";
 };
 
 export type Scenario = {
@@ -71,6 +92,8 @@ export type Scenario = {
   readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
+  /** Skills it adds to the workspace's, beyond Courtyard's house skills (ADR 0016). */
+  readonly skills?: readonly ScenarioSkill[];
   /** The conversation; none for a tidy. */
   readonly turns: readonly Turn[];
   /**
@@ -86,6 +109,15 @@ export type Scenario = {
      */
     readonly goes: readonly (string | readonly string[])[];
   };
+};
+
+/** A skill of the owner's for one workspace, used by the skills scenarios. */
+const PACKING_LIST: ScenarioSkill = {
+  name: "packing-list",
+  description:
+    "Makes a packing list for a trip, from what the context file says about it. Use it when the owner asks what to take, bring or pack.",
+  body: "List what the trip needs, grouped by where it goes (sleeping, cooking, clothes), one thing per line, from what the context file says about the trip. Ask about anything that changes the list.",
+  where: "workspace",
 };
 
 export const SCENARIOS: readonly Scenario[] = [
@@ -473,6 +505,104 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         say: "I moved to Leeds last month, so I'm a bit slow this week. Which file does the sitemap go in?",
         expect: [],
+      },
+    ],
+  },
+  {
+    name: "skill-fits-a-request",
+    rule: "a plain-words request that fits a skill's description loads it",
+    workspace: "Camping",
+    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "Can you put together what I need to take on the Lake District trip?",
+        expect: [],
+        loads: ["packing-list"],
+      },
+    ],
+  },
+  {
+    name: "skill-house-grilling",
+    rule: "a request to stress-test a plan loads the house Grilling",
+    workspace: "Garage gym",
+    context: { plans: ["Put the squat rack against the back wall"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "Grill me on my plan for where the squat rack goes, before I bolt it down.",
+        expect: [],
+        loads: ["grilling"],
+      },
+    ],
+  },
+  {
+    name: "skill-unrelated-question",
+    rule: "an unrelated question loads no skill",
+    workspace: "Camping",
+    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    skills: [PACKING_LIST],
+    turns: [
+      {
+        say: "How long does it take to drive from Leeds to Keswick, roughly?",
+        expect: [],
+        loads: [],
+      },
+    ],
+  },
+  {
+    name: "skill-owner-only",
+    rule: "a skill only the owner starts never loads by itself, even when the request fits it",
+    workspace: "Allotment",
+    context: { facts: ["The plot is a half plot with four raised beds"] },
+    skills: [
+      {
+        name: "plot-survey",
+        description:
+          "Surveys the allotment by asking the owner about each bed, one question at a time.",
+        body: "Ask the owner about each bed in turn, one question per message, and save what they say.",
+        where: "house",
+        start: "owner",
+      },
+    ],
+    turns: [
+      {
+        say: "Could you survey my allotment, bed by bed?",
+        expect: [],
+        loads: [],
+      },
+    ],
+  },
+  {
+    name: "skill-started-by-owner",
+    rule: "a skill the owner starts is followed, without the model loading it, and still in the next turn",
+    workspace: "Allotment",
+    context: { facts: ["The plot is a half plot with four raised beds"] },
+    skills: [
+      {
+        name: "plot-survey",
+        description:
+          "Surveys the allotment by asking the owner about each bed, one question at a time.",
+        body: "Ask the owner about the beds one question per message, starting with the first bed. Don't give advice until every bed is covered.",
+        where: "house",
+        start: "owner",
+      },
+    ],
+    turns: [
+      {
+        say: "Let's go through the plot.",
+        skill: "plot-survey",
+        expect: [],
+        asks: ["bed"],
+        questions: { atLeast: 1, atMost: 2 },
+        loads: [],
+      },
+      {
+        say: "Bed one has garlic in it at the moment.",
+        expect: [{ action: "add", section: "facts", words: ["garlic"] }],
+        asks: ["bed"],
+        questions: { atLeast: 1, atMost: 2 },
+        loads: [],
       },
     ],
   },

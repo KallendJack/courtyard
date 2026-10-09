@@ -42,6 +42,13 @@ them itself. Every provider, the fake included, gets the same skills the same wa
 ## Consequences
 
 - **No Claude-only extras,** such as a skill choosing its own model or running in a sub-agent.
+- **A skill stays in use for the rest of its session** (decided while building #89). Each turn is framed afresh from
+  the event log, so the worker puts the `SKILL.md` of every skill the owner started or a model loaded into each later
+  turn, and Retry and Carry on keep the owner's tag. Skills that take many turns, such as grilling and Get to know,
+  depend on it.
+- **Codex still finds skills by itself** in a thread's folder and the folders above it, the owner's included, and
+  has no setting to stop looking, so each Codex thread starts with every skill it found turned off
+  (`docs/real-codex-check.md`).
 - **Skills are text a model reads,** so `docs/ai-conduct.md` gets a Skills section, and the eval set checks that the
   right skill loads, that an unrelated question loads none, and that an owner-only skill never loads by itself.
 - **Every turn carries the list,** a name and description per skill, so a workspace with many of the owner's skills

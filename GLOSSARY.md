@@ -153,8 +153,15 @@ _Avoid_: quota, rate limit (except for the failure reason)
 **Skill**:
 A folder of instructions a model loads when it needs them, such as grilling a plan, in the open Agent Skills format.
 The owner starts one from a button or the skill picker, or a model loads one when its description fits. Courtyard
-loads them itself, never a provider's own skills (ADR 0016).
+loads them itself, never a provider's own skills (ADR 0016). Once started or loaded, a skill stays in use for the rest
+of its session. Each comes from one of four places, its **source**: the owner's for one workspace (Yours), a code
+workspace's project, the owner's for every workspace (Yours, everywhere), or a house skill.
 _Avoid_: prompt, plugin, command, agent
+
+**Skill picker**:
+The list of a workspace's skills that opens from the message box (a `/` at its start, or the Skill pill), or as a
+sheet on a phone. A picked skill sits in the box as a tag and goes with the message.
+_Avoid_: slash command, skill menu
 
 **House skill**:
 A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner's own skills, and a project's, with
@@ -195,7 +202,8 @@ The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
 **Activity**:
-An event saying what a model is doing: a file it read, a command it ran, a tool connection it used.
+An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a command it
+ran, a tool connection it used.
 _Avoid_: tool call, step, trace
 
 **Approval**:
