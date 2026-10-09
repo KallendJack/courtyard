@@ -6,6 +6,7 @@ import { createInterface } from "node:readline";
 import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
+  type Activity,
   type Capabilities,
   Effort,
   type EffortInfo,
@@ -18,6 +19,7 @@ import {
 import { z } from "zod";
 import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
+import { pageKey, turnSources } from "../sources/index.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
@@ -38,6 +40,7 @@ const CAPABILITIES: Capabilities = {
   codes: false,
   usesTools: false,
   savesContext: true,
+  searchesWeb: true,
 };
 const LABEL = "Codex";
 
@@ -492,6 +495,40 @@ const MessageCompleted = z.object({
     }),
   }),
 });
+/**
+ * A web search Codex finished (ADR 0019): a search, with what it searched for, or a page it opened.
+ * Looking inside a page it already opened, and anything new, counts as neither.
+ */
+const WebSearchCompleted = z.object({
+  method: z.literal("item/completed"),
+  params: z.object({
+    item: z.object({
+      type: z.literal("webSearch"),
+      query: z.string().catch(""),
+      action: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("search"), query: z.string().nullable().catch(null) }),
+          z.object({ type: z.literal("openPage"), url: z.string().nullable().catch(null) }),
+        ])
+        .nullable()
+        .catch(null),
+    }),
+  }),
+});
+
+/** What a finished web search shows the owner, if anything. */
+const webActivity = (notice: unknown): Activity | undefined => {
+  const parsed = WebSearchCompleted.safeParse(notice);
+  if (!parsed.success) return undefined;
+  const { query, action } = parsed.data.params.item;
+  if (action?.type === "openPage") {
+    const url = pageKey(action.url ?? "");
+    return url === undefined ? undefined : { kind: "page-read", url };
+  }
+  const searched = (action?.type === "search" ? action.query : null) ?? query;
+  return searched.trim() === "" ? undefined : { kind: "web-searched", query: searched.trim() };
+};
+
 /** The ways a turn fails that Courtyard tells apart; anything else counts as "other". */
 const CodexErrorCode = z
   .enum([
@@ -664,6 +701,8 @@ type ThreadTurn = {
   readonly message: string;
   /** Courtyard's tools, the only ones the thread is given. */
   readonly tools: ReadonlyMap<string, TurnTool>;
+  /** Whether the thread searches the web, on cached mode only (ADR 0019). */
+  readonly searchesWeb: boolean;
   /** The shape the answer must have, as JSON Schema, for a one-off question. */
   readonly outputSchema?: unknown;
   /** Hears each of the turn's notices but its end. */
@@ -715,7 +754,11 @@ const turnOnThread = async (
     approvalPolicy: "never",
     environments: [],
     dynamicTools: [...turn.tools.values()].map(asDynamicTool),
-    config: { "skills.config": skillsOff.value },
+    config: {
+      "skills.config": skillsOff.value,
+      // Results from OpenAI's index, never live: Courtyard can't limit what Codex opens.
+      ...(turn.searchesWeb ? { web_search: "cached" } : {}),
+    },
   });
   if (!thread.ok) return err(failureForRequest(thread.error));
   const startedThread = ThreadStarted.safeParse(thread.value);
@@ -1039,9 +1082,18 @@ export const createCodexProvider = (options: {
       }
       const codex = started.value;
 
-      // The answer goes out a piece at a time, in order, however fast Codex sends it.
+      // The answer and what Codex does go out a piece at a time, in order, however fast it sends them.
       let emitting = Promise.resolve();
       let lost = false;
+      const inOrder = (send: () => Promise<void>) => {
+        emitting = emitting.then(send).catch(() => {
+          lost = true;
+        });
+      };
+      // What the turn found on the web, for its sources (ADR 0019).
+      let answer = "";
+      let usedWeb = false;
+      const read: string[] = [];
       const end = await turnOnThread(codex, {
         model: input.model,
         effort: input.effort,
@@ -1049,15 +1101,20 @@ export const createCodexProvider = (options: {
         instructions: input.framing.instructions,
         message: input.framing.message,
         tools: toolsFor(input),
+        searchesWeb: input.framing.webSearch !== null,
         heard: (notice) => {
+          const activity = webActivity(notice);
+          if (activity !== undefined) {
+            usedWeb = true;
+            if (activity.kind === "page-read") read.push(activity.url);
+            inOrder(() => input.report(activity));
+            return;
+          }
           const text = TextDelta.safeParse(notice);
           if (!text.success) return;
           const piece = text.data.params.delta;
-          emitting = emitting
-            .then(() => input.emit(piece))
-            .catch(() => {
-              lost = true;
-            });
+          answer += piece;
+          inOrder(() => input.emit(piece));
         },
         signal: input.signal,
       });
@@ -1066,7 +1123,12 @@ export const createCodexProvider = (options: {
       if (input.signal.aborted) return ok(null);
       if (lost) return err({ kind: "unknown", message: "Courtyard couldn't keep Codex's answer." });
       switch (end.value.kind) {
-        case "completed":
+        case "completed": {
+          // Codex gives no list of results, so its sources are the links its answer gives.
+          const sources = usedWeb ? turnSources({ answer, read, titles: new Map() }) : [];
+          if (sources.length > 0) await input.cite(sources);
+          return ok(null);
+        }
         case "stopped":
           return ok(null);
         case "crashed":
@@ -1096,6 +1158,7 @@ export const createCodexProvider = (options: {
         instructions: input.instructions,
         message: input.message,
         tools: new Map(),
+        searchesWeb: false,
         outputSchema: jsonSchemaOf(input.schema),
         heard: (notice) => {
           const message = MessageCompleted.safeParse(notice);
