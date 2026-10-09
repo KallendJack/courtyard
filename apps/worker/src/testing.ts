@@ -173,6 +173,14 @@ export const postJson = (request: Requester, path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** For tests: sends JSON with any method, such as PUT or DELETE. */
+export const sendJson = (request: Requester, path: string, method: string, body: unknown) =>
+  request(path, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 /** For tests: starts a session in the garage-gym workspace with the owner's first message. */
 export const startSession = async (request: Requester, text: string, model = FAKE_MODEL) => {
   const response = await postJson(request, "/api/workspaces/garage-gym/sessions", { text, model });

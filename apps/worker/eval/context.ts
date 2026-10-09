@@ -11,6 +11,8 @@ import {
   type Save,
   type SessionId,
   SessionSummary,
+  THING_DETAILS,
+  type ThingSave,
   TidyProposal,
   takesEffort,
   type WorkspaceId,
@@ -35,11 +37,13 @@ import {
   testWorker,
   writeSkill,
 } from "../src/testing.ts";
+import { readThingText, thingPath } from "../src/things/index.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
   type ExpectedDocument,
   type ExpectedSave,
+  type ExpectedThing,
   ownerContextFor,
   type Places,
   SCENARIOS,
@@ -454,6 +458,85 @@ const judgeDocuments = async (judge: {
   return checks;
 };
 
+const describeThing = (save: ThingSave) => {
+  const did = { add: "added", change: "changed", remove: "removed" }[save.action];
+  const fields = Object.entries(save.fields ?? {}).map(([field, value]) =>
+    value === null ? `no ${field}` : `${field} ${value}`,
+  );
+  const history = save.history === undefined ? [] : [`history "${save.history}"`];
+  const photo = save.photo ? ["photo"] : [];
+  const what = [...fields, ...history, ...photo];
+  return `${did} Thing ${save.thing.name}${what.length === 0 ? "" : ` (${what.join(", ")})`}`;
+};
+
+/**
+ * A turn's Thing checks (ADR 0020): one for each Thing it should add, change or remove, judged by
+ * its file afterwards, and one for saving no other. Nothing when the turn doesn't say.
+ */
+const judgeThings = async (judge: {
+  expected: readonly ExpectedThing[] | undefined;
+  saved: readonly ThingSave[];
+  /** The workspace's folder, where the Things are. */
+  folder: string;
+}): Promise<Check[]> => {
+  const { expected, saved, folder } = judge;
+  if (expected === undefined) return [];
+  const left = [...saved];
+  const checks: Check[] = [];
+  for (const wanted of expected) {
+    const index = left.findLastIndex(
+      (save) => save.action === wanted.action && hasWords(save.thing.name, { words: wanted.name }),
+    );
+    const save = index === -1 ? undefined : left.splice(index, 1)[0];
+    if (save === undefined) {
+      checks.push({
+        miss: `expected to ${wanted.action} a Thing with ${describeWords(wanted.name)}; ${saved.length === 0 ? "saved none" : saved.map(describeThing).join("; ")}`,
+      });
+      continue;
+    }
+    const path = thingPath(save.thing.slug);
+    const text = await readFile(join(folder, path), "utf8").catch(() => null);
+    if (wanted.action === "remove" || text === null) {
+      checks.push({
+        miss:
+          (wanted.action === "remove") === (text === null)
+            ? null
+            : `expected ${path} ${wanted.action === "remove" ? "gone" : "there"}`,
+      });
+      continue;
+    }
+    const read = readThingText(text);
+    if (!read.ok) {
+      checks.push({ miss: `${path} isn't a Thing as written: ${read.error}` });
+      continue;
+    }
+    const { fields, history } = read.value;
+    const misses = [
+      ...(["status", ...THING_DETAILS] as const).flatMap((field) => {
+        const words = wanted.fields?.[field];
+        const value = fields[field] ?? "";
+        return words === undefined || hasWords(value, { words })
+          ? []
+          : [`its ${field} to have ${describeWords(words)}, not "${value}"`];
+      }),
+      ...(wanted.history === undefined ||
+      hasWords(history.at(-1)?.text ?? "", { words: wanted.history })
+        ? []
+        : [
+            `its history to end with ${describeWords(wanted.history)}, not "${history.at(-1)?.text ?? ""}"`,
+          ]),
+      ...(wanted.partOf === undefined || fields.partOf === wanted.partOf
+        ? []
+        : [`it to be part of ${wanted.partOf}, not ${fields.partOf ?? "nothing"}`]),
+    ];
+    checks.push({ miss: misses.length === 0 ? null : `expected ${path}: ${misses.join("; ")}` });
+  }
+  checks.push({
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeThing).join("; ")}`,
+  });
+  return checks;
+};
+
 /**
  * A house skills folder for a scenario with house skills of its own: Courtyard's, with the
  * scenario's beside them in skills.json. `undefined` when it adds none.
@@ -754,6 +837,17 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
       }
       judged.push(...documentChecks);
+      const things = events.flatMap((event) => (event.type === "thing-saved" ? [event.save] : []));
+      if (things.length > 0) notes.push(`${prefix}${things.map(describeThing).join("; ")}`);
+      const thingChecks = await judgeThings({ expected: turn.things, saved: things, folder });
+      // A Thing missed: how the answer ended says why (it asked, or waited for details).
+      if (
+        thingChecks.some((check) => check.miss !== null) &&
+        documentChecks.every((c) => c.miss === null)
+      ) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...thingChecks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

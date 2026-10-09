@@ -23,6 +23,7 @@ import {
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
+  sendJson,
   testWorker,
 } from "./testing.ts";
 
@@ -338,13 +339,6 @@ describe("the document tool", () => {
     expect(savedEvents(events)).toHaveLength(1);
   });
 });
-
-const sendJson = (request: Requester, path: string, method: string, body: unknown) =>
-  request(path, {
-    method,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
 
 /** Recent changes as the page lists them: an undo shows as its change marked undone. */
 const changesListed = async (request: Requester) =>

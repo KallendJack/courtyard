@@ -1234,7 +1234,7 @@ describe("Courtyard's tools on a Codex turn", () => {
     return { success: result.success, text, items: result.contentItems };
   };
 
-  it("offers the file tools, the save tool, the document tool, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
+  it("offers the file tools, the save tool, the document and Things tools, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
     const { codex } = await turnCalling([]);
 
     const ToolSpec = z.object({
@@ -1255,6 +1255,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "search_files",
       "save_to_context",
       "save_document",
+      "save_thing",
       "use_skill",
       "suggest_replies",
     ]);
@@ -1411,6 +1412,25 @@ describe("Courtyard's tools on a Codex turn", () => {
     });
     expect(events.filter((event) => event.type === "document-saved")).toHaveLength(1);
     expect(await readFile(plan, "utf8")).toBe("# Rack plan\n\nBack wall, bolted.\n");
+  });
+
+  it("saves a Thing through the worker, by the label it's given, and refuses a label there isn't", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "save_thing", args: { name: "Power rack", status: "have", price: "£420" } },
+      { tool: "save_thing", args: { thing: "T1", history: "Bolted to the floor" } },
+      { tool: "save_thing", args: { thing: "T4", remove: true } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({ success: true, text: "Added [T1] Power rack." });
+    expect(answerOf(answers[1])).toMatchObject({ success: true, text: "Changed [T1] Power rack." });
+    expect(answerOf(answers[2])).toMatchObject({
+      success: false,
+      text: expect.stringContaining("There's no Thing labelled T4"),
+    });
+    expect(events.filter((event) => event.type === "thing-saved")).toHaveLength(2);
+    expect(await readFile(join(workspace, "things", "power-rack.md"), "utf8")).toMatch(
+      /^---\nname: Power rack\nstatus: have\nprice: £420\n---\n\n- \d{4}-\d{2}-\d{2}: Bolted to the floor\n$/,
+    );
   });
 
   it("hands suggested replies to the worker, which checks them and records them", async () => {

@@ -221,6 +221,19 @@ export const writeBytes = async (
 };
 
 /**
+ * Writes a file's bytes, making its folder first if it isn't there yet (see `writeBytes`): whether
+ * it was written.
+ */
+export const writeBytesIn = async (path: string, bytes: Uint8Array) => {
+  try {
+    await mkdir(dirname(path), { recursive: true });
+  } catch {
+    return false;
+  }
+  return (await writeBytes(path, bytes)).ok;
+};
+
+/**
  * Writes JSON readable only by the worker's user. It goes to a temporary file first, so a crash
  * mid-write never leaves half a file. With `exclusive`, it fails with `exists` rather than
  * replacing a file that's already there.

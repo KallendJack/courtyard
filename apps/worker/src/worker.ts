@@ -43,6 +43,7 @@ import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
 import { signInRoutes } from "./sign-ins/routes.ts";
 import { skillList, workspaceSkills } from "./skills/index.ts";
+import { THING_PHOTO_ROUTE, thingRoutes } from "./things/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -66,16 +67,32 @@ const MAX_BODY_BYTES = 16 * 1024;
 /** The largest message with files attached (#78): five of the largest, and room for the form. */
 const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.pdfMaxBytes + 1024 * 1024;
 
-/** The paths of the routes that take a message, each `:param` standing for one part of a path. */
-const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(
-  (route) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`),
-);
+/** The largest Thing's photo upload: the largest photo a message takes, and room for the form. */
+const MAX_THING_PHOTO_BYTES = ATTACHMENTS.photoMaxBytes + 64 * 1024;
+
+/** A route's path under `/api` as a pattern, each `:param` standing for one part of a path. */
+const pathOf = (route: string) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`);
+
+/** The paths of the routes that take a message. */
+const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(pathOf);
+
+/** The path a Thing's photo is uploaded to (ADR 0020). */
+const THING_PHOTO_PATH = pathOf(THING_PHOTO_ROUTE);
+
+/** Whether a request is a multipart form posted to one of these paths. */
+const formTo = (c: Context, paths: readonly RegExp[]) =>
+  c.req.method === "POST" &&
+  paths.some((path) => path.test(c.req.path)) &&
+  (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
 
 /** Whether a request is a message sent with files attached (#78). */
-const takesFiles = (c: Context) =>
-  c.req.method === "POST" &&
-  MESSAGE_PATHS.some((path) => path.test(c.req.path)) &&
-  (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
+const sendsMessageFiles = (c: Context) => formTo(c, MESSAGE_PATHS);
+
+/** Whether a request is a Thing's photo, uploaded (ADR 0020). */
+const sendsThingPhoto = (c: Context) => formTo(c, [THING_PHOTO_PATH]);
+
+/** Whether a request takes files: a message's, or a Thing's photo. */
+const takesFiles = (c: Context) => sendsMessageFiles(c) || sendsThingPhoto(c);
 
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
 const FAKE_SIGN_IN_MS = 5000;
@@ -174,7 +191,14 @@ export const createWorker = (options: {
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
   const jsonLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
   const filesLimit = bodyLimit({ maxSize: MAX_MESSAGE_WITH_FILES_BYTES, onError: tooLarge });
-  api.use("*", (c, next) => (takesFiles(c) ? filesLimit(c, next) : jsonLimit(c, next)));
+  const photoLimit = bodyLimit({ maxSize: MAX_THING_PHOTO_BYTES, onError: tooLarge });
+  api.use("*", (c, next) =>
+    sendsMessageFiles(c)
+      ? filesLimit(c, next)
+      : sendsThingPhoto(c)
+        ? photoLimit(c, next)
+        : jsonLimit(c, next),
+  );
   api.use("*", sameSiteJsonOnly({ takesFiles }));
   api.use("*", requireLogin(owner));
 
@@ -183,6 +207,7 @@ export const createWorker = (options: {
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
+  api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(

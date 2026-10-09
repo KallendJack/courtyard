@@ -5,7 +5,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, FileText, ListChecks, Pencil, Undo2 } from "lucide-react";
+import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
@@ -179,6 +179,32 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
             Open
           </Link>
         )}
+      </NoteRow>
+    );
+  }
+
+  if (change.thing !== undefined) {
+    const { did, name } = change.thing;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} Thing`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <Tag />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          muted={muted}
+          struck={did === "removed"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
       </NoteRow>
     );
   }

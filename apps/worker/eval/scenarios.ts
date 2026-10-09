@@ -99,6 +99,26 @@ export type Turn = {
    * read again and retried, keeping the edit.
    */
   readonly editsAfterRead?: { readonly path: string; readonly text: string };
+  /**
+   * The Things this message should end with added, changed or removed (ADR 0020), each judged by
+   * its file afterwards; none means it saves none. Left out, they aren't checked (they're still
+   * printed).
+   */
+  readonly things?: readonly ExpectedThing[];
+};
+
+/**
+ * A Thing a turn should add, change or remove: words its name has, and words each field it names
+ * should have afterwards, the last line of its history, and the Thing it's part of, by file name.
+ */
+export type ExpectedThing = {
+  readonly action: "add" | "change" | "remove";
+  readonly name: Words;
+  readonly fields?: Readonly<
+    Partial<Record<"status" | "brand" | "bought" | "price" | "condition" | "size" | "where", Words>>
+  >;
+  readonly history?: Words;
+  readonly partOf?: string;
 };
 
 /** A document a turn should save or update, and words its text must have afterwards. */
@@ -215,6 +235,9 @@ const SEARCHING_GYM: Pick<Scenario, "workspace" | "context"> = {
     plans: ["Buy a 20 kg Olympic barbell this month"],
   },
 };
+
+/** This month as a Thing's bought field starts with it today: `2026-10`. */
+const THIS_MONTH = new Date().toLocaleDateString("en-CA").slice(0, 7);
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -1017,6 +1040,65 @@ export const SCENARIOS: readonly Scenario[] = [
           path: "docs/packing-list-for-bilbao.md",
           text: "# Packing list for Bilbao\n\n- Two rackets\n- Trainers\n- Shorts\n- Sun cream\n",
         },
+      },
+    ],
+  },
+  {
+    name: "thing-chain-swapped",
+    rule: "something the owner did to a Thing changes that Thing, its fields and its history, and nothing else",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides trails most Sundays"] },
+    files: {
+      "things/whyte-t-140.md":
+        "---\nname: Whyte T-140\nstatus: have\nbought: 2025-04\nprice: £1,400\n---\n\n- 2025-04-12: Bought second-hand\n",
+      "things/chain.md":
+        "---\nname: Chain\nstatus: have\nbrand: KMC X11\nbought: 2025-04\npart of: whyte-t-140\n---\n",
+      "things/cassette.md":
+        "---\nname: Cassette\nstatus: have\nbrand: SRAM XG-1150\nbought: 2025-04\npart of: whyte-t-140\n---\n",
+      "things/tyres.md":
+        "---\nname: Tyres\nstatus: have\nbrand: Maxxis Minion DHF 2.5\nbought: 2026-05\npart of: whyte-t-140\n---\n",
+    },
+    turns: [
+      {
+        say: "Swapped the chain today, the old one was past 0.75%. Went with the KMC X11 again, £32.",
+        expect: [],
+        things: [
+          {
+            action: "change",
+            name: ["chain"],
+            fields: { price: ["32"], bought: [THIS_MONTH] },
+            history: [["swap", "replace", "new", "fitted"]],
+            partOf: "whyte-t-140",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "thing-parts-offered",
+    rule: "a model adds what the owner bought, offers its typical parts, and adds them only once the owner agrees",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides trails most Sundays"] },
+    turns: [
+      {
+        say: "Picked up a Whyte T-140 on Saturday, £1,400 second-hand.",
+        expect: [],
+        things: [
+          {
+            action: "add",
+            name: ["t-140"],
+            fields: { status: ["have"], price: [["1,400", "1400"]] },
+          },
+        ],
+        asks: [["chain", "tyre", "fork", "part", "component"]],
+      },
+      {
+        say: "Yes, add the chain and the tyres.",
+        expect: [],
+        things: [
+          { action: "add", name: ["chain"], partOf: "whyte-t-140" },
+          { action: "add", name: ["tyre"], partOf: "whyte-t-140" },
+        ],
       },
     ],
   },
