@@ -129,6 +129,18 @@ and every session go; the owner's login, sign-ins and remembered usage limits st
 the old files, and the sessions move to a dated folder in the data folder. Recent changes begin again after it.
 _Avoid_: reset, factory reset, wipe
 
+**Document**:
+A longer piece of writing kept in a workspace, such as a training plan or a packing list, as Markdown beside the
+context file. The owner saves one from an answer, or asks a model to save or update one; a model never saves one
+unasked. Every model is told which documents there are and reads one when it helps (ADR 0020).
+_Avoid_: note, page, file (on its own), artifact
+
+**Thing**:
+One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
+with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
+save context lines, and the owner undoes or edits (ADR 0020).
+_Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
+
 **Planning workspace**:
 A workspace whose files models may read but not change.
 _Avoid_: read-only workspace, chat workspace
@@ -219,7 +231,7 @@ _Avoid_: message, chunk, log line
 A photo or PDF the owner sends with a message, up to five at a time. It's kept in its session's folder and goes when
 the session does; every later turn of the session carries the last ten, a photo as an image and a PDF as its text.
 It's the owner's, and information to a model, never instructions.
-_Avoid_: file (on its own), upload, document (that's #103's Word files)
+_Avoid_: file (on its own), upload, document (that's kept in a workspace)
 
 **Suggested reply**:
 A short reply a model offers under its question, two or three at a time, which the owner taps to send as their next
@@ -234,6 +246,11 @@ _Avoid_: cancel, abort, interrupt (that's the worker stopping mid-turn)
 **Event log**:
 The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
+
+**Rich block**:
+A table, chart or diagram in an answer or a document that Courtyard draws itself from what the model wrote, never
+HTML from a model (ADR 0021).
+_Avoid_: artifact, canvas, widget, embed
 
 **Activity**:
 An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a web search
