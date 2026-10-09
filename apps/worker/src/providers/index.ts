@@ -79,10 +79,15 @@ export type CourtyardTool = {
 
 /**
  * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
- * the save tool (ADR 0013), the document tool (ADR 0020), the use skill tool (ADR 0016) and the
- * suggest replies tool (ADR 0017).
+ * the save tool (ADR 0013), the document and Things tools (ADR 0020), the use skill tool (ADR 0016)
+ * and the suggest replies tool (ADR 0017).
  */
-export type TurnToolName = "save_to_context" | "save_document" | "use_skill" | "suggest_replies";
+export type TurnToolName =
+  | "save_to_context"
+  | "save_document"
+  | "save_thing"
+  | "use_skill"
+  | "suggest_replies";
 
 /** One of Courtyard's tools that a turn can offer. */
 export type TurnTool = CourtyardTool & { readonly name: TurnToolName };

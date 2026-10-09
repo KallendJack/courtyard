@@ -12,6 +12,7 @@ import {
   type SessionId,
   type SkillName,
   type Source,
+  type ThingSave,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 
@@ -40,6 +41,14 @@ export type DocumentNote = {
   readonly undone: boolean;
 };
 
+/** A Thing the model saved in its answer (ADR 0020), shown as a note under it, and whether the owner has undone it since. */
+export type ThingNote = {
+  /** The save's event number, which Undo names it by. */
+  readonly seq: number;
+  readonly save: ThingSave;
+  readonly undone: boolean;
+};
+
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -65,6 +74,8 @@ export type Turn = {
   readonly notes: readonly Note[];
   /** The documents saved from it, in order. */
   readonly documents: readonly DocumentNote[];
+  /** The Things its model saved, in order. */
+  readonly things: readonly ThingNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -157,6 +168,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             activities: [],
             notes: [],
             documents: [],
+            things: [],
             replies: [],
             sources: [],
             state: { kind: "running" },
@@ -235,6 +247,25 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         change: (turn) => ({
           ...turn,
           documents: turn.documents.map((note) =>
+            note.seq === event.save ? { ...note, undone: true } : note,
+          ),
+        }),
+      });
+    case "thing-saved": {
+      const note: ThingNote = { seq, save: event.save, undone: false };
+      return withTurn(log, {
+        seq,
+        holds: (_, last) => last,
+        change: (turn) => ({ ...turn, things: [...turn.things, note] }),
+      });
+    }
+    case "thing-undone":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.things.some((note) => note.seq === event.save),
+        change: (turn) => ({
+          ...turn,
+          things: turn.things.map((note) =>
             note.seq === event.save ? { ...note, undone: true } : note,
           ),
         }),
