@@ -48,7 +48,8 @@ test("the owner renames a session from its page and the sidebar, then deletes it
 
   await page.getByRole("button", { name: "Rename session" }).click();
   await page.getByLabel("Session title").fill("Bench position");
-  await page.getByRole("button", { name: "Save" }).click();
+  // Exactly, as Save as document sits under the answer.
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Bench position" })).toBeVisible();
   await expect(recent.getByRole("link", { name: "Bench position" })).toBeVisible();
 

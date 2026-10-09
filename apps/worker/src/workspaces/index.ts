@@ -304,8 +304,8 @@ const keepColours = async (every: readonly Listed[]): Promise<Result<null, Works
   return ok(null);
 };
 
-/** Names Windows keeps for devices, which can't be folder names there. */
-const RESERVED_ON_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+/** Names Windows keeps for devices, which can't be folder or file names there. */
+export const RESERVED_ON_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 
 /** Letters with no plain form once accents are taken off. */
 const PLAIN_LETTERS: Record<string, string> = {
@@ -319,11 +319,11 @@ const PLAIN_LETTERS: Record<string, string> = {
 };
 
 /**
- * The folder name for a workspace called `name`: its letters and digits, lowercase and without
- * accents, with a dash between words. "Nan's 80th Birthday!" is `nans-80th-birthday`.
+ * A name as a file or folder name: its letters and digits, lowercase and without accents, with a
+ * dash between words. "Nan's 80th Birthday!" is `nans-80th-birthday`; empty when it has none.
  */
-const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
-  const folderName = name
+export const plainName = (name: string) =>
+  name
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
@@ -331,7 +331,10 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const id = WorkspaceId.safeParse(folderName);
+
+/** The folder name for a workspace called `name` (see `plainName`). */
+const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
+  const id = WorkspaceId.safeParse(plainName(name));
   if (!id.success) {
     return err({
       kind: "invalid",

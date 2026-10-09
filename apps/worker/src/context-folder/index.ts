@@ -8,7 +8,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { exists, listFolder } from "../files.ts";
+import { exists, listFolder, readTextFile, removeFile, writeTextFileIn } from "../files.ts";
 import { git, gitBytes, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -18,7 +18,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
  * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
  * owner context started from the app, a model's save and the owner undoing or editing one, a
- * tidy the owner ticked, or a fresh start clearing the whole folder.
+ * tidy the owner ticked, a document saved, updated, renamed or deleted (ADR 0020), or a fresh
+ * start clearing the whole folder.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -29,6 +30,7 @@ export const ChangeKind = z.enum([
   "undo",
   "edit",
   "tidy",
+  "document",
   "fresh-start",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;
@@ -47,6 +49,12 @@ export type ChangeNote = {
   readonly session?: SessionId;
   /** The change an undo reverses, for an undo from Recent changes. */
   readonly undoes?: ChangeId;
+  /**
+   * The whole files it wrote or removed, by their paths from the folder's top, for a change made
+   * file by file rather than line by line (a document's, ADR 0020) and its undo: both of a renamed
+   * file's. Recent changes and Undo read them back (`wholeFilesOf`, `undoWholeFiles`).
+   */
+  readonly files?: readonly string[];
 };
 
 /** A workspace made, renamed, recoloured or archived in the app. */
@@ -104,6 +112,7 @@ const commitMessageArgs = (note: ChangeNote) => [
     ...note.places.map(placeTrailer),
     ...(note.session === undefined ? [] : [`Courtyard-Session: ${note.session}`]),
     ...(note.undoes === undefined ? [] : [`Courtyard-Undoes: ${note.undoes}`]),
+    ...(note.files ?? []).map((path) => `Courtyard-File: ${path}`),
   ].join("\n"),
 ];
 
@@ -172,11 +181,25 @@ export type HistoryChange = {
   readonly at: string;
   readonly places: readonly Place[];
   readonly session: SessionId | undefined;
+  /** The whole files it wrote or removed, by their paths from the folder's top; none for most. */
+  readonly files: readonly string[];
 };
 
 /** A place's file, by its path from the folder's top. */
 export const placeFile = (place: Place) =>
   place.kind === "owner-context" ? OWNER_FILE : `${place.id}/${CONTEXT_FILE}`;
+
+/**
+ * The folders in a workspace's folder whose files are changed whole, rather than line by line, so
+ * Recent changes lists their changes too: its documents (ADR 0020).
+ */
+export const WHOLE_FILE_FOLDERS = ["docs"] as const;
+
+/** Every path whose changes Recent changes lists for a place, from the folder's top. */
+const historyPaths = (place: Place) =>
+  place.kind === "owner-context"
+    ? [placeFile(place)]
+    : [placeFile(place), ...WHOLE_FILE_FOLDERS.map((folder) => `${place.id}/${folder}`)];
 
 /** Commit fields, and commits, as `git log` prints them here. */
 const FIELD = "\x1f";
@@ -248,6 +271,7 @@ const parseLog = (log: string): HistoryChange[] =>
         at: time.data,
         places: values("Courtyard-Place").flatMap((value) => placeFromTrailer(value) ?? []),
         session: session.success ? session.data : undefined,
+        files: values("Courtyard-File"),
       },
     ];
   });
@@ -465,7 +489,7 @@ export const createContextFolder = (options: {
           ...(after === undefined ? ["HEAD"] : [after, "--skip=1"]),
           ...(freshStart === "" ? [] : [`^${freshStart}`]),
           "--",
-          placeFile(place),
+          ...historyPaths(place),
         );
         const changes = parseLog(log);
         const page = changes.slice(0, limit);
@@ -529,4 +553,118 @@ export const createContextFolder = (options: {
       return files === undefined ? err("storage") : ok(files);
     },
   };
+};
+
+// Changes made file by file (a document's, ADR 0020), rather than line by line: which whole files
+// one wrote or removed, whether they're still as it left them, and undoing it.
+
+/** Text compared as git keeps it, whatever line endings the file has on this machine. */
+export const sameFileText = (a: string | null, b: string | null) =>
+  a === null || b === null ? a === b : a.replace(/\r\n/g, "\n") === b.replace(/\r\n/g, "\n");
+
+/** One whole file a change wrote or removed: its path from the folder's top, before and after. */
+export type WholeFile = {
+  readonly path: string;
+  readonly before: string | null;
+  readonly after: string | null;
+};
+
+/** Each whole file these changes wrote or removed, as `ChangeNote.files` named them, in one go. */
+export const wholeFilesOf = async (
+  folder: ContextFolder,
+  changes: readonly Pick<HistoryChange, "id" | "files">[],
+): Promise<Result<WholeFile[][], HistoryError>> => {
+  const files = await folder.filesAt(
+    changes.flatMap(({ id, files }) =>
+      files.flatMap((path) => [
+        { change: id, before: true, path },
+        { change: id, path },
+      ]),
+    ),
+  );
+  if (!files.ok) return files;
+  let at = 0;
+  return ok(
+    changes.map(({ files: paths }) =>
+      paths.map((path) => {
+        const before = files.value[at] ?? null;
+        const after = files.value[at + 1] ?? null;
+        at += 2;
+        return { path, before, after };
+      }),
+    ),
+  );
+};
+
+/** Whether every whole file a change wrote or removed is still as it left it. */
+export const stillAsLeft = async (
+  contextDir: string,
+  files: readonly WholeFile[],
+): Promise<Result<boolean, "storage">> => {
+  for (const { path, after } of files) {
+    const now = await readTextFile(join(contextDir, path));
+    if (!now.ok) return err("storage");
+    if (!sameFileText(now.value ?? null, after)) return ok(false);
+  }
+  return ok(true);
+};
+
+/** Why a change made file by file wasn't undone. */
+export type WholeFilesUndoRefusal =
+  | { readonly kind: "not-found" }
+  /** It isn't one of the kinds of change undone this way. */
+  | { readonly kind: "not-undoable" }
+  | { readonly kind: "already-undone" }
+  /** A file it changed has changed since, so undoing it would lose the newer text. */
+  | { readonly kind: "changed-since" }
+  | { readonly kind: "storage" };
+
+/**
+ * Undoes a change made file by file, of one of the `kinds` given, as a change of its own: each
+ * file it wrote or removed goes back as it was. Refused when one has changed since, so nothing
+ * newer is lost, and named as coming from `session` when one asked.
+ */
+export const undoWholeFiles = async (
+  target: {
+    readonly contextDir: string;
+    readonly contextFolder: ContextFolder;
+    readonly sessionId?: SessionId | undefined;
+  },
+  undo: { readonly id: ChangeId; readonly kinds: readonly ChangeKind[] },
+): Promise<Result<null, WholeFilesUndoRefusal>> => {
+  const { contextDir, contextFolder } = target;
+  const found = await contextFolder.changeOf(undo.id);
+  if (!found.ok) return err({ kind: "storage" });
+  const change = found.value;
+  if (change === undefined) return err({ kind: "not-found" });
+  if (!undo.kinds.includes(change.kind) || change.files.length === 0) {
+    return err({ kind: "not-undoable" });
+  }
+  const undone = await contextFolder.undone();
+  if (!undone.ok) return err({ kind: "storage" });
+  if (undone.value.has(undo.id)) return err({ kind: "already-undone" });
+  const read = await wholeFilesOf(contextFolder, [change]);
+  const files = read.ok ? read.value[0] : undefined;
+  if (files === undefined) return err({ kind: "storage" });
+  return contextFolder.change(
+    async (): Promise<Result<null, WholeFilesUndoRefusal>> => {
+      const unchanged = await stillAsLeft(contextDir, files);
+      if (!unchanged.ok) return err({ kind: "storage" });
+      if (!unchanged.value) return err({ kind: "changed-since" });
+      for (const { path, before } of files) {
+        const file = join(contextDir, path);
+        const put = before === null ? await removeFile(file) : await writeTextFileIn(file, before);
+        if (!put) return err({ kind: "storage" });
+      }
+      return ok(null);
+    },
+    () => ({
+      kind: "undo",
+      title: `Undo: ${change.title}`,
+      places: change.places,
+      undoes: undo.id,
+      files: change.files,
+      ...(target.sessionId === undefined ? {} : { session: target.sessionId }),
+    }),
+  );
 };

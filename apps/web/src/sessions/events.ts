@@ -2,6 +2,7 @@ import {
   type Activity,
   ApiError,
   type Attachment,
+  type DocumentSave,
   type Effort,
   type FailureReason,
   type ModelRef,
@@ -28,6 +29,17 @@ export type Note = {
     | { readonly kind: "edited"; readonly now: PlacedLine };
 };
 
+/**
+ * A document saved from an answer (ADR 0020), by the model or with Save as document, shown as a
+ * note under it, and whether the owner has undone it since.
+ */
+export type DocumentNote = {
+  /** The save's event number, which Undo names it by. */
+  readonly seq: number;
+  readonly save: DocumentSave;
+  readonly undone: boolean;
+};
+
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -51,6 +63,8 @@ export type Turn = {
   readonly activities: readonly Activity[];
   /** The saves it made, in order. */
   readonly notes: readonly Note[];
+  /** The documents saved from it, in order. */
+  readonly documents: readonly DocumentNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -96,6 +110,22 @@ const withNote = (
   ),
 });
 
+/** Swaps in a new version of the turn `holds` picks (given whether it's the last), leaving the rest. */
+const withTurn = (
+  log: Log,
+  update: {
+    seq: number;
+    holds: (turn: Turn, last: boolean) => boolean;
+    change: (turn: Turn) => Turn;
+  },
+): Log => ({
+  ...log,
+  lastSeq: update.seq,
+  turns: log.turns.map((turn, index) =>
+    update.holds(turn, index === log.turns.length - 1) ? update.change(turn) : turn,
+  ),
+});
+
 /**
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
  * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
@@ -126,6 +156,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             replayed: 0,
             activities: [],
             notes: [],
+            documents: [],
             replies: [],
             sources: [],
             state: { kind: "running" },
@@ -186,6 +217,27 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         save: event.save,
         change: (note) => ({ ...note, state: { kind: "edited", now: event.now } }),
+      });
+    case "document-saved": {
+      const note: DocumentNote = { seq, save: event.save, undone: false };
+      // Saved with Save as document, under the answer it was saved from; else by this turn's model.
+      const { answer } = event;
+      return withTurn(log, {
+        seq,
+        holds: (turn, last) => (answer === undefined ? last : turn.seq === answer),
+        change: (turn) => ({ ...turn, documents: [...turn.documents, note] }),
+      });
+    }
+    case "document-undone":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.documents.some((note) => note.seq === event.save),
+        change: (turn) => ({
+          ...turn,
+          documents: turn.documents.map((note) =>
+            note.seq === event.save ? { ...note, undone: true } : note,
+          ),
+        }),
       });
   }
 };

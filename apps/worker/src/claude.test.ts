@@ -1001,6 +1001,47 @@ describe("the save tool on a Claude turn", () => {
     });
   });
 
+  it("hands a document over whole, and gives the model the worker's refusal of a stale one", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const SAVE_DOCUMENT: TurnTool = {
+      name: "save_document",
+      description: "Saves a document.",
+      input: { text: z.string(), path: z.string().optional(), change: z.string().optional() },
+    };
+    const stale =
+      "docs/packing-list.md has changed since you read it. Read it again, then send its whole new text with your change.";
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, SAVE_DOCUMENT]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: false, content: [{ kind: "text", text: stale }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__save_document", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    const input = {
+      path: "docs/packing-list.md",
+      text: "# Packing list\n\n- Grips",
+      change: "grips",
+    };
+    const result = await client.callTool({ name: "save_document", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "save_document", input }]);
+    expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: stale }] });
+  });
+
   it("isn't offered, or allowed, on a turn whose framing has none", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
 

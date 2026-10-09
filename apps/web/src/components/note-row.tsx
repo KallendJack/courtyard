@@ -3,13 +3,16 @@ import { classes } from "@/lib/classes";
 import { FormError } from "./form-error";
 
 /**
- * What a note says: its label ("Saved to Facts"), its line, and the line it replaced. Grey when
- * the change is undone; struck through when the line is gone.
+ * What a note says: its label ("Saved to Facts"), its line, and the line it replaced, or a few
+ * words on what changed (a document's update). Grey when the change is undone; struck through
+ * when the line is gone.
  */
 export function NoteWords(props: {
   label: string;
   line?: string | undefined;
   was?: string | undefined;
+  /** What changed, in a few words, after the line: "added grips". */
+  aside?: string | undefined;
   muted?: boolean;
   struck?: boolean;
 }) {
@@ -32,6 +35,9 @@ export function NoteWords(props: {
       </span>
       {props.was !== undefined && !props.muted && (
         <span className="text-muted-foreground"> (was {props.was})</span>
+      )}
+      {props.aside !== undefined && !props.muted && (
+        <span className="text-muted-foreground"> ({props.aside})</span>
       )}
     </p>
   );

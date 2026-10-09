@@ -4,6 +4,7 @@ import {
   type ProviderList,
   type SessionId,
   skillTitle,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
 import { memo, useState } from "react";
@@ -15,6 +16,7 @@ import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
 import { Answer } from "./answer.tsx";
+import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { attachmentUrl } from "./messages.ts";
@@ -140,8 +142,12 @@ export const TurnView = memo(function TurnView(props: {
   onCarryOn?: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply to this turn (the latest only): whether it was sent. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
+  /** The session's workspace, where its documents' notes open. */
+  workspaceId?: WorkspaceId;
+  /** Where Save as document saves, in a planning workspace that isn't archived; none otherwise. */
+  documents?: DocumentsHere;
 }) {
-  const { sessionId, turn, providers, onRetry, onCarryOn, onReply } = props;
+  const { sessionId, turn, providers, onRetry, onCarryOn, onReply, workspaceId, documents } = props;
 
   return (
     <div className="space-y-4">
@@ -188,12 +194,34 @@ export const TurnView = memo(function TurnView(props: {
       )}
       {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
       {turn.answer !== "" && turn.state.kind !== "running" && (
-        <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
+        <div className="flex flex-wrap items-center gap-1">
+          <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
+          {documents !== undefined && (
+            <SaveAsDocument
+              sessionId={sessionId}
+              answer={turn.seq}
+              text={turn.answer}
+              here={documents}
+            />
+          )}
+        </div>
       )}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
           {turn.notes.map((note) => (
             <SaveNote key={note.seq} sessionId={sessionId} note={note} />
+          ))}
+        </ul>
+      )}
+      {turn.documents.length > 0 && workspaceId !== undefined && (
+        <ul aria-label="Documents saved" className="space-y-1.5">
+          {turn.documents.map((note) => (
+            <DocumentNoteRow
+              key={note.seq}
+              sessionId={sessionId}
+              workspaceId={workspaceId}
+              note={note}
+            />
           ))}
         </ul>
       )}

@@ -33,7 +33,7 @@ function Changes() {
       <p className="mt-2 text-[15px]/[23px] text-muted-foreground">
         {id === undefined
           ? "What's changed in your owner context, newest first."
-          : `What's changed in ${name ?? "this workspace"}'s context file, newest first.`}
+          : `What's changed in ${name ?? "this workspace"}'s context file and documents, newest first.`}
       </p>
       <div className="mt-8">
         {/* A key per place, so going from one list to another starts the new one afresh. */}

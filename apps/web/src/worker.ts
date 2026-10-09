@@ -1,7 +1,6 @@
 import {
   ApiError,
   type CarryOnRequest,
-  type ChangeId,
   ContextBackup,
   type GetToKnowRequest,
   LiveStatus,
@@ -9,7 +8,6 @@ import {
   OwnerContextDetail,
   type PasswordForm,
   ProviderList,
-  RecentChanges,
   type SaveEdit,
   type SessionChange,
   type SessionId,
@@ -167,20 +165,6 @@ export const deleteSession = (id: SessionId) =>
     body: {},
     schema: z.unknown(),
   });
-
-/** A page of a workspace's or the owner context's Recent changes, after the change `after`. */
-export const loadChanges = (about: ContextPlace, after?: ChangeId) => {
-  const place =
-    about.kind === "owner" ? "/owner-context" : `/workspaces/${encodeURIComponent(about.id)}`;
-  return fromWorker(
-    `${place}/changes${after === undefined ? "" : `?after=${after}`}`,
-    RecentChanges,
-  );
-};
-
-/** Undoes a change from Recent changes. */
-export const undoChange = (id: ChangeId) =>
-  sendJson({ path: `/changes/${id}/undo`, body: {}, schema: z.unknown() });
 
 /** A context file to act on: one workspace's, or the owner context. */
 export type ContextPlace =

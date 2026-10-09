@@ -1178,7 +1178,13 @@ describe("Courtyard's tools on a Codex turn", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  type Call = { tool: string; args: unknown; ids?: { threadId?: string; turnId?: string } };
+  type Call = {
+    tool: string;
+    args: unknown;
+    ids?: { threadId?: string; turnId?: string };
+    /** Done just before the call, such as an edit by hand. */
+    before?: () => Promise<void>;
+  };
 
   /**
    * A Codex turn in garage-gym in which Codex makes the scripted tool calls, then answers. Gives
@@ -1188,7 +1194,10 @@ describe("Courtyard's tools on a Codex turn", () => {
     const answers: Message[] = [];
     const codex = standIn({
       turn: async (turn) => {
-        for (const { tool, args, ids } of calls) answers.push(await turn.call(tool, args, ids));
+        for (const { tool, args, ids, before } of calls) {
+          await before?.();
+          answers.push(await turn.call(tool, args, ids));
+        }
         delta(turn, "Done.");
         turn.complete("completed");
       },
@@ -1225,7 +1234,7 @@ describe("Courtyard's tools on a Codex turn", () => {
     return { success: result.success, text, items: result.contentItems };
   };
 
-  it("offers the file tools, the save tool, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
+  it("offers the file tools, the save tool, the document tool, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
     const { codex } = await turnCalling([]);
 
     const ToolSpec = z.object({
@@ -1245,6 +1254,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "read_file",
       "search_files",
       "save_to_context",
+      "save_document",
       "use_skill",
       "suggest_replies",
     ]);
@@ -1368,6 +1378,39 @@ describe("Courtyard's tools on a Codex turn", () => {
     expect(events.filter((event) => event.type === "activity")).toMatchObject([
       { activity: { kind: "skill-loaded", name: "grilling", source: "house" } },
     ]);
+  });
+
+  it("saves a document through the worker, and refuses an update to one changed since it was read", async () => {
+    const plan = join(workspace, "docs", "rack-plan.md");
+    // Once: titling the session is a Codex turn of its own, which makes the calls again.
+    let edited = false;
+    const editByHand = async () => {
+      if (edited) return;
+      edited = true;
+      await writeFile(plan, "# Rack plan\n\nBack wall, bolted.\n");
+    };
+    const { answers, events } = await turnCalling([
+      { tool: "save_document", args: { text: "# Rack plan\n\nBack wall." } },
+      { tool: "read_file", args: { path: "docs/rack-plan.md" } },
+      {
+        tool: "save_document",
+        args: { path: "docs/rack-plan.md", text: "# Rack plan\n\nBy the door." },
+        before: editByHand,
+      },
+      { tool: "save_document", args: { text: `# Huge\n\n${"x".repeat(40_001)}` } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({ success: true, text: "Saved docs/rack-plan.md." });
+    expect(answerOf(answers[2])).toMatchObject({
+      success: false,
+      text: expect.stringContaining("docs/rack-plan.md has changed since you read it."),
+    });
+    expect(answerOf(answers[3])).toMatchObject({
+      success: false,
+      text: expect.stringContaining("over 40,000 characters"),
+    });
+    expect(events.filter((event) => event.type === "document-saved")).toHaveLength(1);
+    expect(await readFile(plan, "utf8")).toBe("# Rack plan\n\nBack wall, bolted.\n");
   });
 
   it("hands suggested replies to the worker, which checks them and records them", async () => {

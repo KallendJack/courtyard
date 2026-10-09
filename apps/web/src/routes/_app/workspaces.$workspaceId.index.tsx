@@ -1,4 +1,5 @@
 import {
+  ChangeId,
   CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
   hasLines,
@@ -22,6 +23,7 @@ import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
+import { DocumentsSection } from "../../documents/documents-section.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
@@ -38,22 +40,36 @@ import {
 } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
+  // A document just deleted from its page, which this page offers to undo (ADR 0020).
+  validateSearch: (search: Record<string, unknown>) => {
+    const deleted = ChangeId.safeParse(search.deleted);
+    const name = typeof search.name === "string" ? search.name : undefined;
+    return {
+      ...(deleted.success ? { deleted: deleted.data } : {}),
+      ...(name === undefined ? {} : { name }),
+    };
+  },
   loader: async ({ params }) => {
     const id = encodeURIComponent(params.workspaceId);
     const workspaceId = WorkspaceId.safeParse(params.workspaceId);
-    const [detail, sessions, providers, skills] = await Promise.all([
+    const [detail, sessions, providers, skills, documents] = await Promise.all([
       fromWorker(`/workspaces/${id}`, WorkspaceDetail),
       fromWorker(`/workspaces/${id}/sessions`, SessionList),
       loadProviders(),
       workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
+      // Imported here, so documents' schemas stay off the first load.
+      workspaceId.success
+        ? import("../../documents/api.ts").then((api) => api.loadDocuments(workspaceId.data))
+        : NOT_FOUND,
     ]);
-    return { detail, sessions, providers, skills };
+    return { detail, sessions, providers, skills, documents };
   },
   component: Workspace,
 });
 
 function Workspace() {
-  const { detail, sessions, providers, skills } = Route.useLoaderData();
+  const { detail, sessions, providers, skills, documents } = Route.useLoaderData();
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
   /** What the owner is doing to the workspace itself, if anything. */
@@ -255,6 +271,24 @@ function Workspace() {
             </>
           )}
       </p>
+      {workspace.mode === "planning" && documents.kind === "loaded" && (
+        <DocumentsSection
+          workspaceId={workspace.id}
+          documents={documents.data.documents}
+          {...(search.name === undefined
+            ? {}
+            : { deleted: { name: search.name, change: search.deleted } })}
+          onUndone={async () => {
+            await navigate({
+              to: "/workspaces/$workspaceId",
+              params: { workspaceId: workspace.id },
+              search: {},
+              replace: true,
+            });
+            await router.invalidate();
+          }}
+        />
+      )}
       {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
     </Page>
   );

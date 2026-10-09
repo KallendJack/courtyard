@@ -80,11 +80,18 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`owner-context/`:** reads `OWNER.md` and starts a new one.
 - **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
   that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
-  changes and Fresh start. Every module that changes the context folder goes through it.
+  changes and Fresh start. Every module that changes the context folder goes through it. A change made file by file
+  rather than line by line (a document's) names its files in `Courtyard-File` trailers, so `wholeFilesOf`,
+  `stillAsLeft` and `undoWholeFiles` can read it back and undo it; `WHOLE_FILE_FOLDERS` are the workspace folders
+  Recent changes looks in besides `CONTEXT.md`.
+- **`documents/`:** a planning workspace's documents (ADR 0020): lists, reads, saves, renames and deletes them, each
+  write one change through `context-folder/`; Save as document's text from an answer; and one turn's document tool,
+  which keeps what the model has read so an update to a document it hasn't read, or one changed since, is refused.
+  Its routes are a workspace's documents and each document (`/api/workspaces/:id/documents/:slug`).
 - **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
   `context-file/` and `context-folder/`.
-- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and undoes one from that
-  page.
+- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents', and
+  undoes one from that page (a model's document save through its session, as a save is).
 - **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
   changes as one change.
 
@@ -95,8 +102,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
-  (instructions with the skills list and the skills in use, the conversation so far, and Courtyard's tools: the save
-  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Tidy and titling a session.
+  (instructions with the documents list, the skills list and the skills in use, the conversation so far, and
+  Courtyard's tools: the save tool, the document tool, use skill and suggest replies), the replies to Courtyard's
+  tools, and the text for Tidy and titling a session.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place from four places, the more specific
   winning by name: the workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context
   folder's top-level one, then the house skills for its kind of workspace from `packages/skills`. It keeps each
@@ -115,8 +123,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
   turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models, Get to know (a session started with its house skill), Grill this plan, and each attachment
-  (`GET /api/sessions/:id/attachments/:attachment`).
+  list of models, Get to know (a session started with its house skill), Grill this plan, each attachment
+  (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`) and Undo
+  of a document save (`POST /api/sessions/:id/documents/:save/undo`).
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -133,7 +142,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 - **`http.ts`:** reads a request's body with a contract schema (a message with files attached as a multipart form,
   `readMessage`), and turns errors into answers.
-- **`files.ts`:** reads and writes files and JSON, checked with a schema.
+- **`files.ts`:** reads, writes (making the folder, with `writeTextFileIn`) and removes files, and JSON checked with
+  a schema.
 - **`git.ts`:** runs git, never stopping to ask for a password.
 - **`result.ts`:** the `Result` type.
 - **`testing.ts`:** a worker on temporary folders, and helpers for the tests and the context eval.
@@ -157,8 +167,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
     and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
     load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
-    plan (`grill-plan.tsx`), and an answer's Sources (`sources.tsx`).
-  - **`changes/`:** the Recent changes list, with Undo.
+    plan (`grill-plan.tsx`), an answer's Sources (`sources.tsx`), and Save as document with each document's note
+    (`documents.tsx`).
+  - **`changes/`:** the Recent changes list, with Undo, and its calls (`api.ts`).
+  - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
+    a document's page is in `routes/`, drawn with the answer renderer.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
@@ -236,6 +249,11 @@ Where the rest fits:
   through `context-folder/` at once; the session records it and the browser shows a note. A refused save is explained
   to the model, which may put it right once
   ([ADR 0013](adr/0013-models-save-context-as-they-chat-and-the-owner-undoes.md)).
+- **Documents.** The model calls the document tool, or the owner taps Save as document under an answer.
+  `documents/` checks it and writes it as a change through `context-folder/`; the session records a
+  `document-saved` event and the browser shows a note with Open and Undo. Each turn lists the documents; a model reads
+  one with the file tools, and that read is what an update is checked against
+  ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -279,6 +297,8 @@ things live only in the worker's memory and go when it restarts.
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
 - `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour
   (and a code workspace's repo).
+- `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
+  its file by that name.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.
@@ -371,7 +391,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
     [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
-  - The fake echoes, and saves, loads a skill, suggests replies or acts out a web search when a test scripts it, or
+  - The fake echoes, and saves, saves a document, loads a skill, suggests replies or acts out a web search when a test scripts it, or
     says which attachments it was given ("please look").
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
