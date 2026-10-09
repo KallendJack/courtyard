@@ -31,6 +31,9 @@ export type FromWorker<T> =
   | { readonly kind: "failed"; readonly status: number; readonly message: string }
   | { readonly kind: "offline" };
 
+/** What a page loads for a path that can't name anything, such as a workspace id that can't be one. */
+export const NOT_FOUND = { kind: "not-found" } as const;
+
 /**
  * Turns a response into one of the kinds above, parsing its body with the contract's schema. A 401
  * means the device isn't logged in, except from the password forms, where it means a wrong password.
@@ -104,7 +107,7 @@ export const logOutOthers = () =>
   sendJson({ path: "/logout-others", body: {}, schema: z.unknown() });
 
 /** A workspace's skills, for the skill picker and its Skills section (ADR 0016). */
-export const loadSkills = (workspaceId: string) =>
+export const loadSkills = (workspaceId: WorkspaceId): Promise<FromWorker<SkillList>> =>
   fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/skills`, SkillList);
 
 /** The providers and their models, for the model picker. */
