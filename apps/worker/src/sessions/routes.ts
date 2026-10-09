@@ -148,6 +148,15 @@ const readMessageWithAttachments = async <T>(
   return ok({ message: sent.value.message, attachments: attachments.value });
 };
 
+/**
+ * The routes that take a message, under `/api`: the only ones a multipart form with files attached
+ * may come to (#78), so the worker gives them the larger body limit.
+ */
+export const MESSAGE_ROUTES = {
+  firstMessage: "/workspaces/:id/sessions",
+  nextMessage: "/sessions/:id/messages",
+} as const;
+
 /** A save's event number in a path; anything else names no save. */
 const SaveNumber = z.coerce.number().int().positive().catch(0);
 
@@ -189,7 +198,7 @@ export const sessionRoutes = (options: {
     return c.json(session.value satisfies SessionSummary, 201);
   };
 
-  routes.post("/workspaces/:id/sessions", async (c) => {
+  routes.post(MESSAGE_ROUTES.firstMessage, async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
     const sent = await readMessageWithAttachments(c, FirstMessage);
@@ -324,7 +333,7 @@ export const sessionRoutes = (options: {
     return c.body(null, 204);
   });
 
-  routes.post("/sessions/:id/messages", async (c) => {
+  routes.post(MESSAGE_ROUTES.nextMessage, async (c) => {
     const message = await readMessageWithAttachments(c, NewMessage);
     if (!message.ok) return message.error;
     const sent = await sessions.send({ rawId: c.req.param("id"), ...message.value });
