@@ -20,6 +20,37 @@ const katexWoff2Only = (): Plugin => ({
   },
 });
 
+const MERMAID_FILE = /[\\/]mermaid[\\/]dist[\\/](chunks[\\/])?mermaid\.esm\.min/;
+const NO_ELK = "\0courtyard-no-elk";
+
+/**
+ * Mermaid as Courtyard draws diagrams with it (rich-blocks/mermaid.tsx):
+ * - From its prebuilt files, its own dependencies bundled in. Built from its source, the CommonJS
+ *   among those dependencies need the bundler's helpers for it, which every page shares, and the
+ *   bundler splits those helpers into a file of their own on the first load.
+ * - Without the `require` that esbuild's shim in those files names, which no diagram calls in a
+ *   browser, for the same reason: read from `globalThis`, it needs no helper.
+ * - Without its ELK layout (500 KB gzipped), which no diagram can ask for: they're laid out by
+ *   dagre. It's left out of the build, so the service worker never fetches it either.
+ */
+const mermaidAsDrawn = (): Plugin => ({
+  name: "courtyard-mermaid-as-drawn",
+  enforce: "pre",
+  resolveId(source, importer) {
+    if (source === "mermaid") return this.resolve("mermaid/dist/mermaid.esm.min.mjs", importer);
+    if (importer !== undefined && MERMAID_FILE.test(importer) && /[\\/]elk-\w+\.mjs$/.test(source))
+      return NO_ELK;
+  },
+  load(id) {
+    if (id === NO_ELK)
+      return 'export const render = () => { throw new Error("Diagrams are laid out by dagre"); };';
+  },
+  transform(code, id) {
+    if (!MERMAID_FILE.test(id)) return;
+    return code.replace(/(?<![.\w$])require(?![\w$])/g, "globalThis.require");
+  },
+});
+
 export default defineConfig(({ mode }) => {
   // The worker's settings live in the repo root's `.env`; read its port from the same place.
   const { COURTYARD_PORT } = loadEnv(mode, "../..", "COURTYARD_");
@@ -30,6 +61,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       katexWoff2Only(),
+      mermaidAsDrawn(),
     ],
     // `@/` is the web app's src folder, so imports read the same from any depth.
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },

@@ -88,6 +88,11 @@ export type Turn = {
    * it isn't checked.
    */
   readonly charts?: boolean;
+  /**
+   * Whether the answer should hold a `mermaid` block (ADR 0021), with a sentence of its own before
+   * it, as steps or how parts connect should; or none. Left out, it isn't checked.
+   */
+  readonly diagrams?: boolean;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
@@ -352,6 +357,24 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Should I squat with a belt yet?",
         expect: [],
         charts: false,
+      },
+    ],
+  },
+  {
+    name: "diagram-steps",
+    rule: "steps that branch on what you find are answered with a diagram after a sentence, and a plain question with none (ADR 0021)",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides a Whyte T-140 trail bike", "Has a chain checker"] },
+    turns: [
+      {
+        say: "Walk me through checking my chain: what I measure, and what each result means I should buy.",
+        expect: [],
+        diagrams: true,
+      },
+      {
+        say: "How often should I lube the chain?",
+        expect: [],
+        diagrams: false,
       },
     ],
   },

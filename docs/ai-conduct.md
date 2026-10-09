@@ -47,7 +47,8 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   run had is printed under it.
 - **Rich blocks.** A turn can say whether its answer should hold a table (`tables`), judged from its Markdown: a
   table, with a sentence of its own before it; or none. Likewise a chart (`charts`): a `chart` block the contract's
-  `Chart` schema accepts, after a sentence of its own; or none.
+  `Chart` schema accepts, after a sentence of its own; or none. And a diagram (`diagrams`): a `mermaid` block after a
+  sentence of its own; or none.
 - **Documents.** A turn can say which documents it should save or update (`documents`, none for none), each judged
   on its text afterwards, and edit a file by hand the moment the model reads it (`editsAfterRead`), so its update is
   refused and retried. Every document a run saved, and every one it read, is printed under it.
@@ -195,6 +196,19 @@ draw this chart". Told on every turn, after the table rule:
 
 The eval's `chart-*` scenario checks it on both providers: numbers over time are answered with a chart the schema
 accepts, after a sentence of its own, and a question without numbers gets none.
+
+Built with #148: a `mermaid` block is drawn by Mermaid in the theme's colours, with its strict setting on and every
+setting locked, so nothing a diagram says can change how it's drawn, run script or load anything. One that can't be
+drawn shows its source under "Couldn't draw this diagram". Told on every turn, after the chart rule:
+
+> A `mermaid` block is drawn as a diagram. Use one for steps to follow or how parts connect, such as what a chain
+> check's result means you should buy, or how the boxes of a home network link up: a flowchart (`flowchart TD`, or
+> `flowchart LR` for a few steps in a row), or a sequence diagram for who does what in turn. Keep it to a dozen steps or
+> so with short labels, and write a sentence or two of your own before it. Write only the diagram, with no settings,
+> styles or links: Courtyard colours it. Never use one for show, or where a list or a sentence says as much.
+
+The eval's `diagram-*` scenario checks it on both providers: steps that depend on what you find are answered with a
+diagram after a sentence of its own, and a plain question gets none.
 
 ## Courtyard's file tools
 

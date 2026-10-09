@@ -188,7 +188,15 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
     (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
     Moorland's colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
-    out its value axis. The folder's classes are
+    out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
+    one at a time, in Moorland's colours read from the theme (and again when the device turns dark or light), at its
+    own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+    changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
+    script, load something or go somewhere (links keep their words) before it goes in the page, the one place
+    Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
+    with an `img`, an actor's icon), so the page's own policy (`index.html`) loads pictures only from Courtyard and
+    such a diagram shows as written. The build takes Mermaid from its prebuilt files without its ELK layout
+    (`mermaidAsDrawn` in `vite.config.ts`), so it adds nothing to the first load. The folder's classes are
     in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
     by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
     the first load. They apply only inside a `RichBlock` (`rich-block.tsx`), which each table and drawing is wrapped

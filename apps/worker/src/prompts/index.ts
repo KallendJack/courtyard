@@ -662,6 +662,10 @@ const ANSWER_FORMAT =
 const RICH_BLOCKS =
   "Courtyard draws some of what you write as more than text. Every Markdown table sorts by its columns, so when you compare options side by side, such as three rackets by price, weight and feel, put them in a table, one option a row. Write a sentence or two of your own before it, saying what it shows or which you'd pick, and never use one for show: one or two things, or points that don't share the same details, read better as text.";
 
+/** When to draw a diagram (docs/ai-conduct.md, Rich blocks; ADR 0021). */
+const DIAGRAMS =
+  "A `mermaid` block is drawn as a diagram. Use one for steps to follow or how parts connect, such as what a chain check's result means you should buy, or how the boxes of a home network link up: a flowchart (`flowchart TD`, or `flowchart LR` for a few steps in a row), or a sequence diagram for who does what in turn. Keep it to a dozen steps or so with short labels, and write a sentence or two of your own before it. Write only the diagram, with no settings, styles or links: Courtyard colours it. Never use one for show, or where a list or a sentence says as much.";
+
 /** When to draw numbers as a chart, and the `chart` block's JSON (docs/ai-conduct.md, Rich blocks). */
 const CHARTS =
   'When numbers compare or change over time, such as spending by month or a lift\'s weight week by week, Courtyard draws them as a chart: write a code block whose language is `chart`, holding only JSON, such as `{"kind": "bar", "title": "Spent on the bike, by month", "unit": "£", "labels": ["Jun", "Jul", "Aug"], "series": [{"name": "Spent", "values": [40, 25, 60]}]}`. Its kind is `bar` to compare amounts, `line` for values that change over time, or `pie` for the parts of a whole (one series, at most five slices). Each series has a number for every label, with at most five series, each named when there\'s more than one, and at most 50 labels; the title and unit are optional. Write a sentence or two of your own before it, saying what it shows, and never use one for show: a number or two read better as text.';
@@ -807,6 +811,7 @@ const instructionsFor = (turn: {
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,
     CHARTS,
+    DIAGRAMS,
     ...(hasSections ? [READING_LINES] : []),
     ...(fromOwner.text === null ? [] : [ownerContextPart(fromOwner.shared, fromOwner.text)]),
     contextFilePart(workspace, {

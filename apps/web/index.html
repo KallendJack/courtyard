@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <!-- resizes-content: the page shrinks when the on-screen keyboard opens, so the message box stays above it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <!-- Pictures come only from Courtyard itself: nothing in an answer or a diagram can load one from elsewhere (ADR 0021). -->
+    <meta http-equiv="Content-Security-Policy" content="img-src 'self' blob: data:" />
     <title>Courtyard</title>
     <meta name="theme-color" content="#F3F0EC" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1B181A" media="(prefers-color-scheme: dark)" />
