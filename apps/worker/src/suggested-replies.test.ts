@@ -152,20 +152,42 @@ describe("a model suggesting replies", () => {
       suggest(["Not yet", "not  yet"]),
     ]);
 
-    const short = "Each reply is a few words on one line, at most 60 characters.";
+    const short = await quotedInGuide("Each reply is a few words on one line");
     expect(replies).toEqual([
-      { ok: false, reply: "Suggest two or three replies, not 1." },
-      { ok: false, reply: "Suggest two or three replies, not 4." },
+      { ok: false, reply: await quotedInGuide("Suggest two or three", { count: "1" }) },
+      { ok: false, reply: await quotedInGuide("Suggest two or three", { count: "4" }) },
       {
         ok: false,
-        reply: "That input doesn't fit this tool: it takes replies, a list of two or three texts.",
+        reply: await quotedInGuide("That input doesn't fit this tool: it takes replies"),
       },
       { ok: false, reply: short },
       { ok: false, reply: short },
       { ok: false, reply: short },
-      { ok: false, reply: "Two of those replies are the same: make each one different." },
+      { ok: false, reply: await quotedInGuide("Two of those replies are the same") },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toEqual([]);
+  });
+
+  it("refuses replies once the owner has stopped the turn", async () => {
+    const stopped = Promise.withResolvers<void>();
+    const called = Promise.withResolvers<void>();
+    const saver = savingProvider([
+      [() => stopped.promise, suggest(REPLIES), async () => called.resolve()],
+    ]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Help me plan the garage gym.",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+
+    await postJson(request, `/api/sessions/${sessionId}/stop`, { turn: 1 });
+    stopped.resolve();
+    await called.promise;
+
+    expect(saver.replies[0]).toEqual([
+      { ok: false, reply: await quotedInGuide("The owner stopped this turn, so no replies") },
+    ]);
   });
 
   it("takes one set per answer", async () => {
@@ -176,7 +198,7 @@ describe("a model suggesting replies", () => {
 
     expect(replies[1]).toEqual({
       ok: false,
-      reply: "You've already suggested replies in this answer.",
+      reply: await quotedInGuide("You've already suggested replies"),
     });
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
       { replies: ["Yes", "No"] },

@@ -309,23 +309,35 @@ export const writeHouseSkills = async (
 };
 
 /**
- * For tests: what docs/ai-conduct.md quotes, from the quote starting with `firstWords`: the quoted
- * lines, wrapped lines joined back up, list items and paragraphs kept.
+ * For tests: what docs/ai-conduct.md quotes, from the quote starting with `firstWords` (inside a
+ * list item too): the quoted lines, wrapped lines joined back up, list items and paragraphs kept.
+ * Each `<placeholder>` in it is filled in from `filled`, as the model would read it.
  */
-export const quotedInGuide = async (firstWords: string) => {
+export const quotedInGuide = async (
+  firstWords: string,
+  filled: Readonly<Record<string, string>> = {},
+) => {
   const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
-  const lines = guide.replace(/\r\n/g, "\n").split("\n");
+  const lines = guide
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimStart());
   const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
+  if (start === -1) throw new Error(`docs/ai-conduct.md quotes nothing starting "${firstWords}"`);
   const quoted: string[] = [];
   for (const line of lines.slice(start)) {
     if (!line.startsWith(">")) break;
     quoted.push(line.replace(/^> ?/, ""));
   }
-  return quoted
+  const text = quoted
     .join("\n")
     .split("\n\n")
     .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
     .join("\n\n");
+  return Object.entries(filled).reduce(
+    (quote, [name, value]) => quote.replaceAll(`<${name}>`, value),
+    text,
+  );
 };
 
 /** For tests: the context folder's changes, newest first: each one's title and trailers. */

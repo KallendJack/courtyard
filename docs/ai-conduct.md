@@ -88,6 +88,10 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 10. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
 11. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
 
+A call to one of Courtyard's tools that the turn doesn't offer is refused:
+
+> This turn has no tool called <name>.
+
 The message is the owner's new message on its own. Later in a session, it's everything said earlier inside the
 conversation markers, then the new message. An owner message that started a skill reads
 `Owner (started the <name> skill): …` there. Earlier answers say how their turn ended:
@@ -143,6 +147,38 @@ A skill starts in one of two ways:
 **Only the owner starts some skills** (`"start": "owner"` in `skills.json`, such as Get to know). That goes with the
 name, so an owner's own skill replacing one is owner-only too. Such a skill is never in a model's list, and the tool
 refuses it ("Only the owner starts <name>.") unless it's already in use in the session.
+
+**The use_skill tool,** as a model reads it, and its inputs:
+
+> Loads one of the skills listed in your instructions: its instructions (its SKILL.md), or, given a path as well, one
+> of the skill's own files, as text. Only files in the skill's folder can be read.
+
+> - name: The skill's name, as listed.
+> - path: One of the skill's own files, from the skill's folder, such as references/notes.md. Leave it out for the
+>   skill's instructions.
+> - start_line: For a long file, the line to read on from; 1 is the first.
+
+It refuses, saying why: input it doesn't take,
+
+> That input doesn't fit this tool: it takes a skill's name, and a path for one of its files.
+
+a skill the workspace hasn't got (or can't use),
+
+> There's no skill called <name> here: the skills you can load are in your instructions.
+
+an owner-only skill that isn't in use,
+
+> Only the owner starts <name>.
+
+a `SKILL.md` that can't be read just then (gone since the turn started, say),
+
+> That skill couldn't be read just now.
+
+and a file outside the skill's folder:
+
+> Only files in the skill's folder can be read.
+
+A file inside it that can't be read gets the file tools' reasons (Courtyard's file tools, above).
 
 **A skill stays in use for the rest of its session,** however it started. Each turn is framed afresh from the event
 log, so every later turn carries the `SKILL.md` of each skill in use: one the owner started (from their messages'
@@ -236,14 +272,41 @@ What a model is told (Every turn, item 11), on a turn that offers the tool:
 > ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what
 > something looks like).
 
-The tool's description says what it does and points to that rule; its one input is the replies. The worker checks
-them and refuses, saying why, when:
+The tool's description says what it does and points to that rule:
 
-- **there aren't two or three,** or the input isn't a list of texts;
-- **a reply is empty, more than one line, or longer than `SUGGESTED_REPLY_MAX_CHARACTERS`** (60, in the contract);
-- **two replies are the same,** ignoring case and spacing;
-- **the answer already suggested replies:** one set per answer, the first that's accepted;
-- **the owner stopped the turn.**
+> Offers the owner two or three replies to the question your answer ends with, shown as buttons under your answer
+> that send one with a tap. Follow the rule for suggested replies in your instructions.
+
+Its one input is the replies (`SUGGESTED_REPLY_MAX_CHARACTERS`, 60, is in the contract):
+
+> - replies: Two or three different replies, each a few words on one line (at most 60 characters), as the owner
+>   would say it.
+
+The worker checks them and refuses, saying why, when:
+
+- **the input isn't a list of texts:**
+
+  > That input doesn't fit this tool: it takes replies, a list of two or three texts.
+
+- **there aren't two or three:**
+
+  > Suggest two or three replies, not <count>.
+
+- **a reply is empty, more than one line, or too long:**
+
+  > Each reply is a few words on one line, at most 60 characters.
+
+- **two replies are the same,** ignoring case and spacing:
+
+  > Two of those replies are the same: make each one different.
+
+- **the answer already suggested replies,** one set per answer, the first that's accepted:
+
+  > You've already suggested replies in this answer.
+
+- **the owner stopped the turn:**
+
+  > The owner stopped this turn, so no replies are shown.
 
 Replies it takes are answered according to what the answer has written so far, since Claude treats what it writes
 after its last tool call as its answer: called before writing, it asked its question only in its thinking (#90);
