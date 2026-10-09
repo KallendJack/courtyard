@@ -364,6 +364,10 @@ export const useSkillReply = (answer: UseSkillAnswer): ToolReply => {
 export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies" satisfies TurnToolName;
 
 /** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 11). */
+/** How answers are written: Markdown, with maths in the forms the web app draws as formulas. */
+const ANSWER_FORMAT =
+  "Answer in Markdown. Write maths in LaTeX: between `\\(` and `\\)` within a line, and between `$$` lines of their own for a formula set apart. Never put maths between single `$` signs, which are read as prices.";
+
 const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them before you finish, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
 
 /** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
@@ -499,7 +503,7 @@ const instructionsFor = (turn: {
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
     accessFor(capabilities),
     todayIs(turn.now),
-    "When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. Answer in Markdown.",
+    `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     ...(hasSections ? [READING_LINES] : []),
     ...(fromOwner.text === null ? [] : [ownerContextPart(fromOwner.shared, fromOwner.text)]),
     contextFilePart(workspace, {
