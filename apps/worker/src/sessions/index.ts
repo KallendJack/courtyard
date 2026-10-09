@@ -19,6 +19,8 @@ import {
   SessionId,
   type SessionSummary,
   type SkillName,
+  SOURCES_MAX,
+  type Source,
   type StopRequest,
   takesEffort,
   WorkspaceId,
@@ -496,6 +498,17 @@ export const createSessions = (options: {
           const recorded = await append(turn.id, { type: "activity", activity });
           if (!recorded.ok) recordingLost = true;
         };
+        /** Records the answer's sources (ADR 0019), once, unless the turn was stopped. */
+        let cited = false;
+        const cite = async (sources: readonly Source[]) => {
+          if (cited || sources.length === 0 || recordingLost || stopper.signal.aborted) return;
+          cited = true;
+          const recorded = await append(turn.id, {
+            type: "sources",
+            sources: sources.slice(0, SOURCES_MAX),
+          });
+          if (!recorded.ok) recordingLost = true;
+        };
         const useSkill = skillTool({ skills: skills.usable, inUse, report });
         const turnSaves = createTurnSaves({
           ...targetOf(turn),
@@ -571,6 +584,7 @@ export const createSessions = (options: {
             },
             emit: (text) => write(replies.kept(text)),
             report,
+            cite,
             signal: stopper.signal,
           }),
           stoppedByOwner,
