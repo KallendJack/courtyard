@@ -259,11 +259,10 @@ export const createWorker = (options: {
   api.get("/workspaces/:id/skills", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
-    const { folder, summary, repoPath } = workspace.value;
     const skills = await workspaceSkills({
       contextDir,
       houseFolder: houseSkills,
-      workspace: { folder, mode: summary.mode, repoPath },
+      workspace: workspace.value,
     });
     return c.json({ skills: skillList(skills) } satisfies SkillList);
   });

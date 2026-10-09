@@ -7,7 +7,7 @@ import {
   type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceDetail,
-  type WorkspaceId,
+  WorkspaceId,
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
@@ -33,17 +33,19 @@ import {
   fromWorker,
   loadProviders,
   loadSkills,
+  NOT_FOUND,
   startSession,
 } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   loader: async ({ params }) => {
     const id = encodeURIComponent(params.workspaceId);
+    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
     const [detail, sessions, providers, skills] = await Promise.all([
       fromWorker(`/workspaces/${id}`, WorkspaceDetail),
       fromWorker(`/workspaces/${id}/sessions`, SessionList),
       loadProviders(),
-      loadSkills(params.workspaceId),
+      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     ]);
     return { detail, sessions, providers, skills };
   },
@@ -114,7 +116,7 @@ function Workspace() {
                 label="Archive workspace"
                 icon={<Archive />}
                 expanded={tidying === "archive"}
-                active={tidying === "archive"}
+                look={tidying === "archive" ? "pressed" : "quiet"}
                 onClick={() => toggle("archive")}
               />
             </>

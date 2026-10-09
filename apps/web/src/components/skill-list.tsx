@@ -1,4 +1,10 @@
-import { SKILL_SOURCE_NAMES, type SkillSummary, skillTitle } from "@courtyard/contract";
+import {
+  SKILL_SOURCE_NAMES,
+  type SkillName,
+  type SkillSummary,
+  skillTitle,
+  type UsableSkillSummary,
+} from "@courtyard/contract";
 import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
@@ -27,11 +33,13 @@ const SIZES = {
 } as const;
 
 /** Whether the skill can be picked: it can be used here. */
-export const usable = (skill: SkillSummary) => skill.problem === undefined;
+export const usable = (skill: SkillSummary): skill is UsableSkillSummary => skill.kind === "usable";
 
 /** A skill's name as a row shows it: a broken one by its folder's name, as it is. */
 const nameOf = (skill: SkillSummary) =>
-  skill.problem?.kind === "broken" ? skill.name : skillTitle(skill.name);
+  skill.kind === "unusable" && skill.problem.kind === "broken"
+    ? skill.name
+    : skillTitle(skill.name);
 
 /** Text ending in a full stop, so more can follow it. */
 const sentence = (text: string) => (/[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`);
@@ -39,15 +47,12 @@ const sentence = (text: string) => (/[.!?]$/.test(text.trim()) ? text.trim() : `
 /** What a row says under the name: what the skill is for, or why it can't be used. */
 function About(props: { skill: SkillSummary; more: boolean; className: string }) {
   const { skill } = props;
-  if (skill.problem?.kind === "broken") {
-    return (
+  if (skill.kind === "unusable") {
+    return skill.problem.kind === "broken" ? (
       <span className={classes("text-destructive-text", props.className)}>
         Can't be used: {skill.problem.reason}
       </span>
-    );
-  }
-  if (skill.problem?.kind === "needs-code-workspace") {
-    return (
+    ) : (
       <span className={classes("text-muted-foreground", props.className)}>
         Needs a code workspace: it runs a script
       </span>
@@ -123,7 +128,7 @@ export function SkillList(props: { skills: readonly SkillSummary[]; label: strin
  */
 export function SkillChoices(props: {
   skills: readonly SkillSummary[];
-  pick: (name: string) => void;
+  pick: (name: SkillName) => void;
 }): ReactNode {
   return (
     <ul aria-label="Skills" className="flex flex-col">
@@ -132,7 +137,7 @@ export function SkillChoices(props: {
           <button
             type="button"
             disabled={!usable(skill)}
-            onClick={() => props.pick(skill.name)}
+            onClick={() => usable(skill) && props.pick(skill.name)}
             className="-mx-2 flex w-[calc(100%+1rem)] rounded-md px-2 outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:hover:bg-transparent"
           >
             <SkillRow skill={skill} size="page" />

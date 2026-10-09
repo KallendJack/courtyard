@@ -28,7 +28,7 @@ export type Framing = {
    * tool (ADR 0016). Every provider offers each one in its own tool format, and hands each call to
    * the worker through `callTool`, which answers it.
    */
-  readonly tools: readonly CourtyardTool[];
+  readonly tools: readonly TurnTool[];
   /**
    * Courtyard's file tools, or `null` when the provider reads no files. Only a provider that
    * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
@@ -43,6 +43,15 @@ export type CourtyardTool = {
   /** Each input by name, with what it means as its description. */
   readonly input: Readonly<Record<string, z.ZodType>>;
 };
+
+/**
+ * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
+ * the save tool (ADR 0013), the use skill tool (ADR 0016) and the suggest replies tool (ADR 0017).
+ */
+export type TurnToolName = "save_to_context" | "use_skill" | "suggest_replies";
+
+/** One of Courtyard's tools that a turn can offer. */
+export type TurnTool = CourtyardTool & { readonly name: TurnToolName };
 
 /** Courtyard's tools for looking at the workspace's files, each confined to its folder. */
 export type FileTools = {

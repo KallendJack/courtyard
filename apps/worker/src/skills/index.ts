@@ -5,6 +5,7 @@ import type {
   SkillProblem,
   SkillSource,
   SkillSummary,
+  UsableSkillSummary,
   WorkspaceMode,
 } from "@courtyard/contract";
 import { checkSkill, type HouseSkill, readHouseManifest, readSkillFile } from "@courtyard/skills";
@@ -27,14 +28,7 @@ import {
 export const SKILLS_FOLDER = join(".agents", "skills");
 
 /** A skill a workspace's models can use: what the app shows of it, and its folder. */
-export type UsableSkill = {
-  readonly name: SkillName;
-  readonly description: string;
-  readonly source: SkillSource;
-  readonly ownerOnly: boolean;
-  readonly replacesHouse: boolean;
-  readonly folder: string;
-};
+export type UsableSkill = UsableSkillSummary & { readonly folder: string };
 
 /** A workspace's skills: the ones it can use, one per name, and the ones it can't. */
 export type WorkspaceSkills = {
@@ -42,10 +36,10 @@ export type WorkspaceSkills = {
   readonly unusable: readonly SkillSummary[];
 };
 
-/** A workspace, as finding its skills needs it. */
+/** A workspace as `getWorkspace` reads it, as far as finding its skills needs it. */
 export type SkillsWorkspace = {
   readonly folder: string;
-  readonly mode: WorkspaceMode;
+  readonly summary: { readonly mode: WorkspaceMode };
   /** A code workspace's repo, whose `.agents/skills` holds the project's skills. */
   readonly repoPath: string | null;
 };
@@ -111,12 +105,13 @@ export const workspaceSkills = async (options: {
   houseFolder: string;
   workspace: SkillsWorkspace;
 }): Promise<WorkspaceSkills> => {
-  const { workspace } = options;
-  const house = await houseSkills(options.houseFolder, workspace.mode);
+  const { folder, repoPath, summary } = options.workspace;
+  const { mode } = summary;
+  const house = await houseSkills(options.houseFolder, mode);
   const places = await Promise.all([
-    foundIn(join(workspace.folder, SKILLS_FOLDER), "workspace"),
-    workspace.mode === "code" && workspace.repoPath !== null
-      ? foundIn(join(workspace.repoPath, SKILLS_FOLDER), "project")
+    foundIn(join(folder, SKILLS_FOLDER), "workspace"),
+    mode === "code" && repoPath !== null
+      ? foundIn(join(repoPath, SKILLS_FOLDER), "project")
       : Promise.resolve([]),
     foundIn(join(options.contextDir, SKILLS_FOLDER), "everywhere"),
   ]);
@@ -125,31 +120,34 @@ export const workspaceSkills = async (options: {
   const usable = new Map<string, UsableSkill>();
   const unusable: SkillSummary[] = [];
   for (const found of [...places.flat(), ...house.found]) {
-    const problem: SkillProblem | undefined = !found.checked.ok
-      ? { kind: "broken", reason: found.checked.error }
-      : found.checked.value.hasScripts && workspace.mode === "planning"
-        ? { kind: "needs-code-workspace" }
-        : undefined;
-    const ownerOnly = house.ownerOnly.has(found.folderName);
-    if (problem !== undefined || !found.checked.ok) {
+    const { checked, folderName, source } = found;
+    const ownerOnly = house.ownerOnly.has(folderName);
+    const cantUse = (problem: SkillProblem, description: string) =>
       unusable.push({
-        name: found.folderName,
-        description: found.checked.ok ? found.checked.value.description : "",
-        source: found.source,
+        kind: "unusable",
+        name: folderName,
+        description,
+        source,
         ownerOnly,
-        replacesHouse: false,
-        ...(problem === undefined ? {} : { problem }),
+        problem,
       });
+    if (!checked.ok) {
+      cantUse({ kind: "broken", reason: checked.error }, "");
       continue;
     }
-    const { name, description } = found.checked.value;
+    const { name, description, hasScripts } = checked.value;
+    if (hasScripts && mode === "planning") {
+      cantUse({ kind: "needs-code-workspace" }, description);
+      continue;
+    }
     if (usable.has(name)) continue;
     usable.set(name, {
+      kind: "usable",
       name,
       description,
-      source: found.source,
+      source,
       ownerOnly,
-      replacesHouse: found.source !== "house" && houseNames.has(name),
+      replacesHouse: source !== "house" && houseNames.has(name),
       folder: found.folder,
     });
   }
@@ -189,27 +187,29 @@ const UseSkillInput = z.strictObject({
  */
 export const skillTool = (options: {
   readonly skills: readonly UsableSkill[];
-  /** The skills in use in the session so far, which the tool adds to as a model loads one. */
-  readonly inUse: SkillName[];
+  /** The skills in use in the session when the turn started. */
+  readonly inUse: readonly SkillName[];
   readonly report: (activity: Activity) => Promise<void>;
 }) => {
+  /** The skills in use so far, with those a model has loaded in this turn. */
+  const inUseNow = new Set(options.inUse);
   return async (input: unknown): Promise<UseSkillAnswer> => {
     const parsed = UseSkillInput.safeParse(input);
     if (!parsed.success) return err({ kind: "malformed" });
     const skill = options.skills.find((usable) => usable.name === parsed.data.name);
     if (skill === undefined) return err({ kind: "unknown", name: parsed.data.name });
-    const inUse = options.inUse.includes(skill.name);
+    const inUse = inUseNow.has(skill.name);
     if (skill.ownerOnly && !inUse) return err({ kind: "owner-only", name: skill.name });
 
     const { path, start_line } = parsed.data;
     if (path == null) {
       const text = await readSkillFile(skill.folder);
-      if (text === undefined) return err({ kind: "unreadable" });
+      if (!text.ok) return text;
       if (!inUse) {
-        options.inUse.push(skill.name);
+        inUseNow.add(skill.name);
         await options.report({ kind: "skill-loaded", name: skill.name, source: skill.source });
       }
-      return ok({ kind: "instructions", text });
+      return ok({ kind: "instructions", text: text.value });
     }
     const files = workspaceFiles({
       folder: skill.folder,
@@ -233,8 +233,9 @@ export const inUseTexts = async (
   const texts = await Promise.all(
     inUse.map(async (name) => {
       const skill = skills.find((usable) => usable.name === name);
-      const text = skill === undefined ? undefined : await readSkillFile(skill.folder);
-      return text === undefined ? [] : [{ name, text }];
+      if (skill === undefined) return [];
+      const text = await readSkillFile(skill.folder);
+      return text.ok ? [{ name, text: text.value }] : [];
     }),
   );
   return texts.flat();

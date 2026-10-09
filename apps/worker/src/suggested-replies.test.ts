@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionSummary } from "@courtyard/contract";
+import { type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   asOwner,
@@ -42,21 +42,38 @@ const turnSuggesting = async (steps: readonly ScriptedStep[]) => {
 
 const suggest = (replies: unknown) => ({ call: "suggest_replies", input: { replies } });
 
-describe("what a model is told once its replies are taken (#127)", () => {
-  const REPLIES = ["Weekends", "Weekday evenings"];
+const REPLIES = ["Weekends", "Weekday evenings"];
 
-  it("tells a model that has written its question that it has finished", async () => {
+/** The answer a turn wrote, without the saving provider's closing "Done.". */
+const answerIn = (events: readonly SessionEvent[]) =>
+  events
+    .flatMap((event) => (event.type === "text-delta" ? [event.text] : []))
+    .join("")
+    .replace(/\s*Done\.$/, "");
+
+describe("what a model is told once its replies are taken (#127)", () => {
+  it("tells a model that has written some of its answer to write only what's missing", async () => {
     const { replies } = await turnSuggesting([
       { write: "Here's the plan. Which days are you free?" },
       suggest(REPLIES),
     ]);
 
     expect(replies[0]?.reply).toBe(
-      await quotedInGuide("The owner sees them as buttons under your answer, and"),
+      await quotedInGuide("The owner sees them as buttons under your answer, with"),
     );
   });
 
-  it("drops anything written after that, so the answer isn't written twice", async () => {
+  it("tells one that has written nothing yet to write its whole answer", async () => {
+    const { replies } = await turnSuggesting([suggest(REPLIES)]);
+
+    expect(replies[0]?.reply).toBe(
+      await quotedInGuide("The owner sees them as buttons under your answer, but"),
+    );
+  });
+});
+
+describe("what a model writes after its replies are taken (#133)", () => {
+  it("is dropped where it repeats the answer, so the answer isn't written twice", async () => {
     const question = "Here's the plan. Which days are you free?";
     const { events } = await turnSuggesting([
       { write: question },
@@ -64,14 +81,44 @@ describe("what a model is told once its replies are taken (#127)", () => {
       { write: question },
     ]);
 
-    const answer = events.flatMap((event) => (event.type === "text-delta" ? [event.text] : []));
-    expect(answer.join("")).toBe(question);
+    expect(answerIn(events)).toBe(question);
   });
 
-  it("tells one that has written only part of its answer to write the rest, not again", async () => {
-    const { replies } = await turnSuggesting([{ write: "Here's the plan." }, suggest(REPLIES)]);
+  it("is kept where it's new, such as a recommendation after the question", async () => {
+    const { events } = await turnSuggesting([
+      { write: "Which days are you free?" },
+      suggest(REPLIES),
+      { write: "I'd go for weekends: the garage is free then." },
+    ]);
 
-    expect(replies[0]?.reply).toBe(await quotedInGuide("The owner sees them as buttons, and"));
+    expect(answerIn(events)).toBe(
+      "Which days are you free?\n\nI'd go for weekends: the garage is free then.",
+    );
+  });
+
+  it("is kept where it's new after the answer written again", async () => {
+    const { events } = await turnSuggesting([
+      { write: "Here's the plan.\nWhich days are you free?" },
+      suggest(REPLIES),
+      { write: "Here's the plan.\nWhich days" },
+      { write: " are you free?\n\nI'd go for weekends." },
+    ]);
+
+    expect(answerIn(events)).toBe(
+      "Here's the plan.\nWhich days are you free?\n\nI'd go for weekends.",
+    );
+  });
+
+  it("is kept after a question mark that wasn't a question, such as in a link", async () => {
+    const { events } = await turnSuggesting([
+      { write: "The plan is at https://gym.example/?week=2." },
+      suggest(REPLIES),
+      { write: "Which days are you free?" },
+    ]);
+
+    expect(answerIn(events)).toBe(
+      "The plan is at https://gym.example/?week=2.\n\nWhich days are you free?",
+    );
   });
 });
 
@@ -82,7 +129,10 @@ describe("a model suggesting replies", () => {
     ]);
 
     expect(replies).toEqual([
-      { saved: true, reply: await quotedInGuide("The owner sees them as buttons") },
+      {
+        ok: true,
+        reply: await quotedInGuide("The owner sees them as buttons under your answer, but"),
+      },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
       {
@@ -102,20 +152,42 @@ describe("a model suggesting replies", () => {
       suggest(["Not yet", "not  yet"]),
     ]);
 
-    const short = "Each reply is a few words on one line, at most 60 characters.";
+    const short = await quotedInGuide("Each reply is a few words on one line");
     expect(replies).toEqual([
-      { saved: false, reply: "Suggest two or three replies, not 1." },
-      { saved: false, reply: "Suggest two or three replies, not 4." },
+      { ok: false, reply: await quotedInGuide("Suggest two or three", { count: "1" }) },
+      { ok: false, reply: await quotedInGuide("Suggest two or three", { count: "4" }) },
       {
-        saved: false,
-        reply: "That input doesn't fit this tool: it takes replies, a list of two or three texts.",
+        ok: false,
+        reply: await quotedInGuide("That input doesn't fit this tool: it takes replies"),
       },
-      { saved: false, reply: short },
-      { saved: false, reply: short },
-      { saved: false, reply: short },
-      { saved: false, reply: "Two of those replies are the same: make each one different." },
+      { ok: false, reply: short },
+      { ok: false, reply: short },
+      { ok: false, reply: short },
+      { ok: false, reply: await quotedInGuide("Two of those replies are the same") },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toEqual([]);
+  });
+
+  it("refuses replies once the owner has stopped the turn", async () => {
+    const stopped = Promise.withResolvers<void>();
+    const called = Promise.withResolvers<void>();
+    const saver = savingProvider([
+      [() => stopped.promise, suggest(REPLIES), async () => called.resolve()],
+    ]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Help me plan the garage gym.",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+
+    await postJson(request, `/api/sessions/${sessionId}/stop`, { turn: 1 });
+    stopped.resolve();
+    await called.promise;
+
+    expect(saver.replies[0]).toEqual([
+      { ok: false, reply: await quotedInGuide("The owner stopped this turn, so no replies") },
+    ]);
   });
 
   it("takes one set per answer", async () => {
@@ -125,8 +197,8 @@ describe("a model suggesting replies", () => {
     ]);
 
     expect(replies[1]).toEqual({
-      saved: false,
-      reply: "You've already suggested replies in this answer.",
+      ok: false,
+      reply: await quotedInGuide("You've already suggested replies"),
     });
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
       { replies: ["Yes", "No"] },

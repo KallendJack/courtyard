@@ -20,12 +20,20 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { apiError, contextError, NO_SAVING_MODEL, readBody } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
+import { err, type Result } from "../result.ts";
 import type { NoteRefusal } from "../saves/index.ts";
-import { getWorkspace, isArchived, listWorkspaces } from "../workspaces/index.ts";
+import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
-/** The house skill Grill this plan starts (docs/ai-conduct.md, Grilling). */
-const GRILLING = SkillName.parse("grilling");
+/**
+ * The house skills a button starts (docs/ai-conduct.md): Grill this plan, and Get to know a
+ * workspace or the owner.
+ */
+const HOUSE_SKILLS = {
+  grilling: SkillName.parse("grilling"),
+  getToKnow: SkillName.parse("get-to-know"),
+  getToKnowMe: SkillName.parse("get-to-know-me"),
+};
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
 const KEEP_ALIVE_MS = 25_000;
@@ -198,19 +206,33 @@ export const sessionRoutes = (options: {
     });
   };
 
+  /**
+   * A planning workspace, for a button that starts a session saving to its context file; or the
+   * response refusing it: a code workspace's models don't save to its context file, so `cannot`
+   * says what that rules out.
+   */
+  const planningWorkspace = async (
+    c: Context,
+    { id, cannot }: { id: string; cannot: string },
+  ): Promise<Result<Workspace, Response>> => {
+    const workspace = await getWorkspace(contextDir, id);
+    if (!workspace.ok) return err(contextError(c, workspace.error));
+    if (workspace.value.summary.mode === "code") {
+      const error = `A code workspace's models don't save to its context file, so ${cannot}.`;
+      return err(apiError(c, { status: 409, error }));
+    }
+    return workspace;
+  };
+
   // Grill this plan (docs/ai-conduct.md, Grilling): one of the workspace's plans, as the first
   // message of a session that starts the Grilling skill.
   routes.post("/workspaces/:id/grill", async (c) => {
-    const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace.ok) return contextError(c, workspace.error);
+    const workspace = await planningWorkspace(c, {
+      id: c.req.param("id"),
+      cannot: "its plans can't be grilled",
+    });
+    if (!workspace.ok) return workspace.error;
     const { summary, contextFile } = workspace.value;
-    if (summary.mode === "code") {
-      return apiError(c, {
-        status: 409,
-        error:
-          "A code workspace's models don't save to its context file, so its plans can't be grilled.",
-      });
-    }
     const body = await readBody(c, GrillRequest);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const { plan, ...rest } = body.value;
@@ -223,25 +245,20 @@ export const sessionRoutes = (options: {
     }
     return startSaving(c, {
       workspaceId: summary.id,
-      message: { text: plan, skill: GRILLING, ...rest },
+      message: { text: plan, skill: HOUSE_SKILLS.grilling, ...rest },
     });
   });
 
   routes.post("/workspaces/:id/get-to-know", async (c) => {
-    const workspace = await getWorkspace(contextDir, c.req.param("id"));
-    if (!workspace.ok) return contextError(c, workspace.error);
-    const { summary } = workspace.value;
-    if (summary.mode === "code") {
-      return apiError(c, {
-        status: 409,
-        error:
-          "A code workspace's models don't save to its context file, so it can't get to know it.",
-      });
-    }
+    const workspace = await planningWorkspace(c, {
+      id: c.req.param("id"),
+      cannot: "it can't get to know it",
+    });
+    if (!workspace.ok) return workspace.error;
     return getToKnow(c, {
-      workspaceId: summary.id,
+      workspaceId: workspace.value.summary.id,
       text: "Get to know this workspace.",
-      skill: SkillName.parse("get-to-know"),
+      skill: HOUSE_SKILLS.getToKnow,
     });
   });
 
@@ -259,7 +276,7 @@ export const sessionRoutes = (options: {
     return getToKnow(c, {
       workspaceId: home.id,
       text: "Get to know me.",
-      skill: SkillName.parse("get-to-know-me"),
+      skill: HOUSE_SKILLS.getToKnowMe,
     });
   });
 

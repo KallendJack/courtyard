@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
-import type { Activity, CourtyardTool, TurnInput } from "./providers/index.ts";
+import type { Activity, TurnInput, TurnTool } from "./providers/index.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
@@ -519,7 +519,7 @@ describe("after the security review", () => {
   });
 });
 
-const SAVE_TOOL: CourtyardTool = {
+const SAVE_TOOL: TurnTool = {
   name: "save_to_context",
   description: "Saves one line to the context file.",
   input: {
@@ -529,7 +529,7 @@ const SAVE_TOOL: CourtyardTool = {
   },
 };
 
-const framingWith = (tools: readonly CourtyardTool[]) => ({
+const framingWith = (tools: readonly TurnTool[]) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
@@ -579,7 +579,7 @@ describe("the save tool on a Claude turn", () => {
   it("comes with every other Courtyard tool of the turn, on the same server, each handed over by name", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     const handed: unknown[] = [];
-    const USE_SKILL: CourtyardTool = {
+    const USE_SKILL: TurnTool = {
       name: "use_skill",
       description: "Loads a skill.",
       input: { name: z.string(), path: z.string().optional() },
@@ -620,7 +620,7 @@ describe("the save tool on a Claude turn", () => {
   it("hands a list over unchanged, as suggested replies are, even one the worker will refuse", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     const handed: unknown[] = [];
-    const SUGGEST_REPLIES: CourtyardTool = {
+    const SUGGEST_REPLIES: TurnTool = {
       name: "suggest_replies",
       description: "Offers the owner replies to tap.",
       input: { replies: z.array(z.string()) },

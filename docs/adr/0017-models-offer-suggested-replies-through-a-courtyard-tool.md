@@ -28,3 +28,6 @@ context (ADR 0013), not through anything in its own text.
 - **Codex gets the tool the way it gets the save tool** (#71), so it waits for that.
 - **One more thing a model is told on every turn** in a planning workspace, which the eval keeps from being overused.
 - **The same tool can serve other skills** that ask the owner questions, with no change to the app.
+- **What a model writes after the call is kept,** apart from any line repeating what its answer had already written:
+  Claude treats what it writes after its last tool call as its answer and often writes it all again, so the tool's
+  reply tells it to write only what's missing, and the worker drops the repeat (#127, #133; `docs/ai-conduct.md`).

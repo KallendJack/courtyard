@@ -1,10 +1,10 @@
-import {
-  type Effort,
-  type ModelRef,
-  type NewMessage,
-  type ProviderList,
+import type {
+  Effort,
+  ModelRef,
+  NewMessage,
+  ProviderList,
   SkillName,
-  type SkillSummary,
+  SkillSummary,
 } from "@courtyard/contract";
 import { ArrowUp, Book, Square } from "lucide-react";
 import {
@@ -73,7 +73,7 @@ export const Composer = memo(function Composer(props: {
   const [listOpen, setListOpen] = useState(false);
   /** The `/…` text the owner closed the list on with Escape, so it stays closed until they type. */
   const [dismissed, setDismissed] = useState<string>();
-  const [active, setActive] = useState<string>();
+  const [active, setActive] = useState<SkillName>();
   const box = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const [place, setPlace] = useState<{ side: "above" | "below"; maxHeight: number }>({
@@ -106,10 +106,8 @@ export const Composer = memo(function Composer(props: {
     setListOpen(false);
     setActive(undefined);
   };
-  const pick = (name: string) => {
-    const picked = SkillName.safeParse(name);
-    if (!picked.success) return;
-    setSkill(picked.data);
+  const pick = (name: SkillName) => {
+    setSkill(name);
     // The `/…` that opened the list was only for finding it.
     if (SLASH.test(text)) setText("");
     setChoosing(undefined);

@@ -1,6 +1,7 @@
-import { skillTitle } from "@courtyard/contract";
+import { type SkillName, skillTitle } from "@courtyard/contract";
 import { Book, X } from "lucide-react";
 import { classes } from "@/lib/classes";
+import { IconButton } from "./button.tsx";
 
 const LOOKS = {
   /** On the owner's message in the chat: the skill they started with it. */
@@ -14,7 +15,7 @@ const LOOKS = {
  * in the message box once picked, where its X takes it off. Not on the first load.
  */
 export function SkillTag(props: {
-  name: string;
+  name: SkillName;
   look: keyof typeof LOOKS;
   /** Takes the skill off the message being written (the box's tag only). */
   onRemove?: () => void;
@@ -39,15 +40,13 @@ export function SkillTag(props: {
         {title}
       </span>
       {props.onRemove && (
-        <button
-          type="button"
-          aria-label={`Take off the ${title} skill`}
-          title={`Take off the ${title} skill`}
+        <IconButton
+          label={`Take off the ${title} skill`}
+          icon={<X aria-hidden />}
+          size="inline"
+          look="inPill"
           onClick={props.onRemove}
-          className="-my-1 inline-flex shrink-0 items-center justify-center rounded-full p-0.5 outline-none hover:bg-primary/10 focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          <X aria-hidden className="size-3.5" />
-        </button>
+        />
       )}
     </span>
   );

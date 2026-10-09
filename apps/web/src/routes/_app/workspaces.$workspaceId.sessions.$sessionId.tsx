@@ -4,6 +4,7 @@ import {
   SESSION_TITLE_MAX_LENGTH,
   SessionDetail,
   type SkillSummary,
+  WorkspaceId,
 } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   fromWorker,
   loadProviders,
   loadSkills,
+  NOT_FOUND,
   renameSession,
   sendMessage,
   stopTurn,
@@ -32,10 +34,11 @@ import {
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   loader: async ({ params }) => {
+    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
     const [session, providers, skills] = await Promise.all([
       fromWorker(`/sessions/${encodeURIComponent(params.sessionId)}`, SessionDetail),
       loadProviders(),
-      loadSkills(params.workspaceId),
+      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     ]);
     return { session, providers, skills };
   },
@@ -103,32 +106,26 @@ function Session(props: {
       stopped.kind === "loaded" || finishedAnyway ? undefined : describeProblem(stopped).body,
     );
   }, [session.id, runningTurn]);
-  const retry = useCallback(
-    async (turn: Turn) => {
+  /** Sends a message with the model and effort of `turn`, the one it retries or answers. */
+  const sendAfter = useCallback(
+    async (turn: Turn, message: Pick<Turn, "text" | "skill">) => {
       const sent = await sendMessage(session.id, {
-        text: turn.text,
+        text: message.text,
         model: turn.model,
         ...(turn.effort === undefined ? {} : { effort: turn.effort }),
-        // The skill the owner started goes again with it.
-        ...(turn.skill === undefined ? {} : { skill: turn.skill }),
-      });
-      setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
-    },
-    [session.id],
-  );
-
-  // A suggested reply goes as the owner's message, with the model and effort of the turn it answers.
-  const reply = useCallback(
-    async (turn: Turn, text: string) => {
-      const sent = await sendMessage(session.id, {
-        text,
-        model: turn.model,
-        ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        ...(message.skill === undefined ? {} : { skill: message.skill }),
       });
       setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
       return sent.kind === "loaded";
     },
     [session.id],
+  );
+  // A retry sends the turn's message again, the skill the owner started with it included.
+  const retry = useCallback((turn: Turn) => void sendAfter(turn, turn), [sendAfter]);
+  // A suggested reply goes as the owner's message, with no skill tag.
+  const reply = useCallback(
+    (turn: Turn, text: string) => sendAfter(turn, { text, skill: undefined }),
+    [sendAfter],
   );
 
   const carryOnFrom = useCallback(
@@ -210,7 +207,7 @@ function Session(props: {
                 label="Delete session"
                 icon={<Trash2 />}
                 expanded={tidying === "delete"}
-                active={tidying === "delete"}
+                look={tidying === "delete" ? "pressed" : "quiet"}
                 onClick={() => toggle("delete")}
               />
             </>

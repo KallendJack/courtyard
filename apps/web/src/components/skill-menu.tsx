@@ -1,4 +1,4 @@
-import type { SkillSummary } from "@courtyard/contract";
+import type { SkillName, SkillSummary } from "@courtyard/contract";
 import { classes } from "@/lib/classes";
 import { SkillRow, usable } from "./skill-list.tsx";
 
@@ -14,8 +14,8 @@ export function SkillMenu(props: {
   workspaceName: string;
   skills: readonly SkillSummary[];
   /** The highlighted skill's name, if any. */
-  active: string | undefined;
-  pick: (name: string) => void;
+  active: SkillName | undefined;
+  pick: (name: SkillName) => void;
   /** Where it floats: above the box, or below it when there's no room above; and how tall it may be. */
   place: { readonly side: "above" | "below"; readonly maxHeight: number };
 }) {
@@ -52,7 +52,7 @@ export function SkillMenu(props: {
                 aria-selected={active}
                 aria-disabled={!pickable}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => pickable && props.pick(skill.name)}
+                onClick={() => usable(skill) && props.pick(skill.name)}
                 className={classes(
                   pickable && "cursor-pointer hover:bg-accent/60",
                   active && "bg-accent",

@@ -10,7 +10,7 @@ import {
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
-import type { OneOffInput, Provider, TurnInput } from "./providers/index.ts";
+import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,
@@ -107,6 +107,12 @@ const firstTurn = async (capabilities = READS_FILES) => {
   if (!turn) throw new Error("no turn reached the provider");
   return turn;
 };
+
+/** A tool's inputs as docs/ai-conduct.md lists them: `- name: what it means`, one per line. */
+const inputsOf = (tool: CourtyardTool | undefined) =>
+  Object.entries(tool?.input ?? {})
+    .map(([name, input]) => `- ${name}: ${input.description}`)
+    .join("\n");
 
 describe("what every turn tells a model", () => {
   it("names the workspace, and says what the model may do with its folder", async () => {
@@ -730,11 +736,33 @@ describe("suggested replies (#126, ADR 0017)", () => {
     const framing = await savingTurn();
 
     const tool = framing.tools.find((offered) => offered.name === "suggest_replies");
-    expect(tool?.description).toMatch(/buttons/);
-    expect(Object.keys(tool?.input ?? {})).toEqual(["replies"]);
+    expect(tool?.description).toBe(await quotedInGuide("Offers the owner two or three replies"));
+    expect(inputsOf(tool)).toBe(await quotedInGuide("- replies: Two or three different replies"));
     expect(framing.instructions).toContain(
       await quotedInGuide("Whenever your answer ends by asking"),
     );
+  });
+
+  it("refuses a call to one of Courtyard's tools that the turn doesn't offer", async () => {
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      '{ "mode": "code", "repoPath": "/path/to/repo" }',
+    );
+    const saver = savingProvider([[{ call: "suggest_replies", input: { replies: ["A", "B"] } }]]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    await followSession(request, { sessionId, until: "turn-completed" });
+
+    expect(saver.replies[0]).toEqual([
+      {
+        ok: false,
+        reply: await quotedInGuide("This turn has no tool called", { name: "suggest_replies" }),
+      },
+    ]);
   });
 
   it("offers it neither in a code workspace nor to a provider that takes none of Courtyard's tools", async () => {
@@ -806,8 +834,8 @@ describe("skills (#89, ADR 0016)", () => {
     expect(framing?.instructions).toContain(`${intro}\n\n${SKILLS_LIST}`);
     expect(framing?.instructions).not.toContain("get-to-know");
     const useSkill = framing?.tools.find((tool) => tool.name === "use_skill");
-    expect(useSkill?.description).toMatch(/Only files in the skill's folder can be read\.$/);
-    expect(Object.keys(useSkill?.input ?? {})).toEqual(["name", "path", "start_line"]);
+    expect(useSkill?.description).toBe(await quotedInGuide("Loads one of the skills"));
+    expect(inputsOf(useSkill)).toBe(await quotedInGuide("- name: The skill's name"));
   });
 
   it("tells every provider the same skills", async () => {
@@ -824,11 +852,11 @@ describe("skills (#89, ADR 0016)", () => {
     );
   });
 
-  it("offers no list and no tool to a provider that takes none of Courtyard's tools", async () => {
+  it("lists them on every turn, offering the tool only to a provider that takes Courtyard's tools", async () => {
     const { provider, turns } = recorder(READS_FILES);
     await (await skillSession([provider])).say({ text: "Hello.", model: MODEL });
 
-    expect(turns[0]?.framing.instructions).not.toContain("<skills>");
+    expect(turns[0]?.framing.instructions).toContain(SKILLS_LIST);
     expect(turns[0]?.framing.tools).toEqual([]);
   });
 
@@ -875,7 +903,7 @@ describe("skills (#89, ADR 0016)", () => {
     const { events } = await say({ text: "Does next week fit?", model: SAVING_MODEL });
     await say({ text: "And the week after?", model: SAVING_MODEL });
 
-    expect(saver.replies[0]?.[0]?.saved).toBe(true);
+    expect(saver.replies[0]?.[0]?.ok).toBe(true);
     expect(saver.replies[0]?.[0]?.reply).toContain("name: programme-check");
     expect(saver.replies[0]?.[0]?.reply).toContain("Check each session against the kit list.");
     expect(events.filter((event) => event.type === "activity")).toMatchObject([
@@ -905,14 +933,10 @@ describe("skills (#89, ADR 0016)", () => {
     const { events } = await say({ text: "Does next week fit?", model: SAVING_MODEL });
 
     const [file, ...outside] = saver.replies[0] ?? [];
-    expect(file).toEqual({ saved: true, reply: "Every fourth week is lighter." });
+    expect(file).toEqual({ ok: true, reply: "Every fourth week is lighter." });
     expect(outside).toHaveLength(3);
-    for (const reply of outside) {
-      expect(reply).toEqual({
-        saved: false,
-        reply: "Only files in the skill's folder can be read.",
-      });
-    }
+    const refused = await quotedInGuide("Only files in the skill's folder");
+    for (const reply of outside) expect(reply).toEqual({ ok: false, reply: refused });
     expect(events.filter((event) => event.type === "activity")).toMatchObject([
       { activity: { kind: "skill-file-read", name, path: "references/deload-weeks.md" } },
     ]);
@@ -932,15 +956,32 @@ describe("skills (#89, ADR 0016)", () => {
     await say({ text: "Get to know this workspace.", model: SAVING_MODEL, skill: "get-to-know" });
 
     expect(saver.replies[0]).toEqual([
-      { saved: false, reply: "Only the owner starts get-to-know." },
-      {
-        saved: false,
-        reply:
-          "There's no skill called packing here: the skills you can load are in your instructions.",
-      },
+      { ok: false, reply: await quotedInGuide("Only the owner starts", { name: "get-to-know" }) },
+      { ok: false, reply: await quotedInGuide("There's no skill called", { name: "packing" }) },
     ]);
     expect(events.filter((event) => event.type === "activity")).toEqual([]);
-    expect(saver.replies[1]?.[0]?.saved).toBe(true);
+    expect(saver.replies[1]?.[0]?.ok).toBe(true);
+  });
+
+  it("refuses input it doesn't take, and a skill that can't be read just then, saying why", async () => {
+    const saver = savingProvider([
+      [
+        { call: "use_skill", input: { skill: "programme-check" } },
+        () => rm(join(workspaceSkills(), "programme-check"), { recursive: true, force: true }),
+        { call: "use_skill", input: { name: "programme-check" } },
+      ],
+    ]);
+    const { say } = await skillSession([saver.provider]);
+
+    await say({ text: "Does next week fit?", model: SAVING_MODEL });
+
+    expect(saver.replies[0]).toEqual([
+      {
+        ok: false,
+        reply: await quotedInGuide("That input doesn't fit this tool: it takes a skill"),
+      },
+      { ok: false, reply: await quotedInGuide("That skill couldn't be read") },
+    ]);
   });
 
   it("keeps a skill's text inside its markers, however a closing marker is spelt", async () => {

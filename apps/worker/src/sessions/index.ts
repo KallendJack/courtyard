@@ -28,7 +28,6 @@ import type { ContextFolder } from "../context-folder/index.ts";
 import { exists, listFolder, move, readJsonFile, readTextFile, writeJsonFile } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
-  asksItsQuestion,
   type FramingWorkspace,
   framingFor,
   notOfferedReply,
@@ -49,6 +48,7 @@ import {
   offerFor,
   type Provider,
   type ToolReply,
+  type TurnToolName,
 } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -59,7 +59,13 @@ import {
   type SaveTarget,
   undoSave,
 } from "../saves/index.ts";
-import { inUseTexts, type SkillsWorkspace, skillTool, workspaceSkills } from "../skills/index.ts";
+import {
+  inUseTexts,
+  type SkillsWorkspace,
+  skillTool,
+  type WorkspaceSkills,
+  workspaceSkills,
+} from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
@@ -411,26 +417,26 @@ export const createSessions = (options: {
     });
 
   /**
-   * What a turn needs from its workspace: its name, mode, folder and repo, its context file as
-   * written, and the owner context.
+   * What a turn needs from its workspace: its name, mode and folder, its context file as written,
+   * the owner context, and its skills.
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<FramingWorkspace & SkillsWorkspace, string>> => {
+  ): Promise<Result<FramingWorkspace & { folder: string; skills: WorkspaceSkills }, string>> => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(options.contextDir, workspaceId),
       readOwnerContext(options.contextDir),
     ]);
     if (!workspace.ok) return err("This session's workspace can't be read.");
     if (!ownerContext.ok) return err(ownerContext.error.message);
-    const { summary, folder, contextMarkdown, repoPath } = workspace.value;
+    const { summary, folder, contextMarkdown } = workspace.value;
     return ok({
       name: summary.name,
       mode: summary.mode,
       folder,
-      repoPath,
       contextFile: contextMarkdown,
       ownerContext: ownerContext.value,
+      skills: await skillsOf(workspace.value),
     });
   };
 
@@ -473,7 +479,7 @@ export const createSessions = (options: {
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
       } else {
-        const skills = await skillsOf(workspace.value);
+        const { skills } = workspace.value;
         const inUse = skillsInUse(events.value);
         const framing = framingFor({
           workspace: workspace.value,
@@ -520,14 +526,13 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
-        /** What the answer has written so far in this turn. */
-        let written = "";
-        /**
-         * Whether the answer is finished: it had asked its question when its replies were taken,
-         * so anything more the model writes (Claude writes it all again) is dropped.
-         */
-        let finished = false;
-        const suggest = createTurnReplies({
+        /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
+        const write = async (text: string) => {
+          if (text === "" || recordingLost || stopper.signal.aborted) return;
+          const recorded = await append(turn.id, { type: "text-delta", text });
+          if (!recorded.ok) recordingLost = true;
+        };
+        const replies = createTurnReplies({
           stopped: () => stopper.signal.aborted || recordingLost,
           record: async (replies) => {
             const recorded = await append(turn.id, {
@@ -537,23 +542,19 @@ export const createSessions = (options: {
             if (!recorded.ok) recordingLost = true;
           },
         });
-        /** What answers each of Courtyard's tools, by name: only those the framing offers. */
-        const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
+        /** What answers each of Courtyard's tools, by name: every one a turn can offer. */
+        const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
-          [SUGGEST_REPLIES_TOOL_NAME]: async (input) => {
-            const taken = await suggest(input);
-            // Its question asked and its replies taken, the answer is finished.
-            if (taken.ok && asksItsQuestion(written)) finished = true;
-            return suggestRepliesReply(taken, written);
-          },
+          [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
+            suggestRepliesReply(await replies.suggest(input)),
         };
+        /** A model's call to one of Courtyard's tools, answered only when the framing offers it. */
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
-          const answer = answers[call.name];
-          if (answer === undefined || !framing.tools.some((tool) => tool.name === call.name)) {
-            return Promise.resolve(notOfferedReply(call.name));
-          }
-          return answer(call.input);
+          const offered = framing.tools.find((tool) => tool.name === call.name);
+          return offered === undefined
+            ? Promise.resolve(notOfferedReply(call.name))
+            : answers[offered.name](call.input);
         };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
@@ -568,19 +569,15 @@ export const createSessions = (options: {
               void calling.finally(() => callsUnderway.delete(calling));
               return calling;
             },
-            emit: async (text) => {
-              // Anything a provider writes after the owner stopped the turn is dropped.
-              if (recordingLost || stopper.signal.aborted || finished) return;
-              written += text;
-              const recorded = await append(turn.id, { type: "text-delta", text });
-              if (!recorded.ok) recordingLost = true;
-            },
+            emit: (text) => write(replies.kept(text)),
             report,
             signal: stopper.signal,
           }),
           stoppedByOwner,
         ]);
         if (outcome !== "stopped" && !outcome.ok) failure = outcome.error;
+        // The last line, held back in case it repeated the answer, when it didn't.
+        else if (outcome !== "stopped") await write(replies.end());
       }
     } catch (error) {
       // A provider throwing is a bug in its adapter: the details go to the worker's log, and the
@@ -737,8 +734,7 @@ export const createSessions = (options: {
     if (message.skill === undefined) return ok(null);
     const workspace = await getWorkspace(options.contextDir, workspaceId);
     if (!workspace.ok) return err(STORAGE_ERROR);
-    const { folder, summary, repoPath } = workspace.value;
-    const skills = await skillsOf({ folder, mode: summary.mode, repoPath });
+    const skills = await skillsOf(workspace.value);
     return skills.usable.some((skill) => skill.name === message.skill)
       ? ok(null)
       : err({ kind: "skill-unavailable" });

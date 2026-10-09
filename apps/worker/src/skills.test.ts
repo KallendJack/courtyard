@@ -55,7 +55,7 @@ const skillsOf = async (request: Requester, workspace = "garage-gym") => {
 };
 
 const usable = (skills: readonly SkillSummary[]) =>
-  skills.filter((s) => s.problem === undefined).map((s) => [s.name, s.source]);
+  skills.filter((s) => s.kind === "usable").map((s) => [s.name, s.source]);
 
 describe("a workspace's skills", () => {
   it("are the house skills for its kind of workspace, until the owner adds their own", async () => {
@@ -63,6 +63,7 @@ describe("a workspace's skills", () => {
 
     expect(skills).toEqual([
       {
+        kind: "usable",
         name: "get-to-know",
         description: "What get-to-know does.",
         source: "house",
@@ -70,6 +71,7 @@ describe("a workspace's skills", () => {
         replacesHouse: false,
       },
       {
+        kind: "usable",
         name: "grilling",
         description: "What grilling does.",
         source: "house",
@@ -103,7 +105,7 @@ describe("a workspace's skills", () => {
       replacesHouse: true,
     });
     expect(byName.get("programme-check")?.description).toBe("The project's.");
-    expect(byName.get("code-review")?.replacesHouse).toBe(true);
+    expect(byName.get("code-review")).toMatchObject({ replacesHouse: true });
   });
 
   it("keep a house skill only the owner starts that way, even when the owner's replaces it", async () => {
@@ -132,27 +134,27 @@ describe("a workspace's skills", () => {
     // Can't-be-used ones come after the rest.
     expect(skills.slice(2)).toEqual([
       {
+        kind: "unusable",
         name: "grilling",
         description: "",
         source: "everywhere",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "its SKILL.md has no description" },
       },
       {
+        kind: "unusable",
         name: "Notes",
         description: "",
         source: "workspace",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "it has no SKILL.md" },
       },
       {
+        kind: "unusable",
         name: "warm-up",
         description: "",
         source: "workspace",
         ownerOnly: false,
-        replacesHouse: false,
         problem: { kind: "broken", reason: "its SKILL.md has no description" },
       },
     ]);
@@ -163,13 +165,14 @@ describe("a workspace's skills", () => {
 
     const request = await owner();
     const planning = await skillsOf(request);
-    expect(planning.find((s) => s.name === "ride-log-chart")?.problem).toEqual({
-      kind: "needs-code-workspace",
+    expect(planning.find((s) => s.name === "ride-log-chart")).toMatchObject({
+      kind: "unusable",
+      problem: { kind: "needs-code-workspace" },
     });
 
     await asCode();
     const code = await skillsOf(request);
-    expect(code.find((s) => s.name === "ride-log-chart")?.problem).toBeUndefined();
+    expect(code.find((s) => s.name === "ride-log-chart")?.kind).toBe("usable");
   });
 
   it("are only the house's and the owner's when a code workspace's repo isn't there", async () => {
@@ -204,5 +207,67 @@ describe("a workspace's skills", () => {
     const response = await (await owner())("/api/workspaces/attic/skills");
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("a skill checked against the Agent Skills format", () => {
+  /** Whether the workspace's packing skill, its SKILL.md being `skillMd`, is usable, or why not. */
+  const packingWith = async (skillMd: string | undefined) => {
+    await mkdir(join(workspaceSkills(), "packing"), { recursive: true });
+    if (skillMd !== undefined) {
+      await writeFile(join(workspaceSkills(), "packing", "SKILL.md"), skillMd);
+    }
+    const packing = (await skillsOf(await owner())).find((s) => s.name === "packing");
+    return packing?.kind === "unusable" ? packing.problem : packing?.kind;
+  };
+
+  it.each([
+    [undefined, "it has no SKILL.md"],
+    ["Pack it.\n", "its SKILL.md doesn't start with a --- line"],
+    ["---\nname: packing\ndescription: Packs.\n", "its SKILL.md's --- lines aren't closed"],
+    ["---\nname: [packing\n---\n", "its SKILL.md's fields aren't valid YAML"],
+    ["---\n- packing\n---\n", "its SKILL.md's fields aren't a list of names and values"],
+    ["---\ndescription: Packs.\n---\n", "its SKILL.md has no name"],
+    [
+      "---\nname: Packing\ndescription: Packs.\n---\n",
+      "its name has to be lowercase letters, digits and single hyphens, up to 64 characters",
+    ],
+    [
+      "---\nname: packer\ndescription: Packs.\n---\n",
+      "its name, \"packer\", isn't its folder's name",
+    ],
+    ["---\nname: packing\ndescription: ''\n---\n", "its SKILL.md has no description"],
+    [
+      `---\nname: packing\ndescription: ${"x".repeat(1025)}\n---\n`,
+      "its description is over 1,024 characters",
+    ],
+    [
+      `---\nname: packing\ndescription: Packs.\ncompatibility: ${"x".repeat(501)}\n---\n`,
+      "its compatibility is over 500 characters",
+    ],
+    [
+      "---\nname: packing\ndescription: Packs.\ndisable-model-invocation: true\n---\n",
+      "its SKILL.md has a field the Agent Skills format doesn't: disable-model-invocation",
+    ],
+  ])("can't be used when it fails, saying why: %j", async (skillMd, reason) => {
+    expect(await packingWith(skillMd)).toEqual({ kind: "broken", reason });
+  });
+
+  it("can be used with every field the format has", async () => {
+    const skillMd = [
+      "---",
+      "name: packing",
+      "description: Packs a bag for a trip.",
+      "license: MIT",
+      "compatibility: Any model.",
+      "metadata:",
+      "  author: courtyard.example",
+      "allowed-tools: Read",
+      "---",
+      "Pack it.",
+      "",
+    ].join("\n");
+
+    expect(await packingWith(skillMd)).toBe("usable");
   });
 });

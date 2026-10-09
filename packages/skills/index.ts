@@ -159,12 +159,14 @@ export const checkSkill = async (folder: string): Promise<Result<CheckedSkill, s
   });
 };
 
-/** A skill's whole `SKILL.md`, as a model is given it, or `undefined` when it can't be read. */
-export const readSkillFile = async (folder: string): Promise<string | undefined> => {
+/** A skill's whole `SKILL.md`, as a model is given it, or that it can't be read. */
+export const readSkillFile = async (
+  folder: string,
+): Promise<Result<string, { readonly kind: "unreadable" }>> => {
   try {
-    return await readFile(join(folder, SKILL_FILE), "utf8");
+    return ok(await readFile(join(folder, SKILL_FILE), "utf8"));
   } catch {
-    return undefined;
+    return err({ kind: "unreadable" });
   }
 };
 

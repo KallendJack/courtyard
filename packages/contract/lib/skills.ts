@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SkillSource } from "./skill-name.ts";
+import { SkillName, SkillSource } from "./skill-name.ts";
 
 /** Each source as the app names it. */
 export const SKILL_SOURCE_NAMES: Record<SkillSource, string> = {
@@ -18,20 +18,36 @@ export const SkillProblem = z.discriminatedUnion("kind", [
 ]);
 export type SkillProblem = z.infer<typeof SkillProblem>;
 
-/** One skill a workspace gets, or one it would get but can't use, and why. */
-export const SkillSummary = z.object({
-  /** Its name; for a broken skill, its folder's name. */
-  name: z.string(),
+/** What every skill a workspace lists says of it. */
+const SkillAbout = {
   /** What it's for; empty for a broken skill without one. */
   description: z.string(),
   source: SkillSource,
   /** Only the owner starts it, so a model is never offered it (`"start": "owner"`). */
   ownerOnly: z.boolean(),
+};
+
+/** A skill a workspace's models can use. */
+export const UsableSkillSummary = z.object({
+  kind: z.literal("usable"),
+  name: SkillName,
+  ...SkillAbout,
   /** One of the owner's, or a project's, with a house skill's name, which it replaces here. */
   replacesHouse: z.boolean(),
-  /** Why it can't be used here, when it can't. */
-  problem: SkillProblem.optional(),
 });
+export type UsableSkillSummary = z.infer<typeof UsableSkillSummary>;
+
+/** One skill a workspace gets, or one it would get but can't use, and why. */
+export const SkillSummary = z.discriminatedUnion("kind", [
+  UsableSkillSummary,
+  z.object({
+    kind: z.literal("unusable"),
+    /** Its name; for a broken skill, its folder's name, which may not be a skill's name. */
+    name: z.string(),
+    ...SkillAbout,
+    problem: SkillProblem,
+  }),
+]);
 export type SkillSummary = z.infer<typeof SkillSummary>;
 
 /** A workspace's skills: the ones it can use by name, then the ones it can't. */

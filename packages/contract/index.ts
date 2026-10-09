@@ -63,6 +63,7 @@ export {
   SkillProblem,
   SkillSummary,
   skillTitle,
+  UsableSkillSummary,
 } from "./lib/skills.ts";
 export {
   TidyChange,
