@@ -14,10 +14,10 @@ import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
-import { attachmentUrl } from "../worker.ts";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
+import { attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
 
