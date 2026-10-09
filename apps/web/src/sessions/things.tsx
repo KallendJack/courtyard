@@ -1,10 +1,6 @@
 import type { SessionId, WorkspaceId } from "@courtyard/contract";
-import { Tag, Undo2 } from "lucide-react";
-import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { NoteRow, NoteWords } from "@/components/note-row";
-import { useAction } from "@/lib/use-action";
-import { describeProblem } from "../problems.tsx";
+import { Tag } from "lucide-react";
+import { FileSaveNote } from "@/components/file-save-note";
 import { undoThingSave } from "../things/api.ts";
 import { thingSaveWords } from "../things/words.ts";
 import type { ThingNote } from "./events.ts";
@@ -23,43 +19,24 @@ export function ThingNoteRow(props: {
   note: ThingNote;
 }) {
   const { sessionId, workspaceId, note } = props;
-  const undo = useAction(async () => {
-    const undone = await undoThingSave(sessionId, note.seq);
-    return undone.kind === "loaded" ? undefined : describeProblem(undone).body;
-  });
   const { action, thing } = note.save;
   return (
-    <NoteRow
-      icon={note.undone ? <Undo2 /> : <Tag />}
-      muted={note.undone}
-      actions={
-        note.undone ? undefined : (
-          <>
-            {action !== "remove" && workspaceId !== undefined && (
-              <ButtonLink
-                variant="quiet"
-                size="xs"
-                to="/workspaces/$workspaceId/things/$slug"
-                params={{ workspaceId, slug: thing.slug }}
-              >
-                Open
-              </ButtonLink>
-            )}
-            <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
-              Undo
-            </Button>
-          </>
-        )
+    <FileSaveNote
+      icon={<Tag />}
+      label={LABELS[action]}
+      name={thing.name}
+      aside={thingSaveWords(note.save)}
+      open={
+        action === "remove" || workspaceId === undefined
+          ? undefined
+          : {
+              to: "/workspaces/$workspaceId/things/$slug",
+              params: { workspaceId, slug: thing.slug },
+            }
       }
-      error={undo.error}
-    >
-      <NoteWords
-        label={note.undone ? "Undone" : LABELS[action]}
-        line={thing.name}
-        aside={thingSaveWords(note.save)}
-        muted={note.undone}
-        struck={action === "remove"}
-      />
-    </NoteRow>
+      undone={note.undone}
+      struck={action === "remove"}
+      undo={() => undoThingSave(sessionId, note.seq)}
+    />
   );
 }

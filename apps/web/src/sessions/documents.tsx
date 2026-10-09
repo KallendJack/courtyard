@@ -1,9 +1,8 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type SessionId, type WorkspaceId } from "@courtyard/contract";
-import { FileCheck, FilePlus, Undo2 } from "lucide-react";
+import { FileCheck, FilePlus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { NoteRow, NoteWords } from "@/components/note-row";
+import { FileSaveNote } from "@/components/file-save-note";
 import { TextField } from "@/components/text-field";
 import { useAction } from "@/lib/use-action";
 import { saveAsDocument, undoDocumentSave } from "../documents/api.ts";
@@ -125,40 +124,19 @@ export function DocumentNoteRow(props: {
   note: DocumentNote;
 }) {
   const { sessionId, workspaceId, note } = props;
-  const undo = useAction(async () => {
-    const undone = await undoDocumentSave(sessionId, note.seq);
-    return undone.kind === "loaded" ? undefined : describeProblem(undone).body;
-  });
   const { action, document, summary } = note.save;
   return (
-    <NoteRow
-      icon={note.undone ? <Undo2 /> : <FileCheck />}
-      muted={note.undone}
-      actions={
-        note.undone ? undefined : (
-          <>
-            <ButtonLink
-              variant="quiet"
-              size="xs"
-              to="/workspaces/$workspaceId/documents/$slug"
-              params={{ workspaceId, slug: document.slug }}
-            >
-              Open
-            </ButtonLink>
-            <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
-              Undo
-            </Button>
-          </>
-        )
-      }
-      error={undo.error}
-    >
-      <NoteWords
-        label={note.undone ? "Undone" : action === "save" ? "Saved document" : "Updated document"}
-        line={document.name}
-        aside={summary}
-        muted={note.undone}
-      />
-    </NoteRow>
+    <FileSaveNote
+      icon={<FileCheck />}
+      label={action === "save" ? "Saved document" : "Updated document"}
+      name={document.name}
+      aside={summary}
+      open={{
+        to: "/workspaces/$workspaceId/documents/$slug",
+        params: { workspaceId, slug: document.slug },
+      }}
+      undone={note.undone}
+      undo={() => undoDocumentSave(sessionId, note.seq)}
+    />
   );
 }
