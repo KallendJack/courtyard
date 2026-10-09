@@ -238,9 +238,8 @@ export const Composer = memo(function Composer(props: {
             {...(skills === undefined
               ? {}
               : {
-                  role: "combobox",
+                  // Still the message box to a screen reader, which hears the list it opens.
                   "aria-autocomplete": "list" as const,
-                  "aria-expanded": menuOpen,
                   ...(menuOpen ? { "aria-controls": menuId } : {}),
                   ...(menuOpen && highlighted
                     ? { "aria-activedescendant": skillOptionId(menuId, highlighted.name) }
