@@ -6,13 +6,13 @@ import {
   DocumentRename,
   type DocumentRenamed,
   DocumentSlug,
-  WorkspaceId,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody } from "../http.ts";
+import type { PlanningFilesTarget } from "../planning-files/index.ts";
+import { DOCUMENTS, fileIn, sharedFileError, workspaceIn } from "../planning-files/routes.ts";
 import {
   type DocumentRefusal,
-  type DocumentTarget,
   type DocumentUndoRefusal,
   deleteDocument,
   getDocument,
@@ -24,9 +24,12 @@ import {
 export const documentError = (c: Context, refusal: DocumentRefusal | DocumentUndoRefusal) => {
   switch (refusal.kind) {
     case "workspace":
-      return contextError(c, refusal.error);
     case "code-workspace":
-      return apiError(c, { status: 409, error: "Only planning workspaces keep documents." });
+    case "not-found":
+    case "not-undoable":
+    case "already-undone":
+    case "storage":
+      return sharedFileError(c, refusal, DOCUMENTS);
     case "no-name":
       return apiError(c, {
         status: 400,
@@ -42,8 +45,6 @@ export const documentError = (c: Context, refusal: DocumentRefusal | DocumentUnd
         status: 409,
         error: `There's already a document called ${refusal.name}. Choose another name.`,
       });
-    case "not-found":
-      return apiError(c, { status: 404, error: "No such document." });
     case "unread":
     case "stale":
     case "changed-since":
@@ -51,27 +52,16 @@ export const documentError = (c: Context, refusal: DocumentRefusal | DocumentUnd
         status: 409,
         error: "That document has changed since, so this would lose the newer text.",
       });
-    case "not-undoable":
-      return apiError(c, { status: 409, error: "This change can't be undone from here." });
-    case "already-undone":
-      return apiError(c, { status: 409, error: "This change is already undone." });
-    case "storage":
-      return apiError(c, {
-        status: 500,
-        error: "The workspace's documents can't be read or written.",
-      });
   }
 };
 
 /** A workspace's documents, under `/api`. */
-export const documentRoutes = (target: Pick<DocumentTarget, "contextDir" | "contextFolder">) => {
+export const documentRoutes = (
+  target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder">,
+) => {
   const routes = new Hono();
 
-  /** The target for the workspace a path names, or `undefined` when it can't name one. */
-  const inWorkspace = (c: Context) => {
-    const id = WorkspaceId.safeParse(c.req.param("id"));
-    return id.success ? { ...target, workspaceId: id.data } : undefined;
-  };
+  const inWorkspace = (c: Context) => workspaceIn(c, target);
 
   routes.get("/workspaces/:id/documents", async (c) => {
     const workspace = inWorkspace(c);
@@ -81,13 +71,8 @@ export const documentRoutes = (target: Pick<DocumentTarget, "contextDir" | "cont
     return c.json({ documents: documents.value } satisfies DocumentList);
   });
 
-  /** The workspace and the document a path names, or `undefined` when it can't name one. */
-  const documentIn = (c: Context) => {
-    const workspace = inWorkspace(c);
-    const slug = DocumentSlug.safeParse(c.req.param("slug"));
-    return workspace === undefined || !slug.success ? undefined : { workspace, slug: slug.data };
-  };
-  const noSuchDocument = (c: Context) => apiError(c, { status: 404, error: "No such document." });
+  const documentIn = (c: Context) => fileIn(c, target, DocumentSlug);
+  const noSuchDocument = (c: Context) => sharedFileError(c, { kind: "not-found" }, DOCUMENTS);
 
   routes.get("/workspaces/:id/documents/:slug", async (c) => {
     const named = documentIn(c);

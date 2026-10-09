@@ -96,6 +96,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
   with the fields, as one multipart form, so both are one change with one Undo; these and the
   photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
+- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
+  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
+  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
+  for the refusals they share.
 - **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
   `context-file/` and `context-folder/`.
 - **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and

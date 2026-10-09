@@ -7,26 +7,24 @@ import {
   type DocumentSave,
   DocumentSlug,
   type DocumentSummary,
-  type SessionId,
-  type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
 import {
-  type ChangeNote,
-  type ContextFolder,
   sameFileText,
   undoWholeFiles,
   type WholeFile,
   type WholeFilesUndoRefusal,
 } from "../context-folder/index.ts";
 import { listFolder, readTextFile, removeFile, writeTextFileIn } from "../files.ts";
-import { err, ok, type Result } from "../result.ts";
 import {
-  getWorkspace,
-  plainName,
-  RESERVED_ON_WINDOWS,
-  type WorkspaceError,
-} from "../workspaces/index.ts";
+  type PlanningFilesTarget,
+  type PlanningFolderRefusal,
+  pathInWorkspace,
+  planningChange,
+  planningFolder,
+  slugFor,
+} from "../planning-files/index.ts";
+import { err, ok, type Result } from "../result.ts";
 
 /**
  * A workspace's documents (ADR 0020): Markdown files in its `docs` folder, each named by its first
@@ -39,10 +37,6 @@ export const DOCS_FOLDER = "docs";
 
 /** A document's path in its workspace's folder. */
 export const documentPath = (slug: DocumentSlug) => `${DOCS_FOLDER}/${slug}.md`;
-
-/** A document's path from the context folder's top, as its changes name it. */
-const pathInFolder = (workspaceId: WorkspaceId, slug: DocumentSlug) =>
-  `${workspaceId}/${documentPath(slug)}`;
 
 /** The heading that names a document: `# Name`, outside any fenced code. */
 const HEADING = /^#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
@@ -71,24 +65,9 @@ export const bodyOf = (markdown: string) => {
   return (at === -1 ? lines : lines.slice(at + 1)).join("\n").trim();
 };
 
-/** The longest a document's file name gets, cut at a word. */
-const SLUG_MAX = 60;
-
-/** The file name for a document called `name`, or `undefined` when it has no letter or digit. */
-export const slugFor = (name: string): DocumentSlug | undefined => {
-  let plain = plainName(name);
-  if (plain.length > SLUG_MAX) plain = plain.slice(0, SLUG_MAX).replace(/-[^-]*$/, "");
-  if (RESERVED_ON_WINDOWS.test(plain)) plain = `${plain}-document`;
-  const slug = DocumentSlug.safeParse(plain);
-  return slug.success ? slug.data : undefined;
-};
-
 /** Why a document wasn't saved, renamed or deleted. */
 export type DocumentRefusal =
-  /** The workspace can't be read, or isn't there. */
-  | { readonly kind: "workspace"; readonly error: WorkspaceError }
-  /** Only planning workspaces keep documents (ADR 0020). */
-  | { readonly kind: "code-workspace" }
+  | PlanningFolderRefusal
   /** It has no `#` heading to name it, or its name has no letter or digit. */
   | { readonly kind: "no-name" }
   | { readonly kind: "too-long"; readonly characters: number }
@@ -109,27 +88,9 @@ export type DocumentUndoRefusal = WholeFilesUndoRefusal;
  * document goes back as it was, unless it's changed since.
  */
 export const undoDocumentChange = (
-  target: Pick<DocumentTarget, "contextDir" | "contextFolder" | "sessionId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder" | "sessionId">,
   id: ChangeId,
 ) => undoWholeFiles(target, { id, kinds: ["document"] });
-
-/** Where documents are kept: the context folder, and the session a change comes from, if any. */
-export type DocumentTarget = {
-  readonly contextDir: string;
-  readonly contextFolder: ContextFolder;
-  readonly workspaceId: WorkspaceId;
-  readonly sessionId?: SessionId;
-};
-
-/** A planning workspace's folder, or why it can't keep documents. */
-const documentsFolder = async (
-  target: Pick<DocumentTarget, "contextDir" | "workspaceId">,
-): Promise<Result<string, DocumentRefusal>> => {
-  const workspace = await getWorkspace(target.contextDir, target.workspaceId);
-  if (!workspace.ok) return err({ kind: "workspace", error: workspace.error });
-  if (workspace.value.summary.mode !== "planning") return err({ kind: "code-workspace" });
-  return ok(workspace.value.folder);
-};
 
 /** A document's file on the worker machine. */
 const fileOf = (folder: string, slug: DocumentSlug) => join(folder, DOCS_FOLDER, `${slug}.md`);
@@ -163,9 +124,9 @@ const summaryOf = async (
 
 /** A planning workspace's documents, the most recently changed first. */
 export const listDocuments = async (
-  target: Pick<DocumentTarget, "contextDir" | "workspaceId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
 ): Promise<Result<DocumentSummary[], DocumentRefusal>> => {
-  const folder = await documentsFolder(target);
+  const folder = await planningFolder(target);
   if (!folder.ok) return folder;
   const names = await listFolder(join(folder.value, DOCS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
@@ -188,7 +149,8 @@ const namedText = (
     return err({ kind: "too-long", characters: markdown.length });
   }
   const name = nameOf(markdown);
-  const slug = name === undefined ? undefined : slugFor(name);
+  const slug =
+    name === undefined ? undefined : slugFor(name, { slug: DocumentSlug, kind: "document" });
   return name === undefined || slug === undefined ? err({ kind: "no-name" }) : ok({ name, slug });
 };
 
@@ -202,24 +164,12 @@ const asFile = (markdown: string) => `${markdown.trimEnd()}\n`;
 /** A saved document and the change it was committed as, if git kept it. */
 export type DocumentSaved = { readonly save: DocumentSave; readonly change: ChangeId | undefined };
 
-/** A change to documents, described for the context folder's history. */
-const documentChange = (
-  target: DocumentTarget,
-  change: { title: string; paths: readonly string[] },
-): ChangeNote => ({
-  kind: "document",
-  title: change.title,
-  places: [{ kind: "workspace", id: target.workspaceId }],
-  ...(target.sessionId === undefined ? {} : { session: target.sessionId }),
-  files: [...new Set(change.paths)],
-});
-
 /**
  * Saves a new document, named by its first `#` heading, as one change. Refused when it has no
  * heading, is too long, or another document has its file name.
  */
 export const saveNewDocument = async (
-  target: DocumentTarget,
+  target: PlanningFilesTarget,
   markdown: string,
 ): Promise<Result<DocumentSaved, DocumentRefusal>> => {
   const named = namedText(markdown);
@@ -227,7 +177,7 @@ export const saveNewDocument = async (
   const { name, slug } = named.value;
   const saved = await target.contextFolder.changeWithId(
     async (): Promise<Result<DocumentSave, DocumentRefusal>> => {
-      const folder = await documentsFolder(target);
+      const folder = await planningFolder(target);
       if (!folder.ok) return folder;
       const there = await readDocumentText(folder.value, slug);
       if (!there.ok) return there;
@@ -240,9 +190,10 @@ export const saveNewDocument = async (
       return ok({ action: "save", document: { slug, name } });
     },
     () =>
-      documentChange(target, {
+      planningChange(target, {
+        kind: "document",
         title: `Save document: ${name}`,
-        paths: [pathInFolder(target.workspaceId, slug)],
+        paths: [documentPath(slug)],
       }),
   );
   return saved.ok ? ok({ save: saved.value.value, change: saved.value.id }) : saved;
@@ -254,7 +205,7 @@ export const saveNewDocument = async (
  * (one the model hasn't seen as it is, say).
  */
 const replaceDocument = async (
-  target: DocumentTarget,
+  target: PlanningFilesTarget,
   replace: {
     slug: DocumentSlug;
     markdown: string;
@@ -268,7 +219,7 @@ const replaceDocument = async (
   let was: string = replace.slug;
   const saved = await target.contextFolder.changeWithId(
     async (): Promise<Result<DocumentSave, DocumentRefusal>> => {
-      const folder = await documentsFolder(target);
+      const folder = await planningFolder(target);
       if (!folder.ok) return folder;
       const now = await readDocumentText(folder.value, replace.slug);
       if (!now.ok) return now;
@@ -297,12 +248,10 @@ const replaceDocument = async (
       return ok({ action: "update", document: { slug, name } });
     },
     () =>
-      documentChange(target, {
+      planningChange(target, {
+        kind: "document",
         title: replace.title({ name: was }, { name }),
-        paths: [
-          pathInFolder(target.workspaceId, replace.slug),
-          pathInFolder(target.workspaceId, slug),
-        ],
+        paths: [documentPath(replace.slug), documentPath(slug)],
       }),
   );
   return saved.ok ? ok({ save: saved.value.value, change: saved.value.id }) : saved;
@@ -310,10 +259,10 @@ const replaceDocument = async (
 
 /** One document for its page: what lists show, and its text below its heading. */
 export const getDocument = async (
-  target: Pick<DocumentTarget, "contextDir" | "workspaceId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
   slug: DocumentSlug,
 ): Promise<Result<{ document: DocumentSummary; body: string }, DocumentRefusal>> => {
-  const folder = await documentsFolder(target);
+  const folder = await planningFolder(target);
   if (!folder.ok) return folder;
   const summary = await summaryOf(folder.value, slug);
   if (!summary.ok) return summary;
@@ -336,10 +285,10 @@ const renamed = (markdown: string, name: string) => {
  * when another document has the new file name.
  */
 export const renameDocument = async (
-  target: DocumentTarget,
+  target: PlanningFilesTarget,
   rename: { slug: DocumentSlug; name: string },
 ): Promise<Result<DocumentSaved, DocumentRefusal>> => {
-  const folder = await documentsFolder(target);
+  const folder = await planningFolder(target);
   if (!folder.ok) return folder;
   const text = await readDocumentText(folder.value, rename.slug);
   if (!text.ok) return text;
@@ -357,13 +306,13 @@ export const renameDocument = async (
 
 /** Deletes a document, as one change that Undo brings back. */
 export const deleteDocument = async (
-  target: DocumentTarget,
+  target: PlanningFilesTarget,
   slug: DocumentSlug,
 ): Promise<Result<ChangeId | undefined, DocumentRefusal>> => {
   let name: string = slug;
   const deleted = await target.contextFolder.changeWithId(
     async (): Promise<Result<null, DocumentRefusal>> => {
-      const folder = await documentsFolder(target);
+      const folder = await planningFolder(target);
       if (!folder.ok) return folder;
       const text = await readDocumentText(folder.value, slug);
       if (!text.ok) return text;
@@ -372,9 +321,10 @@ export const deleteDocument = async (
       return (await removeFile(fileOf(folder.value, slug))) ? ok(null) : err({ kind: "storage" });
     },
     () =>
-      documentChange(target, {
+      planningChange(target, {
+        kind: "document",
         title: `Delete document: ${name}`,
-        paths: [pathInFolder(target.workspaceId, slug)],
+        paths: [documentPath(slug)],
       }),
   );
   return deleted.ok ? ok(deleted.value.id) : deleted;
@@ -390,7 +340,7 @@ export const documentChangeOf = (
   const made = files.find((file) => file.before === null && file.after !== null);
   const gone = files.find((file) => file.before !== null && file.after === null);
   const kept = files.find((file) => file.before !== null && file.after !== null);
-  const slugAt = (path: string) => slugOfPath(path.split("/").slice(1).join("/")) ?? null;
+  const slugAt = (path: string) => slugOfPath(pathInWorkspace(path)) ?? null;
   const named = (text: string | null, path: string) => nameOf(text ?? "") ?? slugAt(path) ?? path;
   if (made !== undefined && gone !== undefined) {
     const sameBody = bodyOf(made.after ?? "") === bodyOf(gone.before ?? "");
@@ -450,7 +400,7 @@ export type DocumentToolRefusal =
  * model last read or saved it, so an update is refused for a document it hasn't read in this
  * answer, or one changed since.
  */
-export const createTurnDocuments = (target: DocumentTarget) => {
+export const createTurnDocuments = (target: PlanningFilesTarget) => {
   /** Each document as the model last saw it in this turn, by its file's name. */
   const seen = new Map<DocumentSlug, string>();
   return {
@@ -458,7 +408,7 @@ export const createTurnDocuments = (target: DocumentTarget) => {
     read: async (path: string) => {
       const slug = slugOfPath(path);
       if (slug === undefined) return;
-      const folder = await documentsFolder(target);
+      const folder = await planningFolder(target);
       const text = folder.ok ? await readDocumentText(folder.value, slug) : undefined;
       if (text?.ok && text.value !== undefined) seen.set(slug, text.value);
     },

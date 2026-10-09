@@ -1,18 +1,21 @@
 import { readFile } from "node:fs/promises";
 import {
+  THING_DETAILS,
   THING_FORM_FIELD,
   THING_PHOTO_FIELD,
   type ThingChanged,
   type ThingDeleted,
   type ThingDetail,
+  type ThingDetailName,
   ThingForm,
   type ThingList,
   ThingSlug,
-  WorkspaceId,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { prepareAttachments } from "../attachments/index.ts";
 import { apiError, contextError, readWithFiles } from "../http.ts";
+import type { PlanningFilesTarget } from "../planning-files/index.ts";
+import { fileIn, sharedFileError, THINGS, workspaceIn } from "../planning-files/routes.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
   getThing,
@@ -21,7 +24,6 @@ import {
   saveThing,
   type ThingEdit,
   type ThingRefusal,
-  type ThingTarget,
   type ThingUndoRefusal,
   thingPhoto,
 } from "./index.ts";
@@ -47,9 +49,12 @@ export const THING_PHOTO_ROUTES = [
 export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal) => {
   switch (refusal.kind) {
     case "workspace":
-      return contextError(c, refusal.error);
     case "code-workspace":
-      return apiError(c, { status: 409, error: "Only planning workspaces keep Things." });
+    case "not-found":
+    case "not-undoable":
+    case "already-undone":
+    case "storage":
+      return sharedFileError(c, refusal, THINGS);
     case "invalid":
       return apiError(c, { status: 400, error: refusal.problem });
     case "incomplete":
@@ -59,8 +64,6 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
         status: 409,
         error: `There's already a Thing called ${refusal.name}. Choose another name.`,
       });
-    case "not-found":
-      return apiError(c, { status: 404, error: "No such Thing." });
     case "unreadable":
       return apiError(c, {
         status: 409,
@@ -93,30 +96,15 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
         status: 409,
         error: "That Thing has changed since, so undoing this would lose the newer change.",
       });
-    case "not-undoable":
-      return apiError(c, { status: 409, error: "This change can't be undone from here." });
-    case "already-undone":
-      return apiError(c, { status: 409, error: "This change is already undone." });
-    case "storage":
-      return apiError(c, {
-        status: 500,
-        error: "The workspace's Things can't be read or written.",
-      });
   }
 };
 
 /** Every field of the owner's form as a save sets it: a blank or missing one cleared. */
-const fromForm = (form: ThingForm): NonNullable<ThingEdit["fields"]> => ({
-  name: form.name,
-  status: form.status,
-  brand: form.brand || null,
-  bought: form.bought || null,
-  price: form.price || null,
-  condition: form.condition || null,
-  size: form.size || null,
-  where: form.where || null,
-  partOf: form.partOf || null,
-});
+const fromForm = (form: ThingForm): NonNullable<ThingEdit["fields"]> => {
+  const details: { [K in ThingDetailName]?: string | null } = {};
+  for (const detail of THING_DETAILS) details[detail] = form[detail] || null;
+  return { name: form.name, status: form.status, ...details, partOf: form.partOf || null };
+};
 
 /**
  * A photo the owner sent, checked as an attachment is and kept as a Thing keeps one; or the answer
@@ -154,28 +142,19 @@ const formSent = async (c: Context): Promise<Result<Omit<ThingEdit, "slug">, Res
 
 /** A workspace's Things, under `/api`: listed, read, added, changed, deleted, and their photos. */
 export const thingRoutes = (
-  target: Pick<ThingTarget, "contextDir" | "contextFolder"> & { now: () => number },
+  target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder"> & { now: () => number },
 ) => {
   const routes = new Hono();
   const { now, ...where } = target;
 
-  /** The target for the workspace a path names, or `undefined` when it can't name one. */
-  const inWorkspace = (c: Context) => {
-    const id = WorkspaceId.safeParse(c.req.param("id"));
-    return id.success ? { ...where, workspaceId: id.data } : undefined;
-  };
-  /** The workspace and the Thing a path names, or `undefined` when it can't name one. */
-  const thingIn = (c: Context) => {
-    const workspace = inWorkspace(c);
-    const slug = ThingSlug.safeParse(c.req.param("slug"));
-    return workspace === undefined || !slug.success ? undefined : { workspace, slug: slug.data };
-  };
-  const noSuchThing = (c: Context) => apiError(c, { status: 404, error: "No such Thing." });
+  const inWorkspace = (c: Context) => workspaceIn(c, where);
+  const thingIn = (c: Context) => fileIn(c, where, ThingSlug);
+  const noSuchThing = (c: Context) => sharedFileError(c, { kind: "not-found" }, THINGS);
 
   /** A Thing as saved, as the API answers it. */
   const changed = async (
     c: Context,
-    workspace: Pick<ThingTarget, "contextDir" | "workspaceId">,
+    workspace: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
     saved: Awaited<ReturnType<typeof saveThing>>,
     status: 200 | 201,
   ) => {
