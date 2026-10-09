@@ -1,5 +1,6 @@
 import {
   type SessionId,
+  THING_FORM_FIELD,
   THING_PHOTO_FIELD,
   ThingChanged,
   ThingDeleted,
@@ -11,7 +12,8 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { type FromWorker, fromWorker, NOT_FOUND, readResponse, sendJson } from "../worker.ts";
+import { sendForm } from "../send-form.ts";
+import { fromWorker, NOT_FOUND, sendJson } from "../worker.ts";
 
 // Things' calls live with Things rather than in worker.ts, so their schemas stay off the first
 // load.
@@ -35,17 +37,43 @@ export const loadThing = async (at: { workspaceId: string; slug: string }) => {
   return { thing, list };
 };
 
-/** Adds a Thing from the owner's form. */
-export const addThing = (workspaceId: WorkspaceId, form: ThingForm) =>
-  sendJson({ path: thingsOf(workspaceId), body: form, schema: ThingChanged });
+/**
+ * Sends the owner's form, with the photo they picked when there's one: JSON on its own, or one
+ * multipart form with both, so the worker saves them as one change with one Undo.
+ */
+const sendThing = (send: {
+  path: string;
+  method: "POST" | "PUT";
+  form: ThingForm;
+  photo: File | undefined;
+}) => {
+  const { path, method, form, photo } = send;
+  if (photo === undefined) return sendJson({ path, method, body: form, schema: ThingChanged });
+  const multipart = new FormData();
+  multipart.set(THING_FORM_FIELD, JSON.stringify(form));
+  multipart.set(THING_PHOTO_FIELD, photo);
+  return sendForm({ path, method, form: multipart, schema: ThingChanged });
+};
 
-/** Changes a Thing from the owner's form: every field, a blank one cleared. */
-export const changeThing = (workspaceId: WorkspaceId, slug: ThingSlug, form: ThingForm) =>
-  sendJson({
-    path: `${thingsOf(workspaceId)}/${slug}`,
+/** Adds a Thing from the owner's form, with its photo if they picked one. */
+export const addThing = (workspaceId: WorkspaceId, form: ThingForm, photo?: File) =>
+  sendThing({ path: thingsOf(workspaceId), method: "POST", form, photo });
+
+/**
+ * Changes a Thing from the owner's form: every field, a blank one cleared, and its photo if they
+ * picked a new one.
+ */
+export const changeThing = (change: {
+  workspaceId: WorkspaceId;
+  slug: ThingSlug;
+  form: ThingForm;
+  photo: File | undefined;
+}) =>
+  sendThing({
+    path: `${thingsOf(change.workspaceId)}/${change.slug}`,
     method: "PUT",
-    body: form,
-    schema: ThingChanged,
+    form: change.form,
+    photo: change.photo,
   });
 
 /** Deletes a Thing and its photo, as a change Undo brings back. */
@@ -58,22 +86,10 @@ export const deleteThing = (workspaceId: WorkspaceId, slug: ThingSlug) =>
   });
 
 /** Sets a Thing's photo from one the owner picked; the worker keeps a resized copy. */
-export const uploadThingPhoto = async (
-  workspaceId: WorkspaceId,
-  slug: ThingSlug,
-  photo: File,
-): Promise<FromWorker<ThingChanged>> => {
+export const uploadThingPhoto = (workspaceId: WorkspaceId, slug: ThingSlug, photo: File) => {
   const form = new FormData();
   form.set(THING_PHOTO_FIELD, photo);
-  try {
-    const response = await fetch(`/api${thingsOf(workspaceId)}/${slug}/photo`, {
-      method: "POST",
-      body: form,
-    });
-    return await readResponse({ response, schema: ThingChanged, unauthorised: "logged-out" });
-  } catch {
-    return { kind: "offline" };
-  }
+  return sendForm({ path: `${thingsOf(workspaceId)}/${slug}/photo`, form, schema: ThingChanged });
 };
 
 /** Where a Thing's photo is served from, named by when the Thing last changed so a new one shows. */

@@ -131,6 +131,12 @@ export type ThingForm = z.infer<typeof ThingForm>;
 /** The multipart field a Thing's new photo is uploaded in. */
 export const THING_PHOTO_FIELD = "photo";
 
+/**
+ * The multipart field that holds the form's fields as JSON, when Add Thing or Edit sends a photo
+ * with them: the form and the photo go as one request, so they're one change with one Undo.
+ */
+export const THING_FORM_FIELD = "thing";
+
 /** A Thing saved by the owner, as it is now, and the change that saved it (`null` when git couldn't keep it). */
 export const ThingChanged = z.object({ change: ChangeId.nullable(), thing: ThingSummary });
 export type ThingChanged = z.infer<typeof ThingChanged>;

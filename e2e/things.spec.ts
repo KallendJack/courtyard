@@ -230,6 +230,8 @@ test("the owner adds, edits and deletes Things themselves, and Undo brings a del
   await expect(changes.getByRole("listitem").first()).toContainText("removed, then undone");
   await expect(changes).toContainText("Changed ThingTyres");
   await expect(changes).toContainText("Added ThingTyres");
+  // Added with its photo as one change, so one Undo takes both back.
+  await expect(changes.getByRole("listitem").filter({ hasText: "Tyres" })).toHaveCount(3);
 });
 
 test("a photo from an attachment shows on its Thing's card and row, and the card uploads another", async ({

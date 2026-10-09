@@ -57,7 +57,8 @@ const setLoginCookie = (c: Context, secret: LoginSecret) => {
 export const sameSiteJsonOnly =
   (options: {
     /**
-     * The requests that may send a multipart form instead: a message with files attached (#78).
+     * The requests that may send a multipart form instead: a message with files attached (#78),
+     * and a Thing's photo (ADR 0020).
      * Another site's page can send a form without asking, but the login cookie is SameSite=Strict,
      * so it arrives logged out, and only routes behind the login take files.
      */

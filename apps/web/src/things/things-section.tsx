@@ -7,7 +7,7 @@ import { SectionTitle } from "@/components/page";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { describeProblem } from "../problems.tsx";
-import { addThing, uploadThingPhoto } from "./api.ts";
+import { addThing } from "./api.ts";
 import { ThingsScope } from "./scope.tsx";
 import { ThingForm } from "./thing-form.tsx";
 import { ThingRows } from "./thing-rows.tsx";
@@ -63,16 +63,8 @@ export function ThingsSection(props: {
               parents={things.filter((thing) => thing.partOf === undefined)}
               hasParts={false}
               save={async (form, photo) => {
-                const added = await addThing(workspaceId, form);
+                const added = await addThing(workspaceId, form, photo);
                 if (added.kind !== "loaded") return describeProblem(added).body;
-                if (photo !== undefined) {
-                  const uploaded = await uploadThingPhoto(
-                    workspaceId,
-                    added.data.thing.slug,
-                    photo,
-                  );
-                  if (uploaded.kind !== "loaded") return describeProblem(uploaded).body;
-                }
                 await router.invalidate();
                 return undefined;
               }}
