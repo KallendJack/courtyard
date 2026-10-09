@@ -3,12 +3,10 @@ import {
   CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
   hasLines,
-  SessionList,
   type SessionSummary,
   type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
-  WorkspaceDetail,
-  WorkspaceId,
+  type WorkspaceId,
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
@@ -29,46 +27,29 @@ import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
 import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { startSession } from "../../sessions/messages.ts";
+import { ThingsSection } from "../../things/things-section.tsx";
 import { describeWhen } from "../../when.ts";
-import {
-  archiveWorkspace,
-  changeWorkspace,
-  fromWorker,
-  loadProviders,
-  loadSkills,
-  NOT_FOUND,
-} from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
-  // A document just deleted from its page, which this page offers to undo (ADR 0020).
+  // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
   validateSearch: (search: Record<string, unknown>) => {
     const deleted = ChangeId.safeParse(search.deleted);
     const name = typeof search.name === "string" ? search.name : undefined;
     return {
       ...(deleted.success ? { deleted: deleted.data } : {}),
       ...(name === undefined ? {} : { name }),
+      ...(search.kind === "thing" ? { kind: "thing" as const } : {}),
     };
   },
-  loader: async ({ params }) => {
-    const id = encodeURIComponent(params.workspaceId);
-    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
-    const [detail, sessions, providers, skills, documents] = await Promise.all([
-      fromWorker(`/workspaces/${id}`, WorkspaceDetail),
-      fromWorker(`/workspaces/${id}/sessions`, SessionList),
-      loadProviders(),
-      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
-      // Imported here, so documents' schemas stay off the first load.
-      workspaceId.success
-        ? import("../../documents/api.ts").then((api) => api.loadDocuments(workspaceId.data))
-        : NOT_FOUND,
-    ]);
-    return { detail, sessions, providers, skills, documents };
-  },
+  // The loader stays in the first load, so it only imports what the page asks for.
+  loader: ({ params }) =>
+    import("../../workspace-page.ts").then((page) => page.loadWorkspacePage(params.workspaceId)),
   component: Workspace,
 });
 
 function Workspace() {
-  const { detail, sessions, providers, skills, documents } = Route.useLoaderData();
+  const { detail, sessions, providers, skills, documents, things } = Route.useLoaderData();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
@@ -103,6 +84,21 @@ function Workspace() {
   );
   const toggle = (what: "rename" | "archive") =>
     setTidying((was) => (was === what ? undefined : what));
+  /** A document or a Thing just deleted from its page, which its section offers to undo. */
+  const deleted =
+    search.name === undefined
+      ? undefined
+      : { kind: search.kind ?? "document", name: search.name, change: search.deleted };
+  /** Once a delete is undone: the page forgets it and loads its lists again. */
+  const undone = async () => {
+    await navigate({
+      to: "/workspaces/$workspaceId",
+      params: { workspaceId: workspace.id },
+      search: {},
+      replace: true,
+    });
+    await router.invalidate();
+  };
 
   return (
     <Page>
@@ -271,22 +267,20 @@ function Workspace() {
             </>
           )}
       </p>
+      {workspace.mode === "planning" && things.kind === "loaded" && (
+        <ThingsSection
+          workspaceId={workspace.id}
+          list={things.data}
+          {...(deleted?.kind === "thing" ? { deleted } : {})}
+          onUndone={undone}
+        />
+      )}
       {workspace.mode === "planning" && documents.kind === "loaded" && (
         <DocumentsSection
           workspaceId={workspace.id}
           documents={documents.data.documents}
-          {...(search.name === undefined
-            ? {}
-            : { deleted: { name: search.name, change: search.deleted } })}
-          onUndone={async () => {
-            await navigate({
-              to: "/workspaces/$workspaceId",
-              params: { workspaceId: workspace.id },
-              search: {},
-              replace: true,
-            });
-            await router.invalidate();
-          }}
+          {...(deleted?.kind === "document" ? { deleted } : {})}
+          onUndone={undone}
         />
       )}
       {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}

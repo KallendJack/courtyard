@@ -143,7 +143,7 @@ export const TurnView = memo(function TurnView(props: {
   onCarryOn?: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply to this turn (the latest only): whether it was sent. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
-  /** The session's workspace, where its documents' notes open. */
+  /** The session's workspace, where its documents' and Things' notes open. */
   workspaceId?: WorkspaceId;
   /** Where Save as document saves, in a planning workspace that isn't archived; none otherwise. */
   documents?: DocumentsHere;
@@ -229,7 +229,12 @@ export const TurnView = memo(function TurnView(props: {
       {turn.things.length > 0 && (
         <ul aria-label="Things saved" className="space-y-1.5">
           {turn.things.map((note) => (
-            <ThingNoteRow key={note.seq} sessionId={sessionId} note={note} />
+            <ThingNoteRow
+              key={note.seq}
+              sessionId={sessionId}
+              workspaceId={workspaceId}
+              note={note}
+            />
           ))}
         </ul>
       )}

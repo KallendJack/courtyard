@@ -2,8 +2,12 @@
 @import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/figtree";
 
-/* The rich blocks' classes go in their own stylesheet, off the first load (rich-blocks.css). */
+/*
+ * The rich blocks' and Things' classes go in their own stylesheets, off the first load
+ * (rich-blocks.css, things.css).
+ */
 @source not "./rich-blocks";
+@source not "./things";
 
 /*
  * Moorland: Courtyard's theme, from the Paper design chosen in issue #2. Every colour, font and
@@ -160,6 +164,18 @@
     --code-number: #c9a26b;
     --code-string: #9db07a;
     --code-comment: #a79ea4;
+  }
+}
+
+/*
+ * Replace, as a Thing's status says it (#150): bracken deepened to read at chip size on muted.
+ * Only Things' pages use it, so it's a utility, written into a stylesheet only where it's used,
+ * rather than a variable every page would carry.
+ */
+@utility text-replace {
+  color: #6e5025;
+  @variant dark {
+    color: #c9a26b;
   }
 }
 
