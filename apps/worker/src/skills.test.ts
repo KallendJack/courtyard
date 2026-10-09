@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillList, type SkillSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, postJson, type Requester, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  postJson,
+  type Requester,
+  testWorker,
+  writeHouseSkills,
+  writeSkill,
+} from "./testing.ts";
 
 // A workspace's skills (ADR 0016): four places, the more specific winning by name, a broken skill
 // shown with its reason, and a skill with scripts kept for code workspaces.
@@ -16,7 +23,7 @@ const repoDir = () => join(root, "repo");
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
   await mkdir(join(contextDir(), "garage-gym"), { recursive: true });
-  await house([
+  await writeHouseSkills(houseDir(), [
     { name: "grilling", workspaces: ["planning", "code"] },
     { name: "get-to-know", workspaces: ["planning"], start: "owner" },
     { name: "code-review", workspaces: ["code"] },
@@ -27,31 +34,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 5 });
 });
 
-/** Writes a skill's folder in `skillsDir`: its SKILL.md, and a script when it has one. */
-const skill = async (
-  skillsDir: string,
-  name: string,
-  options: { description?: string; scripts?: boolean } = {},
-) => {
-  const folder = join(skillsDir, name);
-  await mkdir(folder, { recursive: true });
-  const description = options.description ?? `What ${name} does.`;
-  await writeFile(
-    join(folder, "SKILL.md"),
-    `---\nname: ${name}\n${description === "" ? "" : `description: ${description}\n`}---\n\nDo it.\n`,
-  );
-  if (options.scripts) {
-    await mkdir(join(folder, "scripts"));
-    await writeFile(join(folder, "scripts", "run.sh"), "echo done\n");
-  }
-};
-
-/** A house skills package of its own, so a test can say what's in it. */
-async function house(skills: { name: string; workspaces: string[]; start?: string }[]) {
-  await mkdir(houseDir(), { recursive: true });
-  await writeFile(join(houseDir(), "skills.json"), JSON.stringify({ skills }));
-  for (const { name } of skills) await skill(houseDir(), name);
-}
+const skill = writeSkill;
 
 const workspaceSkills = () => join(contextDir(), "garage-gym", ".agents", "skills");
 const everywhereSkills = () => join(contextDir(), ".agents", "skills");

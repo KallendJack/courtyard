@@ -1028,7 +1028,7 @@ describe("Courtyard's tools on a Codex turn", () => {
     return { success: result.success, text, items: result.contentItems };
   };
 
-  it("offers the file tools and the save tool on each thread, with what each takes", async () => {
+  it("offers the file tools, the save tool and the use skill tool on each thread, with what each takes", async () => {
     const { codex } = await turnCalling([]);
 
     const ToolSpec = z.object({
@@ -1048,6 +1048,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "read_file",
       "search_files",
       "save_to_context",
+      "use_skill",
     ]);
     const read = offered.find((tool) => tool.name === "read_file");
     expect(read?.inputSchema.properties).toHaveProperty("path");
@@ -1146,6 +1147,29 @@ describe("Courtyard's tools on a Codex turn", () => {
     expect(await readFile(join(workspace, "CONTEXT.md"), "utf8")).toContain(
       "- The rack is bolted down.",
     );
+  });
+
+  it("loads a skill through the worker, and none of the files outside its folder", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "use_skill", args: { name: "grilling" } },
+      { tool: "use_skill", args: { name: "grilling", path: "../skills.json" } },
+      { tool: "use_skill", args: { name: "grilling", path: join(workspace, "CONTEXT.md") } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({
+      success: true,
+      text: expect.stringContaining("name: grilling"),
+    });
+    for (const answer of answers.slice(1)) {
+      expect(answerOf(answer)).toEqual({
+        success: false,
+        text: "Only files in the skill's folder can be read.",
+        items: [{ type: "inputText", text: "Only files in the skill's folder can be read." }],
+      });
+    }
+    expect(events.filter((event) => event.type === "activity")).toMatchObject([
+      { activity: { kind: "skill-loaded", name: "grilling", source: "house" } },
+    ]);
   });
 
   it("refuses a call for a turn or a thread it doesn't recognise, and a tool it didn't offer", async () => {

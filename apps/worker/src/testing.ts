@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
@@ -187,19 +188,28 @@ export const gatedProvider = () => {
   return { provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }), release };
 };
 
-/** For tests: one step of a scripted turn, a save the model asks for or something to do mid-turn. */
-export type ScriptedStep = Readonly<Record<string, unknown>> | (() => Promise<void>);
+/**
+ * For tests: one step of a scripted turn: a save the model asks for (its input), a call to another
+ * of Courtyard's tools by name (`call`), or something to do mid-turn.
+ */
+export type ScriptedStep =
+  | Readonly<Record<string, unknown>>
+  | { readonly call: string; readonly input: unknown }
+  | (() => Promise<void>);
 
-/** For tests: what the worker told a model about one of its saves. */
+/** For tests: what the worker told a model about one of its tool calls, a save or another. */
 export type SaveReply = { readonly saved: boolean; readonly reply: string };
+
+const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
+  typeof step !== "function" && typeof step.call === "string";
 
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
 
 /**
- * For tests: a provider that, in each turn, hands the worker the saves scripted for that turn in
- * order (running any function steps between them), keeps the worker's replies, and answers
- * "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
+ * For tests: a provider that, in each turn, hands the worker the saves and tool calls scripted for
+ * that turn in order (running any function steps between them), keeps the worker's replies, and
+ * answers "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
  */
 export const savingProvider = (
   turns: readonly (readonly ScriptedStep[])[],
@@ -227,7 +237,11 @@ export const savingProvider = (
       for (const step of steps) {
         if (typeof step === "function") await step();
         else {
-          const reply = await input.callTool({ name: SAVE_TOOL_NAME, input: step });
+          const reply = await input.callTool(
+            isCall(step)
+              ? { name: step.call, input: step.input }
+              : { name: SAVE_TOOL_NAME, input: step },
+          );
           const text = reply.content
             .map((part) => (part.kind === "text" ? part.text : ""))
             .join("");
@@ -246,6 +260,46 @@ export const savingProvider = (
     answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
   };
   return { provider, replies, framings };
+};
+
+/**
+ * For tests: writes a skill's folder in `skillsDir`: a SKILL.md with its name and description
+ * (none when it's empty) and `body`, any other files given, and a script when it has one.
+ */
+export const writeSkill = async (
+  skillsDir: string,
+  name: string,
+  options: {
+    description?: string;
+    body?: string;
+    files?: Readonly<Record<string, string>>;
+    scripts?: boolean;
+  } = {},
+) => {
+  const folder = join(skillsDir, name);
+  await mkdir(folder, { recursive: true });
+  const description = options.description ?? `What ${name} does.`;
+  const fields = [`name: ${name}`, ...(description === "" ? [] : [`description: ${description}`])];
+  const body = options.body ?? "Do it.";
+  await writeFile(join(folder, "SKILL.md"), `---\n${fields.join("\n")}\n---\n\n${body}\n`);
+  for (const [path, text] of Object.entries(options.files ?? {})) {
+    await mkdir(dirname(join(folder, path)), { recursive: true });
+    await writeFile(join(folder, path), text);
+  }
+  if (options.scripts) {
+    await mkdir(join(folder, "scripts"));
+    await writeFile(join(folder, "scripts", "run.sh"), "echo done\n");
+  }
+};
+
+/** For tests: a house skills package in `dir`, with `skills.json` and a stand-in for each skill. */
+export const writeHouseSkills = async (
+  dir: string,
+  skills: readonly { name: string; workspaces: readonly string[]; start?: string }[],
+) => {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "skills.json"), JSON.stringify({ skills }));
+  for (const { name } of skills) await writeSkill(dir, name);
 };
 
 /** For tests: the context folder's changes, newest first: each one's title and trailers. */

@@ -7,7 +7,7 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
-import { SAVE_TOOL_NAME } from "../prompts/index.ts";
+import { SAVE_TOOL_NAME, USE_SKILL_TOOL_NAME } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { Provider, SignIn } from "./index.ts";
 
@@ -70,6 +70,18 @@ const scriptedSaves = (message: string): Record<string, string>[] =>
     }
     const remove = REMOVE.exec(text);
     return remove?.[1] ? [{ action: "remove", label: remove[1] }] : [];
+  });
+
+const USE_SKILL = /^use skill ([a-z0-9-]+)(?: (\S+))?$/i;
+
+/**
+ * The skills a message scripts loading, one per line: "use skill grilling" for its instructions,
+ * "use skill programme-check references/deload-weeks.md" for one of its files.
+ */
+const scriptedSkillLoads = (message: string): Record<string, string>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, name, path] = USE_SKILL.exec(line.trim()) ?? [];
+    return name === undefined ? [] : [{ name, ...(path === undefined ? {} : { path }) }];
   });
 
 /** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
@@ -179,7 +191,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (story 90). It answers "You said: …" a word at a time, and fails on purpose when a message asks
  * it to ("please fail"), so failures can be seen and tested. "please read" reports reading the
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
- * `scriptedSaves`) when the turn offers the save tool. A tidy follows markers in the file (see
+ * `scriptedSaves`) when the turn offers the save tool, and "use skill …" loads a skill (see
+ * `scriptedSkillLoads`) when it offers the use skill tool. A tidy follows markers in the file (see
  * `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested.
@@ -232,6 +245,11 @@ export const createFakeProvider = (
       const last = framing.newMessage;
       const offers = (name: string) => framing.tools.some((tool) => tool.name === name);
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
+      if (offers(USE_SKILL_TOOL_NAME)) {
+        for (const input of scriptedSkillLoads(last)) {
+          await callTool({ name: USE_SKILL_TOOL_NAME, input });
+        }
+      }
       if (offers(SAVE_TOOL_NAME)) {
         for (const input of scriptedSaves(last)) await callTool({ name: SAVE_TOOL_NAME, input });
       }
