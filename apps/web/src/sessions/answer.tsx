@@ -2,7 +2,15 @@ import { memo } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { finishForNow, splitBlocks } from "./blocks.ts";
+import { CodeBlock } from "./code-block.tsx";
 import { useReveal } from "./reveal.ts";
+
+/** A node of formatted Markdown, as far as reading its text needs. */
+type Node = { readonly value?: string; readonly children?: readonly Node[] };
+
+/** All the text in a node, as written. */
+const textOf = (node: Node | undefined): string =>
+  node === undefined ? "" : (node.value ?? node.children?.map(textOf).join("") ?? "");
 
 const SUBHEADING = "font-display text-xl/7 font-semibold";
 const LINK = "font-medium text-primary-text underline underline-offset-2";
@@ -43,14 +51,21 @@ const ELEMENTS: Components = {
     </a>
   ),
   code: ({ node: _, className: __, ...props }) => (
-    <code
-      className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em] [pre_&]:bg-transparent [pre_&]:p-0"
-      {...props}
-    />
+    <code className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em]" {...props} />
   ),
-  pre: ({ node: _, ...props }) => (
-    <pre className="overflow-x-auto rounded-md border bg-field p-3 text-sm/6" {...props} />
-  ),
+  pre: ({ node }) => {
+    const code = node?.children.find((child) => child.type === "element");
+    const language = code?.properties.className;
+    const written = Array.isArray(language)
+      ? language.find((name) => String(name).startsWith("language-"))
+      : undefined;
+    return (
+      <CodeBlock
+        language={written === undefined ? undefined : String(written).slice("language-".length)}
+        code={textOf(code).replace(/\n$/, "")}
+      />
+    );
+  },
   blockquote: ({ node: _, ...props }) => (
     <blockquote
       className="border-l-2 border-primary-text/40 pl-4 text-muted-foreground"

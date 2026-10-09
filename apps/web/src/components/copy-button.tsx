@@ -1,19 +1,21 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { IconButton } from "./button.tsx";
+import { Button, IconButton } from "./button.tsx";
 
 /** How long a copy button says Copied before it's a copy button again. */
 const COPIED_FOR_MS = 2000;
 
 /**
  * Copies text in one tap, then shows a tick and "Copied" for a couple of seconds, which screen
- * readers announce too. Copy answer under each finished answer. Not on the first load.
+ * readers announce too. Two looks: an icon on its own (Copy answer, under each finished answer)
+ * and a quiet "Copy" button (in a code block's top bar). Not on the first load.
  */
 export function CopyButton(props: {
   /** What the button is called, for screen readers and on hover: "Copy answer". */
   label: string;
   /** What to copy, read at the moment it's tapped. */
   text: () => string;
+  look: "icon" | "labelled";
 }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -30,14 +32,32 @@ export function CopyButton(props: {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), COPIED_FOR_MS);
   };
+  const tick = <Check strokeWidth={2.25} />;
 
+  if (props.look === "labelled") {
+    return (
+      <Button
+        variant={copied ? "quietPrimary" : "quiet"}
+        size="xs"
+        aria-label={props.label}
+        title={props.label}
+        onClick={() => void copy()}
+      >
+        {copied ? tick : <Copy className="size-3.5" />}
+        <span aria-hidden>{copied ? "Copied" : "Copy"}</span>
+        <span role="status" className="sr-only">
+          {copied ? "Copied" : ""}
+        </span>
+      </Button>
+    );
+  }
   return (
     <div className="flex items-center gap-1.5">
       <IconButton
         label={props.label}
         size="action"
         look={copied ? "done" : "quiet"}
-        icon={copied ? <Check strokeWidth={2.25} /> : <Copy />}
+        icon={copied ? tick : <Copy />}
         onClick={() => void copy()}
       />
       <span role="status" className="text-xs font-medium text-primary-text">

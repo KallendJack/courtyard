@@ -118,7 +118,7 @@ export const TurnView = memo(function TurnView(props: {
         </div>
       )}
       {turn.answer !== "" && turn.state.kind !== "running" && (
-        <CopyButton label="Copy answer" text={() => answerToCopy(turn)} />
+        <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
       )}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
