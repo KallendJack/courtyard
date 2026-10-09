@@ -1067,7 +1067,7 @@ export const SCENARIOS: readonly Scenario[] = [
             fields: { status: ["have"], price: [["1,400", "1400"]] },
           },
         ],
-        asks: [["chain", "tyre", "fork", "part"]],
+        asks: [["chain", "tyre", "fork", "part", "component"]],
       },
       {
         say: "Yes, add the chain and the tyres.",

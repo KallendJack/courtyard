@@ -808,7 +808,15 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       judged.push(...documentChecks);
       const things = events.flatMap((event) => (event.type === "thing-saved" ? [event.save] : []));
       if (things.length > 0) notes.push(`${prefix}${things.map(describeThing).join("; ")}`);
-      judged.push(...(await judgeThings({ expected: turn.things, saved: things, folder })));
+      const thingChecks = await judgeThings({ expected: turn.things, saved: things, folder });
+      // A Thing missed: how the answer ended says why (it asked, or waited for details).
+      if (
+        thingChecks.some((check) => check.miss !== null) &&
+        documentChecks.every((c) => c.miss === null)
+      ) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...thingChecks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {
