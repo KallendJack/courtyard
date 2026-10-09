@@ -58,6 +58,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      attachments: [],
       tools: [],
       fileTools: null,
     },
@@ -297,6 +298,7 @@ describe("a Claude turn", () => {
         instructions: "Exactly these instructions.",
         message: "Exactly this message.",
         newMessage: "This message.",
+        attachments: [],
         tools: [],
         fileTools: null,
       },
@@ -533,6 +535,7 @@ const framingWith = (tools: readonly TurnTool[]) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
+  attachments: [],
   tools,
   fileTools: null,
 });

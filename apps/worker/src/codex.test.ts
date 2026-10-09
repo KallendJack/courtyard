@@ -307,6 +307,7 @@ const runTurn = async (
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      attachments: [],
       tools: [],
       fileTools: null,
     },

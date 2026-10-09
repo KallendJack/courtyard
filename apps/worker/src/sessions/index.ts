@@ -28,6 +28,7 @@ import { z } from "zod";
 import {
   attachmentPath,
   attachmentsOf,
+  carriedAttachments,
   keepAttachments,
   type PreparedAttachment,
 } from "../attachments/index.ts";
@@ -506,6 +507,7 @@ export const createSessions = (options: {
             offered: skills.usable.filter((skill) => !skill.ownerOnly),
             inUse: await inUseTexts(skills.usable, inUse),
           },
+          attachments: await carriedAttachments(folderOf(turn.id), events.value),
           now: options.now(),
         });
         const report = async (activity: Activity) => {

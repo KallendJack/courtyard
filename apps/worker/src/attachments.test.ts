@@ -80,6 +80,19 @@ describe("attaching photos and PDFs to a message", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(new Uint8Array(PHOTO.bytes));
   });
 
+  it("lets the fake say what it was given to look at, when a message scripts it", async () => {
+    const request = await start();
+    const started = await startWith(request, "please look", [PHOTO, MANUAL]);
+    const session = SessionSummary.parse(await started.json());
+
+    const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+
+    const answer = events.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
+    expect(answer).toBe(
+      "I see IMG_2041.jpg (a photo) and rack-manual.pdf (a PDF). You said: please look",
+    );
+  });
+
   it("takes attachments on a later message too", async () => {
     const request = await start();
     const session = await startSession(request, "Where should the rack go?");

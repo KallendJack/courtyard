@@ -399,24 +399,40 @@ export const pngOf = (
   ]);
 };
 
+/** How many lines `pdfOf` puts on a page. */
+const PDF_LINES_PER_PAGE = 40;
+
 /**
- * For tests and the eval: a one-page PDF with these lines of text on it, or none (a page with no
- * text, as a scan is to a model).
+ * For tests and the eval: a PDF with these lines of text on it, as many pages as they need, or a
+ * page with none (as a scan is to a model).
  */
 export const pdfOf = (lines: readonly string[]): Uint8Array => {
   const escaped = (line: string) => line.replace(/[\\()]/g, (char) => `\\${char}`);
-  const stream =
-    lines.length === 0
-      ? ""
-      : ["BT /F1 12 Tf 72 720 Td 16 TL", ...lines.map((line) => `(${escaped(line)}) '`), "ET"].join(
-          "\n",
-        );
+  const pages: (readonly string[])[] = [];
+  for (let at = 0; at < lines.length; at += PDF_LINES_PER_PAGE) {
+    pages.push(lines.slice(at, at + PDF_LINES_PER_PAGE));
+  }
+  if (pages.length === 0) pages.push([]);
+  // Objects 1 and 2 are the catalog and the page list, 3 the font, then each page and its text.
+  const pageIds = pages.map((_, index) => 4 + index * 2);
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ...pages.flatMap((page, index) => {
+      const stream =
+        page.length === 0
+          ? ""
+          : [
+              "BT /F1 12 Tf 72 720 Td 16 TL",
+              ...page.map((line) => `(${escaped(line)}) '`),
+              "ET",
+            ].join("\n");
+      return [
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${5 + index * 2} 0 R /Resources << /Font << /F1 3 0 R >> >> >>`,
+        `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+      ];
+    }),
   ];
   let pdf = "%PDF-1.4\n";
   const offsets: number[] = [];

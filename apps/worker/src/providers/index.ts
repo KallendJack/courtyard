@@ -1,5 +1,6 @@
 import type {
   Activity,
+  AttachmentMediaType,
   Capabilities,
   Effort,
   FailureReason,
@@ -24,6 +25,12 @@ export type Framing = {
   /** The owner's new message on its own, for a provider that needs only that (the fake). */
   readonly newMessage: string;
   /**
+   * The session's last attachments, oldest first, as `message` lists them (#78). Each photo goes
+   * with the message as an image, in this order, its provider's own way; a PDF's text is already
+   * in `message`.
+   */
+  readonly attachments: readonly FramedAttachment[];
+  /**
    * Courtyard's own tools this turn offers, such as the save tool (ADR 0013) and the use skill
    * tool (ADR 0016). Every provider offers each one in its own tool format, and hands each call to
    * the worker through `callTool`, which answers it.
@@ -35,6 +42,20 @@ export type Framing = {
    */
   readonly fileTools: FileTools | null;
 };
+
+/** An attachment a turn carries: a photo by its file on the worker machine, or a PDF by its name. */
+export type FramedAttachment =
+  | {
+      readonly kind: "photo";
+      readonly name: string;
+      readonly path: string;
+      readonly mediaType: AttachmentMediaType;
+    }
+  | { readonly kind: "pdf"; readonly name: string };
+
+/** Only the photos of a turn's attachments, in order: the images that go with its message. */
+export const photosOf = (attachments: readonly FramedAttachment[]) =>
+  attachments.flatMap((attachment) => (attachment.kind === "photo" ? [attachment] : []));
 
 /** One of Courtyard's own tools as a model is told about it: its name, what it's for, and each input. */
 export type CourtyardTool = {
