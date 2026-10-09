@@ -13,6 +13,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   memo,
+  type RefObject,
   useEffect,
   useId,
   useLayoutEffect,
@@ -41,6 +42,45 @@ const LIST_ROOM_ABOVE = 240;
 const ATTACH_LABEL = "Attach photos or PDFs";
 const CAMERA_LABEL = "Take a photo";
 const FULL_HINT = `${ATTACHMENTS.perMessage} is the most a message takes`;
+
+/**
+ * The paperclip and, on a phone, the camera (#78): plain in a session's one-row box on a phone, or
+ * as discs in the box's toolbar. Each opens its hidden file input.
+ */
+function AttachButtons(props: {
+  look: "plain" | "disc";
+  /** Whether the camera shows here; it's only ever on a phone. */
+  camera: boolean;
+  /** The tray is full, so neither can add another. */
+  full: boolean;
+  picker: RefObject<HTMLInputElement | null>;
+  cameraInput: RefObject<HTMLInputElement | null>;
+}) {
+  const disc = props.look === "disc" ? ({ size: "action", look: "disc" } as const) : {};
+  return (
+    <>
+      <IconButton
+        label={ATTACH_LABEL}
+        icon={<Paperclip />}
+        {...disc}
+        disabled={props.full}
+        {...(props.full ? { hint: FULL_HINT } : {})}
+        onClick={() => props.picker.current?.click()}
+      />
+      {props.camera && (
+        <span className="contents md:hidden">
+          <IconButton
+            label={CAMERA_LABEL}
+            icon={<Camera />}
+            {...disc}
+            disabled={props.full}
+            onClick={() => props.cameraInput.current?.click()}
+          />
+        </span>
+      )}
+    </>
+  );
+}
 
 /** A `/` at the start of the box, and what's typed after it: what opens and narrows the skill list. */
 const SLASH = /^\/(\S*)$/;
@@ -353,18 +393,12 @@ export const Composer = memo(function Composer(props: {
           >
             {compact && (
               <span className="contents md:hidden">
-                <IconButton
-                  label={ATTACH_LABEL}
-                  icon={<Paperclip />}
-                  disabled={full}
-                  {...(full ? { hint: FULL_HINT } : {})}
-                  onClick={() => picker.current?.click()}
-                />
-                <IconButton
-                  label={CAMERA_LABEL}
-                  icon={<Camera />}
-                  disabled={full}
-                  onClick={() => camera.current?.click()}
+                <AttachButtons
+                  look="plain"
+                  camera
+                  full={full}
+                  picker={picker}
+                  cameraInput={camera}
                 />
               </span>
             )}
@@ -420,27 +454,13 @@ export const Composer = memo(function Composer(props: {
             />
             <div className="flex items-center gap-2">
               <span className={classes("contents", compact && "max-md:hidden")}>
-                <IconButton
-                  label={ATTACH_LABEL}
-                  icon={<Paperclip />}
-                  size="action"
+                <AttachButtons
                   look="disc"
-                  disabled={full}
-                  {...(full ? { hint: FULL_HINT } : {})}
-                  onClick={() => picker.current?.click()}
+                  camera={!compact}
+                  full={full}
+                  picker={picker}
+                  cameraInput={camera}
                 />
-                {!compact && (
-                  <span className="contents md:hidden">
-                    <IconButton
-                      label={CAMERA_LABEL}
-                      icon={<Camera />}
-                      size="action"
-                      look="disc"
-                      disabled={full}
-                      onClick={() => camera.current?.click()}
-                    />
-                  </span>
-                )}
                 {full && (
                   <span className="text-xs text-muted-foreground">
                     {attaching.length} of {ATTACHMENTS.perMessage}
