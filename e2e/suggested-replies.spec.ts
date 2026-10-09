@@ -36,14 +36,18 @@ test("a suggested reply is sent with a tap, at the turn's effort, and the replie
 test("typing a reply of one's own takes the suggested ones away", async ({ page }) => {
   const suggested = await startSuggesting(page, ["Back wall", "By the door"]);
   await expect(suggested.getByRole("button")).toHaveCount(2);
+  // The message box says a reply of one's own is welcome too (#154).
+  const message = page.getByLabel("Message");
+  await expect(message).toHaveAttribute("placeholder", "Or type your own reply…");
 
-  await page.getByLabel("Message").fill("Neither, the side wall.");
+  await message.fill("Neither, the side wall.");
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
     "You said: Neither, the side wall.",
   );
   await expect(suggested).toBeHidden();
+  await expect(message).toHaveAttribute("placeholder", "Reply…");
 });
 
 test("the replies sit in a row on a wide screen", async ({ page }) => {

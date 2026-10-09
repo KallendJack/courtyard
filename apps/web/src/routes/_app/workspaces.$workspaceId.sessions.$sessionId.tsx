@@ -100,6 +100,9 @@ function Session(props: {
   const navigate = useNavigate();
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
+  /** The latest answer offers suggested replies, so the message box says one's own is welcome too (#154). */
+  const suggesting =
+    last?.state.kind === "done" && last.replies.length > 0 && !session.workspaceArchived;
 
   const send = useCallback(
     async (message: NewMessage, files: readonly File[]) => {
@@ -297,7 +300,9 @@ function Session(props: {
           {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
           disabled={running || problem !== undefined || session.workspaceArchived}
           {...(running ? { stop } : {})}
-          placeholder={running ? "Waiting for the answer…" : "Reply…"}
+          placeholder={
+            running ? "Waiting for the answer…" : suggesting ? "Or type your own reply…" : "Reply…"
+          }
           compactOnNarrow
           {...(props.skills === undefined ? {} : { skills: props.skills })}
           send={send}
