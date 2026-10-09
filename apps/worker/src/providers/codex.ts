@@ -672,6 +672,30 @@ type ThreadTurn = {
   readonly signal: AbortSignal;
 };
 
+/** The skills Codex finds itself for some folders (`skills/list`), by name. */
+const SkillsListed = z.object({
+  data: z.array(z.object({ skills: z.array(z.object({ name: z.string() })) })),
+});
+
+/**
+ * Every skill Codex would load itself in `cwd`, each turned off, for a thread's own settings. Codex
+ * finds skills in a folder's `.agents/skills` and those of the folders above it up to a repo's
+ * top: the owner's skills in the context folder, which Courtyard loads itself (ADR 0016). Codex has
+ * no setting that stops it looking (docs/real-codex-check.md), so each one it finds is switched off
+ * by name. When Codex can't say, the turn doesn't start.
+ */
+const codexSkillsOff = async (
+  codex: Connection,
+  cwd: string,
+): Promise<Result<{ name: string; enabled: false }[], ExplainedFailure>> => {
+  const listed = await codex.request("skills/list", { cwds: [cwd], forceReload: true });
+  if (!listed.ok) return err(failureForRequest(listed.error));
+  const parsed = SkillsListed.safeParse(listed.value);
+  if (!parsed.success) return err({ kind: "unknown", message: NOT_UNDERSTOOD });
+  const names = new Set(parsed.data.data.flatMap((found) => found.skills.map(({ name }) => name)));
+  return ok([...names].map((name) => ({ name, enabled: false as const })));
+};
+
 /**
  * Runs one turn on a fresh, unsaved thread, which Codex forgets afterwards (ADR 0015): how the
  * turn ended, or why it didn't start.
@@ -680,6 +704,8 @@ const turnOnThread = async (
   codex: Connection,
   turn: ThreadTurn,
 ): Promise<Result<TurnEnd, ExplainedFailure>> => {
+  const skillsOff = await codexSkillsOff(codex, turn.cwd);
+  if (!skillsOff.ok) return skillsOff;
   const thread = await codex.request("thread/start", {
     model: turn.model,
     cwd: turn.cwd,
@@ -689,6 +715,7 @@ const turnOnThread = async (
     approvalPolicy: "never",
     environments: [],
     dynamicTools: [...turn.tools.values()].map(asDynamicTool),
+    config: { "skills.config": skillsOff.value },
   });
   if (!thread.ok) return err(failureForRequest(thread.error));
   const startedThread = ThreadStarted.safeParse(thread.value);

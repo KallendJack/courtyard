@@ -14,6 +14,13 @@ before any change to Codex's pinned version, and whenever the adapter's isolatio
    connectors, the browser or the computer) or does Courtyard's job (memories, skills, `AGENTS.md`) is switched off.
 3. Start the worker. Codex starts with `--strict-config`, so a setting the new version renamed or removed stops it
    starting, and the model picker says Codex couldn't start, rather than the setting being quietly ignored.
+4. Check that Codex's own skills stay off (the last item below). Codex 0.161 finds skills in a thread's folder's
+   `.agents/skills` and those of the folders above it, up to a git repo's top, which is where the owner's skills live
+   in the context folder (ADR 0016). It has no setting that stops it looking (`skip_host_skill_discovery` doesn't,
+   and `skills.config` takes names or paths, no wildcard), so the adapter asks Codex (`skills/list`) which skills it
+   found for each thread's folder and starts the thread with each one turned off (`skills.config`, by name); when
+   Codex can't say, the turn doesn't start. Two settings also keep them from the model today: `environments: []` (no
+   executor, so Codex reads no skill) and `skills.include_instructions=false`.
 
 ## The check
 
@@ -43,6 +50,11 @@ a file just outside the workspace folder (in the context folder, next to it) hol
 - [ ] **A crash recovers.** Ending `codex.exe` (or `codex`) mid-turn fails that turn with "Codex stopped
       unexpectedly", and the next message starts Codex again and is answered.
 - [ ] **It ends with the worker.** Stopping the worker leaves no Codex process running.
+- [ ] **Codex's own skills stay off.** With a skill in the workspace's `.agents/skills`, one in the context folder's
+      top-level `.agents/skills`, and one in `$HOME/.agents/skills` (each telling the model to start its answer with
+      a made-up word), asked which skills it has, and told `Use $<name>`, Codex loads the first two only through
+      Courtyard's `use_skill` (the chat shows "Used …"), never by itself, and never the one in `$HOME`. Its bundled
+      skills aren't listed either.
 
 ## Runs
 
@@ -50,3 +62,4 @@ a file just outside the workspace folder (in the context folder, next to it) hol
 | ---------- | ------- | ------------------------------------------------------------------------------------ |
 | 2026-10-07 | 0.161.0 | All passed, on a throwaway worker with GPT-6.1-Sol (ticket 29). Feature list checked. |
 | 2026-10-07 | 0.161.0 | Reading, saving and the confinement passed with GPT-6.1-Sol, once the code-mode host was back on (#71). Its code had only standard JavaScript, a clock and Courtyard's tools. |
+| 2026-10-09 | 0.161.0 | Codex's own skills (#89), GPT-6.1-Sol, throwaway context folder. Codex found the workspace's and the context folder's skills as "repo" skills, and with its default environment an owner's `$workspace-skill` loaded one itself. Started as Courtyard starts it, with each found skill turned off per thread, it loaded them only through `use_skill` ("Used …"), `$` mentions included. `$HOME/.agents/skills` wasn't read, with `HOME` the real profile or another folder. |

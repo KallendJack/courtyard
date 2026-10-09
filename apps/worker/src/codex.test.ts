@@ -109,6 +109,10 @@ const standIn = (
     /** An error for any request but `initialize`, as a Codex too old for OpenAI's servers gets. */
     refuse?: string;
     rateLimits?: unknown;
+    /** The skills Codex finds itself for a thread's folder (its .agents/skills), by name; none by default. */
+    skills?: readonly string[];
+    /** An error for `skills/list` only. */
+    refuseSkills?: string;
     turn?: TurnScript;
   } = {},
 ) => {
@@ -196,6 +200,18 @@ const standIn = (
           return reply(id, { data: script.models ?? MODELS, nextCursor: null });
         case "account/rateLimits/read":
           return reply(id, script.rateLimits ?? {});
+        case "skills/list": {
+          if (script.refuseSkills) return fail(id, script.refuseSkills);
+          const { cwds } = z.object({ cwds: z.array(z.string()) }).parse(message.params);
+          const skills = (script.skills ?? []).map((name) => ({
+            name,
+            description: `What ${name} does.`,
+            path: join(cwds[0] ?? "", ".agents", "skills", name, "SKILL.md"),
+            scope: "repo",
+            enabled: true,
+          }));
+          return reply(id, { data: cwds.map((cwd) => ({ cwd, skills, errors: [] })) });
+        }
         case "thread/start":
           threads += 1;
           return reply(id, { thread: { id: `thread-${threads}` }, model: "gpt-6.1-sol" });
@@ -487,6 +503,42 @@ describe("Codex's isolation", () => {
     // plain JavaScript with no files, network or shell, and only the tools a thread is offered.
     expect(off).not.toContain("code_mode_host");
   });
+
+  it("starts every thread with each skill Codex finds itself turned off, so only Courtyard's reach it", async () => {
+    // Codex finds the owner's skills in a workspace folder's .agents/skills, and the context
+    // folder's, as a repo's (docs/real-codex-check.md); Courtyard loads them itself (ADR 0016).
+    const codex = standIn({ skills: ["programme-check", "grilling"] });
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+
+    const { result } = await runTurn(provider);
+
+    expect(result.ok).toBe(true);
+    expect(codex.requests("skills/list")[0]?.params).toEqual({
+      cwds: [folder],
+      forceReload: true,
+    });
+    expect(codex.requests("thread/start")[0]?.params).toMatchObject({
+      config: {
+        "skills.config": [
+          { name: "programme-check", enabled: false },
+          { name: "grilling", enabled: false },
+        ],
+      },
+    });
+  });
+
+  it("fails a turn, rather than start it, when Codex can't say which skills it would load", async () => {
+    const codex = standIn({ skills: ["grilling"], refuseSkills: "no such method" });
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+
+    const { result } = await runTurn(provider);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: "Codex couldn't answer this time." },
+    });
+    expect(codex.requests("thread/start")).toEqual([]);
+  });
 });
 
 const delta = (turn: Parameters<TurnScript>[0], text: string) =>
@@ -519,6 +571,8 @@ describe("a Codex turn", () => {
         environments: [],
         // Courtyard's tools are all it has, and this framing offers none.
         dynamicTools: [],
+        // Codex found no skills of its own here to turn off.
+        config: { "skills.config": [] },
       });
     }
     const [first, second] = codex.requests("turn/start");
