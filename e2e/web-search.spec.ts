@@ -39,6 +39,33 @@ test("what the model searched and read shows above the answer, and its numbered 
   }
 });
 
+test.describe("copying", () => {
+  test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+  test("Copy answer copies the sources too, as Markdown links", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    await page.getByLabel("Message").fill(SEARCHING);
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByRole("list", { name: "Sources" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Copy answer" }).click();
+
+    const copied = (await page.evaluate(() => navigator.clipboard.readText())).replaceAll(
+      "\r\n",
+      "\n",
+    );
+    expect(copied).toBe(
+      [
+        `You said: ${SEARCHING}`,
+        "",
+        "Sources:",
+        "1. [Titan Fitness](https://titan.fitness/j-hooks) · T-3 Series J-Hooks",
+        "2. [garagegymreviews.com](https://www.garagegymreviews.com/titan-t3) · Titan T-3 review",
+      ].join("\n"),
+    );
+  });
+});
+
 test("an answer that didn't use the web lists no sources", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   await page.getByLabel("Message").fill("Where should the rack go?");

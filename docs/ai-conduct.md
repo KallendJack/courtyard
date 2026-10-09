@@ -365,10 +365,11 @@ What a model is told (Every turn, item 12), on a turn that offers web search, th
 The chat shows "Searched the web for “…”" for each search and "Read <site>" for each page read, as it shows "Used
 <skill>". Under the answer it lists the turn's **sources**, numbered: each page the answer links to, then each page
 the model read that it doesn't link, with the site's name (from the page's title when the title ends with the name
-its address spells, such as "| Titan Fitness" for titan.fitness, or else the address's host), linked, and the page's title (from the search results for Claude, the link's words otherwise). A
-turn that didn't search or read a page lists none. The sources are kept as an event, so they're there after a
-reload. No site icons are loaded, so no site learns the answer was shown. The conversation a later turn gets leaves
-them out: the answer's own links are there, as written.
+its address spells, such as "| Titan Fitness" for titan.fitness, or else the address's host), linked, and the
+page's title (from the search results for Claude, the link's words otherwise). A turn that didn't search or read a
+page lists none. The sources are kept as an event, so they're there after a reload, and Copy answer copies them
+under the answer as Markdown links. No site icons are loaded, so no site learns the answer was shown. The
+conversation a later turn gets leaves them out: the answer's own links are there, as written.
 
 The eval's `search-*` scenarios check it on both providers: a current-facts question searches and lists sources, a
 link the owner sends is read, and an ordinary question doesn't search.
