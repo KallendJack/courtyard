@@ -48,6 +48,7 @@ import {
   offerFor,
   type Provider,
   type ToolReply,
+  type TurnToolName,
 } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
@@ -541,19 +542,19 @@ export const createSessions = (options: {
             if (!recorded.ok) recordingLost = true;
           },
         });
-        /** What answers each of Courtyard's tools, by name: only those the framing offers. */
-        const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
+        /** What answers each of Courtyard's tools, by name: every one a turn can offer. */
+        const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
         };
+        /** A model's call to one of Courtyard's tools, answered only when the framing offers it. */
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
-          const answer = answers[call.name];
-          if (answer === undefined || !framing.tools.some((tool) => tool.name === call.name)) {
-            return Promise.resolve(notOfferedReply(call.name));
-          }
-          return answer(call.input);
+          const offered = framing.tools.find((tool) => tool.name === call.name);
+          return offered === undefined
+            ? Promise.resolve(notOfferedReply(call.name))
+            : answers[offered.name](call.input);
         };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([

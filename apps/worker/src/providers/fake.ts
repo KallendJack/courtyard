@@ -13,7 +13,7 @@ import {
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { Provider, SignIn } from "./index.ts";
+import type { Provider, SignIn, TurnToolName } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
 const CAPABILITIES: Capabilities = {
@@ -96,6 +96,16 @@ const scriptedReplies = (message: string): { replies: string[] }[] =>
     const [, replies] = SUGGEST_REPLIES.exec(line.trim()) ?? [];
     return replies === undefined ? [] : [{ replies: replies.split("|").map((r) => r.trim()) }];
   });
+
+/**
+ * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
+ * skills loaded first, then saves, then suggested replies.
+ */
+const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
+  [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
+  [SAVE_TOOL_NAME, scriptedSaves],
+  [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
+];
 
 /** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
 const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
@@ -257,20 +267,10 @@ export const createFakeProvider = (
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
-      const offers = (name: string) => framing.tools.some((tool) => tool.name === name);
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
-      if (offers(USE_SKILL_TOOL_NAME)) {
-        for (const input of scriptedSkillLoads(last)) {
-          await callTool({ name: USE_SKILL_TOOL_NAME, input });
-        }
-      }
-      if (offers(SAVE_TOOL_NAME)) {
-        for (const input of scriptedSaves(last)) await callTool({ name: SAVE_TOOL_NAME, input });
-      }
-      if (offers(SUGGEST_REPLIES_TOOL_NAME)) {
-        for (const input of scriptedReplies(last)) {
-          await callTool({ name: SUGGEST_REPLIES_TOOL_NAME, input });
-        }
+      for (const [name, scripted] of SCRIPTED_CALLS) {
+        if (!framing.tools.some((tool) => tool.name === name)) continue;
+        for (const input of scripted(last)) await callTool({ name, input });
       }
       if (hitsLimit.test(last)) {
         return err({

@@ -103,9 +103,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
   skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
 - **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
-  three, each a few words on one line, all different, one set per answer.
+  three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
+  writes after them apart from lines it repeats.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
-  Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change), follows each
+  Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
+  is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
+  turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
   list of models, Get to know (a session started with its house skill) and Grill this plan.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
