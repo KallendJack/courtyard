@@ -21,6 +21,7 @@ const CAPABILITIES: Capabilities = {
   codes: false,
   usesTools: false,
   savesContext: true,
+  searchesWeb: true,
 };
 
 /** The levels of effort the fake's model takes, so picking one can be seen and tested. */

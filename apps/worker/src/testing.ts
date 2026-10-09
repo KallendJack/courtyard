@@ -131,7 +131,13 @@ export const FAKE_TWO_MODEL = { provider: "fake-two", model: "echo" };
 /** For tests: a provider that's there but not signed in, as Codex is before the owner signs in. */
 export const signedOutProvider = (): Provider => {
   const id = ProviderId.parse("away");
-  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: false };
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
   const notSignedIn = { kind: "provider-unavailable", message: "Not signed in." } as const;
   return {
     id,
@@ -223,7 +229,13 @@ export const savingProvider = (
   const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
-  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: true,
+    searchesWeb: false,
+  };
   const provider: Provider = {
     id,
     capabilities,
