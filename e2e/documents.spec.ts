@@ -13,7 +13,8 @@ test("Save as document keeps an answer as a document, listed on the workspace pa
 
   await page.getByRole("button", { name: "Save as document" }).click();
   const box = page.getByRole("textbox", { name: "Document name" });
-  await expect(box).toHaveValue(/Twelve weeks/);
+  // The session's title: its first message, or the title a model gives it once the turn is done.
+  await expect(box).toHaveValue(/Twelve weeks/i);
   await expect(page.getByText(`Saves the whole answer to ${name}'s documents.`)).toBeVisible();
   await box.fill("Padel plan to Christmas");
   await page.getByRole("button", { name: "Save", exact: true }).click();
