@@ -1,11 +1,28 @@
 import { z } from "zod";
-import { ATTACHMENTS, AttachmentMediaType, PDF_TYPE, PHOTO_TYPES } from "./attachment.ts";
 
-// Checking a file before it's attached (#78), in the browser and again in the worker. Apart from
-// `attachment.ts`, which every session event needs, so none of this reaches the first load.
+// Attaching a file (#78): the limits, and the checks the browser makes and the worker makes again.
+// Apart from `attachment.ts`, which every session event needs, so none of this is on the first load.
+
+/**
+ * The limits on attachments: at most five per message, each up to 20 MB; photos shrunk in the
+ * browser to about 2000 px on their long side; and the session's last ten go with each turn.
+ */
+export const ATTACHMENTS = {
+  perMessage: 5,
+  maxBytes: 20 * 1024 * 1024,
+  photoLongSide: 2000,
+  carried: 10,
+} as const;
+
+/** The kinds of photo a model takes. The browser sends every photo as JPEG, HEIC included. */
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+export const PDF_TYPE = "application/pdf";
 
 export const PhotoMediaType = z.enum(PHOTO_TYPES);
 export type PhotoMediaType = z.infer<typeof PhotoMediaType>;
+
+export const AttachmentMediaType = z.enum([...PHOTO_TYPES, PDF_TYPE]);
+export type AttachmentMediaType = z.infer<typeof AttachmentMediaType>;
 
 /** A photo or a PDF, by its media type. */
 export const attachmentKind = (mediaType: AttachmentMediaType) =>

@@ -1,17 +1,12 @@
 export { ApiError } from "./lib/api-error.ts";
+export { ATTACHMENTS_FIELD, Attachment, AttachmentId, MESSAGE_FIELD } from "./lib/attachment.ts";
 export {
   ATTACHMENTS,
-  ATTACHMENTS_FIELD,
-  Attachment,
-  AttachmentId,
+  AttachmentFile,
   AttachmentMediaType,
-  MESSAGE_FIELD,
+  attachmentKind,
   PDF_TYPE,
   PHOTO_TYPES,
-} from "./lib/attachment.ts";
-export {
-  AttachmentFile,
-  attachmentKind,
   PhotoMediaType,
   sizeInWords,
   TOO_MANY_ATTACHMENTS,

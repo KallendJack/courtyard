@@ -295,8 +295,8 @@ export const Composer = memo(function Composer(props: {
             "relative flex flex-col gap-2 rounded-lg border bg-field px-3 pt-2.5 pb-2 shadow-xs focus-within:border-primary-text focus-within:ring-3 focus-within:ring-accent md:px-4 md:pt-3.5 md:pb-3",
             compact &&
               (attaching.length === 0
-                ? "max-md:rounded-full max-md:py-1.5 max-md:pr-1.5 max-md:pl-1.5"
-                : "max-md:rounded-[22px] max-md:px-1.5 max-md:pt-2.5 max-md:pb-1.5"),
+                ? "max-md:rounded-full max-md:px-1.5 max-md:py-1.5"
+                : "max-md:rounded-[22px] max-md:px-1.5 max-md:py-1.5"),
           )}
         >
           {menuOpen && (
@@ -312,7 +312,7 @@ export const Composer = memo(function Composer(props: {
           {dragging && (
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-[inherit] border-[1.5px] border-dashed border-primary bg-accent text-sm/[18px] font-semibold text-primary-text"
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-dashed border-primary bg-accent text-sm/[18px] font-semibold text-primary-text"
             >
               <Paperclip className="size-5" />
               Drop photos or PDFs to attach
@@ -415,17 +415,14 @@ export const Composer = memo(function Composer(props: {
               placeholder={props.placeholder}
               rows={1}
               // One line to start, growing with what's typed, so the keyboard keeps its room.
-              className={classes(
-                "block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12",
-                compact && "max-md:pl-1",
-              )}
+              className="block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
             />
             <div className="flex items-center gap-2">
               <span className={classes("contents", compact && "max-md:hidden")}>
                 <IconButton
                   label={ATTACH_LABEL}
                   icon={<Paperclip />}
-                  size="disc"
+                  size="action"
                   look="disc"
                   disabled={full}
                   {...(full ? { hint: FULL_HINT } : {})}
@@ -436,7 +433,7 @@ export const Composer = memo(function Composer(props: {
                     <IconButton
                       label={CAMERA_LABEL}
                       icon={<Camera />}
-                      size="disc"
+                      size="action"
                       look="disc"
                       disabled={full}
                       onClick={() => camera.current?.click()}

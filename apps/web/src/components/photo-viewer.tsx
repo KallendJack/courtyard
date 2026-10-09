@@ -1,6 +1,5 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
 
 /** How far a swipe goes before it moves to the next photo. */
@@ -53,22 +52,24 @@ export function PhotoViewer(props: {
         if (from === undefined || Math.abs(event.clientX - from) < SWIPE_PX) return;
         step(event.clientX < from ? 1 : -1);
       }}
-      className="m-0 h-dvh max-h-none w-full max-w-none bg-viewer text-viewer-foreground backdrop:bg-viewer"
+      className="m-0 h-dvh max-h-none w-full max-w-none"
+      // Dark in both modes, so a photo stands out; set here, as only this page needs it.
+      style={{ backgroundColor: "var(--viewer)", color: "var(--viewer-foreground)" }}
     >
       {photo && showing !== undefined && (
         <div className="relative flex h-full flex-col">
           <div className="flex h-14 shrink-0 items-center justify-between pt-3 pr-2 pl-5">
             <div className="flex min-w-0 flex-col gap-px">
               <span className="truncate text-sm/[18px] font-medium">{photo.name}</span>
-              <span className="text-xs text-viewer-muted">
+              <span className="text-xs" style={{ color: "var(--viewer-muted)" }}>
                 {showing + 1} of {photos.length}
               </span>
             </div>
             <IconButton
               label="Close"
               icon={<X />}
-              size="lg"
-              look="onViewer"
+              size="md"
+              look="inPill"
               onClick={props.onClose}
             />
           </div>
@@ -89,10 +90,11 @@ export function PhotoViewer(props: {
                   aria-label={`Show ${each.name}`}
                   aria-current={index === showing}
                   onClick={() => show(index)}
-                  className={classes(
-                    "size-1.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-viewer-foreground",
-                    index === showing ? "bg-viewer-foreground" : "bg-viewer-dot",
-                  )}
+                  className="size-1.5 rounded-full"
+                  style={{
+                    backgroundColor:
+                      index === showing ? "var(--viewer-foreground)" : "var(--viewer-dot)",
+                  }}
                 />
               ))}
             </div>

@@ -15,8 +15,8 @@ function RemoveBadge(props: { name: string; onRemove: () => void }) {
     <span className="absolute -top-1.5 -right-1.5">
       <IconButton
         label={`Remove ${props.name}`}
-        icon={<X />}
-        size="badge"
+        icon={<X className="size-2.5" strokeWidth={3} />}
+        size="xs"
         look="badge"
         onClick={props.onRemove}
       />

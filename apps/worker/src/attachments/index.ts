@@ -119,8 +119,13 @@ export const prepareAttachments = async (
 const folderIn = (sessionFolder: string) => join(sessionFolder, "attachments");
 
 /** Where an attachment is kept in its session's folder. */
-export const attachmentPath = (sessionFolder: string, attachment: Attachment) =>
-  join(folderIn(sessionFolder), `${attachment.id}${ENDINGS[attachment.mediaType]}`);
+export const attachmentPath = (sessionFolder: string, attachment: Attachment) => {
+  const known = AttachmentMediaType.safeParse(attachment.mediaType);
+  return join(
+    folderIn(sessionFolder),
+    `${attachment.id}${known.success ? ENDINGS[known.data] : ""}`,
+  );
+};
 
 /** Where a PDF's text is kept, beside it, so later turns don't read the PDF again. */
 const textPath = (sessionFolder: string, attachment: Attachment) =>

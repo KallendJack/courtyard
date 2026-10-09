@@ -77,7 +77,7 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
     );
   }
   return (
-    <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 pb-2.5 text-accent-foreground md:max-w-[318px]">
+    <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 pb-2.5 text-accent-foreground">
       {photos.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {photos.map((photo, index) => (
