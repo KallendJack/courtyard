@@ -635,13 +635,28 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
   }
 };
 
-/** What a model is told about the replies it suggested: that the owner sees them, or why not. */
-export const suggestRepliesReply = (shown: Result<unknown, RepliesRefusal>): ToolReply =>
+/**
+ * What a model is told when its replies are taken, by what its answer has written so far
+ * (docs/ai-conduct.md, Suggested replies): Claude takes what it writes after its last tool call as
+ * its answer, so it's told whether that's nothing more, the rest, or all of it.
+ */
+const repliesTaken = (written: string) =>
+  written.includes("?")
+    ? "The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its question, so you've finished: write nothing more."
+    : written.trim() !== ""
+      ? "The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write only the rest, ending with your question."
+      : "The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to say.";
+
+/**
+ * What a model is told about the replies it suggested, its answer having `written` so far: that
+ * the owner sees them, or why not.
+ */
+export const suggestRepliesReply = (
+  shown: Result<unknown, RepliesRefusal>,
+  written: string,
+): ToolReply =>
   shown.ok
-    ? textReply(
-        true,
-        "The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to say.",
-      )
+    ? textReply(true, repliesTaken(written))
     : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */

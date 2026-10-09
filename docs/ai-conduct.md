@@ -244,12 +244,23 @@ them and refuses, saying why, when:
 - **the answer already suggested replies:** one set per answer, the first that's accepted;
 - **the owner stopped the turn.**
 
-Replies it takes are answered with this, since a model can call the tool before it has written its question (Claude
-did in the Grilling eval, having asked it only in its thinking, #90):
+Replies it takes are answered according to what the answer has written so far, since Claude treats what it writes
+after its last tool call as its answer: called before writing, it asked its question only in its thinking (#90);
+called after, it often wrote its whole answer again (#127). With nothing written yet:
 
 > The owner sees them as buttons under your answer. They see only the text you write, never your thinking, and the
 > buttons don't show your question: if your text doesn't ask it yet, write it now, with anything else you meant to
 > say.
+
+With a question written (a question mark in the answer so far):
+
+> The owner sees them as buttons under your answer, and everything you've written above them. Your answer asks its
+> question, so you've finished: write nothing more.
+
+With some of the answer written but no question yet:
+
+> The owner sees them as buttons, and everything you've written above them, so don't write any of it again: write
+> only the rest, ending with your question.
 
 A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
@@ -395,8 +406,8 @@ Its text, which every later turn of the session carries:
 >   in. Keep your own words short: a sentence on their answer at most, then the question. Follow the owner's changes
 >   to the topics: an answer that covers a later topic covers it, and a topic the owner skips stays skipped.
 > - **Put each question so it has a few likely answers** wherever the topic allows (which kind, how often, how far
->   along), so the owner can answer with a tap: when you have the suggest_replies tool, call it first, then write
->   your whole message. Ask for the owner's own words only when nothing else will do, such as a name.
+>   along), so the owner can answer with a tap: when you have the suggest_replies tool, offer them with it. Ask for
+>   the owner's own words only when nothing else will do, such as a name.
 > - **Save what the owner tells you as they say it,** with the save tool, by the saving rules. A topic is never
 >   saved: only what the owner says about it.
 > - **Wrap up** when every topic is answered or skipped, or when the owner has had enough ("that's enough", "let's
@@ -431,8 +442,8 @@ Its text:
 >   in. Keep your own words short: a sentence on their answer at most, then the question. Follow the owner's changes
 >   to the topics: an answer that covers a later topic covers it, and a topic the owner skips stays skipped.
 > - **Put each question so it has a few likely answers** wherever the topic allows (which kind, how often, how far
->   along), so the owner can answer with a tap: when you have the suggest_replies tool, call it first, then write
->   your whole message. Ask for the owner's own words only when nothing else will do, such as a name.
+>   along), so the owner can answer with a tap: when you have the suggest_replies tool, offer them with it. Ask for
+>   the owner's own words only when nothing else will do, such as a name.
 > - **Save what the owner tells you as they say it,** with the save tool, to the owner context (place "owner"), never
 >   to this workspace's context file: what's true about them to About me, and how they like answers to How to answer
 >   me. A topic is never saved: only what the owner says about it.

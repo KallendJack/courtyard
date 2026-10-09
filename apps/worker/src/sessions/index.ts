@@ -519,6 +519,8 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        /** What the answer has written so far in this turn. */
+        let written = "";
         const suggest = createTurnReplies({
           stopped: () => stopper.signal.aborted || recordingLost,
           record: async (replies) => {
@@ -533,7 +535,8 @@ export const createSessions = (options: {
         const answers: Readonly<Record<string, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
-          [SUGGEST_REPLIES_TOOL_NAME]: async (input) => suggestRepliesReply(await suggest(input)),
+          [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
+            suggestRepliesReply(await suggest(input), written),
         };
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
           const answer = answers[call.name];
@@ -558,6 +561,7 @@ export const createSessions = (options: {
             emit: async (text) => {
               // Anything a provider writes after the owner stopped the turn is dropped.
               if (recordingLost || stopper.signal.aborted) return;
+              written += text;
               const recorded = await append(turn.id, { type: "text-delta", text });
               if (!recorded.ok) recordingLost = true;
             },
