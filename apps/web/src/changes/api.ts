@@ -1,5 +1,4 @@
-import { type ChangeId, RecentChanges } from "@courtyard/contract";
-import { z } from "zod";
+import { type ChangeId, RecentChanges, Undone } from "@courtyard/contract";
 import { type ContextPlace, fromWorker, sendJson } from "../worker.ts";
 
 // Recent changes' calls live with it rather than in worker.ts, so their schemas stay off the
@@ -17,4 +16,4 @@ export const loadChanges = (about: ContextPlace, after?: ChangeId) => {
 
 /** Undoes a change from Recent changes, or a document's delete from its workspace's page. */
 export const undoChange = (id: ChangeId) =>
-  sendJson({ path: `/changes/${id}/undo`, body: {}, schema: z.unknown() });
+  sendJson({ path: `/changes/${id}/undo`, body: {}, schema: Undone });

@@ -59,3 +59,10 @@ export const RecentChanges = z.object({
   more: ChangeId.nullable(),
 });
 export type RecentChanges = z.infer<typeof RecentChanges>;
+
+/**
+ * What an Undo answers, from Recent changes or from a document's or a Thing's note: nothing (204),
+ * which the web app reads as `null`. A refused one answers with an error instead.
+ */
+export const Undone = z.literal(null);
+export type Undone = z.infer<typeof Undone>;

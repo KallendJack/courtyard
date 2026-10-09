@@ -9,9 +9,9 @@ import {
   ThingList,
   ThingSlug,
   type ThingSummary,
+  Undone,
   WorkspaceId,
 } from "@courtyard/contract";
-import { z } from "zod";
 import { sendForm } from "../send-form.ts";
 import { fromWorker, NOT_FOUND, sendJson } from "../worker.ts";
 
@@ -101,5 +101,5 @@ export const undoThingSave = (sessionId: SessionId, save: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/things/${save}/undo`,
     body: {},
-    schema: z.unknown(),
+    schema: Undone,
   });
