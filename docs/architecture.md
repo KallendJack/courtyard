@@ -187,20 +187,27 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
     just the source while the block is still arriving; a drawing that throws shows it too. The folder's classes are
     in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
-    by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
-    the first load.
-  - **`changes/`:** the Recent changes list, with Undo, and its calls (`api.ts`).
+    by `stylesheet.ts` (through `lib/stylesheet.ts`) from inside the answer renderer's script, so neither the classes
+    nor a stylesheet's name are on the first load.
+  - **`changes/`:** the Recent changes list, with Undo, its calls (`api.ts`), and the note a page shows for
+    something just deleted from its own page, with Undo (`just-deleted.tsx`).
   - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
     a document's page is in `routes/`, drawn with the answer renderer.
-  - **`things/`:** Things' calls (`api.ts`) and how their fields read (`words.ts`).
+  - **`things/`:** a workspace's Things section (`things-section.tsx`, filtered by status), a Thing's card
+    (`thing-card.tsx`, its route in `routes/`, its history drawn with the answer renderer), the rows both list them
+    in, parts under their Thing (`thing-rows.tsx`), Add Thing's and Edit's form (`thing-form.tsx`), Things' calls
+    (`api.ts`) and how their fields read (`words.ts`). Like `rich-blocks/`, its classes are in a stylesheet of its
+    own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
+    first loads.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
-  (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, sheets, notices and so on), used
+  (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
+  workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
@@ -277,8 +284,9 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
 - **Things.** The model calls the Things tool by the labels its turn listed. `things/` checks the call and writes it
   as a change through `context-folder/`, resizing a photo from the turn's attachments first; the session records a
-  `thing-saved` event and the browser shows a note with Undo. The owner's own adds, edits, deletes and photo uploads
-  go through `things/`'s routes, each a change Recent changes can undo
+  `thing-saved` event and the browser shows a note with Open, which goes to the Thing's card
+  (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
+  workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
