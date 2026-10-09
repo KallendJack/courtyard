@@ -70,6 +70,25 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   ).toHaveAttribute("data-workspace-colour", colour ?? "");
 });
 
+test("what a new workspace is for, when the owner says, shows under its name as the intro line", async ({
+  page,
+}) => {
+  const name = `Pottery ${Date.now()}`;
+  await page.goto("/new-workspace");
+
+  await page.getByLabel("Name").fill(name);
+  const forWhat = page.getByLabel("What's it for?");
+  await expect(forWhat).toHaveAccessibleDescription(
+    "One line. It sits at the top of the context file, and Get to know starts from it.",
+  );
+  await expect(page.getByText("Optional", { exact: true })).toBeVisible();
+  await forWhat.fill("Turning the shed into a pottery studio by spring");
+  await page.getByRole("button", { name: "Add workspace" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByText("Turning the shed into a pottery studio by spring")).toBeVisible();
+});
+
 test("a name another workspace has gets a clear message", async ({ page }) => {
   await page.goto("/new-workspace");
 

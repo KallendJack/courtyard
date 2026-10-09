@@ -1,4 +1,4 @@
-import { WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
+import { CONTEXT_LINE_MAX_CHARACTERS, WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/button";
@@ -12,12 +12,16 @@ export const Route = createFileRoute("/_app/new-workspace")({
   component: NewWorkspace,
 });
 
-/** Adds a workspace: the worker makes its folder and starter context file, then it opens. */
+/**
+ * Adds a workspace: the worker makes its folder and starter context file, whose intro line is what
+ * it's for when the owner says, then it opens.
+ */
 function NewWorkspace() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [intro, setIntro] = useState("");
   const add = useAction(async () => {
-    const workspace = await addWorkspace({ name });
+    const workspace = await addWorkspace({ name, intro });
     if (workspace.kind !== "loaded") return describeProblem(workspace).body;
     // Every list of workspaces now includes it.
     await router.invalidate();
@@ -50,8 +54,18 @@ function NewWorkspace() {
           placeholder="Garage gym"
           autoComplete="off"
           required
-          // The name is the only thing this page asks for.
+          // The name is the one thing this page needs.
           autoFocus
+        />
+        <TextField
+          label="What's it for?"
+          optional
+          hint="One line. It sits at the top of the context file, and Get to know starts from it."
+          value={intro}
+          onChange={(event) => setIntro(event.target.value)}
+          maxLength={CONTEXT_LINE_MAX_CHARACTERS}
+          placeholder="Turning the garage into a home gym by Christmas"
+          autoComplete="off"
         />
         <Button type="submit" disabled={add.busy}>
           Add workspace
