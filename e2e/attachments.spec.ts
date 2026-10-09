@@ -160,6 +160,8 @@ test.describe("on a phone", () => {
     await page.getByLabel("Message").fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page).toHaveURL(/\/sessions\//);
+    // The session page is showing, with its first answer done, so the box is its own.
+    await expect(page.getByRole("button", { name: "Copy answer" })).toBeVisible();
 
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Take a photo" }).click();

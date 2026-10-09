@@ -408,7 +408,8 @@ export const Composer = memo(function Composer(props: {
               // A pasted photo or screenshot attaches (#78); pasted text goes in as usual.
               onPaste={(event) => {
                 const files = [...event.clipboardData.files];
-                if (files.length === 0) return;
+                // Text copied with a picture of itself (from a document, say) is pasted as text.
+                if (files.length === 0 || event.clipboardData.getData("text/plain") !== "") return;
                 event.preventDefault();
                 void attach(files);
               }}
