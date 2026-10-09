@@ -104,28 +104,27 @@ export const ThingDetail = z.object({
 });
 export type ThingDetail = z.infer<typeof ThingDetail>;
 
-/** A field the owner's form can leave blank: blank is none. */
-const blankIsNone = <T extends z.ZodType>(schema: T) =>
-  z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    schema.optional(),
-  );
+/**
+ * A field the owner's form can leave blank (`""`) or out: either way it has none. Kept to Zod
+ * features the first load already has, since every Zod feature any page uses loads with it.
+ */
+const blankable = <T extends z.ZodType>(schema: T) => schema.or(z.literal("")).optional();
 
 /**
- * A Thing as the owner's Add Thing and Edit form gives it: every field, a blank one left out.
- * Its history and photo are kept as they are.
+ * A Thing as the owner's Add Thing and Edit form gives it: every field, a blank or missing one
+ * cleared. Its history and photo are kept as they are.
  */
 export const ThingForm = z.object({
   name: oneLine(THING_FIELD_MAX_CHARACTERS, "name"),
   status: ThingStatus,
-  brand: blankIsNone(oneLine(THING_FIELD_MAX_CHARACTERS, "brand")),
-  bought: blankIsNone(ThingBought),
-  price: blankIsNone(oneLine(THING_FIELD_MAX_CHARACTERS, "price")),
-  condition: blankIsNone(oneLine(THING_FIELD_MAX_CHARACTERS, "condition")),
-  size: blankIsNone(oneLine(THING_FIELD_MAX_CHARACTERS, "size")),
-  where: blankIsNone(oneLine(THING_FIELD_MAX_CHARACTERS, "where")),
+  brand: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "brand")),
+  bought: blankable(ThingBought),
+  price: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "price")),
+  condition: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "condition")),
+  size: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "size")),
+  where: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "where")),
   /** The Thing it's part of, by its file's name; one that's a part itself can't be. */
-  partOf: blankIsNone(ThingSlug).or(z.null()),
+  partOf: blankable(ThingSlug).nullable(),
 });
 export type ThingForm = z.infer<typeof ThingForm>;
 

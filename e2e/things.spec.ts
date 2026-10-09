@@ -17,9 +17,12 @@ test("a model's Thing saves show as notes with what changed, and Undo puts one b
   );
 
   const notes = page.getByRole("list", { name: "Things saved" });
-  const bike = notes.getByRole("listitem").filter({ hasText: "Whyte T-140" });
-  await expect(bike).toContainText("Added Thing");
-  await expect(bike).toContainText("(have, bought Oct 2026, £1,400)");
+  await expect(notes.getByRole("listitem").nth(0)).toContainText(
+    "Added ThingWhyte T-140 (have, bought Oct 2026, £1,400)",
+  );
+  await expect(notes.getByRole("listitem").nth(1)).toContainText(
+    "Added ThingChain (have, part of Whyte T-140)",
+  );
   const swapped = notes.getByRole("listitem").nth(2);
   await expect(swapped).toContainText("Updated Thing");
   await expect(swapped).toContainText(

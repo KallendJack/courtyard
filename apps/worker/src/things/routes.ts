@@ -89,17 +89,17 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
   }
 };
 
-/** Every field of the owner's form as a save sets it: a blank one cleared. */
+/** Every field of the owner's form as a save sets it: a blank or missing one cleared. */
 const fromForm = (form: ThingForm): NonNullable<ThingEdit["fields"]> => ({
   name: form.name,
   status: form.status,
-  brand: form.brand ?? null,
-  bought: form.bought ?? null,
-  price: form.price ?? null,
-  condition: form.condition ?? null,
-  size: form.size ?? null,
-  where: form.where ?? null,
-  partOf: form.partOf ?? null,
+  brand: form.brand || null,
+  bought: form.bought || null,
+  price: form.price || null,
+  condition: form.condition || null,
+  size: form.size || null,
+  where: form.where || null,
+  partOf: form.partOf || null,
 });
 
 /** A workspace's Things, under `/api`: listed, read, added, changed, deleted, and their photos. */
