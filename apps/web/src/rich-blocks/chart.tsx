@@ -74,10 +74,10 @@ const ABOVE = 20;
 const PLOT_HEIGHT = 160;
 const BELOW = 26;
 /** The narrowest a label's slot gets before the chart scrolls sideways instead. */
-const SLOT_MIN = 44;
+const SLOT_MIN = 40;
 /** Each bar's widest, and its narrowest beside others. */
 const BAR_MAX = 56;
-const BAR_MIN = 22;
+const BAR_MIN = 18;
 
 /** How wide the element is, as the page lays it out. */
 const useWidth = () => {
@@ -120,7 +120,12 @@ function Plot(props: { chart: Plotted }) {
     bars,
   );
   const axis = Math.max(28, ...scale.ticks.map((tick) => formatValue(tick).length * 7 + 8));
-  const slotMin = bars ? Math.max(SLOT_MIN, chart.series.length * (BAR_MIN + 4) + 16) : SLOT_MIN;
+  // Room for the longest label, at about 7 px a character, and for each series' bar side by side.
+  const slotMin = Math.max(
+    SLOT_MIN,
+    ...chart.labels.map((label) => label.length * 7 + 8),
+    bars ? chart.series.length * (BAR_MIN + 2) + 12 : 0,
+  );
   const plotWidth = Math.max((width ?? 0) - axis, chart.labels.length * slotMin);
   const slot = plotWidth / chart.labels.length;
   const y = (value: number) =>
@@ -277,9 +282,19 @@ function Lines(props: Placed) {
 }
 
 /** What each colour stands for: the series, or a pie's slices with their values. */
-function Legend(props: { items: readonly ReactNode[] }) {
+function Legend(props: {
+  items: readonly ReactNode[];
+  /** One under another, beside a pie, rather than in a row above the plot. */
+  stacked?: boolean;
+}) {
   return (
-    <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+    <ul
+      className={
+        props.stacked
+          ? "flex flex-col gap-2 text-xs text-muted-foreground"
+          : "mb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
+      }
+    >
       {props.items.map((item, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: items are in the model's order
         <li key={index} className="flex items-center gap-1.5">
@@ -292,11 +307,13 @@ function Legend(props: { items: readonly ReactNode[] }) {
 }
 
 const PIE_RADIUS = 72;
+/** The pie's middle, leaving room for the outline between slices at its edge. */
+const PIE_MIDDLE = PIE_RADIUS + 2;
 
 /** A point on the pie's edge, `share` of the way round from the top, clockwise. */
 const edge = (share: number) => {
   const angle = share * 2 * Math.PI;
-  return [PIE_RADIUS + PIE_RADIUS * Math.sin(angle), PIE_RADIUS - PIE_RADIUS * Math.cos(angle)];
+  return [PIE_MIDDLE + PIE_RADIUS * Math.sin(angle), PIE_MIDDLE - PIE_RADIUS * Math.cos(angle)];
 };
 
 /** Parts of a whole: a slice per label, and beside it each label's value and share. */
@@ -308,9 +325,9 @@ function Pie(props: { labels: readonly string[]; values: readonly number[] }) {
     before += value;
     return { from, to: before / total };
   });
-  const size = PIE_RADIUS * 2;
+  const size = PIE_MIDDLE * 2;
   return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
       <svg aria-hidden width={size} height={size} className="block shrink-0">
         {slices.map(({ from, to }, index) => {
           const { fill } = colour(index);
@@ -322,7 +339,7 @@ function Pie(props: { labels: readonly string[]; values: readonly number[] }) {
           if (to - from >= 1)
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: slices are in the model's order
-              <circle key={index} cx={PIE_RADIUS} cy={PIE_RADIUS} r={PIE_RADIUS} {...shared} />
+              <circle key={index} cx={PIE_MIDDLE} cy={PIE_MIDDLE} r={PIE_RADIUS} {...shared} />
             );
           const [startX, startY] = edge(from);
           const [endX, endY] = edge(to);
@@ -331,13 +348,14 @@ function Pie(props: { labels: readonly string[]; values: readonly number[] }) {
             <path
               // biome-ignore lint/suspicious/noArrayIndexKey: slices are in the model's order
               key={index}
-              d={`M${PIE_RADIUS},${PIE_RADIUS} L${startX},${startY} A${PIE_RADIUS},${PIE_RADIUS} 0 ${large} 1 ${endX},${endY} Z`}
+              d={`M${PIE_MIDDLE},${PIE_MIDDLE} L${startX},${startY} A${PIE_RADIUS},${PIE_RADIUS} 0 ${large} 1 ${endX},${endY} Z`}
               {...shared}
             />
           );
         })}
       </svg>
       <Legend
+        stacked
         items={props.labels.map((label, index) => {
           const value = props.values[index] ?? 0;
           return (

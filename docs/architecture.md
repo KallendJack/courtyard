@@ -185,7 +185,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
     whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
     fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
-    just the source while the block is still arriving; a drawing that throws shows it too. The folder's classes are
+    just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
+    (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
+    Moorland's colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
+    out its value axis. The folder's classes are
     in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
     by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
     the first load.
@@ -204,7 +207,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
-  runs after each build to stamp the service worker and check the first-load budget.
+  runs after each build to stamp the service worker and check the first-load budget. `vite.config.ts` keeps everything
+  the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
+  shares with the first load, such as React and Zod, into files of their own.
 
 ### The house skills: `packages/skills`
 
@@ -219,7 +224,8 @@ Every shape that crosses between the web app and the worker, as Zod schemas with
 topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
 `session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's
+tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors, and a `chart`
+block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.
 

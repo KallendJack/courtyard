@@ -280,6 +280,109 @@ test.describe("charts", () => {
     await page.emulateMedia({ colorScheme: "dark" });
     expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill("rgb(142, 94, 147)"));
   });
+
+  test("a line chart draws each series in its own colour, named in a legend", async ({ page }) => {
+    const session = await ask(
+      page,
+      `Your squat and deadlift this block:\n\n${chartBlock({
+        kind: "line",
+        title: "Top sets",
+        unit: "kg",
+        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
+        series: [
+          { name: "Squat", values: [80, 82.5, 85, 87.5] },
+          { name: "Deadlift", values: [100, 105, 107.5, 110] },
+        ],
+      })}`,
+    );
+    const chart = session.getByRole("figure", { name: "Top sets" });
+    await expect(chart.getByRole("listitem")).toHaveText(["Squat", "Deadlift"]);
+    await expect(chart.locator("svg polyline")).toHaveCount(2);
+    // Heather, then slate.
+    expect(await coloursOf(chart.locator("svg polyline"), "stroke")).toEqual([
+      "rgb(106, 63, 110)",
+      "rgb(94, 110, 126)",
+    ]);
+    // A dot on every value, and each line's latest value written at its end.
+    await expect(chart.locator("svg circle")).toHaveCount(8);
+    await expect(chart.locator("svg text", { hasText: /^87\.5$/ })).toHaveCount(1);
+    await expect(chart.locator("svg text", { hasText: /^110$/ })).not.toHaveCount(0);
+  });
+
+  test("a pie chart has a slice per label, each with its value and share", async ({ page }) => {
+    const session = await ask(
+      page,
+      `Where the bike money went:\n\n${chartBlock({
+        kind: "pie",
+        labels: ["Drivetrain", "Tyres", "Servicing"],
+        series: [{ values: [185, 60, 55] }],
+      })}`,
+    );
+    const chart = session.getByRole("figure", { name: "Pie chart" });
+    await expect(chart.locator("svg [data-series]")).toHaveCount(3);
+    expect(await coloursOf(chart.locator("svg [data-series]"), "fill")).toEqual([
+      "rgb(106, 63, 110)",
+      "rgb(94, 110, 126)",
+      "rgb(124, 143, 90)",
+    ]);
+    await expect(chart.getByRole("listitem")).toHaveText([
+      "Drivetrain18562%",
+      "Tyres6020%",
+      "Servicing5518%",
+    ]);
+  });
+
+  test("a chart that can't be drawn shows what the model wrote under a line saying so", async ({
+    page,
+  }) => {
+    const broken =
+      '{ "kind": "bar", "labels": ["Jun", "Jul", "Aug"],\n  "series": [{ "name": "Spent", "values": [40, 25 }] }';
+    const unmatched = { ...SPENDING, series: [{ name: "Spent", values: [40, 25] }] };
+    const session = await ask(
+      page,
+      `Before.\n\n\`\`\`chart\n${broken}\n\`\`\`\n\n${chartBlock(unmatched)}\n\nAfter.`,
+    );
+    const answer = session.locator("[aria-live]").last();
+    const problems = answer.getByRole("figure", {
+      name: "Couldn't draw this chart, so here's what the model wrote",
+    });
+    await expect(problems).toHaveCount(2);
+    await expect(problems.first().locator("pre")).toHaveText(broken);
+    await expect(answer).toContainText("After.");
+    await expect(answer.locator("svg [data-series]")).toHaveCount(0);
+  });
+
+  test("a chart still arriving shows as code, never as one that couldn't be drawn", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    // Long enough to be seen arriving.
+    const labels = Array.from({ length: 24 }, (_, index) => `Week ${index + 1}`);
+    const chart = {
+      kind: "line",
+      title: "Bodyweight",
+      labels,
+      series: [{ name: "kg", values: labels.map((_, index) => 80 + index / 4) }],
+    };
+    await page.getByLabel("Message").fill(`Here:\n\n${chartBlock(chart)}`);
+    await page.getByRole("button", { name: "Start" }).click();
+    const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
+    await expect(answer).toHaveAttribute("aria-busy", "true");
+    const sawProblem = await answer.evaluate(
+      (element) =>
+        new Promise<boolean>((resolve) => {
+          let seen = false;
+          const look = () => {
+            if (element.textContent?.includes("Couldn't draw")) seen = true;
+            if (element.getAttribute("aria-busy") === "false") resolve(seen);
+            else requestAnimationFrame(look);
+          };
+          look();
+        }),
+    );
+    expect(sawProblem).toBe(false);
+    await expect(answer.getByRole("figure", { name: "Bodyweight" })).toBeVisible();
+  });
 });
 
 test.describe("on a phone", () => {
@@ -297,6 +400,43 @@ test.describe("on a phone", () => {
       page: document.documentElement.scrollWidth <= window.innerWidth,
     }));
     expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+  });
+
+  test("a chart fits the screen, and a crowded one scrolls sideways, not the page", async ({
+    page,
+  }) => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
+    const session = await ask(
+      page,
+      `Two charts:\n\n${chartBlock(SPENDING)}\n\n${chartBlock({
+        kind: "bar",
+        title: "Spent this year",
+        labels: months,
+        series: [
+          { name: "Bike", values: months.map((_, index) => 20 + index * 10) },
+          { name: "Padel", values: months.map((_, index) => 60 - index * 4) },
+        ],
+      })}`,
+    );
+    const scrollerOf = (title: string) =>
+      session.getByRole("figure", { name: title }).locator("svg").locator("xpath=..");
+    const sizes = (scroller: Locator) =>
+      scroller.evaluate((element) => ({
+        scrolls: element.scrollWidth > element.clientWidth,
+        overflow: getComputedStyle(element).overflowX,
+        page: document.documentElement.scrollWidth <= window.innerWidth,
+      }));
+
+    expect(await sizes(scrollerOf("Spent on the bike, by month"))).toEqual({
+      scrolls: false,
+      overflow: "auto",
+      page: true,
+    });
+    expect(await sizes(scrollerOf("Spent this year"))).toEqual({
+      scrolls: true,
+      overflow: "auto",
+      page: true,
+    });
   });
 
   test("a wide table scrolls sideways, not the page, and still sorts", async ({ page }) => {
