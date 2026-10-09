@@ -97,6 +97,7 @@ import {
   workspaceSkills,
 } from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
+import { type ThingRefusal, type ThingUndoRefusal, undoThingChange } from "../things/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
@@ -133,6 +134,8 @@ export type SessionError =
   | { readonly kind: "answer-not-found" }
   /** Saving an answer as a document, or undoing a document save, couldn't be done. */
   | { readonly kind: "document-refused"; readonly refusal: DocumentRefusal | DocumentUndoRefusal }
+  /** Undoing a Thing save couldn't be done. */
+  | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -948,6 +951,54 @@ export const createSessions = (options: {
     });
   };
 
+  /**
+   * Undoes one of the session's document or Thing saves, by its event number or the change it was
+   * committed as, and records that in the session.
+   */
+  const undoFileSave = async (
+    undo: { rawId: string; save: number | ChangeId },
+    of: "document" | "thing",
+  ): Promise<Result<null, SessionError>> => {
+    const found = await findSession(undo.rawId);
+    if (!found.ok) return found;
+    const file = found.value;
+    if (await isArchived(options.contextDir, file.workspaceId)) {
+      return err({ kind: "workspace-archived" });
+    }
+    const refused = (refusal: DocumentUndoRefusal): SessionError =>
+      of === "document"
+        ? { kind: "document-refused", refusal }
+        : { kind: "thing-refused", refusal };
+    const session = runningSession(file.id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const events = await readEvents(file.id);
+      if (!events.ok) return events;
+      const saved = events.value.find(
+        (event) =>
+          event.type === `${of}-saved` &&
+          "change" in event &&
+          (typeof undo.save === "number" ? event.seq === undo.save : event.change === undo.save),
+      );
+      if (saved === undefined || !("change" in saved)) return err({ kind: "save-not-found" });
+      const undone = events.value.some(
+        (event) => event.type === `${of}-undone` && "save" in event && event.save === saved.seq,
+      );
+      if (undone) return err(refused({ kind: "already-undone" }));
+      if (saved.change === undefined) return err(refused({ kind: "not-undoable" }));
+      const reversed =
+        of === "document"
+          ? await undoDocumentChange(targetOf(file), saved.change)
+          : await undoThingChange(targetOf(file), saved.change);
+      if (!reversed.ok) return err(refused(reversed.error));
+      const recorded = await writeEvent({
+        id: file.id,
+        session,
+        event: { type: of === "document" ? "document-undone" : "thing-undone", save: saved.seq },
+      });
+      return recorded.ok ? ok(null) : recorded;
+    });
+  };
+
   return {
     /**
      * Save as document (ADR 0020): the whole answer to the owner's message numbered `answer`, as a
@@ -996,45 +1047,15 @@ export const createSessions = (options: {
      * committed as (from Recent changes): the document goes back as it was, unless it's changed
      * since. Recorded in the session, so its note shows it from any device.
      */
-    undoDocument: async (undo: {
-      rawId: string;
-      save: number | ChangeId;
-    }): Promise<Result<null, SessionError>> => {
-      const found = await findSession(undo.rawId);
-      if (!found.ok) return found;
-      const file = found.value;
-      if (await isArchived(options.contextDir, file.workspaceId)) {
-        return err({ kind: "workspace-archived" });
-      }
-      const session = runningSession(file.id);
-      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        const events = await readEvents(file.id);
-        if (!events.ok) return events;
-        const saved = events.value.find(
-          (event) =>
-            event.type === "document-saved" &&
-            (typeof undo.save === "number" ? event.seq === undo.save : event.change === undo.save),
-        );
-        if (saved?.type !== "document-saved") return err({ kind: "save-not-found" });
-        const undone = events.value.some(
-          (event) => event.type === "document-undone" && event.save === saved.seq,
-        );
-        if (undone) {
-          return err({ kind: "document-refused", refusal: { kind: "already-undone" } });
-        }
-        if (saved.change === undefined) {
-          return err({ kind: "document-refused", refusal: { kind: "not-undoable" } });
-        }
-        const reversed = await undoDocumentChange(targetOf(file), saved.change);
-        if (!reversed.ok) return err({ kind: "document-refused", refusal: reversed.error });
-        const recorded = await writeEvent({
-          id: file.id,
-          session,
-          event: { type: "document-undone", save: saved.seq },
-        });
-        return recorded.ok ? ok(null) : recorded;
-      });
-    },
+    undoDocument: (undo: { rawId: string; save: number | ChangeId }) =>
+      undoFileSave(undo, "document"),
+
+    /**
+     * Undoes one of the session's Thing saves (ADR 0020), by its event number, or by the change it
+     * was committed as (from Recent changes): the Thing, and its photo, go back as they were, unless
+     * they've changed since. Recorded in the session, so its note shows it from any device.
+     */
+    undoThing: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "thing"),
 
     /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
     undoSave: ({ rawId, save }: { rawId: string; save: number }) =>

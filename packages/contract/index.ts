@@ -102,6 +102,28 @@ export {
   UsableSkillSummary,
 } from "./lib/skills.ts";
 export {
+  THING_DETAILS,
+  THING_FIELD_MAX_CHARACTERS,
+  THING_HISTORY_MAX_CHARACTERS,
+  THING_PHOTO_FIELD,
+  ThingBought,
+  ThingChange,
+  ThingChanged,
+  ThingDeleted,
+  ThingDetail,
+  type ThingDetailName,
+  ThingFields,
+  ThingForm,
+  ThingHistoryEntry,
+  ThingList,
+  ThingPhotoPath,
+  ThingProblem,
+  ThingSave,
+  ThingSlug,
+  ThingStatus,
+  ThingSummary,
+} from "./lib/things.ts";
+export {
   TidyChange,
   TidyChangeKind,
   TidyId,

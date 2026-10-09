@@ -26,6 +26,7 @@ import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "
 import { firstSavingModel, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { NoteRefusal } from "../saves/index.ts";
+import { thingError } from "../things/routes.ts";
 import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
@@ -138,6 +139,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       });
     case "document-refused":
       return documentError(c, error.refusal);
+    case "thing-refused":
+      return thingError(c, error.refusal);
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
