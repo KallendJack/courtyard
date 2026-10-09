@@ -46,7 +46,9 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   search or a page read); one that should also needs sources listed under it. Every search, page read and source a
   run had is printed under it.
 - **Rich blocks.** A turn can say whether its answer should hold a table (`tables`), judged from its Markdown: a
-  table, with a sentence of its own before it; or none.
+  table, with a sentence of its own before it; or none. Likewise a chart (`charts`): a `chart` block the contract's
+  `Chart` schema accepts, after a sentence of its own; or none. And a diagram (`diagrams`): a `mermaid` block after a
+  sentence of its own; or none.
 - **Documents.** A turn can say which documents it should save or update (`documents`, none for none), each judged
   on its text afterwards, and edit a file by hand the moment the model reads it (`editsAfterRead`), so its update is
   refused and retried. Every document a run saved, and every one it read, is printed under it.
@@ -179,15 +181,34 @@ What a model is told (Every turn, item 4), on every turn, the same for every pro
 The eval's `table-*` scenario checks it on both providers: a comparison of options is answered with a table after a
 sentence of its own, and a question that isn't one gets none.
 
-Diagrams, built with #148: a `mermaid` fence is drawn by Mermaid, in Moorland's colours, with its strict setting on and
-every setting locked, so nothing a diagram says can change how it's drawn, run script or load anything. One that can't
-be drawn shows as written. What a model is told, on every turn, the same for every provider:
+Built with #147: a `chart` block is JSON the web app draws as a bar, line or pie chart in the theme's colours, its
+values written on it. The contract's `Chart` schema checks it, and one that fails shows its source under "Couldn't
+draw this chart". Told on every turn, after the table rule:
+
+> When numbers compare or change over time, such as spending by month or a lift's weight week by week, Courtyard
+> draws them as a chart: write a code block whose language is `chart`, holding only JSON, such as
+> `{"kind": "bar", "title": "Spent on the bike, by month", "unit": "£", "labels": ["Jun", "Jul", "Aug"], "series":
+> [{"name": "Spent", "values": [40, 25, 60]}]}`. Its kind is `bar` to compare amounts, `line` for values that change
+> over time, or `pie` for the parts of a whole (one series, at most five slices). Each series has a number for every
+> label, with at most five series, each named when there's more than one, and at most 50 labels; the title and unit
+> are optional. Write a sentence or two of your own before it, saying what it shows, and never use one for show: a
+> number or two read better as text.
+
+The eval's `chart-*` scenario checks it on both providers: numbers over time are answered with a chart the schema
+accepts, after a sentence of its own, and a question without numbers gets none.
+
+Built with #148: a `mermaid` block is drawn by Mermaid in the theme's colours, with its strict setting on and every
+setting locked, so nothing a diagram says can change how it's drawn, run script or load anything. One that can't be
+drawn shows its source under "Couldn't draw this diagram". Told on every turn, after the chart rule:
 
 > A `mermaid` block is drawn as a diagram. Use one for steps to follow or how parts connect, such as what a chain
 > check's result means you should buy, or how the boxes of a home network link up: a flowchart (`flowchart TD`, or
 > `flowchart LR` for a few steps in a row), or a sequence diagram for who does what in turn. Keep it to a dozen steps or
 > so with short labels, and write a sentence or two of your own before it. Write only the diagram, with no settings,
 > styles or links: Courtyard colours it. Never use one for show, or where a list or a sentence says as much.
+
+The eval's `diagram-*` scenario checks it on both providers: steps that depend on what you find are answered with a
+diagram after a sentence of its own, and a plain question gets none.
 
 ## Courtyard's file tools
 

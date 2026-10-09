@@ -2,6 +2,7 @@ import mermaid from "mermaid";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { cleanDiagram } from "./diagram-svg.ts";
 import type { DrawingProps } from "./fenced.tsx";
+import { RichBlock } from "./rich-block.tsx";
 
 const DARK = "(prefers-color-scheme: dark)";
 
@@ -117,12 +118,14 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
 
   if (arriving || failed === asked) return fallback;
   return (
-    <figure
-      aria-label="Diagram"
-      aria-busy={drawn !== asked}
-      className="overflow-x-auto rounded-md border bg-field px-5 py-6"
-    >
-      <div ref={holder} className="mx-auto w-fit" />
-    </figure>
+    <RichBlock>
+      <figure
+        aria-label="Diagram"
+        aria-busy={drawn !== asked}
+        className="overflow-x-auto rounded-md border bg-field px-5 py-6"
+      >
+        <div ref={holder} className="mx-auto w-fit" />
+      </figure>
+    </RichBlock>
   );
 }

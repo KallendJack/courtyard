@@ -2,8 +2,8 @@ import { ChevronsUpDown, MoveDown, MoveUp } from "lucide-react";
 import { Children, type ComponentProps, createContext, use, useState } from "react";
 import type { ExtraProps } from "react-markdown";
 import { classes } from "@/lib/classes";
-import "./stylesheet.ts";
 import { childrenNamed, type MarkdownElement, textOf } from "./hast.ts";
+import { RichBlock } from "./rich-block.tsx";
 import { nextSort, type Sort, sortedOrder } from "./sorting.ts";
 
 /** What a table's headings and rows need from the table they're in. */
@@ -47,13 +47,15 @@ export function MarkdownTable({ node, children }: ComponentProps<"table"> & Extr
     order: sortedOrder(rows, sort),
   };
   return (
-    <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
-        <table className="w-full border-collapse text-sm/[22px]">
-          <SortingContext value={sorting}>{children}</SortingContext>
-        </table>
+    <RichBlock>
+      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
+          <table className="w-full border-collapse text-sm/[22px]">
+            <SortingContext value={sorting}>{children}</SortingContext>
+          </table>
+        </div>
       </div>
-    </div>
+    </RichBlock>
   );
 }
 

@@ -178,6 +178,12 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toContain(await quotedInGuide("Courtyard draws some"));
   });
 
+  it("asks for a chart block's JSON when numbers compare or change, text first and never for show (ADR 0021)", async () => {
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(await quotedInGuide("When numbers compare or change"));
+  });
+
   it("asks for a diagram for steps or how parts connect, text first, in the kinds that read best (ADR 0021)", async () => {
     const { framing } = await firstTurn();
 

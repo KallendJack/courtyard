@@ -42,6 +42,7 @@ type FencedKind = {
  * rule in docs/ai-conduct.md; a block of any other language is code.
  */
 const FENCED_KINDS = new Map<string, FencedKind>([
+  ["chart", { noun: "chart", load: () => import("./chart.tsx") }],
   ["mermaid", { noun: "diagram", load: () => import("./mermaid.tsx") }],
 ]);
 

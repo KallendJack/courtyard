@@ -82,6 +82,17 @@ export type Turn = {
    * it, as a comparison of options should; or none. Left out, it isn't checked.
    */
   readonly tables?: boolean;
+  /**
+   * Whether the answer should hold a `chart` block the web app can draw (ADR 0021), with a
+   * sentence of its own before it, as numbers that compare or change should; or none. Left out,
+   * it isn't checked.
+   */
+  readonly charts?: boolean;
+  /**
+   * Whether the answer should hold a `mermaid` block (ADR 0021), with a sentence of its own before
+   * it, as steps or how parts connect should; or none. Left out, it isn't checked.
+   */
+  readonly diagrams?: boolean;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
@@ -323,6 +334,47 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "What's a bandeja, anyway?",
         expect: [],
         tables: false,
+      },
+    ],
+  },
+  {
+    name: "chart-over-time",
+    rule: "numbers that change over time are answered with a chart after a sentence, and a question without numbers with none (ADR 0021)",
+    workspace: "Garage gym",
+    context: {
+      facts: [
+        "Trains three mornings a week",
+        "Best squat by month: June 60 kg, July 70 kg, August 77.5 kg, September 85 kg, October 90 kg",
+      ],
+    },
+    turns: [
+      {
+        say: "How has my squat come on since June?",
+        expect: [],
+        charts: true,
+      },
+      {
+        say: "Should I squat with a belt yet?",
+        expect: [],
+        charts: false,
+      },
+    ],
+  },
+  {
+    name: "diagram-steps",
+    rule: "steps that branch on what you find are answered with a diagram after a sentence, and a plain question with none (ADR 0021)",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides a Whyte T-140 trail bike", "Has a chain checker"] },
+    turns: [
+      {
+        say: "Walk me through checking my chain: what I measure, and what each result means I should buy.",
+        expect: [],
+        diagrams: true,
+      },
+      {
+        say: "How often should I lube the chain?",
+        expect: [],
+        diagrams: false,
       },
     ],
   },
