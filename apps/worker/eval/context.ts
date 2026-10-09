@@ -275,7 +275,18 @@ const judgeTurn = (judge: {
               : `expected to load ${loads.join(", ") || "no skill"}; loaded ${judge.loaded.join(", ") || "none"}`,
           },
         ];
-  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills];
+  const { says } = turn;
+  const said: Check[] =
+    says === undefined
+      ? []
+      : [
+          {
+            miss: hasWords(answer, { words: says })
+              ? null
+              : `expected the answer to say ${describeWords(says)}`,
+          },
+        ];
+  return [...saveChecks, nothingElse, ...question, ...howMany, ...skills, ...said];
 };
 
 /**
