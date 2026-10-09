@@ -582,6 +582,24 @@ describe("getting to know a workspace (#127)", () => {
     expect(framing?.instructions).toContain('<skill name="get-to-know">');
   });
 
+  it("gives Get to know what a new workspace is for, from What's it for?, to plan its topics from", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const intro = "Turning the shed into a pottery studio by spring";
+    await postJson(request, "/api/workspaces", { name: "Pottery", intro });
+
+    const started = await postJson(request, "/api/workspaces/pottery/get-to-know", {
+      model: MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    await followSession(request, { sessionId, until: "turn-completed" });
+
+    expect(turns[0]?.framing.instructions).toContain(
+      `<context_file>\n# Pottery\n\n${intro}\n\n## Facts`,
+    );
+    expect(turns[0]?.framing.instructions).toContain('<skill name="get-to-know">');
+  });
+
   it("gets to know the owner with the Get to know me skill, in the first planning workspace", async () => {
     await mkdir(join(root, "context", "attic"), { recursive: true });
     await writeFile(
