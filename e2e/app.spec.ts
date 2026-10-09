@@ -186,16 +186,42 @@ test("is installable, and caches the app but never session data", async ({ page,
   expect(kept).not.toContain("/assets/not-a-real-file.js");
 });
 
-test("keeps every file the app is made of once installed, not just pages opened", async ({
+test("keeps every file the app is made of once installed, but Mermaid's only once a diagram needs them", async ({
   page,
 }) => {
   await installed(page);
+  const keptOnInstall = await keptByTheApp(page);
 
+  // A diagram, drawn: the scripts it asks for, Mermaid's among them.
+  const asked: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/assets/") && path.endsWith(".js")) asked.push(path);
+  });
+  await page.goto("/workspaces/garage-gym");
+  await page
+    .getByLabel("Message")
+    .fill("A diagram:\n\n```mermaid\nflowchart TD\n  a[Measure] --> b[Keep riding]\n```");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(
+    page.getByRole("figure", { name: "Diagram", exact: true }).locator("svg"),
+  ).toBeVisible();
+  const mermaids = asked.filter((path) => /mermaid|flowDiagram|dagre/i.test(path));
+  expect(mermaids.length).toBeGreaterThan(0);
+
+  // Mermaid's (over a megabyte) weren't kept on install, so a new build doesn't download them on
+  // a phone's data; every other file was, so pages not yet opened work offline. Mermaid's own
+  // files are named by its build: `<name>-<ID>-<hash>.js`, the ID eight capitals and digits.
+  expect(keptOnInstall.filter((path) => mermaids.includes(path))).toEqual([]);
   const built = readdirSync(join(import.meta.dirname, "../apps/web/dist/assets"));
-  expect(built.length).toBeGreaterThan(0);
-  expect(await keptByTheApp(page)).toEqual(
-    expect.arrayContaining(built.map((file) => `/assets/${file}`)),
-  );
+  const others = built
+    .filter((file) => !/-[A-Z0-9]{8}-/.test(file))
+    .map((file) => `/assets/${file}`)
+    .filter((path) => !mermaids.includes(path) && !/no-elk/.test(path));
+  expect(others.length).toBeGreaterThan(20);
+  expect(keptOnInstall).toEqual(expect.arrayContaining(others));
+  // Once a diagram has needed them, they're kept like the rest.
+  await expect.poll(() => keptByTheApp(page)).toEqual(expect.arrayContaining(mermaids));
 });
 
 test("opens offline and says the worker can't be reached", async ({ page, context }) => {

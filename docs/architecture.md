@@ -228,7 +228,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
-  runs after each build to stamp the service worker and check the first-load budget. `vite.config.ts` keeps everything
+  runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
+  keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
   the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
   shares with the first load, such as React and Zod, into files of their own.
 
