@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { Effort, ModelId } from "@courtyard/contract";
+import { Effort, ModelId, type Source } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
@@ -12,11 +12,14 @@ import type { Activity, TurnInput, TurnTool } from "./providers/index.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
-/** A stand-in for Claude Code: records what each turn asked for and replays scripted messages. */
+/**
+ * A stand-in for Claude Code: records what each turn asked for and replays scripted messages. A
+ * function among them is a step Claude Code takes at that point, such as calling a hook.
+ */
 const stubClaudeCode = (
   script: { check?: (signal: AbortSignal) => Promise<unknown>; messages?: unknown[] } = {},
 ) => {
-  const runs: { prompt: string; options: Options }[] = [];
+  const runs: Parameters<ClaudeCode["run"]>[0][] = [];
   const claudeCode: ClaudeCode = {
     check:
       script.check ??
@@ -32,11 +35,35 @@ const stubClaudeCode = (
     run: (request) => {
       runs.push(request);
       return (async function* () {
-        for (const message of script.messages ?? []) yield message;
+        for (const message of script.messages ?? []) {
+          if (typeof message === "function") await message(request.options);
+          else yield message;
+        }
       })();
     },
   };
   return { claudeCode, runs };
+};
+
+/**
+ * What a turn's streamed prompt says (#78): it must be one user message, and this is its content.
+ * A string prompt fails: every turn streams its message.
+ */
+const streamedContent = async (prompt: Parameters<ClaudeCode["run"]>[0]["prompt"] | undefined) => {
+  if (prompt === undefined || typeof prompt === "string") throw new Error("not streamed");
+  const messages: unknown[] = [];
+  for await (const message of prompt) messages.push(message);
+  const [only] = z
+    .array(
+      z.object({
+        type: z.literal("user"),
+        parent_tool_use_id: z.null(),
+        message: z.object({ role: z.literal("user"), content: z.array(z.unknown()) }),
+      }),
+    )
+    .length(1)
+    .parse(messages);
+  return only?.message.content;
 };
 
 const textDelta = (text: string) => ({
@@ -50,6 +77,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
   const provider = createClaudeProvider({ claudeCode });
   const emitted: string[] = [];
   const activities: Activity[] = [];
+  const sources: Source[] = [];
   const result = await provider.runTurn({
     model: ModelId.parse("sonnet"),
     effort: undefined,
@@ -58,8 +86,10 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      attachments: [],
       tools: [],
       fileTools: null,
+      webSearch: null,
     },
     callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
     emit: async (text) => {
@@ -68,10 +98,13 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
     report: async (activity) => {
       activities.push(activity);
     },
+    cite: async (found) => {
+      sources.push(...found);
+    },
     signal: new AbortController().signal,
     ...overrides,
   });
-  return { result, emitted, activities };
+  return { result, emitted, activities, sources };
 };
 
 /** The PreToolUse hook the adapter gave Claude Code, called the way Claude Code would. */
@@ -93,6 +126,31 @@ const preToolUse = async (options: Options, tool: { name: string; input: unknown
   );
 };
 
+/** The PostToolUse hooks the adapter gave Claude Code, called the way Claude Code would. */
+const postToolUse = async (
+  options: Options,
+  tool: { name: string; input: unknown; response: unknown },
+) => {
+  for (const matcher of options.hooks?.PostToolUse ?? []) {
+    for (const hook of matcher.hooks) {
+      await hook(
+        {
+          hook_event_name: "PostToolUse",
+          tool_name: tool.name,
+          tool_input: tool.input,
+          tool_response: tool.response,
+          tool_use_id: "tool-1",
+          session_id: "s",
+          transcript_path: "",
+          cwd: folder,
+        },
+        "tool-1",
+        { signal: new AbortController().signal },
+      );
+    }
+  }
+};
+
 describe("Claude's status", () => {
   it("is available with its models when Claude Code is logged in", async () => {
     const status = await createClaudeProvider({ claudeCode: stubClaudeCode().claudeCode }).status();
@@ -105,6 +163,7 @@ describe("Claude's status", () => {
       codes: false,
       usesTools: false,
       savesContext: true,
+      searchesWeb: true,
     });
   });
 
@@ -297,13 +356,59 @@ describe("a Claude turn", () => {
         instructions: "Exactly these instructions.",
         message: "Exactly this message.",
         newMessage: "This message.",
+        attachments: [],
         tools: [],
         fileTools: null,
+        webSearch: null,
       },
     });
 
     expect(runs[0]?.options.systemPrompt).toBe("Exactly these instructions.");
-    expect(runs[0]?.prompt).toBe("Exactly this message.");
+    expect(await streamedContent(runs[0]?.prompt)).toEqual([
+      { type: "text", text: "Exactly this message." },
+    ]);
+  });
+
+  it("sends the turn's photos with its message as images, in order (#78)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    try {
+      const [first, second] = [join(root, "one.png"), join(root, "two.jpg")];
+      await writeFile(first, "first photo");
+      await writeFile(second, "second photo");
+      const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+      await runTurn(claudeCode, {
+        framing: {
+          instructions: "The instructions.",
+          message: "The message, with the PDF's text.",
+          newMessage: "The message.",
+          attachments: [
+            { kind: "photo", name: "one.png", path: first, mediaType: "image/png" },
+            { kind: "pdf", name: "manual.pdf" },
+            { kind: "photo", name: "two.jpg", path: second, mediaType: "image/jpeg" },
+          ],
+          tools: [],
+          fileTools: null,
+          webSearch: null,
+        },
+      });
+
+      const image = (mediaType: string, text: string) => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: Buffer.from(text).toString("base64"),
+        },
+      });
+      expect(await streamedContent(runs[0]?.prompt)).toEqual([
+        { type: "text", text: "The message, with the PDF's text." },
+        image("image/png", "first photo"),
+        image("image/jpeg", "second photo"),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("streams the answer as it's written and uses the model asked for", async () => {
@@ -533,8 +638,249 @@ const framingWith = (tools: readonly TurnTool[]) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
+  attachments: [],
   tools,
   fileTools: null,
+  webSearch: null,
+});
+
+/** A planning turn's framing, which offers web search with the links the owner sent. */
+const searchingFraming = (ownerLinks: readonly string[] = []) => ({
+  ...framingWith([]),
+  webSearch: { ownerLinks },
+});
+
+/** What Claude Code's WebSearch gives back: its query, and each search's hits. */
+const searchResults = (query: string, hits: readonly { title: string; url: string }[]) => ({
+  query,
+  results: [{ tool_use_id: "search-1", content: hits }, "Some commentary on the results."],
+  durationSeconds: 1.2,
+});
+
+describe("web search on a Claude turn (ADR 0019)", () => {
+  it("offers WebSearch and WebFetch beside the planning tools when the framing offers web search", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    await runTurn(claudeCode, { framing: searchingFraming() });
+    await runTurn(claudeCode, { framing: framingWith([]) });
+
+    expect(runs.map((run) => run.options.tools)).toEqual([
+      ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
+      ["Read", "Glob", "Grep"],
+    ]);
+  });
+
+  it("allows a search and reports it, and refuses both tools on a turn without web search", async () => {
+    const reported: Activity[] = [];
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, {
+      framing: searchingFraming(),
+      report: async (activity) => {
+        reported.push(activity);
+      },
+    });
+    await runTurn(claudeCode, { framing: framingWith([]) });
+    const [searching, without] = runs.map((run) => run.options);
+    if (!searching || !without) throw new Error("no turns ran");
+
+    // As Claude Code sends it, with how thoroughly to search.
+    const search = {
+      name: "WebSearch",
+      input: { query: "Titan T-3 J-hook width", mode: "extended" },
+    };
+    expect(await preToolUse(searching, search)).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "allow" },
+    });
+    expect(reported).toEqual([{ kind: "web-searched", query: "Titan T-3 J-hook width" }]);
+    for (const tool of [
+      search,
+      { name: "WebFetch", input: { url: "https://titan.fitness/", prompt: "Hook width?" } },
+    ]) {
+      expect(await preToolUse(without, tool)).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+    }
+  });
+
+  it("fetches only a page from the turn's search results or the owner's messages, refusing any other with a reason", async () => {
+    const reported: Activity[] = [];
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, {
+      framing: searchingFraming(["https://courtyard.example/manual.pdf"]),
+      report: async (activity) => {
+        reported.push(activity);
+      },
+    });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    const fetch = (url: string) =>
+      preToolUse(options, { name: "WebFetch", input: { url, prompt: "What's the hook width?" } });
+
+    // Nothing has been searched yet: only the owner's link can be read.
+    expect(await fetch("https://titan.fitness/j-hooks")).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringMatching(/search results.*owner/i),
+      },
+    });
+    expect(await fetch("https://courtyard.example/manual.pdf")).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "allow" },
+    });
+
+    await postToolUse(options, {
+      name: "WebSearch",
+      input: { query: "Titan T-3 J-hooks" },
+      response: searchResults("Titan T-3 J-hooks", [
+        { title: "T-3 Series J-Hooks | Titan Fitness", url: "https://titan.fitness/j-hooks" },
+      ]),
+    });
+
+    expect(await fetch("https://titan.fitness/j-hooks")).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "allow" },
+    });
+    // A page the results don't name, such as one with the owner's details put into its address.
+    for (const url of [
+      "https://titan.fitness/j-hooks?owner=Leeds",
+      "https://example.com/collect?q=garage-gym",
+      "file:///etc/hosts",
+    ]) {
+      expect(await fetch(url)).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+    }
+    expect(reported).toEqual([
+      { kind: "page-read", url: "https://courtyard.example/manual.pdf", site: "courtyard.example" },
+      { kind: "page-read", url: "https://titan.fitness/j-hooks", site: "titan.fitness" },
+    ]);
+  });
+
+  it("lists the pages the answer links to and the pages it read as its sources, titled from the search results", async () => {
+    const search = async (options: Options) => {
+      await preToolUse(options, { name: "WebSearch", input: { query: "Titan T-3 J-hooks" } });
+      await postToolUse(options, {
+        name: "WebSearch",
+        input: { query: "Titan T-3 J-hooks" },
+        response: searchResults("Titan T-3 J-hooks", [
+          { title: "T-3 Series J-Hooks | Titan Fitness", url: "https://titan.fitness/j-hooks" },
+          {
+            title: "Titan T-3 Power Rack review: what fits",
+            url: "https://www.garagegymreviews.com/titan-t3",
+          },
+          { title: "The Ohio Bar - Black Oxide", url: "https://www.roguefitness.com/gb/ohio" },
+          { title: "Not used", url: "https://example.com/unused" },
+        ]),
+      });
+    };
+    const read = (options: Options) =>
+      preToolUse(options, {
+        name: "WebFetch",
+        input: { url: "https://www.garagegymreviews.com/titan-t3", prompt: "What fits?" },
+      });
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        search,
+        read,
+        textDelta(
+          "Yes: the hooks take a 28–32 mm shaft ([Titan](https://titan.fitness/j-hooks#specs)). ",
+        ),
+        textDelta("A bar to go with them: [Ohio Bar](https://www.roguefitness.com/gb/ohio)."),
+        success,
+      ],
+    });
+
+    const { sources } = await runTurn(claudeCode, { framing: searchingFraming() });
+
+    expect(sources).toEqual([
+      // The title's last part names the site only when it's the site's own name.
+      { site: "Titan Fitness", title: "T-3 Series J-Hooks", url: "https://titan.fitness/j-hooks" },
+      {
+        site: "roguefitness.com",
+        title: "The Ohio Bar - Black Oxide",
+        url: "https://www.roguefitness.com/gb/ohio",
+      },
+      {
+        site: "garagegymreviews.com",
+        title: "Titan T-3 Power Rack review: what fits",
+        url: "https://www.garagegymreviews.com/titan-t3",
+      },
+    ]);
+  });
+
+  it("lists a turn's search results as its sources when the answer neither links nor reads a page, the results it names first", async () => {
+    const search =
+      (query: string, hits: readonly { title: string; url: string }[]) =>
+      async (options: Options) => {
+        await preToolUse(options, { name: "WebSearch", input: { query } });
+        await postToolUse(options, {
+          name: "WebSearch",
+          input: { query },
+          response: searchResults(query, hits),
+        });
+      };
+    const searches = [
+      search("Titan T-3 J-hooks", [
+        { title: "T-3 Series J-Hooks | Titan Fitness", url: "https://titan.fitness/j-hooks" },
+        { title: "J-hooks guide", url: "https://www.garagegymreviews.com/j-hooks" },
+      ]),
+      search("Ohio bar price", [
+        { title: "The Ohio Bar | Rogue Fitness UK", url: "https://www.roguefitness.com/gb/ohio" },
+        { title: "Ohio bar review", url: "https://barbend.com/ohio" },
+      ]),
+    ];
+    const naming = stubClaudeCode({
+      messages: [
+        ...searches,
+        textDelta("Titan Fitness lists 28–32 mm; Rogue Fitness UK sells the Ohio at £350."),
+        success,
+      ],
+    });
+    const plain = stubClaudeCode({
+      messages: [...searches, textDelta("The hooks take a 28–32 mm shaft."), success],
+    });
+
+    const named = await runTurn(naming.claudeCode, { framing: searchingFraming() });
+    const unnamed = await runTurn(plain.claudeCode, { framing: searchingFraming() });
+
+    // The results it names, from every search.
+    expect(named.sources.map((source) => source.site)).toEqual([
+      "Titan Fitness",
+      "Rogue Fitness UK",
+    ]);
+    // Otherwise every result, each search's top ones first.
+    expect(unnamed.sources.map((source) => source.url)).toEqual([
+      "https://titan.fitness/j-hooks",
+      "https://www.roguefitness.com/gb/ohio",
+      "https://www.garagegymreviews.com/j-hooks",
+      "https://barbend.com/ohio",
+    ]);
+  });
+
+  it("lists no sources for a turn that didn't use the web, links or not", async () => {
+    const { claudeCode } = stubClaudeCode({
+      messages: [textDelta("See [the manual](https://titan.fitness/manual)."), success],
+    });
+
+    const searching = await runTurn(claudeCode, { framing: searchingFraming() });
+    const without = await runTurn(claudeCode, { framing: framingWith([]) });
+
+    expect([searching.sources, without.sources]).toEqual([[], []]);
+  });
+
+  it("refuses a search or a fetch with an input it doesn't know", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { framing: searchingFraming(["https://titan.fitness/"]) });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    for (const tool of [
+      { name: "WebSearch", input: { query: "J-hooks", to: "https://example.com" } },
+      { name: "WebFetch", input: { url: "https://titan.fitness/", prompt: "", method: "POST" } },
+    ]) {
+      expect(await preToolUse(options, tool)).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+    }
+  });
 });
 
 describe("the save tool on a Claude turn", () => {

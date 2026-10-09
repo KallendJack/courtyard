@@ -101,6 +101,9 @@ const ICON_SIZES = {
   /** In a list row. */
   sm: "size-7 [&_svg:not([class*='size-'])]:size-3.5",
   md: "size-9 [&_svg:not([class*='size-'])]:size-[18px]",
+  /** Under an answer: a full-size tap target on a phone, smaller on a desktop (Copy answer). */
+  action:
+    "size-9 md:size-7 [&_svg:not([class*='size-'])]:size-[17px] md:[&_svg:not([class*='size-'])]:size-[15px]",
   /** Inside a small pill, without making it taller (a skill's tag in the message box). */
   inline: "-my-1 size-[18px] [&_svg:not([class*='size-'])]:size-3.5",
 } as const;
@@ -113,6 +116,12 @@ const ICON_LOOKS = {
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */
   inPill: "text-current hover:bg-primary/10",
+  /** On a quiet disc among the message box's pills (the paperclip). */
+  disc: "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+  /** A dark badge ringed in the box's colour, on the corner of a thumbnail (Remove). */
+  badge: "border-2 border-field bg-foreground text-background",
+  /** On a heather wash: what it does has just been done (Copied). */
+  done: "bg-accent text-primary-text",
 } as const;
 
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */
@@ -145,7 +154,7 @@ export function IconButton({
       title={hint === undefined ? label : `${label} (${hint})`}
       {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
       className={classes(
-        "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:shrink-0",
+        "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 [&_svg]:shrink-0",
         square ? "rounded-md" : "rounded-full",
         ICON_LOOKS[look],
         ICON_SIZES[size],

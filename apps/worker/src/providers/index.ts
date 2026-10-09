@@ -6,9 +6,11 @@ import type {
   ModelId,
   ModelInfo,
   ModelRef,
+  PhotoMediaType,
   ProviderId,
   ProviderStatus,
   SignInState,
+  Source,
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { Result } from "../result.ts";
@@ -24,6 +26,12 @@ export type Framing = {
   /** The owner's new message on its own, for a provider that needs only that (the fake). */
   readonly newMessage: string;
   /**
+   * The session's last attachments, oldest first, as `message` lists them (#78). Each photo goes
+   * with the message as an image, in this order, its provider's own way; a PDF's text is already
+   * in `message`.
+   */
+  readonly attachments: readonly FramedAttachment[];
+  /**
    * Courtyard's own tools this turn offers, such as the save tool (ADR 0013) and the use skill
    * tool (ADR 0016). Every provider offers each one in its own tool format, and hands each call to
    * the worker through `callTool`, which answers it.
@@ -34,7 +42,32 @@ export type Framing = {
    * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
    */
   readonly fileTools: FileTools | null;
+  /** Web search (ADR 0019), or `null` when the turn doesn't offer it. */
+  readonly webSearch: WebSearch | null;
 };
+
+/**
+ * Web search on a turn (ADR 0019): the model searches, and reads pages from its search results or
+ * the links the owner sent, and nothing else.
+ */
+export type WebSearch = {
+  /** Every web address in the owner's messages in the session, as they wrote it. */
+  readonly ownerLinks: readonly string[];
+};
+
+/** An attachment a turn carries: a photo by its file on the worker machine, or a PDF by its name. */
+export type FramedAttachment =
+  | {
+      readonly kind: "photo";
+      readonly name: string;
+      readonly path: string;
+      readonly mediaType: PhotoMediaType;
+    }
+  | { readonly kind: "pdf"; readonly name: string };
+
+/** Only the photos of a turn's attachments, in order: the images that go with its message. */
+export const photosOf = (attachments: readonly FramedAttachment[]) =>
+  attachments.flatMap((attachment) => (attachment.kind === "photo" ? [attachment] : []));
 
 /** One of Courtyard's own tools as a model is told about it: its name, what it's for, and each input. */
 export type CourtyardTool = {
@@ -84,6 +117,8 @@ export type TurnInput = {
   readonly emit: (text: string) => Promise<void>;
   /** Says what the model is doing, such as reading a file. */
   readonly report: (activity: Activity) => Promise<void>;
+  /** Lists the web pages the answer used, its Sources, once the answer is written. */
+  readonly cite: (sources: readonly Source[]) => Promise<void>;
   /**
    * Hands a call to one of the framing's `tools` to the worker, by the tool's name, its input
    * exactly as the model sent it. The worker checks it, does it, and says what to tell the model.

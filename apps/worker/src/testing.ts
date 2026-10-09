@@ -1,12 +1,23 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { ApiError, ModelId, ProviderId, SessionEvent, SessionSummary } from "@courtyard/contract";
+import {
+  ApiError,
+  ATTACHMENTS_FIELD,
+  MESSAGE_FIELD,
+  ModelId,
+  ProviderId,
+  SessionEvent,
+  SessionSummary,
+} from "@courtyard/contract";
 import type { Hono } from "hono";
 import { git } from "./git.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
 import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
+import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
+
+export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
 /**
  * For tests and the context eval: a worker on the `context` and `data` folders in `root`, with any other options and
@@ -131,7 +142,13 @@ export const FAKE_TWO_MODEL = { provider: "fake-two", model: "echo" };
 /** For tests: a provider that's there but not signed in, as Codex is before the owner signs in. */
 export const signedOutProvider = (): Provider => {
   const id = ProviderId.parse("away");
-  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: false };
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
   const notSignedIn = { kind: "provider-unavailable", message: "Not signed in." } as const;
   return {
     id,
@@ -223,7 +240,13 @@ export const savingProvider = (
   const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
-  const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: true,
+    searchesWeb: false,
+  };
   const provider: Provider = {
     id,
     capabilities,
@@ -351,4 +374,22 @@ export const changesIn = async (contextDir: string) => {
       const [title = "", body = ""] = entry.split("\x1f");
       return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
     });
+};
+
+/**
+ * For tests and the eval: sends a message with files attached, the way the web app does: its JSON
+ * in one field of a multipart form and each file in another.
+ */
+export const postWithFiles = (
+  request: Requester,
+  path: string,
+  message: unknown,
+  files: readonly TestFile[],
+) => {
+  const form = new FormData();
+  form.set(MESSAGE_FIELD, JSON.stringify(message));
+  for (const file of files) {
+    form.append(ATTACHMENTS_FIELD, new File([file.bytes], file.name, { type: file.type }));
+  }
+  return request(path, { method: "POST", body: form });
 };

@@ -177,6 +177,26 @@ export const writeTextFile = async (
 };
 
 /**
+ * Writes a file's bytes, readable only by the worker's user, through a temporary file beside it so
+ * a crash mid-write never leaves half a file.
+ */
+export const writeBytes = async (
+  path: string,
+  bytes: Uint8Array,
+): Promise<Result<null, "unwritable">> => {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, bytes, { mode: 0o600 });
+    await move(temporary, path);
+    return ok(null);
+  } catch {
+    return err("unwritable");
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+};
+
+/**
  * Writes JSON readable only by the worker's user. It goes to a temporary file first, so a crash
  * mid-write never leaves half a file. With `exclusive`, it fails with `exists` rather than
  * replacing a file that's already there.

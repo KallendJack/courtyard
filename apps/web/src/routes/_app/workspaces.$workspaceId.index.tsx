@@ -26,6 +26,7 @@ import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
 import { GrillablePlan } from "../../sessions/grill-plan.tsx";
+import { startSession } from "../../sessions/messages.ts";
 import { describeWhen } from "../../when.ts";
 import {
   archiveWorkspace,
@@ -34,7 +35,6 @@ import {
   loadProviders,
   loadSkills,
   NOT_FOUND,
-  startSession,
 } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
@@ -167,8 +167,8 @@ function Workspace() {
             {...(skills.kind === "loaded"
               ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
               : {})}
-            send={async (message) => {
-              const session = await startSession(workspace.id, message);
+            send={async (message, files) => {
+              const session = await startSession({ workspaceId: workspace.id, message, files });
               if (session.kind !== "loaded") return describeProblem(session).body;
               await navigate({
                 to: "/workspaces/$workspaceId/sessions/$sessionId",

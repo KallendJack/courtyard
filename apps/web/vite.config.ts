@@ -2,14 +2,35 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
+
+/**
+ * KaTeX's styles name each font three ways (woff2, woff, ttf). Every browser Courtyard runs in
+ * reads woff2, so only those are built, and the service worker keeps a third of the files.
+ */
+const katexWoff2Only = (): Plugin => ({
+  name: "courtyard-katex-woff2-only",
+  enforce: "pre",
+  transform(code, id) {
+    if (!/[\\/]katex[\\/].*\.css$/.test(id)) return;
+    return code.replace(
+      /,url\([^)]+\.woff\) format\("woff"\),url\([^)]+\.ttf\) format\("truetype"\)/g,
+      "",
+    );
+  },
+});
 
 export default defineConfig(({ mode }) => {
   // The worker's settings live in the repo root's `.env`; read its port from the same place.
   const { COURTYARD_PORT } = loadEnv(mode, "../..", "COURTYARD_");
 
   return {
-    plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react(), tailwindcss()],
+    plugins: [
+      tanstackRouter({ target: "react", autoCodeSplitting: true }),
+      react(),
+      tailwindcss(),
+      katexWoff2Only(),
+    ],
     // `@/` is the web app's src folder, so imports read the same from any depth.
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     // The build manifest lets finish-build.mjs measure the first load and list the app's files.

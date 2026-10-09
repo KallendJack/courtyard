@@ -1,6 +1,7 @@
 import {
   type Activity,
   ApiError,
+  type Attachment,
   type Effort,
   type FailureReason,
   type ModelRef,
@@ -9,6 +10,7 @@ import {
   SessionEvent,
   type SessionId,
   type SkillName,
+  type Source,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 
@@ -35,6 +37,8 @@ export type Turn = {
   readonly effort: Effort | undefined;
   /** The skill the owner started with it, if any (ADR 0016). */
   readonly skill: SkillName | undefined;
+  /** The photos and PDFs it carried (#78). */
+  readonly attachments: readonly Attachment[];
   /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
   readonly modelChanged: boolean;
   readonly answer: string;
@@ -49,6 +53,8 @@ export type Turn = {
   readonly notes: readonly Note[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
+  /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
+  readonly sources: readonly Source[];
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -112,6 +118,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             model: event.model,
             effort: event.effort,
             skill: event.skill,
+            attachments: event.attachments ?? [],
             modelChanged:
               before !== undefined &&
               (before.provider !== event.model.provider || before.model !== event.model.model),
@@ -120,6 +127,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             activities: [],
             notes: [],
             replies: [],
+            sources: [],
             state: { kind: "running" },
           },
         ],
@@ -145,6 +153,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       });
     case "suggested-replies":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
+    case "sources":
+      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":

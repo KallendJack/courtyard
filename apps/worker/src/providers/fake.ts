@@ -13,7 +13,8 @@ import {
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { Provider, SignIn, TurnToolName } from "./index.ts";
+import { pageRead, turnSources } from "../sources/index.ts";
+import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
 const CAPABILITIES: Capabilities = {
@@ -21,6 +22,7 @@ const CAPABILITIES: Capabilities = {
   codes: false,
   usesTools: false,
   savesContext: true,
+  searchesWeb: true,
 };
 
 /** The levels of effort the fake's model takes, so picking one can be seen and tested. */
@@ -106,6 +108,33 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
 ];
+
+const SEARCH = /^search the web for: (.+)$/i;
+const READ_PAGE = /^read page: (\S+)$/i;
+const CITE = /^cite: (.+)$/i;
+
+/**
+ * What a message scripts the fake doing on the web (ADR 0019), one per line: "search the web for:
+ * …" searches, "read page: <address>" reads a page, and "cite: [title](address)" lists a page as a
+ * source, the way a model's answer links it.
+ */
+const scriptedWeb = (message: string) => {
+  const activities: Activity[] = [];
+  const cited: string[] = [];
+  for (const line of message.split("\n").map((each) => each.trim())) {
+    const [, query] = SEARCH.exec(line) ?? [];
+    const [, url] = READ_PAGE.exec(line) ?? [];
+    const [, link] = CITE.exec(line) ?? [];
+    if (query !== undefined) activities.push({ kind: "web-searched", query });
+    const read = url === undefined ? undefined : pageRead(url);
+    if (read !== undefined) activities.push(read);
+    if (link !== undefined) cited.push(link);
+  }
+  return {
+    activities,
+    sources: turnSources({ answer: cited.join("\n"), read: [], searches: [] }),
+  };
+};
 
 /** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
 const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
@@ -202,6 +231,19 @@ const fakeSignIn = (options: { finishAfterMs?: number }): SignIn => {
   };
 };
 
+/**
+ * What "please look" makes the fake say it was given (#78): the turn's attachments by name, "I see
+ * IMG_2041.jpg (a photo) and rack-manual.pdf (a PDF). ", or "I see nothing attached. ".
+ */
+const seen = (attachments: readonly FramedAttachment[]) => {
+  const named = attachments.map(
+    ({ name, kind }) => `${name} (${kind === "photo" ? "a photo" : "a PDF"})`,
+  );
+  const last = named.pop();
+  if (last === undefined) return "I see nothing attached. ";
+  return `I see ${named.length === 0 ? last : `${named.join(", ")} and ${last}`}. `;
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -216,10 +258,12 @@ const pause = (ms: number, signal: AbortSignal) =>
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool, and "use skill …" loads a skill (see
  * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
- * replies (see `scriptedReplies`) when it offers that tool. A tidy follows markers in the file
+ * replies (see `scriptedReplies`) when it offers that tool. On a turn with web search, "search the
+ * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
- * hours on, so overflow can be seen and tested.
+ * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
+ * (see `seen`).
  */
 export const createFakeProvider = (
   options: {
@@ -262,12 +306,14 @@ export const createFakeProvider = (
       capabilities: CAPABILITIES,
     }),
 
-    runTurn: async ({ model, effort, framing, emit, report, callTool, signal }) => {
+    runTurn: async ({ model, effort, framing, emit, report, cite, callTool, signal }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
+      const web = framing.webSearch === null ? undefined : scriptedWeb(last);
+      for (const activity of web?.activities ?? []) await report(activity);
       for (const [name, scripted] of SCRIPTED_CALLS) {
         if (!framing.tools.some((tool) => tool.name === name)) continue;
         for (const input of scripted(last)) await callTool({ name, input });
@@ -284,11 +330,13 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
-      for (const word of `You said: ${last}`.split(/(?<= )/)) {
+      const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
+      for (const word of `${saw}You said: ${last}`.split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);
       }
+      if (web !== undefined && web.sources.length > 0) await cite(web.sources);
       return ok(null);
     },
 

@@ -20,15 +20,19 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { OUTSIDE_WORKSPACE } from "../prompts/index.ts";
+import { readBytes } from "../files.ts";
+import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
+import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
   jsonSchemaOf,
   type Provider,
+  photosOf,
   type ToolReply,
   type TurnInput,
+  type WebSearch,
 } from "./index.ts";
 
 const id = ProviderId.parse("claude");
@@ -38,6 +42,7 @@ const CAPABILITIES: Capabilities = {
   codes: false,
   usesTools: false,
   savesContext: true,
+  searchesWeb: true,
 };
 const LABEL = "Claude";
 
@@ -48,12 +53,52 @@ const LABEL = "Claude";
 export type ClaudeCode = {
   /** Who is signed in, and the models their plan offers, without sending a prompt. */
   readonly check: (signal: AbortSignal) => Promise<unknown>;
-  /** Runs one turn, yielding Claude Code's messages as they arrive. */
-  readonly run: (request: { prompt: string; options: Options }) => AsyncIterable<unknown>;
+  /**
+   * Runs one turn, yielding Claude Code's messages as they arrive. A session's turn streams its
+   * message, so it can carry images (#78); a one-off question is a string.
+   */
+  readonly run: (request: {
+    prompt: string | AsyncIterable<SDKUserMessage>;
+    options: Options;
+  }) => AsyncIterable<unknown>;
 };
+
+/**
+ * A turn's message as Claude Code's streaming input (#78): one message from the owner, its text
+ * then each photo the turn carries as an image, in the order the text numbers them.
+ */
+async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUserMessage> {
+  const images = await Promise.all(
+    photosOf(framing.attachments).map(async (photo) => {
+      const bytes = await readBytes(photo.path);
+      return bytes.ok && bytes.value !== undefined
+        ? [
+            {
+              type: "image" as const,
+              source: {
+                type: "base64" as const,
+                media_type: photo.mediaType,
+                data: bytes.value.toString("base64"),
+              },
+            },
+          ]
+        : [];
+    }),
+  );
+  yield {
+    type: "user",
+    message: {
+      role: "user",
+      content: [{ type: "text", text: framing.message }, ...images.flat()],
+    },
+    parent_tool_use_id: null,
+  };
+}
 
 /** The tools a planning workspace gets: looking at its files, never changing them (ADR 0003). */
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
+/** The tools a turn with web search gets as well (ADR 0019). */
+const WEB_TOOLS = ["WebSearch", "WebFetch"];
 /** The in-process MCP server Courtyard's own tools are offered through. */
 const COURTYARD_SERVER = "courtyard";
 
@@ -362,6 +407,46 @@ const GrepInput = z.strictObject({
   multiline: z.unknown().optional(),
 });
 
+const WebSearchInput = z.strictObject({
+  query: z.string(),
+  allowed_domains: z.array(z.string()).optional(),
+  blocked_domains: z.array(z.string()).optional(),
+  /** How thoroughly to search ("standard", "extended"), which Claude Code sends but doesn't list. */
+  mode: z.string().optional(),
+});
+const WebFetchInput = z.strictObject({ url: z.string(), prompt: z.string() });
+
+/** What WebSearch gives back: its hits, among commentary. Anything else in it is ignored. */
+const WebSearchOutput = z.object({
+  results: z.array(
+    z.union([
+      z.object({ content: z.array(z.object({ title: z.string(), url: z.string() })) }),
+      z.unknown().transform(() => ({ content: [] })),
+    ]),
+  ),
+});
+
+/**
+ * Web search on a turn, as the hooks keep track of it (ADR 0019): the pages that may be read
+ * (the owner's links, then each search's results), each search's results, and the pages read.
+ */
+type WebTurn = {
+  readonly allowed: Set<string>;
+  readonly searches: SearchHit[][];
+  readonly read: string[];
+  searched: boolean;
+};
+
+const webTurnFor = (webSearch: WebSearch | null): WebTurn | null =>
+  webSearch === null
+    ? null
+    : {
+        allowed: new Set(webSearch.ownerLinks.flatMap((link) => pageKey(link) ?? [])),
+        searches: [],
+        read: [],
+        searched: false,
+      };
+
 /** What a tool call would touch: the paths it names and any glob that could reach elsewhere. */
 const reachOf = (tool: string, input: unknown) => {
   switch (tool) {
@@ -403,7 +488,9 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
  * Checked before every tool call, and the only way one is allowed: none are pre-approved, so
  * anything this doesn't allow is refused, including when it fails. Only the planning tools, only
  * inside the workspace folder once symlinks are followed, and Courtyard's own tools offered this
- * turn, which touch nothing themselves. Each file read is reported.
+ * turn, which touch nothing themselves. On a turn with web search, searches, and reading only a
+ * page from the turn's search results or a link the owner sent (ADR 0019). Each file read, search
+ * and page read is reported.
  */
 const confineTo =
   (confine: {
@@ -411,12 +498,30 @@ const confineTo =
     report: TurnInput["report"];
     /** Courtyard's own tools offered this turn, by the names Claude Code calls them. */
     courtyardTools: readonly string[];
+    web: WebTurn | null;
   }): HookCallback =>
   async (input) => {
-    const { folder, report, courtyardTools } = confine;
+    const { folder, report, courtyardTools, web } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (courtyardTools.includes(input.tool_name)) return decision(true);
+      if (web !== null && input.tool_name === "WebSearch") {
+        const search = WebSearchInput.safeParse(input.tool_input);
+        if (!search.success) return decision(false, "That search couldn't be checked.");
+        web.searched = true;
+        await report({ kind: "web-searched", query: search.data.query });
+        return decision(true);
+      }
+      if (web !== null && input.tool_name === "WebFetch") {
+        const fetch = WebFetchInput.safeParse(input.tool_input);
+        const read = fetch.success ? pageRead(fetch.data.url) : undefined;
+        if (read === undefined || !web.allowed.has(read.url)) {
+          return decision(false, PAGE_NOT_ALLOWED);
+        }
+        web.read.push(read.url);
+        await report(read);
+        return decision(true);
+      }
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
 
@@ -429,6 +534,26 @@ const confineTo =
     } catch {
       return decision(false, "That request couldn't be checked, so it was refused.");
     }
+  };
+
+/**
+ * Checked after every tool call: a search's results become pages the turn may read, and are kept
+ * for its Sources (ADR 0019). Run before the results reach the model, so a fetch of one of
+ * them always finds it allowed.
+ */
+const noteResults =
+  (web: WebTurn): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "WebSearch") return {};
+    const output = WebSearchOutput.safeParse(input.tool_response);
+    if (!output.success) return {};
+    const hits = output.data.results.flatMap((result) => result.content);
+    web.searches.push(hits);
+    for (const hit of hits) {
+      const key = pageKey(hit.url);
+      if (key !== undefined) web.allowed.add(key);
+    }
+    return {};
   };
 
 /**
@@ -553,16 +678,18 @@ export const createClaudeProvider = (
 
       const { tools } = input.framing;
       const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
+      const web = webTurnFor(input.framing.webSearch);
+      let answer = "";
       try {
         const messages = claudeCode.run({
-          prompt: input.framing.message,
+          prompt: turnPrompt(input.framing),
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
             systemPrompt: input.framing.instructions,
-            tools: PLANNING_TOOLS,
+            tools: web === null ? PLANNING_TOOLS : [...PLANNING_TOOLS, ...WEB_TOOLS],
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
             ...(tools.length === 0
@@ -570,8 +697,9 @@ export const createClaudeProvider = (
               : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
             hooks: {
               PreToolUse: [
-                { hooks: [confineTo({ folder, report: input.report, courtyardTools })] },
+                { hooks: [confineTo({ folder, report: input.report, courtyardTools, web })] },
               ],
+              ...(web === null ? {} : { PostToolUse: [{ hooks: [noteResults(web)] }] }),
             },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,
@@ -582,7 +710,10 @@ export const createClaudeProvider = (
         for await (const message of untilStopped(messages, stop.signal)) {
           const delta = TextDelta.safeParse(message);
           if (delta.success) {
-            if (!delta.data.parent_tool_use_id) await input.emit(delta.data.event.delta.text);
+            if (!delta.data.parent_tool_use_id) {
+              answer += delta.data.event.delta.text;
+              await input.emit(delta.data.event.delta.text);
+            }
             continue;
           }
           noteProgress(message, progress);
@@ -599,7 +730,12 @@ export const createClaudeProvider = (
       const failure =
         progress.failure ??
         (progress.result === undefined ? failureFor("unknown", progress.resetAt) : undefined);
-      return failure ? err(failure) : ok(null);
+      if (failure) return err(failure);
+      if (web !== null && (web.searched || web.read.length > 0)) {
+        const sources = turnSources({ answer, read: web.read, searches: web.searches });
+        if (sources.length > 0) await input.cite(sources);
+      }
+      return ok(null);
     },
 
     answerOnce: async (input) => {

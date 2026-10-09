@@ -6,16 +6,21 @@ import {
   skillTitle,
 } from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
-import { memo } from "react";
+import { memo, useState } from "react";
+import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
+import { CopyButton } from "@/components/copy-button";
 import { Notice } from "@/components/notice";
+import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
 import { Answer } from "./answer.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
+import { attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
+import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -26,6 +31,10 @@ const describeActivity = (activity: Activity) => {
       return `Used ${skillTitle(activity.name)}`;
     case "skill-file-read":
       return `Read ${skillTitle(activity.name)}'s ${activity.path}`;
+    case "web-searched":
+      return `Searched the web for “${activity.query}”`;
+    case "page-read":
+      return `Read ${activity.site}`;
   }
 };
 
@@ -43,6 +52,79 @@ export const describeFailure = (reason: FailureReason) => {
       return reason.message;
   }
 };
+
+/**
+ * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
+ * and PDFs as chips that open in a new tab (#78).
+ */
+function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
+  const { sessionId, turn } = props;
+  const [viewing, setViewing] = useState<number>();
+  const photos = turn.attachments.flatMap((attachment) =>
+    attachment.kind === "photo"
+      ? [{ src: attachmentUrl(sessionId, attachment.id), name: attachment.name }]
+      : [],
+  );
+  const pdfs = turn.attachments.filter((attachment) => attachment.kind === "pdf");
+  const words = (
+    <>
+      {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
+      <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
+        {turn.text}
+      </p>
+    </>
+  );
+  if (turn.attachments.length === 0) {
+    return (
+      <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground">
+        {words}
+      </div>
+    );
+  }
+  return (
+    <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 pb-2.5 text-accent-foreground">
+      {photos.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {photos.map((photo, index) => (
+            <PhotoThumb
+              key={photo.src}
+              in="message"
+              src={photo.src}
+              name={photo.name}
+              onOpen={() => setViewing(index)}
+            />
+          ))}
+        </div>
+      )}
+      {pdfs.map((pdf) => (
+        <PdfChip
+          key={pdf.id}
+          in="message"
+          name={pdf.name}
+          size={pdf.size}
+          href={attachmentUrl(sessionId, pdf.id)}
+        />
+      ))}
+      <div className="flex flex-col gap-1.5 px-2.5">{words}</div>
+      <PhotoViewer
+        photos={photos}
+        showing={viewing}
+        show={setViewing}
+        onClose={() => setViewing(undefined)}
+      />
+    </div>
+  );
+}
+
+/**
+ * What Copy answer copies: the answer's Markdown as the model wrote it, so it pastes formatted
+ * anywhere that reads Markdown. Anything shown with the answer that belongs in a copy (its
+ * Sources, say) is added here, as Markdown at the end.
+ */
+const answerToCopy = (turn: Turn) =>
+  turn.sources.length === 0
+    ? turn.answer.trim()
+    : `${turn.answer.trim()}\n\n${sourcesAsMarkdown(turn.sources)}`;
 
 /**
  * One turn: the owner's message, the answer, and a note for each save it made, with a quiet line
@@ -76,12 +158,7 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground">
-        {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
-        <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
-          {turn.text}
-        </p>
-      </div>
+      <OwnerMessage sessionId={sessionId} turn={turn} />
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
@@ -108,6 +185,10 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
+      {turn.answer !== "" && turn.state.kind !== "running" && (
+        <CopyButton look="icon" label="Copy answer" text={() => answerToCopy(turn)} />
       )}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">

@@ -105,12 +105,21 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
   three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
   writes after them apart from lines it repeats.
+- **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
+  links to and the pages the model read, each with its site's name and title; when it used none, the search results
+  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
+  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
+  results that Claude may read.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
   turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models, Get to know (a session started with its house skill) and Grill this plan.
+  list of models, Get to know (a session started with its house skill), Grill this plan, and each attachment
+  (`GET /api/sessions/:id/attachments/:attachment`).
+- **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
+  its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
+  refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
 
@@ -122,7 +131,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
 
-- **`http.ts`:** reads a request's body with a contract schema, and turns errors into answers.
+- **`http.ts`:** reads a request's body with a contract schema (a message with files attached as a multipart form,
+  `readMessage`), and turns errors into answers.
 - **`files.ts`:** reads and writes files and JSON, checked with a schema.
 - **`git.ts`:** runs git, never stopping to ask for a password.
 - **`result.ts`:** the `Result` type.
@@ -140,9 +150,14 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
-    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), the turn list, the
-    message box with its model, effort and skill pickers, save notes, the usage-limit notice with Carry on, the
-    Get to know offer, and Grill this plan beside each plan (`grill-plan.tsx`).
+    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), code blocks with
+    their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
+    block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
+    finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
+    message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
+    and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
+    load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
+    plan (`grill-plan.tsx`), and an answer's Sources (`sources.tsx`).
   - **`changes/`:** the Recent changes list, with Undo.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
@@ -151,9 +166,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, text fields, sheets, notices and so on), used on every page
-  ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small helpers shared by
-  pages. **`styles.css`:** the Moorland theme.
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, sheets, notices and so on), used
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker and check the first-load budget.
 
@@ -167,8 +182,11 @@ kinds of workspace that get each one and whether only the owner starts it (ADR 0
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
-topic in `lib/`: login, workspaces, sessions and their events, skills, saves and changes, tidies, usage limits and
-overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's answers are checked against these types;
+topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
+`session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
+a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
+tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's
+answers are checked against these types;
 the web app parses every answer with these schemas.
 
 ### Outside the apps
@@ -206,7 +224,7 @@ sequenceDiagram
   P->>M: Agent SDK, Codex app-server or the fake
   M-->>P: text, activity, saves
   P->>S: each piece as it comes
-  S->>L: text-delta, activity, context-saved
+  S->>L: text-delta, activity, context-saved, sources
   L-->>B: each event once it's written, numbered
   S->>L: turn-completed, turn-stopped or turn-failed
   Note over B: replays events into turns,<br/>reveals text at an even pace
@@ -222,6 +240,17 @@ Where the rest fits:
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
   ([ADR 0017](adr/0017-models-offer-suggested-replies-through-a-courtyard-tool.md)).
+- **Web search.** In a planning workspace, a model searches the web with its provider's own search and reads pages
+  (ADR 0019): Claude through Claude Code's `WebSearch` and `WebFetch`, the adapter's hook allowing a fetch only for a
+  page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each search
+  and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
+  (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
+- **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
+  files in another (the only requests that aren't JSON, and the only ones allowed past the small body limit).
+  `attachments/` checks them and keeps them in the session's folder; the owner message's event records each one, and
+  the browser shows them from the attachment route. Each turn carries the session's last ten: `prompts/` puts each
+  PDF's text in the message and lists the photos, which each provider sends its own way (below). They go with their
+  session when it's deleted (docs/ai-conduct.md, Attachments).
 - **Undo and Edit.** From a save's note, through `sessions/` to `saves/`; or from Recent changes, through `changes/`.
   Each is a change of its own, and the session records what the owner did to its save.
 - **Stop.** The worker tells the provider to stop, stops waiting for it at once, and drops anything it sends
@@ -259,7 +288,8 @@ things live only in the worker's memory and go when it restarts.
 
 **The data folder** (`COURTYARD_DATA_DIR`):
 
-- `sessions/<session>/`: `session.json` (title and times) and `events.jsonl` (the event log).
+- `sessions/<session>/`: `session.json` (title and times), `events.jsonl` (the event log) and `attachments/`: each
+  photo or PDF the owner attached, by its id, and each PDF's text beside it.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
@@ -333,15 +363,19 @@ Everything Courtyard's models read is built in one place, from written rules, an
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
 - **Each provider passes it on unchanged:**
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
-    machine's Claude Code setup, its skills included (ADR 0003).
+    machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
+    message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
+    and `WebFetch`, confined as ADR 0019 says.
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
-    finds itself turned off. [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a
-    real Codex before its version changes.
-  - The fake echoes, and saves, loads a skill or suggests replies when a test scripts it.
+    finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
+    [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
+    version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
+  - The fake echoes, and saves, loads a skill, suggests replies or acts out a web search when a test scripts it, or
+    says which attachments it was given ("please look").
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
-  their saves, the skills they load and the replies they suggest. It runs on demand, never in CI (`pnpm eval:context`;
-  ai-conduct.md, The eval set).
+  their saves, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
+  never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
 - **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
   folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started
   by the owner, the same on every provider (ai-conduct.md, Skills).

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SkillName, SkillSource } from "./skill-name.ts";
+import { SkillName } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
   ContextLine,
@@ -65,6 +65,8 @@ export const Capabilities = z.object({
   usesTools: z.boolean(),
   /** Offers the save tool, so it can save to context as it answers (ADR 0013). */
   savesContext: z.boolean(),
+  /** Searches the web, and reads the pages it finds, in a planning workspace (ADR 0019). */
+  searchesWeb: z.boolean(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 
@@ -175,27 +177,6 @@ export type SessionChange = z.infer<typeof SessionChange>;
 export const SessionList = z.object({ sessions: z.array(SessionSummary) });
 export type SessionList = z.infer<typeof SessionList>;
 
-/** Why a turn ended without an answer. */
-export const FailureReason = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("rate-limited"), resetAt: z.iso.datetime().optional() }),
-  z.object({ kind: z.literal("provider-unavailable"), message: z.string() }),
-  z.object({ kind: z.literal("unknown"), message: z.string() }),
-  /** The worker stopped while the turn was running. */
-  z.object({ kind: z.literal("interrupted") }),
-]);
-export type FailureReason = z.infer<typeof FailureReason>;
-
-/** What a model is doing during a turn, shown to the owner as it happens. */
-export const Activity = z.discriminatedUnion("kind", [
-  /** A file it read, as a path inside the workspace folder. */
-  z.object({ kind: z.literal("read-file"), path: z.string() }),
-  /** A skill it loaded itself, and where the skill came from (ADR 0016). */
-  z.object({ kind: z.literal("skill-loaded"), name: SkillName, source: SkillSource }),
-  /** One of a skill's own files it read, as a path inside the skill's folder. */
-  z.object({ kind: z.literal("skill-file-read"), name: SkillName, path: z.string() }),
-]);
-export type Activity = z.infer<typeof Activity>;
-
 /** Which file a line is written in: the workspace's context file, or the owner context (ADR 0013). */
 export const LinePlace = z.enum(["workspace", "owner"]);
 export type LinePlace = z.infer<typeof LinePlace>;
@@ -231,82 +212,12 @@ export const placeName = (
   return options.withinOwnerContext ? where : `Owner context → ${where}`;
 };
 
-/**
- * What one save did (ADR 0013): a line added, a line changed (and perhaps moved to another
- * section or place, as a plan becomes a fact), or a line removed.
- */
-export const Save = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("add"), saved: PlacedLine }),
-  z.object({ action: z.literal("change"), saved: PlacedLine, replaced: PlacedLine }),
-  z.object({ action: z.literal("remove"), replaced: PlacedLine }),
-]);
-export type Save = z.infer<typeof Save>;
-
 /** The owner editing a saved line from its note: its new wording, section and place. */
 export const SaveEdit = z.discriminatedUnion("place", [
   z.object({ place: z.literal("workspace"), section: ContextSection, line: ContextLine }),
   z.object({ place: z.literal("owner"), section: OwnerSection, line: ContextLine }),
 ]);
 export type SaveEdit = z.infer<typeof SaveEdit>;
-
-/** How many suggested replies a model offers at once, at least and at most (ADR 0017). */
-export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
-
-/** The longest suggested reply: a few words, on one line on a phone. */
-export const SUGGESTED_REPLY_MAX_CHARACTERS = 60;
-
-const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
-
-/** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
-export const SessionEvent = z.discriminatedUnion("type", [
-  z.object({
-    ...eventBase,
-    type: z.literal("owner-message"),
-    text: z.string(),
-    model: ModelRef,
-    /** The effort it was sent with; none for the model's default. */
-    effort: Effort.optional(),
-    /** The skill the owner started with it, which stays in use for the rest of the session. */
-    skill: SkillName.optional(),
-  }),
-  z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
-  z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
-  z.object({ ...eventBase, type: z.literal("turn-completed") }),
-  /** The owner stopped the turn; whatever was written before stays. */
-  z.object({ ...eventBase, type: z.literal("turn-stopped") }),
-  z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
-  /** A save the model made during the turn, already in the context file. */
-  z.object({
-    ...eventBase,
-    type: z.literal("context-saved"),
-    save: Save,
-    /** The change it was committed as, so Recent changes can find it (absent before #50). */
-    change: ChangeId.optional(),
-  }),
-  /** The owner undid the save numbered `save`, whenever and from wherever they did it. */
-  z.object({ ...eventBase, type: z.literal("context-undone"), save: z.number().int().positive() }),
-  /**
-   * The owner chose Carry on after a usage limit: the session moves to this model, at its default
-   * effort, and the failed turn's message is sent to it again.
-   */
-  z.object({ ...eventBase, type: z.literal("model-changed"), model: ModelRef }),
-  /** The owner edited the save numbered `save`: its line is now `now`. */
-  z.object({
-    ...eventBase,
-    type: z.literal("context-edited"),
-    save: z.number().int().positive(),
-    now: PlacedLine,
-  }),
-  /** A model gave the session this title after its first answer, in place of the first line. */
-  z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
-  /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
-  z.object({ ...eventBase, type: z.literal("suggested-replies"), replies: z.array(z.string()) }),
-]);
-export type SessionEvent = z.infer<typeof SessionEvent>;
-
-/** Whether an event ends its turn: completed, stopped by the owner, or failed. */
-export const endsTurn = (event: SessionEvent) =>
-  event.type === "turn-completed" || event.type === "turn-stopped" || event.type === "turn-failed";
 
 /**
  * What a stop request names: the turn to stop, by its owner message's event number, so a stop
