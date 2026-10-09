@@ -156,6 +156,11 @@ export const sessionError = (c: Context, error: SessionError) => {
       return documentError(c, error.refusal);
     case "thing-refused":
       return thingError(c, error.refusal);
+    case "cannot-code":
+      return apiError(c, {
+        status: 409,
+        error: `${error.provider} can't code, so it can't work in a code workspace. Pick a model that can.`,
+      });
     case "branch-refused":
       return apiError(c, { status: 409, error: branchRefused(error.refusal) });
     case "storage":

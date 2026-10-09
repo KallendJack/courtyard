@@ -146,6 +146,8 @@ export type SessionError =
   | { readonly kind: "document-refused"; readonly refusal: DocumentRefusal | DocumentUndoRefusal }
   /** Undoing a Thing save couldn't be done. */
   | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
+  /** The model's provider can't code, so it can't work in a code workspace (ADR 0007). */
+  | { readonly kind: "cannot-code"; readonly provider: string }
   /** A code session couldn't start its session branch (ADR 0007), and why. */
   | { readonly kind: "branch-refused"; readonly refusal: BranchRefusal }
   | { readonly kind: "storage"; readonly message: string };
@@ -934,8 +936,15 @@ export const createSessions = (options: {
     if (!workspace.ok) return err(STORAGE_ERROR);
     const { summary, repoPath } = workspace.value;
     if (summary.mode === "planning") return ok({ provider: provider.value, repoPath: undefined });
-    return ok({ provider: provider.value, repoPath: repoPath ?? "" });
+    const coding = await codes(provider.value);
+    return coding.ok ? ok({ provider: provider.value, repoPath: repoPath ?? "" }) : coding;
   };
+
+  /** Whether a provider can work in a code workspace: only one that codes can (ADR 0007). */
+  const codes = async (provider: Provider): Promise<Result<null, SessionError>> =>
+    provider.capabilities.codes
+      ? ok(null)
+      : err({ kind: "cannot-code", provider: (await provider.status()).label });
 
   /** Every provider's status, with the usage limits its models are at. */
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
@@ -1258,14 +1267,14 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerFor(message);
+      const provider = await providerIn(session.value.workspaceId, message);
       if (!provider.ok) return provider;
       const usable = await skillUsable(session.value.workspaceId, message);
       if (!usable.ok) return usable;
       return startTurn({
         id: session.value.id,
         workspaceId: session.value.workspaceId,
-        provider: provider.value,
+        provider: provider.value.provider,
         message,
         since,
         attachments,
@@ -1297,6 +1306,10 @@ export const createSessions = (options: {
       if (overflow.kind !== "carry-on") return err({ kind: "no-overflow", overflow });
       const provider = options.providers.find((p) => p.id === overflow.model.provider);
       if (!provider) return err({ kind: "model-unavailable" });
+      if (found.value.branch !== undefined) {
+        const coding = await codes(provider);
+        if (!coding.ok) return coding;
+      }
       return startTurn({
         id,
         workspaceId,
