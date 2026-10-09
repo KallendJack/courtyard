@@ -8,6 +8,7 @@ import {
 import { ArrowRightLeft } from "lucide-react";
 import { memo } from "react";
 import { Button } from "@/components/button";
+import { CopyButton } from "@/components/copy-button";
 import { Notice } from "@/components/notice";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
@@ -43,6 +44,13 @@ export const describeFailure = (reason: FailureReason) => {
       return reason.message;
   }
 };
+
+/**
+ * What Copy answer copies: the answer's Markdown as the model wrote it, so it pastes formatted
+ * anywhere that reads Markdown. Anything shown with the answer that belongs in a copy (its
+ * Sources, say) is added here, as Markdown at the end.
+ */
+const answerToCopy = (turn: Turn) => turn.answer.trim();
 
 /**
  * One turn: the owner's message, the answer, and a note for each save it made, with a quiet line
@@ -108,6 +116,9 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.answer !== "" && turn.state.kind !== "running" && (
+        <CopyButton label="Copy answer" text={() => answerToCopy(turn)} />
       )}
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
