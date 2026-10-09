@@ -14,15 +14,12 @@ import { describeWhen } from "../../when.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/documents/$slug")({
   // The loader stays in the first load, so its schemas load with the page.
-  loader: async ({ params }) => {
-    const { loadDocument } = await import("../../documents/api.ts");
-    return { document: await loadDocument(params) };
-  },
+  loader: ({ params }) => import("../../documents/api.ts").then((api) => api.loadDocument(params)),
   component: DocumentPage,
 });
 
 function DocumentPage() {
-  const { document } = Route.useLoaderData();
+  const document = Route.useLoaderData();
   const params = Route.useParams();
   const workspaceId = WorkspaceId.safeParse(params.workspaceId);
   if (document.kind === "not-found" || !workspaceId.success) {

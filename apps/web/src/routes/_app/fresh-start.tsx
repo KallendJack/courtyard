@@ -14,10 +14,7 @@ import { describeProblem, Problem } from "../../problems.tsx";
 
 export const Route = createFileRoute("/_app/fresh-start")({
   // The loader stays in the first load, so its schemas load with the page.
-  loader: async () => {
-    const { loadFreshStart } = await import("../../fresh-start/api.ts");
-    return { summary: await loadFreshStart() };
-  },
+  loader: () => import("../../fresh-start/api.ts").then((api) => api.loadFreshStart()),
   component: FreshStart,
 });
 
@@ -70,7 +67,7 @@ function StillRunning(props: { running: RunningTurn }) {
  * has typed the words. On a page of its own, off the first load.
  */
 function FreshStart() {
-  const { summary } = Route.useLoaderData();
+  const summary = Route.useLoaderData();
   const router = useRouter();
   const [typed, setTyped] = useState("");
   const start = useAction(async () => {

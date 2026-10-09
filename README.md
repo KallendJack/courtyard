@@ -6,6 +6,10 @@ context, so you never re-explain your space, your constraints or your stack.
 - **Workspaces are folders.** One per project or area, each with a short `CONTEXT.md` split into facts, plans and ideas.
 - **Context stays true.** Models save context as you chat; you see every change and can undo it, and each is a git
   commit, backed up wherever you choose.
+- **Documents and Things.** A planning workspace's page also lists its Things, the kit it's about (a card each, with a
+  photo, details and a dated history, filtered by have, want or replace, parts under the Thing they belong to), and
+  its documents, the longer things saved from answers. Models keep Things current as you chat; you can add, edit and
+  delete them yourself. Both are files in the workspace's folder, so they're backed up and undone like the rest.
 - **Skills.** Ways of working a model follows, such as grilling a plan: Courtyard's own, and yours, as folders in the
   open Agent Skills format in your context folder (`.agents/skills/`, at its top or in a workspace's folder). Each
   workspace's page lists the ones it gets.
