@@ -7,13 +7,13 @@ import {
   AttachmentFile,
   AttachmentId,
   AttachmentMediaType,
-  attachmentKind,
-  PhotoMediaType,
+  attachmentType,
   type SessionEvent,
   TOO_MANY_ATTACHMENTS,
 } from "@courtyard/contract";
 import { extractText, getDocumentProxy } from "unpdf";
 import { entryAt, readTextFile, writeBytes, writeTextFile } from "../files.ts";
+import type { FramedAttachment } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /** An attachment checked and ready to keep: what the owner's message records, its bytes, and a PDF's text. */
@@ -23,15 +23,13 @@ export type PreparedAttachment = {
   readonly text: string | undefined;
 };
 
-/** An attachment as a turn passes it on: a photo's file, or a PDF's text (#78). */
+/**
+ * An attachment as a turn passes it on (#78): as its framing gives it to the provider, with a
+ * PDF's text for the message.
+ */
 export type TurnAttachment =
-  | {
-      readonly kind: "photo";
-      readonly name: string;
-      readonly path: string;
-      readonly mediaType: PhotoMediaType;
-    }
-  | { readonly kind: "pdf"; readonly name: string; readonly text: string };
+  | Extract<FramedAttachment, { kind: "photo" }>
+  | (Extract<FramedAttachment, { kind: "pdf" }> & { readonly text: string });
 
 /** How each kind of file starts, so a file is what its type says before it's kept or served. */
 const STARTS: Readonly<Record<AttachmentMediaType, (bytes: Uint8Array) => boolean>> = {
@@ -102,15 +100,16 @@ export const prepareAttachments = async (
     const mediaType = type.data;
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (!STARTS[mediaType](bytes)) return err(`${name} isn't the kind of file its name says.`);
-    const kind = attachmentKind(mediaType);
-    const text = kind === "pdf" ? await pdfText(bytes) : undefined;
-    if (kind === "pdf" && text === undefined) return err(`${name} can't be read as a PDF.`);
-    if (kind === "pdf" && text?.trim() === "") return err(noTextIn(name));
+    const recorded = attachmentType(mediaType);
+    const text = recorded.kind === "pdf" ? await pdfText(bytes) : undefined;
+    if (recorded.kind === "pdf" && text === undefined) {
+      return err(`${name} can't be read as a PDF.`);
+    }
+    if (recorded.kind === "pdf" && text?.trim() === "") return err(noTextIn(name));
     const attachment: Attachment = {
       id: AttachmentId.parse(randomUUID()),
       name,
-      kind,
-      mediaType,
+      ...recorded,
       size: bytes.length,
     };
     prepared.push({ attachment, bytes, text });
@@ -121,13 +120,8 @@ export const prepareAttachments = async (
 const folderIn = (sessionFolder: string) => join(sessionFolder, "attachments");
 
 /** Where an attachment is kept in its session's folder. */
-export const attachmentPath = (sessionFolder: string, attachment: Attachment) => {
-  const known = AttachmentMediaType.safeParse(attachment.mediaType);
-  return join(
-    folderIn(sessionFolder),
-    `${attachment.id}${known.success ? ENDINGS[known.data] : ""}`,
-  );
-};
+export const attachmentPath = (sessionFolder: string, attachment: Attachment) =>
+  join(folderIn(sessionFolder), `${attachment.id}${ENDINGS[attachment.mediaType]}`);
 
 /** Where a PDF's text is kept, beside it, so later turns don't read the PDF again. */
 const textPath = (sessionFolder: string, attachment: Attachment) =>
@@ -179,12 +173,11 @@ export const carriedAttachments = async (
   const carried = attachmentsOf(events).slice(-ATTACHMENTS.carried);
   const found = await Promise.all(
     carried.map(async (attachment): Promise<TurnAttachment[]> => {
-      const photo = PhotoMediaType.safeParse(attachment.mediaType);
-      if (photo.success) {
+      if (attachment.kind === "photo") {
         const path = attachmentPath(sessionFolder, attachment);
         const there = await entryAt(path);
         return there.ok && there.value?.kind === "file"
-          ? [{ kind: "photo", name: attachment.name, path, mediaType: photo.data }]
+          ? [{ kind: "photo", name: attachment.name, path, mediaType: attachment.mediaType }]
           : [];
       }
       const text = await readTextFile(textPath(sessionFolder, attachment));

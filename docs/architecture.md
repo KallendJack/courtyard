@@ -182,8 +182,9 @@ kinds of workspace that get each one and whether only the owner starts it (ADR 0
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
-topic in `lib/`: login, workspaces, sessions and their events, attachments (an event's in `attachment.ts`, the limits
-and checks in `attachment-file.ts`, kept apart so the checks aren't on the first load), skills, saves and changes,
+topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
+`session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
+a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.

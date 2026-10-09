@@ -1,13 +1,18 @@
 export { ApiError } from "./lib/api-error.ts";
-export { ATTACHMENTS_FIELD, Attachment, AttachmentId, MESSAGE_FIELD } from "./lib/attachment.ts";
+export {
+  ATTACHMENTS_FIELD,
+  Attachment,
+  AttachmentId,
+  MESSAGE_FIELD,
+  PDF_TYPE,
+  PHOTO_TYPES,
+  PhotoMediaType,
+} from "./lib/attachment.ts";
 export {
   ATTACHMENTS,
   AttachmentFile,
   AttachmentMediaType,
-  attachmentKind,
-  PDF_TYPE,
-  PHOTO_TYPES,
-  PhotoMediaType,
+  attachmentType,
   sizeInWords,
   TOO_MANY_ATTACHMENTS,
 } from "./lib/attachment-file.ts";
@@ -30,14 +35,11 @@ export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
-  Activity,
   Capabilities,
   CarryOnRequest,
   ChangeId,
   Effort,
   EffortInfo,
-  endsTurn,
-  FailureReason,
   FirstMessage,
   GetToKnowRequest,
   GrillRequest,
@@ -52,23 +54,28 @@ export {
   ProviderList,
   ProviderStatus,
   placeName,
-  Save,
   SaveEdit,
   SESSION_TITLE_MAX_LENGTH,
   SessionChange,
   SessionDetail,
-  SessionEvent,
   SessionId,
   SessionList,
   SessionSummary,
-  SOURCES_MAX,
-  Source,
   StopRequest,
-  SUGGESTED_REPLIES,
-  SUGGESTED_REPLY_MAX_CHARACTERS,
   takesEffort,
   UsageLimit,
 } from "./lib/session.ts";
+export {
+  Activity,
+  endsTurn,
+  FailureReason,
+  Save,
+  SessionEvent,
+  SOURCES_MAX,
+  Source,
+  SUGGESTED_REPLIES,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
+} from "./lib/session-event.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {
