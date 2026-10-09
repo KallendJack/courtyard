@@ -3,17 +3,19 @@ export {
   ATTACHMENTS,
   ATTACHMENTS_FIELD,
   Attachment,
-  AttachmentFile,
   AttachmentId,
   AttachmentMediaType,
-  attachmentKind,
   MESSAGE_FIELD,
   PDF_TYPE,
   PHOTO_TYPES,
+} from "./lib/attachment.ts";
+export {
+  AttachmentFile,
+  attachmentKind,
   PhotoMediaType,
   sizeInWords,
   TOO_MANY_ATTACHMENTS,
-} from "./lib/attachment.ts";
+} from "./lib/attachment-file.ts";
 export { AuthState, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
 export { ContextBackup } from "./lib/backup.ts";
 export {
