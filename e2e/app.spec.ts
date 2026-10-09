@@ -16,6 +16,7 @@ const Manifest = z.object({
   name: z.string(),
   display: z.string(),
   start_url: z.string(),
+  background_color: z.string(),
   icons: z.array(z.object({ src: z.string(), sizes: z.string() })),
 });
 
@@ -169,6 +170,9 @@ test.describe("at the end of a long session", () => {
 test("is installable, and caches the app but never session data", async ({ page, request }) => {
   const manifest = Manifest.parse(await (await request.get("/manifest.webmanifest")).json());
   expect(manifest).toMatchObject({ name: "Courtyard", display: "standalone", start_url: "/" });
+  // An installed app on Android paints the strip behind the gesture bar in this colour, whatever
+  // the page's theme, so it's the dark theme's ground: the owner uses dark mode (#157).
+  expect(manifest.background_color.toLowerCase()).toBe("#1b181a");
   const sizes = manifest.icons.map((icon) => icon.sizes);
   expect(sizes).toEqual(expect.arrayContaining(["192x192", "512x512"]));
   for (const icon of manifest.icons) {
