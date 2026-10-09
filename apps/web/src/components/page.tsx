@@ -6,11 +6,17 @@ export function Page(props: {
   children: ReactNode;
   /** No space below: the page ends with something pinned to the bottom (the message box). */
   flushBottom?: boolean;
+  /**
+   * The panel's whole width rather than a reading column, for a page of cards (a workspace's),
+   * which lays them out by its own width: a column on a phone, two once there's room.
+   */
+  wide?: boolean;
 }) {
   return (
     <main
       className={classes(
-        "mx-auto flex w-full max-w-reading flex-col px-4 pt-6 md:px-8 md:pt-12",
+        "mx-auto flex w-full flex-col px-4 pt-6 md:px-8 md:pt-12",
+        props.wide ? "@container max-w-5xl" : "max-w-reading",
         !props.flushBottom && "pb-10",
       )}
     >
@@ -41,6 +47,9 @@ export function PageTitle(props: { children: ReactNode; above?: ReactNode; actio
 export function SectionTitle(props: { children: ReactNode }) {
   return <h2 className="display-section text-xl/7">{props.children}</h2>;
 }
+
+/** A card on a wide page: one of a workspace's sections (its sessions, context file, Things). */
+export const CARD = "rounded-2xl bg-surface p-4 md:p-5";
 
 /** A row in a page's list (workspaces, sessions): the whole row is the link. */
 export const LIST_ROW =

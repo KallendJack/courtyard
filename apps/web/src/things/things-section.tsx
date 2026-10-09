@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/button";
-import { SectionTitle } from "@/components/page";
+import { CARD, SectionTitle } from "@/components/page";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { describeProblem } from "../problems.tsx";
@@ -44,7 +44,7 @@ export function ThingsSection(props: {
 
   return (
     <ThingsScope>
-      <section aria-label="Things" className="mt-12">
+      <section aria-label="Things" className={CARD}>
         <div className="flex items-center justify-between gap-3">
           <SectionTitle>Things</SectionTitle>
           <Button variant="outline" size="sm" onClick={() => setAdding((was) => !was)}>

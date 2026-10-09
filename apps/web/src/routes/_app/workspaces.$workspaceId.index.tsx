@@ -3,6 +3,7 @@ import {
   CONTEXT_FILE_LONG_CHARACTERS,
   type ContextFile,
   hasLines,
+  type OwnerContextShared,
   type SessionSummary,
   type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -17,7 +18,7 @@ import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
-import { LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
+import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
@@ -77,7 +78,7 @@ function Workspace() {
     return undefined;
   };
   const above = (
-    <div className="flex items-center gap-2 text-xs font-medium text-primary-text">
+    <div className="flex items-center gap-2 text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase">
       <ColourChooser colour={workspace.colour} choose={(colour) => change({ colour })} />
       {workspace.mode === "code" ? "Code workspace" : "Workspace"}
     </div>
@@ -101,7 +102,7 @@ function Workspace() {
   };
 
   return (
-    <Page>
+    <Page wide>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
@@ -170,7 +171,7 @@ function Workspace() {
         </div>
       )}
 
-      <section aria-label="Sessions" className="mt-8">
+      <div className="mt-6 md:mt-8">
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
@@ -192,15 +193,62 @@ function Workspace() {
         ) : (
           <p className="text-sm text-muted-foreground">{describeProblem(providers).body}</p>
         )}
-        {sessions.kind === "loaded" && <SessionLinks sessions={sessions.data.sessions} />}
-      </section>
-
-      <div className="mt-12">
-        <SectionTitle>Context file</SectionTitle>
       </div>
-      {workspace.mode === "planning" && (contextFile === null || !hasLines(contextFile)) && (
+
+      {/* The workspace's cards: what's been said and known, and its skills, on the left; what it has on the right. */}
+      <div className="mt-6 grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] @3xl:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          {sessions.kind === "loaded" && <SessionLinks sessions={sessions.data.sessions} />}
+          <section aria-label="Context file" className={CARD}>
+            <ContextFileCard
+              workspaceId={workspace.id}
+              mode={workspace.mode}
+              contextFile={contextFile}
+              ownerContextShared={ownerContextShared}
+            />
+          </section>
+          {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          {workspace.mode === "planning" && things.kind === "loaded" && (
+            <ThingsSection
+              workspaceId={workspace.id}
+              list={things.data}
+              {...(deleted?.kind === "thing" ? { deleted } : {})}
+              onUndone={undone}
+            />
+          )}
+          {workspace.mode === "planning" && documents.kind === "loaded" && (
+            <DocumentsSection
+              workspaceId={workspace.id}
+              documents={documents.data.documents}
+              {...(deleted?.kind === "document" ? { deleted } : {})}
+              onUndone={undone}
+            />
+          )}
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/**
+ * The context file's card: its sections, or a way to start one, then what else models here read
+ * and the ways to look after it (Recent changes, Tidy).
+ */
+function ContextFileCard(props: {
+  workspaceId: WorkspaceId;
+  mode: WorkspaceMode;
+  contextFile: ContextFile | null;
+  ownerContextShared: OwnerContextShared;
+}) {
+  const { workspaceId, mode, contextFile, ownerContextShared } = props;
+  return (
+    <>
+      <SectionTitle>Context file</SectionTitle>
+      {mode === "planning" && (contextFile === null || !hasLines(contextFile)) && (
         <GetToKnow
-          about={{ kind: "workspace", id: workspace.id }}
+          about={{ kind: "workspace", id: workspaceId }}
           label="Get to know this workspace"
         >
           You're asked a few questions about it, and what you say is saved here.
@@ -217,7 +265,7 @@ function Workspace() {
             <div className="mt-3">
               <StatusPill
                 action={
-                  <ButtonLink size="sm" to="/tidy" search={{ workspace: workspace.id }}>
+                  <ButtonLink size="sm" to="/tidy" search={{ workspace: workspaceId }}>
                     Tidy
                   </ButtonLink>
                 }
@@ -228,12 +276,12 @@ function Workspace() {
           )}
           <ContextFileSections
             contextFile={contextFile}
-            {...(workspace.mode === "planning" && { workspaceId: workspace.id })}
+            {...(mode === "planning" && { workspaceId })}
           />
         </>
       )}
       {ownerContextShared !== "none" && (
-        <p className="mt-8 text-sm text-muted-foreground">
+        <p className="mt-6 text-sm text-muted-foreground">
           Also reads{" "}
           <Link to="/" className="text-foreground underline">
             {ownerContextShared === "all"
@@ -246,7 +294,7 @@ function Workspace() {
       <p className="mt-4 text-sm text-muted-foreground">
         <Link
           to="/changes"
-          search={{ workspace: workspace.id }}
+          search={{ workspace: workspaceId }}
           className="text-foreground underline"
         >
           Recent changes
@@ -259,7 +307,7 @@ function Workspace() {
               {" · "}
               <Link
                 to="/tidy"
-                search={{ workspace: workspace.id }}
+                search={{ workspace: workspaceId }}
                 className="text-foreground underline"
               >
                 Tidy
@@ -267,24 +315,7 @@ function Workspace() {
             </>
           )}
       </p>
-      {workspace.mode === "planning" && things.kind === "loaded" && (
-        <ThingsSection
-          workspaceId={workspace.id}
-          list={things.data}
-          {...(deleted?.kind === "thing" ? { deleted } : {})}
-          onUndone={undone}
-        />
-      )}
-      {workspace.mode === "planning" && documents.kind === "loaded" && (
-        <DocumentsSection
-          workspaceId={workspace.id}
-          documents={documents.data.documents}
-          {...(deleted?.kind === "document" ? { deleted } : {})}
-          onUndone={undone}
-        />
-      )}
-      {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
-    </Page>
+    </>
   );
 }
 
@@ -295,7 +326,7 @@ function Workspace() {
  */
 function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode }) {
   return (
-    <section aria-label="Skills" className="mt-12">
+    <section aria-label="Skills" className={CARD}>
       <div className="flex flex-col gap-1">
         <SectionTitle>Skills</SectionTitle>
         <p className="text-sm/[21px] text-muted-foreground">
@@ -318,7 +349,7 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
 function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
   if (sessions.length === 0) return null;
   return (
-    <div className="mt-10">
+    <section aria-label="Sessions" className={CARD}>
       <SectionTitle>Sessions</SectionTitle>
       <ul className="mt-2 divide-y">
         {sessions.map((session) => (
@@ -336,7 +367,7 @@ function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
