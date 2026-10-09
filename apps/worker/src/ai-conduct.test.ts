@@ -875,7 +875,7 @@ describe("skills (#89, ADR 0016)", () => {
     const { events } = await say({ text: "Does next week fit?", model: SAVING_MODEL });
     await say({ text: "And the week after?", model: SAVING_MODEL });
 
-    expect(saver.replies[0]?.[0]?.saved).toBe(true);
+    expect(saver.replies[0]?.[0]?.ok).toBe(true);
     expect(saver.replies[0]?.[0]?.reply).toContain("name: programme-check");
     expect(saver.replies[0]?.[0]?.reply).toContain("Check each session against the kit list.");
     expect(events.filter((event) => event.type === "activity")).toMatchObject([
@@ -905,11 +905,11 @@ describe("skills (#89, ADR 0016)", () => {
     const { events } = await say({ text: "Does next week fit?", model: SAVING_MODEL });
 
     const [file, ...outside] = saver.replies[0] ?? [];
-    expect(file).toEqual({ saved: true, reply: "Every fourth week is lighter." });
+    expect(file).toEqual({ ok: true, reply: "Every fourth week is lighter." });
     expect(outside).toHaveLength(3);
     for (const reply of outside) {
       expect(reply).toEqual({
-        saved: false,
+        ok: false,
         reply: "Only files in the skill's folder can be read.",
       });
     }
@@ -932,15 +932,15 @@ describe("skills (#89, ADR 0016)", () => {
     await say({ text: "Get to know this workspace.", model: SAVING_MODEL, skill: "get-to-know" });
 
     expect(saver.replies[0]).toEqual([
-      { saved: false, reply: "Only the owner starts get-to-know." },
+      { ok: false, reply: "Only the owner starts get-to-know." },
       {
-        saved: false,
+        ok: false,
         reply:
           "There's no skill called packing here: the skills you can load are in your instructions.",
       },
     ]);
     expect(events.filter((event) => event.type === "activity")).toEqual([]);
-    expect(saver.replies[1]?.[0]?.saved).toBe(true);
+    expect(saver.replies[1]?.[0]?.ok).toBe(true);
   });
 
   it("keeps a skill's text inside its markers, however a closing marker is spelt", async () => {

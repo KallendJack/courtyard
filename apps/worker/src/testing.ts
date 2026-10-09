@@ -199,8 +199,8 @@ export type ScriptedStep =
   | { readonly write: string }
   | (() => Promise<void>);
 
-/** For tests: what the worker told a model about one of its tool calls, a save or another. */
-export type SaveReply = { readonly saved: boolean; readonly reply: string };
+/** For tests: what the worker told a model about one of its tool calls: whether it did it, and what it said. */
+export type ToolCallReply = { readonly ok: boolean; readonly reply: string };
 
 const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
   typeof step !== "function" && "call" in step && typeof step.call === "string";
@@ -220,7 +220,7 @@ export const savingProvider = (
   turns: readonly (readonly ScriptedStep[])[],
   options: { holdAfterSaves?: boolean } = {},
 ) => {
-  const replies: SaveReply[][] = [];
+  const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
   const capabilities = { readsFiles: false, codes: false, usesTools: false, savesContext: true };
@@ -235,7 +235,7 @@ export const savingProvider = (
       capabilities,
     }),
     runTurn: async (input) => {
-      const turnReplies: SaveReply[] = [];
+      const turnReplies: ToolCallReply[] = [];
       const steps = turns[replies.length] ?? [];
       replies.push(turnReplies);
       framings.push(input.framing);
@@ -251,7 +251,7 @@ export const savingProvider = (
           const text = reply.content
             .map((part) => (part.kind === "text" ? part.text : ""))
             .join("");
-          turnReplies.push({ saved: reply.ok, reply: text });
+          turnReplies.push({ ok: reply.ok, reply: text });
         }
       }
       if (options.holdAfterSaves) {

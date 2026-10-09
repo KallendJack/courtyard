@@ -206,12 +206,12 @@ export const skillTool = (options: {
     const { path, start_line } = parsed.data;
     if (path == null) {
       const text = await readSkillFile(skill.folder);
-      if (text === undefined) return err({ kind: "unreadable" });
+      if (!text.ok) return text;
       if (!inUse) {
         inUseNow.add(skill.name);
         await options.report({ kind: "skill-loaded", name: skill.name, source: skill.source });
       }
-      return ok({ kind: "instructions", text });
+      return ok({ kind: "instructions", text: text.value });
     }
     const files = workspaceFiles({
       folder: skill.folder,
@@ -235,8 +235,9 @@ export const inUseTexts = async (
   const texts = await Promise.all(
     inUse.map(async (name) => {
       const skill = skills.find((usable) => usable.name === name);
-      const text = skill === undefined ? undefined : await readSkillFile(skill.folder);
-      return text === undefined ? [] : [{ name, text }];
+      if (skill === undefined) return [];
+      const text = await readSkillFile(skill.folder);
+      return text.ok ? [{ name, text: text.value }] : [];
     }),
   );
   return texts.flat();

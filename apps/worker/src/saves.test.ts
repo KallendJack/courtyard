@@ -105,7 +105,7 @@ describe("a save during a turn", () => {
     expect(await contextFile()).toContain(
       "- The ceiling is 2.3 m.\n- Padel lessons on Tuesdays.\n\n## Plans",
     );
-    expect(replies()[0]?.saved).toBe(true);
+    expect(replies()[0]?.ok).toBe(true);
     expect(onlySave(events).save).toEqual({
       action: "add",
       saved: { place: "workspace", section: "facts", line: "Padel lessons on Tuesdays." },
@@ -187,7 +187,7 @@ describe("a save the worker refuses", () => {
     ]);
 
     const reply = replies()[0];
-    expect(reply?.saved).toBe(false);
+    expect(reply?.ok).toBe(false);
     expect(reply?.reply).toMatch(/changed since/i);
     expect(reply?.reply).toContain("[P1] Buy a rack from the gym sale.");
     expect(savesIn(events)).toEqual([]);
@@ -219,7 +219,7 @@ describe("a save the worker refuses", () => {
       { section: "facts", action: "remove", label: "F9" },
     ]);
 
-    expect(replies().map((reply) => reply.saved)).toEqual([false, false]);
+    expect(replies().map((reply) => reply.ok)).toEqual([false, false]);
     expect(await contextFile()).toBe(CONTEXT);
   });
 
@@ -461,7 +461,7 @@ describe("a save to the owner context", () => {
       { action: "add", place: "workspace", section: "answers", text: "Short answers." },
     ]);
 
-    expect(replies().map((reply) => reply.saved)).toEqual([false, false]);
+    expect(replies().map((reply) => reply.ok)).toEqual([false, false]);
     expect(replies()[0]?.reply).toMatch(/already saved: "Lives in Leeds."/);
     expect(await ownerFile()).toBe(OWNER);
     expect(await contextFile()).toBe(CONTEXT);
@@ -481,7 +481,7 @@ describe("a save to the owner context", () => {
       { action: "add", section: "answers", text: "Examples in TypeScript." },
     ]);
 
-    expect(replies().map((reply) => reply.saved)).toEqual([false, false, false, false, true]);
+    expect(replies().map((reply) => reply.ok)).toEqual([false, false, false, false, true]);
     expect(replies()[0]?.reply).toMatch(/only to How to answer me/);
     // It isn't shown About me, so it has no labels for it; it is shown the context file.
     expect(replies()[2]?.reply).toMatch(/no line labelled MF1/);

@@ -130,7 +130,7 @@ describe("a model suggesting replies", () => {
 
     expect(replies).toEqual([
       {
-        saved: true,
+        ok: true,
         reply: await quotedInGuide("The owner sees them as buttons under your answer, but"),
       },
     ]);
@@ -154,16 +154,16 @@ describe("a model suggesting replies", () => {
 
     const short = "Each reply is a few words on one line, at most 60 characters.";
     expect(replies).toEqual([
-      { saved: false, reply: "Suggest two or three replies, not 1." },
-      { saved: false, reply: "Suggest two or three replies, not 4." },
+      { ok: false, reply: "Suggest two or three replies, not 1." },
+      { ok: false, reply: "Suggest two or three replies, not 4." },
       {
-        saved: false,
+        ok: false,
         reply: "That input doesn't fit this tool: it takes replies, a list of two or three texts.",
       },
-      { saved: false, reply: short },
-      { saved: false, reply: short },
-      { saved: false, reply: short },
-      { saved: false, reply: "Two of those replies are the same: make each one different." },
+      { ok: false, reply: short },
+      { ok: false, reply: short },
+      { ok: false, reply: short },
+      { ok: false, reply: "Two of those replies are the same: make each one different." },
     ]);
     expect(events.filter((event) => event.type === "suggested-replies")).toEqual([]);
   });
@@ -175,7 +175,7 @@ describe("a model suggesting replies", () => {
     ]);
 
     expect(replies[1]).toEqual({
-      saved: false,
+      ok: false,
       reply: "You've already suggested replies in this answer.",
     });
     expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
