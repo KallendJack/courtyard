@@ -7,15 +7,16 @@ const COPIED_FOR_MS = 2000;
 
 /**
  * Copies text in one tap, then shows a tick and "Copied" for a couple of seconds, which screen
- * readers announce too. Two looks: an icon on its own (Copy answer, under each finished answer)
- * and a quiet "Copy" button (in a code block's top bar). Not on the first load.
+ * readers announce too. Three looks: an icon on its own (Copy answer, under each finished answer),
+ * a quiet "Copy" button (in a code block's top bar), and an outlined button reading its label
+ * (Copy code, beside a sign-in code). Not on the first load.
  */
 export function CopyButton(props: {
   /** What the button is called, for screen readers and on hover: "Copy answer". */
   label: string;
   /** What to copy, read at the moment it's tapped. */
   text: () => string;
-  look: "icon" | "labelled";
+  look: "icon" | "labelled" | "outline";
 }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -34,17 +35,18 @@ export function CopyButton(props: {
   };
   const tick = <Check strokeWidth={2.25} />;
 
-  if (props.look === "labelled") {
+  if (props.look !== "icon") {
+    const outline = props.look === "outline";
     return (
       <Button
-        variant={copied ? "quietPrimary" : "quiet"}
+        variant={outline ? "outline" : copied ? "quietPrimary" : "quiet"}
         size="xs"
         aria-label={props.label}
         title={props.label}
         onClick={() => void copy()}
       >
-        {copied ? tick : <Copy className="size-3.5" />}
-        <span aria-hidden>{copied ? "Copied" : "Copy"}</span>
+        {!outline && (copied ? tick : <Copy className="size-3.5" />)}
+        <span aria-hidden>{copied ? "Copied" : outline ? props.label : "Copy"}</span>
         <span role="status" className="sr-only">
           {copied ? "Copied" : ""}
         </span>

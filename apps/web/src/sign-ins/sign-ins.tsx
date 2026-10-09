@@ -1,6 +1,7 @@
 import type { ProviderSignIn, ProviderStatus } from "@courtyard/contract";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
+import { CopyButton } from "@/components/copy-button";
 import { FormError } from "@/components/form-error";
 import { InfoBox, Notice, WaitingDot } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
@@ -93,15 +94,6 @@ function Waiting(props: {
   onCancel: () => void;
   busy: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(props.code);
-      setCopied(true);
-    } catch {
-      // Without the clipboard (a page served over plain HTTP, say) the code can still be typed.
-    }
-  };
   return (
     <div className="flex w-full flex-col gap-3">
       <p className="text-foreground">
@@ -115,9 +107,7 @@ function Waiting(props: {
         <span className="text-[28px]/[34px] font-semibold tracking-[0.1em] text-foreground">
           {props.code}
         </span>
-        <Button variant="outline" size="xs" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy code"}
-        </Button>
+        <CopyButton label="Copy code" text={() => props.code} look="outline" />
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
