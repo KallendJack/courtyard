@@ -14,12 +14,7 @@ import { Select } from "@/components/select";
 import { TextField } from "@/components/text-field";
 import { useAction } from "@/lib/use-action";
 import { preparePhoto } from "../sessions/attaching.ts";
-import { boughtFromWords, boughtInWords, STATUS_WORDS } from "./words.ts";
-
-const STATUSES = (["have", "want", "replace"] as const).map((status) => ({
-  value: status,
-  label: STATUS_WORDS[status],
-}));
+import { boughtFromWords, boughtInWords, STATUS_CHOICES } from "./words.ts";
 
 const DETAIL_LABELS: Readonly<Record<ThingDetailName, string>> = {
   brand: "Brand",
@@ -117,7 +112,12 @@ export function ThingForm(props: {
           <span aria-hidden className="text-sm font-medium">
             Status
           </span>
-          <SegmentedChoice label="Status" options={STATUSES} value={status} onChange={setStatus} />
+          <SegmentedChoice
+            label="Status"
+            options={STATUS_CHOICES}
+            value={status}
+            onChange={setStatus}
+          />
         </div>
       </div>
       <Pair>

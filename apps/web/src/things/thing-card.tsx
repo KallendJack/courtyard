@@ -90,15 +90,11 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
             parents={all.filter((each) => each.partOf === undefined && each.slug !== thing.slug)}
             hasParts={parts.length > 0}
             save={async (form, photo) => {
-              // A new photo on its own changes no field, which the worker would refuse.
-              if (!sameFields(thing, form)) {
-                const changed = await changeThing(workspaceId, thing.slug, form);
-                if (changed.kind !== "loaded") return describeProblem(changed).body;
-              }
-              if (photo !== undefined) {
-                const uploaded = await uploadThingPhoto(workspaceId, thing.slug, photo);
-                if (uploaded.kind !== "loaded") return describeProblem(uploaded).body;
-              }
+              // Saving with nothing changed is just closing the form: the worker would refuse it.
+              if (photo === undefined && sameFields(thing, form)) return undefined;
+              // The fields and a new photo go together, as one change with one Undo.
+              const changed = await changeThing({ workspaceId, slug: thing.slug, form, photo });
+              if (changed.kind !== "loaded") return describeProblem(changed).body;
               await router.invalidate();
               return undefined;
             }}

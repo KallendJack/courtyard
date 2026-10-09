@@ -1,6 +1,6 @@
-import { ChevronsUpDown, MoveDown, MoveUp } from "lucide-react";
 import { Children, type ComponentProps, createContext, use, useState } from "react";
 import type { ExtraProps } from "react-markdown";
+import { SortButton } from "@/components/sort-button";
 import { classes } from "@/lib/classes";
 import { childrenNamed, type MarkdownElement, textOf } from "./hast.ts";
 import { RichBlock } from "./rich-block.tsx";
@@ -77,20 +77,9 @@ export function MarkdownHeading({ node, children, style }: ComponentProps<"th"> 
       {sorting === undefined || column === undefined ? (
         <span className="block px-3.5 py-2.5">{children}</span>
       ) : (
-        <button
-          type="button"
-          onClick={() => sorting.tap(column)}
-          className="flex w-full cursor-pointer items-center gap-1 px-3.5 py-2.5 text-left font-semibold whitespace-nowrap -outline-offset-2"
-        >
+        <SortButton sorted={direction} onSort={() => sorting.tap(column)}>
           {children}
-          {direction === "ascending" ? (
-            <MoveUp className="size-3" />
-          ) : direction === "descending" ? (
-            <MoveDown className="size-3" />
-          ) : (
-            <ChevronsUpDown className="size-3 text-placeholder" />
-          )}
-        </button>
+        </SortButton>
       )}
     </th>
   );

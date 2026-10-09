@@ -43,7 +43,7 @@ import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
 import { signInRoutes } from "./sign-ins/routes.ts";
 import { skillList, workspaceSkills } from "./skills/index.ts";
-import { THING_PHOTO_ROUTE, thingRoutes } from "./things/routes.ts";
+import { THING_PHOTO_ROUTES, thingRoutes } from "./things/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -73,23 +73,30 @@ const MAX_THING_PHOTO_BYTES = ATTACHMENTS.photoMaxBytes + 64 * 1024;
 /** A route's path under `/api` as a pattern, each `:param` standing for one part of a path. */
 const pathOf = (route: string) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`);
 
-/** The paths of the routes that take a message. */
-const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(pathOf);
+/** A request a multipart form may be sent with: its method, and its path as a pattern. */
+type FormRequest = { readonly method: string; readonly path: RegExp };
 
-/** The path a Thing's photo is uploaded to (ADR 0020). */
-const THING_PHOTO_PATH = pathOf(THING_PHOTO_ROUTE);
+/** The requests that take a message. */
+const MESSAGE_REQUESTS: readonly FormRequest[] = Object.values(MESSAGE_ROUTES).map((route) => ({
+  method: "POST",
+  path: pathOf(route),
+}));
 
-/** Whether a request is a multipart form posted to one of these paths. */
-const formTo = (c: Context, paths: readonly RegExp[]) =>
-  c.req.method === "POST" &&
-  paths.some((path) => path.test(c.req.path)) &&
+/** The requests that may send a Thing's photo (ADR 0020). */
+const THING_PHOTO_REQUESTS: readonly FormRequest[] = THING_PHOTO_ROUTES.map(
+  ({ method, route }) => ({ method, path: pathOf(route) }),
+);
+
+/** Whether a request is a multipart form sent as one of these requests. */
+const formTo = (c: Context, requests: readonly FormRequest[]) =>
+  requests.some(({ method, path }) => c.req.method === method && path.test(c.req.path)) &&
   (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
 
 /** Whether a request is a message sent with files attached (#78). */
-const sendsMessageFiles = (c: Context) => formTo(c, MESSAGE_PATHS);
+const sendsMessageFiles = (c: Context) => formTo(c, MESSAGE_REQUESTS);
 
-/** Whether a request is a Thing's photo, uploaded (ADR 0020). */
-const sendsThingPhoto = (c: Context) => formTo(c, [THING_PHOTO_PATH]);
+/** Whether a request sends a Thing's photo, on its own or with the form's fields (ADR 0020). */
+const sendsThingPhoto = (c: Context) => formTo(c, THING_PHOTO_REQUESTS);
 
 /** Whether a request takes files: a message's, or a Thing's photo. */
 const takesFiles = (c: Context) => sendsMessageFiles(c) || sendsThingPhoto(c);

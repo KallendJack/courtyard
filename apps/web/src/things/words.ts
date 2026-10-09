@@ -1,4 +1,4 @@
-import type { ThingSave, ThingStatus, ThingSummary } from "@courtyard/contract";
+import { THING_DETAILS, type ThingSave, ThingStatus, type ThingSummary } from "@courtyard/contract";
 
 // How a Thing's fields read to the owner (ADR 0020).
 
@@ -31,12 +31,18 @@ export const boughtFromWords = (typed: string) => {
   return /^\d{1,2}$/.test(day) ? `${monthPart}-${day.padStart(2, "0")}` : typed.trim();
 };
 
-/** Each status as the owner reads it, in the filter's order. */
+/** Each status as the owner reads it. */
 export const STATUS_WORDS: Readonly<Record<ThingStatus, string>> = {
   have: "Have",
   want: "Want",
   replace: "Replace",
 };
+
+/** Each status as a choice, in the contract's order: the form's Status and the section's filter. */
+export const STATUS_CHOICES = ThingStatus.options.map((status) => ({
+  value: status,
+  label: STATUS_WORDS[status],
+}));
 
 /**
  * A Thing's details on one line, for its row: its brand, when it was bought, its price and where
@@ -65,16 +71,14 @@ export const thingSaveWords = (save: ThingSave) => {
     ...(save.action === "add" && fields.status !== undefined ? [fields.status] : []),
     ...(save.action === "change" && fields.name !== undefined ? [`now ${fields.name}`] : []),
     ...(save.action === "change" && fields.status !== undefined ? [fields.status] : []),
-    ...(["brand", "bought", "price", "condition", "size", "where", "partOf"] as const).flatMap(
-      (field) => {
-        const value = fields[field];
-        if (value === undefined) return [];
-        const named = field === "partOf" ? "part of" : field;
-        if (value === null) return [`no ${named}`];
-        if (field === "bought") return [`bought ${boughtInWords(value)}`];
-        return [field === "partOf" ? `part of ${value}` : value];
-      },
-    ),
+    ...([...THING_DETAILS, "partOf"] as const).flatMap((field) => {
+      const value = fields[field];
+      if (value === undefined) return [];
+      const named = field === "partOf" ? "part of" : field;
+      if (value === null) return [`no ${named}`];
+      if (field === "bought") return [`bought ${boughtInWords(value)}`];
+      return [field === "partOf" ? `part of ${value}` : value];
+    }),
     ...(save.photo ? ["new photo"] : []),
   ];
   const parts = [

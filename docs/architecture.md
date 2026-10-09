@@ -93,7 +93,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   removes one as one change through `context-folder/` (its photo with it), keeps a photo resized with `sharp`
   (`keptPhoto`), and one turn's Things tool, which labels the Things as the turn showed them and refuses a change to
   one changed since. Its routes are a workspace's Things, each Thing, and its photo
-  (`/api/workspaces/:id/things/:slug/photo`, a multipart upload, the only one besides a message's).
+  (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
+  with the fields, as one multipart form, so both are one change with one Undo; these and the
+  photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
+- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
+  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
+  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
+  for the refusals they share.
 - **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
   `context-file/` and `context-folder/`.
 - **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and
@@ -147,8 +153,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
 
-- **`http.ts`:** reads a request's body with a contract schema (a message with files attached as a multipart form,
-  `readMessage`), and turns errors into answers.
+- **`http.ts`:** reads a request's body with a contract schema (JSON with files as a multipart form,
+  `readWithFiles`: a message's attachments with `readMessage`, a Thing's photo with its form), and turns errors into
+  answers.
 - **`files.ts`:** reads, writes (making the folder, with `writeTextFileIn`) and removes files, and JSON checked with
   a schema.
 - **`git.ts`:** runs git, never stopping to ask for a password.
@@ -163,8 +170,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
   workspaces down the side or across the top; the rest are pages.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
-  offline worker or a refusal comes back as a value to show. **`worker-watch.ts`** checks the worker's health while a
-  page needs it.
+  offline worker or a refusal comes back as a value to show. **`send-form.ts`**, beside it so it's not on the first
+  load, sends a multipart form (a message's files, a Thing's photo) the same way. **`worker-watch.ts`** checks the
+  worker's health while a page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
     revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced
@@ -221,10 +229,13 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
-  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
+  heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
+  the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
-  runs after each build to stamp the service worker and check the first-load budget. `vite.config.ts` keeps everything
+  runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
+  keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
   the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
   shares with the first load, such as React and Zod, into files of their own.
 
@@ -314,7 +325,8 @@ Where the rest fits:
   and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
   (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
-  files in another (the only requests that aren't JSON, and the only ones allowed past the small body limit).
+  files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
+  small body limit).
   `attachments/` checks them and keeps them in the session's folder; the owner message's event records each one, and
   the browser shows them from the attachment route. Each turn carries the session's last ten: `prompts/` puts each
   PDF's text in the message and lists the photos, which each provider sends its own way (below). They go with their

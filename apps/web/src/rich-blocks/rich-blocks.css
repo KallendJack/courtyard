@@ -7,6 +7,8 @@
  */
 @reference "../styles.css";
 @source "./**/*.tsx";
+/* The shared piece only a rich block uses: a table heading's sort button. */
+@source "../components/sort-button.tsx";
 
 :where([data-rich-block]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

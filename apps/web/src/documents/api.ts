@@ -7,9 +7,9 @@ import {
   DocumentSlug,
   type SaveAsDocument,
   type SessionId,
+  Undone,
   WorkspaceId,
 } from "@courtyard/contract";
-import { z } from "zod";
 import { fromWorker, NOT_FOUND, sendJson } from "../worker.ts";
 
 // Documents' calls live with documents rather than in worker.ts, so their schemas stay off the
@@ -65,5 +65,5 @@ export const undoDocumentSave = (sessionId: SessionId, save: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/documents/${save}/undo`,
     body: {},
-    schema: z.unknown(),
+    schema: Undone,
   });

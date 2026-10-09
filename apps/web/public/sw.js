@@ -6,7 +6,10 @@
 // files under its own name, and the previous build's are cleared once this one takes over.
 
 const BUILD = "__COURTYARD_BUILD__";
-/** Every file the app is made of, kept on install so pages not yet opened work offline too. */
+/**
+ * Every file the app is made of, kept on install so pages not yet opened work offline too; all but
+ * Mermaid's, which are kept once a diagram needs them, like any file fetched.
+ */
 const FILES = /* __COURTYARD_FILES__ */ [];
 
 const CACHE = `courtyard-app-${BUILD}`;

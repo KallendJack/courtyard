@@ -49,12 +49,13 @@ const clean = (element: Element) => {
  * already made it safe, but not to load nothing, so this takes away whatever could still run
  * script, load something or go somewhere: links (keeping their words), pictures, foreign content,
  * event handlers, addresses and CSS that names anything outside the drawing. It's drawn at its own
- * size, so a wide diagram scrolls sideways rather than shrinking to fit.
+ * size, so a wide diagram scrolls sideways rather than shrinking to fit. `undefined` when the
+ * markup holds no drawing to show: one that isn't well-formed SVG, say.
  */
-export const cleanDiagram = (markup: string, id: string): SVGSVGElement => {
+export const cleanDiagram = (markup: string, id: string): SVGSVGElement | undefined => {
   const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
   const svg = parsed.getElementById(id);
-  if (!(svg instanceof SVGSVGElement)) throw new Error("Mermaid drew no diagram");
+  if (!(svg instanceof SVGSVGElement)) return undefined;
   clean(svg);
   const { width, height } = svg.viewBox.baseVal;
   svg.removeAttribute("style");

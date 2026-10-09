@@ -5,6 +5,7 @@ import {
   RecentChanges,
   type SessionEvent,
   SessionSummary,
+  THING_FORM_FIELD,
   THING_PHOTO_FIELD,
   ThingChanged,
   ThingDeleted,
@@ -259,6 +260,20 @@ const uploadPhoto = (request: Requester, slug: string, file: File) => {
 
 const photoFile = () => readFile(join(thingsDir(), "photos", "chain.jpg"));
 
+/** Adds or changes a Thing from the form with a photo, the way the web app does: one multipart form. */
+const sendThingWithPhoto = (
+  request: Requester,
+  method: "POST" | "PUT",
+  path: string,
+  thing: unknown,
+  photo: File,
+) => {
+  const form = new FormData();
+  form.set(THING_FORM_FIELD, JSON.stringify(thing));
+  form.set(THING_PHOTO_FIELD, photo);
+  return request(`/api/workspaces/mountain-biking/${path}`, { method, body: form });
+};
+
 describe("a Thing's photo", () => {
   it("is uploaded, kept resized as a JPEG beside the Thing, which points at it, and served", async () => {
     await withKit();
@@ -305,6 +320,85 @@ describe("a Thing's photo", () => {
     expect((await undoChange(request, second.change ?? "")).status).toBe(204);
 
     expect((await photoFile()).equals(first)).toBe(true);
+  });
+
+  it("comes with a Thing added from the form, as one change", async () => {
+    await withKit();
+    const request = await owner();
+    const photo = new File([BIG_PHOTO], "pump.png", { type: "image/png" });
+
+    const added = await sendThingWithPhoto(
+      request,
+      "POST",
+      "things",
+      { name: "Pump", status: "want" },
+      photo,
+    );
+
+    expect(added.status).toBe(201);
+    expect(ThingChanged.parse(await added.json()).thing).toMatchObject({
+      slug: "pump",
+      photo: true,
+    });
+    expect(await thingFile("pump")).toBe(
+      "---\nname: Pump\nstatus: want\nphoto: photos/pump.jpg\n---\n",
+    );
+    const changes = await changesIn(contextDir);
+    expect(changes[0]).toEqual({
+      title: "Add Thing: Pump",
+      trailers: [
+        "Courtyard-Change: thing",
+        "Courtyard-Place: workspace/mountain-biking",
+        "Courtyard-File: mountain-biking/things/pump.md",
+        "Courtyard-File: mountain-biking/things/photos/pump.jpg",
+      ],
+    });
+    expect(changes[1]?.title).not.toBe("Add Thing: Pump");
+  });
+
+  it("comes with a Thing changed from the form, fields and photo as one change, which one Undo takes back", async () => {
+    await withKit();
+    const request = await owner();
+    const photo = new File([BIG_PHOTO], "chain.png", { type: "image/png" });
+
+    const changed = await sendThingWithPhoto(
+      request,
+      "PUT",
+      "things/chain",
+      {
+        name: "Chain",
+        status: "replace",
+        brand: "KMC X11",
+        bought: "2026-03",
+        partOf: "whyte-t-140",
+      },
+      photo,
+    );
+
+    expect(changed.status).toBe(200);
+    const saved = ThingChanged.parse(await changed.json());
+    expect(saved.thing).toMatchObject({ status: "replace", photo: true });
+    expect((await changesIn(contextDir))[0]?.title).toBe("Change Thing: Chain");
+    expect((await undoChange(request, saved.change ?? "")).status).toBe(204);
+    expect(await thingFile("chain")).toBe(CHAIN);
+    await expect(photoFile()).rejects.toThrow();
+  });
+
+  it("comes with an edit that changes no field, as a change of the photo alone", async () => {
+    await withKit();
+    const request = await owner();
+    const photo = new File([BIG_PHOTO], "chain.png", { type: "image/png" });
+
+    const changed = await sendThingWithPhoto(
+      request,
+      "PUT",
+      "things/chain",
+      { name: "Chain", status: "have", brand: "KMC X11", bought: "2026-03", partOf: "whyte-t-140" },
+      photo,
+    );
+
+    expect(changed.status).toBe(200);
+    expect(ThingChanged.parse(await changed.json()).thing.photo).toBe(true);
   });
 
   it("refuses a file that isn't a photo, or isn't the kind it says", async () => {

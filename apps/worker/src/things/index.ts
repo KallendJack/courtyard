@@ -2,7 +2,6 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ChangeId,
-  type SessionId,
   THING_DETAILS,
   THING_HISTORY_MAX_CHARACTERS,
   type ThingChange,
@@ -14,13 +13,10 @@ import {
   ThingSlug,
   ThingStatus,
   type ThingSummary,
-  type WorkspaceId,
 } from "@courtyard/contract";
 import sharp from "sharp";
 import { z } from "zod";
 import {
-  type ChangeNote,
-  type ContextFolder,
   sameFileText,
   undoWholeFiles,
   type WholeFile,
@@ -35,13 +31,15 @@ import {
   writeBytesIn,
   writeTextFileIn,
 } from "../files.ts";
-import { err, ok, type Result } from "../result.ts";
 import {
-  getWorkspace,
-  plainName,
-  RESERVED_ON_WINDOWS,
-  type WorkspaceError,
-} from "../workspaces/index.ts";
+  type PlanningFilesTarget,
+  type PlanningFolderRefusal,
+  pathInWorkspace,
+  planningChange,
+  planningFolder,
+  slugFor,
+} from "../planning-files/index.ts";
+import { err, ok, type Result } from "../result.ts";
 
 /**
  * A workspace's Things (ADR 0020): the owner's kit, a Markdown file each in its `things` folder,
@@ -60,23 +58,9 @@ export const thingPath = (slug: ThingSlug) => `${THINGS_FOLDER}/${slug}.md`;
 /** A Thing's photo, as its front matter names it: beside it, in the photos folder. */
 const photoName = (slug: ThingSlug) => `${PHOTOS_FOLDER}/${slug}.jpg`;
 
-/** A path from the context folder's top, as changes name it. */
-const pathInFolder = (workspaceId: WorkspaceId, path: string) => `${workspaceId}/${path}`;
-
-/** Where Things are kept: the context folder, and the session a change comes from, if any. */
-export type ThingTarget = {
-  readonly contextDir: string;
-  readonly contextFolder: ContextFolder;
-  readonly workspaceId: WorkspaceId;
-  readonly sessionId?: SessionId;
-};
-
 /** Why a Thing wasn't saved, removed or read. */
 export type ThingRefusal =
-  /** The workspace can't be read, or isn't there. */
-  | { readonly kind: "workspace"; readonly error: WorkspaceError }
-  /** Only planning workspaces keep Things (ADR 0020). */
-  | { readonly kind: "code-workspace" }
+  | PlanningFolderRefusal
   /** A field doesn't fit: too long, more than one line, a date that isn't one, and so on. */
   | { readonly kind: "invalid"; readonly problem: string }
   /** A new Thing needs a name and a status. */
@@ -102,16 +86,6 @@ export type ThingRefusal =
   /** A photo that can't be read as one. */
   | { readonly kind: "bad-photo" }
   | { readonly kind: "storage" };
-
-/** A planning workspace's folder, or why it can't keep Things. */
-const thingsWorkspace = async (
-  target: Pick<ThingTarget, "contextDir" | "workspaceId">,
-): Promise<Result<string, ThingRefusal>> => {
-  const workspace = await getWorkspace(target.contextDir, target.workspaceId);
-  if (!workspace.ok) return err({ kind: "workspace", error: workspace.error });
-  if (workspace.value.summary.mode !== "planning") return err({ kind: "code-workspace" });
-  return ok(workspace.value.folder);
-};
 
 /** A Thing's file, or its photo, on the worker machine. */
 const fileOf = (folder: string, slug: ThingSlug) => join(folder, THINGS_FOLDER, `${slug}.md`);
@@ -177,18 +151,6 @@ const thingText = (fields: ThingFields, history: readonly ThingHistoryEntry[]) =
   });
   const lines = history.map(({ date, text }) => `- ${date === null ? "" : `${date}: `}${text}`);
   return `---\n${front.join("\n")}\n---\n${lines.length === 0 ? "" : `\n${lines.join("\n")}\n`}`;
-};
-
-/** The longest a Thing's file name gets, cut at a word. */
-const SLUG_MAX = 60;
-
-/** The file name for a Thing called `name`, or `undefined` when it has no letter or digit. */
-const slugFor = (name: string): ThingSlug | undefined => {
-  let plain = plainName(name);
-  if (plain.length > SLUG_MAX) plain = plain.slice(0, SLUG_MAX).replace(/-[^-]*$/, "");
-  if (RESERVED_ON_WINDOWS.test(plain)) plain = `${plain}-thing`;
-  const slug = ThingSlug.safeParse(plain);
-  return slug.success ? slug.data : undefined;
 };
 
 /** A Thing as read from its file: what lists show, its history and its file's text. */
@@ -269,15 +231,15 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
 
 /** A planning workspace's Things, in list order, and the files that aren't Things as written. */
 export const readThings = async (
-  target: Pick<ThingTarget, "contextDir" | "workspaceId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
 ): Promise<Result<ReadThings, ThingRefusal>> => {
-  const folder = await thingsWorkspace(target);
+  const folder = await planningFolder(target);
   return folder.ok ? readThingsIn(folder.value) : folder;
 };
 
 /** One Thing for its card, its history newest first. */
 export const getThing = async (
-  target: Pick<ThingTarget, "contextDir" | "workspaceId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
   slug: ThingSlug,
 ): Promise<Result<ReadThing, ThingRefusal>> => {
   const read = await readThings(target);
@@ -288,10 +250,10 @@ export const getThing = async (
 
 /** A Thing's photo, as kept: `undefined` when it has none. */
 export const thingPhoto = async (
-  target: Pick<ThingTarget, "contextDir" | "workspaceId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
   slug: ThingSlug,
 ): Promise<Result<string | undefined, ThingRefusal>> => {
-  const folder = await thingsWorkspace(target);
+  const folder = await planningFolder(target);
   if (!folder.ok) return folder;
   const there = await exists(photoOf(folder.value, slug));
   if (!there.ok) return err({ kind: "storage" });
@@ -377,25 +339,13 @@ const fieldsChanged = (
   return changed;
 };
 
-/** A change to Things, described for the context folder's history. */
-const thingChange = (
-  target: ThingTarget,
-  change: { title: string; paths: readonly string[] },
-): ChangeNote => ({
-  kind: "thing",
-  title: change.title,
-  places: [{ kind: "workspace", id: target.workspaceId }],
-  ...(target.sessionId === undefined ? {} : { session: target.sessionId }),
-  files: [...new Set(change.paths.map((path) => pathInFolder(target.workspaceId, path)))],
-});
-
 /**
  * Adds, changes or removes one Thing, as one change: its file, and its photo with it. `check` is
  * given the Thing's file as it is now, and refuses the change by returning a refusal (one the model
  * hasn't seen as it is, say).
  */
 export const saveThing = async (
-  target: ThingTarget,
+  target: PlanningFilesTarget,
   edit: ThingEdit,
   options: { now: number; check?: (now: ReadThing) => ThingRefusal | undefined },
 ): Promise<Result<ThingSaved, ThingRefusal>> => {
@@ -403,7 +353,7 @@ export const saveThing = async (
   const paths: string[] = [];
   const saved = await target.contextFolder.changeWithId(
     async (): Promise<Result<{ save: ThingSave; text: string | null }, ThingRefusal>> => {
-      const folder = await thingsWorkspace(target);
+      const folder = await planningFolder(target);
       if (!folder.ok) return folder;
       const read = await readThingsIn(folder.value);
       if (!read.ok) return read;
@@ -451,7 +401,8 @@ export const saveThing = async (
       if (merged.name === undefined || merged.status === undefined) {
         return err({ kind: "incomplete" });
       }
-      const slug = current?.summary.slug ?? slugFor(merged.name);
+      const slug =
+        current?.summary.slug ?? slugFor(merged.name, { slug: ThingSlug, kind: "thing" });
       if (slug === undefined) {
         return err({ kind: "invalid", problem: "Its name needs a letter or a digit." });
       }
@@ -517,7 +468,7 @@ export const saveThing = async (
         text,
       });
     },
-    () => thingChange(target, { title, paths }),
+    () => planningChange(target, { kind: "thing", title, paths }),
   );
   return saved.ok
     ? ok({ save: saved.value.value.save, text: saved.value.value.text, change: saved.value.id })
@@ -532,7 +483,7 @@ export type ThingUndoRefusal = WholeFilesUndoRefusal;
  * photo included, goes back as it was, unless it's changed since.
  */
 export const undoThingChange = (
-  target: Pick<ThingTarget, "contextDir" | "contextFolder" | "sessionId">,
+  target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder" | "sessionId">,
   id: ChangeId,
 ) => undoWholeFiles(target, { id, kinds: ["thing"] });
 
@@ -550,8 +501,8 @@ const slugOfPath = (path: string): ThingSlug | undefined => {
 export const thingChangeOf = (
   files: readonly WholeFile[],
 ): { thing: ThingChange; path: string | null } => {
-  const file = files.find((one) => slugOfPath(one.path.split("/").slice(1).join("/")));
-  const slug = file && (slugOfPath(file.path.split("/").slice(1).join("/")) ?? null);
+  const file = files.find((one) => slugOfPath(pathInWorkspace(one.path)));
+  const slug = file && (slugOfPath(pathInWorkspace(file.path)) ?? null);
   const nameIn = (text: string | null) => {
     const read = text === null ? undefined : readThingText(text);
     return read?.ok ? read.value.fields.name : undefined;
@@ -566,7 +517,7 @@ export const thingChangeOf = (
 
 /** Whether a change's files are a Thing's (rather than a document's). */
 export const isThingChange = (files: readonly Pick<WholeFile, "path">[]) =>
-  files.some(({ path }) => path.split("/")[1] === THINGS_FOLDER);
+  files.some(({ path }) => pathInWorkspace(path).startsWith(`${THINGS_FOLDER}/`));
 
 /** A Thing with the label a model knows it by (`T1`), in list order. */
 export type LabelledThing = { readonly label: string; readonly thing: ThingSummary };
@@ -582,24 +533,38 @@ const asLabel = (raw: string) =>
     .replace(/^\[(.*)\]$/, "$1")
     .toUpperCase();
 
-/** What a model sends the Things tool, checked like anything else a model sends. */
-const ThingRequest = z
-  .object({
-    thing: z.string().optional(),
-    remove: z.boolean().optional(),
-    name: z.string().optional(),
-    status: ThingStatus.optional(),
-    brand: z.string().optional(),
-    bought: z.string().optional(),
-    price: z.string().optional(),
-    condition: z.string().optional(),
-    size: z.string().optional(),
-    where: z.string().optional(),
-    part_of: z.string().optional(),
-    history: z.string().optional(),
-    photo: z.number().int().optional(),
-  })
-  .strict();
+/**
+ * What a model sends the Things tool, checked like anything else a model sends. Besides these, it
+ * may send any of a Thing's details (`THING_DETAILS`) as text, blank to clear it, and nothing
+ * else: `detailsSent` checks those.
+ */
+const ThingRequest = z.looseObject({
+  thing: z.string().optional(),
+  remove: z.boolean().optional(),
+  name: z.string().optional(),
+  status: ThingStatus.optional(),
+  part_of: z.string().optional(),
+  history: z.string().optional(),
+  photo: z.number().int().optional(),
+});
+
+/** A detail as a model sends it: any text, blank to clear it. */
+const DetailSent = z.string();
+
+/**
+ * The details a Things tool call sets, `null` for one it clears; `undefined` when it sends
+ * anything that isn't one of a Thing's details as text.
+ */
+const detailsSent = (rest: Readonly<Record<string, unknown>>) => {
+  const details: { [K in ThingDetailName]?: string | null } = {};
+  for (const [key, value] of Object.entries(rest)) {
+    const detail = THING_DETAILS.find((one) => one === key);
+    const text = DetailSent.safeParse(value);
+    if (detail === undefined || !text.success) return undefined;
+    details[detail] = text.data.trim() === "" ? null : text.data;
+  }
+  return details;
+};
 
 /** Why the Things tool didn't save: the input doesn't fit, a label or photo is wrong, or it was refused. */
 export type ThingToolRefusal =
@@ -629,7 +594,7 @@ export type ThingToolSaved = ThingSaved & { readonly label: string | undefined }
  * now, labelled afresh.
  */
 export const createTurnThings = (
-  target: ThingTarget & {
+  target: PlanningFilesTarget & {
     /** The Things as the turn's instructions listed them. */
     readonly shown: readonly ReadThing[];
     /** The photos that come with the turn's message, Image 1 first, by their files. */
@@ -649,21 +614,20 @@ export const createTurnThings = (
   return async (raw: unknown): Promise<Result<ThingToolSaved, ThingToolRefusal>> => {
     const request = ThingRequest.safeParse(raw);
     if (!request.success) return err({ kind: "malformed" });
-    const { thing, remove, part_of, history, photo, ...set } = request.data;
+    const { thing, remove, name, status, part_of, history, photo, ...rest } = request.data;
+    const details = detailsSent(rest);
+    if (details === undefined) return err({ kind: "malformed" });
     const label = thing === undefined || thing.trim() === "" ? undefined : asLabel(thing);
     const slug = label === undefined ? undefined : labels.get(label);
     if (label !== undefined && slug === undefined) return err({ kind: "unknown-label", label });
     if (label === undefined && remove) return err({ kind: "malformed" });
 
-    const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {};
-    for (const [field, value] of Object.entries(set)) {
-      if (value === undefined) continue;
-      const cleared = typeof value === "string" && value.trim() === "";
-      if (field === "name" || field === "status") {
-        if (cleared) return err({ kind: "incomplete" });
-      }
-      Object.assign(fields, { [field]: cleared ? null : value });
-    }
+    if (name?.trim() === "") return err({ kind: "incomplete" });
+    const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {
+      ...(name === undefined ? {} : { name }),
+      ...(status === undefined ? {} : { status }),
+      ...details,
+    };
     if (part_of !== undefined) {
       const parentLabel = asLabel(part_of);
       const parent = parentLabel === "" ? null : labels.get(parentLabel);

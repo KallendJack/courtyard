@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { themeColour } from "./theme.ts";
 
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
@@ -273,12 +274,15 @@ test.describe("charts", () => {
       await expect(chart.locator("svg text", { hasText: new RegExp(`^${text}$`) })).not.toHaveCount(
         0,
       );
-    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill("rgb(106, 63, 110)"));
+    const heather = await themeColour(page, "primary");
+    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill(heather));
     await expect(session.locator("[aria-live]").last()).toContainText("That's the lot.");
     expect(chartCode().length).toBe(1);
 
     await page.emulateMedia({ colorScheme: "dark" });
-    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill("rgb(142, 94, 147)"));
+    const darkHeather = await themeColour(page, "primary");
+    expect(darkHeather).not.toBe(heather);
+    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill(darkHeather));
   });
 
   test("a line chart draws each series in its own colour, named in a legend", async ({ page }) => {
@@ -300,8 +304,8 @@ test.describe("charts", () => {
     await expect(chart.locator("svg polyline")).toHaveCount(2);
     // Heather, then slate.
     expect(await coloursOf(chart.locator("svg polyline"), "stroke")).toEqual([
-      "rgb(106, 63, 110)",
-      "rgb(94, 110, 126)",
+      await themeColour(page, "primary"),
+      await themeColour(page, "workspace-slate"),
     ]);
     // A dot on every value, and each line's latest value written at its end.
     await expect(chart.locator("svg circle")).toHaveCount(8);
@@ -320,10 +324,11 @@ test.describe("charts", () => {
     );
     const chart = session.getByRole("figure", { name: "Pie chart" });
     await expect(chart.locator("svg [data-series]")).toHaveCount(3);
+    // Heather, slate, then moss.
     expect(await coloursOf(chart.locator("svg [data-series]"), "fill")).toEqual([
-      "rgb(106, 63, 110)",
-      "rgb(94, 110, 126)",
-      "rgb(124, 143, 90)",
+      await themeColour(page, "primary"),
+      await themeColour(page, "workspace-slate"),
+      await themeColour(page, "workspace-moss"),
     ]);
     await expect(chart.getByRole("listitem")).toHaveText([
       "Drivetrain18562%",

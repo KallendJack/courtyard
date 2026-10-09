@@ -76,14 +76,19 @@ const configure = (dark: boolean) => {
 /** The last diagram asked for, so diagrams draw one at a time: Mermaid's settings are shared. */
 let queue: Promise<unknown> = Promise.resolve();
 
-/** A diagram drawn from its source, cleaned, ready to show; rejects when it can't be drawn. */
+/** A diagram drawn from its source, cleaned, ready to show; `undefined` when it can't be drawn. */
 const draw = (options: { id: string; source: string; dark: boolean }) => {
   const drawing = queue.then(async () => {
-    configure(options.dark);
-    const { svg } = await mermaid.render(options.id, options.source);
-    return cleanDiagram(svg, options.id);
+    try {
+      configure(options.dark);
+      const { svg } = await mermaid.render(options.id, options.source);
+      return cleanDiagram(svg, options.id);
+    } catch {
+      // Mermaid can't read the source, or can't draw what it read.
+      return undefined;
+    }
   });
-  queue = drawing.catch(() => undefined);
+  queue = drawing;
   return drawing;
 };
 
@@ -103,14 +108,15 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
   useEffect(() => {
     if (arriving) return;
     let current = true;
-    draw({ id, source, dark }).then(
-      (svg) => {
-        if (!current) return;
-        holder.current?.replaceChildren(svg);
-        setDrawn(asked);
-      },
-      () => current && setFailed(asked),
-    );
+    void draw({ id, source, dark }).then((svg) => {
+      if (!current) return;
+      if (svg === undefined) {
+        setFailed(asked);
+        return;
+      }
+      holder.current?.replaceChildren(svg);
+      setDrawn(asked);
+    });
     return () => {
       current = false;
     };

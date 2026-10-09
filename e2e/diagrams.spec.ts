@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { themeColour } from "./theme.ts";
 
 // Diagrams (ADR 0021): a `mermaid` block in an answer or a document, drawn by Mermaid, loaded only
 // when one is there, with nothing in the diagram able to run script or load anything.
@@ -133,7 +134,7 @@ test("nothing in a diagram can run script or load anything", async ({ page, base
   // Its own settings changed nothing: Moorland's colours, not the diagram's.
   await expect(diagrams.first().locator(".node rect").first()).toHaveCSS(
     "fill",
-    "rgb(238, 230, 238)",
+    await themeColour(page, "accent"),
   );
 
   // Hovering and clicking every step runs nothing either.
@@ -181,12 +182,15 @@ test("a diagram is drawn in Moorland's colours, and again in dark ones when the 
     .locator(".node rect")
     .first();
   // Heather outline on a heather wash.
-  await expect(step).toHaveCSS("fill", "rgb(238, 230, 238)");
-  await expect(step).toHaveCSS("stroke", "rgb(106, 63, 110)");
+  const wash = await themeColour(page, "accent");
+  await expect(step).toHaveCSS("fill", wash);
+  await expect(step).toHaveCSS("stroke", await themeColour(page, "primary"));
 
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect(step).toHaveCSS("fill", "rgb(61, 44, 63)");
-  await expect(step).toHaveCSS("stroke", "rgb(142, 94, 147)");
+  const darkWash = await themeColour(page, "accent");
+  expect(darkWash).not.toBe(wash);
+  await expect(step).toHaveCSS("fill", darkWash);
+  await expect(step).toHaveCSS("stroke", await themeColour(page, "primary"));
 });
 
 test("a document's diagrams are drawn on its page, as in an answer", async ({ page }) => {

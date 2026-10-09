@@ -24,6 +24,7 @@ export {
   RecentChangeKind,
   RecentChanges,
   RecentChangeUndo,
+  Undone,
 } from "./lib/changes.ts";
 export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
 export {
@@ -105,6 +106,7 @@ export {
 export {
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,
+  THING_FORM_FIELD,
   THING_HISTORY_MAX_CHARACTERS,
   THING_PHOTO_FIELD,
   ThingBought,
