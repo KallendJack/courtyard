@@ -139,6 +139,18 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), and Undo
   of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
   (`POST /api/sessions/:id/things/:save/undo`).
+- **`code/`:** code sessions' git and what they may do
+  ([ADR 0007](adr/0007-code-sessions-work-on-a-session-branch-in-its-own-worktree.md)). Starts a session's session
+  branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
+  for GitHub), freshly fetched, in its own worktree in the data folder, so the owner's checkout is never touched; or
+  says why it can't (the repository missing, not git, or its remote unreachable). Decides each edit (inside the
+  worktree once symlinks are followed, never git's own `.git` file there) and each command: `allowlist.ts` is the
+  command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
+  command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
+  refused, and committing needs the worktree on the session branch. The default allowlist is the package scripts,
+  git and gh commands that only look, and adding and committing; pushing and the session's own PR join it with the
+  GitHub sign-in. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
+  command, which records each one allowed as an activity and words each refusal through `prompts/`.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -324,6 +336,12 @@ Where the rest fits:
   page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each search
   and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
   (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
+- **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
+  session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
+  `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
+  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
+  as an activity (`edited-file`, `ran-command`); anything else is refused with the reason, for now (approvals come
+  next, #171).
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).
@@ -373,8 +391,11 @@ things live only in the worker's memory and go when it restarts.
 
 **The data folder** (`COURTYARD_DATA_DIR`):
 
-- `sessions/<session>/`: `session.json` (title and times), `events.jsonl` (the event log) and `attachments/`: each
-  photo or PDF the owner attached, by its id, and each PDF's text beside it.
+- `sessions/<session>/`: `session.json` (title and times, and a code session's branch), `events.jsonl` (the event
+  log) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
+- `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
+  (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
+  a fresh start, until clearing it away is built (with pull requests, #169).
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
@@ -450,14 +471,18 @@ Everything Courtyard's models read is built in one place, from written rules, an
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
     machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
     message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
-    and `WebFetch`, confined as ADR 0019 says.
+    and `WebFetch`, confined as ADR 0019 says. In a code session it works in the session branch's worktree with
+    `Edit`, `Write` and `Bash` as well, and loads the repository's own project settings (its `CLAUDE.md` or
+    `AGENTS.md`) and only the repository's own skills, still none of the machine's setup
+    ([ADR 0022](adr/0022-code-sessions-follow-the-repositorys-own-claude-code-setup.md)).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
     [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
-    says which attachments it was given ("please look").
+    says which attachments it was given ("please look"). In a code session it edits a file ("edit file …") and runs
+    a command ("run command: …") when the worker allows, and says why when it doesn't; Fake two doesn't code.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
   never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).

@@ -148,6 +148,27 @@ is ready (it checks every few hours), or run:
 - **The result** is written to `live-update.json` in the data folder, and the home page shows it.
   From the button, the update's output goes to `live-update.log` there too.
 
+### Code workspaces
+
+Being built ([milestone 7](https://github.com/KallendJack/courtyard/milestone/7)). To make a
+workspace a code workspace, give its folder a `workspace.json` naming the repository on the worker
+machine:
+
+```json
+{ "mode": "code", "repoPath": "/path/to/repo" }
+```
+
+- **The repository needs an `origin` remote** (its GitHub copy): each session starts its own
+  branch, `courtyard/…`, from `origin`'s default branch, freshly fetched, in its own worktree in
+  the data folder's `worktrees/`. Your own checkout is never touched.
+- **Only a model that can code works there** (Claude, for now); others are refused, saying so.
+- **Without asking,** a session edits files in its worktree and runs the package scripts
+  (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
+  git and gh commands that only look, and `git add` and `git commit` on its branch. Anything else
+  is refused with the reason, for now: approvals come next.
+- **A finished session's worktree stays** for now, even once the session is deleted. Remove it
+  with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
+
 ## Settings
 
 Every setting, and what it does, is in [`.env.example`](.env.example). Copy it to `.env` in the live copy and fill it in.
@@ -169,6 +190,11 @@ to other people, so everyone who runs Courtyard signs in with their own. Set
 
 Each session sees only its own workspace's folder: none of the machine's Claude Code settings,
 memory, skills or connectors, and in planning workspaces it can only read.
+
+In a code workspace (see [Code workspaces](#code-workspaces)), Claude also follows the
+repository's own Claude Code setup: its `CLAUDE.md` (or the `AGENTS.md` it points to), its
+`.claude/settings.json` and its `.claude/skills`, read from the session's own worktree. Still
+none of the machine's own.
 
 
 ### Codex
