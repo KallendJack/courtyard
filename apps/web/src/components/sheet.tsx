@@ -39,7 +39,7 @@ export function Sheet(props: {
       {open && (
         <div className="flex flex-col gap-4 px-4 pt-2.5 pb-6">
           <span aria-hidden className="h-1 w-9 self-center rounded-full bg-border" />
-          <h2 className="font-display text-lg/tight font-semibold">{props.title}</h2>
+          <h2 className="display-section text-lg/tight">{props.title}</h2>
           <div className="flex flex-col gap-3">{props.children}</div>
           <div className="flex justify-end">
             <Button onClick={props.onClose}>Done</Button>

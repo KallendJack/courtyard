@@ -87,12 +87,12 @@ test("code is coloured by language from the theme, light and dark", async ({ pag
 
   // The workspace colours as they are.
   await page.emulateMedia({ colorScheme: "dark" });
-  expect(await looksOf(token("def"))).toEqual({ colour: "rgb(201, 155, 203)", italic: false });
-  expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(138, 155, 172)", italic: false });
+  expect(await looksOf(token("def"))).toEqual({ colour: "rgb(183, 132, 187)", italic: false });
+  expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(159, 178, 198)", italic: false });
   expect(await looksOf(token("30"))).toEqual({ colour: "rgb(201, 162, 107)", italic: false });
-  expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(157, 176, 122)", italic: false });
+  expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(169, 188, 133)", italic: false });
   expect(await looksOf(token("# sets, reps and kg"))).toEqual({
-    colour: "rgb(167, 158, 164)",
+    colour: "rgb(140, 140, 140)",
     italic: true,
   });
 });

@@ -11,21 +11,24 @@
 @source not "./components/sort-button.tsx";
 
 /*
- * Moorland: Courtyard's theme, from the Paper design chosen in issue #2. Every colour, font and
- * radius the app uses is defined here once; components use the names, never the values.
- * Dark mode follows the device's own setting.
+ * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components
+ * use the names, never the values. Dark mode follows the device's own setting:
+ * - by day, Moorland, from the Paper design chosen in issue #2;
+ * - by night, Handheld, from the Paper boards "Handheld ·": black, violet for what's live or
+ *   chosen, gold for what needs the owner, and heavy Figtree headings. The owner uses dark mode.
  */
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-display: var(--display-face);
   --font-heading: var(--font-display);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-surface: var(--surface);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -73,10 +76,17 @@
 :root {
   --radius: 10px;
 
+  /* Headings: Fraunces, a page title lighter than a section's. */
+  --display-face: "Fraunces Variable", ui-serif, Georgia, serif;
+  --display-title-weight: 500;
+  --display-section-weight: 600;
+  --display-tracking: -0.02em;
+
   --background: #f3f0ec; /* mist: the page ground */
   --foreground: #231f22;
   --card: #fcfaf8; /* the raised session panel */
   --card-foreground: #231f22;
+  --surface: #f6f3ef; /* a card on the panel: a workspace page's sections */
   --popover: #ffffff;
   --popover-foreground: #231f22;
   --primary: #6a3f6e; /* heather: the one accent */
@@ -126,45 +136,52 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #1b181a;
-    --foreground: #eee8eb;
-    --card: #231f22;
-    --card-foreground: #eee8eb;
-    --popover: #2a2529;
-    --popover-foreground: #eee8eb;
-    --primary: #8e5e93;
+    /* Headings: heavy Figtree, a little tighter. */
+    --display-face: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+    --display-title-weight: 800;
+    --display-section-weight: 800;
+    --display-tracking: -0.03em;
+
+    --background: #070707; /* the frame round the page: the sidebar and the strip on top */
+    --foreground: #ffffff;
+    --card: #000000; /* the page itself */
+    --card-foreground: #ffffff;
+    --surface: #0b0b0b; /* a card on the page */
+    --popover: #0e0e0e;
+    --popover-foreground: #ffffff;
+    --primary: #9d6bff; /* violet: what's live or chosen */
     --primary-foreground: #ffffff;
-    --primary-text: #c99bcb;
-    --secondary: #342d32;
-    --secondary-foreground: #eee8eb;
-    --muted: #342d32;
-    --muted-foreground: #a79ea4;
-    --placeholder: #7d747a;
-    --accent: #3d2c3f;
-    --accent-foreground: #eee8eb;
-    /* The design has no dark failure colours; these keep its red readable on the dark ground. */
+    --primary-text: #b994ff;
+    --secondary: #161616;
+    --secondary-foreground: #ffffff;
+    --muted: #1c1c1c; /* the selected workspace */
+    --muted-foreground: #8c8c8c;
+    --placeholder: #6b6b6b;
+    --accent: #1a1a1a; /* charcoal: the owner's messages */
+    --accent-foreground: #ffffff;
+    /* The design has no failure colours; these keep a red readable on black. */
     --destructive: #e88a8a;
-    --destructive-foreground: #1b181a;
-    --destructive-soft: #3a2224;
+    --destructive-foreground: #000000;
+    --destructive-soft: #2a1414;
     --destructive-text: #f0c4c4;
-    --border: #352f33;
-    --input: #3a3337;
-    --field: #2a2529;
-    --ring: #c99bcb;
-    --warning: #c9a26b;
+    --border: #1f1f1f;
+    --input: #2a2a2a;
+    --field: #0e0e0e;
+    --ring: #9d6bff;
+    --warning: #ffb21e; /* gold: something being handled, or that needs the owner */
 
     --workspace-bracken: #c9a26b;
-    --workspace-heather: #c99bcb;
-    --workspace-slate: #8a9bac;
-    --workspace-moss: #9db07a;
-    --workspace-peat: #a48e7e;
+    --workspace-heather: #b784bb;
+    --workspace-slate: #9fb2c6;
+    --workspace-moss: #a9bc85;
+    --workspace-peat: #a88f7e;
 
     /* Code in answers: the workspace colours as they are. */
-    --code-keyword: #c99bcb;
-    --code-name: #8a9bac;
+    --code-keyword: #b784bb;
+    --code-name: #9fb2c6;
     --code-number: #c9a26b;
-    --code-string: #9db07a;
-    --code-comment: #a79ea4;
+    --code-string: #a9bc85;
+    --code-comment: #8c8c8c;
   }
 }
 
@@ -178,6 +195,17 @@
   @variant dark {
     color: #c9a26b;
   }
+}
+
+/* Headings in the theme's display face: a page's title, and a section's (lighter by day). */
+@utility display-title {
+  font-family: var(--display-face);
+  font-weight: var(--display-title-weight);
+  letter-spacing: var(--display-tracking);
+}
+@utility display-section {
+  font-family: var(--display-face);
+  font-weight: var(--display-section-weight);
 }
 
 @layer base {
