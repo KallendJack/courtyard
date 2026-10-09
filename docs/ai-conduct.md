@@ -158,6 +158,53 @@ A skill's text is instructions, unlike the context file's, since only the owner 
 still can't close its markers. Known limits: the owner can't make one of their own skills owner-only (the format has no
 field for it, and Claude's and Codex's own fields fail the check), and skills with scripts wait for phase 4's shell.
 
+## Grilling
+
+Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning and code workspaces alike: a
+model stress-tests a plan one question at a time, recommending an answer with each, and saves each decision as the
+owner agrees it. It's Courtyard's own, taking Matt Pocock's ideas for grilling (one question at a time, a
+recommendation with each, one thread settled before the next, looking things up rather than asking) but not his text,
+which is written for coding agents.
+
+It starts in any of the ways a skill does (Skills, above): a model loads it when the owner asks for a plan to be
+grilled, or the owner picks it, or taps **Grill this plan** beside a Plan line on a workspace's page. That starts a new
+session whose first message is the plan line, as it's written, carrying the Grilling tag. The session keeps that line
+as its title, as Get to know's does, and is answered as Get to know is (the first model that saves to context and
+isn't at its usage limit, at its default effort). Only a planning workspace's plans have it, for now: not the owner
+context's, and not a code workspace's, whose models don't save to its context file. A plan that has changed since the
+page showed it is refused, and the owner reloads.
+
+Its description, as the skills list gives it:
+
+> Stress-tests a plan, a decision or an idea by asking about it one question at a time, each with a recommended
+> answer, and saves what's agreed. Use it when the owner asks for a plan to be grilled, questioned or stress-tested.
+
+Its text, which every later turn of the session carries once it's in use:
+
+> # Grilling
+>
+> Question the owner about their plan until it's clear enough to act on: what it depends on, what could go wrong,
+> what it costs and when it happens. Their message names the plan, often word for word as a Plan line of the context
+> file.
+>
+> - **One question per message,** the one that matters most next. Settle what other decisions depend on first, and
+>   follow one thread until it's settled before starting another.
+> - **Recommend an answer** with each question: the one you'd pick and why, in a sentence or two, so the owner can
+>   just agree. If you have a tool for suggesting replies, offer your recommendation as one of them.
+> - **Don't ask what's known.** Look in the context file, the owner context and the conversation first, and ask only
+>   what they don't answer.
+> - **Save each decision as it's agreed,** with the save tool, not at the end: once the owner agrees your
+>   recommendation or gives their own answer. A decision that sharpens the plan changes the plan's line; any other
+>   becomes a new line, a plan if it's decided but not done, a fact if it's true now. Your recommendation isn't a
+>   decision until the owner agrees to it. Where you can't save to the context file, the wrap-up is the record.
+> - **Wrap up** when the owner says that's enough, or when nothing important is left to ask: the decisions made, then
+>   the questions still open. Save nothing in the wrap-up. The decisions are saved already, and an open question is
+>   saved only if the owner asks.
+
+Its saves are ordinary saves (Saving context lines, below): checked by the worker, each shown as a note with Undo.
+The eval's `grill-*` scenarios check it on both providers: the first answer asks one question with a recommendation,
+an agreed decision changes the plan's line, and the wrap-up saves nothing.
+
 ## Starter context file
 
 Built with #24. A workspace added from the app starts with a context file from a template (`createWorkspace` in

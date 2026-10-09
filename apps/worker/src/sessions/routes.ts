@@ -2,6 +2,7 @@ import {
   CarryOnRequest,
   FirstMessage,
   GetToKnowRequest,
+  GrillRequest,
   NewMessage,
   type Overflow,
   type ProviderList,
@@ -10,6 +11,7 @@ import {
   type SessionDetail,
   type SessionList,
   type SessionSummary,
+  SkillName,
   StopRequest,
   type WorkspaceId,
 } from "@courtyard/contract";
@@ -22,6 +24,9 @@ import { firstSavingModel, type Provider } from "../providers/index.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived, listWorkspaces } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
+
+/** The house skill Grill this plan starts (docs/ai-conduct.md, Grilling). */
+const GRILLING = SkillName.parse("grilling");
 
 /** How often an idle event stream sends a comment, so proxies don't close it. */
 const KEEP_ALIVE_MS = 25_000;
@@ -163,18 +168,61 @@ export const sessionRoutes = (options: {
   });
 
   /**
+   * Starts a session from a button, with a first message the owner didn't type (Get to know's
+   * starter, a plan to grill) and the skill it starts, titled by that message's first line. It's
+   * answered by the model named, or else the first that saves to context and isn't at its limit.
+   */
+  const startSaving = async (
+    c: Context,
+    start: { workspaceId: WorkspaceId; message: FirstMessage },
+  ) => {
+    const model = start.message.model ?? (await firstSavingModel(providers));
+    if (model === undefined) return apiError(c, { status: 409, error: NO_SAVING_MODEL });
+    const message = { ...start.message, model };
+    return startIn(c, { workspaceId: start.workspaceId, message, starter: true });
+  };
+
+  /**
    * Gets to know a workspace or the owner context: a session in `workspaceId` started with the
-   * worker's own starter message (docs/ai-conduct.md, Getting to know a workspace), answered by
-   * the model the request names, or else the first that saves to context and isn't at its limit.
+   * worker's own starter message (docs/ai-conduct.md, Getting to know a workspace).
    */
   const getToKnow = async (c: Context, start: { workspaceId: WorkspaceId; text: string }) => {
     const body = await readBody(c, GetToKnowRequest);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const model = body.value.model ?? (await firstSavingModel(providers));
-    if (model === undefined) return apiError(c, { status: 409, error: NO_SAVING_MODEL });
-    const message = { text: start.text, model };
-    return startIn(c, { workspaceId: start.workspaceId, message, starter: true });
+    return startSaving(c, {
+      workspaceId: start.workspaceId,
+      message: { text: start.text, ...body.value },
+    });
   };
+
+  // Grill this plan (docs/ai-conduct.md, Grilling): one of the workspace's plans, as the first
+  // message of a session that starts the Grilling skill.
+  routes.post("/workspaces/:id/grill", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const { summary, contextFile } = workspace.value;
+    if (summary.mode === "code") {
+      return apiError(c, {
+        status: 409,
+        error:
+          "A code workspace's models don't save to its context file, so its plans can't be grilled.",
+      });
+    }
+    const body = await readBody(c, GrillRequest);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const { plan, ...rest } = body.value;
+    if (!contextFile?.plans.includes(plan)) {
+      return apiError(c, {
+        status: 409,
+        error:
+          "That plan isn't in the context file any more. Reload the page to see it as it is now.",
+      });
+    }
+    return startSaving(c, {
+      workspaceId: summary.id,
+      message: { text: plan, skill: GRILLING, ...rest },
+    });
+  });
 
   routes.post("/workspaces/:id/get-to-know", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
