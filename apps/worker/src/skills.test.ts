@@ -209,3 +209,65 @@ describe("a workspace's skills", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("a skill checked against the Agent Skills format", () => {
+  /** Whether the workspace's packing skill, its SKILL.md being `skillMd`, is usable, or why not. */
+  const packingWith = async (skillMd: string | undefined) => {
+    await mkdir(join(workspaceSkills(), "packing"), { recursive: true });
+    if (skillMd !== undefined) {
+      await writeFile(join(workspaceSkills(), "packing", "SKILL.md"), skillMd);
+    }
+    const packing = (await skillsOf(await owner())).find((s) => s.name === "packing");
+    return packing?.kind === "unusable" ? packing.problem : packing?.kind;
+  };
+
+  it.each([
+    [undefined, "it has no SKILL.md"],
+    ["Pack it.\n", "its SKILL.md doesn't start with a --- line"],
+    ["---\nname: packing\ndescription: Packs.\n", "its SKILL.md's --- lines aren't closed"],
+    ["---\nname: [packing\n---\n", "its SKILL.md's fields aren't valid YAML"],
+    ["---\n- packing\n---\n", "its SKILL.md's fields aren't a list of names and values"],
+    ["---\ndescription: Packs.\n---\n", "its SKILL.md has no name"],
+    [
+      "---\nname: Packing\ndescription: Packs.\n---\n",
+      "its name has to be lowercase letters, digits and single hyphens, up to 64 characters",
+    ],
+    [
+      "---\nname: packer\ndescription: Packs.\n---\n",
+      "its name, \"packer\", isn't its folder's name",
+    ],
+    ["---\nname: packing\ndescription: ''\n---\n", "its SKILL.md has no description"],
+    [
+      `---\nname: packing\ndescription: ${"x".repeat(1025)}\n---\n`,
+      "its description is over 1,024 characters",
+    ],
+    [
+      `---\nname: packing\ndescription: Packs.\ncompatibility: ${"x".repeat(501)}\n---\n`,
+      "its compatibility is over 500 characters",
+    ],
+    [
+      "---\nname: packing\ndescription: Packs.\ndisable-model-invocation: true\n---\n",
+      "its SKILL.md has a field the Agent Skills format doesn't: disable-model-invocation",
+    ],
+  ])("can't be used when it fails, saying why: %j", async (skillMd, reason) => {
+    expect(await packingWith(skillMd)).toEqual({ kind: "broken", reason });
+  });
+
+  it("can be used with every field the format has", async () => {
+    const skillMd = [
+      "---",
+      "name: packing",
+      "description: Packs a bag for a trip.",
+      "license: MIT",
+      "compatibility: Any model.",
+      "metadata:",
+      "  author: courtyard.example",
+      "allowed-tools: Read",
+      "---",
+      "Pack it.",
+      "",
+    ].join("\n");
+
+    expect(await packingWith(skillMd)).toBe("usable");
+  });
+});
