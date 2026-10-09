@@ -401,9 +401,7 @@ const instructionsFor = (turn: {
       ownerContext: fromOwner.text !== null,
     }),
     ...(turn.saves ? [workspace.mode === "planning" ? SAVING : SAVING_IN_CODE] : []),
-    ...(turn.offersSkillTool && turn.skills.offered.length > 0
-      ? [skillsListPart(turn.skills.offered)]
-      : []),
+    ...(turn.skills.offered.length > 0 ? [skillsListPart(turn.skills.offered)] : []),
     ...(turn.skills.inUse.length > 0
       ? [
           skillsInUsePart(turn.skills.inUse, {
@@ -549,9 +547,9 @@ const messageFor = (earlier: readonly Said[], newest: string) => {
 
 /**
  * What a model is told for the turn that the session's last owner message starts: the
- * instructions for this workspace and provider, the skills it may load and those in use, the
- * conversation ending with that message, and Courtyard's tools the turn offers. A provider that
- * saves takes Courtyard's tools, so it's offered the save tool, and the use skill tool when
+ * instructions for this workspace and provider, the skills it may load (on every turn) and those in
+ * use, the conversation ending with that message, and Courtyard's tools the turn offers. A provider
+ * that saves takes Courtyard's tools, so it's offered the save tool, and the use skill tool when
  * there's a skill to use.
  */
 export const framingFor = (turn: {

@@ -83,8 +83,8 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 7. The context file between its markers, each line with its label, saying it wins where it differs from the owner
    context, or a line saying there isn't one yet.
 8. When the turn offers the save tool: the saving rules (Saving context lines, below).
-9. When the turn offers the use skill tool and the workspace has skills a model may load: how to use them, then each
-   one's name and description between `<skills>` markers (Skills, below).
+9. When the workspace has skills a model may load: how to use them, then each one's name and description between
+   `<skills>` markers (Skills, below), the same on every turn for every provider.
 10. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
 11. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
 
@@ -150,8 +150,8 @@ tags, so Retry and Carry on, which send a message again with its tag, keep it) o
 activities). Grilling and Get to know take many turns, and depend on this. A skill that has gone or broken since is
 left out.
 
-What a model is told (Every turn, items 9 and 10). **The list,** on a turn that offers the tool, is this, then each
-skill's name and description, one per line, between `<skills>` markers, apart from owner-only ones:
+What a model is told (Every turn, items 9 and 10). **The list,** on every turn, is this, then each skill's name and
+description, one per line, between `<skills>` markers, apart from owner-only ones:
 
 > Skills are instructions for particular kinds of task, written by the owner or by Courtyard. When what the owner
 > asks fits a skill's description, load it with the use_skill tool before you answer, and follow it. Each skill you

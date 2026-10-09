@@ -824,11 +824,11 @@ describe("skills (#89, ADR 0016)", () => {
     );
   });
 
-  it("offers no list and no tool to a provider that takes none of Courtyard's tools", async () => {
+  it("lists them on every turn, offering the tool only to a provider that takes Courtyard's tools", async () => {
     const { provider, turns } = recorder(READS_FILES);
     await (await skillSession([provider])).say({ text: "Hello.", model: MODEL });
 
-    expect(turns[0]?.framing.instructions).not.toContain("<skills>");
+    expect(turns[0]?.framing.instructions).toContain(SKILLS_LIST);
     expect(turns[0]?.framing.tools).toEqual([]);
   });
 
