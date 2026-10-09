@@ -1,8 +1,8 @@
 import { Chart } from "@courtyard/contract";
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
-import "./stylesheet.ts";
 import { formatValue, type Scale, scaleFor } from "./chart-scale.ts";
 import type { DrawingProps } from "./fenced.tsx";
+import { RichBlock } from "./rich-block.tsx";
 
 /** Each series' colour (or each slice's), in order: Moorland's heather, then the workspace colours. */
 const COLOURS = [
@@ -41,29 +41,31 @@ export default function ChartBlock(props: DrawingProps) {
     chart.title ?? `${chart.kind === "bar" ? "Bar" : chart.kind === "line" ? "Line" : "Pie"} chart`;
   const named = chart.series.length > 1 || chart.kind === "pie";
   return (
-    <figure aria-label={name} className="rounded-md border bg-field p-4 md:p-5">
-      {chart.title === undefined && chart.unit === undefined ? null : (
-        <figcaption className="mb-3 flex items-baseline justify-between gap-3">
-          <span className="text-[15px]/5 font-semibold">{chart.title}</span>
-          {chart.unit === undefined ? null : (
-            <span className="text-xs text-muted-foreground">{chart.unit}</span>
-          )}
-        </figcaption>
-      )}
-      {chart.kind === "pie" ? (
-        <Pie labels={chart.labels} values={chart.series[0]?.values ?? []} />
-      ) : (
-        <>
-          {named ? (
-            <Legend
-              items={chart.series.map((series, index) => series.name ?? `Series ${index + 1}`)}
-            />
-          ) : null}
-          <Plot chart={chart} />
-        </>
-      )}
-      <DataTable chart={chart} />
-    </figure>
+    <RichBlock>
+      <figure aria-label={name} className="rounded-md border bg-field p-4 md:p-5">
+        {chart.title === undefined && chart.unit === undefined ? null : (
+          <figcaption className="mb-3 flex items-baseline justify-between gap-3">
+            <span className="text-[15px]/5 font-semibold">{chart.title}</span>
+            {chart.unit === undefined ? null : (
+              <span className="text-xs text-muted-foreground">{chart.unit}</span>
+            )}
+          </figcaption>
+        )}
+        {chart.kind === "pie" ? (
+          <Pie labels={chart.labels} values={chart.series[0]?.values ?? []} />
+        ) : (
+          <>
+            {named ? (
+              <Legend
+                items={chart.series.map((series, index) => series.name ?? `Series ${index + 1}`)}
+              />
+            ) : null}
+            <Plot chart={chart} />
+          </>
+        )}
+        <DataTable chart={chart} />
+      </figure>
+    </RichBlock>
   );
 }
 

@@ -191,7 +191,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     out its value axis. The folder's classes are
     in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
     by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
-    the first load.
+    the first load. They apply only inside a `RichBlock` (`rich-block.tsx`), which each table and drawing is wrapped
+    in, never a fallback: coming after the theme's stylesheet, they would otherwise outrank its screen-size variants on
+    every page.
   - **`changes/`:** the Recent changes list, with Undo, and its calls (`api.ts`).
   - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
     a document's page is in `routes/`, drawn with the answer renderer.
