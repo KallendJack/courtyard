@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   createSdkMcpServer,
@@ -20,12 +20,13 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { readBytes } from "../files.ts";
+import { exists, listSubfolders, readBytes } from "../files.ts";
 import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
+  type CodeTurn,
   type CourtyardTool,
   jsonSchemaOf,
   type Provider,
@@ -36,10 +37,10 @@ import {
 } from "./index.ts";
 
 const id = ProviderId.parse("claude");
-/** Claude reads the workspace's files and saves to context; coding and tools come later. */
+/** Claude reads the workspace's files, saves to context and codes; tool connections come later. */
 const CAPABILITIES: Capabilities = {
   readsFiles: true,
-  codes: false,
+  codes: true,
   usesTools: false,
   savesContext: true,
   searchesWeb: true,
@@ -97,6 +98,11 @@ async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUser
 
 /** The tools a planning workspace gets: looking at its files, never changing them (ADR 0003). */
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
+/**
+ * The tools a code session gets as well: editing files and running commands, each asked of the
+ * worker first (ADR 0007).
+ */
+const CODING_TOOLS = ["Edit", "Write", "Bash"];
 /** The tools a turn with web search gets as well (ADR 0019). */
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 /** The in-process MCP server Courtyard's own tools are offered through. */
@@ -174,6 +180,25 @@ const isolatedOptions = (): Options => ({
   verbatimPrompts: true,
   env: isolatedEnv(),
 });
+
+/** Where a repository keeps its own Claude Code skills, each in a folder with its `SKILL.md`. */
+const PROJECT_SKILLS = join(".claude", "skills");
+
+/**
+ * What a code session takes from its repository (ADR 0022): Claude Code's project settings
+ * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
+ * repository's own skills. The machine's user and local settings, memory and connectors stay off,
+ * as on every turn.
+ */
+const projectSetup = async (worktree: string): Promise<Partial<Options>> => {
+  const folders = await listSubfolders(join(worktree, PROJECT_SKILLS));
+  const skills = [];
+  for (const name of folders.ok ? folders.value : []) {
+    const found = await exists(join(worktree, PROJECT_SKILLS, name, "SKILL.md"));
+    if (found.ok && found.value) skills.push(name);
+  }
+  return { settingSources: ["project"], skills };
+};
 
 /** Claude Code as it really is: the Agent SDK, with this machine's sign-in. */
 const realClaudeCode: ClaudeCode = {
@@ -416,6 +441,46 @@ const WebSearchInput = z.strictObject({
 });
 const WebFetchInput = z.strictObject({ url: z.string(), prompt: z.string() });
 
+const EditInput = z.strictObject({
+  file_path: z.string(),
+  old_string: z.string(),
+  new_string: z.string(),
+  replace_all: z.boolean().optional(),
+});
+const WriteInput = z.strictObject({ file_path: z.string(), content: z.string() });
+const BashInput = z.strictObject({
+  command: z.string(),
+  description: z.string().optional(),
+  timeout: z.number().optional(),
+  run_in_background: z.boolean().optional(),
+  dangerouslyDisableSandbox: z.boolean().optional(),
+});
+
+/**
+ * The worker's say on a code session's edit or command (ADR 0007): what it answers, or
+ * `undefined` for a tool that neither edits nor runs anything.
+ */
+const askWorker = async (
+  code: CodeTurn,
+  tool: string,
+  input: unknown,
+): Promise<Result<null, string> | undefined> => {
+  const unchecked = err("That request couldn't be checked, so it was refused.");
+  switch (tool) {
+    case "Edit":
+    case "Write": {
+      const edit = (tool === "Edit" ? EditInput : WriteInput).safeParse(input);
+      return edit.success ? code.edit(edit.data.file_path) : unchecked;
+    }
+    case "Bash": {
+      const bash = BashInput.safeParse(input);
+      return bash.success ? code.run(bash.data.command) : unchecked;
+    }
+    default:
+      return undefined;
+  }
+};
+
 /** What WebSearch gives back: its hits, among commentary. Anything else in it is ignored. */
 const WebSearchOutput = z.object({
   results: z.array(
@@ -488,9 +553,10 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
  * Checked before every tool call, and the only way one is allowed: none are pre-approved, so
  * anything this doesn't allow is refused, including when it fails. Only the planning tools, only
  * inside the workspace folder once symlinks are followed, and Courtyard's own tools offered this
- * turn, which touch nothing themselves. On a turn with web search, searches, and reading only a
- * page from the turn's search results or a link the owner sent (ADR 0019). Each file read, search
- * and page read is reported.
+ * turn, which touch nothing themselves. In a code session, edits and commands too, each as the
+ * worker says (ADR 0007). On a turn with web search, searches, and reading only a page from the
+ * turn's search results or a link the owner sent (ADR 0019). Each file read, search and page read
+ * is reported.
  */
 const confineTo =
   (confine: {
@@ -499,12 +565,16 @@ const confineTo =
     /** Courtyard's own tools offered this turn, by the names Claude Code calls them. */
     courtyardTools: readonly string[];
     web: WebTurn | null;
+    code: CodeTurn | null;
   }): HookCallback =>
   async (input) => {
-    const { folder, report, courtyardTools, web } = confine;
+    const { folder, report, courtyardTools, web, code } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (courtyardTools.includes(input.tool_name)) return decision(true);
+      const asked =
+        code === null ? undefined : await askWorker(code, input.tool_name, input.tool_input);
+      if (asked !== undefined) return asked.ok ? decision(true) : decision(false, asked.error);
       if (web !== null && input.tool_name === "WebSearch") {
         const search = WebSearchInput.safeParse(input.tool_input);
         if (!search.success) return decision(false, "That search couldn't be checked.");
@@ -677,6 +747,7 @@ export const createClaudeProvider = (
       input.signal.addEventListener("abort", stopClaudeCode);
 
       const { tools } = input.framing;
+      const { code } = input;
       const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
       const web = webTurnFor(input.framing.webSearch);
       let answer = "";
@@ -685,11 +756,16 @@ export const createClaudeProvider = (
           prompt: turnPrompt(input.framing),
           options: {
             ...isolatedOptions(),
+            ...(code === null ? {} : await projectSetup(folder)),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
             systemPrompt: input.framing.instructions,
-            tools: web === null ? PLANNING_TOOLS : [...PLANNING_TOOLS, ...WEB_TOOLS],
+            tools: [
+              ...PLANNING_TOOLS,
+              ...(code === null ? [] : CODING_TOOLS),
+              ...(web === null ? [] : WEB_TOOLS),
+            ],
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
             ...(tools.length === 0
@@ -697,7 +773,7 @@ export const createClaudeProvider = (
               : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
             hooks: {
               PreToolUse: [
-                { hooks: [confineTo({ folder, report: input.report, courtyardTools, web })] },
+                { hooks: [confineTo({ folder, report: input.report, courtyardTools, web, code })] },
               ],
               ...(web === null ? {} : { PostToolUse: [{ hooks: [noteResults(web)] }] }),
             },
