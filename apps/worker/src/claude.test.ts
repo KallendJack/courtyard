@@ -615,7 +615,11 @@ describe("web search on a Claude turn (ADR 0019)", () => {
     const [searching, without] = runs.map((run) => run.options);
     if (!searching || !without) throw new Error("no turns ran");
 
-    const search = { name: "WebSearch", input: { query: "Titan T-3 J-hook width" } };
+    // As Claude Code sends it, with how thoroughly to search.
+    const search = {
+      name: "WebSearch",
+      input: { query: "Titan T-3 J-hook width", mode: "extended" },
+    };
     expect(await preToolUse(searching, search)).toMatchObject({
       hookSpecificOutput: { permissionDecision: "allow" },
     });
@@ -694,6 +698,7 @@ describe("web search on a Claude turn (ADR 0019)", () => {
             title: "Titan T-3 Power Rack review: what fits",
             url: "https://www.garagegymreviews.com/titan-t3",
           },
+          { title: "The Ohio Bar - Black Oxide", url: "https://www.roguefitness.com/gb/ohio" },
           { title: "Not used", url: "https://example.com/unused" },
         ]),
       });
@@ -708,8 +713,9 @@ describe("web search on a Claude turn (ADR 0019)", () => {
         search,
         read,
         textDelta(
-          "Yes: the hooks take a 28–32 mm shaft ([Titan](https://titan.fitness/j-hooks#specs)).",
+          "Yes: the hooks take a 28–32 mm shaft ([Titan](https://titan.fitness/j-hooks#specs)). ",
         ),
+        textDelta("A bar to go with them: [Ohio Bar](https://www.roguefitness.com/gb/ohio)."),
         success,
       ],
     });
@@ -717,7 +723,13 @@ describe("web search on a Claude turn (ADR 0019)", () => {
     const { sources } = await runTurn(claudeCode, { framing: searchingFraming() });
 
     expect(sources).toEqual([
+      // The title's last part names the site only when it's the site's own name.
       { site: "Titan Fitness", title: "T-3 Series J-Hooks", url: "https://titan.fitness/j-hooks" },
+      {
+        site: "roguefitness.com",
+        title: "The Ohio Bar - Black Oxide",
+        url: "https://www.roguefitness.com/gb/ohio",
+      },
       {
         site: "garagegymreviews.com",
         title: "Titan T-3 Power Rack review: what fits",

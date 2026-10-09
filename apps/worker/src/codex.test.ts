@@ -674,7 +674,12 @@ describe("web search on a Codex turn (ADR 0019)", () => {
           queries: null,
         });
         webSearchItem(turn, "", { type: "openPage", url: "https://titan.fitness/j-hooks" });
-        webSearchItem(turn, "", { type: "findInPage", url: "https://titan.fitness/j-hooks" });
+        // Looking for words in a page it opened, as Codex does with a price, isn't a search.
+        webSearchItem(turn, "'£45'", {
+          type: "findInPage",
+          url: "https://titan.fitness/j-hooks",
+          pattern: "£45",
+        });
         delta(turn, "About £45 a pair ([Titan Fitness](https://titan.fitness/j-hooks)), ");
         delta(turn, "or see https://www.garagegymreviews.com/titan-t3.");
         turn.complete("completed");

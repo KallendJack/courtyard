@@ -371,6 +371,8 @@ const WebSearchInput = z.strictObject({
   query: z.string(),
   allowed_domains: z.array(z.string()).optional(),
   blocked_domains: z.array(z.string()).optional(),
+  /** How thoroughly to search ("standard", "extended"), which Claude Code sends but doesn't list. */
+  mode: z.string().optional(),
 });
 const WebFetchInput = z.strictObject({ url: z.string(), prompt: z.string() });
 

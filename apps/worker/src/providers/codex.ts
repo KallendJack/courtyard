@@ -506,10 +506,11 @@ const WebSearchCompleted = z.object({
       type: z.literal("webSearch"),
       query: z.string().catch(""),
       action: z
-        .discriminatedUnion("type", [
-          z.object({ type: z.literal("search"), query: z.string().nullable().catch(null) }),
-          z.object({ type: z.literal("openPage"), url: z.string().nullable().catch(null) }),
-        ])
+        .object({
+          type: z.string(),
+          query: z.string().nullable().optional().catch(null),
+          url: z.string().nullable().optional().catch(null),
+        })
         .nullable()
         .catch(null),
     }),
@@ -525,8 +526,10 @@ const webActivity = (notice: unknown): Activity | undefined => {
     const url = pageKey(action.url ?? "");
     return url === undefined ? undefined : { kind: "page-read", url };
   }
-  const searched = (action?.type === "search" ? action.query : null) ?? query;
-  return searched.trim() === "" ? undefined : { kind: "web-searched", query: searched.trim() };
+  // Looking for words in a page already open (`findInPage`), or anything new, isn't a search.
+  if (action !== null && action.type !== "search") return undefined;
+  const searched = (action?.query ?? query).trim();
+  return searched === "" ? undefined : { kind: "web-searched", query: searched };
 };
 
 /** The ways a turn fails that Courtyard tells apart; anything else counts as "other". */

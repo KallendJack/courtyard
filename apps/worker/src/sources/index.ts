@@ -40,8 +40,26 @@ export const linksIn = (text: string): { url: string; text: string }[] => {
   return links.sort((a, b) => a.at - b.at).map(({ url, text: words }) => ({ url, text: words }));
 };
 
-/** A title's last part names its site when it's short: "T-3 Series J-Hooks | Titan Fitness". */
-const SITE_IN_TITLE = /^(.+?)\s+[|–—-]\s+([^|–—]{2,40})$/;
+/** A title's last part, after its last separator: "T-3 Series J-Hooks | Titan Fitness". */
+const LAST_PART = /^(.+)\s+[|–—-]\s+(.{2,40})$/;
+
+/** Only a name's letters and digits, lower case, to compare it with a host. */
+const bare = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * Whether a title's last part is the site's own name, as its host spells it: "Titan Fitness" for
+ * titan.fitness, "Rogue Fitness UK" for roguefitness.com. Not "Black Oxide" for roguefitness.com,
+ * which is part of the page's title.
+ */
+const namesHost = (name: string, host: string) => {
+  const letters = bare(name);
+  const hostLetters = bare(host);
+  const mainLabel = bare(host.split(".").slice(-2, -1)[0] ?? "");
+  return (
+    letters.length >= 2 &&
+    (hostLetters.includes(letters) || (mainLabel.length >= 3 && letters.includes(mainLabel)))
+  );
+};
 
 /** A page as a source: its site's name from its title when the title ends with it, or its host. */
 const sourceOf = (page: { url: string; title: string }): Source | undefined => {
@@ -49,10 +67,9 @@ const sourceOf = (page: { url: string; title: string }): Source | undefined => {
   if (key === undefined) return undefined;
   const host = new URL(key).hostname.replace(/^www\./, "");
   const title = page.title.replace(/\s+/g, " ").trim();
-  const named = SITE_IN_TITLE.exec(title);
-  const siteName = named?.[2]?.trim();
-  if (named?.[1] && siteName && siteName.split(" ").length <= 5) {
-    return Source.parse({ site: siteName, title: named[1].trim(), url: key });
+  const [, rest, last] = LAST_PART.exec(title) ?? [];
+  if (rest !== undefined && last !== undefined && namesHost(last, host)) {
+    return Source.parse({ site: last.trim(), title: rest.trim(), url: key });
   }
   // A link whose words are only its address or its host says nothing more.
   const saysMore = title !== "" && pageKey(title) === undefined && title !== host;
