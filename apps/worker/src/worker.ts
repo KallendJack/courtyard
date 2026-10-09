@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ATTACHMENTS,
   type ContextBackup,
   type Health,
   type LiveStatus,
@@ -15,7 +16,7 @@ import {
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
@@ -60,6 +61,18 @@ export type Worker = {
 
 /** The largest request body the API reads; nothing it accepts comes close. */
 const MAX_BODY_BYTES = 16 * 1024;
+
+/** The largest message with files attached (#78): five of the largest, and room for the form. */
+const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.maxBytes + 1024 * 1024;
+
+/** The routes that take a message, which may come with files attached as a multipart form. */
+const MESSAGE_ROUTES = /^\/api\/(sessions\/[^/]+\/messages|workspaces\/[^/]+\/sessions)$/;
+
+/** Whether a request is a message sent with files attached (#78). */
+const takesFiles = (c: Context) =>
+  c.req.method === "POST" &&
+  MESSAGE_ROUTES.test(c.req.path) &&
+  (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
 
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
 const FAKE_SIGN_IN_MS = 5000;
@@ -155,14 +168,11 @@ export const createWorker = (options: {
   (options.repeat ?? repeatForever)(KEEP_UP_EVERY_MS, contextFolder.keepUp);
 
   const api = new Hono();
-  api.use(
-    "*",
-    bodyLimit({
-      maxSize: MAX_BODY_BYTES,
-      onError: (c) => apiError(c, { status: 413, error: "Request too large" }),
-    }),
-  );
-  api.use("*", sameSiteJsonOnly);
+  const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
+  const jsonLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
+  const filesLimit = bodyLimit({ maxSize: MAX_MESSAGE_WITH_FILES_BYTES, onError: tooLarge });
+  api.use("*", (c, next) => (takesFiles(c) ? filesLimit(c, next) : jsonLimit(c, next)));
+  api.use("*", sameSiteJsonOnly({ takesFiles }));
   api.use("*", requireLogin(owner));
 
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));

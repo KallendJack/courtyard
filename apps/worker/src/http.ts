@@ -1,4 +1,4 @@
-import type { ApiError } from "@courtyard/contract";
+import { type ApiError, ATTACHMENTS_FIELD, MESSAGE_FIELD } from "@courtyard/contract";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { z } from "zod";
@@ -13,6 +13,33 @@ export const apiError = (c: Context, problem: { status: ContentfulStatusCode; er
 export const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Result<T, string>> => {
   const parsed = schema.safeParse(await c.req.json().catch(() => undefined));
   return parsed.success ? ok(parsed.data) : err(parsed.error.issues[0]?.message ?? "Bad request");
+};
+
+/**
+ * A message the owner sent, parsed with `schema`, and the files attached to it (#78): JSON on its
+ * own, or a multipart form with the JSON in one field and the files in another. Or the first reason
+ * it doesn't fit.
+ */
+export const readMessage = async <T>(
+  c: Context,
+  schema: z.ZodType<T>,
+): Promise<Result<{ message: T; files: File[] }, string>> => {
+  if (!c.req.header("content-type")?.startsWith("multipart/form-data")) {
+    const message = await readBody(c, schema);
+    return message.ok ? ok({ message: message.value, files: [] }) : message;
+  }
+  const form = await c.req.formData().catch(() => undefined);
+  const json = form?.get(MESSAGE_FIELD);
+  let body: unknown;
+  try {
+    body = typeof json === "string" ? JSON.parse(json) : undefined;
+  } catch {
+    body = undefined;
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Bad request");
+  const files = (form?.getAll(ATTACHMENTS_FIELD) ?? []).filter((part) => part instanceof File);
+  return ok({ message: parsed.data, files });
 };
 
 /** Why Get to know or Tidy, with no model named, found none to ask. */

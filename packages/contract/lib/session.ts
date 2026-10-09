@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Attachment } from "./attachment.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
@@ -268,6 +269,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     effort: Effort.optional(),
     /** The skill the owner started with it, which stays in use for the rest of the session. */
     skill: SkillName.optional(),
+    /** The photos and PDFs it carries, kept in the session's folder (#78). */
+    attachments: z.array(Attachment).optional(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
