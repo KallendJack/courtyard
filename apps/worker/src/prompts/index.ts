@@ -486,6 +486,10 @@ const ANSWER_FORMAT =
 const RICH_BLOCKS =
   "Courtyard draws some of what you write as more than text. Every Markdown table sorts by its columns, so when you compare options side by side, such as three rackets by price, weight and feel, put them in a table, one option a row. Write a sentence or two of your own before it, saying what it shows or which you'd pick, and never use one for show: one or two things, or points that don't share the same details, read better as text.";
 
+/** When to draw a diagram (docs/ai-conduct.md, Rich blocks; ADR 0021). */
+const DIAGRAMS =
+  "A `mermaid` block is drawn as a diagram. Use one for steps to follow or how parts connect, such as what a chain check's result means you should buy, or how the boxes of a home network link up: a flowchart (`flowchart TD`, or `flowchart LR` for a few steps in a row), or a sequence diagram for who does what in turn. Keep it to a dozen steps or so with short labels, and write a sentence or two of your own before it. Write only the diagram, with no settings, styles or links: Courtyard colours it. Never use one for show, or where a list or a sentence says as much.";
+
 const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them before you finish, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
 
 /** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
@@ -625,6 +629,7 @@ const instructionsFor = (turn: {
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,
+    DIAGRAMS,
     ...(hasSections ? [READING_LINES] : []),
     ...(fromOwner.text === null ? [] : [ownerContextPart(fromOwner.shared, fromOwner.text)]),
     contextFilePart(workspace, {

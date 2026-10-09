@@ -25,19 +25,24 @@ const colour = (name: string) =>
  */
 const configure = (dark: boolean) => {
   const muted = colour("muted-foreground");
+  const font = getComputedStyle(document.body).fontFamily;
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
     htmlLabels: false,
     layout: "dagre",
     suppressErrorRendering: true,
+    // Flat, as the rest of Moorland is: no shadows or gradients. A little closer together than
+    // Mermaid's own spacing, so a three-way choice fits an answer's width.
+    look: "classic",
+    flowchart: { nodeSpacing: 30, rankSpacing: 40 },
     theme: "base",
     darkMode: dark,
-    fontFamily: getComputedStyle(document.body).fontFamily,
+    fontFamily: font,
     fontSize: 14,
     themeVariables: {
       darkMode: dark,
-      fontFamily: getComputedStyle(document.body).fontFamily,
+      fontFamily: font,
       fontSize: "14px",
       background: colour("field"),
       primaryColor: colour("accent"),
@@ -60,6 +65,8 @@ const configure = (dark: boolean) => {
       ".node rect { rx: 8px; ry: 8px; }",
       ".nodeLabel, .node text { font-weight: 500; }",
       `.edgeLabel text, .edgeLabel tspan { fill: ${muted}; font-size: 12px; font-weight: 600; }`,
+      // An arrow's label hides the line behind it.
+      ".edgeLabel rect { opacity: 1; }",
     ].join("\n"),
     secure: [...Object.keys(mermaid.mermaidAPI.defaultConfig), "htmlLabels", "layout"],
   });

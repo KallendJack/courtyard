@@ -173,6 +173,16 @@ What a model is told (Every turn, item 4), on every turn, the same for every pro
 The eval's `table-*` scenario checks it on both providers: a comparison of options is answered with a table after a
 sentence of its own, and a question that isn't one gets none.
 
+Diagrams, built with #148: a `mermaid` fence is drawn by Mermaid, in Moorland's colours, with its strict setting on and
+every setting locked, so nothing a diagram says can change how it's drawn, run script or load anything. One that can't
+be drawn shows as written. What a model is told, on every turn, the same for every provider:
+
+> A `mermaid` block is drawn as a diagram. Use one for steps to follow or how parts connect, such as what a chain
+> check's result means you should buy, or how the boxes of a home network link up: a flowchart (`flowchart TD`, or
+> `flowchart LR` for a few steps in a row), or a sequence diagram for who does what in turn. Keep it to a dozen steps or
+> so with short labels, and write a sentence or two of your own before it. Write only the diagram, with no settings,
+> styles or links: Courtyard colours it. Never use one for show, or where a list or a sentence says as much.
+
 ## Courtyard's file tools
 
 Built with #71, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its

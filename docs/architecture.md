@@ -178,7 +178,16 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
     whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
     fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
-    just the source while the block is still arriving; a drawing that throws shows it too. The folder's classes are
+    just the source while the block is still arriving; a drawing that throws shows it too. **Diagrams**
+    (`mermaid.tsx`) are drawn by Mermaid once the block has all arrived, one at a time, in Moorland's colours read
+    from the theme (and again when the device turns dark or light), at their own size so a wide one scrolls
+    sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+    changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
+    script, load something or go somewhere (links keep their words) before it goes in the page, the one place
+    Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
+    with an `img`, an actor's icon), so the page's own policy (`index.html`) loads pictures only from Courtyard and
+    such a diagram shows as written. The build takes Mermaid from its prebuilt files without its ELK layout
+    (`mermaidAsDrawn` in `vite.config.ts`), so it adds nothing to the first load. The folder's classes are
     in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
     by `stylesheet.ts` from inside the answer renderer's script, so neither the classes nor a stylesheet's name are on
     the first load.
