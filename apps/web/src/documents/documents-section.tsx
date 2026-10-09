@@ -1,12 +1,8 @@
 import type { ChangeId, DocumentSummary, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
-import { FileText, Trash2 } from "lucide-react";
-import { Button } from "@/components/button";
-import { NoteRow, NoteWords } from "@/components/note-row";
+import { FileText } from "lucide-react";
 import { LIST_ROW, SectionTitle } from "@/components/page";
-import { useAction } from "@/lib/use-action";
-import { undoChange } from "../changes/api.ts";
-import { describeProblem } from "../problems.tsx";
+import { JustDeleted } from "../changes/just-deleted.tsx";
 import { describeWhen } from "../when.ts";
 
 /**
@@ -23,13 +19,6 @@ export function DocumentsSection(props: {
   onUndone: () => Promise<void>;
 }) {
   const { workspaceId, documents, deleted } = props;
-  const undo = useAction(async () => {
-    if (deleted?.change === undefined) return "This delete can't be undone from here.";
-    const undone = await undoChange(deleted.change);
-    if (undone.kind !== "loaded") return describeProblem(undone).body;
-    await props.onUndone();
-    return undefined;
-  });
   if (documents.length === 0 && deleted === undefined) return null;
 
   return (
@@ -44,26 +33,7 @@ export function DocumentsSection(props: {
         Longer things saved here. Every model knows they're here and reads one when it helps.
       </p>
       {deleted !== undefined && (
-        <ul aria-label="Just deleted" className="mt-3">
-          <NoteRow
-            icon={<Trash2 />}
-            actions={
-              deleted.change === undefined ? undefined : (
-                <Button
-                  variant="quiet"
-                  size="xs"
-                  onClick={() => void undo.run()}
-                  disabled={undo.busy}
-                >
-                  Undo
-                </Button>
-              )
-            }
-            error={undo.error}
-          >
-            <NoteWords label="Deleted" line={deleted.name} />
-          </NoteRow>
-        </ul>
+        <JustDeleted name={deleted.name} change={deleted.change} onUndone={props.onUndone} />
       )}
       {documents.length > 0 && (
         <ul className="mt-2 divide-y">

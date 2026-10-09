@@ -8,7 +8,8 @@ import { classes } from "@/lib/classes";
 export function SegmentedChoice<T extends string>(props: {
   /** What's being chosen, for screen readers: "Section", say. */
   label: string;
-  options: readonly { readonly value: T; readonly label: string }[];
+  /** Each choice, and how many there are of it when that helps choose (Things' "Have 5"). */
+  options: readonly { readonly value: T; readonly label: string; readonly count?: number }[];
   value: T;
   onChange: (value: T) => void;
 }) {
@@ -37,6 +38,9 @@ export function SegmentedChoice<T extends string>(props: {
               className="sr-only"
             />
             {option.label}
+            {option.count !== undefined && (
+              <span className="font-normal text-muted-foreground"> {option.count}</span>
+            )}
           </label>
         );
       })}
