@@ -14,6 +14,8 @@ import {
   type SessionEvent,
   type SkillName,
   SUGGESTED_REPLY_MAX_CHARACTERS,
+  THING_DETAILS,
+  type ThingDetailName,
   type ThingSave,
   ThingStatus,
   type WorkspaceMode,
@@ -429,6 +431,16 @@ const thingsPart = (things: ReadThings, readsFiles: boolean) => {
 /** When and how a model keeps Things current (docs/ai-conduct.md, Things). */
 const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
 
+/** Each of a Thing's details as the Things tool describes it to a model. */
+const THING_DETAIL_INPUTS: Readonly<Record<ThingDetailName, string>> = {
+  brand: "Its make and model, such as KMC X11.",
+  bought: "When it was bought: a year, a month or a day, such as 2026-03 or 2026-10-09.",
+  price: "What it cost, such as £32.",
+  condition: "What state it's in, such as Worn.",
+  size: "Its size, such as 11-speed, 118 links.",
+  where: "Where it's kept or fitted, such as On the bike.",
+};
+
 /** The Things tool as a model reads it: what it does, and that the rule is elsewhere. */
 const THING_TOOL: TurnTool = {
   name: THING_TOOL_NAME,
@@ -444,15 +456,12 @@ const THING_TOOL: TurnTool = {
     status: ThingStatus.optional().describe(
       "have, want (to get one) or replace (has it, means to replace it). A new Thing needs one.",
     ),
-    brand: z.string().optional().describe("Its make and model, such as KMC X11."),
-    bought: z
-      .string()
-      .optional()
-      .describe("When it was bought: a year, a month or a day, such as 2026-03 or 2026-10-09."),
-    price: z.string().optional().describe("What it cost, such as £32."),
-    condition: z.string().optional().describe("What state it's in, such as Worn."),
-    size: z.string().optional().describe("Its size, such as 11-speed, 118 links."),
-    where: z.string().optional().describe("Where it's kept or fitted, such as On the bike."),
+    ...Object.fromEntries(
+      THING_DETAILS.map((detail) => [
+        detail,
+        z.string().optional().describe(THING_DETAIL_INPUTS[detail]),
+      ]),
+    ),
     part_of: z
       .string()
       .optional()

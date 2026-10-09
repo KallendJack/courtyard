@@ -533,24 +533,38 @@ const asLabel = (raw: string) =>
     .replace(/^\[(.*)\]$/, "$1")
     .toUpperCase();
 
-/** What a model sends the Things tool, checked like anything else a model sends. */
-const ThingRequest = z
-  .object({
-    thing: z.string().optional(),
-    remove: z.boolean().optional(),
-    name: z.string().optional(),
-    status: ThingStatus.optional(),
-    brand: z.string().optional(),
-    bought: z.string().optional(),
-    price: z.string().optional(),
-    condition: z.string().optional(),
-    size: z.string().optional(),
-    where: z.string().optional(),
-    part_of: z.string().optional(),
-    history: z.string().optional(),
-    photo: z.number().int().optional(),
-  })
-  .strict();
+/**
+ * What a model sends the Things tool, checked like anything else a model sends. Besides these, it
+ * may send any of a Thing's details (`THING_DETAILS`) as text, blank to clear it, and nothing
+ * else: `detailsSent` checks those.
+ */
+const ThingRequest = z.looseObject({
+  thing: z.string().optional(),
+  remove: z.boolean().optional(),
+  name: z.string().optional(),
+  status: ThingStatus.optional(),
+  part_of: z.string().optional(),
+  history: z.string().optional(),
+  photo: z.number().int().optional(),
+});
+
+/** A detail as a model sends it: any text, blank to clear it. */
+const DetailSent = z.string();
+
+/**
+ * The details a Things tool call sets, `null` for one it clears; `undefined` when it sends
+ * anything that isn't one of a Thing's details as text.
+ */
+const detailsSent = (rest: Readonly<Record<string, unknown>>) => {
+  const details: { [K in ThingDetailName]?: string | null } = {};
+  for (const [key, value] of Object.entries(rest)) {
+    const detail = THING_DETAILS.find((one) => one === key);
+    const text = DetailSent.safeParse(value);
+    if (detail === undefined || !text.success) return undefined;
+    details[detail] = text.data.trim() === "" ? null : text.data;
+  }
+  return details;
+};
 
 /** Why the Things tool didn't save: the input doesn't fit, a label or photo is wrong, or it was refused. */
 export type ThingToolRefusal =
@@ -600,21 +614,20 @@ export const createTurnThings = (
   return async (raw: unknown): Promise<Result<ThingToolSaved, ThingToolRefusal>> => {
     const request = ThingRequest.safeParse(raw);
     if (!request.success) return err({ kind: "malformed" });
-    const { thing, remove, part_of, history, photo, ...set } = request.data;
+    const { thing, remove, name, status, part_of, history, photo, ...rest } = request.data;
+    const details = detailsSent(rest);
+    if (details === undefined) return err({ kind: "malformed" });
     const label = thing === undefined || thing.trim() === "" ? undefined : asLabel(thing);
     const slug = label === undefined ? undefined : labels.get(label);
     if (label !== undefined && slug === undefined) return err({ kind: "unknown-label", label });
     if (label === undefined && remove) return err({ kind: "malformed" });
 
-    const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {};
-    for (const [field, value] of Object.entries(set)) {
-      if (value === undefined) continue;
-      const cleared = typeof value === "string" && value.trim() === "";
-      if (field === "name" || field === "status") {
-        if (cleared) return err({ kind: "incomplete" });
-      }
-      Object.assign(fields, { [field]: cleared ? null : value });
-    }
+    if (name?.trim() === "") return err({ kind: "incomplete" });
+    const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {
+      ...(name === undefined ? {} : { name }),
+      ...(status === undefined ? {} : { status }),
+      ...details,
+    };
     if (part_of !== undefined) {
       const parentLabel = asLabel(part_of);
       const parent = parentLabel === "" ? null : labels.get(parentLabel);

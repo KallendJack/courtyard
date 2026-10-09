@@ -1,4 +1,4 @@
-import { type ThingSave, ThingStatus, type ThingSummary } from "@courtyard/contract";
+import { THING_DETAILS, type ThingSave, ThingStatus, type ThingSummary } from "@courtyard/contract";
 
 // How a Thing's fields read to the owner (ADR 0020).
 
@@ -71,16 +71,14 @@ export const thingSaveWords = (save: ThingSave) => {
     ...(save.action === "add" && fields.status !== undefined ? [fields.status] : []),
     ...(save.action === "change" && fields.name !== undefined ? [`now ${fields.name}`] : []),
     ...(save.action === "change" && fields.status !== undefined ? [fields.status] : []),
-    ...(["brand", "bought", "price", "condition", "size", "where", "partOf"] as const).flatMap(
-      (field) => {
-        const value = fields[field];
-        if (value === undefined) return [];
-        const named = field === "partOf" ? "part of" : field;
-        if (value === null) return [`no ${named}`];
-        if (field === "bought") return [`bought ${boughtInWords(value)}`];
-        return [field === "partOf" ? `part of ${value}` : value];
-      },
-    ),
+    ...([...THING_DETAILS, "partOf"] as const).flatMap((field) => {
+      const value = fields[field];
+      if (value === undefined) return [];
+      const named = field === "partOf" ? "part of" : field;
+      if (value === null) return [`no ${named}`];
+      if (field === "bought") return [`bought ${boughtInWords(value)}`];
+      return [field === "partOf" ? `part of ${value}` : value];
+    }),
     ...(save.photo ? ["new photo"] : []),
   ];
   const parts = [
