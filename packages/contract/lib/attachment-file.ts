@@ -4,13 +4,19 @@ import { PDF_TYPE, PHOTO_TYPES, type PhotoMediaType } from "./attachment.ts";
 // Attaching a file (#78): the limits, and the checks the browser makes and the worker makes again.
 // Apart from `attachment.ts`, which every session event needs, so none of this is on the first load.
 
+/** A megabyte, as the limits count them. */
+const MB = 1024 * 1024;
+
 /**
- * The limits on attachments: at most five per message, each up to 20 MB; photos shrunk in the
- * browser to about 2000 px on their long side; and the session's last ten go with each turn.
+ * The limits on attachments: at most five per message; a PDF up to 20 MB; a photo up to 3.75 MB,
+ * since Claude takes an image only up to 5 MB once it's base64-encoded for sending (Codex takes
+ * more), and a photo the browser has shrunk to about 2000 px on its long side is well under that;
+ * and the session's last ten go with each turn.
  */
 export const ATTACHMENTS = {
   perMessage: 5,
-  maxBytes: 20 * 1024 * 1024,
+  pdfMaxBytes: 20 * MB,
+  photoMaxBytes: 3.75 * MB,
   photoLongSide: 2000,
   carried: 10,
 } as const;
@@ -37,13 +43,17 @@ export const sizeInWords = (bytes: number) =>
 export const AttachmentFile = z
   .object({ name: z.string(), type: z.string(), size: z.number().int().nonnegative() })
   .superRefine(({ name, type, size }, ctx) => {
-    const problem = !AttachmentMediaType.safeParse(type).success
+    const known = AttachmentMediaType.safeParse(type);
+    const isPdf = known.success && known.data === PDF_TYPE;
+    const problem = !known.success
       ? `${name} can't be attached: only photos and PDFs.`
-      : size > ATTACHMENTS.maxBytes
-        ? `${name} is over ${ATTACHMENTS.maxBytes / (1024 * 1024)} MB.`
-        : size === 0
-          ? `${name} is empty.`
-          : undefined;
+      : isPdf && size > ATTACHMENTS.pdfMaxBytes
+        ? `${name} is over ${ATTACHMENTS.pdfMaxBytes / MB} MB.`
+        : !isPdf && size > ATTACHMENTS.photoMaxBytes
+          ? `${name} is over ${ATTACHMENTS.photoMaxBytes / MB} MB, the largest photo every model takes.`
+          : size === 0
+            ? `${name} is empty.`
+            : undefined;
     if (problem !== undefined) ctx.addIssue({ code: "custom", message: problem });
   });
 export type AttachmentFile = z.infer<typeof AttachmentFile>;

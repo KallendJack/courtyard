@@ -81,8 +81,8 @@ const pdfText = async (bytes: Uint8Array): Promise<string | undefined> => {
 };
 
 /**
- * Checks the files sent with a message (#78), as the browser did: at most five, each a photo or a
- * PDF up to 20 MB, and each really the kind it says. A PDF's text is pulled out here, and a PDF
+ * Checks the files sent with a message (#78), as the browser did: at most five, each a photo up to
+ * 3.75 MB or a PDF up to 20 MB, and each really the kind it says. A PDF's text is pulled out here, and a PDF
  * with none is refused. Answers with the first reason one can't go.
  */
 export const prepareAttachments = async (

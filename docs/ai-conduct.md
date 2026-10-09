@@ -114,8 +114,9 @@ conversation markers, then the new message. When the session has attachments, th
 ## Attachments
 
 Built with #78. The owner can attach up to five photos and PDFs to a message. The worker checks them (photos and
-PDFs only, up to 20 MB each, and a PDF with text in it) and keeps them in the session's folder. Every turn carries the
-session's last ten attachments, oldest first, so "and the other bolt?" works later on. Each photo goes as an image,
+PDFs only, a photo up to 3.75 MB, the most Claude takes once it's encoded, a PDF up to 20 MB, and a PDF with text in
+it) and keeps them in the session's folder. Every turn carries the session's last ten attachments, oldest first, so
+"and the other bolt?" works later on. Each photo goes as an image,
 each provider's own way (Claude's as an image with the message, Codex's as its `localImage` input, the fake's by
 name); each PDF goes as its text, which the worker pulls out, the same on every provider. Claude doesn't read a PDF's
 pictures. Past `PDF_TEXT_MAX_CHARACTERS` (40,000) a PDF's text stops, with a note saying so. Attachments are the

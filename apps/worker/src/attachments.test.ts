@@ -155,7 +155,9 @@ describe("attaching photos and PDFs to a message", () => {
     const refusals = await Promise.all(
       [
         [{ name: "garage-tour.mov", type: "video/quicktime", bytes: new Uint8Array([1, 2, 3]) }],
-        [{ ...PHOTO, name: "huge.png", bytes: new Uint8Array(20 * 1024 * 1024 + 1) }],
+        // Bigger than Claude takes, though the browser always shrinks a photo well under it.
+        [{ ...PHOTO, name: "huge.png", bytes: new Uint8Array(4 * 1024 * 1024) }],
+        [{ ...MANUAL, name: "huge.pdf", bytes: new Uint8Array(20 * 1024 * 1024 + 1) }],
         [{ name: "not-a-photo.jpg", type: "image/jpeg", bytes: new TextEncoder().encode("hi") }],
         Array.from({ length: 6 }, (_, n) => ({ ...PHOTO, name: `photo-${n}.png` })),
         [{ name: "scan.pdf", type: "application/pdf", bytes: pdfOf([]) }],
@@ -167,7 +169,8 @@ describe("attaching photos and PDFs to a message", () => {
 
     expect(refusals).toEqual([
       { status: 400, error: "garage-tour.mov can't be attached: only photos and PDFs." },
-      { status: 400, error: "huge.png is over 20 MB." },
+      { status: 400, error: "huge.png is over 3.75 MB, the largest photo every model takes." },
+      { status: 400, error: "huge.pdf is over 20 MB." },
       { status: 400, error: "not-a-photo.jpg isn't the kind of file its name says." },
       { status: 400, error: "Only 5 photos or PDFs go with a message." },
       {

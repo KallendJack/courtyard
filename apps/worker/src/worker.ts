@@ -63,7 +63,7 @@ export type Worker = {
 const MAX_BODY_BYTES = 16 * 1024;
 
 /** The largest message with files attached (#78): five of the largest, and room for the form. */
-const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.maxBytes + 1024 * 1024;
+const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.pdfMaxBytes + 1024 * 1024;
 
 /** The paths of the routes that take a message, each `:param` standing for one part of a path. */
 const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(
