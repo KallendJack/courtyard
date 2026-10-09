@@ -8,9 +8,11 @@ import {
   asOwner,
   errorOf,
   FAKE_MODEL,
+  FAKE_TWO_MODEL,
   followSession,
   pdfOf,
   pngOf,
+  postJson,
   postWithFiles,
   type Requester,
   startSession,
@@ -91,6 +93,39 @@ describe("attaching photos and PDFs to a message", () => {
     expect(answer).toBe(
       "I see IMG_2041.jpg (a photo) and rack-manual.pdf (a PDF). You said: please look",
     );
+  });
+
+  it("sends a message's attachments again when Carry on sends it to another provider", async () => {
+    const request = await asOwner(
+      testWorker({
+        root,
+        providers: [
+          createFakeProvider({ delayMs: 0 }),
+          createFakeProvider({ delayMs: 0, second: true }),
+        ],
+      }),
+    );
+    const started = await postWithFiles(
+      request,
+      "/api/workspaces/garage-gym/sessions",
+      { text: "please look, then please hit Fake two's limit", model: FAKE_TWO_MODEL },
+      [PHOTO],
+    );
+    const session = SessionSummary.parse(await started.json());
+    const failed = await followSession(request, { sessionId: session.id, until: "turn-failed" });
+
+    await postJson(request, `/api/sessions/${session.id}/carry-on`, {
+      turn: ownerMessage(failed).seq,
+    });
+    const carried = await followSession(request, {
+      sessionId: session.id,
+      after: failed.length,
+      until: "turn-completed",
+    });
+
+    expect(ownerMessage(carried).attachments).toEqual(ownerMessage(failed).attachments);
+    const answer = carried.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
+    expect(answer).toMatch(/^I see IMG_2041.jpg \(a photo\)\. /);
   });
 
   it("takes attachments on a later message too", async () => {
