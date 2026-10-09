@@ -294,7 +294,7 @@ const USE_SKILL_TOOL: CourtyardTool = {
 export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies";
 
 /** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 11). */
-const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them once you've written your answer, so the owner can answer with a tap: each a few words, as the owner would say it. The owner sees them as buttons under your answer, so your answer doesn't mention them. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
+const SUGGESTING = `Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or another, which days they're free), call the ${SUGGEST_REPLIES_TOOL_NAME} tool with two or three of them before you finish, so the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what something looks like).`;
 
 /** The suggest replies tool as a model reads it: what it does, and that the rule is elsewhere. */
 const SUGGEST_REPLIES_TOOL: CourtyardTool = {
@@ -638,7 +638,7 @@ const repliesRefusalReason = (refusal: RepliesRefusal) => {
 /** What a model is told about the replies it suggested: that the owner sees them, or why not. */
 export const suggestRepliesReply = (shown: Result<unknown, RepliesRefusal>): ToolReply =>
   shown.ok
-    ? textReply(true, "The owner sees them as buttons under your answer.")
+    ? textReply(true, "They're shown as buttons under your answer, so don't mention them. If your answer already asks the question, you've finished; if not, write your answer now, asking the question once.")
     : textReply(false, repliesRefusalReason(shown.error));
 
 /** Why a save was refused, in the model's terms. */

@@ -558,7 +558,7 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "That's enough for now.",
         expect: [],
         questions: { atLeast: 0, atMost: 0 },
-        says: ["nurse"],
+        says: [["nurse", "nursing"]],
         loads: [],
       },
     ],

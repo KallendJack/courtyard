@@ -177,10 +177,10 @@ Courtyard's tools (today, every one that saves). A code workspace's models aren'
 What a model is told (Every turn, item 11), on a turn that offers the tool:
 
 > Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or
-> another, which days they're free), call the suggest_replies tool with two or three of them once you've written
-> your answer, so the owner can answer with a tap: each a few words, as the owner would say it. The owner sees them
-> as buttons under your answer, so your answer doesn't mention them. Never suggest replies with an ordinary answer,
-> or after a question only the owner can answer in their own words (a memory, a name, what something looks like).
+> another, which days they're free), call the suggest_replies tool with two or three of them before you finish, so
+> the owner can answer with a tap: each a few words, as the owner would say it. Never suggest replies with an
+> ordinary answer, or after a question only the owner can answer in their own words (a memory, a name, what
+> something looks like).
 
 The tool's description says what it does and points to that rule; its one input is the replies. The worker checks
 them and refuses, saying why, when:
@@ -191,7 +191,11 @@ them and refuses, saying why, when:
 - **the answer already suggested replies:** one set per answer, the first that's accepted;
 - **the owner stopped the turn.**
 
-A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
+An accepted set gets this reply, since a model told only that the buttons show sometimes wrote its question again
+after the call, or, having called first, wrote only that there were buttons (#127): "They're shown as buttons under
+your answer, so don't mention them. If your answer already asks the question, you've finished; if not, write your
+answer now, asking the question once." A refusal shows nothing to the owner, and the model can put it right and call
+again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
 own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
 later turn gets leaves suggested replies out: the owner's reply is there, as written.
