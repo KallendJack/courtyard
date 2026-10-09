@@ -19,7 +19,7 @@ const folder = resolve("/path/to/context/garage-gym");
 const stubClaudeCode = (
   script: { check?: (signal: AbortSignal) => Promise<unknown>; messages?: unknown[] } = {},
 ) => {
-  const runs: { prompt: string; options: Options }[] = [];
+  const runs: Parameters<ClaudeCode["run"]>[0][] = [];
   const claudeCode: ClaudeCode = {
     check:
       script.check ??
@@ -45,6 +45,27 @@ const stubClaudeCode = (
   return { claudeCode, runs };
 };
 
+/**
+ * What a turn's streamed prompt says (#78): it must be one user message, and this is its content.
+ * A string prompt fails: every turn streams its message.
+ */
+const streamedContent = async (prompt: Parameters<ClaudeCode["run"]>[0]["prompt"] | undefined) => {
+  if (prompt === undefined || typeof prompt === "string") throw new Error("not streamed");
+  const messages: unknown[] = [];
+  for await (const message of prompt) messages.push(message);
+  const [only] = z
+    .array(
+      z.object({
+        type: z.literal("user"),
+        parent_tool_use_id: z.null(),
+        message: z.object({ role: z.literal("user"), content: z.array(z.unknown()) }),
+      }),
+    )
+    .length(1)
+    .parse(messages);
+  return only?.message.content;
+};
+
 const textDelta = (text: string) => ({
   type: "stream_event",
   event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
@@ -65,6 +86,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      attachments: [],
       tools: [],
       fileTools: null,
       webSearch: null,
@@ -334,6 +356,7 @@ describe("a Claude turn", () => {
         instructions: "Exactly these instructions.",
         message: "Exactly this message.",
         newMessage: "This message.",
+        attachments: [],
         tools: [],
         fileTools: null,
         webSearch: null,
@@ -341,7 +364,51 @@ describe("a Claude turn", () => {
     });
 
     expect(runs[0]?.options.systemPrompt).toBe("Exactly these instructions.");
-    expect(runs[0]?.prompt).toBe("Exactly this message.");
+    expect(await streamedContent(runs[0]?.prompt)).toEqual([
+      { type: "text", text: "Exactly this message." },
+    ]);
+  });
+
+  it("sends the turn's photos with its message as images, in order (#78)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    try {
+      const [first, second] = [join(root, "one.png"), join(root, "two.jpg")];
+      await writeFile(first, "first photo");
+      await writeFile(second, "second photo");
+      const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+      await runTurn(claudeCode, {
+        framing: {
+          instructions: "The instructions.",
+          message: "The message, with the PDF's text.",
+          newMessage: "The message.",
+          attachments: [
+            { kind: "photo", name: "one.png", path: first, mediaType: "image/png" },
+            { kind: "pdf", name: "manual.pdf" },
+            { kind: "photo", name: "two.jpg", path: second, mediaType: "image/jpeg" },
+          ],
+          tools: [],
+          fileTools: null,
+          webSearch: null,
+        },
+      });
+
+      const image = (mediaType: string, text: string) => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: Buffer.from(text).toString("base64"),
+        },
+      });
+      expect(await streamedContent(runs[0]?.prompt)).toEqual([
+        { type: "text", text: "The message, with the PDF's text." },
+        image("image/png", "first photo"),
+        image("image/jpeg", "second photo"),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("streams the answer as it's written and uses the model asked for", async () => {
@@ -571,6 +638,7 @@ const framingWith = (tools: readonly TurnTool[]) => ({
   instructions: "The turn's instructions.",
   message: "I've booked padel lessons for Tuesdays.",
   newMessage: "I've booked padel lessons for Tuesdays.",
+  attachments: [],
   tools,
   fileTools: null,
   webSearch: null,

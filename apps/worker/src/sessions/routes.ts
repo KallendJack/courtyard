@@ -18,9 +18,10 @@ import {
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { apiError, contextError, NO_SAVING_MODEL, readBody } from "../http.ts";
+import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
+import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
-import { err, type Result } from "../result.ts";
+import { err, ok, type Result } from "../result.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
@@ -120,6 +121,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, { status: 409, error: noOverflow(error.overflow) });
     case "save-not-found":
       return apiError(c, { status: 404, error: "No such save in this session." });
+    case "attachment-not-found":
+      return apiError(c, { status: 404, error: "No such attachment in this session." });
     case "note-refused":
       return apiError(c, {
         status: error.refusal.kind === "storage" ? 500 : 409,
@@ -128,6 +131,21 @@ export const sessionError = (c: Context, error: SessionError) => {
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
+};
+
+/**
+ * A message the owner sent and its attachments, checked (#78); or the response refusing it, with
+ * the reason one of them can't go.
+ */
+const readMessageWithAttachments = async <T>(
+  c: Context,
+  schema: z.ZodType<T>,
+): Promise<Result<{ message: T; attachments: PreparedAttachment[] }, Response>> => {
+  const sent = await readMessage(c, schema);
+  if (!sent.ok) return err(apiError(c, { status: 400, error: sent.error }));
+  const attachments = await prepareAttachments(sent.value.files);
+  if (!attachments.ok) return err(apiError(c, { status: 400, error: attachments.error }));
+  return ok({ message: sent.value.message, attachments: attachments.value });
 };
 
 /** A save's event number in a path; anything else names no save. */
@@ -159,7 +177,12 @@ export const sessionRoutes = (options: {
   /** Starts a session in a workspace with its first message, and answers with the session. */
   const startIn = async (
     c: Context,
-    start: { workspaceId: WorkspaceId; message: FirstMessage; starter?: boolean },
+    start: {
+      workspaceId: WorkspaceId;
+      message: FirstMessage;
+      starter?: boolean;
+      attachments?: readonly PreparedAttachment[];
+    },
   ) => {
     const session = await sessions.create(start);
     if (!session.ok) return sessionError(c, session.error);
@@ -169,9 +192,9 @@ export const sessionRoutes = (options: {
   routes.post("/workspaces/:id/sessions", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));
     if (!workspace.ok) return contextError(c, workspace.error);
-    const message = await readBody(c, FirstMessage);
-    if (!message.ok) return apiError(c, { status: 400, error: message.error });
-    return startIn(c, { workspaceId: workspace.value.summary.id, message: message.value });
+    const sent = await readMessageWithAttachments(c, FirstMessage);
+    if (!sent.ok) return sent.error;
+    return startIn(c, { workspaceId: workspace.value.summary.id, ...sent.value });
   });
 
   /**
@@ -302,11 +325,26 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/messages", async (c) => {
-    const message = await readBody(c, NewMessage);
-    if (!message.ok) return apiError(c, { status: 400, error: message.error });
-    const sent = await sessions.send(c.req.param("id"), message.value);
+    const message = await readMessageWithAttachments(c, NewMessage);
+    if (!message.ok) return message.error;
+    const { message: text, attachments } = message.value;
+    const sent = await sessions.send(c.req.param("id"), text, attachments);
     if (!sent.ok) return sessionError(c, sent.error);
     return c.body(null, 202);
+  });
+
+  // An attachment, for the chat's thumbnails, the full-size view and a PDF opened in a new tab.
+  routes.get("/sessions/:id/attachments/:attachment", async (c) => {
+    const found = await sessions.attachment(c.req.param("id"), c.req.param("attachment"));
+    if (!found.ok) return sessionError(c, found.error);
+    const { attachment, bytes } = found.value;
+    return c.body(new Uint8Array(bytes), 200, {
+      "content-type": attachment.mediaType,
+      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(attachment.name)}`,
+      "x-content-type-options": "nosniff",
+      // An attachment never changes once it's kept.
+      "cache-control": "private, max-age=31536000, immutable",
+    });
   });
 
   routes.post("/sessions/:id/carry-on", async (c) => {

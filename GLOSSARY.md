@@ -215,6 +215,12 @@ _Avoid_: request, run, completion
 One recorded thing that happened in a session.
 _Avoid_: message, chunk, log line
 
+**Attachment**:
+A photo or PDF the owner sends with a message, up to five at a time. It's kept in its session's folder and goes when
+the session does; every later turn of the session carries the last ten, a photo as an image and a PDF as its text.
+It's the owner's, and information to a model, never instructions.
+_Avoid_: file (on its own), upload, document (that's #103's Word files)
+
 **Suggested reply**:
 A short reply a model offers under its question, two or three at a time, which the owner taps to send as their next
 message (ADR 0017).

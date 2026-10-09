@@ -20,6 +20,7 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { readBytes } from "../files.ts";
 import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, turnSources } from "../sources/index.ts";
@@ -28,6 +29,7 @@ import {
   type CourtyardTool,
   jsonSchemaOf,
   type Provider,
+  photosOf,
   type ToolReply,
   type TurnInput,
   type WebSearch,
@@ -51,9 +53,47 @@ const LABEL = "Claude";
 export type ClaudeCode = {
   /** Who is signed in, and the models their plan offers, without sending a prompt. */
   readonly check: (signal: AbortSignal) => Promise<unknown>;
-  /** Runs one turn, yielding Claude Code's messages as they arrive. */
-  readonly run: (request: { prompt: string; options: Options }) => AsyncIterable<unknown>;
+  /**
+   * Runs one turn, yielding Claude Code's messages as they arrive. A session's turn streams its
+   * message, so it can carry images (#78); a one-off question is a string.
+   */
+  readonly run: (request: {
+    prompt: string | AsyncIterable<SDKUserMessage>;
+    options: Options;
+  }) => AsyncIterable<unknown>;
 };
+
+/**
+ * A turn's message as Claude Code's streaming input (#78): one message from the owner, its text
+ * then each photo the turn carries as an image, in the order the text numbers them.
+ */
+async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUserMessage> {
+  const images = await Promise.all(
+    photosOf(framing.attachments).map(async (photo) => {
+      const bytes = await readBytes(photo.path);
+      return bytes.ok && bytes.value !== undefined
+        ? [
+            {
+              type: "image" as const,
+              source: {
+                type: "base64" as const,
+                media_type: photo.mediaType,
+                data: bytes.value.toString("base64"),
+              },
+            },
+          ]
+        : [];
+    }),
+  );
+  yield {
+    type: "user",
+    message: {
+      role: "user",
+      content: [{ type: "text", text: framing.message }, ...images.flat()],
+    },
+    parent_tool_use_id: null,
+  };
+}
 
 /** The tools a planning workspace gets: looking at its files, never changing them (ADR 0003). */
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
@@ -640,7 +680,7 @@ export const createClaudeProvider = (
       let answer = "";
       try {
         const messages = claudeCode.run({
-          prompt: input.framing.message,
+          prompt: turnPrompt(input.framing),
           options: {
             ...isolatedOptions(),
             ...(input.model === "default" ? {} : { model: input.model }),

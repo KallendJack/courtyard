@@ -27,7 +27,9 @@ import {
   asOwner,
   followSession,
   postJson,
+  postWithFiles,
   type Requester,
+  type TestFile,
   testWorker,
   writeSkill,
 } from "../src/testing.ts";
@@ -425,6 +427,8 @@ const send = async (
     sessionId: SessionId | undefined;
     text: string;
     skill: string | undefined;
+    /** Files attached to the message (#78). */
+    attach: readonly TestFile[];
     choice: Choice;
   },
 ): Promise<SessionId> => {
@@ -435,12 +439,16 @@ const send = async (
     ...(effort === undefined ? {} : { effort }),
     ...(to.skill === undefined ? {} : { skill: to.skill }),
   };
+  const post = (path: string) =>
+    to.attach.length === 0
+      ? postJson(request, path, message)
+      : postWithFiles(request, path, message, to.attach);
   if (to.sessionId === undefined) {
-    const started = await postJson(request, `/api/workspaces/${to.workspaceId}/sessions`, message);
+    const started = await post(`/api/workspaces/${to.workspaceId}/sessions`);
     if (started.status !== 201) throw new Error(`starting a session failed (${started.status})`);
     return SessionSummary.parse(await started.json()).id;
   }
-  const sent = await postJson(request, `/api/sessions/${to.sessionId}/messages`, message);
+  const sent = await post(`/api/sessions/${to.sessionId}/messages`);
   if (sent.status !== 202) throw new Error(`sending a message failed (${sent.status})`);
   return to.sessionId;
 };
@@ -555,6 +563,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         sessionId,
         text: turn.say,
         skill: turn.skill,
+        attach: turn.attach ?? [],
         choice,
       });
       const events = await withTimeout(

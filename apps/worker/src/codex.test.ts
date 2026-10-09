@@ -316,6 +316,7 @@ const runTurn = async (
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
       newMessage: "Where should the rack go?",
+      attachments: [],
       tools: [],
       fileTools: null,
       webSearch: null,
@@ -608,6 +609,36 @@ describe("a Codex turn", () => {
     expect(codex.launches).toHaveLength(1);
   });
 
+  it("gives the turn's photos with its message as local images, in order (#78)", async () => {
+    const codex = standIn();
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+    const photos = [resolve("/path/to/data/one.png"), resolve("/path/to/data/two.jpg")];
+
+    await runTurn(provider, {
+      framing: {
+        instructions: "The instructions.",
+        message: "The message, with the PDF's text.",
+        newMessage: "The message.",
+        attachments: [
+          { kind: "photo", name: "one.png", path: photos[0] ?? "", mediaType: "image/png" },
+          { kind: "pdf", name: "manual.pdf" },
+          { kind: "photo", name: "two.jpg", path: photos[1] ?? "", mediaType: "image/jpeg" },
+        ],
+        tools: [],
+        fileTools: null,
+        webSearch: null,
+      },
+    });
+
+    expect(codex.requests("turn/start")[0]?.params).toMatchObject({
+      input: [
+        { type: "text", text: "The message, with the PDF's text.", text_elements: [] },
+        { type: "localImage", path: photos[0] },
+        { type: "localImage", path: photos[1] },
+      ],
+    });
+  });
+
   it("streams Codex's answer as it's written, and only this thread's", async () => {
     const codex = standIn({
       turn: (turn) => {
@@ -645,6 +676,7 @@ describe("web search on a Codex turn (ADR 0019)", () => {
     instructions: "The turn's instructions.",
     message: "What do Titan's J-hooks cost?",
     newMessage: "What do Titan's J-hooks cost?",
+    attachments: [],
     tools: [],
     fileTools: null,
     webSearch: { ownerLinks: [] },

@@ -5,7 +5,6 @@ import {
   ContextBackup,
   type GetToKnowRequest,
   LiveStatus,
-  type NewMessage,
   type NewWorkspace,
   OwnerContextDetail,
   type PasswordForm,
@@ -38,7 +37,7 @@ export const NOT_FOUND = { kind: "not-found" } as const;
  * Turns a response into one of the kinds above, parsing its body with the contract's schema. A 401
  * means the device isn't logged in, except from the password forms, where it means a wrong password.
  */
-const readResponse = async <T>(read: {
+export const readResponse = async <T>(read: {
   response: Response;
   schema: z.ZodType<T>;
   unauthorised: "logged-out" | "failed";
@@ -169,14 +168,6 @@ export const deleteSession = (id: SessionId) =>
     schema: z.unknown(),
   });
 
-/** Starts a session in a workspace with the owner's first message. */
-export const startSession = (workspaceId: WorkspaceId, message: NewMessage) =>
-  sendJson({
-    path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
-    body: message,
-    schema: SessionSummary,
-  });
-
 /** A page of a workspace's or the owner context's Recent changes, after the change `after`. */
 export const loadChanges = (about: ContextPlace, after?: ChangeId) => {
   const place =
@@ -220,14 +211,6 @@ export const carryOn = (sessionId: SessionId, turn: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/carry-on`,
     body: { turn } satisfies CarryOnRequest,
-    schema: z.unknown(),
-  });
-
-/** Sends the next message in a session. */
-export const sendMessage = (sessionId: SessionId, message: NewMessage) =>
-  sendJson({
-    path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
-    body: message,
     schema: z.unknown(),
   });
 

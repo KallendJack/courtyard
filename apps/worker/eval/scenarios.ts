@@ -1,4 +1,5 @@
 import type { OwnerSection, PlacedLine } from "@courtyard/contract";
+import { pdfOf, pngOf, type TestFile } from "../src/testing.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
@@ -80,6 +81,34 @@ export type Turn = {
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
   readonly avoids?: readonly Words[];
+  /** Photos and PDFs the owner attaches to this message (#78). */
+  readonly attach?: readonly TestFile[];
+};
+
+/**
+ * A made-up photo for the attachment scenarios: a landscape, blue sky over green grass, with a
+ * yellow sun in the top right corner.
+ */
+const LANDSCAPE: TestFile = {
+  name: "IMG_3107.png",
+  type: "image/png",
+  bytes: pngOf(400, 300, (x, y) => {
+    if ((x - 320) ** 2 + (y - 60) ** 2 < 35 ** 2) return [250, 210, 40];
+    return y < 180 ? [110, 170, 230] : [60, 150, 60];
+  }),
+};
+
+/** A made-up rack manual for the attachment scenarios. */
+const RACK_MANUAL: TestFile = {
+  name: "titan-t3-manual.pdf",
+  type: "application/pdf",
+  bytes: pdfOf([
+    "Titan T-3 Power Rack: owner's manual",
+    "Assembly takes about 90 minutes with two people.",
+    "Safety: the J-hooks are rated to a maximum load of 340 kg each.",
+    "The J-hook cup is 64 mm across, for bars with a 28-32 mm shaft.",
+    "Bolt torque for the uprights: 45 Nm.",
+  ]),
 };
 
 /**
@@ -179,6 +208,25 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
+    name: "attached-photo",
+    rule: "A photo the owner attaches is described correctly, and still seen in a later turn (#78)",
+    workspace: "Garden",
+    context: { facts: ["The garden faces south"] },
+    turns: [
+      {
+        say: "What's in this picture? One or two sentences.",
+        attach: [LANDSCAPE],
+        expect: [],
+        says: [["sky"], ["grass", "field", "meadow", "lawn", "ground", "green"], ["sun"]],
+      },
+      {
+        say: "Which corner was the sun in?",
+        expect: [],
+        says: [["top right", "top-right", "upper right", "upper-right"]],
+      },
+    ],
+  },
+  {
     name: "search-opening-times",
     rule: "a question about opening times searches the web and lists sources",
     workspace: "Days out",
@@ -212,6 +260,25 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Roughly how many sets of squats a week should a beginner do for strength?",
         expect: [],
         searches: false,
+      },
+    ],
+  },
+  {
+    name: "attached-pdf",
+    rule: "A PDF the owner attaches is read and its contents used (#78)",
+    workspace: "Garage gym",
+    context: { facts: ["The garage is 5 m by 3 m"] },
+    turns: [
+      {
+        say: "A friend lent me the manual for his rack, to settle an argument. What's the most each J-hook can hold?",
+        attach: [RACK_MANUAL],
+        expect: [],
+        says: [["340"]],
+      },
+      {
+        say: "And what torque do the upright bolts need?",
+        expect: [],
+        says: [["45"]],
       },
     ],
   },

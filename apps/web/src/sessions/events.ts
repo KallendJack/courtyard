@@ -1,6 +1,7 @@
 import {
   type Activity,
   ApiError,
+  type Attachment,
   type Effort,
   type FailureReason,
   type ModelRef,
@@ -36,6 +37,8 @@ export type Turn = {
   readonly effort: Effort | undefined;
   /** The skill the owner started with it, if any (ADR 0016). */
   readonly skill: SkillName | undefined;
+  /** The photos and PDFs it carried (#78). */
+  readonly attachments: readonly Attachment[];
   /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
   readonly modelChanged: boolean;
   readonly answer: string;
@@ -115,6 +118,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             model: event.model,
             effort: event.effort,
             skill: event.skill,
+            attachments: event.attachments ?? [],
             modelChanged:
               before !== undefined &&
               (before.provider !== event.model.provider || before.model !== event.model.model),

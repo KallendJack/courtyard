@@ -27,9 +27,11 @@ test("what the model searched and read shows above the answer, and its numbered 
       "Read titan.fitness",
     ]);
     const sources = page.getByRole("list", { name: "Sources" });
+    // Numbered, as an ordered list.
+    await expect(sources).toHaveJSProperty("tagName", "OL");
     await expect(sources.getByRole("listitem")).toHaveText([
-      "1.Titan Fitness · T-3 Series J-Hooks",
-      "2.garagegymreviews.com · Titan T-3 review",
+      "Titan Fitness · T-3 Series J-Hooks",
+      "garagegymreviews.com · Titan T-3 review",
     ]);
     const first = sources.getByRole("link", { name: "Titan Fitness" });
     await expect(first).toHaveAttribute("href", "https://titan.fitness/j-hooks");

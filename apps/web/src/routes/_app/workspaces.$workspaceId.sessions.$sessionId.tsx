@@ -19,6 +19,7 @@ import { RenameForm } from "@/components/rename-form";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
+import { sendMessage } from "../../sessions/messages.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import {
   carryOn,
@@ -28,7 +29,6 @@ import {
   loadSkills,
   NOT_FOUND,
   renameSession,
-  sendMessage,
   stopTurn,
 } from "../../worker.ts";
 
@@ -90,8 +90,8 @@ function Session(props: {
   const running = last?.state.kind === "running";
 
   const send = useCallback(
-    async (message: NewMessage) => {
-      const sent = await sendMessage(session.id, message);
+    async (message: NewMessage, files: readonly File[]) => {
+      const sent = await sendMessage(session.id, message, files);
       return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
     },
     [session.id],

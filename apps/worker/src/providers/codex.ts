@@ -25,6 +25,7 @@ import {
   type CourtyardTool,
   jsonSchemaOf,
   type Provider,
+  photosOf,
   type SignIn,
   type ToolReply,
   type TurnInput,
@@ -702,6 +703,8 @@ type ThreadTurn = {
   readonly cwd: string;
   readonly instructions: string;
   readonly message: string;
+  /** The photos that go with the message, as files Codex reads itself (#78). */
+  readonly photos?: readonly { readonly path: string }[];
   /** Courtyard's tools, the only ones the thread is given. */
   readonly tools: ReadonlyMap<string, TurnTool>;
   /** Whether the thread searches the web, on cached mode only (ADR 0019). */
@@ -802,7 +805,11 @@ const turnOnThread = async (
   try {
     const started = await codex.request("turn/start", {
       threadId,
-      input: [{ type: "text", text: turn.message, text_elements: [] }],
+      input: [
+        { type: "text", text: turn.message, text_elements: [] },
+        // Each photo the turn carries, in the order the message numbers them (#78).
+        ...(turn.photos ?? []).map((photo) => ({ type: "localImage", path: photo.path })),
+      ],
       ...(turn.effort === undefined ? {} : { effort: turn.effort }),
       sandboxPolicy: { type: "readOnly", networkAccess: false },
       approvalPolicy: "never",
@@ -1103,6 +1110,7 @@ export const createCodexProvider = (options: {
         cwd: resolve(input.folder),
         instructions: input.framing.instructions,
         message: input.framing.message,
+        photos: photosOf(input.framing.attachments),
         tools: toolsFor(input),
         searchesWeb: input.framing.webSearch !== null,
         heard: (notice) => {

@@ -96,6 +96,12 @@
   --mark-walls: #f3f0ec;
   --mark-tree: #c9a26b;
 
+  /* The full-size photo viewer is dark in both modes, so a photo stands out (#78). */
+  --viewer: #1b181a;
+  --viewer-foreground: #eee8eb;
+  --viewer-muted: #a79ea4;
+  --viewer-dot: #5a5257;
+
   --workspace-bracken: #b08a55;
   --workspace-heather: #6a3f6e;
   --workspace-slate: #5e6e7e;

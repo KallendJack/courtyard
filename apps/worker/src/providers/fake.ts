@@ -14,7 +14,7 @@ import {
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { turnSources } from "../sources/index.ts";
-import type { Activity, Provider, SignIn, TurnToolName } from "./index.ts";
+import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
 const CAPABILITIES: Capabilities = {
@@ -230,6 +230,19 @@ const fakeSignIn = (options: { finishAfterMs?: number }): SignIn => {
   };
 };
 
+/**
+ * What "please look" makes the fake say it was given (#78): the turn's attachments by name, "I see
+ * IMG_2041.jpg (a photo) and rack-manual.pdf (a PDF). ", or "I see nothing attached. ".
+ */
+const seen = (attachments: readonly FramedAttachment[]) => {
+  const named = attachments.map(
+    ({ name, kind }) => `${name} (${kind === "photo" ? "a photo" : "a PDF"})`,
+  );
+  const last = named.pop();
+  if (last === undefined) return "I see nothing attached. ";
+  return `I see ${named.length === 0 ? last : `${named.join(", ")} and ${last}`}. `;
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -248,7 +261,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
- * hours on, so overflow can be seen and tested.
+ * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
+ * (see `seen`).
  */
 export const createFakeProvider = (
   options: {
@@ -315,7 +329,8 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
-      for (const word of `You said: ${last}`.split(/(?<= )/)) {
+      const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
+      for (const word of `${saw}You said: ${last}`.split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);

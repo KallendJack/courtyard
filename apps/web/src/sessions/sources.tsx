@@ -32,22 +32,23 @@ export const sourcesAsMarkdown = (sources: readonly Source[]) =>
  */
 export function SourceList(props: { sources: readonly Source[] }) {
   return (
-    <div className="flex flex-col gap-1 md:gap-1.5">
+    <div className="flex flex-col gap-1">
       <p aria-hidden className="text-xs font-semibold text-muted-foreground">
         Sources
       </p>
-      <ol aria-label="Sources" className="flex flex-col gap-1 md:gap-1.5">
-        {props.sources.map((source, index) => (
-          <li key={source.url} className="flex min-w-0 items-baseline text-sm/5.5">
-            <span aria-hidden className="w-5.5 shrink-0 font-semibold text-primary-text">
-              {index + 1}.
-            </span>
-            <span className="min-w-0 truncate">
+      {/* The answer's own numbered lists' look, whose classes are already in the first load. */}
+      <ol
+        aria-label="Sources"
+        className="flex list-decimal flex-col gap-1 pl-6 marker:font-semibold marker:text-primary-text"
+      >
+        {props.sources.map((source) => (
+          <li key={source.url} className="text-sm/[22px]">
+            <span className="block truncate">
               <a
                 href={source.url}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-primary-text underline decoration-1 underline-offset-2"
+                className="font-medium text-primary-text underline underline-offset-2"
               >
                 {source.site}
               </a>

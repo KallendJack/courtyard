@@ -37,6 +37,9 @@ a file just outside the workspace folder (in the context folder, next to it) hol
       take a new message.
 - [ ] **Reading the workspace.** Asked about a file in the workspace folder, Codex reads it to answer, and the chat
       shows the read.
+- [ ] **Photos reach it.** A photo attached to a message, kept in the session's folder in the data folder (outside
+      the workspace), is described correctly, and still seen in the next turn (`localImage` input, #78). The eval's
+      `attached-photo` scenario does this on Codex (`--model` a Codex model).
 - [ ] **Saving.** Told something new and "remember that", Codex saves it: the chat shows the save's note, and the
       context file has the line.
 - [ ] **No reading outside the workspace.** Asked to read the file outside the workspace folder (by `../` and by its
@@ -69,3 +72,4 @@ a file just outside the workspace folder (in the context folder, next to it) hol
 | 2026-10-07 | 0.161.0 | All passed, on a throwaway worker with GPT-6.1-Sol (ticket 29). Feature list checked. |
 | 2026-10-07 | 0.161.0 | Reading, saving and the confinement passed with GPT-6.1-Sol, once the code-mode host was back on (#71). Its code had only standard JavaScript, a clock and Courtyard's tools. |
 | 2026-10-09 | 0.161.0 | Codex's own skills (#89), GPT-6.1-Sol, throwaway context folder. Codex found the workspace's and the context folder's skills as "repo" skills (`skills/list`). With its default environment, an owner's `$workspace-skill` loaded one by itself, and with `skills.include_instructions` on it listed both; turning them off in the thread's `skills.config` stopped that. Started as Courtyard starts it, it loaded them only through `use_skill` ("Used …"), `$` mentions included. `$HOME/.agents/skills` wasn't read, with `HOME` the real profile or another folder, and no bundled skill was listed. |
+| 2026-10-09 | 0.161.0 | Photos (#78), GPT-6.1-Sol, Courtyard's Codex home and settings (read-only sandbox, no environment), the photo in a temporary data folder outside the workspace: `localImage` reached the model, which described it correctly in 4 of 5 runs and found it again the next turn in all 5 (the miss called a field "green ground", so the scenario takes that too). A PDF's text was used in 2 of 2. |
