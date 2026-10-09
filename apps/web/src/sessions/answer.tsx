@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { WebLink } from "@/components/web-link";
 import { finishForNow, splitBlocks } from "./blocks.ts";
 import { CodeBlock } from "./code-block.tsx";
 import { hasMaths, writeMathsForRemark } from "./maths.ts";
@@ -14,7 +15,6 @@ const textOf = (node: Node | undefined): string =>
   node === undefined ? "" : (node.value ?? node.children?.map(textOf).join("") ?? "");
 
 const SUBHEADING = "font-display text-xl/7 font-semibold";
-const LINK = "font-medium text-primary-text underline underline-offset-2";
 
 /**
  * How each part of an answer looks. Markdown becomes elements, never raw HTML, so an answer can't
@@ -36,20 +36,11 @@ const ELEMENTS: Components = {
   ul: ({ node: _, ...props }) => (
     <ul className="list-disc space-y-2 pl-6 marker:text-primary-text" {...props} />
   ),
-  a: ({ node: _, href, ...props }) => (
-    <a href={href} target="_blank" rel="noreferrer" className={LINK} {...props} />
-  ),
+  a: ({ node: _, className: __, ...props }) => <WebLink {...props} />,
   // An image is shown as a link, never loaded by itself: a model tricked by something it read
   // could otherwise put data in an image's address and send it away without anyone clicking.
   img: ({ src, alt }) => (
-    <a
-      href={typeof src === "string" ? src : undefined}
-      target="_blank"
-      rel="noreferrer"
-      className={LINK}
-    >
-      {alt || "Image"}
-    </a>
+    <WebLink href={typeof src === "string" ? src : undefined}>{alt || "Image"}</WebLink>
   ),
   code: ({ node: _, className: __, ...props }) => (
     <code className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em]" {...props} />

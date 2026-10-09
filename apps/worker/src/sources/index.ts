@@ -1,8 +1,9 @@
-import { SOURCES_MAX, Source } from "@courtyard/contract";
+import { type Activity, SOURCES_MAX, Source } from "@courtyard/contract";
 
 /**
  * Sources (ADR 0019): the web pages an answer used, worked out the same way for every provider
- * from the links the answer wrote and the pages the model read.
+ * from the links the answer wrote, the pages the model read and, for a provider that gives them,
+ * its search results.
  */
 
 /**
@@ -19,6 +20,15 @@ export const pageKey = (address: string): string | undefined => {
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
   url.hash = "";
   return url.href;
+};
+
+/** A web page's site as the chat names it when nothing better is known: its host, without "www.". */
+const hostOf = (key: string) => new URL(key).hostname.replace(/^www\./, "");
+
+/** A page read, as the activity the chat shows ("Read titan.fitness"), when it's a web page's. */
+export const pageRead = (address: string): Extract<Activity, { kind: "page-read" }> | undefined => {
+  const key = pageKey(address);
+  return key === undefined ? undefined : { kind: "page-read", url: key, site: hostOf(key) };
 };
 
 /** A Markdown link, `[text](address "title")`, or an address on its own. */
@@ -46,6 +56,17 @@ const LAST_PART = /^(.+)\s+[|–—-]\s+(.{2,40})$/;
 /** Only a name's letters and digits, lower case, to compare it with a host. */
 const bare = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
+/** The labels a host's own name can sit before: the "co" of screwfix.co.uk. */
+const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gov", "ac"]);
+
+/** A host's own name: "screwfix" for www.screwfix.co.uk, "titan" for titan.fitness. */
+const mainLabelOf = (host: string) =>
+  host
+    .split(".")
+    .slice(0, -1)
+    .filter((label) => label !== "www" && !SECOND_LEVEL.has(label))
+    .at(-1) ?? "";
+
 /**
  * Whether a title's last part is the site's own name, as its host spells it: "Titan Fitness" for
  * titan.fitness, "Rogue Fitness UK" for roguefitness.com. Not "Black Oxide" for roguefitness.com,
@@ -54,7 +75,7 @@ const bare = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")
 const namesHost = (name: string, host: string) => {
   const letters = bare(name);
   const hostLetters = bare(host);
-  const mainLabel = bare(host.split(".").slice(-2, -1)[0] ?? "");
+  const mainLabel = bare(mainLabelOf(host));
   return (
     letters.length >= 2 &&
     (hostLetters.includes(letters) || (mainLabel.length >= 3 && letters.includes(mainLabel)))
@@ -62,10 +83,10 @@ const namesHost = (name: string, host: string) => {
 };
 
 /** A page as a source: its site's name from its title when the title ends with it, or its host. */
-const sourceOf = (page: { url: string; title: string }): Source | undefined => {
+const sourceOf = (page: SearchHit): Source | undefined => {
   const key = pageKey(page.url);
   if (key === undefined) return undefined;
-  const host = new URL(key).hostname.replace(/^www\./, "");
+  const host = hostOf(key);
   const title = page.title.replace(/\s+/g, " ").trim();
   const [, rest, last] = LAST_PART.exec(title) ?? [];
   if (rest !== undefined && last !== undefined && namesHost(last, host)) {
@@ -76,25 +97,62 @@ const sourceOf = (page: { url: string; title: string }): Source | undefined => {
   return Source.parse({ site: host, title: saysMore ? title : "", url: key });
 };
 
+/** Characters with a meaning in a regular expression. */
+const SPECIAL = /[.*+?^${}()|[\]\\]/g;
+
+/** Whether some text has a name in it as a word of its own, in any case. */
+const mentions = (text: string, name: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(SPECIAL, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(
+    text,
+  );
+
+/** Whether an answer names a source's site: "Titan Fitness", or "Screwfix" for screwfix.co.uk. */
+const namedIn = (answer: string, source: Source) => {
+  const mainLabel = mainLabelOf(new URL(source.url).hostname);
+  return mentions(answer, source.site) || (mainLabel.length >= 3 && mentions(answer, mainLabel));
+};
+
+/** A page a search gave back. */
+export type SearchHit = { readonly url: string; readonly title: string };
+
+/** Every search's results, each one's top results first: the first of each, then the second… */
+const topFirst = (searches: readonly (readonly SearchHit[])[]) =>
+  Array.from({ length: Math.max(0, ...searches.map((hits) => hits.length)) }, (_, rank) =>
+    searches.flatMap((hits) => hits[rank] ?? []),
+  ).flat();
+
 /**
- * A turn's sources, when it used the web: each page the answer links to, then each page the model
- * read that it doesn't link, once each, with the page's title when a search gave one and the
- * link's words otherwise.
+ * A turn's sources, when it used the web. First the pages it used: each page the answer links to,
+ * then each page the model read that it doesn't link, once each, titled from the search results
+ * when they have the page and from the link's words otherwise. When it used none, its search
+ * results stand in: the ones whose site the answer names, or else all of them, each search's top
+ * results first. At most `SOURCES_MAX`.
  */
 export const turnSources = (turn: {
   readonly answer: string;
   /** The pages the model read, by their address. */
   readonly read: readonly string[];
-  /** Page titles from the turn's search results, by page key. */
-  readonly titles: ReadonlyMap<string, string>;
+  /** Each search's results, in its order; none from a provider that gives no results list. */
+  readonly searches: readonly (readonly SearchHit[])[];
 }): Source[] => {
-  const pages = new Map<string, { url: string; title: string }>();
+  const results = new Map<string, SearchHit>();
+  for (const hit of topFirst(turn.searches)) {
+    const key = pageKey(hit.url);
+    if (key !== undefined && !results.has(key)) results.set(key, { url: key, title: hit.title });
+  }
+  const pages = new Map<string, SearchHit>();
   const add = (url: string, words: string) => {
     const key = pageKey(url);
     if (key === undefined || pages.has(key)) return;
-    pages.set(key, { url: key, title: turn.titles.get(key) ?? words });
+    pages.set(key, { url: key, title: results.get(key)?.title ?? words });
   };
   for (const link of linksIn(turn.answer)) add(link.url, link.text);
   for (const url of turn.read) add(url, "");
-  return [...pages.values()].flatMap((page) => sourceOf(page) ?? []).slice(0, SOURCES_MAX);
+  const sourcesOf = (found: Iterable<SearchHit>) =>
+    [...found].flatMap((page) => sourceOf(page) ?? []);
+  const used = sourcesOf(pages.values());
+  if (used.length > 0) return used.slice(0, SOURCES_MAX);
+  const searched = sourcesOf(results.values());
+  const named = searched.filter((source) => namedIn(turn.answer, source));
+  return (named.length > 0 ? named : searched).slice(0, SOURCES_MAX);
 };

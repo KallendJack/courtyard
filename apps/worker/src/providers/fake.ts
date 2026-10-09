@@ -13,7 +13,7 @@ import {
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
-import { turnSources } from "../sources/index.ts";
+import { pageRead, turnSources } from "../sources/index.ts";
 import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves when a message scripts it. */
@@ -126,12 +126,13 @@ const scriptedWeb = (message: string) => {
     const [, url] = READ_PAGE.exec(line) ?? [];
     const [, link] = CITE.exec(line) ?? [];
     if (query !== undefined) activities.push({ kind: "web-searched", query });
-    if (url !== undefined) activities.push({ kind: "page-read", url });
+    const read = url === undefined ? undefined : pageRead(url);
+    if (read !== undefined) activities.push(read);
     if (link !== undefined) cited.push(link);
   }
   return {
     activities,
-    sources: turnSources({ answer: cited.join("\n"), read: [], titles: new Map() }),
+    sources: turnSources({ answer: cited.join("\n"), read: [], searches: [] }),
   };
 };
 

@@ -144,6 +144,45 @@ test("pasting or dropping a photo attaches it", async ({ page }) => {
   await expect(tray(page).getByRole("img", { name: "dropped.jpg" })).toBeVisible();
 });
 
+test("a picture copied from a web page attaches, but text copied from a document pastes as text", async ({
+  page,
+}) => {
+  await page.goto("/workspaces/garage-gym");
+  const png = photo("image.png").buffer.toString("base64");
+  const box = page.getByLabel("Message");
+  /** Pastes a picture with what else a clipboard holds; whether the box was left to paste text. */
+  const paste = (also: { html: string; text: string }) =>
+    box.evaluate(
+      (element, { base64, html, text }) => {
+        const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+        const data = new DataTransfer();
+        data.items.add(new File([bytes], "image.png", { type: "image/png" }));
+        data.setData("text/html", html);
+        if (text !== "") data.setData("text/plain", text);
+        return element.dispatchEvent(
+          new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
+        );
+      },
+      { base64: png, ...also },
+    );
+
+  // Word and Excel copy a selection's text with a picture of it: the text is what's meant.
+  const pastedText = await paste({
+    html: "<html><body><table><tr><td>Rack</td><td>120 cm</td></tr></table></body></html>",
+    text: "Rack\t120 cm",
+  });
+  expect(pastedText).toBe(true);
+  await expect(tray(page)).toBeHidden();
+
+  // A browser's Copy image gives the picture, its HTML only an <img>, and perhaps its address.
+  const pastedPicture = await paste({
+    html: '<meta charset="utf-8"><img src="https://courtyard.example/rack.png" alt="The rack">',
+    text: "https://courtyard.example/rack.png",
+  });
+  expect(pastedPicture).toBe(false);
+  await expect(tray(page).getByRole("img", { name: "image.jpg" })).toBeVisible();
+});
+
 test("a desktop has no camera button", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   await expect(page.getByRole("button", { name: "Attach photos or PDFs" })).toBeVisible();

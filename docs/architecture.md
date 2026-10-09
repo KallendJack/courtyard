@@ -106,8 +106,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
   writes after them apart from lines it repeats.
 - **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
-  links to and the pages the model read, each with its site's name and title. Also finds the web addresses in the
-  owner's messages, the only pages besides search results that Claude may read.
+  links to and the pages the model read, each with its site's name and title; when it used none, the search results
+  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
+  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
+  results that Claude may read.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
@@ -164,7 +166,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, sheets, notices and so on), used
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, sheets, notices and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
@@ -180,8 +182,9 @@ kinds of workspace that get each one and whether only the owner starts it (ADR 0
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
-topic in `lib/`: login, workspaces, sessions and their events, attachments (an event's in `attachment.ts`, the limits
-and checks in `attachment-file.ts`, kept apart so the checks aren't on the first load), skills, saves and changes,
+topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
+`session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
+a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.

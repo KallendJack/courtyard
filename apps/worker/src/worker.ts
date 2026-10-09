@@ -37,7 +37,7 @@ import {
 } from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import { createSessions } from "./sessions/index.ts";
-import { sessionRoutes } from "./sessions/routes.ts";
+import { MESSAGE_ROUTES, sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
 import { signInRoutes } from "./sign-ins/routes.ts";
@@ -63,15 +63,17 @@ export type Worker = {
 const MAX_BODY_BYTES = 16 * 1024;
 
 /** The largest message with files attached (#78): five of the largest, and room for the form. */
-const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.maxBytes + 1024 * 1024;
+const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.pdfMaxBytes + 1024 * 1024;
 
-/** The routes that take a message, which may come with files attached as a multipart form. */
-const MESSAGE_ROUTES = /^\/api\/(sessions\/[^/]+\/messages|workspaces\/[^/]+\/sessions)$/;
+/** The paths of the routes that take a message, each `:param` standing for one part of a path. */
+const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(
+  (route) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`),
+);
 
 /** Whether a request is a message sent with files attached (#78). */
 const takesFiles = (c: Context) =>
   c.req.method === "POST" &&
-  MESSAGE_ROUTES.test(c.req.path) &&
+  MESSAGE_PATHS.some((path) => path.test(c.req.path)) &&
   (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
 
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */

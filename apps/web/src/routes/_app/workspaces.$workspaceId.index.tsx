@@ -168,7 +168,7 @@ function Workspace() {
               ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
               : {})}
             send={async (message, files) => {
-              const session = await startSession(workspace.id, message, files);
+              const session = await startSession({ workspaceId: workspace.id, message, files });
               if (session.kind !== "loaded") return describeProblem(session).body;
               await navigate({
                 to: "/workspaces/$workspaceId/sessions/$sessionId",

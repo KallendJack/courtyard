@@ -91,7 +91,7 @@ function Session(props: {
 
   const send = useCallback(
     async (message: NewMessage, files: readonly File[]) => {
-      const sent = await sendMessage(session.id, message, files);
+      const sent = await sendMessage({ sessionId: session.id, message, files });
       return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
     },
     [session.id],
@@ -109,11 +109,14 @@ function Session(props: {
   /** Sends a message with the model and effort of `turn`, the one it retries or answers. */
   const sendAfter = useCallback(
     async (turn: Turn, message: Pick<Turn, "text" | "skill">) => {
-      const sent = await sendMessage(session.id, {
-        text: message.text,
-        model: turn.model,
-        ...(turn.effort === undefined ? {} : { effort: turn.effort }),
-        ...(message.skill === undefined ? {} : { skill: message.skill }),
+      const sent = await sendMessage({
+        sessionId: session.id,
+        message: {
+          text: message.text,
+          model: turn.model,
+          ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+          ...(message.skill === undefined ? {} : { skill: message.skill }),
+        },
       });
       setSendProblem(sent.kind === "loaded" ? undefined : describeProblem(sent).body);
       return sent.kind === "loaded";

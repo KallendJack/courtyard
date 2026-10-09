@@ -37,28 +37,28 @@ const sendMessageWithFiles = async <T>(request: {
 };
 
 /** Starts a session in a workspace with the owner's first message and any files attached. */
-export const startSession = (
-  workspaceId: WorkspaceId,
-  message: NewMessage,
-  files: readonly File[] = [],
-) =>
+export const startSession = (start: {
+  workspaceId: WorkspaceId;
+  message: NewMessage;
+  files: readonly File[];
+}) =>
   sendMessageWithFiles({
-    path: `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
-    message,
-    files,
+    path: `/workspaces/${encodeURIComponent(start.workspaceId)}/sessions`,
+    message: start.message,
+    files: start.files,
     schema: SessionSummary,
   });
 
 /** Sends the next message in a session, with any files attached. */
-export const sendMessage = (
-  sessionId: SessionId,
-  message: NewMessage,
-  files: readonly File[] = [],
-) =>
+export const sendMessage = (send: {
+  sessionId: SessionId;
+  message: NewMessage;
+  files?: readonly File[];
+}) =>
   sendMessageWithFiles({
-    path: `/sessions/${encodeURIComponent(sessionId)}/messages`,
-    message,
-    files,
+    path: `/sessions/${encodeURIComponent(send.sessionId)}/messages`,
+    message: send.message,
+    files: send.files ?? [],
     schema: z.unknown(),
   });
 

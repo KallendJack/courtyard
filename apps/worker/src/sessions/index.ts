@@ -980,12 +980,13 @@ export const createSessions = (options: {
     },
 
     /** Starts a turn; returns as soon as the owner's message is recorded. */
-    send: async (
-      rawId: string,
-      message: NewMessage,
+    send: async (send: {
+      rawId: string;
+      message: NewMessage;
       /** The files attached to it, checked (#78). */
-      attachments: readonly PreparedAttachment[] = [],
-    ): Promise<Result<null, SessionError>> => {
+      attachments: readonly PreparedAttachment[];
+    }): Promise<Result<null, SessionError>> => {
+      const { rawId, message, attachments } = send;
       const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;

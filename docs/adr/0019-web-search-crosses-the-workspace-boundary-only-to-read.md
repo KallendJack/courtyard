@@ -20,7 +20,10 @@ pages, on these terms:
 - **Planning workspaces only, always on.** The model decides when to search. A code workspace, whose models will work
   on repositories, gets none until phase 4 decides what its models may reach.
 - **Sources** are recorded as an event and listed under the answer, so the owner can check where facts came from.
-  No site icons are loaded, so no site learns that an answer was shown.
+  They are the pages the turn used: those its answer links to, then those it read. A Claude turn that searched but
+  used none lists its search results instead: the ones whose site the answer names ("Screwfix", "Titan Fitness"),
+  or all of them when it names none, each search's top results first, at most 20. No site icons are loaded, so no
+  site learns that an answer was shown.
 
 ## Considered options
 
@@ -38,5 +41,5 @@ pages, on these terms:
   from the query. The query's words are the model's, kept to what the question needs by `docs/ai-conduct.md`.
 - **Codex can't read a page the owner pastes** unless its cached index has it; ai-conduct says "if you can".
 - **Codex gives no list of results,** so its sources are the links its answer gives; Claude's take their titles from
-  its search results.
+  its search results, and fall back to them when its answer neither links nor reads a page.
 - **The real-Codex check** covers the per-thread search setting (`docs/real-codex-check.md`).

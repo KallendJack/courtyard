@@ -749,8 +749,8 @@ describe("web search on a Claude turn (ADR 0019)", () => {
       });
     }
     expect(reported).toEqual([
-      { kind: "page-read", url: "https://courtyard.example/manual.pdf" },
-      { kind: "page-read", url: "https://titan.fitness/j-hooks" },
+      { kind: "page-read", url: "https://courtyard.example/manual.pdf", site: "courtyard.example" },
+      { kind: "page-read", url: "https://titan.fitness/j-hooks", site: "titan.fitness" },
     ]);
   });
 
@@ -803,6 +803,55 @@ describe("web search on a Claude turn (ADR 0019)", () => {
         title: "Titan T-3 Power Rack review: what fits",
         url: "https://www.garagegymreviews.com/titan-t3",
       },
+    ]);
+  });
+
+  it("lists a turn's search results as its sources when the answer neither links nor reads a page, the results it names first", async () => {
+    const search =
+      (query: string, hits: readonly { title: string; url: string }[]) =>
+      async (options: Options) => {
+        await preToolUse(options, { name: "WebSearch", input: { query } });
+        await postToolUse(options, {
+          name: "WebSearch",
+          input: { query },
+          response: searchResults(query, hits),
+        });
+      };
+    const searches = [
+      search("Titan T-3 J-hooks", [
+        { title: "T-3 Series J-Hooks | Titan Fitness", url: "https://titan.fitness/j-hooks" },
+        { title: "J-hooks guide", url: "https://www.garagegymreviews.com/j-hooks" },
+      ]),
+      search("Ohio bar price", [
+        { title: "The Ohio Bar | Rogue Fitness UK", url: "https://www.roguefitness.com/gb/ohio" },
+        { title: "Ohio bar review", url: "https://barbend.com/ohio" },
+      ]),
+    ];
+    const naming = stubClaudeCode({
+      messages: [
+        ...searches,
+        textDelta("Titan Fitness lists 28–32 mm; Rogue Fitness UK sells the Ohio at £350."),
+        success,
+      ],
+    });
+    const plain = stubClaudeCode({
+      messages: [...searches, textDelta("The hooks take a 28–32 mm shaft."), success],
+    });
+
+    const named = await runTurn(naming.claudeCode, { framing: searchingFraming() });
+    const unnamed = await runTurn(plain.claudeCode, { framing: searchingFraming() });
+
+    // The results it names, from every search.
+    expect(named.sources.map((source) => source.site)).toEqual([
+      "Titan Fitness",
+      "Rogue Fitness UK",
+    ]);
+    // Otherwise every result, each search's top ones first.
+    expect(unnamed.sources.map((source) => source.url)).toEqual([
+      "https://titan.fitness/j-hooks",
+      "https://www.roguefitness.com/gb/ohio",
+      "https://www.garagegymreviews.com/j-hooks",
+      "https://barbend.com/ohio",
     ]);
   });
 

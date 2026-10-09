@@ -20,7 +20,7 @@ import { LimitNotice } from "./limit-notice.tsx";
 import { attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
-import { SourceList, siteOf, sourcesAsMarkdown } from "./sources.tsx";
+import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
 
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
@@ -34,7 +34,7 @@ const describeActivity = (activity: Activity) => {
     case "web-searched":
       return `Searched the web for “${activity.query}”`;
     case "page-read":
-      return `Read ${siteOf(activity.url)}`;
+      return `Read ${activity.site}`;
   }
 };
 
