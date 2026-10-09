@@ -1,12 +1,22 @@
 import { z } from "zod";
+import { DocumentChange } from "./documents.ts";
 import { ChangeId, PlacedLine, SessionId } from "./session.ts";
+import { ThingChange } from "./things.ts";
 import { WorkspaceId } from "./workspace.ts";
 
 /**
  * The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit,
- * a tidy.
+ * a tidy, a change to a document or a Thing (ADR 0020).
  */
-export const RecentChangeKind = z.enum(["save", "undo", "edit", "hand-edit", "tidy"]);
+export const RecentChangeKind = z.enum([
+  "save",
+  "undo",
+  "edit",
+  "hand-edit",
+  "tidy",
+  "document",
+  "thing",
+]);
 export type RecentChangeKind = z.infer<typeof RecentChangeKind>;
 
 /**
@@ -18,7 +28,8 @@ export type RecentChangeUndo = z.infer<typeof RecentChangeUndo>;
 
 /**
  * One change to a workspace's context file or the owner context (ADR 0013): the lines it took out
- * and put in there, newest first. A reworded line is one out and one in.
+ * and put in there, newest first. A reworded line is one out and one in. Or one change to one of a
+ * workspace's documents (ADR 0020).
  */
 export const RecentChange = z.object({
   id: ChangeId,
@@ -31,6 +42,10 @@ export const RecentChange = z.object({
   session: z.object({ id: SessionId, title: z.string(), workspaceId: WorkspaceId }).optional(),
   removed: z.array(PlacedLine),
   added: z.array(PlacedLine),
+  /** For a change to a document, and its undo: what it did to the document, with no lines. */
+  document: DocumentChange.optional(),
+  /** For a change to a Thing, and its undo: what it did to the Thing, with no lines. */
+  thing: ThingChange.optional(),
   undo: RecentChangeUndo,
 });
 export type RecentChange = z.infer<typeof RecentChange>;
@@ -44,3 +59,10 @@ export const RecentChanges = z.object({
   more: ChangeId.nullable(),
 });
 export type RecentChanges = z.infer<typeof RecentChanges>;
+
+/**
+ * What an Undo answers, from Recent changes or from a document's or a Thing's note: nothing (204),
+ * which the web app reads as `null`. A refused one answers with an error instead.
+ */
+export const Undone = z.literal(null);
+export type Undone = z.infer<typeof Undone>;

@@ -8,8 +8,10 @@ import {
   type SignInState,
 } from "@courtyard/contract";
 import {
+  DOCUMENT_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
+  THING_TOOL_NAME,
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -99,13 +101,73 @@ const scriptedReplies = (message: string): { replies: string[] }[] =>
     return replies === undefined ? [] : [{ replies: replies.split("|").map((r) => r.trim()) }];
   });
 
+const SAVE_DOCUMENT = /^save document:?$/i;
+const UPDATE_DOCUMENT = /^update document (\S+?):?(?: (.+))?$/i;
+
+/**
+ * The document a message scripts saving (ADR 0020): a line "save document", or "update document
+ * docs/packing-list.md: added grips" (what changed after the colon, if anything), with the
+ * document's whole text on the lines after it.
+ */
+const scriptedDocuments = (message: string): Record<string, string>[] => {
+  const lines = message.split("\n");
+  const at = lines.findIndex(
+    (line) => SAVE_DOCUMENT.test(line.trim()) || UPDATE_DOCUMENT.test(line.trim()),
+  );
+  if (at === -1) return [];
+  const text = lines.slice(at + 1).join("\n");
+  const [, path, change] = UPDATE_DOCUMENT.exec(lines[at]?.trim() ?? "") ?? [];
+  return [
+    {
+      text,
+      ...(path === undefined ? {} : { path }),
+      ...(change === undefined ? {} : { change }),
+    },
+  ];
+};
+
+const READ_FILE = /^read file: (\S+)$/i;
+
+/** The workspace's files a message scripts reading, one per line: "read file: docs/notes.md". */
+const scriptedReads = (message: string) =>
+  message.split("\n").flatMap((line) => {
+    const [, path] = READ_FILE.exec(line.trim()) ?? [];
+    return path === undefined ? [] : [path];
+  });
+
+const THING = /^thing (\S+?): *(.*)$/i;
+const THING_FIELD =
+  /^(name|status|brand|bought|price|condition|size|where|part of|history|photo|remove)\b *(.*)$/i;
+
+/**
+ * The Thing saves a message scripts (ADR 0020), one per line: "thing add: name Tyres | status
+ * have | part of T1" adds one, and "thing T2: history Swapped | price £32", "thing T2: photo 1" or
+ * "thing T2: remove" changes or removes the Thing labelled T2. Each field is its name, then its
+ * value; an empty value clears it.
+ */
+const scriptedThings = (message: string): Record<string, unknown>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, which = "", rest = ""] = THING.exec(line.trim()) ?? [];
+    if (which === "") return [];
+    const input: Record<string, unknown> = which.toLowerCase() === "add" ? {} : { thing: which };
+    for (const part of rest.split("|")) {
+      const [, field = "", value = ""] = THING_FIELD.exec(part.trim()) ?? [];
+      const key = field.toLowerCase().replace(" ", "_");
+      if (key === "") continue;
+      input[key] = key === "remove" ? true : key === "photo" ? Number(value) : value.trim();
+    }
+    return [input];
+  });
+
 /**
  * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
- * skills loaded first, then saves, then suggested replies.
+ * skills loaded first, then saves, documents and Things, then suggested replies.
  */
 const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
   [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
   [SAVE_TOOL_NAME, scriptedSaves],
+  [DOCUMENT_TOOL_NAME, scriptedDocuments],
+  [THING_TOOL_NAME, scriptedThings],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
 ];
 
@@ -258,7 +320,10 @@ const pause = (ms: number, signal: AbortSignal) =>
  * context file, so activity can be too, and lines such as "save fact: …" make saves (see
  * `scriptedSaves`) when the turn offers the save tool, and "use skill …" loads a skill (see
  * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
- * replies (see `scriptedReplies`) when it offers that tool. On a turn with web search, "search the
+ * replies (see `scriptedReplies`) when it offers that tool, and "save document" or "update
+ * document …" saves a document (see `scriptedDocuments`) when it offers the document tool, after
+ * any "read file: …" it acts out reading (see `scriptedReads`), and "thing add: …" or "thing T2:
+ * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
@@ -312,6 +377,7 @@ export const createFakeProvider = (
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
+      for (const path of scriptedReads(last)) await report({ kind: "read-file", path });
       const web = framing.webSearch === null ? undefined : scriptedWeb(last);
       for (const activity of web?.activities ?? []) await report(activity);
       for (const [name, scripted] of SCRIPTED_CALLS) {

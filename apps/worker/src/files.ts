@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { link, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import type { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
@@ -176,6 +177,29 @@ export const writeTextFile = async (
   }
 };
 
+/** Removes a file, if it's there: whether it's gone. */
+export const removeFile = async (path: string) => {
+  try {
+    await rm(path, { force: true, maxRetries: 5 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Writes a text file, making its folder first if it isn't there yet (see `writeTextFile`): whether
+ * it was written.
+ */
+export const writeTextFileIn = async (path: string, text: string) => {
+  try {
+    await mkdir(dirname(path), { recursive: true });
+  } catch {
+    return false;
+  }
+  return (await writeTextFile(path, text)).ok;
+};
+
 /**
  * Writes a file's bytes, readable only by the worker's user, through a temporary file beside it so
  * a crash mid-write never leaves half a file.
@@ -194,6 +218,19 @@ export const writeBytes = async (
   } finally {
     await rm(temporary, { force: true }).catch(() => undefined);
   }
+};
+
+/**
+ * Writes a file's bytes, making its folder first if it isn't there yet (see `writeBytes`): whether
+ * it was written.
+ */
+export const writeBytesIn = async (path: string, bytes: Uint8Array) => {
+  try {
+    await mkdir(dirname(path), { recursive: true });
+  } catch {
+    return false;
+  }
+  return (await writeBytes(path, bytes)).ok;
 };
 
 /**

@@ -1,6 +1,7 @@
-import type { ProviderList, SessionId } from "@courtyard/contract";
+import type { ProviderList, SessionId, WorkspaceId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { DocumentsHere } from "./documents.tsx";
 import type { Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
 
@@ -31,8 +32,13 @@ export function SessionTurns(props: {
   onCarryOn: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply; left out when the session can't be carried on. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
+  /** The session's workspace, where its documents' notes open. */
+  workspaceId: WorkspaceId;
+  /** Where Save as document saves; left out where answers can't be saved as documents. */
+  documents?: DocumentsHere;
 }) {
-  const { sessionId, turns, providers, onRetry, onCarryOn, onReply } = props;
+  const { sessionId, turns, providers, onRetry, onCarryOn, onReply, workspaceId, documents } =
+    props;
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -122,6 +128,8 @@ export function SessionTurns(props: {
               sessionId={sessionId}
               turn={turn}
               providers={providers}
+              workspaceId={workspaceId}
+              {...(documents === undefined ? {} : { documents })}
               // Only the last turn can be retried, carried on or replied to, so only it gets the
               // handlers.
               {...(turn === last ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}) } : {})}

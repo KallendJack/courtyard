@@ -1001,6 +1001,86 @@ describe("the save tool on a Claude turn", () => {
     });
   });
 
+  it("hands a document over whole, and gives the model the worker's refusal of a stale one", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const SAVE_DOCUMENT: TurnTool = {
+      name: "save_document",
+      description: "Saves a document.",
+      input: { text: z.string(), path: z.string().optional(), change: z.string().optional() },
+    };
+    const stale =
+      "docs/packing-list.md has changed since you read it. Read it again, then send its whole new text with your change.";
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, SAVE_DOCUMENT]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: false, content: [{ kind: "text", text: stale }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__save_document", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    const input = {
+      path: "docs/packing-list.md",
+      text: "# Packing list\n\n- Grips",
+      change: "grips",
+    };
+    const result = await client.callTool({ name: "save_document", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "save_document", input }]);
+    expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: stale }] });
+  });
+
+  it("hands a Thing save over as Claude sent it, photo number and all, and gives back the worker's answer", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const SAVE_THING: TurnTool = {
+      name: "save_thing",
+      description: "Saves a Thing.",
+      input: {
+        thing: z.string().optional(),
+        history: z.string().optional(),
+        photo: z.number().int().optional(),
+      },
+    };
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, SAVE_THING]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: true, content: [{ kind: "text", text: "Changed [T2] Chain." }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__save_thing", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    const input = { thing: "T2", history: "Swapped", photo: 1 };
+    const result = await client.callTool({ name: "save_thing", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "save_thing", input }]);
+    expect(result).toMatchObject({ content: [{ type: "text", text: "Changed [T2] Chain." }] });
+  });
+
   it("isn't offered, or allowed, on a turn whose framing has none", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
 

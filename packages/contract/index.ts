@@ -24,7 +24,23 @@ export {
   RecentChangeKind,
   RecentChanges,
   RecentChangeUndo,
+  Undone,
 } from "./lib/changes.ts";
+export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
+export {
+  DOCUMENT_MAX_CHARACTERS,
+  DOCUMENT_NAME_MAX_LENGTH,
+  DocumentChange,
+  DocumentChanged,
+  DocumentDetail,
+  DocumentList,
+  DocumentName,
+  DocumentRename,
+  DocumentRenamed,
+  DocumentSlug,
+  DocumentSummary,
+  SaveAsDocument,
+} from "./lib/documents.ts";
 export {
   FRESH_START_WORDS,
   FreshStartRequest,
@@ -67,6 +83,7 @@ export {
 } from "./lib/session.ts";
 export {
   Activity,
+  DocumentSave,
   endsTurn,
   FailureReason,
   Save,
@@ -86,6 +103,29 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
+export {
+  THING_DETAILS,
+  THING_FIELD_MAX_CHARACTERS,
+  THING_FORM_FIELD,
+  THING_HISTORY_MAX_CHARACTERS,
+  THING_PHOTO_FIELD,
+  ThingBought,
+  ThingChange,
+  ThingChanged,
+  ThingDeleted,
+  ThingDetail,
+  type ThingDetailName,
+  ThingFields,
+  ThingForm,
+  ThingHistoryEntry,
+  ThingList,
+  ThingPhotoPath,
+  ThingProblem,
+  ThingSave,
+  ThingSlug,
+  ThingStatus,
+  ThingSummary,
+} from "./lib/things.ts";
 export {
   TidyChange,
   TidyChangeKind,

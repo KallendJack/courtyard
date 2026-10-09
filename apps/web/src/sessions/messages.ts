@@ -8,7 +8,8 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { type FromWorker, readResponse, sendJson } from "../worker.ts";
+import { sendForm } from "../send-form.ts";
+import { type FromWorker, sendJson } from "../worker.ts";
 
 // Sending the owner's messages, with any photos and PDFs attached (#78). Beside `worker.ts` rather
 // than in it, since only the pages with a message box send them: none of it is on the first load.
@@ -28,12 +29,7 @@ const sendMessageWithFiles = async <T>(request: {
   const form = new FormData();
   form.set(MESSAGE_FIELD, JSON.stringify(message));
   for (const file of files) form.append(ATTACHMENTS_FIELD, file);
-  try {
-    const response = await fetch(`/api${path}`, { method: "POST", body: form });
-    return await readResponse({ response, schema, unauthorised: "logged-out" });
-  } catch {
-    return { kind: "offline" };
-  }
+  return sendForm({ path, form, schema });
 };
 
 /** Starts a session in a workspace with the owner's first message and any files attached. */

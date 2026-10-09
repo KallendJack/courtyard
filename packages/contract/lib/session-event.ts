@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { Attachment } from "./attachment.ts";
+import { DocumentSlug } from "./documents.ts";
 import { ChangeId, Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
+import { ThingSave } from "./things.ts";
 
 // A session's events (ADR 0006) and what they carry. Apart from `session.ts`, whose summaries the
 // home page needs, so only the session page loads these.
@@ -56,6 +58,18 @@ export const Save = z.discriminatedUnion("action", [
 ]);
 export type Save = z.infer<typeof Save>;
 
+/**
+ * What one document save did (ADR 0020): a new document saved, or one updated with its whole new
+ * text, by its file's name and its name then.
+ */
+export const DocumentSave = z.object({
+  action: z.enum(["save", "update"]),
+  document: z.object({ slug: DocumentSlug, name: z.string() }),
+  /** For an update: what changed, in a few words, as the model said. */
+  summary: z.string().optional(),
+});
+export type DocumentSave = z.infer<typeof DocumentSave>;
+
 /** How many suggested replies a model offers at once, at least and at most (ADR 0017). */
 export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
 
@@ -106,6 +120,30 @@ export const SessionEvent = z.discriminatedUnion("type", [
     save: z.number().int().positive(),
     now: PlacedLine,
   }),
+  /**
+   * A document saved: by the model during the turn, or by the owner with Save as document, from
+   * the answer to their message numbered `answer`.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("document-saved"),
+    save: DocumentSave,
+    /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
+    change: ChangeId.optional(),
+    answer: z.number().int().positive().optional(),
+  }),
+  /** The owner undid the document save numbered `save`, whenever and from wherever they did it. */
+  z.object({ ...eventBase, type: z.literal("document-undone"), save: z.number().int().positive() }),
+  /** A Thing the model saved during the turn: added, changed or removed (ADR 0020). */
+  z.object({
+    ...eventBase,
+    type: z.literal("thing-saved"),
+    save: ThingSave,
+    /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
+    change: ChangeId.optional(),
+  }),
+  /** The owner undid the Thing save numbered `save`, whenever and from wherever they did it. */
+  z.object({ ...eventBase, type: z.literal("thing-undone"), save: z.number().int().positive() }),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */

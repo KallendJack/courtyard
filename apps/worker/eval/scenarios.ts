@@ -77,12 +77,65 @@ export type Turn = {
    * read and cited is still printed).
    */
   readonly searches?: boolean;
+  /**
+   * Whether the answer should hold a Markdown table (ADR 0021), with a sentence of its own before
+   * it, as a comparison of options should; or none. Left out, it isn't checked.
+   */
+  readonly tables?: boolean;
+  /**
+   * Whether the answer should hold a `chart` block the web app can draw (ADR 0021), with a
+   * sentence of its own before it, as numbers that compare or change should; or none. Left out,
+   * it isn't checked.
+   */
+  readonly charts?: boolean;
+  /**
+   * Whether the answer should hold a `mermaid` block (ADR 0021), with a sentence of its own before
+   * it, as steps or how parts connect should; or none. Left out, it isn't checked.
+   */
+  readonly diagrams?: boolean;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
   readonly avoids?: readonly Words[];
   /** Photos and PDFs the owner attaches to this message (#78). */
   readonly attach?: readonly TestFile[];
+  /**
+   * The documents this message should end with saved or updated (ADR 0020), each judged on its
+   * text afterwards; none means it saves none. Left out, it isn't checked (they're still printed).
+   */
+  readonly documents?: readonly ExpectedDocument[];
+  /**
+   * An edit by hand to a file in the workspace, made the moment the model reads it in this turn,
+   * so the document it read is out of date when it saves: its update should be refused, then
+   * read again and retried, keeping the edit.
+   */
+  readonly editsAfterRead?: { readonly path: string; readonly text: string };
+  /**
+   * The Things this message should end with added, changed or removed (ADR 0020), each judged by
+   * its file afterwards; none means it saves none. Left out, they aren't checked (they're still
+   * printed).
+   */
+  readonly things?: readonly ExpectedThing[];
+};
+
+/**
+ * A Thing a turn should add, change or remove: words its name has, and words each field it names
+ * should have afterwards, the last line of its history, and the Thing it's part of, by file name.
+ */
+export type ExpectedThing = {
+  readonly action: "add" | "change" | "remove";
+  readonly name: Words;
+  readonly fields?: Readonly<
+    Partial<Record<"status" | "brand" | "bought" | "price" | "condition" | "size" | "where", Words>>
+  >;
+  readonly history?: Words;
+  readonly partOf?: string;
+};
+
+/** A document a turn should save or update, and words its text must have afterwards. */
+export type ExpectedDocument = {
+  readonly action: "save" | "update";
+  readonly words: Words;
 };
 
 /**
@@ -194,6 +247,9 @@ const SEARCHING_GYM: Pick<Scenario, "workspace" | "context"> = {
   },
 };
 
+/** This month as a Thing's bought field starts with it today: `2026-10`. */
+const THIS_MONTH = new Date().toLocaleDateString("en-CA").slice(0, 7);
+
 export const SCENARIOS: readonly Scenario[] = [
   {
     name: "search-current-price",
@@ -260,6 +316,65 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Roughly how many sets of squats a week should a beginner do for strength?",
         expect: [],
         searches: false,
+      },
+    ],
+  },
+  {
+    name: "table-comparison",
+    rule: "options compared side by side are answered with a table after a sentence, and an ordinary question with none (ADR 0021)",
+    workspace: "Padel",
+    context: { facts: ["Plays padel twice a week", "Has a sore right elbow"] },
+    turns: [
+      {
+        say: "How do the Head Evo Speed, the Babolat Contact and the Bullpadel Indiga CTR compare on weight, shape and how soft they feel?",
+        expect: [],
+        tables: true,
+      },
+      {
+        say: "What's a bandeja, anyway?",
+        expect: [],
+        tables: false,
+      },
+    ],
+  },
+  {
+    name: "chart-over-time",
+    rule: "numbers that change over time are answered with a chart after a sentence, and a question without numbers with none (ADR 0021)",
+    workspace: "Garage gym",
+    context: {
+      facts: [
+        "Trains three mornings a week",
+        "Best squat by month: June 60 kg, July 70 kg, August 77.5 kg, September 85 kg, October 90 kg",
+      ],
+    },
+    turns: [
+      {
+        say: "How has my squat come on since June?",
+        expect: [],
+        charts: true,
+      },
+      {
+        say: "Should I squat with a belt yet?",
+        expect: [],
+        charts: false,
+      },
+    ],
+  },
+  {
+    name: "diagram-steps",
+    rule: "steps that branch on what you find are answered with a diagram after a sentence, and a plain question with none (ADR 0021)",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides a Whyte T-140 trail bike", "Has a chain checker"] },
+    turns: [
+      {
+        say: "Walk me through checking my chain: what I measure, and what each result means I should buy.",
+        expect: [],
+        diagrams: true,
+      },
+      {
+        say: "How often should I lube the chain?",
+        expect: [],
+        diagrams: false,
       },
     ],
   },
@@ -935,6 +1050,107 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
         questions: { atLeast: 1, atMost: 2 },
         suggests: false,
+      },
+    ],
+  },
+  {
+    name: "document-saved-when-asked",
+    rule: "a model offers to save a longer answer as a document, but saves it only once the owner asks",
+    workspace: "Padel",
+    context: {
+      facts: ["Plays padel on Tuesdays and Saturdays", "Has a weak left knee"],
+      plans: ["Play the club tournament on 14 November"],
+    },
+    turns: [
+      {
+        say: "Can you make me a four-week training plan up to the tournament, two sessions a week? Keep my knee in mind.",
+        expect: [],
+        documents: [],
+      },
+      {
+        say: "Save it as a document please.",
+        expect: [],
+        documents: [{ action: "save", words: ["week", "knee"] }],
+      },
+    ],
+  },
+  {
+    name: "document-stale-update",
+    rule: "an update to a document changed since the model read it is refused, read again and retried, keeping the change",
+    workspace: "Padel",
+    context: { facts: ["Going to Bilbao for a padel weekend in November"] },
+    files: {
+      "docs/packing-list-for-bilbao.md":
+        "# Packing list for Bilbao\n\n- Two rackets\n- Trainers\n- Shorts\n",
+    },
+    turns: [
+      {
+        say: "Add grips to my packing list for Bilbao, please.",
+        expect: [],
+        documents: [{ action: "update", words: ["grips", "sun cream", "two rackets"] }],
+        editsAfterRead: {
+          path: "docs/packing-list-for-bilbao.md",
+          text: "# Packing list for Bilbao\n\n- Two rackets\n- Trainers\n- Shorts\n- Sun cream\n",
+        },
+      },
+    ],
+  },
+  {
+    name: "thing-chain-swapped",
+    rule: "something the owner did to a Thing changes that Thing, its fields and its history, and nothing else",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides trails most Sundays"] },
+    files: {
+      "things/whyte-t-140.md":
+        "---\nname: Whyte T-140\nstatus: have\nbought: 2025-04\nprice: £1,400\n---\n\n- 2025-04-12: Bought second-hand\n",
+      "things/chain.md":
+        "---\nname: Chain\nstatus: have\nbrand: KMC X11\nbought: 2025-04\npart of: whyte-t-140\n---\n",
+      "things/cassette.md":
+        "---\nname: Cassette\nstatus: have\nbrand: SRAM XG-1150\nbought: 2025-04\npart of: whyte-t-140\n---\n",
+      "things/tyres.md":
+        "---\nname: Tyres\nstatus: have\nbrand: Maxxis Minion DHF 2.5\nbought: 2026-05\npart of: whyte-t-140\n---\n",
+    },
+    turns: [
+      {
+        say: "Swapped the chain today, the old one was past 0.75%. Went with the KMC X11 again, £32.",
+        expect: [],
+        things: [
+          {
+            action: "change",
+            name: ["chain"],
+            fields: { price: ["32"], bought: [THIS_MONTH] },
+            history: [["swap", "replace", "new", "fitted"]],
+            partOf: "whyte-t-140",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "thing-parts-offered",
+    rule: "a model adds what the owner bought, offers its typical parts, and adds them only once the owner agrees",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides trails most Sundays"] },
+    turns: [
+      {
+        say: "Picked up a Whyte T-140 on Saturday, £1,400 second-hand.",
+        expect: [],
+        things: [
+          {
+            action: "add",
+            name: ["t-140"],
+            fields: { status: ["have"], price: [["1,400", "1400"]] },
+          },
+        ],
+        asks: [["chain", "tyre", "fork", "part", "component"]],
+      },
+      {
+        say: "Yes, add the chain and the tyres.",
+        expect: [],
+        things: [
+          { action: "add", name: ["chain"], partOf: "whyte-t-140" },
+          { action: "add", name: ["tyre"], partOf: "whyte-t-140" },
+        ],
       },
     ],
   },

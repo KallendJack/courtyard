@@ -80,11 +80,30 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`owner-context/`:** reads `OWNER.md` and starts a new one.
 - **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
   that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
-  changes and Fresh start. Every module that changes the context folder goes through it.
+  changes and Fresh start. Every module that changes the context folder goes through it. A change made file by file
+  rather than line by line (a document's or a Thing's) names its files in `Courtyard-File` trailers, so
+  `wholeFilesOf`, `stillAsLeft` and `undoWholeFiles` can read it back and undo it (as bytes, so a photo goes back as
+  it was); `WHOLE_FILE_FOLDERS` are the workspace folders Recent changes looks in besides `CONTEXT.md`.
+- **`documents/`:** a planning workspace's documents (ADR 0020): lists, reads, saves, renames and deletes them, each
+  write one change through `context-folder/`; Save as document's text from an answer; and one turn's document tool,
+  which keeps what the model has read so an update to a document it hasn't read, or one changed since, is refused.
+  Its routes are a workspace's documents and each document (`/api/workspaces/:id/documents/:slug`).
+- **`things/`:** a planning workspace's Things (ADR 0020): reads each `things/<slug>.md` against the contract's
+  schema (listing a file that fails with its problem), lists them with each part after its Thing, adds, changes and
+  removes one as one change through `context-folder/` (its photo with it), keeps a photo resized with `sharp`
+  (`keptPhoto`), and one turn's Things tool, which labels the Things as the turn showed them and refuses a change to
+  one changed since. Its routes are a workspace's Things, each Thing, and its photo
+  (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
+  with the fields, as one multipart form, so both are one change with one Undo; these and the
+  photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
+- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
+  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
+  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
+  for the refusals they share.
 - **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
   `context-file/` and `context-folder/`.
-- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and undoes one from that
-  page.
+- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and
+  Things', and undoes one from that page (a model's document or Thing save through its session, as a save is).
 - **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
   changes as one change.
 
@@ -95,8 +114,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
-  (instructions with the skills list and the skills in use, the conversation so far, and Courtyard's tools: the save
-  tool, use skill and suggest replies), the replies to Courtyard's tools, and the text for Tidy and titling a session.
+  (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
+  far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
+  tools, and the text for Tidy and titling a session.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place from four places, the more specific
   winning by name: the workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context
   folder's top-level one, then the house skills for its kind of workspace from `packages/skills`. It keeps each
@@ -115,8 +135,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
   turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
   one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
-  list of models, Get to know (a session started with its house skill), Grill this plan, and each attachment
-  (`GET /api/sessions/:id/attachments/:attachment`).
+  list of models, Get to know (a session started with its house skill), Grill this plan, each attachment
+  (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), and Undo
+  of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
+  (`POST /api/sessions/:id/things/:save/undo`).
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -131,9 +153,11 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
 
-- **`http.ts`:** reads a request's body with a contract schema (a message with files attached as a multipart form,
-  `readMessage`), and turns errors into answers.
-- **`files.ts`:** reads and writes files and JSON, checked with a schema.
+- **`http.ts`:** reads a request's body with a contract schema (JSON with files as a multipart form,
+  `readWithFiles`: a message's attachments with `readMessage`, a Thing's photo with its form), and turns errors into
+  answers.
+- **`files.ts`:** reads, writes (making the folder, with `writeTextFileIn`) and removes files, and JSON checked with
+  a schema.
 - **`git.ts`:** runs git, never stopping to ask for a password.
 - **`result.ts`:** the `Result` type.
 - **`testing.ts`:** a worker on temporary folders, and helpers for the tests and the context eval.
@@ -146,31 +170,74 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
   workspaces down the side or across the top; the rest are pages.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
-  offline worker or a refusal comes back as a value to show. **`worker-watch.ts`** checks the worker's health while a
-  page needs it.
+  offline worker or a refusal comes back as a value to show. **`send-form.ts`**, beside it so it's not on the first
+  load, sends a multipart form (a message's files, a Thing's photo) the same way. **`worker-watch.ts`** checks the
+  worker's health while a page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
-    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`), code blocks with
+    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced
+    blocks Courtyard draws come from `rich-blocks/`), code blocks with
     their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
     block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
     finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
     message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
     and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
     load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
-    plan (`grill-plan.tsx`), and an answer's Sources (`sources.tsx`).
-  - **`changes/`:** the Recent changes list, with Undo.
+    plan (`grill-plan.tsx`), an answer's Sources (`sources.tsx`), Save as document with each document's note
+    (`documents.tsx`), and each Thing save's note (`things.tsx`).
+  - **`rich-blocks/`:** the blocks Courtyard draws in answers and documents
+    ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
+    document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,
+    prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
+    `answer.tsx`, a fence whose language is a kind in its `FENCED_KINDS` (a `chart`, a `mermaid`) becomes a
+    `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
+    whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
+    fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
+    just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
+    (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
+    Moorland's colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
+    out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
+    one at a time, in Moorland's colours read from the theme (and again when the device turns dark or light), at its
+    own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+    changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
+    script, load something or go somewhere (links keep their words) before it goes in the page, the one place
+    Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
+    with an `img`, an actor's icon), so the page's own policy (`index.html`) loads pictures only from Courtyard and
+    such a diagram shows as written. The build takes Mermaid from its prebuilt files without its ELK layout
+    (`mermaidAsDrawn` in `vite.config.ts`), so it adds nothing to the first load. The folder's classes are
+    in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
+    by `stylesheet.ts` (through `lib/stylesheet.ts`) from inside the answer renderer's script, so neither the classes
+    nor a stylesheet's name are on the first load. They apply only inside a `RichBlock` (`rich-block.tsx`), which
+    each table and drawing is wrapped in, never a fallback: coming after the theme's stylesheet, they would otherwise
+    outrank its screen-size variants on every page.
+  - **`changes/`:** the Recent changes list, with Undo, its calls (`api.ts`), and the note a page shows for
+    something just deleted from its own page, with Undo (`just-deleted.tsx`).
+  - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
+    a document's page is in `routes/`, drawn with the answer renderer.
+  - **`things/`:** a workspace's Things section (`things-section.tsx`, filtered by status), a Thing's card
+    (`thing-card.tsx`, its route in `routes/`, its history drawn with the answer renderer), the rows both list them
+    in, parts under their Thing (`thing-rows.tsx`), Add Thing's and Edit's form (`thing-form.tsx`), Things' calls
+    (`api.ts`) and how their fields read (`words.ts`). Like `rich-blocks/`, its classes are in a stylesheet of its
+    own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
+    first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`sign-ins/`:** the home page's sign-in box and Models list.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
-  (`problems.tsx`), and how dates read (`when.ts`).
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, sheets, notices and so on), used
-  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). **`lib/`:** small
+  (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
+  workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
+  heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
+  the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the Moorland theme.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
-  runs after each build to stamp the service worker and check the first-load budget.
+  runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
+  keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
+  the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
+  shares with the first load, such as React and Zod, into files of their own.
 
 ### The house skills: `packages/skills`
 
@@ -185,7 +252,8 @@ Every shape that crosses between the web app and the worker, as Zod schemas with
 topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
 `session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors. The worker's
+tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors, and a `chart`
+block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.
 
@@ -236,6 +304,17 @@ Where the rest fits:
   through `context-folder/` at once; the session records it and the browser shows a note. A refused save is explained
   to the model, which may put it right once
   ([ADR 0013](adr/0013-models-save-context-as-they-chat-and-the-owner-undoes.md)).
+- **Documents.** The model calls the document tool, or the owner taps Save as document under an answer.
+  `documents/` checks it and writes it as a change through `context-folder/`; the session records a
+  `document-saved` event and the browser shows a note with Open and Undo. Each turn lists the documents; a model reads
+  one with the file tools, and that read is what an update is checked against
+  ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
+- **Things.** The model calls the Things tool by the labels its turn listed. `things/` checks the call and writes it
+  as a change through `context-folder/`, resizing a photo from the turn's attachments first; the session records a
+  `thing-saved` event and the browser shows a note with Open, which goes to the Thing's card
+  (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
+  workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
+  ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -246,7 +325,8 @@ Where the rest fits:
   and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
   (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
-  files in another (the only requests that aren't JSON, and the only ones allowed past the small body limit).
+  files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
+  small body limit).
   `attachments/` checks them and keeps them in the session's folder; the owner message's event records each one, and
   the browser shows them from the attachment route. Each turn carries the session's last ten: `prompts/` puts each
   PDF's text in the message and lists the photos, which each provider sends its own way (below). They go with their
@@ -279,6 +359,11 @@ things live only in the worker's memory and go when it restarts.
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
 - `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour
   (and a code workspace's repo).
+- `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
+  its file by that name.
+- `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
+  history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
+  photo, resized to fit 1600 px and 300 KB, in plain git.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.
@@ -371,10 +456,10 @@ Everything Courtyard's models read is built in one place, from written rules, an
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
     [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
-  - The fake echoes, and saves, loads a skill, suggests replies or acts out a web search when a test scripts it, or
+  - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
     says which attachments it was given ("please look").
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
-  their saves, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
+  their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
   never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
 - **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
   folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started

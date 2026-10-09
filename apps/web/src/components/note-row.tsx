@@ -3,13 +3,16 @@ import { classes } from "@/lib/classes";
 import { FormError } from "./form-error";
 
 /**
- * What a note says: its label ("Saved to Facts"), its line, and the line it replaced. Grey when
- * the change is undone; struck through when the line is gone.
+ * What a note says: its label ("Saved to Facts"), its line, and the line it replaced, or a few
+ * words on what changed (a document's update). Grey when the change is undone; struck through
+ * when the line is gone.
  */
 export function NoteWords(props: {
   label: string;
   line?: string | undefined;
   was?: string | undefined;
+  /** What changed, in a few words, after the line: "added grips". */
+  aside?: string | undefined;
   muted?: boolean;
   struck?: boolean;
 }) {
@@ -33,6 +36,9 @@ export function NoteWords(props: {
       {props.was !== undefined && !props.muted && (
         <span className="text-muted-foreground"> (was {props.was})</span>
       )}
+      {props.aside !== undefined && !props.muted && (
+        <span className="text-muted-foreground"> ({props.aside})</span>
+      )}
     </p>
   );
 }
@@ -43,8 +49,8 @@ const isControl = (icon: ReactNode | { readonly control: ReactNode }) =>
 /**
  * One change to context as a quiet list item with a heather rule (ADR 0013): the note under an
  * answer, an entry in Recent changes, a change a tidy proposes. An icon (or a control, such as a
- * tick box), the words, an action slot that lines up from row to row (under the words on a phone),
- * and an error under them. A finished one is grey.
+ * tick box), the words, an action slot that lines up from row to row and widens for two (Open and
+ * Undo), under the words on a phone, and an error under them. A finished one is grey.
  */
 export function NoteRow(props: {
   /** Beside the words: an icon, which screen readers skip, or a control, which they reach. */
@@ -82,7 +88,7 @@ export function NoteRow(props: {
       )}
       <div className="min-w-0 wrap-anywhere">{props.children}</div>
       {props.actions !== undefined && (
-        <div className="col-start-2 -ml-3 flex md:col-start-3 md:ml-0 md:w-[84px]">
+        <div className="col-start-2 -ml-3 flex md:col-start-3 md:ml-0 md:min-w-[84px]">
           {props.actions}
         </div>
       )}

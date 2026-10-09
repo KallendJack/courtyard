@@ -20,6 +20,7 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
+import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
@@ -42,6 +43,7 @@ import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
 import { signInRoutes } from "./sign-ins/routes.ts";
 import { skillList, workspaceSkills } from "./skills/index.ts";
+import { THING_PHOTO_ROUTES, thingRoutes } from "./things/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
 import {
@@ -65,16 +67,39 @@ const MAX_BODY_BYTES = 16 * 1024;
 /** The largest message with files attached (#78): five of the largest, and room for the form. */
 const MAX_MESSAGE_WITH_FILES_BYTES = ATTACHMENTS.perMessage * ATTACHMENTS.pdfMaxBytes + 1024 * 1024;
 
-/** The paths of the routes that take a message, each `:param` standing for one part of a path. */
-const MESSAGE_PATHS = Object.values(MESSAGE_ROUTES).map(
-  (route) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`),
+/** The largest Thing's photo upload: the largest photo a message takes, and room for the form. */
+const MAX_THING_PHOTO_BYTES = ATTACHMENTS.photoMaxBytes + 64 * 1024;
+
+/** A route's path under `/api` as a pattern, each `:param` standing for one part of a path. */
+const pathOf = (route: string) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[^/]+")}$`);
+
+/** A request a multipart form may be sent with: its method, and its path as a pattern. */
+type FormRequest = { readonly method: string; readonly path: RegExp };
+
+/** The requests that take a message. */
+const MESSAGE_REQUESTS: readonly FormRequest[] = Object.values(MESSAGE_ROUTES).map((route) => ({
+  method: "POST",
+  path: pathOf(route),
+}));
+
+/** The requests that may send a Thing's photo (ADR 0020). */
+const THING_PHOTO_REQUESTS: readonly FormRequest[] = THING_PHOTO_ROUTES.map(
+  ({ method, route }) => ({ method, path: pathOf(route) }),
 );
 
-/** Whether a request is a message sent with files attached (#78). */
-const takesFiles = (c: Context) =>
-  c.req.method === "POST" &&
-  MESSAGE_PATHS.some((path) => path.test(c.req.path)) &&
+/** Whether a request is a multipart form sent as one of these requests. */
+const formTo = (c: Context, requests: readonly FormRequest[]) =>
+  requests.some(({ method, path }) => c.req.method === method && path.test(c.req.path)) &&
   (c.req.header("content-type")?.startsWith("multipart/form-data") ?? false);
+
+/** Whether a request is a message sent with files attached (#78). */
+const sendsMessageFiles = (c: Context) => formTo(c, MESSAGE_REQUESTS);
+
+/** Whether a request sends a Thing's photo, on its own or with the form's fields (ADR 0020). */
+const sendsThingPhoto = (c: Context) => formTo(c, THING_PHOTO_REQUESTS);
+
+/** Whether a request takes files: a message's, or a Thing's photo. */
+const takesFiles = (c: Context) => sendsMessageFiles(c) || sendsThingPhoto(c);
 
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
 const FAKE_SIGN_IN_MS = 5000;
@@ -173,7 +198,14 @@ export const createWorker = (options: {
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
   const jsonLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
   const filesLimit = bodyLimit({ maxSize: MAX_MESSAGE_WITH_FILES_BYTES, onError: tooLarge });
-  api.use("*", (c, next) => (takesFiles(c) ? filesLimit(c, next) : jsonLimit(c, next)));
+  const photoLimit = bodyLimit({ maxSize: MAX_THING_PHOTO_BYTES, onError: tooLarge });
+  api.use("*", (c, next) =>
+    sendsMessageFiles(c)
+      ? filesLimit(c, next)
+      : sendsThingPhoto(c)
+        ? photoLimit(c, next)
+        : jsonLimit(c, next),
+  );
   api.use("*", sameSiteJsonOnly({ takesFiles }));
   api.use("*", requireLogin(owner));
 
@@ -181,6 +213,8 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
+  api.route("/", documentRoutes({ contextDir, contextFolder }));
+  api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(

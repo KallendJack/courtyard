@@ -83,6 +83,23 @@ export const prepareFiles = async (
   return { ready, problems };
 };
 
+/**
+ * One photo the owner picked for something other than a message (a Thing's), made ready the same
+ * way: shrunk, turned into JPEG and checked as the worker checks it; or why it can't go.
+ */
+export const preparePhoto = async (
+  picked: File,
+): Promise<{ readonly file: File } | { readonly problem: string }> => {
+  const file = looksLikePhoto(picked) ? await shrunk(picked) : undefined;
+  if (file === undefined)
+    return { problem: `${picked.name} can't be used: it isn't a photo this browser can open.` };
+  const checked = AttachmentFile.safeParse({ name: file.name, type: file.type, size: file.size });
+  if (!checked.success) {
+    return { problem: checked.error.issues[0]?.message ?? `${picked.name} can't be used.` };
+  }
+  return { file };
+};
+
 /** Lets go of the thumbnails of files leaving the tray. */
 export const releasePreviews = (leaving: readonly Attaching[]) => {
   for (const { preview } of leaving) if (preview !== undefined) URL.revokeObjectURL(preview);

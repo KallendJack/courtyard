@@ -5,7 +5,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, ListChecks, Pencil, Undo2 } from "lucide-react";
+import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
@@ -14,7 +14,8 @@ import { EmptyState } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { describeWhen } from "../when.ts";
-import { type ContextPlace, loadChanges, undoChange } from "../worker.ts";
+import type { ContextPlace } from "../worker.ts";
+import { loadChanges, undoChange } from "./api.ts";
 
 const loggedIn = getRouteApi("/_app");
 
@@ -129,6 +130,22 @@ function Meta(props: { workspace: Whose; change: RecentChange; note?: string | u
   );
 }
 
+const OPEN = "text-[13px]/5 text-foreground underline";
+
+/** Open, under a document's or a Thing's entry while it's still there: its page. */
+function OpenLink(props: { workspaceId: WorkspaceId; kind: "document" | "thing"; slug: string }) {
+  const params = { workspaceId: props.workspaceId, slug: props.slug };
+  return props.kind === "document" ? (
+    <Link to="/workspaces/$workspaceId/documents/$slug" params={params} className={OPEN}>
+      Open
+    </Link>
+  ) : (
+    <Link to="/workspaces/$workspaceId/things/$slug" params={params} className={OPEN}>
+      Open
+    </Link>
+  );
+}
+
 /** One entry: the change as a note, when and where it came from, and Undo while it can be. */
 function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: () => void }) {
   const { workspace, change } = props;
@@ -145,6 +162,65 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
         Undo
       </Button>
     ) : undefined;
+
+  if (change.document !== undefined) {
+    const { did, name, was, slug } = change.document;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} document`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <FileText />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          was={did === "renamed" ? was : undefined}
+          muted={muted}
+          struck={did === "deleted"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <OpenLink workspaceId={workspace} kind="document" slug={slug} />
+        )}
+      </NoteRow>
+    );
+  }
+
+  if (change.thing !== undefined) {
+    const { did, name, slug } = change.thing;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} Thing`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <Tag />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          muted={muted}
+          struck={did === "removed"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <OpenLink workspaceId={workspace} kind="thing" slug={slug} />
+        )}
+      </NoteRow>
+    );
+  }
 
   if (change.kind === "hand-edit" || change.kind === "tidy") {
     const { pairs, gone } = pairedLines(change);

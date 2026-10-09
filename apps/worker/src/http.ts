@@ -16,20 +16,21 @@ export const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Res
 };
 
 /**
- * A message the owner sent, parsed with `schema`, and the files attached to it (#78): JSON on its
- * own, or a multipart form with the JSON in one field and the files in another. Or the first reason
- * it doesn't fit.
+ * A request's JSON, parsed with `schema`, and the files sent with it: JSON on its own, or a
+ * multipart form with the JSON in the `fields.json` field and the files in `fields.files`. Or the
+ * first reason it doesn't fit. A Thing from the owner's form with its photo comes this way (ADR 0020).
  */
-export const readMessage = async <T>(
+export const readWithFiles = async <T>(
   c: Context,
-  schema: z.ZodType<T>,
-): Promise<Result<{ message: T; files: File[] }, string>> => {
+  read: { schema: z.ZodType<T>; fields: { json: string; files: string } },
+): Promise<Result<{ body: T; files: File[] }, string>> => {
+  const { schema, fields } = read;
   if (!c.req.header("content-type")?.startsWith("multipart/form-data")) {
-    const message = await readBody(c, schema);
-    return message.ok ? ok({ message: message.value, files: [] }) : message;
+    const body = await readBody(c, schema);
+    return body.ok ? ok({ body: body.value, files: [] }) : body;
   }
   const form = await c.req.formData().catch(() => undefined);
-  const json = form?.get(MESSAGE_FIELD);
+  const json = form?.get(fields.json);
   let body: unknown;
   try {
     body = typeof json === "string" ? JSON.parse(json) : undefined;
@@ -38,8 +39,22 @@ export const readMessage = async <T>(
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Bad request");
-  const files = (form?.getAll(ATTACHMENTS_FIELD) ?? []).filter((part) => part instanceof File);
-  return ok({ message: parsed.data, files });
+  const files = (form?.getAll(fields.files) ?? []).filter((part) => part instanceof File);
+  return ok({ body: parsed.data, files });
+};
+
+/**
+ * A message the owner sent, parsed with `schema`, and the files attached to it (#78): JSON on its
+ * own, or a multipart form with the JSON in one field and the files in another. Or the first reason
+ * it doesn't fit.
+ */
+export const readMessage = async <T>(
+  c: Context,
+  schema: z.ZodType<T>,
+): Promise<Result<{ message: T; files: File[] }, string>> => {
+  const fields = { json: MESSAGE_FIELD, files: ATTACHMENTS_FIELD };
+  const read = await readWithFiles(c, { schema, fields });
+  return read.ok ? ok({ message: read.value.body, files: read.value.files }) : read;
 };
 
 /** Why Get to know or Tidy, with no model named, found none to ask. */

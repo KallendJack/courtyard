@@ -1,0 +1,16 @@
+/*
+ * The rich blocks' own classes (ADR 0021). Tailwind puts every class it finds into the first
+ * load's stylesheet, even one only lazily loaded code uses, so styles.css leaves this folder out
+ * and this stylesheet, loaded with the answer renderer, has its classes instead. The theme is
+ * Moorland's, by reference: its names, nothing of its own. They apply only inside a `RichBlock`
+ * (rich-block.tsx): coming after the theme's, they'd otherwise outrank its classes everywhere.
+ */
+@reference "../styles.css";
+@source "./**/*.tsx";
+/* The shared piece only a rich block uses: a table heading's sort button. */
+@source "../components/sort-button.tsx";
+
+:where([data-rich-block]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}

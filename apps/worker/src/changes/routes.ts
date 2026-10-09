@@ -17,6 +17,16 @@ const undoRefused = (c: Context, refusal: ChangeUndoRefusal) => {
         status: 409,
         error: "A line it changed has changed since, so undoing it would lose the newer wording.",
       });
+    case "document-changed-since":
+      return apiError(c, {
+        status: 409,
+        error: "That document has changed since, so undoing it would lose the newer text.",
+      });
+    case "thing-changed-since":
+      return apiError(c, {
+        status: 409,
+        error: "That Thing has changed since, so undoing this would lose the newer change.",
+      });
     case "session":
       return sessionError(c, refusal.error);
     case "storage":

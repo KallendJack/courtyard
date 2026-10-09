@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  Chart,
+  type DocumentSave,
   Effort,
   endsTurn,
   ModelId,
@@ -10,6 +12,8 @@ import {
   type Save,
   type SessionId,
   SessionSummary,
+  THING_DETAILS,
+  type ThingSave,
   TidyProposal,
   takesEffort,
   type WorkspaceId,
@@ -17,6 +21,7 @@ import {
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
+import { DOCS_FOLDER, documentPath } from "../src/documents/index.ts";
 import { OWNER_FILE } from "../src/owner-context/index.ts";
 import {
   createClaudeProvider,
@@ -33,10 +38,13 @@ import {
   testWorker,
   writeSkill,
 } from "../src/testing.ts";
+import { readThingText, thingPath } from "../src/things/index.ts";
 import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
+  type ExpectedDocument,
   type ExpectedSave,
+  type ExpectedThing,
   ownerContextFor,
   type Places,
   SCENARIOS,
@@ -223,6 +231,51 @@ const listItemsIn = (answer: string) =>
     item.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/, "").trim(),
   );
 
+/** A Markdown table's delimiter row, under its heading row: `| --- | :---: |`. */
+const TABLE_DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** An answer's first Markdown table: its heading row, and the text written before it. */
+const firstTable = (answer: string) => {
+  const lines = answer.split("\n");
+  const at = lines.findIndex(
+    (line, index) => line.includes("|") && TABLE_DELIMITER.test(lines[index + 1] ?? ""),
+  );
+  if (at === -1) return undefined;
+  return { heading: (lines[at] ?? "").trim(), before: lines.slice(0, at).join("\n").trim() };
+};
+
+/**
+ * An answer's first `chart` block (ADR 0021): the text written before it, and its JSON checked by
+ * the contract's `Chart` schema, as the web app checks it: the chart, or why it can't be drawn.
+ */
+const firstChart = (answer: string) => {
+  const found = /^[ \t]*```[ \t]*chart[ \t]*\n([\s\S]*?)\n[ \t]*```/im.exec(answer);
+  if (found === null) return undefined;
+  const before = answer.slice(0, found.index).trim();
+  const source = found[1] ?? "";
+  let json: unknown;
+  try {
+    json = JSON.parse(source);
+  } catch {
+    return { before, problem: `its JSON doesn't parse: ${source.slice(0, 160)}` };
+  }
+  const chart = Chart.safeParse(json);
+  return chart.success
+    ? { before, chart: chart.data }
+    : { before, problem: `the web app can't draw it (${chart.error.issues[0]?.message})` };
+};
+
+/**
+ * An answer's first `mermaid` block (ADR 0021): the text written before it and the diagram's
+ * first line, its kind. Whether Mermaid can draw it is the web app's to find out (it needs a page).
+ */
+const firstDiagram = (answer: string) => {
+  const found = /^[ \t]*```[ \t]*mermaid[ \t]*\n([\s\S]*?)\n[ \t]*```/im.exec(answer);
+  if (found === null) return undefined;
+  const kind = (found[1] ?? "").trim().split("\n")[0]?.trim() ?? "";
+  return { before: answer.slice(0, found.index).trim(), kind };
+};
+
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
@@ -338,6 +391,59 @@ const judgeTurn = (judge: {
                 : null,
           },
         ];
+  const table = firstTable(answer);
+  const tabled: Check[] =
+    turn.tables === undefined
+      ? []
+      : [
+          {
+            miss: turn.tables
+              ? table === undefined
+                ? `expected a table; the answer starts "${answer.trim().slice(0, 160)}"`
+                : table.before === ""
+                  ? "expected a sentence before the table; the answer starts with it"
+                  : null
+              : table === undefined
+                ? null
+                : `expected no table; it has one headed ${table.heading}`,
+          },
+        ];
+  const chart = firstChart(answer);
+  const charted: Check[] =
+    turn.charts === undefined
+      ? []
+      : [
+          {
+            miss: turn.charts
+              ? chart === undefined
+                ? `expected a chart; the answer starts "${answer.trim().slice(0, 160)}"`
+                : "problem" in chart
+                  ? `expected a chart it can draw; ${chart.problem}`
+                  : chart.before === ""
+                    ? "expected a sentence before the chart; the answer starts with it"
+                    : null
+              : chart === undefined
+                ? null
+                : "expected no chart; it has one",
+          },
+        ];
+  const diagram = firstDiagram(answer);
+  const diagrammed: Check[] =
+    turn.diagrams === undefined
+      ? []
+      : [
+          {
+            miss: turn.diagrams
+              ? diagram === undefined
+                ? `expected a diagram; the answer starts "${answer.trim().slice(0, 160)}"`
+                : diagram.before === ""
+                  ? "expected a sentence before the diagram; the answer starts with it"
+                  : null
+              : diagram === undefined
+                ? null
+                : `expected no diagram; it has a ${diagram.kind}`,
+          },
+        ];
   const topics = listItemsIn(answer);
   const listed: Check[] =
     turn.listsTopics === undefined
@@ -375,9 +481,131 @@ const judgeTurn = (judge: {
     ...said,
     ...replies,
     ...searched,
+    ...tabled,
+    ...charted,
+    ...diagrammed,
     ...listed,
     ...avoided,
   ];
+};
+
+const describeDocument = (save: DocumentSave) =>
+  `${save.action === "save" ? "saved" : "updated"} ${documentPath(save.document.slug)}${save.summary === undefined ? "" : ` (${save.summary})`}`;
+
+/**
+ * A turn's document checks (ADR 0020): one for each document it should save or update, judged on
+ * the document's text afterwards, and one for saving no other. Nothing when the turn doesn't say.
+ */
+const judgeDocuments = async (judge: {
+  expected: readonly ExpectedDocument[] | undefined;
+  saved: readonly DocumentSave[];
+  /** The workspace's folder, where the documents are. */
+  folder: string;
+}): Promise<Check[]> => {
+  const { expected, saved, folder } = judge;
+  if (expected === undefined) return [];
+  const left = [...saved];
+  const checks: Check[] = [];
+  for (const wanted of expected) {
+    const index = left.findLastIndex((save) => save.action === wanted.action);
+    const save = index === -1 ? undefined : left.splice(index, 1)[0];
+    if (save === undefined) {
+      checks.push({
+        miss: `expected to ${wanted.action} a document; ${saved.length === 0 ? "saved none" : saved.map(describeDocument).join("; ")}`,
+      });
+      continue;
+    }
+    const path = documentPath(save.document.slug);
+    const text = await readFile(join(folder, path), "utf8").catch(() => "");
+    checks.push({
+      miss: hasWords(text, { words: wanted.words })
+        ? null
+        : `expected ${path} to have ${describeWords(wanted.words)}; it reads "${text.replace(/\s+/g, " ").slice(0, 300)}"`,
+    });
+  }
+  checks.push({
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeDocument).join("; ")}`,
+  });
+  return checks;
+};
+
+const describeThing = (save: ThingSave) => {
+  const did = { add: "added", change: "changed", remove: "removed" }[save.action];
+  const fields = Object.entries(save.fields ?? {}).map(([field, value]) =>
+    value === null ? `no ${field}` : `${field} ${value}`,
+  );
+  const history = save.history === undefined ? [] : [`history "${save.history}"`];
+  const photo = save.photo ? ["photo"] : [];
+  const what = [...fields, ...history, ...photo];
+  return `${did} Thing ${save.thing.name}${what.length === 0 ? "" : ` (${what.join(", ")})`}`;
+};
+
+/**
+ * A turn's Thing checks (ADR 0020): one for each Thing it should add, change or remove, judged by
+ * its file afterwards, and one for saving no other. Nothing when the turn doesn't say.
+ */
+const judgeThings = async (judge: {
+  expected: readonly ExpectedThing[] | undefined;
+  saved: readonly ThingSave[];
+  /** The workspace's folder, where the Things are. */
+  folder: string;
+}): Promise<Check[]> => {
+  const { expected, saved, folder } = judge;
+  if (expected === undefined) return [];
+  const left = [...saved];
+  const checks: Check[] = [];
+  for (const wanted of expected) {
+    const index = left.findLastIndex(
+      (save) => save.action === wanted.action && hasWords(save.thing.name, { words: wanted.name }),
+    );
+    const save = index === -1 ? undefined : left.splice(index, 1)[0];
+    if (save === undefined) {
+      checks.push({
+        miss: `expected to ${wanted.action} a Thing with ${describeWords(wanted.name)}; ${saved.length === 0 ? "saved none" : saved.map(describeThing).join("; ")}`,
+      });
+      continue;
+    }
+    const path = thingPath(save.thing.slug);
+    const text = await readFile(join(folder, path), "utf8").catch(() => null);
+    if (wanted.action === "remove" || text === null) {
+      checks.push({
+        miss:
+          (wanted.action === "remove") === (text === null)
+            ? null
+            : `expected ${path} ${wanted.action === "remove" ? "gone" : "there"}`,
+      });
+      continue;
+    }
+    const read = readThingText(text);
+    if (!read.ok) {
+      checks.push({ miss: `${path} isn't a Thing as written: ${read.error}` });
+      continue;
+    }
+    const { fields, history } = read.value;
+    const misses = [
+      ...(["status", ...THING_DETAILS] as const).flatMap((field) => {
+        const words = wanted.fields?.[field];
+        const value = fields[field] ?? "";
+        return words === undefined || hasWords(value, { words })
+          ? []
+          : [`its ${field} to have ${describeWords(words)}, not "${value}"`];
+      }),
+      ...(wanted.history === undefined ||
+      hasWords(history.at(-1)?.text ?? "", { words: wanted.history })
+        ? []
+        : [
+            `its history to end with ${describeWords(wanted.history)}, not "${history.at(-1)?.text ?? ""}"`,
+          ]),
+      ...(wanted.partOf === undefined || fields.partOf === wanted.partOf
+        ? []
+        : [`it to be part of ${wanted.partOf}, not ${fields.partOf ?? "nothing"}`]),
+    ];
+    checks.push({ miss: misses.length === 0 ? null : `expected ${path}: ${misses.join("; ")}` });
+  }
+  checks.push({
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeThing).join("; ")}`,
+  });
+  return checks;
 };
 
 /**
@@ -566,10 +794,27 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         attach: turn.attach ?? [],
         choice,
       });
+      // An edit by hand the moment the model reads the file, once (editsAfterRead).
+      const { editsAfterRead } = turn;
+      let edited: Promise<void> | undefined;
       const events = await withTimeout(
-        followSession(request, { sessionId, after, until: endsTurn }),
+        followSession(request, {
+          sessionId,
+          after,
+          until: endsTurn,
+          onEvent: (event) => {
+            const read =
+              event.type === "activity" &&
+              event.activity.kind === "read-file" &&
+              event.activity.path === editsAfterRead?.path;
+            if (read && edited === undefined && editsAfterRead !== undefined) {
+              edited = writeFile(join(folder, editsAfterRead.path), editsAfterRead.text);
+            }
+          },
+        }),
         `turn ${index + 1}`,
       );
+      await edited;
       after = events.at(-1)?.seq ?? after;
       const ended = events.at(-1);
       if (ended?.type !== "turn-completed") {
@@ -635,6 +880,45 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         replies,
         web,
       });
+      const documents = events.flatMap((event) =>
+        event.type === "document-saved" ? [event.save] : [],
+      );
+      if (documents.length > 0)
+        notes.push(`${prefix}${documents.map(describeDocument).join("; ")}`);
+      const reads = events.flatMap((event) =>
+        event.type === "activity" &&
+        event.activity.kind === "read-file" &&
+        event.activity.path.startsWith(`${DOCS_FOLDER}/`)
+          ? [event.activity.path]
+          : [],
+      );
+      if (reads.length > 0) notes.push(`${prefix}read ${reads.join(", ")}`);
+      if (editsAfterRead !== undefined) {
+        notes.push(
+          `${prefix}${edited === undefined ? "never read" : "edited by hand after reading"} ${editsAfterRead.path}`,
+        );
+      }
+      const documentChecks = await judgeDocuments({
+        expected: turn.documents,
+        saved: documents,
+        folder,
+      });
+      // A document missed: how the answer ended says why (it asked, or gave up after a refusal).
+      if (documentChecks.some((check) => check.miss !== null)) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...documentChecks);
+      const things = events.flatMap((event) => (event.type === "thing-saved" ? [event.save] : []));
+      if (things.length > 0) notes.push(`${prefix}${things.map(describeThing).join("; ")}`);
+      const thingChecks = await judgeThings({ expected: turn.things, saved: things, folder });
+      // A Thing missed: how the answer ended says why (it asked, or waited for details).
+      if (
+        thingChecks.some((check) => check.miss !== null) &&
+        documentChecks.every((c) => c.miss === null)
+      ) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...thingChecks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

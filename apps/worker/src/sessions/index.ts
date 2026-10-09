@@ -36,6 +36,16 @@ import {
 } from "../attachments/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
+  answerAsDocument,
+  createTurnDocuments,
+  type DocumentRefusal,
+  type DocumentSaved,
+  type DocumentUndoRefusal,
+  listDocuments,
+  saveNewDocument,
+  undoDocumentChange,
+} from "../documents/index.ts";
+import {
   exists,
   listFolder,
   move,
@@ -46,6 +56,8 @@ import {
 } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
+  DOCUMENT_TOOL_NAME,
+  documentReply,
   type FramingWorkspace,
   framingFor,
   notOfferedReply,
@@ -54,8 +66,10 @@ import {
   saveReply,
   skillsInUse,
   suggestRepliesReply,
+  THING_TOOL_NAME,
   TITLING,
   TitleAnswer,
+  thingReply,
   titleMessage,
   USE_SKILL_TOOL_NAME,
   useSkillReply,
@@ -65,6 +79,7 @@ import {
   modelsOnOffer,
   offerFor,
   type Provider,
+  photosOf,
   type ToolReply,
   type TurnToolName,
 } from "../providers/index.ts";
@@ -85,6 +100,13 @@ import {
   workspaceSkills,
 } from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
+import {
+  createTurnThings,
+  readThings,
+  type ThingRefusal,
+  type ThingUndoRefusal,
+  undoThingChange,
+} from "../things/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
@@ -117,6 +139,12 @@ export type SessionError =
   | { readonly kind: "attachment-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
+  /** No finished answer to save as a document has that message's number. */
+  | { readonly kind: "answer-not-found" }
+  /** Saving an answer as a document, or undoing a document save, couldn't be done. */
+  | { readonly kind: "document-refused"; readonly refusal: DocumentRefusal | DocumentUndoRefusal }
+  /** Undoing a Thing save couldn't be done. */
+  | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -218,6 +246,22 @@ const saveStateOf = (events: readonly SessionEvent[], seq: number): SaveState | 
     if (event.type === "context-undone" && event.save === seq) undone = true;
   }
   return { save: saved.save, current, undone };
+};
+
+/**
+ * The answer to the owner's message numbered `turn`, once its turn has ended: `undefined` when no
+ * message has that number, or its turn is still running.
+ */
+const answerTo = (events: readonly SessionEvent[], turn: number) => {
+  const start = events.findIndex((event) => event.seq === turn && event.type === "owner-message");
+  if (start === -1) return undefined;
+  let answer = "";
+  for (const event of events.slice(start + 1)) {
+    if (event.type === "owner-message") break;
+    if (event.type === "text-delta") answer += event.text;
+    if (endsTurn(event)) return answer;
+  }
+  return undefined;
 };
 
 /**
@@ -450,12 +494,24 @@ export const createSessions = (options: {
     if (!workspace.ok) return err("This session's workspace can't be read.");
     if (!ownerContext.ok) return err(ownerContext.error.message);
     const { summary, folder, contextMarkdown } = workspace.value;
+    const documents =
+      summary.mode === "planning"
+        ? await listDocuments({ contextDir: options.contextDir, workspaceId })
+        : ok([]);
+    if (!documents.ok) return err("This session's workspace's documents can't be read.");
+    const things =
+      summary.mode === "planning"
+        ? await readThings({ contextDir: options.contextDir, workspaceId })
+        : ok({ things: [], problems: [] });
+    if (!things.ok) return err("This session's workspace's Things can't be read.");
     return ok({
       name: summary.name,
       mode: summary.mode,
       folder,
       contextFile: contextMarkdown,
       ownerContext: ownerContext.value,
+      documents: documents.value,
+      things: things.value,
       skills: await skillsOf(workspace.value),
     });
   };
@@ -512,8 +568,11 @@ export const createSessions = (options: {
           attachments: await carriedAttachments(folderOf(turn.id), events.value),
           now: options.now(),
         });
+        const turnDocuments = createTurnDocuments(targetOf(turn));
         const report = async (activity: Activity) => {
           if (recordingLost || stopper.signal.aborted) return;
+          // A document read is what the model has seen of it, before anyone hears of the read.
+          if (activity.kind === "read-file") await turnDocuments.read(activity.path);
           const recorded = await append(turn.id, { type: "activity", activity });
           if (!recorded.ok) recordingLost = true;
         };
@@ -558,6 +617,52 @@ export const createSessions = (options: {
           retrying = !saved.ok && !retrying;
           return reply;
         };
+        /** Whether the last document save was refused, so this one is its retry. */
+        let retryingDocument = false;
+        const saveDocument = async (input: unknown): Promise<ToolReply> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return documentReply(err({ kind: "stopped" }), true);
+          }
+          const saved = await turnDocuments.save(input);
+          if (saved.ok) {
+            const { save, change } = saved.value;
+            const recorded = await append(turn.id, {
+              type: "document-saved",
+              save,
+              ...(change === undefined ? {} : { change }),
+            });
+            if (!recorded.ok) recordingLost = true;
+          }
+          const reply = documentReply(saved, retryingDocument);
+          retryingDocument = !saved.ok && !retryingDocument;
+          return reply;
+        };
+        const turnThings = createTurnThings({
+          ...targetOf(turn),
+          shown: workspace.value.things.things,
+          photos: photosOf(framing.attachments),
+          now: options.now(),
+        });
+        /** Whether the last Thing save was refused, so this one is its retry. */
+        let retryingThing = false;
+        const saveThingTool = async (input: unknown): Promise<ToolReply> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return thingReply(err({ kind: "stopped" }), true);
+          }
+          const saved = await turnThings(input);
+          if (saved.ok) {
+            const { save, change } = saved.value;
+            const recorded = await append(turn.id, {
+              type: "thing-saved",
+              save,
+              ...(change === undefined ? {} : { change }),
+            });
+            if (!recorded.ok) recordingLost = true;
+          }
+          const reply = thingReply(saved, retryingThing);
+          retryingThing = !saved.ok && !retryingThing;
+          return reply;
+        };
         /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
         const write = async (text: string) => {
           if (text === "" || recordingLost || stopper.signal.aborted) return;
@@ -577,6 +682,8 @@ export const createSessions = (options: {
         /** What answers each of Courtyard's tools, by name: every one a turn can offer. */
         const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
+          [DOCUMENT_TOOL_NAME]: saveDocument,
+          [THING_TOOL_NAME]: saveThingTool,
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
@@ -886,7 +993,112 @@ export const createSessions = (options: {
     });
   };
 
+  /**
+   * Undoes one of the session's document or Thing saves, by its event number or the change it was
+   * committed as, and records that in the session.
+   */
+  const undoFileSave = async (
+    undo: { rawId: string; save: number | ChangeId },
+    of: "document" | "thing",
+  ): Promise<Result<null, SessionError>> => {
+    const found = await findSession(undo.rawId);
+    if (!found.ok) return found;
+    const file = found.value;
+    if (await isArchived(options.contextDir, file.workspaceId)) {
+      return err({ kind: "workspace-archived" });
+    }
+    const refused = (refusal: DocumentUndoRefusal): SessionError =>
+      of === "document"
+        ? { kind: "document-refused", refusal }
+        : { kind: "thing-refused", refusal };
+    const session = runningSession(file.id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const events = await readEvents(file.id);
+      if (!events.ok) return events;
+      const saved = events.value.find(
+        (event) =>
+          event.type === `${of}-saved` &&
+          "change" in event &&
+          (typeof undo.save === "number" ? event.seq === undo.save : event.change === undo.save),
+      );
+      if (saved === undefined || !("change" in saved)) return err({ kind: "save-not-found" });
+      const undone = events.value.some(
+        (event) => event.type === `${of}-undone` && "save" in event && event.save === saved.seq,
+      );
+      if (undone) return err(refused({ kind: "already-undone" }));
+      if (saved.change === undefined) return err(refused({ kind: "not-undoable" }));
+      const reversed =
+        of === "document"
+          ? await undoDocumentChange(targetOf(file), saved.change)
+          : await undoThingChange(targetOf(file), saved.change);
+      if (!reversed.ok) return err(refused(reversed.error));
+      const recorded = await writeEvent({
+        id: file.id,
+        session,
+        event: { type: of === "document" ? "document-undone" : "thing-undone", save: saved.seq },
+      });
+      return recorded.ok ? ok(null) : recorded;
+    });
+  };
+
   return {
+    /**
+     * Save as document (ADR 0020): the whole answer to the owner's message numbered `answer`, as a
+     * new document called `name` in the session's workspace, with no model turn. Recorded in the
+     * session, so its note shows under that answer with Undo.
+     */
+    saveAsDocument: async (save: {
+      rawId: string;
+      answer: number;
+      name: string;
+    }): Promise<Result<DocumentSaved, SessionError>> => {
+      const found = await findSession(save.rawId);
+      if (!found.ok) return found;
+      const file = found.value;
+      if (await isArchived(options.contextDir, file.workspaceId)) {
+        return err({ kind: "workspace-archived" });
+      }
+      const session = runningSession(file.id);
+      return inOrder(session, async (): Promise<Result<DocumentSaved, SessionError>> => {
+        const events = await readEvents(file.id);
+        if (!events.ok) return events;
+        const answer = answerTo(events.value, save.answer);
+        if (answer === undefined || answer.trim() === "") return err({ kind: "answer-not-found" });
+        const saved = await saveNewDocument(
+          { ...targetOf(file), sessionId: file.id },
+          answerAsDocument(answer, save.name),
+        );
+        if (!saved.ok) return err({ kind: "document-refused", refusal: saved.error });
+        const { change } = saved.value;
+        const recorded = await writeEvent({
+          id: file.id,
+          session,
+          event: {
+            type: "document-saved",
+            save: saved.value.save,
+            answer: save.answer,
+            ...(change === undefined ? {} : { change }),
+          },
+        });
+        return recorded.ok ? ok(saved.value) : recorded;
+      });
+    },
+
+    /**
+     * Undoes one of the session's document saves, by its event number, or by the change it was
+     * committed as (from Recent changes): the document goes back as it was, unless it's changed
+     * since. Recorded in the session, so its note shows it from any device.
+     */
+    undoDocument: (undo: { rawId: string; save: number | ChangeId }) =>
+      undoFileSave(undo, "document"),
+
+    /**
+     * Undoes one of the session's Thing saves (ADR 0020), by its event number, or by the change it
+     * was committed as (from Recent changes): the Thing, and its photo, go back as they were, unless
+     * they've changed since. Recorded in the session, so its note shows it from any device.
+     */
+    undoThing: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "thing"),
+
     /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
     undoSave: ({ rawId, save }: { rawId: string; save: number }) =>
       actOnSave({

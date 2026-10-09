@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
   type ChangeId,
+  type DocumentChange,
   type LinePlace,
   type PlacedLine,
   RECENT_CHANGES_PAGE,
@@ -9,6 +10,7 @@ import {
   type RecentChanges,
   type RecentChangeUndo,
   type SessionId,
+  type ThingChange,
 } from "@courtyard/contract";
 import {
   addContextLine,
@@ -22,11 +24,16 @@ import {
   type HistoryError,
   type Place,
   placeFile,
+  stillAsLeft,
+  type WholeFile,
+  wholeFilesOf,
 } from "../context-folder/index.ts";
-import { readTextFile, writeTextFile } from "../files.ts";
+import { documentChangeOf, undoDocumentChange } from "../documents/index.ts";
+import { exists, readTextFile, writeTextFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
 import { titleOf } from "../saves/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
+import { isThingChange, thingChangeOf, undoThingChange } from "../things/index.ts";
 
 /**
  * Recent changes (ADR 0013): what's changed in a workspace's context file or the owner context,
@@ -47,6 +54,10 @@ export type ChangeUndoRefusal =
   | { readonly kind: "not-undoable" }
   /** A line the change touched has changed since. */
   | { readonly kind: "changed-since" }
+  /** A document the change wrote or removed has changed since. */
+  | { readonly kind: "document-changed-since" }
+  /** A Thing the change wrote or removed has changed since. */
+  | { readonly kind: "thing-changed-since" }
   /** A save is undone through its session, which refused. */
   | { readonly kind: "session"; readonly error: SessionError }
   | { readonly kind: "storage" };
@@ -193,6 +204,45 @@ export const listChanges = async (
   if (!undone.ok) return undone;
   const savesOf = sessionSaves(sessions);
   const sessionOf = sessionsRead(sessions);
+  const wholeFiles = await wholeFilesOf(contextFolder, changes);
+  if (!wholeFiles.ok) return wholeFiles;
+
+  /**
+   * What a change to whole files did to a document or a Thing, and whether Undo is offered for
+   * it: only while each file is as it left it.
+   */
+  const wholeFileEntry = async (
+    change: HistoryChange,
+    files: readonly WholeFile[],
+  ): Promise<
+    Result<
+      | { document: DocumentChange; undo: RecentChangeUndo }
+      | { thing: ThingChange; undo: RecentChangeUndo },
+      HistoryError
+    >
+  > => {
+    const now = await stillAsLeft(contextDir, files);
+    if (!now.ok) return err("storage");
+    const thing = isThingChange(files);
+    const made = thing ? thingChangeOf(files) : documentChangeOf(files);
+    const there = made.path === null ? undefined : await exists(join(contextDir, made.path));
+    if (there !== undefined && !there.ok) return err("storage");
+    const undo: RecentChangeUndo =
+      change.kind !== "document" && change.kind !== "thing"
+        ? "none"
+        : undone.value.has(change.id)
+          ? "undone"
+          : now.value
+            ? "available"
+            : "none";
+    if ("thing" in made) {
+      return ok({ thing: { ...made.thing, slug: there?.value ? made.thing.slug : null }, undo });
+    }
+    return ok({
+      document: { ...made.document, slug: there?.value ? made.document.slug : null },
+      undo,
+    });
+  };
 
   const undoOf = async (
     change: HistoryChange,
@@ -208,13 +258,18 @@ export const listChanges = async (
   };
 
   const listed = await Promise.all(
-    changes.map(async (change, index): Promise<RecentChange[]> => {
+    changes.map(async (change, index): Promise<Result<RecentChange[], HistoryError>> => {
       const kind = RecentChangeKind.safeParse(change.kind);
       const changed = lines.value[index];
-      if (!kind.success || changed === undefined) return [];
-      if (changed.removed.length === 0 && changed.added.length === 0) return [];
+      const files = wholeFiles.value[index] ?? [];
+      if (!kind.success || changed === undefined) return ok([]);
+      const whole = files.length === 0 ? undefined : await wholeFileEntry(change, files);
+      if (whole !== undefined && !whole.ok) return whole;
+      if (whole === undefined && changed.removed.length === 0 && changed.added.length === 0) {
+        return ok([]);
+      }
       const session = change.session === undefined ? undefined : await sessionOf(change.session);
-      return [
+      return ok([
         {
           id: change.id,
           kind: kind.data,
@@ -229,12 +284,14 @@ export const listChanges = async (
                 },
               }),
           ...changed,
-          undo: await undoOf(change, changed),
+          ...(whole === undefined ? { undo: await undoOf(change, changed) } : whole.value),
         },
-      ];
+      ]);
     }),
   );
-  return ok({ changes: listed.flat(), more });
+  const failed = listed.find((entry) => !entry.ok);
+  if (failed !== undefined && !failed.ok) return failed;
+  return ok({ changes: listed.flatMap((entry) => (entry.ok ? entry.value : [])), more });
 };
 
 /** Undoes a hand edit or a tidy, as a change of its own: each place's lines it changed, reversed. */
@@ -279,6 +336,41 @@ const undoLines = async (
 };
 
 /**
+ * Undoes a change to a document or a Thing (ADR 0020): through its session when one made it, so
+ * the note there shows it as for a save, or else (the owner's own change, or a session since
+ * deleted) file by file.
+ */
+const undoWholeFileChange = async (
+  target: ChangesTarget,
+  change: HistoryChange,
+): Promise<Result<null, ChangeUndoRefusal>> => {
+  const thing = change.kind === "thing";
+  if (change.session !== undefined) {
+    const through = { rawId: change.session, save: change.id };
+    const undone = thing
+      ? await target.sessions.undoThing(through)
+      : await target.sessions.undoDocument(through);
+    if (undone.ok) return undone;
+    const gone = undone.error.kind === "not-found" || undone.error.kind === "save-not-found";
+    if (!gone) return err({ kind: "session", error: undone.error });
+  }
+  const undone = thing
+    ? await undoThingChange(target, change.id)
+    : await undoDocumentChange(target, change.id);
+  if (undone.ok) return undone;
+  switch (undone.error.kind) {
+    case "not-found":
+    case "storage":
+      return err({ kind: undone.error.kind });
+    case "changed-since":
+      return err({ kind: thing ? "thing-changed-since" : "document-changed-since" });
+    case "not-undoable":
+    case "already-undone":
+      return err({ kind: "not-undoable" });
+  }
+};
+
+/**
  * Undoes a change from Recent changes. A save is undone through its session, the same as its
  * note's Undo, so the note shows it and the model knows. A hand edit or a tidy is reversed line by
  * line.
@@ -291,6 +383,9 @@ export const undoChange = async (
   if (!found.ok) return err({ kind: "storage" });
   const change = found.value;
   if (change === undefined) return err({ kind: "not-found" });
+  if (change.kind === "document" || change.kind === "thing") {
+    return undoWholeFileChange(target, change);
+  }
   if (undoneByLines(change)) {
     const undone = await target.contextFolder.undone();
     if (!undone.ok) return err({ kind: "storage" });

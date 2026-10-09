@@ -1,11 +1,13 @@
 import {
   CarryOnRequest,
+  type DocumentChanged,
   FirstMessage,
   GetToKnowRequest,
   GrillRequest,
   NewMessage,
   type Overflow,
   type ProviderList,
+  SaveAsDocument,
   SaveEdit,
   SessionChange,
   type SessionDetail,
@@ -19,10 +21,12 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
+import { documentError } from "../documents/routes.ts";
 import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { NoteRefusal } from "../saves/index.ts";
+import { thingError } from "../things/routes.ts";
 import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
@@ -128,6 +132,15 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: error.refusal.kind === "storage" ? 500 : 409,
         error: noteRefused(error.refusal, error.act),
       });
+    case "answer-not-found":
+      return apiError(c, {
+        status: 404,
+        error: "No finished answer to save: wait for the answer to finish, then save it.",
+      });
+    case "document-refused":
+      return documentError(c, error.refusal);
+    case "thing-refused":
+      return thingError(c, error.refusal);
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
@@ -369,6 +382,34 @@ export const sessionRoutes = (options: {
     const stopped = await sessions.stop(c.req.param("id"), request.value);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
+  });
+
+  // Save as document (ADR 0020): an answer, as a new document in the session's workspace.
+  routes.post("/sessions/:id/documents", async (c) => {
+    const body = await readBody(c, SaveAsDocument);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const saved = await sessions.saveAsDocument({ rawId: c.req.param("id"), ...body.value });
+    if (!saved.ok) return sessionError(c, saved.error);
+    return c.json({ change: saved.value.change ?? null } satisfies DocumentChanged, 201);
+  });
+
+  routes.post("/sessions/:id/documents/:save/undo", async (c) => {
+    const undone = await sessions.undoDocument({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
+    return c.body(null, 204);
+  });
+
+  // Undo from a Thing save's note (ADR 0020).
+  routes.post("/sessions/:id/things/:save/undo", async (c) => {
+    const undone = await sessions.undoThing({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
+    return c.body(null, 204);
   });
 
   routes.post("/sessions/:id/saves/:save/undo", async (c) => {

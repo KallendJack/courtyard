@@ -173,6 +173,14 @@ export const postJson = (request: Requester, path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** For tests: sends JSON with any method, such as PUT or DELETE. */
+export const sendJson = (request: Requester, path: string, method: string, body: unknown) =>
+  request(path, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 /** For tests: starts a session in the garage-gym workspace with the owner's first message. */
 export const startSession = async (request: Requester, text: string, model = FAKE_MODEL) => {
   const response = await postJson(request, "/api/workspaces/garage-gym/sessions", { text, model });
@@ -214,6 +222,8 @@ export type ScriptedStep =
   | { readonly call: string; readonly input: unknown }
   /** Text the model writes at that point in its answer. */
   | { readonly write: string }
+  /** A file in the workspace the model reads at that point, by its path there, reported as read. */
+  | { readonly read: string }
   | (() => Promise<void>);
 
 /** For tests: what the worker told a model about one of its tool calls: whether it did it, and what it said. */
@@ -224,6 +234,9 @@ const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
 
 const isWrite = (step: ScriptedStep): step is { write: string } =>
   typeof step !== "function" && "write" in step && typeof step.write === "string";
+
+const isRead = (step: ScriptedStep): step is { read: string } =>
+  typeof step !== "function" && "read" in step && typeof step.read === "string";
 
 /** For tests: the model the saving provider offers. */
 export const SAVING_MODEL = { provider: "saver", model: "one" };
@@ -265,6 +278,7 @@ export const savingProvider = (
       for (const step of steps) {
         if (typeof step === "function") await step();
         else if (isWrite(step)) await input.emit(step.write);
+        else if (isRead(step)) await input.report({ kind: "read-file", path: step.read });
         else {
           const reply = await input.callTool(
             isCall(step)
