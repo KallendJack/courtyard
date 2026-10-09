@@ -1082,7 +1082,7 @@ describe("Courtyard's tools on a Codex turn", () => {
     return { success: result.success, text, items: result.contentItems };
   };
 
-  it("offers the file tools, the save tool and the use skill tool on each thread, with what each takes", async () => {
+  it("offers the file tools, the save tool, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
     const { codex } = await turnCalling([]);
 
     const ToolSpec = z.object({
@@ -1103,6 +1103,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "search_files",
       "save_to_context",
       "use_skill",
+      "suggest_replies",
     ]);
     const read = offered.find((tool) => tool.name === "read_file");
     expect(read?.inputSchema.properties).toHaveProperty("path");
@@ -1223,6 +1224,22 @@ describe("Courtyard's tools on a Codex turn", () => {
     }
     expect(events.filter((event) => event.type === "activity")).toMatchObject([
       { activity: { kind: "skill-loaded", name: "grilling", source: "house" } },
+    ]);
+  });
+
+  it("hands suggested replies to the worker, which checks them and records them", async () => {
+    const { answers, events } = await turnCalling([
+      { tool: "suggest_replies", args: { replies: ["Against the back wall"] } },
+      { tool: "suggest_replies", args: { replies: ["Against the back wall", "By the door"] } },
+    ]);
+
+    expect(answerOf(answers[0])).toMatchObject({
+      success: false,
+      text: "Suggest two or three replies, not 1.",
+    });
+    expect(answerOf(answers[1])).toMatchObject({ success: true });
+    expect(events.filter((event) => event.type === "suggested-replies")).toMatchObject([
+      { replies: ["Against the back wall", "By the door"] },
     ]);
   });
 
