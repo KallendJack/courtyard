@@ -91,7 +91,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 1. The workspace, by name, as one area of the owner's life.
 2. Access. With `readsFiles`: read and search the workspace's folder (images included) and read files when they help;
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
-   file and the owner.
+   file and the owner. In a code session, its own (Coding, below).
 3. Today's date.
 4. Say so and ask rather than guess, and answer in Markdown, with maths in the forms the web app draws as formulas
    (#140). A single `$` is never maths, so prices stay text:
@@ -223,6 +223,40 @@ what the tools ask for (`apps/worker/src/workspace-files/`) and the prompts modu
 note when there's more to read or a search stopped early, or why nothing was found (nothing there, a folder where a
 file was meant, too large, not text or an image, an input the tool doesn't take). The save tool comes alongside them
 on the same terms as Claude's.
+
+## Coding
+
+Built with #170 (ADRs 0007, 0022). Only a provider that codes works in a code workspace, and each of its sessions
+works on its own session branch, in its own worktree. Its access line (Every turn, item 2) says so:
+
+> You're working on your own session branch of this workspace's repository, checked out in its own folder: your
+> working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
+> without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch.
+> Anything else, such as a change outside your working directory or another command, is refused with the reason: find
+> another way, or tell the owner what you need. Run one command at a time, since a command that chains or substitutes
+> another never runs.
+
+Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
+the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
+same way for every provider, and a refusal tells the model why, in one of these:
+
+- An edit outside the worktree, or to git's own file there: "Only files in your session branch's worktree can be
+  changed."
+- A command that chains, pipes, redirects or substitutes: "Run one command at a time: a command that chains, pipes,
+  redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own."
+- A command off the command allowlist: "That command isn't on this workspace's command allowlist, so it didn't run.
+  The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build,
+  e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another
+  way with those, or tell the owner what you need run." Approvals take its place next (#171).
+- A command naming a path outside the worktree: "That command names a path outside your session branch's worktree, so
+  it didn't run."
+- A commit while the worktree is off the session branch: "Commits go on your session branch, <branch>, and the
+  worktree isn't on it now, so that didn't run."
+- A command whose quotes don't close: "That command couldn't be read: check its quotes close."
+- Anything asked after the owner stopped the turn: "The owner stopped this turn, so nothing more is done."
+
+Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
+set.
 
 ## Skills
 
@@ -931,7 +965,7 @@ Each is written here, as rules, before its phase starts. What the spec already d
 
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coding                                        | 4            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
+| Approvals                                     | 4            | Commands off the allowlist, and edits outside the worktree, wait for the owner's approval; a model is told when one is denied.                          |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |
 | Floor plans                                   | 5            | Drawn as SVG in the answer, to scale with dimensions; the web app sanitises and renders it. Saving one is the owner's action, never the model's.          |
 

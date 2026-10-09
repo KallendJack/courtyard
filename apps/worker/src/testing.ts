@@ -248,14 +248,18 @@ export const SAVING_MODEL = { provider: "saver", model: "one" };
  */
 export const savingProvider = (
   turns: readonly (readonly ScriptedStep[])[],
-  options: { holdAfterSaves?: boolean } = {},
+  options: {
+    holdAfterSaves?: boolean;
+    /** Whether it codes, so it can work in a code workspace (ADR 0007); it never edits anything. */
+    codes?: boolean;
+  } = {},
 ) => {
   const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
   const capabilities = {
     readsFiles: false,
-    codes: false,
+    codes: options.codes ?? false,
     usesTools: false,
     savesContext: true,
     searchesWeb: false,

@@ -116,10 +116,17 @@ const contained = (text: string) => text.replace(CLOSING_MARKER, "<\\/$1>");
 /** A name on one line, in quotes it can't close. */
 const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim());
 
-const accessFor = (capabilities: Capabilities) =>
-  capabilities.readsFiles
+/** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
+const CODING_ACCESS =
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch. Anything else, such as a change outside your working directory or another command, is refused with the reason: find another way, or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
+
+const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
+  // Only a provider that codes works in a code workspace (ADR 0007).
+  if (mode === "code" && capabilities.codes) return CODING_ACCESS;
+  return capabilities.readsFiles
     ? "You can read and search the files in this workspace's folder, your working directory, images included. You can't change anything or run commands. Read files when they help you answer."
     : "You can't open the workspace's files, change anything or run commands: you know the workspace from its context file and what the owner tells you.";
+};
 
 /** Today's date in words, so a model can tell a stale line and date the lines that need one. */
 const todayIs = (now: number) =>
@@ -816,7 +823,7 @@ const instructionsFor = (turn: {
   const hasSections = workspace.contextFile !== null || fromOwner.shared === "all";
   return [
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
-    accessFor(capabilities),
+    accessFor(capabilities, workspace.mode),
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,

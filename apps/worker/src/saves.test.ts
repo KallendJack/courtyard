@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   asOwner,
   changesIn,
+  codeRepo,
+  codeWorkspace,
   errorOf,
   followSession,
   postJson,
@@ -58,7 +60,11 @@ const sessionSaving = async (
   steps: readonly ScriptedStep[],
   options: { until?: SessionEvent["type"]; holdAfterSaves?: boolean } = {},
 ) => {
-  const saver = savingProvider([steps], { holdAfterSaves: options.holdAfterSaves ?? false });
+  // It codes, so it can work in a code workspace too (ADR 0007).
+  const saver = savingProvider([steps], {
+    holdAfterSaves: options.holdAfterSaves ?? false,
+    codes: true,
+  });
   const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
   const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
     text: "I've booked padel lessons for Tuesdays.",
@@ -468,10 +474,8 @@ describe("a save to the owner context", () => {
   });
 
   it("from a code workspace, saves only to How to answer me", async () => {
-    await writeFile(
-      join(contextDir, "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    const { repo } = await codeRepo(root);
+    await codeWorkspace(root, "garage-gym", repo);
 
     const { replies } = await sessionSaving([
       { action: "add", place: "owner", section: "facts", text: "Has a bad left knee." },

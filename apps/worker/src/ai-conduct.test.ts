@@ -15,6 +15,8 @@ import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "./provider
 import { err, ok } from "./result.ts";
 import {
   asOwner,
+  codeRepo,
+  codeWorkspace,
   FAKE_MODEL,
   followSession,
   pdfOf,
@@ -54,7 +56,15 @@ const READS_FILES: Capabilities = {
   savesContext: false,
   searchesWeb: false,
 };
+/** A provider that codes, as only one may in a code workspace (ADR 0007). */
+const CODES: Capabilities = { ...READS_FILES, codes: true };
 const MODEL = { provider: "recorder", model: "one" };
+
+/** Makes garage-gym a code workspace, on a repository of its own. */
+const asCode = async () => {
+  const { repo } = await codeRepo(root);
+  await codeWorkspace(root, "garage-gym", repo);
+};
 const FAIL = Symbol("fail");
 
 /** A provider that keeps every turn it's given and gives the scripted replies in turn. */
@@ -128,6 +138,17 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toContain('"garage-gym" workspace');
     expect(framing.instructions).toMatch(/read and search the files in this workspace/i);
     expect(framing.instructions).toMatch(/can't change anything or run commands/i);
+  });
+
+  it("tells a model in a code session that it works on its own session branch, and what runs without asking (ADR 0007)", async () => {
+    await asCode();
+
+    const { framing } = await firstTurn(CODES);
+
+    expect(framing.instructions).toContain(
+      await quotedInGuide("You're working on your own session branch"),
+    );
+    expect(framing.instructions).not.toMatch(/can't change anything or run commands/i);
   });
 
   it("tells a model that reads no files only what it can do", async () => {
@@ -476,12 +497,9 @@ describe("the owner context every turn carries (ADR 0010)", () => {
 
   it("gives a code workspace only how the owner likes answers", async () => {
     await ownerContext(OWNER_MD);
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    await asCode();
 
-    const { instructions } = (await firstTurn()).framing;
+    const { instructions } = (await firstTurn(CODES)).framing;
 
     expect(instructions).toContain("- [A1] Metric units and pounds.");
     expect(instructions).not.toContain("Lives in the UK");
@@ -595,11 +613,8 @@ describe("saving context as a model answers (ADR 0013)", () => {
   });
 
   it("offers a code workspace the save tool for How to answer me only", async () => {
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
-    const saver = savingProvider([[]]);
+    await asCode();
+    const saver = savingProvider([[]], { codes: true });
     await turnOn(saver.provider);
 
     const framing = saver.framings[0];
@@ -853,7 +868,8 @@ describe("titling a session (#104)", () => {
 describe("suggested replies (#126, ADR 0017)", () => {
   /** What the first turn of a session gives a provider that saves, in garage-gym. */
   const savingTurn = async () => {
-    const saver = savingProvider([[]]);
+    // It codes, so it can work in a code workspace too (ADR 0007).
+    const saver = savingProvider([[]], { codes: true });
     const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
     const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
       text: "Where should the rack go?",
@@ -878,11 +894,10 @@ describe("suggested replies (#126, ADR 0017)", () => {
   });
 
   it("refuses a call to one of Courtyard's tools that the turn doesn't offer", async () => {
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
-    const saver = savingProvider([[{ call: "suggest_replies", input: { replies: ["A", "B"] } }]]);
+    await asCode();
+    const saver = savingProvider([[{ call: "suggest_replies", input: { replies: ["A", "B"] } }]], {
+      codes: true,
+    });
     const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
     const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
       text: "Where should the rack go?",
@@ -903,10 +918,7 @@ describe("suggested replies (#126, ADR 0017)", () => {
     const { provider, turns } = recorder(READS_FILES);
     await (await sessionOn(provider)).say("Where should the rack go?");
     await rm(join(root, "data"), { recursive: true, force: true });
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    await asCode();
     const inCode = await savingTurn();
 
     for (const framing of [turns[0]?.framing, inCode]) {
@@ -918,7 +930,8 @@ describe("suggested replies (#126, ADR 0017)", () => {
 
 /** The framings and replies a provider that saves is given, one per turn, as `turns` script. */
 const savingTurns = async (turns: Parameters<typeof savingProvider>[0]) => {
-  const saver = savingProvider(turns);
+  // It codes, so it can work in a code workspace too (ADR 0007).
+  const saver = savingProvider(turns, { codes: true });
   const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
   const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
     text: "Where should the rack go?",
@@ -1051,10 +1064,7 @@ describe("documents (#145, ADR 0020)", () => {
 
   it("offers neither the list nor the tool in a code workspace", async () => {
     await withDocuments();
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    await asCode();
 
     const saver = await savingTurns([[]]);
 
@@ -1183,10 +1193,7 @@ describe("Things (#149, ADR 0020)", () => {
 
   it("offers neither the list nor the tool in a code workspace", async () => {
     await withThings();
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    await asCode();
 
     const saver = await savingTurns([[]]);
 
@@ -1221,11 +1228,8 @@ describe("web search (#108, ADR 0019)", () => {
     const { provider: without, turns: withoutTurns } = recorder(READS_FILES);
     await (await sessionOn(without)).say("What does a J-hook cost?");
     await rm(join(root, "data"), { recursive: true, force: true });
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
-    const { provider: inCode, turns: codeTurns } = recorder(SEARCHES);
+    await asCode();
+    const { provider: inCode, turns: codeTurns } = recorder({ ...SEARCHES, codes: true });
     await (await sessionOn(inCode)).say("What does a J-hook cost?");
 
     for (const framing of [withoutTurns[0]?.framing, codeTurns[0]?.framing]) {

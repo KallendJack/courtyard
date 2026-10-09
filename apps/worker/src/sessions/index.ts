@@ -962,7 +962,11 @@ export const createSessions = (options: {
     const provider = await providerFor(message);
     if (!provider.ok) return provider;
     const workspace = await getWorkspace(options.contextDir, workspaceId);
-    if (!workspace.ok) return err(STORAGE_ERROR);
+    if (!workspace.ok) {
+      return err(
+        workspace.error.kind === "archived" ? { kind: "workspace-archived" } : STORAGE_ERROR,
+      );
+    }
     const { summary, repoPath } = workspace.value;
     if (summary.mode === "planning") return ok({ provider: provider.value, repoPath: undefined });
     const coding = await codes(provider.value);
@@ -1227,6 +1231,8 @@ export const createSessions = (options: {
       const usable = await skillUsable(start.workspaceId, message.value);
       if (!usable.ok) return usable;
       const provider = await providerIn(start.workspaceId, message.value);
+      // A fresh start meanwhile may have taken its workspace away.
+      if (settingAside || since !== freshStarts) return err({ kind: "starting-fresh" });
       if (!provider.ok) return provider;
       const { repoPath } = provider.value;
       const id = SessionId.parse(randomUUID());
