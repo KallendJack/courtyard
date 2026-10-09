@@ -232,7 +232,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
   heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
-  helpers shared by pages. **`styles.css`:** the Moorland theme.
+  helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
 - Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
   keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
