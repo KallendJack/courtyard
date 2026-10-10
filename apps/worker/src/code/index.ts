@@ -1,10 +1,11 @@
 import { join } from "node:path";
-import type { SessionId } from "@courtyard/contract";
+import { CODE_SESSIONS_AT_ONCE, type SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, DEFAULT_ALLOWLIST, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+import { createCodeSlots } from "./slots.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -112,6 +113,13 @@ export const editableIn = async (worktree: string, path: string) => {
   return shown === "" || first === GIT_FILE ? undefined : shown;
 };
 
+/**
+ * What a code session's commands get in their environment: its slot among the code sessions
+ * running, 1 to `CODE_SESSIONS_AT_ONCE`, which no other running one has, for a repository's checks
+ * to pick their test servers' ports from (this repository's Playwright config does).
+ */
+export const slotEnv = (slot: number) => ({ COURTYARD_SESSION_SLOT: String(slot) });
+
 export const createCode = (options: {
   dataDir: string;
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
@@ -122,6 +130,9 @@ export const createCode = (options: {
   return {
     /** The folder a session's branch is checked out in. */
     worktreeOf,
+
+    /** Which code sessions are running, and which wait for one to end. */
+    slots: createCodeSlots(CODE_SESSIONS_AT_ONCE),
 
     /**
      * What a session's commands get on top of the environment they run in, so its git and gh, and

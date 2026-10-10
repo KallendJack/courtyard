@@ -327,8 +327,8 @@ const firstLine = (output: string) =>
     .find((line) => line !== "");
 
 /**
- * Runs a command the worker allowed in the worktree, as a shell would, in the environment the
- * worker gives a code session's commands, and says how it went.
+ * Runs a command the worker allowed in the worktree, with what the session gives its commands (its
+ * slot, and Courtyard's GitHub sign-in), as a shell would, and says how it went.
  */
 const runIn = (code: CodeTurn, command: string) =>
   new Promise<string>((resolve) => {

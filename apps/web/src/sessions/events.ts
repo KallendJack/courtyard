@@ -80,6 +80,8 @@ export type Turn = {
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
   readonly sources: readonly Source[];
+  /** Whether it's waiting for one of the code sessions running to end before it starts (#174). */
+  readonly queued: boolean;
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -171,6 +173,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             things: [],
             replies: [],
             sources: [],
+            queued: false,
             state: { kind: "running" },
           },
         ],
@@ -198,6 +201,12 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "sources":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
+    case "turn-queued":
+    case "turn-dequeued":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, queued: event.type === "turn-queued" }),
+      });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":

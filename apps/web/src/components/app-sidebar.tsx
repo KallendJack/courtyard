@@ -1,26 +1,19 @@
-import {
-  SESSION_TITLE_MAX_LENGTH,
-  type SessionId,
-  SessionList,
-  type WorkspaceSummary,
-} from "@courtyard/contract";
-import { Link, useLocation, useParams, useRouter, useRouterState } from "@tanstack/react-router";
-import { LogOut, PanelLeft, Pencil, Plus } from "lucide-react";
+import type { WorkspaceSummary } from "@courtyard/contract";
+import { Link, useParams } from "@tanstack/react-router";
+import { LogOut, PanelLeft, Plus } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
-import { describeProblem } from "../problems.tsx";
-import { fromWorker, renameSession } from "../worker.ts";
 import { IconButton } from "./button.tsx";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
 import { WorkspaceDot } from "./workspace-colour.tsx";
 
-/** Loaded when the owner first renames from the sidebar, so it stays off the first load. */
-const RenameForm = lazy(() =>
-  import("./rename-form.tsx").then((module) => ({ default: module.RenameForm })),
+/**
+ * Loaded once a workspace is open, so it stays off the first load: the home page lists no
+ * sessions.
+ */
+const RecentSessions = lazy(() =>
+  import("./recent-sessions.tsx").then((module) => ({ default: module.RecentSessions })),
 );
-
-/** How many of a workspace's sessions the sidebar lists. */
-const RECENT_SESSIONS = 5;
 /** Where this device remembers that the sidebar was collapsed. */
 const COLLAPSED_KEY = "courtyard.sidebar-collapsed";
 
@@ -46,6 +39,10 @@ const WORKSPACE_ROW = classes(
   "text-[15px] data-[status=active]:bg-muted data-[status=active]:font-semibold",
 );
 
+/** A group's heading in the sidebar (code workspaces, recent sessions), gone in the rail. */
+export const GROUP_HEADING =
+  "px-3 pb-1.5 text-xs font-medium text-muted-foreground group-data-[collapsed=true]/sidebar:hidden";
+
 /** The sidebar only shows from tablet width up; below that the workspace strip takes over. */
 const SHOWN = "(min-width: 768px)";
 
@@ -66,9 +63,29 @@ export function AppSidebar(props: {
   onLogOut: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(wasCollapsed);
+  const { workspaceId } = useParams({ strict: false });
   const toggle = useCallback(() => setCollapsed((was) => !was), []);
 
   useEffect(() => remember(collapsed), [collapsed]);
+
+  /** A workspace's row: its dot, and its name until the sidebar is a rail. */
+  const row = (workspace: WorkspaceSummary) => (
+    <li key={workspace.id}>
+      <Link
+        to="/workspaces/$workspaceId"
+        params={{ workspaceId: workspace.id }}
+        aria-label={workspace.name}
+        title={collapsed ? workspace.name : undefined}
+        className={WORKSPACE_ROW}
+      >
+        <WorkspaceDot colour={workspace.colour} />
+        <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
+          {workspace.name}
+        </span>
+      </Link>
+    </li>
+  );
+  const code = props.workspaces.filter((workspace) => workspace.mode === "code");
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -107,23 +124,8 @@ export function AppSidebar(props: {
             onClick={toggle}
           />
         </div>
-        <ul className="flex flex-col gap-0.5">
-          {props.workspaces.map((workspace) => (
-            <li key={workspace.id}>
-              <Link
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId: workspace.id }}
-                aria-label={workspace.name}
-                title={collapsed ? workspace.name : undefined}
-                className={WORKSPACE_ROW}
-              >
-                <WorkspaceDot colour={workspace.colour} />
-                <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
-                  {workspace.name}
-                </span>
-              </Link>
-            </li>
-          ))}
+        <ul aria-label="Planning workspaces" className="flex flex-col gap-0.5">
+          {props.workspaces.filter((workspace) => workspace.mode !== "code").map(row)}
           <li>
             <Link
               to="/new-workspace"
@@ -142,7 +144,20 @@ export function AppSidebar(props: {
             </Link>
           </li>
         </ul>
-        <RecentSessions workspaces={props.workspaces} />
+        {/* Code workspaces stand apart (#174): their own group, below the planning ones. */}
+        {code.length > 0 && (
+          <div className="flex flex-col">
+            <h2 className={GROUP_HEADING}>Code</h2>
+            <ul aria-label="Code workspaces" className="flex flex-col gap-0.5">
+              {code.map(row)}
+            </ul>
+          </div>
+        )}
+        {workspaceId !== undefined && (
+          <Suspense>
+            <RecentSessions workspaces={props.workspaces} />
+          </Suspense>
+        )}
         <button
           type="button"
           onClick={props.onLogOut}
@@ -154,102 +169,5 @@ export function AppSidebar(props: {
         </button>
       </nav>
     </aside>
-  );
-}
-
-/**
- * The open workspace's latest sessions, refreshed as the owner moves around and whenever a page
- * reloads its data (after a session is renamed, say). Each can be renamed in place.
- */
-function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
-  const { workspaceId } = useParams({ strict: false });
-  const { pathname } = useLocation();
-  const loadedAt = useRouterState({ select: (state) => state.matches.at(-1)?.updatedAt });
-  const router = useRouter();
-  /** The sessions last fetched, and whose they are, so another workspace's are never shown. */
-  const [listed, setListed] = useState<{
-    workspaceId: string;
-    sessions: SessionList["sessions"];
-  }>();
-  const [renaming, setRenaming] = useState<SessionId>();
-  const workspace = props.workspaces.find((w) => w.id === workspaceId);
-  const sessions = listed && listed.workspaceId === workspaceId ? listed.sessions : [];
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname and loadedAt are the triggers: moving between pages (starting a session, say) or a page reloading its data refreshes the list
-  useEffect(() => {
-    if (workspaceId === undefined) return;
-    let current = true;
-    void fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/sessions`, SessionList).then(
-      (result) => {
-        const sessions = result.kind === "loaded" ? result.data.sessions : [];
-        if (current) setListed({ workspaceId, sessions });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [workspaceId, pathname, loadedAt]);
-
-  if (!workspace || sessions.length === 0) return null;
-  return (
-    <section
-      aria-label={`Recent in ${workspace.name}`}
-      className="flex flex-col group-data-[collapsed=true]/sidebar:hidden"
-    >
-      <h2 className="px-3 pb-1.5 text-xs font-medium text-muted-foreground">
-        Recent in {workspace.name}
-      </h2>
-      <ul>
-        {sessions.slice(0, RECENT_SESSIONS).map((session) =>
-          renaming === session.id ? (
-            <li key={session.id} className="px-1 py-1">
-              <Suspense
-                fallback={
-                  <span className="block truncate px-2 py-1.5 text-sm text-muted-foreground">
-                    {session.title}
-                  </span>
-                }
-              >
-                <RenameForm
-                  label="Session title"
-                  value={session.title}
-                  maxLength={SESSION_TITLE_MAX_LENGTH}
-                  save={async (title) => {
-                    const renamed = await renameSession(session.id, { title });
-                    if (renamed.kind !== "loaded") return describeProblem(renamed).body;
-                    const others = sessions.map((s) => (s.id === session.id ? renamed.data : s));
-                    setListed({ workspaceId: session.workspaceId, sessions: others });
-                    // The session's own page, if it's open, shows the new title too.
-                    await router.invalidate();
-                    return undefined;
-                  }}
-                  onDone={() => setRenaming(undefined)}
-                />
-              </Suspense>
-            </li>
-          ) : (
-            <li key={session.id} className="group/row relative">
-              <Link
-                to="/workspaces/$workspaceId/sessions/$sessionId"
-                params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-                className="block truncate rounded-md py-1.5 pr-9 pl-3 text-sm text-muted-foreground hover:bg-muted/60 data-[status=active]:font-medium data-[status=active]:text-foreground"
-              >
-                {session.title}
-              </Link>
-              {/* Shown on hover or focus with a mouse; always on a touch screen, which can't hover. */}
-              <span className="absolute top-1/2 right-1 flex -translate-y-1/2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
-                <IconButton
-                  label={`Rename ${session.title}`}
-                  icon={<Pencil />}
-                  size="sm"
-                  square
-                  onClick={() => setRenaming(session.id)}
-                />
-              </span>
-            </li>
-          ),
-        )}
-      </ul>
-    </section>
   );
 }

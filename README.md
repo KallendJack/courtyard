@@ -166,6 +166,9 @@ machine:
   (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
   git and gh commands that only look, and `git add` and `git commit` on its branch. Anything else
   is refused with the reason, for now: approvals come next.
+- **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
+  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
+  the same, for the repository's checks to pick their test servers' ports from.
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.

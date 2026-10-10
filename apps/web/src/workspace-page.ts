@@ -1,4 +1,4 @@
-import { SessionList, WorkspaceDetail, WorkspaceId } from "@courtyard/contract";
+import { CodeSessionList, WorkspaceDetail, WorkspaceId } from "@courtyard/contract";
 import { loadDocuments } from "./documents/api.ts";
 import { loadThings } from "./things/api.ts";
 import { fromWorker, loadProviders, loadSkills, NOT_FOUND } from "./worker.ts";
@@ -12,7 +12,7 @@ export const loadWorkspacePage = async (workspace: string) => {
   const workspaceId = WorkspaceId.safeParse(workspace);
   const [detail, sessions, providers, skills, documents, things] = await Promise.all([
     fromWorker(`/workspaces/${id}`, WorkspaceDetail),
-    fromWorker(`/workspaces/${id}/sessions`, SessionList),
+    fromWorker(`/workspaces/${id}/sessions`, CodeSessionList),
     loadProviders(),
     workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     workspaceId.success ? loadDocuments(workspaceId.data) : NOT_FOUND,
