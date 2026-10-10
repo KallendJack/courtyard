@@ -10,6 +10,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../files.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { DeviceLogin, type StorageError } from "../owner/index.ts";
 import { err, ok, type Result } from "../result.ts";
 
@@ -97,12 +98,7 @@ export const createNotifications = (options: {
   const devicesPath = join(folder, "devices.json");
 
   /** Changes to the devices one at a time, so two can't each read the file before the other writes. */
-  let queue: Promise<unknown> = Promise.resolve();
-  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
-    const run = queue.then(change, change);
-    queue = run.catch(() => undefined);
-    return run;
-  };
+  const oneAtATime = createOneAtATime();
 
   const readKeys = async (): Promise<Result<PushKeys, StorageError>> => {
     const kept = await readJsonFile(keysPath, PushKeys);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type AuthState, MIN_PASSWORD_LENGTH } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../files.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /** The secret in a device login's cookie. Only its hash is ever stored. */
@@ -99,12 +100,7 @@ export const createOwner = (options: { dataDir: string; now: () => number }): Ow
    * Runs changes one at a time. Without this, guesses sent together would all read the same
    * failure count and skip the slow-down, and a login and a logout could undo each other.
    */
-  let queue: Promise<unknown> = Promise.resolve();
-  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
-    const run = queue.then(change, change);
-    queue = run.catch(() => undefined);
-    return run;
-  };
+  const oneAtATime = createOneAtATime();
 
   const read = async <T>(path: string, schema: z.ZodType<T>) => {
     const file = await readJsonFile(path, schema);
