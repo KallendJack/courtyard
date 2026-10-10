@@ -307,7 +307,10 @@ function Session(props: {
         <div className="mt-4">
           <Notice>
             Its pull request was {ended}, so this session can be read but takes no more messages.
-            Its branch and worktree are cleared away. Start a new session to carry on.
+            {running
+              ? "Its branch and worktree are cleared away once the turn running now ends."
+              : "Its branch and worktree are cleared away."}{" "}
+            Start a new session to carry on.
           </Notice>
         </div>
       )}

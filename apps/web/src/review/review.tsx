@@ -180,7 +180,7 @@ export default function Review(props: {
                   confirm={() => end({ kind: "close" })}
                 >
                   It closes on GitHub without merging, and this session ends: its branch and
-                  worktree are cleared away.
+                  worktree are cleared away once no turn is running.
                 </ConfirmStep>
               ) : (
                 <div className="flex flex-col gap-2">
