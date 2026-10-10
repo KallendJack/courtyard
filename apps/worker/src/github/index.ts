@@ -117,15 +117,17 @@ const GIT_SETTINGS: readonly (readonly [string, string])[] = [
   ["url.https://github.com/.insteadOf", "ssh://git@github.com/"],
 ];
 
+/** The names of the checks that ended in `outcome`, each once, in the order they come. */
+const namesWith = (checks: readonly FoundCheck[], outcome: FoundCheck["outcome"]) => [
+  ...new Set(checks.filter((check) => check.outcome === outcome).map((check) => check.name)),
+];
+
 /**
  * Where a pull request's checks stand, from each check: failed when any has, by name, so its
  * session can start on a fix while the rest run; else running while any is.
  */
 const checksOf = (checks: readonly FoundCheck[]): PullRequestChecks => {
-  const failed = [
-    ...new Set(checks.filter((check) => check.outcome === "failed").map((check) => check.name)),
-  ];
-  const [first, ...more] = failed;
+  const [first, ...more] = namesWith(checks, "failed");
   if (first !== undefined) return { kind: "failed", failed: [first, ...more] };
   if (checks.some((check) => check.outcome === "running")) return { kind: "running" };
   return checks.length === 0 ? { kind: "none" } : { kind: "passed" };
@@ -147,14 +149,19 @@ const mergeReadiness = (pull: FoundPullRequest): MergeReadiness => {
       `It conflicts with ${pull.base}. Ask the session to bring its branch up to date.`,
     );
   }
-  const named = (outcome: FoundCheck["outcome"]) => [
-    ...new Set(pull.checks.filter((check) => check.outcome === outcome).map((check) => check.name)),
-  ];
-  const failed = named("failed");
+  const failed = namesWith(pull.checks, "failed");
   if (failed.length > 0) return refused(`Merge waits for ${namesOf(failed)} to pass.`);
-  const running = named("running");
+  const running = namesWith(pull.checks, "running");
   if (running.length > 0) return refused(`Merge waits for ${namesOf(running)} to finish.`);
   return { kind: "ready" };
+};
+
+/** A pull request GitHub gave, read into Courtyard's shape, or why it couldn't be. */
+const readPull = <T>(shape: z.ZodType<T>, pull: unknown): Result<T, GitHubProblem> => {
+  const parsed = shape.safeParse(pull);
+  return parsed.success
+    ? ok(parsed.data)
+    : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
 };
 
 export const createGitHub = (options: {
@@ -281,6 +288,23 @@ export const createGitHub = (options: {
     return ok({ github, token: stored.value.accessToken });
   };
 
+  /**
+   * The latest pull request from `branch` in `repo`, asked of GitHub with the sign-in now, with
+   * GitHub and the token for asking more; `null` when there's none.
+   */
+  const latestPull = async (find: {
+    repo: string;
+    branch: string;
+  }): Promise<
+    Result<{ github: GitHubApi; token: string; pull: FoundPullRequest | null }, GitHubProblem>
+  > => {
+    const signedIn = await tokenFor(api);
+    if (!signedIn.ok) return signedIn;
+    const found = await signedIn.value.github.pullRequest(signedIn.value.token, find);
+    if (!found.ok) return err({ kind: "github", message: found.error });
+    return ok({ ...signedIn.value, pull: found.value });
+  };
+
   return {
     status: async (): Promise<Result<GitHubConnection, "storage">> => {
       if (api === null) return ok({ kind: "not-set-up" });
@@ -341,20 +365,11 @@ export const createGitHub = (options: {
       repo: string;
       branch: string;
     }): Promise<Result<PullRequest | undefined, GitHubProblem>> => {
-      if (api === null) return err({ kind: "not-set-up" });
-      const stored = await read();
-      if (!stored.ok) return err({ kind: "storage" });
-      if (stored.value === undefined) return ok(undefined);
-      const found = await api.pullRequest(stored.value.accessToken, find);
-      if (!found.ok) return err({ kind: "github", message: found.error });
-      if (found.value === null) return ok(undefined);
-      const parsed = PullRequest.safeParse({
-        ...found.value,
-        checks: checksOf(found.value.checks),
-      });
-      return parsed.success
-        ? ok(parsed.data)
-        : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
+      const found = await latestPull(find);
+      if (!found.ok) return found.error.kind === "signed-out" ? ok(undefined) : found;
+      const { pull } = found.value;
+      if (pull === null) return ok(undefined);
+      return readPull(PullRequest, { ...pull, checks: checksOf(pull.checks) });
     },
 
     /**
@@ -365,16 +380,13 @@ export const createGitHub = (options: {
       repo: string;
       branch: string;
     }): Promise<Result<PullRequestReview | undefined, GitHubProblem>> => {
-      const signedIn = await tokenFor(api);
-      if (!signedIn.ok) return signedIn;
-      const { github, token } = signedIn.value;
-      const found = await github.pullRequest(token, find);
-      if (!found.ok) return err({ kind: "github", message: found.error });
-      if (found.value === null) return ok(undefined);
-      const pull = found.value;
+      const found = await latestPull(find);
+      if (!found.ok) return found;
+      const { github, token, pull } = found.value;
+      if (pull === null) return ok(undefined);
       const files = await github.pullRequestFiles(token, { repo: find.repo, number: pull.number });
       if (!files.ok) return err({ kind: "github", message: files.error });
-      const parsed = PullRequestReview.safeParse({
+      return readPull(PullRequestReview, {
         pullRequest: { ...pull, checks: checksOf(pull.checks) },
         branch: find.branch,
         base: pull.base,
@@ -382,9 +394,6 @@ export const createGitHub = (options: {
         files: files.value,
         merge: mergeReadiness(pull),
       });
-      return parsed.success
-        ? ok(parsed.data)
-        : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
     },
 
     /** Merges pull request `number` in `repo`, only while its latest commit is `head` (#160). */
