@@ -162,11 +162,26 @@ machine:
   branch, `courtyard/…`, from `origin`'s default branch, freshly fetched, in its own worktree in
   the data folder's `worktrees/`. Your own checkout is never touched.
 - **Only a model that can code works there** (Claude, for now); others are refused, saying so.
-- **Without asking,** a session edits files in its worktree and runs the package scripts
-  (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
-  git and gh commands that only look, and `git add` and `git commit` on its branch. Any other
-  command, or an edit outside its worktree, waits for you: the session shows the exact command
-  with Allow and Deny, and waits as long as you take.
+- **Without asking,** a session edits files in its worktree and runs the command allowlist: the
+  package scripts (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e
+  and verify), git and gh commands that only look, `git add` and `git commit` on its branch,
+  pushing its branch (to `origin`, under its own name, never forced), and opening or updating its
+  own pull request with `gh pr create`/`gh pr edit`. Any other command, an edit outside its
+  worktree, or an edit to a file that decides what those commands run (a `package.json`, git
+  hooks, `.claude`) waits for you: the session shows the exact command or file with Allow and
+  Deny, and waits as long as you take.
+- **To change a workspace's command allowlist,** add an `allowlist` to its `workspace.json`: the
+  commands to add, and the default ones to remove, each by its first words, ending ` ...` when
+  more arguments may follow. A command still never chains another, nor names a path outside the
+  worktree, without asking.
+
+  ```json
+  {
+    "mode": "code",
+    "repoPath": "/path/to/repo",
+    "allowlist": { "add": ["cargo test ...", "pnpm lint"], "remove": ["npm ci"] }
+  }
+  ```
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.

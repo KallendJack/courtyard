@@ -355,6 +355,44 @@ describe("a code workspace's command allowlist", () => {
     expect(ran).toEqual([]);
   });
 
+  it("is the workspace's own when its settings change the default", async () => {
+    await writeFile(
+      join(root, "context", "side-project", "workspace.json"),
+      JSON.stringify({
+        mode: "code",
+        repoPath: repo,
+        allowlist: { add: ["cargo test ...", "pnpm lint"], remove: ["npm ci", "git log ..."] },
+      }),
+    );
+    const commands = [
+      "cargo test --all",
+      "pnpm lint",
+      "pnpm test",
+      "pnpm lint --fix",
+      "npm ci",
+      "git log --oneline",
+      "cargo test --manifest-path=../elsewhere/Cargo.toml",
+    ];
+
+    const { answers, asked } = await askAbout(commands);
+
+    expect(answers.slice(0, 3)).toEqual([
+      { ok: true, value: null },
+      { ok: true, value: null },
+      { ok: true, value: null },
+    ]);
+    expect(asked).toEqual([
+      { kind: "command", command: "pnpm lint --fix", reason: "off-allowlist" },
+      { kind: "command", command: "npm ci", reason: "off-allowlist" },
+      { kind: "command", command: "git log --oneline", reason: "off-allowlist" },
+      {
+        kind: "command",
+        command: "cargo test --manifest-path=../elsewhere/Cargo.toml",
+        reason: "reaches-out",
+      },
+    ]);
+  });
+
   it("commits, pushes and opens its PR only on the session branch", async () => {
     const { provider, answers } = codingProvider([
       { run: 'git commit -m "Add the notes"' },

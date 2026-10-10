@@ -41,9 +41,11 @@ import {
   type PreparedAttachment,
 } from "../attachments/index.ts";
 import {
+  allowlistFor,
   type BranchRefusal,
   type Code,
   type CodeRefusal,
+  type CommandRule,
   commandAllowed,
   editPlaceIn,
   type PullRequestProblem,
@@ -545,7 +547,17 @@ export const createSessions = (options: {
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<FramingWorkspace & { folder: string; skills: WorkspaceSkills }, string>> => {
+  ): Promise<
+    Result<
+      FramingWorkspace & {
+        folder: string;
+        skills: WorkspaceSkills;
+        /** Its command allowlist, for a code session's commands. */
+        allowlist: readonly CommandRule[];
+      },
+      string
+    >
+  > => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(options.contextDir, workspaceId),
       readOwnerContext(options.contextDir),
@@ -572,6 +584,7 @@ export const createSessions = (options: {
       documents: documents.value,
       things: things.value,
       skills: await skillsOf(workspace.value),
+      allowlist: allowlistFor(workspace.value.allowlist),
     });
   };
 
@@ -854,7 +867,12 @@ export const createSessions = (options: {
           },
           run: async (command, why) => {
             const allowed = await commandAllowed(
-              { worktree, branch, pullRequest: pullRequestIn(events.value)?.number },
+              {
+                worktree,
+                branch,
+                pullRequest: pullRequestIn(events.value)?.number,
+                allowlist: workspace.value.allowlist,
+              },
               command,
             );
             if (allowed.ok) return decide(ok({ kind: "ran-command", command }));

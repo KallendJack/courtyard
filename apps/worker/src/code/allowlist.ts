@@ -240,7 +240,7 @@ const editsOwn = (rest: readonly string[], { branch, pullRequest }: OwnWork) => 
  * gh commands that only look, adding and committing on the session branch, pushing it, and
  * opening and updating its own pull request (#172).
  */
-export const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
+const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
   { words: ["npm", "ci"], more: false },
   ...PACKAGE_SCRIPTS.flatMap((script) => [
@@ -260,6 +260,28 @@ export const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["gh", "pr", "create"], more: true, onSessionBranch: true, own: opensOwn },
   { words: ["gh", "pr", "edit"], more: true, onSessionBranch: true, own: editsOwn },
 ];
+
+/** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
+const ruleNamed = (named: string): CommandRule => {
+  const words = named.split(" ");
+  const more = words.at(-1) === "...";
+  return { words: more ? words.slice(0, -1) : words, more };
+};
+
+/**
+ * A code workspace's command allowlist: the default, with the commands its settings add and
+ * without the default ones they remove (by their words, whether or not more may follow).
+ */
+export const allowlistFor = (settings: {
+  readonly add: readonly string[];
+  readonly remove: readonly string[];
+}): readonly CommandRule[] => {
+  const removed = new Set(settings.remove.map((named) => ruleNamed(named).words.join(" ")));
+  return [
+    ...DEFAULT_ALLOWLIST.filter((rule) => !removed.has(rule.words.join(" "))),
+    ...settings.add.map(ruleNamed),
+  ];
+};
 
 /**
  * The rule a command's words match, or `undefined` when none does. A push or a pull request

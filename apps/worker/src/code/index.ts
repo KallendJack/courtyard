@@ -5,7 +5,10 @@ import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { GitHub, GitHubProblem } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import { type CommandRule, DEFAULT_ALLOWLIST, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+import { type CommandRule, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+
+export { allowlistFor, type CommandRule } from "./allowlist.ts";
+
 import { createCodeSlots } from "./slots.ts";
 
 /**
@@ -97,13 +100,14 @@ export const commandAllowed = async (
     readonly branch: string;
     /** Its pull request's number, once it has one (#172). */
     readonly pullRequest?: number | undefined;
+    /** Its code workspace's command allowlist (`allowlistFor`). */
+    readonly allowlist: readonly CommandRule[];
   },
   command: string,
-  allowlist: readonly CommandRule[] = DEFAULT_ALLOWLIST,
 ): Promise<Result<null, CodeRefusal | CommandApproval>> => {
   const words = wordsOf(command);
   if (!words.ok) return err({ kind: words.error });
-  const rule = ruleFor(allowlist, words.value, {
+  const rule = ruleFor(session.allowlist, words.value, {
     branch: session.branch,
     pullRequest: session.pullRequest,
   });

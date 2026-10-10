@@ -30,6 +30,26 @@ const CONFIG_FILE = "workspace.json";
 export const ARCHIVED_FOLDER = "archived";
 const COLOURS = WorkspaceColour.options;
 
+/**
+ * A command named by its first words, one space apart, with ` ...` at the end when more arguments
+ * may follow them (`"cargo test ..."`).
+ */
+const CommandWords = z
+  .string()
+  .trim()
+  .regex(/^\S+( \S+)*$/, "names a command by its words, one space apart")
+  .refine((words) => words !== "...", "names no command");
+
+/**
+ * A code workspace's changes to the default command allowlist (spec #169): the commands it adds,
+ * and the default ones it removes, each as `CommandWords`.
+ */
+export const AllowlistSettings = z.object({
+  add: z.array(CommandWords).default([]),
+  remove: z.array(CommandWords).default([]),
+});
+export type AllowlistSettings = z.infer<typeof AllowlistSettings>;
+
 /** A workspace's optional `workspace.json`. Without one, a workspace is a planning workspace. */
 const WorkspaceConfig = z
   .object({
@@ -37,6 +57,8 @@ const WorkspaceConfig = z
     mode: WorkspaceMode.default("planning"),
     /** The git repository a code workspace works on, on the worker machine. */
     repoPath: z.string().min(1).optional(),
+    /** A code workspace's changes to the default command allowlist, if any. */
+    allowlist: AllowlistSettings.optional(),
     colour: WorkspaceColour.optional(),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
@@ -52,6 +74,7 @@ type Config =
       readonly mode: WorkspaceMode;
       readonly colour?: WorkspaceColour;
       readonly repoPath?: string;
+      readonly allowlist?: AllowlistSettings;
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -64,6 +87,8 @@ export type Workspace = {
   readonly contextMarkdown: string | null;
   /** A code workspace's repository on the worker machine, as its config names it. */
   readonly repoPath: string | null;
+  /** A code workspace's changes to the default command allowlist: none when its config has none. */
+  readonly allowlist: AllowlistSettings;
 };
 
 /** A workspace as read from its folder, before its colour is settled. */
@@ -110,13 +135,14 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, colour, repoPath } = parsed.data;
+  const { name, mode, colour, repoPath, allowlist } = parsed.data;
   return {
     kind: "read",
     mode,
     ...(name === undefined ? {} : { name }),
     ...(colour === undefined ? {} : { colour }),
     ...(repoPath === undefined ? {} : { repoPath }),
+    ...(allowlist === undefined ? {} : { allowlist }),
   };
 };
 
@@ -151,6 +177,7 @@ const readWorkspace = async (
     folder,
     contextMarkdown: markdown.value ?? null,
     repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
+    allowlist: valid?.allowlist ?? { add: [], remove: [] },
   });
 };
 
