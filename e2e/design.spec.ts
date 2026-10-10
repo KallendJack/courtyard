@@ -62,9 +62,9 @@ test("follows the device's dark mode", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   const dark = await background();
 
-  // Moorland's mist by day, its peat-dark by night.
+  // Moorland's mist by day, Handheld's black by night.
   expect(light).toBe("rgb(243, 240, 236)");
-  expect(dark).toBe("rgb(27, 24, 26)");
+  expect(dark).toBe("rgb(7, 7, 7)");
 });
 
 test("never loads an image an answer points to, so an answer can't send data away", async ({

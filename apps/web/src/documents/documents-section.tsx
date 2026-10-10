@@ -1,7 +1,7 @@
 import type { ChangeId, DocumentSummary, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
-import { LIST_ROW, SectionTitle } from "@/components/page";
+import { CARD, LIST_ROW, SectionTitle } from "@/components/page";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { describeWhen } from "../when.ts";
 
@@ -22,7 +22,7 @@ export function DocumentsSection(props: {
   if (documents.length === 0 && deleted === undefined) return null;
 
   return (
-    <section aria-label="Documents" className="mt-12">
+    <section aria-label="Documents" className={CARD}>
       <div className="flex items-baseline justify-between gap-3">
         <SectionTitle>Documents</SectionTitle>
         {documents.length > 0 && (

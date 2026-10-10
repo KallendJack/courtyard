@@ -172,7 +172,7 @@ test("is installable, and caches the app but never session data", async ({ page,
   expect(manifest).toMatchObject({ name: "Courtyard", display: "standalone", start_url: "/" });
   // An installed app on Android paints the strip behind the gesture bar in this colour, whatever
   // the page's theme, so it's the dark theme's ground: the owner uses dark mode (#157).
-  expect(manifest.background_color.toLowerCase()).toBe("#1b181a");
+  expect(manifest.background_color.toLowerCase()).toBe("#070707");
   const sizes = manifest.icons.map((icon) => icon.sizes);
   expect(sizes).toEqual(expect.arrayContaining(["192x192", "512x512"]));
   for (const icon of manifest.icons) {

@@ -45,9 +45,7 @@ export function PasswordPage(props: {
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm rounded-lg border bg-card p-6 md:p-8">
         <CourtyardMark size={40} />
-        <h1 className="mt-5 font-display text-[26px]/[31px] font-medium tracking-[-0.02em]">
-          {props.title}
-        </h1>
+        <h1 className="mt-5 display-title text-[26px]/[31px]">{props.title}</h1>
         <div className="mt-2 text-[15px]/[23px] text-muted-foreground">{props.intro}</div>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <TextField
