@@ -1,7 +1,7 @@
 import { Effort, type SkillName, type SkillSummary } from "@courtyard/contract";
 import { HandheldSheet } from "@/components/handheld-sheet";
 import { SheetChoices, SheetSkills } from "@/components/sheet-choices";
-import { type ModelChoice, modelKey, modelWord, shortModelName } from "./model-pickers.tsx";
+import { type ModelChoice, modelKey, modelWord } from "./model-pickers.tsx";
 import type { OfferedModel } from "./models.ts";
 
 /** The effort row's value for a model's default: never a level's name, which can't be empty. */
@@ -21,7 +21,7 @@ function ModelRows(props: { models: readonly OfferedModel[]; choice: ModelChoice
         label="Model"
         options={props.models.map((each) => ({
           value: modelKey(each.ref),
-          label: shortModelName(each),
+          label: each.name,
           word: modelWord(each),
         }))}
         value={model === undefined ? "" : modelKey(model.ref)}

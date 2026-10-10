@@ -286,7 +286,7 @@ export const savingProvider = (
       id,
       label: "Saver",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -356,7 +356,7 @@ export const codingProvider = (
       id,
       label: "Coder",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -418,7 +418,7 @@ export const drawingProvider = (steps: readonly PaperStep[]) => {
       id,
       label: "Drawer",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -478,7 +478,7 @@ export const runningProvider = (
       id,
       label: "Runner",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {

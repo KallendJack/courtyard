@@ -363,6 +363,7 @@ describe("Codex's status", () => {
         {
           id: "gpt-6.1-sol",
           label: "Codex · GPT-6.1-Sol",
+          name: "GPT-6.1-Sol",
           // Ultra hands work to sub-agents, which Courtyard switches off, so it isn't offered.
           efforts: [
             { id: Effort.parse("low"), label: "Low" },
@@ -375,6 +376,7 @@ describe("Codex's status", () => {
         {
           id: "gpt-6-astra",
           label: "Codex · GPT-6-Astra",
+          name: "GPT-6-Astra",
           efforts: [
             { id: Effort.parse("medium"), label: "Medium" },
             { id: Effort.parse("max"), label: "Max" },

@@ -445,12 +445,20 @@ const CheckAnswer = z.object({
  * description starts with that model's name ("Opus 5.5 · Best for…"), so the label borrows it.
  */
 const labelFor = (model: z.infer<typeof ClaudeModel>) => {
-  const [first, ...rest] = model.description.split(" · ");
-  const named = rest.length > 0 ? first?.trim() : undefined;
-  return model.value === "default" && named
-    ? `${LABEL} · Default (${named})`
-    : `${LABEL} · ${model.displayName}`;
+  const named = defaultsTo(model);
+  return named ? `${LABEL} · Default (${named})` : `${LABEL} · ${model.displayName}`;
 };
+
+/** The model Claude Code's Default is, when its description says. */
+const defaultsTo = (model: z.infer<typeof ClaudeModel>) => {
+  if (model.value !== "default") return undefined;
+  const [first, ...rest] = model.description.split(" · ");
+  return rest.length > 0 ? first?.trim() || undefined : undefined;
+};
+
+/** A model on its own, where there's little room: Default by the model it is, if known. */
+const nameFor = (model: z.infer<typeof ClaudeModel>) =>
+  model.value === "default" ? (defaultsTo(model) ?? "Default") : model.displayName;
 
 const TextDelta = z.object({
   type: z.literal("stream_event"),
@@ -902,7 +910,15 @@ export const createClaudeProvider = (
     const offered = models.flatMap((m) => {
       const modelId = ModelId.safeParse(m.value);
       return modelId.success && !m.value.startsWith("claude-")
-        ? [{ id: modelId.data, label: labelFor(m), efforts: effortsOf(m) }]
+        ? [
+            {
+              id: modelId.data,
+              label: labelFor(m),
+              name: nameFor(m),
+              ...(m.value === "default" ? { followsDefault: true as const } : {}),
+              efforts: effortsOf(m),
+            },
+          ]
         : [];
     });
     return {
