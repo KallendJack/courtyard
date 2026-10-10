@@ -151,10 +151,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
   allowlist is the package scripts, git and gh commands that only look, adding and committing, pushing the session
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
-  PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
-  command, which records each one allowed as an activity and words each refusal through `prompts/`, and the
-  environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the module's own fetch from the
-  remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
+  PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
+  A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
+  read by `workspaces/`, built by `allowlistFor`). `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
+  worker's say on every edit and command, which records each one allowed as an activity and words each refusal
+  through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
+  module's own fetch from the remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
   turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
   this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
   three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
@@ -173,7 +175,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
   base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
   ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
-  commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or closed on GitHub does.
+  commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or
+  closed on GitHub does.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.

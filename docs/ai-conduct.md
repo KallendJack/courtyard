@@ -243,8 +243,8 @@ the repository's, so they aren't part of this guide. The worker decides each edi
 same way for every provider. An edit outside the worktree, an edit inside it to a file that decides what its allowed
 commands run (a `package.json` or the package manager's settings, git hooks, `.claude`, git's own `.git`), a command
 off the command allowlist, and a command naming a path outside the worktree each wait for the owner's approval
-(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything else refused, tells the
-model why, in one of these:
+(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything
+else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
   why it's needed."
