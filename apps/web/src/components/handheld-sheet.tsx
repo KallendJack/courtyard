@@ -1,6 +1,7 @@
-import { type ReactNode, type TouchEvent, useEffect, useRef } from "react";
+import { type ReactNode, type TouchEvent, useRef } from "react";
 import { classes } from "@/lib/classes";
 import { useLayout } from "./handheld.ts";
+import { useDialog } from "./use-dialog.ts";
 
 /** How far a swipe goes, in pixels, before it closes a sheet. */
 const SWIPE = 64;
@@ -30,18 +31,10 @@ export function HandheldSheet(props: {
   children?: ReactNode;
 }) {
   const side = useLayout() === "tablet" ? "right" : "bottom";
-  const dialog = useRef<HTMLDialogElement>(null);
+  const dialog = useDialog(props.open, props.onClose);
   const body = useRef<HTMLDivElement>(null);
   /** Where a touch on the sheet started, and whether what scrolls was at its top then. */
   const touch = useRef<{ x: number; y: number; atTop: boolean }>(undefined);
-  const { open } = props;
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (open && !element.open) element.showModal();
-    if (!open && element.open) element.close();
-  }, [open]);
 
   const touchStart = (event: TouchEvent) => {
     const finger = event.touches[0];
@@ -73,24 +66,18 @@ export function HandheldSheet(props: {
   };
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way out is Escape, which the browser's dialog handles itself
     <dialog
-      ref={dialog}
+      {...dialog}
       data-sheet={side}
       {...(props.fits === undefined ? {} : { "data-fits": props.fits })}
       aria-label={props.title}
-      onClose={props.onClose}
-      // A tap on the dialog itself, not on anything in it, is a tap on the page around it.
-      onClick={(event) => {
-        if (event.target === event.currentTarget) props.onClose();
-      }}
       onTouchStart={touchStart}
       onTouchEnd={touchEnd}
       onTouchCancel={() => {
         touch.current = undefined;
       }}
     >
-      {open && (
+      {props.open && (
         <>
           <div data-handheld="" className="contents">
             <header

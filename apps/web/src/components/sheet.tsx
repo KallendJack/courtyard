@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { Button } from "./button.tsx";
+import { useDialog } from "./use-dialog.ts";
 
 /**
  * A panel that rises from the bottom of a narrow window over the page, for a few choices, with
@@ -15,29 +16,15 @@ export function Sheet(props: {
   onClose: () => void;
   children: ReactNode;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const { open } = props;
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (open && !element.open) element.showModal();
-    if (!open && element.open) element.close();
-  }, [open]);
+  const dialog = useDialog(props.open, props.onClose);
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way out is Escape, which the browser's dialog handles itself
     <dialog
-      ref={dialog}
+      {...dialog}
       aria-label={props.title}
-      onClose={props.onClose}
-      // A tap on the dialog itself, not on anything in it, is a tap on the dimmed page around it.
-      onClick={(event) => {
-        if (event.target === event.currentTarget) props.onClose();
-      }}
       className="mx-0 mt-auto mb-0 max-h-[85dvh] w-full max-w-none rounded-t-lg bg-card text-card-foreground backdrop:bg-foreground/30"
     >
-      {open && (
+      {props.open && (
         <div className="flex flex-col gap-4 px-4 pt-2.5 pb-6">
           <span aria-hidden className="h-1 w-9 self-center rounded-full bg-border" />
           <h2 className="display-section text-lg/tight">{props.title}</h2>
