@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
@@ -12,11 +13,18 @@ import {
 import type { Hono } from "hono";
 import { git } from "./git.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
-import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
-import { err, ok } from "./result.ts";
+import {
+  type CodeTurn,
+  createFakeProvider,
+  type Framing,
+  type Provider,
+} from "./providers/index.ts";
+import { err, ok, type Result } from "./result.ts";
 import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
+export { createFakeGitHub, type FakeGitHub } from "./github/fake.ts";
+export { createFakePush, type FakePush } from "./notifications/fake.ts";
 export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
 /**
@@ -248,14 +256,18 @@ export const SAVING_MODEL = { provider: "saver", model: "one" };
  */
 export const savingProvider = (
   turns: readonly (readonly ScriptedStep[])[],
-  options: { holdAfterSaves?: boolean } = {},
+  options: {
+    holdAfterSaves?: boolean;
+    /** Whether it codes, so it can work in a code workspace (ADR 0007); it never edits anything. */
+    codes?: boolean;
+  } = {},
 ) => {
   const replies: ToolCallReply[][] = [];
   const framings: Framing[] = [];
   const id = ProviderId.parse("saver");
   const capabilities = {
     readsFiles: false,
-    codes: false,
+    codes: options.codes ?? false,
     usesTools: false,
     savesContext: true,
     searchesWeb: false,
@@ -303,6 +315,153 @@ export const savingProvider = (
     answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
   };
   return { provider, replies, framings };
+};
+
+/** For tests: the model the coding provider offers. */
+export const CODING_MODEL = { provider: "coder", model: "one" };
+
+/**
+ * For tests: a provider that codes (ADR 0007). In each turn it asks the worker about each edit
+ * (`edit`, a path) and command (`run`) scripted for it, in order, keeps the worker's answers, and
+ * answers "Done." It never edits or runs anything itself, so any command can be asked about. A
+ * `<branch>` in a command stands for the branch its worktree is on, the session branch.
+ */
+export const codingProvider = (
+  steps: readonly (
+    | { readonly edit: string }
+    /** A command, and what the model says it's for (shown on an approval, #171). */
+    | { readonly run: string; readonly why?: string }
+  )[],
+) => {
+  const answers: Result<null, string>[] = [];
+  const id = ProviderId.parse("coder");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Coder",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const branch = await git(code.worktree, ["branch", "--show-current"]);
+      for (const step of steps) {
+        answers.push(
+          "edit" in step
+            ? await code.edit(step.edit)
+            : await code.run(step.run.replaceAll("<branch>", branch), step.why),
+        );
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The coder only codes." }),
+  };
+  return { provider, answers };
+};
+
+/** For tests: the model the running provider offers. */
+export const RUNNING_MODEL = { provider: "runner", model: "one" };
+
+/**
+ * For tests: a provider that codes and, in each turn, runs each of `commands` itself in the
+ * worktree, in the environment the worker gives a code session's commands, as Claude Code runs
+ * its commands (#99). It doesn't ask the worker first, so it can run what no model may (`gh auth
+ * token`) and show what the environment holds. Keeps whether each one worked and what it printed,
+ * and each turn's framing and the environment the worker gave its commands.
+ */
+export const runningProvider = (
+  commands: readonly { readonly command: readonly string[]; readonly input?: string }[],
+) => {
+  const printed: { ok: boolean; output: string }[] = [];
+  const framings: Framing[] = [];
+  const envs: CodeTurn["env"][] = [];
+  const id = ProviderId.parse("runner");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Runner",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The runner only codes." });
+      framings.push(input.framing);
+      envs.push(code.env);
+      for (const { command, input: stdin } of commands) {
+        const [program = "", ...args] = command;
+        const ran = spawnSync(program, args, {
+          cwd: code.worktree,
+          env: { ...process.env, ...code.env },
+          input: stdin ?? "",
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 30_000,
+        });
+        printed.push({ ok: ran.status === 0, output: `${ran.stdout ?? ""}${ran.stderr ?? ""}` });
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The runner only codes." }),
+  };
+  return { provider, printed, framings, envs };
+};
+
+/** For tests: one turn the held coder is working on: where, with what, and how to let it end. */
+export type HeldCodeTurn = {
+  readonly worktree: string;
+  /** What its commands run with as well. */
+  readonly env: CodeTurn["env"];
+  /** Lets the turn end, answering "Done.". */
+  readonly finish: () => void;
+};
+
+/**
+ * For tests: a provider that codes (ADR 0007) and holds each turn open until the test finishes it
+ * (or it's stopped), so several code sessions can be running at once. `turns` lists every turn it
+ * has started, in order, as it starts.
+ */
+export const heldCoder = () => {
+  const turns: HeldCodeTurn[] = [];
+  const { provider: coder } = codingProvider([]);
+  const provider: Provider = {
+    ...coder,
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const finished = new Promise<void>((finish) => {
+        turns.push({ worktree: code.worktree, env: code.env, finish });
+        input.signal.addEventListener("abort", () => finish(), { once: true });
+      });
+      await finished;
+      if (!input.signal.aborted) await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, turns };
 };
 
 /**
@@ -374,6 +533,48 @@ export const quotedInGuide = async (
   return Object.entries(filled).reduce(
     (quote, [name, value]) => quote.replaceAll(`<${name}>`, value),
     text,
+  );
+};
+
+/**
+ * For tests: a repository a code workspace works on, as on the worker machine: the owner's
+ * checkout (`repo`) of a remote (`origin`, standing in for GitHub) whose default branch is `main`,
+ * with one commit, `README.md`. Commits made in it are by a test person. The remote is named by
+ * its address on GitHub (`github`, as `owner/name`), which git takes to `origin` on disk.
+ */
+export const codeRepo = async (root: string) => {
+  const origin = join(root, "origin.git");
+  const repo = join(root, "repo");
+  const github = "octo-owner/side-project";
+  await mkdir(origin, { recursive: true });
+  await gitIn(origin, "init", "--quiet", "--bare", "--initial-branch=main");
+  await gitIn(root, "clone", "--quiet", origin, repo);
+  await standInForGitHub(repo, { origin, github });
+  await gitIn(repo, "config", "user.name", "Test");
+  await gitIn(repo, "config", "user.email", "test@example.com");
+  await writeFile(join(repo, "README.md"), "# A project\n");
+  await gitIn(repo, "add", ".");
+  await gitIn(repo, "commit", "--quiet", "-m", "Start");
+  await gitIn(repo, "push", "--quiet", "origin", "main");
+  return { origin, repo, github };
+};
+
+/**
+ * For tests: names `repo`'s remote by its address on GitHub (`github`, as `owner/name`), as a
+ * real clone's is, while git reaches the bare repository `origin` on disk in its place.
+ */
+export const standInForGitHub = async (repo: string, where: { origin: string; github: string }) => {
+  const address = `https://github.com/${where.github}.git`;
+  await gitIn(repo, "remote", "set-url", "origin", address);
+  await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);
+};
+
+/** For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`. */
+export const codeWorkspace = async (root: string, id: string, repoPath: string) => {
+  await mkdir(join(root, "context", id), { recursive: true });
+  await writeFile(
+    join(root, "context", id, "workspace.json"),
+    JSON.stringify({ mode: "code", repoPath }),
   );
 };
 

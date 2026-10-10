@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
@@ -8,7 +8,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
-import type { Activity, TurnInput, TurnTool } from "./providers/index.ts";
+import type { Activity, CodeTurn, TurnInput, TurnTool } from "./providers/index.ts";
+import { err, ok } from "./result.ts";
+import { quotedInGuide } from "./testing.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
@@ -82,6 +84,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
     model: ModelId.parse("sonnet"),
     effort: undefined,
     folder,
+    code: null,
     framing: {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
@@ -160,7 +163,7 @@ describe("Claude's status", () => {
     expect(status.models.map((m) => m.id)).toEqual(["default", "opus", "sonnet"]);
     expect(status.capabilities).toEqual({
       readsFiles: true,
-      codes: false,
+      codes: true,
       usesTools: false,
       savesContext: true,
       searchesWeb: true,
@@ -655,6 +658,209 @@ const searchResults = (query: string, hits: readonly { title: string; url: strin
   query,
   results: [{ tool_use_id: "search-1", content: hits }, "Some commentary on the results."],
   durationSeconds: 1.2,
+});
+
+describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
+  /** A session branch's worktree with the repository's own project skills, and the turn's say. */
+  const codeSession = async () => {
+    const worktree = await mkdtemp(join(tmpdir(), "courtyard-worktree-"));
+    for (const name of ["tdd", "pr"]) {
+      await mkdir(join(worktree, ".claude", "skills", name), { recursive: true });
+      await writeFile(join(worktree, ".claude", "skills", name, "SKILL.md"), `# ${name}\n`);
+    }
+    // A folder that isn't a skill, without its SKILL.md.
+    await mkdir(join(worktree, ".claude", "skills", "notes"), { recursive: true });
+    const asked: string[] = [];
+    const code: CodeTurn = {
+      worktree,
+      env: {
+        COURTYARD_SESSION_SLOT: "2",
+        GH_CONFIG_DIR: "/path/to/data/github/gh",
+        GH_TOKEN: undefined,
+      },
+      edit: async (path) => {
+        asked.push(`edit ${path}`);
+        return path.includes("outside") ? err("Not out there.") : ok(null);
+      },
+      run: async (command) => {
+        asked.push(`run ${command}`);
+        return command === "pnpm test" ? ok(null) : err("Not that one.");
+      },
+    };
+    return { worktree, code, asked };
+  };
+
+  it("runs its commands with the worker's GitHub sign-in, never the machine's", async () => {
+    const { worktree, code } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    process.env.GH_TOKEN = "ghp_machine";
+    try {
+      await runTurn(claudeCode, { folder: worktree, code });
+    } finally {
+      delete process.env.GH_TOKEN;
+    }
+
+    const env = runs[0]?.options.env;
+    expect(env?.GH_CONFIG_DIR).toBe("/path/to/data/github/gh");
+    expect(env?.GH_TOKEN).toBeUndefined();
+    // Still none of the machine's Claude Code setup.
+    expect(env).toMatchObject({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("works in its worktree with edit and command tools, loading only the repository's project settings and skills", async () => {
+    const { worktree, code } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    await runTurn(claudeCode, { folder: worktree, code });
+
+    const options = runs[0]?.options;
+    expect(options?.cwd).toBe(worktree);
+    expect(options?.tools).toEqual(["Read", "Glob", "Grep", "Edit", "Write", "Bash"]);
+    expect(options?.permissionMode).toBe("dontAsk");
+    // Its AGENTS.md or CLAUDE.md and its skills, never the machine's own setup.
+    expect(options?.settingSources).toEqual(["project"]);
+    expect([...(Array.isArray(options?.skills) ? options.skills : [])].sort()).toEqual([
+      "pr",
+      "tdd",
+    ]);
+    expect(options?.plugins ?? []).toEqual([]);
+    expect(options?.strictMcpConfig).toBe(true);
+    expect(options?.mcpServers).toEqual({});
+    // Its commands get its slot among the code sessions running, so their checks never share ports.
+    expect(options?.env).toMatchObject({
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+      COURTYARD_SESSION_SLOT: "2",
+    });
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("finds none of the machine's installed plugins, whatever the repository's settings enable", async () => {
+    const { worktree, code } = await codeSession();
+    let pluginsFolder: string | undefined;
+    let found: string[] | undefined;
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        async (options: Options) => {
+          pluginsFolder = options.env?.CLAUDE_CODE_PLUGIN_CACHE_DIR;
+          if (pluginsFolder !== undefined) found = await readdir(pluginsFolder);
+        },
+        success,
+      ],
+    });
+
+    await runTurn(claudeCode, { folder: worktree, code });
+
+    // Claude Code looks for plugins in an empty folder of the turn's own, gone once it ends.
+    expect(found).toEqual([]);
+    expect(pluginsFolder?.startsWith(worktree)).toBe(false);
+    await expect(readdir(pluginsFolder ?? worktree)).rejects.toThrow();
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("asks the worker before every edit and command, and tells Claude why one is refused", async () => {
+    const { worktree, code, asked } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const decisions = [
+      await preToolUse(options, {
+        name: "Edit",
+        input: { file_path: join(worktree, "notes.md"), old_string: "a", new_string: "b" },
+      }),
+      await preToolUse(options, {
+        name: "Write",
+        input: { file_path: join(worktree, "..", "outside.md"), content: "Escaped" },
+      }),
+      await preToolUse(options, {
+        name: "Bash",
+        input: { command: "pnpm test", description: "Run the tests" },
+      }),
+      await preToolUse(options, { name: "Bash", input: { command: "rm -rf ." } }),
+      // A field Courtyard doesn't know is refused rather than let through unchecked.
+      await preToolUse(options, { name: "Bash", input: { command: "pnpm test", cwd: "/" } }),
+      await preToolUse(options, { name: "NotebookEdit", input: { notebook_path: "a.ipynb" } }),
+    ].map((decision) => ("hookSpecificOutput" in decision ? decision.hookSpecificOutput : {}));
+
+    expect(asked).toEqual([
+      `edit ${join(worktree, "notes.md")}`,
+      `edit ${join(worktree, "..", "outside.md")}`,
+      "run pnpm test",
+      "run rm -rf .",
+    ]);
+    const unchecked = await quotedInGuide("That request couldn't be checked");
+    expect(decisions).toEqual([
+      { hookEventName: "PreToolUse", permissionDecision: "allow" },
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "Not out there.",
+      },
+      { hookEventName: "PreToolUse", permissionDecision: "allow" },
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "Not that one.",
+      },
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: unchecked,
+      },
+      expect.objectContaining({ permissionDecision: "deny" }),
+    ]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("waits as long as the owner takes to answer an approval, telling the worker what a command is for (#171)", async () => {
+    const { worktree } = await codeSession();
+    const heard: (string | undefined)[] = [];
+    const code: CodeTurn = {
+      worktree,
+      env: {},
+      edit: async () => ok(null),
+      run: async (_command, why) => {
+        heard.push(why);
+        return ok(null);
+      },
+    };
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    await preToolUse(options, {
+      name: "Bash",
+      input: { command: "pnpm add left-pad", description: "Add the padding package" },
+    });
+    await preToolUse(options, { name: "Bash", input: { command: "git status" } });
+
+    expect(heard).toEqual(["Add the padding package", undefined]);
+    // Claude Code gives up on a hook after its timeout: a paused night is far shorter than this.
+    const timeout = options.hooks?.PreToolUse?.[0]?.timeout ?? 0;
+    expect(timeout).toBeGreaterThanOrEqual(7 * 24 * 60 * 60);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("gives a planning turn no edits, commands, settings or skills of its own", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode);
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const edit = await preToolUse(options, {
+      name: "Write",
+      input: { file_path: join(folder, "notes.md"), content: "Hello" },
+    });
+    const command = await preToolUse(options, { name: "Bash", input: { command: "pnpm test" } });
+
+    expect(options.skills).toEqual([]);
+    expect(edit).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(command).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  });
 });
 
 describe("web search on a Claude turn (ADR 0019)", () => {

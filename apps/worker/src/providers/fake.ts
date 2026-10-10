@@ -1,3 +1,5 @@
+import { exec } from "node:child_process";
+import { resolve } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   type Capabilities,
@@ -7,6 +9,7 @@ import {
   ProviderId,
   type SignInState,
 } from "@courtyard/contract";
+import { writeTextFileIn } from "../files.ts";
 import {
   DOCUMENT_TOOL_NAME,
   SAVE_TOOL_NAME,
@@ -16,12 +19,19 @@ import {
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageRead, turnSources } from "../sources/index.ts";
-import type { Activity, FramedAttachment, Provider, SignIn, TurnToolName } from "./index.ts";
+import type {
+  Activity,
+  CodeTurn,
+  FramedAttachment,
+  Provider,
+  SignIn,
+  TurnToolName,
+} from "./index.ts";
 
-/** The fake reads nothing; it echoes, and saves when a message scripts it. */
+/** The fake reads nothing; it echoes, and saves and codes when a message scripts it. */
 const CAPABILITIES: Capabilities = {
   readsFiles: false,
-  codes: false,
+  codes: true,
   usesTools: false,
   savesContext: true,
   searchesWeb: true,
@@ -306,6 +316,64 @@ const seen = (attachments: readonly FramedAttachment[]) => {
   return `I see ${named.length === 0 ? last : `${named.join(", ")} and ${last}`}. `;
 };
 
+const EDIT_FILE = /^edit file (\S+): (.*)$/i;
+const RUN_COMMAND = /^run command: (.+?)(?: \(for: (.+)\))?$/i;
+
+/** The first line a command printed, or nothing. */
+const firstLine = (output: string) =>
+  output
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line !== "");
+
+/**
+ * Runs a command the worker allowed in the worktree, with what the session gives its commands (its
+ * slot, and Courtyard's GitHub sign-in), as a shell would, and says how it went.
+ */
+const runIn = (code: CodeTurn, command: string) =>
+  new Promise<string>((resolve) => {
+    exec(
+      command,
+      {
+        cwd: code.worktree,
+        env: { ...process.env, ...code.env },
+        windowsHide: true,
+        timeout: 60_000,
+      },
+      (error, stdout, stderr) => {
+        const said = firstLine(error ? `${stderr}\n${stdout}` : stdout);
+        const how = error ? `${command} failed` : `Ran ${command}`;
+        resolve(said === undefined ? `${how}. ` : `${how}: ${said} `);
+      },
+    );
+  });
+
+/**
+ * What a message scripts the fake doing in a code session (ADR 0007), one per line, in order:
+ * "edit file notes.md: The rack goes on the back wall" writes that line as the file, and "run
+ * command: git status" runs the command in the worktree, each only once the worker allows it (or
+ * the owner does, #171). A command can say what it's for at the end: "run command: git --version
+ * (for: To check which git runs here)". Says how each went, or why it was refused.
+ */
+const scriptedCoding = async (code: CodeTurn, message: string) => {
+  let said = "";
+  for (const line of message.split("\n").map((each) => each.trim())) {
+    const [, path, text] = EDIT_FILE.exec(line) ?? [];
+    const [, command, why] = RUN_COMMAND.exec(line) ?? [];
+    if (path !== undefined && text !== undefined) {
+      const allowed = await code.edit(path);
+      if (!allowed.ok) said += `Couldn't edit ${path}: ${allowed.error} `;
+      else await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
+    } else if (command !== undefined) {
+      const allowed = await code.run(command, why);
+      said += allowed.ok
+        ? await runIn(code, command)
+        : `Couldn't run ${command}: ${allowed.error} `;
+    }
+  }
+  return said;
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -328,7 +396,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
- * (see `seen`).
+ * (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
+ * allows (see `scriptedCoding`); Fake two doesn't code.
  */
 export const createFakeProvider = (
   options: {
@@ -351,10 +420,12 @@ export const createFakeProvider = (
   const id = ProviderId.parse(options.second ? "fake-two" : "fake");
   const label = options.second ? "Fake two" : "Fake";
   const hitsLimit = new RegExp(`please hit ${label}'s limit`, "i");
+  // Fake two doesn't code, so a model that can't is there to be refused in a code workspace.
+  const capabilities = options.second ? { ...CAPABILITIES, codes: false } : CAPABILITIES;
 
   return {
     id,
-    capabilities: CAPABILITIES,
+    capabilities,
     ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     status: async () => ({
       id,
@@ -368,10 +439,10 @@ export const createFakeProvider = (
           defaultEffort: Effort.parse("medium"),
         },
       ],
-      capabilities: CAPABILITIES,
+      capabilities,
     }),
 
-    runTurn: async ({ model, effort, framing, emit, report, cite, callTool, signal }) => {
+    runTurn: async ({ model, effort, framing, code, emit, report, cite, callTool, signal }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
@@ -396,8 +467,9 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
+      const coded = code === null ? "" : await scriptedCoding(code, last);
       const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
-      for (const word of `${saw}You said: ${last}`.split(/(?<= )/)) {
+      for (const word of `${coded}${saw}You said: ${last}`.split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);

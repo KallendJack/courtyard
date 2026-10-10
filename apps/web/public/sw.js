@@ -80,3 +80,84 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+// Notifications (#173): the worker pushes one when a session needs the owner's OK, and when a
+// turn finishes or fails. It carries only the session's title, what it needs, and the session's
+// id, since it shows on a locked screen; a tap opens that session.
+
+/** A notification's parts, or nothing when a push isn't one of Courtyard's. */
+const noticeIn = (data) => {
+  try {
+    const notice = data?.json();
+    const parts = [notice?.title, notice?.body, notice?.session];
+    return parts.every((part) => typeof part === "string") ? notice : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Whether the owner has the session open in front of them on this device already. */
+const watching = async (session) => {
+  const windows = await self.clients.matchAll({ type: "window" });
+  return windows.some(
+    (window) =>
+      window.visibilityState === "visible" &&
+      new URL(window.url).pathname.endsWith(`/sessions/${session}`),
+  );
+};
+
+self.addEventListener("push", (event) => {
+  const notice = noticeIn(event.data);
+  if (notice === undefined) return;
+  event.waitUntil(
+    watching(notice.session).then((open) => {
+      if (open) return;
+      return self.registration.showNotification(notice.title, {
+        body: notice.body,
+        icon: "/icons/icon-192.png",
+        // A session's newer notification replaces its older one.
+        tag: notice.session,
+        data: { session: notice.session },
+      });
+    }),
+  );
+});
+
+/** How long a tap waits to hear which workspace a session is in, before opening the home page. */
+const FIND_SESSION_MS = 3000;
+
+/** The page a session is on, asked of the worker, since the notification doesn't carry it. */
+const pageOf = async (session) => {
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(session)}`, {
+      signal: AbortSignal.timeout(FIND_SESSION_MS),
+    });
+    const found = response.ok ? await response.json() : undefined;
+    if (typeof found?.workspaceId !== "string") return "/";
+    return `/workspaces/${encodeURIComponent(found.workspaceId)}/sessions/${encodeURIComponent(session)}`;
+  } catch {
+    return "/";
+  }
+};
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const session = event.notification.data?.session;
+  if (typeof session !== "string") return;
+  event.waitUntil(
+    pageOf(session).then(async (page) => {
+      const windows = await self.clients.matchAll({ type: "window" });
+      const open = windows.find((window) => new URL(window.url).pathname === page);
+      if (open) return open.focus();
+      // Courtyard already open: that window goes to the session, rather than another opening.
+      const app = windows[0];
+      if (app) {
+        return app
+          .navigate(page)
+          .then((moved) => moved?.focus())
+          .catch(() => self.clients.openWindow(page));
+      }
+      return self.clients.openWindow(page);
+    }),
+  );
+});

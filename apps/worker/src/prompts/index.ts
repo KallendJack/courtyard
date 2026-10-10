@@ -22,6 +22,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { TurnAttachment } from "../attachments/index.ts";
+import type { CodeRefusal } from "../code/index.ts";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import { type DocumentToolRefusal, documentPath } from "../documents/index.ts";
 import type {
@@ -115,10 +116,17 @@ const contained = (text: string) => text.replace(CLOSING_MARKER, "<\\/$1>");
 /** A name on one line, in quotes it can't close. */
 const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim());
 
-const accessFor = (capabilities: Capabilities) =>
-  capabilities.readsFiles
+/** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
+const CODING_ACCESS =
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, adding and committing on your branch, pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
+
+const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
+  // Only a provider that codes works in a code workspace (ADR 0007).
+  if (mode === "code" && capabilities.codes) return CODING_ACCESS;
+  return capabilities.readsFiles
     ? "You can read and search the files in this workspace's folder, your working directory, images included. You can't change anything or run commands. Read files when they help you answer."
     : "You can't open the workspace's files, change anything or run commands: you know the workspace from its context file and what the owner tells you.";
+};
 
 /** Today's date in words, so a model can tell a stale line and date the lines that need one. */
 const todayIs = (now: number) =>
@@ -815,7 +823,7 @@ const instructionsFor = (turn: {
   const hasSections = workspace.contextFile !== null || fromOwner.shared === "all";
   return [
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
-    accessFor(capabilities),
+    accessFor(capabilities, workspace.mode),
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,
@@ -1181,6 +1189,43 @@ export const notOfferedReply = (name: string) =>
  * Courtyard's: the same reason whichever provider it's on.
  */
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
+
+/**
+ * What Claude is told of a tool call whose input can't be checked, or whose check fails: it's
+ * refused, never let through unchecked (docs/ai-conduct.md, Coding).
+ */
+export const UNCHECKED_REQUEST = "That request couldn't be checked, so it was refused.";
+
+/**
+ * The message the worker sends a code session when its pull request's checks fail (#172;
+ * docs/ai-conduct.md, Coding), naming the checks that failed.
+ */
+export const checksFailedMessage = (failed: {
+  number: number;
+  checks: readonly [string, ...string[]];
+}) =>
+  `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
+
+/**
+ * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
+ * the owner can allow waits for their approval instead (#171), and is told only if they deny it.
+ */
+export const codeRefusalReason = (refusal: CodeRefusal) => {
+  switch (refusal.kind) {
+    case "stopped":
+      return "The owner stopped this turn, so nothing more is done.";
+    case "chained":
+      return "Run one command at a time: a command that chains, pipes, redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own.";
+    case "unreadable":
+      return "That command couldn't be read: check its quotes close.";
+    case "off-branch":
+      return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
+    case "denied":
+      return refusal.what === "command"
+        ? "The owner denied that command, so it didn't run. Find another way, or tell the owner why it's needed."
+        : "The owner denied that change, so the file wasn't changed. Find another way, or tell the owner why it's needed.";
+  }
+};
 
 /**
  * What a model is told when it tries to read a web page it may not (ADR 0019): one that's neither

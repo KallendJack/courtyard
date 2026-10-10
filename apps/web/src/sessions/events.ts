@@ -1,12 +1,14 @@
 import {
   type Activity,
   ApiError,
+  type ApprovalAsk,
   type Attachment,
   type DocumentSave,
   type Effort,
   type FailureReason,
   type ModelRef,
   type PlacedLine,
+  type PullRequest,
   type Save,
   SessionEvent,
   type SessionId,
@@ -80,6 +82,20 @@ export type Turn = {
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
   readonly sources: readonly Source[];
+  /**
+   * The approval the turn is waiting on (#171), by its event number, until the owner answers it
+   * from any device; `undefined` when it waits on none.
+   */
+  readonly approval:
+    | { readonly seq: number; readonly ask: ApprovalAsk; readonly why: string | undefined }
+    | undefined;
+  /** Whether it's waiting for one of the code sessions running to end before it starts (#174). */
+  readonly queued: boolean;
+  /**
+   * Whether the worker sent it, not the owner, because the session's pull request's checks
+   * failed (#172): the failed checks open its activity in place of the owner's message.
+   */
+  readonly fixesChecks: boolean;
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -92,6 +108,8 @@ type Log = {
   readonly turns: readonly Turn[];
   /** The title a model gave the session after its first answer, if one has. */
   readonly modelTitle: string | undefined;
+  /** A code session's pull request as it last stood (#172), once it has one. */
+  readonly pullRequest: PullRequest | undefined;
 };
 
 /** Swaps in a new last turn and leaves every other turn object as it was. */
@@ -171,6 +189,9 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             things: [],
             replies: [],
             sources: [],
+            approval: undefined,
+            queued: false,
+            fixesChecks: event.checksFailed !== undefined,
             state: { kind: "running" },
           },
         ],
@@ -181,6 +202,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return { ...log, lastSeq: seq };
     case "session-titled":
       return { ...log, lastSeq: seq, modelTitle: event.title };
+    case "pull-request":
+      return { ...log, lastSeq: seq, pullRequest: event.pullRequest };
     case "text-delta":
       return withLastTurn(log, {
         seq,
@@ -198,6 +221,23 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "sources":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
+    case "approval-requested":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, approval: { seq, ask: event.ask, why: event.why } }),
+      });
+    case "approval-answered":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.approval?.seq === event.approval,
+        change: (turn) => ({ ...turn, approval: undefined }),
+      });
+    case "turn-queued":
+    case "turn-dequeued":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, queued: event.type === "turn-queued" }),
+      });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
     case "turn-stopped":
@@ -306,6 +346,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     lastSeq: 0,
     turns: [],
     modelTitle: undefined,
+    pullRequest: undefined,
   });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
@@ -387,5 +428,11 @@ export const useSessionTurns = (sessionId: SessionId) => {
     };
   }, [sessionId]);
 
-  return { turns: log.turns, modelTitle: log.modelTitle, problem, reconnecting };
+  return {
+    turns: log.turns,
+    modelTitle: log.modelTitle,
+    pullRequest: log.pullRequest,
+    problem,
+    reconnecting,
+  };
 };

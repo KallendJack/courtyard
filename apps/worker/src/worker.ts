@@ -19,13 +19,20 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
+import { createCode } from "./code/index.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
+import { createGitHubApi, type GitHubApi } from "./github/api.ts";
+import { createGitHub, KEEP_FRESH_EVERY_MS } from "./github/index.ts";
+import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
+import { createNotifications, type SendPush } from "./notifications/index.ts";
+import { notificationRoutes } from "./notifications/routes.ts";
+import { sendWebPush } from "./notifications/web-push.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
@@ -104,6 +111,12 @@ const takesFiles = (c: Context) => sendsMessageFiles(c) || sendsThingPhoto(c);
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
 const FAKE_SIGN_IN_MS = 5000;
 
+/**
+ * How often code sessions' pull requests are looked at on GitHub (#172), besides as soon as a
+ * turn in one ends: often enough to see checks run, well inside GitHub's limits.
+ */
+const FOLLOW_PULL_REQUESTS_EVERY_MS = 30_000;
+
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
 
@@ -144,6 +157,13 @@ export const createWorker = (options: {
   repeat?: Repeat;
   /** The house skills' folder: the `@courtyard/skills` package, unless a test gives its own. */
   houseSkills?: string;
+  /**
+   * GitHub (#99). Tests pass a fake; otherwise it's GitHub itself, through the GitHub App the
+   * settings name, or none when they name none.
+   */
+  github?: GitHubApi;
+  /** Sends a notification to a device (#173). Tests pass a fake; otherwise it's web push. */
+  sendPush?: SendPush;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -160,6 +180,7 @@ export const createWorker = (options: {
     secondFakeProvider,
     liveCopy,
     updateTask,
+    githubClientId,
   } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
@@ -176,14 +197,40 @@ export const createWorker = (options: {
     now,
   );
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
+  const github = createGitHub({
+    api:
+      options.github ??
+      (githubClientId === null ? null : createGitHubApi({ clientId: githubClientId })),
+    dataDir,
+    now,
+  });
   const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
+  const notifications = createNotifications({
+    dataDir,
+    send: options.sendPush ?? sendWebPush,
+    devicesLoggedIn: owner.devices,
+    titleOf: async (id) => {
+      const session = await sessions.get(id);
+      return session.ok ? session.value.title : undefined;
+    },
+  });
   const sessions = createSessions({
     dataDir,
     providers,
     contextDir,
     contextFolder,
     houseSkills,
+    code: createCode({
+      dataDir,
+      commandEnv: github.commandEnv,
+      pullRequests: github,
+    }),
     now,
+    notify: (session, event, pullRequest) => {
+      notifications
+        .sessionEvent(session, event, pullRequest)
+        .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error));
+    },
   });
   const live = createLive({
     liveCopy,
@@ -192,7 +239,10 @@ export const createWorker = (options: {
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
   });
-  (options.repeat ?? repeatForever)(KEEP_UP_EVERY_MS, contextFolder.keepUp);
+  const repeat = options.repeat ?? repeatForever;
+  repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
+  repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
+  repeat(FOLLOW_PULL_REQUESTS_EVERY_MS, sessions.followPullRequests);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
@@ -224,6 +274,8 @@ export const createWorker = (options: {
     ),
   );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
+  api.route("/", gitHubRoutes(github));
+  api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

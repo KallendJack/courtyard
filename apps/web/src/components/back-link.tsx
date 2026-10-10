@@ -1,4 +1,4 @@
-import type { WorkspaceId } from "@courtyard/contract";
+import type { SessionId, WorkspaceId } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { WorkspaceDot } from "./workspace-colour";
 
@@ -8,15 +8,17 @@ const BACK = "flex w-fit items-center gap-2 text-xs font-medium text-primary-tex
 
 /**
  * The way back above a page's title: to a workspace, named and in its colour, or with no
- * workspace, to the home page's list of them.
+ * workspace, to the home page's list of them; from a pull request's review, to its session.
  */
 export function BackLink(props: {
   workspaceId: WorkspaceId | undefined;
   /** Where the page sits in the workspace, after its name: "Documents". */
   within?: string;
+  /** Back to this session's conversation, from its pull request's review (#160). */
+  session?: SessionId;
 }) {
   const workspaces = loggedIn.useLoaderData();
-  const { workspaceId, within } = props;
+  const { workspaceId, within, session } = props;
   if (workspaceId === undefined) {
     return (
       <Link to="/" aria-label="Back to Workspaces" className={BACK}>
@@ -29,9 +31,13 @@ export function BackLink(props: {
   const name = workspace?.name ?? workspaceId;
   return (
     <Link
-      to="/workspaces/$workspaceId"
-      params={{ workspaceId }}
-      aria-label={`Back to ${name}`}
+      {...(session === undefined
+        ? { to: "/workspaces/$workspaceId", params: { workspaceId } }
+        : {
+            to: "/workspaces/$workspaceId/sessions/$sessionId",
+            params: { workspaceId, sessionId: session },
+          })}
+      aria-label={session === undefined ? `Back to ${name}` : "Back to the session"}
       className={BACK}
     >
       {workspace && <WorkspaceDot colour={workspace.colour} small />}

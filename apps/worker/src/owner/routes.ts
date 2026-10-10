@@ -2,7 +2,7 @@ import { type AuthState, MIN_PASSWORD_LENGTH, PasswordForm } from "@courtyard/co
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { apiError, readBody } from "../http.ts";
-import { LoginSecret, type Owner, type StorageError } from "./index.ts";
+import { deviceLoginOf, LoginSecret, type Owner, type StorageError } from "./index.ts";
 
 /** The answer to a setup or login request that didn't send a password form. */
 const PASSWORD_REFUSED = "Send a password of up to 1,024 characters";
@@ -20,6 +20,12 @@ const storageError = (c: Context, error: StorageError) =>
 const secretFrom = (c: Context) => {
   const parsed = LoginSecret.safeParse(getCookie(c, LOGIN_COOKIE));
   return parsed.success ? parsed.data : undefined;
+};
+
+/** The device login a request came from, once `requireLogin` has let it in. */
+export const deviceLoginFrom = (c: Context) => {
+  const secret = secretFrom(c);
+  return secret === undefined ? undefined : deviceLoginOf(secret);
 };
 
 /**

@@ -91,7 +91,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 1. The workspace, by name, as one area of the owner's life.
 2. Access. With `readsFiles`: read and search the workspace's folder (images included) and read files when they help;
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
-   file and the owner.
+   file and the owner. In a code session, its own (Coding, below).
 3. Today's date.
 4. Say so and ask rather than guess, and answer in Markdown, with maths in the forms the web app draws as formulas
    (#140). A single `$` is never maths, so prices stay text:
@@ -223,6 +223,57 @@ what the tools ask for (`apps/worker/src/workspace-files/`) and the prompts modu
 note when there's more to read or a search stopped early, or why nothing was found (nothing there, a folder where a
 file was meant, too large, not text or an image, an input the tool doesn't take). The save tool comes alongside them
 on the same terms as Claude's.
+
+## Coding
+
+Built with #170 (ADRs 0007, 0022). Only a provider that codes works in a code workspace, and each of its sessions
+works on its own session branch, in its own worktree. Its access line (Every turn, item 2) says so:
+
+> You're working on your own session branch of this workspace's repository, checked out in its own folder: your
+> working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
+> without asking: its package scripts, git and gh commands that only look, adding and committing on your branch,
+> pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working
+> directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another
+> command, waits for the owner to allow it;
+> if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
+> a command that chains or substitutes another never runs.
+
+Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
+the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
+same way for every provider. An edit outside the worktree, an edit inside it to a file that decides what its allowed
+commands run (a `package.json` or the package manager's settings, git hooks, `.claude`, git's own `.git`), a command
+off the command allowlist, and a command naming a path outside the worktree each wait for the owner's approval
+(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything
+else refused, tells the model why, in one of these:
+
+- A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
+  why it's needed."
+- An edit the owner denied: "The owner denied that change, so the file wasn't changed. Find another way, or tell the
+  owner why it's needed."
+- A command that chains, pipes, redirects or substitutes: "Run one command at a time: a command that chains, pipes,
+  redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own."
+- A commit, a push or a pull request command while the worktree is off the session branch: "Committing, pushing and
+  opening your pull request work only on your session branch, <branch>, and the worktree isn't on it now, so that
+  didn't run."
+- A command whose quotes don't close: "That command couldn't be read: check its quotes close."
+- Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
+  this turn, so nothing more is done."
+
+A tool call whose input can't be checked (a field Courtyard doesn't know, say), or whose check fails, is refused,
+never let through, and Claude is told:
+
+> That request couldn't be checked, so it was refused.
+
+Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
+set.
+
+The session opens its pull request itself, with `gh`, written the way the repository's own instructions or PR skill
+say (#172). The worker follows the PR's checks, and when one fails on a commit it hasn't asked about yet, it sends the
+session this message (on the model the owner last used), with the failed checks in the turn's activity:
+
+> The checks on your pull request #<number> failed: <checks>. Find out why (gh pr checks and gh run view --log-failed
+> show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
+> it, say why, so the owner can decide what to do.
 
 ## Skills
 
@@ -931,7 +982,7 @@ Each is written here, as rules, before its phase starts. What the spec already d
 
 | Scenario                                      | Phase        | Already decided                                                                                                                                         |
 | --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coding                                        | 4            | Edits only on the session branch; allowlisted commands run, others wait for approval; a model is told when a command is denied.                         |
+| Approvals                                     | 4            | Commands off the allowlist, and edits outside the worktree, wait for the owner's approval; a model is told when one is denied.                          |
 | Tool connections                              | 5            | Only the tools the workspace names; safe actions run, others wait for approval; an unreachable tool is reported, never a failed turn.                   |
 | Floor plans                                   | 5            | Drawn as SVG in the answer, to scale with dimensions; the web app sanitises and renders it. Saving one is the owner's action, never the model's.          |
 

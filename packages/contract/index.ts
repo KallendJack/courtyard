@@ -1,4 +1,5 @@
 export { ApiError } from "./lib/api-error.ts";
+export { ApprovalAnswer, ApprovalAnswering, ApprovalAsk } from "./lib/approval.ts";
 export {
   ATTACHMENTS_FIELD,
   Attachment,
@@ -27,6 +28,7 @@ export {
   Undone,
 } from "./lib/changes.ts";
 export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
+export { CODE_SESSIONS_AT_ONCE, CodeSessionList } from "./lib/code-sessions.ts";
 export {
   DOCUMENT_MAX_CHARACTERS,
   DOCUMENT_NAME_MAX_LENGTH,
@@ -47,9 +49,27 @@ export {
   FreshStartSummary,
   RunningTurn,
 } from "./lib/fresh-start.ts";
+export { GitHubConnection } from "./lib/github.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
+export {
+  NotificationSubscription,
+  NotificationsOff,
+  NotificationsStatus,
+  PushNotice,
+} from "./lib/notifications.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
+export {
+  ChangedFile,
+  MergeReadiness,
+  PullRequest,
+  PullRequestChanges,
+  PullRequestCheck,
+  PullRequestChecks,
+  PullRequestMerging,
+  PullRequestReview,
+  pullRequestEnded,
+} from "./lib/pull-request.ts";
 export {
   Capabilities,
   CarryOnRequest,
@@ -86,6 +106,7 @@ export {
   DocumentSave,
   endsTurn,
   FailureReason,
+  pullRequestIn,
   Save,
   SessionEvent,
   SOURCES_MAX,

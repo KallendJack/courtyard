@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   type Activity,
+  type ApprovalAnswer,
+  type ApprovalAsk,
   type Attachment,
   type CarryOnRequest,
   type ChangeId,
+  type CodeSessionList,
   type Effort,
   endsTurn,
   type FailureReason,
@@ -15,6 +18,10 @@ import {
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  type PullRequest,
+  type PullRequestReview,
+  pullRequestEnded,
+  pullRequestIn,
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
@@ -34,6 +41,17 @@ import {
   keepAttachments,
   type PreparedAttachment,
 } from "../attachments/index.ts";
+import {
+  allowlistFor,
+  type BranchRefusal,
+  type Code,
+  type CodeRefusal,
+  type CommandRule,
+  commandAllowed,
+  editPlaceIn,
+  type PullRequestProblem,
+  slotEnv,
+} from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
   answerAsDocument,
@@ -54,8 +72,11 @@ import {
   readTextFile,
   writeJsonFile,
 } from "../files.ts";
+import type { CommandEnv } from "../git.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
+  checksFailedMessage,
+  codeRefusalReason,
   DOCUMENT_TOOL_NAME,
   documentReply,
   type FramingWorkspace,
@@ -75,6 +96,7 @@ import {
   useSkillReply,
 } from "../prompts/index.ts";
 import {
+  type CodeTurn,
   firstWithRoom,
   modelsOnOffer,
   offerFor,
@@ -145,6 +167,22 @@ export type SessionError =
   | { readonly kind: "document-refused"; readonly refusal: DocumentRefusal | DocumentUndoRefusal }
   /** Undoing a Thing save couldn't be done. */
   | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
+  /** The model's provider can't code, so it can't work in a code workspace (ADR 0007). */
+  | { readonly kind: "cannot-code"; readonly provider: string }
+  /** A code session couldn't start its session branch (ADR 0007), and why. */
+  | { readonly kind: "branch-refused"; readonly refusal: BranchRefusal }
+  /** No approval in the session has that event number (#171). */
+  | { readonly kind: "approval-not-found" }
+  /** The approval's turn has ended (stopped, or the worker restarted), so nothing waits on it. */
+  | { readonly kind: "approval-closed" }
+  /** The session's pull request was merged or closed, so it takes no more messages (#172). */
+  | { readonly kind: "pull-request-ended"; readonly state: "merged" | "closed" }
+  /** The session has no pull request to review yet, or isn't a code session (#160). */
+  | { readonly kind: "no-pull-request" }
+  /** Merge or Close can't act on the pull request now, in the owner's words (#160). */
+  | { readonly kind: "pull-request-refused"; readonly reason: string }
+  /** GitHub couldn't be asked, or wouldn't do it (#160). */
+  | { readonly kind: "github"; readonly problem: PullRequestProblem }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -170,12 +208,24 @@ const SessionFile = z.object({
   titledBy: z.enum(["owner", "starter"]).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  /** A code session's session branch (ADR 0007); left out in a planning workspace. */
+  branch: z.string().optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
 /** An event before it's numbered and timed. */
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
 type NewEvent = WithoutNumbering<SessionEvent>;
+
+/** Whether a pull request is as it was last recorded, so nothing about it changed. */
+const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
+  was !== undefined &&
+  now.number === was.number &&
+  now.url === was.url &&
+  now.state === was.state &&
+  now.head === was.head &&
+  JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
+  JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
 /** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
 const titleFrom = (text: string) => {
@@ -304,6 +354,10 @@ type RunningSession = {
   listeners: Set<(event: SessionEvent) => void>;
   /** Appends and subscriptions run one at a time, so events are gapless and none is missed. */
   queue: Promise<unknown>;
+  /** The approvals its turn is waiting on (#171), by event number: each takes the owner's answer. */
+  approvals: Map<number, (answer: ApprovalAnswer) => void>;
+  /** Resolves once the turn last started here has ended, its end recorded. */
+  ended: Promise<void>;
 };
 
 /**
@@ -320,7 +374,14 @@ export const createSessions = (options: {
   contextFolder: ContextFolder;
   /** The house skills' folder (ADR 0016). */
   houseSkills: string;
+  /** Code sessions' branches and worktrees (ADR 0007). */
+  code: Code;
   now: () => number;
+  /**
+   * Told of an approval asked for and of each turn's end, once recorded, with a code session's
+   * pull request as it is then, for the owner's notifications (#173).
+   */
+  notify?: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => void;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
@@ -341,6 +402,8 @@ export const createSessions = (options: {
       nextSeq: undefined,
       listeners: new Set(),
       queue: Promise.resolve(),
+      approvals: new Map(),
+      ended: Promise.resolve(),
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -486,7 +549,17 @@ export const createSessions = (options: {
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<FramingWorkspace & { folder: string; skills: WorkspaceSkills }, string>> => {
+  ): Promise<
+    Result<
+      FramingWorkspace & {
+        folder: string;
+        skills: WorkspaceSkills;
+        /** Its command allowlist, for a code session's commands. */
+        allowlist: readonly CommandRule[];
+      },
+      string
+    >
+  > => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(options.contextDir, workspaceId),
       readOwnerContext(options.contextDir),
@@ -513,6 +586,7 @@ export const createSessions = (options: {
       documents: documents.value,
       things: things.value,
       skills: await skillsOf(workspace.value),
+      allowlist: allowlistFor(workspace.value.allowlist),
     });
   };
 
@@ -532,6 +606,8 @@ export const createSessions = (options: {
     provider: Provider;
     model: ModelRef["model"];
     effort: Effort | undefined;
+    /** Whether it's in a code session, so it runs only once it has a slot among them. */
+    coding: boolean;
     /** Whether it answers the session's first message, so the session is titled once it completes. */
     firstTurn: boolean;
   }) => {
@@ -545,12 +621,22 @@ export const createSessions = (options: {
     let recordingLost = false;
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
     const callsUnderway = new Set<Promise<unknown>>();
+    const taken = turn.coding ? options.code.slots.take(turn.id, stopper.signal) : undefined;
+    // Every device sees the turn wait, and start (ADR 0006).
+    if (taken?.queued && !(await append(turn.id, { type: "turn-queued" })).ok) recordingLost = true;
+    const slot = await taken?.slot;
+    if (taken?.queued && slot !== undefined) {
+      if (!(await append(turn.id, { type: "turn-dequeued" })).ok) recordingLost = true;
+    }
     try {
-      const [events, workspace] = await Promise.all([
+      const [events, workspace, file] = await Promise.all([
         readEvents(turn.id),
         turnWorkspaceOf(turn.workspaceId),
+        readJsonFile(sessionFilePath(turn.id), SessionFile),
       ]);
-      if (!events.ok) {
+      if (taken !== undefined && slot === undefined) {
+        // Stopped while it waited for a slot, so it never ran.
+      } else if (!events.ok || !file.ok) {
         failure = { kind: "unknown", message: "The session's event log can't be read." };
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
@@ -695,12 +781,122 @@ export const createSessions = (options: {
             ? Promise.resolve(notOfferedReply(call.name))
             : answers[offered.name](call.input);
         };
+        const branch = file.value?.branch;
+        const worktree = branch === undefined ? undefined : options.code.worktreeOf(turn.id);
+        /** Says whether something may happen in a code session, telling the owner when it does. */
+        const decide = async (
+          decided: Result<Activity, CodeRefusal>,
+        ): Promise<Result<null, string>> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return err(codeRefusalReason({ kind: "stopped" }));
+          }
+          if (!decided.ok) return err(codeRefusalReason(decided.error));
+          await report(decided.value);
+          return ok(null);
+        };
+        /**
+         * Asks the owner's approval (#171) and waits for it, with no time limit: Allow decides it
+         * as `allowed`, Deny refuses it, and a stop ends the wait.
+         */
+        const approval = async (asking: {
+          ask: ApprovalAsk;
+          why: string | undefined;
+          allowed: Activity;
+        }): Promise<Result<null, string>> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return err(codeRefusalReason({ kind: "stopped" }));
+          }
+          let answered: (answer: ApprovalAnswer | "stopped") => void = () => {};
+          const answer = new Promise<ApprovalAnswer | "stopped">((resolve) => {
+            answered = resolve;
+          });
+          const onStop = () => answered("stopped");
+          stopper.signal.addEventListener("abort", onStop, { once: true });
+          // Waited on from the moment it's recorded, so an answer can't arrive before the wait.
+          const asked = await inOrder(session, async () => {
+            const recorded = await writeEvent({
+              id: turn.id,
+              session,
+              event: {
+                type: "approval-requested",
+                ask: asking.ask,
+                ...(asking.why === undefined ? {} : { why: asking.why }),
+              },
+            });
+            if (recorded.ok) {
+              session.approvals.set(recorded.value.seq, answered);
+              options.notify?.(turn.id, recorded.value, undefined);
+            }
+            return recorded;
+          });
+          if (!asked.ok) {
+            recordingLost = true;
+            answered("stopped");
+          }
+          const given = await answer;
+          stopper.signal.removeEventListener("abort", onStop);
+          if (asked.ok) session.approvals.delete(asked.value.seq);
+          if (given === "stopped") return err(codeRefusalReason({ kind: "stopped" }));
+          return decide(
+            given === "allow"
+              ? ok(asking.allowed)
+              : err({ kind: "denied", what: asking.ask.kind === "command" ? "command" : "edit" }),
+          );
+        };
+        /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
+        const codeTurn = (worktree: string, branch: string, env: CommandEnv): CodeTurn => ({
+          worktree,
+          // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
+          env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)) },
+          edit: async (path) => {
+            const place = await editPlaceIn(worktree, path);
+            if (place.kind === "inside") {
+              return decide(ok({ kind: "edited-file", path: place.shown }));
+            }
+            if (place.kind === "setup") {
+              return approval({
+                ask: { kind: "setup", path: place.shown },
+                why: undefined,
+                allowed: { kind: "edited-file", path: place.shown },
+              });
+            }
+            const outside = resolve(worktree, path);
+            return approval({
+              ask: { kind: "edit", path: outside },
+              why: undefined,
+              allowed: { kind: "edited-file", path: outside },
+            });
+          },
+          run: async (command, why) => {
+            const allowed = await commandAllowed(
+              {
+                worktree,
+                branch,
+                pullRequest: pullRequestIn(events.value)?.number,
+                allowlist: workspace.value.allowlist,
+              },
+              command,
+            );
+            if (allowed.ok) return decide(ok({ kind: "ran-command", command }));
+            const refused = allowed.error;
+            if (refused.kind !== "needs-approval") return decide(err(refused));
+            return approval({
+              ask: { kind: "command", command, reason: refused.reason },
+              why,
+              allowed: { kind: "ran-command", command },
+            });
+          },
+        });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
             model: turn.model,
             effort: turn.effort,
-            folder: workspace.value.folder,
+            folder: worktree ?? workspace.value.folder,
+            code:
+              worktree === undefined || branch === undefined
+                ? null
+                : codeTurn(worktree, branch, await options.code.commandEnv()),
             framing,
             callTool: (call) => {
               const calling = callTool(call);
@@ -750,6 +946,15 @@ export const createSessions = (options: {
         ? { type: "turn-failed", reason: failure }
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
+    // Only once it's ended, so the next code session waiting starts after it.
+    options.code.slots.release(turn.id);
+    // What the turn did to its pull request shows at once, the PR it opened, say (#172), and its
+    // notification then says when the PR's checks still fail (story 31).
+    if (turn.coding) await followPullRequest(turn.id);
+    if (ended.ok) {
+      const events = turn.coding ? await readEvents(turn.id) : undefined;
+      options.notify?.(turn.id, ended.value, events?.ok ? pullRequestIn(events.value) : undefined);
+    }
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
       titleSession(turn.id).catch((error: unknown) =>
@@ -812,12 +1017,16 @@ export const createSessions = (options: {
     carryingOn?: { turn: number };
     /** How many fresh starts there had been when the turn was asked for. */
     since: number;
+    /** It's in a code session, so it runs only once it has a slot among them. */
+    coding: boolean;
     /** It answers the session's first message, so the session is titled once it completes. */
     firstTurn?: boolean;
     /** The files the owner attached, checked, to keep in the session's folder (#78). */
     attachments?: readonly PreparedAttachment[];
     /** Attachments already kept that the message carries again (Carry on). */
     keptAttachments?: readonly Attachment[];
+    /** Sent by the worker because the session's pull request's checks failed (#172). */
+    checksFailed?: { pullRequest: number; head: string; checks: [string, ...string[]] };
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -830,6 +1039,14 @@ export const createSessions = (options: {
       turn: undefined,
     };
     session.turn = starting;
+
+    if (start.coding) {
+      const ended = await pullRequestEndedIn(start.id);
+      if (ended !== undefined) {
+        session.turn = { kind: "idle" };
+        return err(ended);
+      }
+    }
 
     if (start.carryingOn) {
       const events = await readEvents(start.id);
@@ -858,20 +1075,26 @@ export const createSessions = (options: {
       ...(start.message.effort === undefined ? {} : { effort: start.message.effort }),
       ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
       ...(attachments.length === 0 ? {} : { attachments }),
+      ...(start.checksFailed === undefined ? {} : { checksFailed: start.checksFailed }),
     });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
       return recorded;
     }
     starting.turn = recorded.value.seq;
+    // The checks it fixes start its activity (#172).
+    for (const name of start.checksFailed?.checks ?? []) {
+      await append(start.id, { type: "activity", activity: { kind: "check-failed", name } });
+    }
     await markUpdated(start.id);
-    runTurn({
+    session.ended = runTurn({
       id: start.id,
       stopper: starting.stopper,
       workspaceId: start.workspaceId,
       provider: start.provider,
       model: start.message.model.model,
       effort: start.message.effort,
+      coding: start.coding,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
@@ -901,6 +1124,34 @@ export const createSessions = (options: {
     if (!takesEffort(offer.model, message.effort)) return err({ kind: "effort-unavailable" });
     return ok(offer.provider);
   };
+
+  /**
+   * The provider to answer a message in a workspace, as `providerFor`; and in a code workspace,
+   * its repository.
+   */
+  const providerIn = async (
+    workspaceId: WorkspaceId,
+    message: NewMessage,
+  ): Promise<Result<{ provider: Provider; repoPath: string | undefined }, SessionError>> => {
+    const provider = await providerFor(message);
+    if (!provider.ok) return provider;
+    const workspace = await getWorkspace(options.contextDir, workspaceId);
+    if (!workspace.ok) {
+      return err(
+        workspace.error.kind === "archived" ? { kind: "workspace-archived" } : STORAGE_ERROR,
+      );
+    }
+    const { summary, repoPath } = workspace.value;
+    if (summary.mode === "planning") return ok({ provider: provider.value, repoPath: undefined });
+    const coding = await codes(provider.value);
+    return coding.ok ? ok({ provider: provider.value, repoPath: repoPath ?? "" }) : coding;
+  };
+
+  /** Whether a provider can work in a code workspace: only one that codes can (ADR 0007). */
+  const codes = async (provider: Provider): Promise<Result<null, SessionError>> =>
+    provider.capabilities.codes
+      ? ok(null)
+      : err({ kind: "cannot-code", provider: (await provider.status()).label });
 
   /** Every provider's status, with the usage limits its models are at. */
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
@@ -943,13 +1194,16 @@ export const createSessions = (options: {
     return ok(undefined);
   };
 
-  /** A workspace's sessions, most recently active first. */
+  /**
+   * A workspace's sessions, most recently active first, each with whether it's waiting for a code
+   * session to end.
+   */
   const sessionsOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<SessionSummary[], SessionError>> => {
+  ): Promise<Result<CodeSessionList["sessions"], SessionError>> => {
     const folders = await listFolder(sessionsDir);
     if (!folders.ok) return err(STORAGE_ERROR);
-    const summaries: SessionSummary[] = [];
+    const summaries: CodeSessionList["sessions"] = [];
     for (const folder of folders.value) {
       const id = SessionId.safeParse(folder);
       if (!id.success) continue;
@@ -957,7 +1211,7 @@ export const createSessions = (options: {
       if (!file.ok) return err(STORAGE_ERROR);
       if (file.value?.workspaceId !== workspaceId) continue;
       await settled(file.value.id);
-      summaries.push(summaryOf(file.value));
+      summaries.push({ ...summaryOf(file.value), queued: options.code.slots.waits(file.value.id) });
     }
     return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   };
@@ -1041,7 +1295,208 @@ export const createSessions = (options: {
     });
   };
 
+  /** Why a code session takes no more messages: its pull request was merged or closed (#172). */
+  const pullRequestEndedIn = async (id: SessionId): Promise<SessionError | undefined> => {
+    const events = await readEvents(id);
+    const pullRequest = events.ok ? pullRequestIn(events.value) : undefined;
+    return pullRequest === undefined || pullRequest.state === "open"
+      ? undefined
+      : { kind: "pull-request-ended", state: pullRequest.state };
+  };
+
+  /** A code session's branch and its workspace's repository, or `undefined` for any other. */
+  const codeBranchOf = async (file: SessionFile) => {
+    if (file.branch === undefined) return undefined;
+    const workspace = await getWorkspace(options.contextDir, file.workspaceId);
+    if (!workspace.ok || typeof workspace.value.repoPath !== "string") return undefined;
+    return { branch: file.branch, repoPath: workspace.value.repoPath };
+  };
+
+  /**
+   * A code session's pull request as the owner reviews it (#160), with the session and its
+   * repository, or why it can't be reviewed.
+   */
+  const reviewIn = async (
+    rawId: string,
+  ): Promise<
+    Result<{ id: SessionId; repoPath: string; review: PullRequestReview }, SessionError>
+  > => {
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const code = await codeBranchOf(found.value);
+    if (code === undefined) return err({ kind: "no-pull-request" });
+    const review = await options.code.reviewOf(code);
+    if (!review.ok) return err({ kind: "github", problem: review.error });
+    if (review.value === undefined) return err({ kind: "no-pull-request" });
+    return ok({ id: found.value.id, repoPath: code.repoPath, review: review.value });
+  };
+
+  /** Following pull requests runs one session at a time, so no change is recorded twice. */
+  let following: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Looks at a code session's pull request on GitHub (#172) and records what changed. A failing
+   * check on a commit not yet asked about starts a turn asking the model to fix it, once the
+   * session is free; a merged or closed one clears the session's worktree and branch away.
+   */
+  const followPullRequest = (id: SessionId) => {
+    const look = following.then(async () => {
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!file.ok || file.value === undefined) return;
+      const { workspaceId } = file.value;
+      const code = await codeBranchOf(file.value);
+      if (code === undefined) return;
+      const { branch, repoPath } = code;
+      await settled(id);
+      const events = await readEvents(id);
+      if (!events.ok) return;
+      let pullRequest = pullRequestIn(events.value);
+      if (!pullRequestEnded(pullRequest)) {
+        const found = await options.code.pullRequestOf({ repoPath, branch });
+        if (found === undefined) return;
+        if (!samePullRequest(found, pullRequest)) {
+          const recorded = await append(id, { type: "pull-request", pullRequest: found });
+          if (!recorded.ok) return;
+        }
+        pullRequest = found;
+      }
+      const session = running.get(id);
+      if (session !== undefined && session.turn.kind !== "idle") return;
+      if (pullRequest.state !== "open") {
+        const worktree = options.code.worktreeOf(id);
+        const there = await exists(worktree);
+        if (there.ok && there.value) {
+          await options.code.clearBranch({
+            repoPath,
+            sessionBranch: { branch, worktree },
+            pushed: true,
+          });
+        }
+        return;
+      }
+      if (pullRequest.checks.kind === "failed") {
+        const { failed } = pullRequest.checks;
+        await fixChecks({ id, workspaceId, events: events.value, pullRequest, failed });
+      }
+    });
+    following = look.catch((error: unknown) =>
+      console.error(`Session ${id}: its pull request couldn't be followed`, error),
+    );
+    return following;
+  };
+
+  /**
+   * Starts a turn asking the model to fix the checks that failed on a pull request's latest
+   * commit, or say why it can't (#172), on the model the owner last used: once per commit.
+   */
+  const fixChecks = async (fix: {
+    id: SessionId;
+    workspaceId: WorkspaceId;
+    events: readonly SessionEvent[];
+    pullRequest: PullRequest;
+    /** The checks that failed, by name. */
+    failed: readonly string[];
+  }) => {
+    const { pullRequest } = fix;
+    const asked = fix.events.some(
+      (event) => event.type === "owner-message" && event.checksFailed?.head === pullRequest.head,
+    );
+    const last = fix.events.findLast((event) => event.type === "owner-message");
+    if (asked || last?.type !== "owner-message") return;
+    const [first, ...more] = fix.failed;
+    if (first === undefined) return;
+    const message: NewMessage = {
+      text: checksFailedMessage({ number: pullRequest.number, checks: [first, ...more] }),
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerFor(message);
+    if (!provider.ok || !provider.value.capabilities.codes) return;
+    await startTurn({
+      id: fix.id,
+      workspaceId: fix.workspaceId,
+      provider: provider.value,
+      message,
+      since: freshStarts,
+      coding: true,
+      checksFailed: {
+        pullRequest: pullRequest.number,
+        head: pullRequest.head,
+        checks: [first, ...more],
+      },
+    });
+  };
+
   return {
+    /** A code session's pull request as the owner reviews it (#160). */
+    pullRequestReview: async (rawId: string): Promise<Result<PullRequestReview, SessionError>> => {
+      const found = await reviewIn(rawId);
+      return found.ok ? ok(found.value.review) : found;
+    },
+
+    /**
+     * Merges a code session's pull request on GitHub (#160), refused with the reason while it
+     * can't merge, and only while its latest commit is `reviewed`, the one the owner looked at. Once
+     * merged, the session ends as one merged on GitHub does: the merge is recorded, and its worktree
+     * and branch are cleared away.
+     */
+    mergePullRequest: async (
+      rawId: string,
+      reviewed: string,
+    ): Promise<Result<null, SessionError>> => {
+      const found = await reviewIn(rawId);
+      if (!found.ok) return found;
+      const { id, repoPath, review } = found.value;
+      const { number, head } = review.pullRequest;
+      // Before anything else: the reason it couldn't merge may be new since the owner looked.
+      if (head !== reviewed) {
+        return err({
+          kind: "pull-request-refused",
+          reason: "The pull request changed since you looked. Review it again.",
+        });
+      }
+      if (review.merge.kind === "refused") {
+        return err({ kind: "pull-request-refused", reason: review.merge.reason });
+      }
+      // GitHub merges it only while its latest commit is still the one reviewed.
+      const merged = await options.code.merge({ repoPath, number, head: reviewed });
+      if (!merged.ok) return err({ kind: "github", problem: merged.error });
+      await followPullRequest(id);
+      return ok(null);
+    },
+
+    /**
+     * Closes a code session's pull request on GitHub without merging it (#160); the session ends
+     * as one closed on GitHub does.
+     */
+    closePullRequest: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const found = await reviewIn(rawId);
+      if (!found.ok) return found;
+      const { id, repoPath, review } = found.value;
+      const { number, state } = review.pullRequest;
+      if (state !== "open") {
+        return err({ kind: "pull-request-refused", reason: `It's ${state} already.` });
+      }
+      const closed = await options.code.close({ repoPath, number });
+      if (!closed.ok) return err({ kind: "github", problem: closed.error });
+      await followPullRequest(id);
+      return ok(null);
+    },
+
+    /**
+     * Follows every code session's pull request on GitHub (#172), for the worker's repeating
+     * jobs: what changed is recorded, a failing check starts a fixing turn, and a merged or closed
+     * one ends its session.
+     */
+    followPullRequests: async () => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return;
+      for (const folder of folders.value) {
+        const id = SessionId.safeParse(folder);
+        if (id.success) await followPullRequest(id.data);
+      }
+    },
+
     /**
      * Save as document (ADR 0020): the whole answer to the owner's message numbered `answer`, as a
      * new document called `name` in the session's workspace, with no model turn. Recorded in the
@@ -1153,10 +1608,22 @@ export const createSessions = (options: {
       if (!message.ok) return message;
       const usable = await skillUsable(start.workspaceId, message.value);
       if (!usable.ok) return usable;
-      const provider = await providerFor(message.value);
+      const provider = await providerIn(start.workspaceId, message.value);
+      // A fresh start meanwhile may have taken its workspace away.
+      if (settingAside || since !== freshStarts) return err({ kind: "starting-fresh" });
       if (!provider.ok) return provider;
+      const { repoPath } = provider.value;
       const id = SessionId.parse(randomUUID());
       const at = stamp();
+      // A code session works on its own session branch from the start (ADR 0007).
+      const branched =
+        repoPath === undefined
+          ? undefined
+          : await options.code.startBranch({ repoPath, sessionId: id });
+      if (branched !== undefined && !branched.ok) {
+        return err({ kind: "branch-refused", refusal: branched.error });
+      }
+      const sessionBranch = branched?.value;
       const file: SessionFile = {
         id,
         workspaceId: start.workspaceId,
@@ -1164,10 +1631,17 @@ export const createSessions = (options: {
         ...(start.starter ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,
+        ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),
+      };
+      const unstarted = async () => {
+        if (repoPath !== undefined && sessionBranch !== undefined) {
+          await options.code.clearBranch({ repoPath, sessionBranch, pushed: false });
+        }
       };
       try {
         await mkdir(folderOf(id), { recursive: true });
       } catch {
+        await unstarted();
         return err(STORAGE_ERROR);
       }
       const written = await writeJsonFile(sessionFilePath(id), file);
@@ -1175,9 +1649,10 @@ export const createSessions = (options: {
         ? await startTurn({
             id,
             workspaceId: start.workspaceId,
-            provider: provider.value,
+            provider: provider.value.provider,
             message: message.value,
             since,
+            coding: sessionBranch !== undefined,
             firstTurn: true,
             ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
           })
@@ -1185,6 +1660,7 @@ export const createSessions = (options: {
       if (!started.ok) {
         // Never leave a session behind without its first message.
         await rm(folderOf(id), { recursive: true, force: true });
+        await unstarted();
         running.delete(id);
         return started;
       }
@@ -1205,16 +1681,17 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerFor(message);
+      const provider = await providerIn(session.value.workspaceId, message);
       if (!provider.ok) return provider;
       const usable = await skillUsable(session.value.workspaceId, message);
       if (!usable.ok) return usable;
       return startTurn({
         id: session.value.id,
         workspaceId: session.value.workspaceId,
-        provider: provider.value,
+        provider: provider.value.provider,
         message,
         since,
+        coding: session.value.branch !== undefined,
         attachments,
       });
     },
@@ -1244,6 +1721,10 @@ export const createSessions = (options: {
       if (overflow.kind !== "carry-on") return err({ kind: "no-overflow", overflow });
       const provider = options.providers.find((p) => p.id === overflow.model.provider);
       if (!provider) return err({ kind: "model-unavailable" });
+      if (found.value.branch !== undefined) {
+        const coding = await codes(provider);
+        if (!coding.ok) return coding;
+      }
       return startTurn({
         id,
         workspaceId,
@@ -1255,6 +1736,7 @@ export const createSessions = (options: {
           ...(message.skill === undefined ? {} : { skill: message.skill }),
         },
         carryingOn: { turn: request.turn },
+        coding: found.value.branch !== undefined,
         // Its attachments go again too, already in the session's folder.
         ...(message.attachments === undefined ? {} : { keptAttachments: message.attachments }),
         // Carrying on the first message is still the session's first turn.
@@ -1274,6 +1756,49 @@ export const createSessions = (options: {
       }
       current.stopper.abort();
       return ok(null);
+    },
+
+    /**
+     * The owner's answer to an approval its turn is waiting on (#171), by the approval's event
+     * number. Recorded in the session, so every device sees it answered, and only the first answer
+     * counts: answering again, from any device, gives back the one that stands.
+     */
+    answerApproval: async (answering: {
+      rawId: string;
+      approval: number;
+      answer: ApprovalAnswer;
+    }): Promise<Result<ApprovalAnswer, SessionError>> => {
+      const found = await findSession(answering.rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      return inOrder(session, async (): Promise<Result<ApprovalAnswer, SessionError>> => {
+        const events = await readEvents(id);
+        if (!events.ok) return events;
+        const asked = events.value.some(
+          (event) => event.type === "approval-requested" && event.seq === answering.approval,
+        );
+        if (!asked) return err({ kind: "approval-not-found" });
+        const earlier = events.value.find(
+          (event) => event.type === "approval-answered" && event.approval === answering.approval,
+        );
+        if (earlier?.type === "approval-answered") return ok(earlier.answer);
+        const waiting = session.approvals.get(answering.approval);
+        if (waiting === undefined) return err({ kind: "approval-closed" });
+        const recorded = await writeEvent({
+          id,
+          session,
+          event: {
+            type: "approval-answered",
+            approval: answering.approval,
+            answer: answering.answer,
+          },
+        });
+        if (!recorded.ok) return recorded;
+        session.approvals.delete(answering.approval);
+        waiting(answering.answer);
+        return ok(answering.answer);
+      });
     },
 
     /** One of the session's attachments (#78) and its bytes, by its id. */
@@ -1317,8 +1842,20 @@ export const createSessions = (options: {
     remove: async (rawId: string): Promise<Result<null, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
+      const { id, workspaceId, branch } = found.value;
       const session = runningSession(id);
+      // A turn waiting for a code session to end hasn't started: it's stopped, and the session goes.
+      if (options.code.slots.waits(id) && session.turn.kind === "running") {
+        session.turn.stopper.abort();
+        await session.ended;
+      }
+      const events = await readEvents(id);
+      // Nothing ever ran on its session branch, so that goes too (ADR 0007).
+      const neverRan =
+        events.ok &&
+        events.value.filter((event) => event.type === "owner-message").length === 1 &&
+        events.value.some((event) => event.type === "turn-queued") &&
+        !events.value.some((event) => event.type === "turn-dequeued");
       // In the session's queue, so nothing is being written to it as its folder goes.
       return inOrder(session, async (): Promise<Result<null, SessionError>> => {
         if (session.turn.kind !== "idle") return err({ kind: "delete-while-running" });
@@ -1331,6 +1868,15 @@ export const createSessions = (options: {
           return err(STORAGE_ERROR);
         }
         running.delete(id);
+        const workspace = await getWorkspace(options.contextDir, workspaceId);
+        const repoPath = workspace.ok ? workspace.value.repoPath : null;
+        if (neverRan && branch !== undefined && typeof repoPath === "string") {
+          await options.code.clearBranch({
+            repoPath,
+            sessionBranch: { branch, worktree: options.code.worktreeOf(id) },
+            pushed: false,
+          });
+        }
         return ok(null);
       });
     },
@@ -1341,8 +1887,11 @@ export const createSessions = (options: {
       return list.ok ? ok(list.value.some((session) => session.busy)) : list;
     },
 
-    /** A workspace's sessions, most recently active first. */
+    /** A workspace's sessions, most recently active first, each with whether it's waiting. */
     list: sessionsOf,
+
+    /** How many code sessions are running, across the worker. */
+    codeRunning: () => options.code.slots.running(),
 
     /** How many sessions there are, in every workspace. */
     count: async (): Promise<Result<number, SessionError>> => {

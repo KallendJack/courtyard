@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type AuthState, MIN_PASSWORD_LENGTH } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../files.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /** The secret in a device login's cookie. Only its hash is ever stored. */
@@ -11,6 +12,13 @@ export const LoginSecret = z
   .regex(/^[A-Za-z0-9_-]{20,100}$/)
   .brand<"LoginSecret">();
 export type LoginSecret = z.infer<typeof LoginSecret>;
+
+/**
+ * One device login, as other modules name it (a device's notifications, say): its secret's hash,
+ * the same one its login is kept by, so it's gone once that device logs out.
+ */
+export const DeviceLogin = z.string().min(1).brand<"DeviceLogin">();
+export type DeviceLogin = z.infer<typeof DeviceLogin>;
 
 /** scrypt's cost settings: about 16 MB of memory per hash, so guessing in bulk is expensive. */
 const COST = { N: 2 ** 14, r: 8, p: 1 };
@@ -65,6 +73,8 @@ export type Owner = {
   readonly logOut: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
   /** Ends every device login except this one, so a lost device can be cut off. */
   readonly logOutOthers: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
+  /** The devices logged in now. */
+  readonly devices: () => Promise<Result<ReadonlySet<DeviceLogin>, StorageError>>;
 };
 
 const scryptKey = (password: string, salt: Buffer, cost: { N: number; r: number; p: number }) =>
@@ -75,6 +85,9 @@ const scryptKey = (password: string, salt: Buffer, cost: { N: number; r: number;
   });
 
 const hashSecret = (secret: string) => createHash("sha256").update(secret).digest("base64url");
+
+/** The device login a login secret is. */
+export const deviceLoginOf = (secret: LoginSecret) => DeviceLogin.parse(hashSecret(secret));
 
 const storage = (message: string): StorageError => ({ kind: "storage", message });
 
@@ -87,12 +100,7 @@ export const createOwner = (options: { dataDir: string; now: () => number }): Ow
    * Runs changes one at a time. Without this, guesses sent together would all read the same
    * failure count and skip the slow-down, and a login and a logout could undo each other.
    */
-  let queue: Promise<unknown> = Promise.resolve();
-  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
-    const run = queue.then(change, change);
-    queue = run.catch(() => undefined);
-    return run;
-  };
+  const oneAtATime = createOneAtATime();
 
   const read = async <T>(path: string, schema: z.ZodType<T>) => {
     const file = await readJsonFile(path, schema);
@@ -215,6 +223,14 @@ export const createOwner = (options: { dataDir: string; now: () => number }): Ow
     logOutOthers: (secret) => {
       const secretHash = hashSecret(secret);
       return keepLogins((hash) => hash === secretHash);
+    },
+
+    devices: async () => {
+      const file = await read(loginsPath, DeviceLoginsFile);
+      if (!file.ok) return file;
+      return ok(
+        new Set((file.value?.logins ?? []).map((login) => DeviceLogin.parse(login.secretHash))),
+      );
     },
   };
 };

@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { ApprovalAnswer, ApprovalAsk } from "./approval.ts";
 import { Attachment } from "./attachment.ts";
 import { DocumentSlug } from "./documents.ts";
+import { PullRequest } from "./pull-request.ts";
 import { ChangeId, Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
 import { ThingSave } from "./things.ts";
@@ -30,6 +32,15 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("web-searched"), query: z.string() }),
   /** A web page it read, by its address, and its site as the chat names it (its host). */
   z.object({ kind: z.literal("page-read"), url: z.string(), site: z.string() }),
+  /**
+   * A file it changed or added in a code session's worktree, as a path inside it (ADR 0007); or
+   * outside it, once the owner allowed that (#171), by its full path.
+   */
+  z.object({ kind: z.literal("edited-file"), path: z.string() }),
+  /** A command it ran in a code session's worktree, exactly as it ran it (ADR 0007). */
+  z.object({ kind: z.literal("ran-command"), command: z.string() }),
+  /** A check that failed on the session's pull request, which the turn is fixing (#172). */
+  z.object({ kind: z.literal("check-failed"), name: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 
@@ -91,6 +102,17 @@ export const SessionEvent = z.discriminatedUnion("type", [
     skill: SkillName.optional(),
     /** The photos and PDFs it carries, kept in the session's folder (#78). */
     attachments: z.array(Attachment).optional(),
+    /**
+     * Sent by the worker, not the owner (#172): the session's pull request's checks failed on
+     * its commit `head`, and the message asks the model to fix them or say why it can't.
+     */
+    checksFailed: z
+      .object({
+        pullRequest: z.number().int().positive(),
+        head: z.string(),
+        checks: z.array(z.string()).min(1),
+      })
+      .optional(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
@@ -98,6 +120,13 @@ export const SessionEvent = z.discriminatedUnion("type", [
   /** The owner stopped the turn; whatever was written before stays. */
   z.object({ ...eventBase, type: z.literal("turn-stopped") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
+  /**
+   * The turn, in a code session, waits: as many code sessions as run at once are running
+   * (`CODE_SESSIONS_AT_ONCE`), and it starts when one of theirs ends.
+   */
+  z.object({ ...eventBase, type: z.literal("turn-queued") }),
+  /** The turn that waited has started. */
+  z.object({ ...eventBase, type: z.literal("turn-dequeued") }),
   /** A save the model made during the turn, already in the context file. */
   z.object({
     ...eventBase,
@@ -154,9 +183,35 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("sources"),
     sources: z.array(Source).min(1).max(SOURCES_MAX),
   }),
+  /**
+   * A code session's model wants to do something only the owner can allow (#171): the turn waits,
+   * with no time limit, until they answer or stop it.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("approval-requested"),
+    ask: ApprovalAsk,
+    /** What the model said it's for, when it said. */
+    why: z.string().optional(),
+  }),
+  /** The session's pull request as it is now on GitHub, each time it changes (#172). */
+  z.object({ ...eventBase, type: z.literal("pull-request"), pullRequest: PullRequest }),
+  /** The owner answered the approval numbered `approval`, from whichever device they did it. */
+  z.object({
+    ...eventBase,
+    type: z.literal("approval-answered"),
+    approval: z.number().int().positive(),
+    answer: ApprovalAnswer,
+  }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 
 /** Whether an event ends its turn: completed, stopped by the owner, or failed. */
 export const endsTurn = (event: SessionEvent) =>
   event.type === "turn-completed" || event.type === "turn-stopped" || event.type === "turn-failed";
+
+/** A session's pull request as it last stood, from its events, or `undefined` before it has one. */
+export const pullRequestIn = (events: readonly SessionEvent[]) => {
+  const last = events.findLast((event) => event.type === "pull-request");
+  return last?.type === "pull-request" ? last.pullRequest : undefined;
+};

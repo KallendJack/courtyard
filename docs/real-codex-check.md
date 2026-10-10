@@ -27,8 +27,8 @@ before any change to Codex's pinned version, and whenever the adapter's isolatio
 On a worker whose data folder holds a signed-in Codex home, with a workspace whose context file has a fact in it, and
 a file just outside the workspace folder (in the context folder, next to it) holding a made-up secret word:
 
-- [ ] **Signing in.** Signed out (Sign out in the home page's Models list), the home page offers Sign in to Codex.
-      Its link and code, entered on a phone, sign Codex in: the page says so by itself, the Models list shows the
+- [ ] **Signing in.** Signed out (Sign out in the home page's Connections), the home page offers Sign in to Codex.
+      Its link and code, entered on a phone, sign Codex in: the page says so by itself, Connections shows the
       account, and Codex's models appear in the picker.
 - [ ] **Models.** The model picker lists Codex's models ("Codex · …") with their effort levels, and the effort picker
       names the model's default ("Default effort (Low)").

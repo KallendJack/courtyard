@@ -17,6 +17,7 @@ import {
   type SignInState,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { fileToolReply } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageRead, turnSources } from "../sources/index.ts";
@@ -941,15 +942,7 @@ export const createCodexProvider = (options: {
    * Starting, giving up and signing out happen one at a time, so two at once (two devices, say)
    * can't leave a sign-in Codex is still waiting for.
    */
-  let changing = Promise.resolve();
-  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
-    const done = changing.then(change);
-    changing = done.then(
-      () => {},
-      () => {},
-    );
-    return done;
-  };
+  const oneAtATime = createOneAtATime();
 
   const waitingState = (waiting: Extract<Login, { kind: "waiting" }>): SignInState => ({
     kind: "waiting",

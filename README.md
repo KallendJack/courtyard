@@ -148,6 +148,73 @@ is ready (it checks every few hours), or run:
 - **The result** is written to `live-update.json` in the data folder, and the home page shows it.
   From the button, the update's output goes to `live-update.log` there too.
 
+### Code workspaces
+
+Being built ([milestone 7](https://github.com/KallendJack/courtyard/milestone/7)). To make a
+workspace a code workspace, give its folder a `workspace.json` naming the repository on the worker
+machine:
+
+```json
+{ "mode": "code", "repoPath": "/path/to/repo" }
+```
+
+- **The repository needs an `origin` remote** (its GitHub copy): each session starts its own
+  branch, `courtyard/…`, from `origin`'s default branch, freshly fetched, in its own worktree in
+  the data folder's `worktrees/`. Your own checkout is never touched.
+- **Only a model that can code works there** (Claude, for now); others are refused, saying so.
+- **Without asking,** a session edits files in its worktree and runs the command allowlist: the
+  package scripts (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e
+  and verify), git and gh commands that only look, `git add` and `git commit` on its branch,
+  pushing its branch (to `origin`, under its own name, never forced), and opening or updating its
+  own pull request with `gh pr create`/`gh pr edit`. Any other command, an edit outside its
+  worktree, or an edit to a file that decides what those commands run (a `package.json`, git
+  hooks, `.claude`) waits for you: the session shows the exact command or file with Allow and
+  Deny, and waits as long as you take.
+- **To change a workspace's command allowlist,** add an `allowlist` to its `workspace.json`: the
+  commands to add, and the default ones to remove, each by its first words, ending ` ...` when
+  more arguments may follow. A command still never chains another, nor names a path outside the
+  worktree, without asking.
+
+  ```json
+  {
+    "mode": "code",
+    "repoPath": "/path/to/repo",
+    "allowlist": { "add": ["cargo test ...", "pnpm lint"], "remove": ["npm ci"] }
+  }
+  ```
+- **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
+  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
+  the same, for the repository's checks to pick their test servers' ports from.
+- **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
+  worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
+  says its sessions can't push or open a pull request.
+- **A session ends when its pull request is merged or closed,** from Courtyard or on GitHub: it
+  stays readable but takes no more messages, and its worktree, its branch and the branch it
+  pushed to GitHub are cleared away (once any turn still running has ended). A session deleted
+  before its first turn started has its worktree and branch cleared away at once.
+
+### Notifications
+
+A device can buzz when a session needs your OK, and when a turn finishes or fails; tapping the
+notification opens the session. It shows only the session's title and what it needs.
+
+**To turn them on,** on each device you want them on, open the home page and switch on
+**Notifications → On this device**, beside Connections, then let the browser show notifications
+when it asks. Each device turns its own on and off.
+
+- **It needs HTTPS** (see [Reaching it](#reaching-it-https-and-a-vpn)): browsers only allow
+  notifications there. **On an iPhone or iPad,** add Courtyard to the Home Screen first (Share →
+  Add to Home Screen, iOS 16.4 or later), and turn them on from there.
+- **If you said no** when the browser asked, the switch says they're blocked: allow notifications
+  for Courtyard in the browser's site settings, then turn them on again.
+- **Nothing buzzes for a session you have open** in front of you on that device.
+- **Logging a device out stops its notifications.** After logging in again, opening the home page
+  picks them up again.
+- **The worker sends them through each browser's own push service** (Google's, Apple's or
+  Mozilla's), so the worker machine needs to reach the internet. Its keys are made on its first run
+  and kept in the data folder's `notifications/`, with each device's subscription; if that folder
+  is lost, turn notifications on again on each device.
+
 ## Settings
 
 Every setting, and what it does, is in [`.env.example`](.env.example). Copy it to `.env` in the live copy and fill it in.
@@ -170,6 +237,11 @@ to other people, so everyone who runs Courtyard signs in with their own. Set
 Each session sees only its own workspace's folder: none of the machine's Claude Code settings,
 memory, skills or connectors, and in planning workspaces it can only read.
 
+In a code workspace (see [Code workspaces](#code-workspaces)), Claude also follows the
+repository's own Claude Code setup: its `CLAUDE.md` (or the `AGENTS.md` it points to), its
+`.claude/settings.json` and its `.claude/skills`, read from the session's own worktree. Still
+none of the machine's own.
+
 
 ### Codex
 
@@ -183,7 +255,7 @@ version, never a Codex you've installed elsewhere.
   touch the other.
 - **Sign in from the home page,** on any device, with a ChatGPT plan. While Codex is signed out,
   the home page offers Sign in to Codex: it shows a link and a one-time code to finish in any
-  browser, and carries on by itself once you have. The Models list at the foot of the home page
+  browser, and carries on by itself once you have. Connections, at the foot of the home page,
   shows who Codex is signed in as, with Sign out. If ChatGPT refuses the code, switch on device
   code sign-in at chatgpt.com (Settings, Security) first. To sign in on the worker machine
   instead, in PowerShell from Courtyard's folder:
@@ -200,6 +272,51 @@ version, never a Codex you've installed elsewhere.
 Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
 Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.
 Courtyard never reads, stores or logs its sign-in.
+
+### GitHub
+
+Code sessions reach GitHub through Courtyard's own sign-in, never the worker machine's `git` or
+`gh` login: a **GitHub App** you register once and install on only the repos sessions may use, so
+they can't reach any other. You sign in to it from Connections, on the home page, with a device
+code. It needs [`gh`](https://cli.github.com) installed on the worker machine (git gets its
+GitHub credentials through it). Until it's set up, a code workspace says its sessions can't push
+or open a pull request.
+
+**Register the GitHub App, once:**
+
+1. On GitHub, open **Settings → Developer settings → GitHub Apps → New GitHub App**
+   (`https://github.com/settings/apps/new`).
+2. Give it a name nobody else has used ("Courtyard for <your name>"), and any homepage URL (this
+   repo's, say). Leave the callback URL empty and "Request user authorization (OAuth) during
+   installation" off. Leave **Expire user authorization tokens** on: Courtyard refreshes them.
+3. Tick **Enable Device Flow**.
+4. Under **Webhook**, untick **Active**: Courtyard asks GitHub, it isn't told.
+5. Under **Repository permissions**, give it: **Contents** read and write (push the session's
+   branch), **Pull requests** read and write (open, update, merge and close its PR), **Checks**,
+   **Commit statuses**, **Actions** and **Issues** read-only (follow the PR's checks, read the issue
+   a session works on); **Metadata** read-only is always on. Add **Workflows** read and write only
+   if sessions may change the repo's `.github/workflows`. Nothing under account permissions.
+6. Choose **Only on this account**, then **Create GitHub App**.
+7. On the app's page, copy its **Client ID** (not the App ID), and set it in the worker's `.env`:
+   `COURTYARD_GITHUB_CLIENT_ID=<client ID>`. It needs no client secret or private key. Restart the
+   worker (or run an Update) to pick it up.
+
+**Install it on the repos sessions may use:** on the app's page, **Install App**, pick your
+account, choose **Only select repositories**, pick them, and **Install**. To change them later:
+**Settings → Applications → Installed GitHub Apps → Configure**. Connections lists the repos it
+reaches.
+
+**Sign in from Connections,** on any device: **Sign in to GitHub** shows a code; **Copy, open
+GitHub** copies it and opens github.com/login/device to enter it, and the page carries on by itself
+once you've said yes. **Switch** signs in as another account (the one signed in stays until the new
+sign-in finishes), and **Sign out** forgets the sign-in on the worker. To withdraw it on GitHub's
+side too: **Settings → Applications → Authorized GitHub Apps → Revoke**.
+
+**Where it's kept:** in the data folder's `github` folder: `sign-in.json` (the token, refreshed
+before it runs out every eight hours, and forgotten if GitHub stops accepting it, after six months
+unused) and `gh/`, the `gh` config folder code sessions use. A session's `git` and `gh` get
+it there, through the environment their commands run in; it never reaches the browser, a
+session's events, the context folder or a model. A fresh start keeps it.
 
 ## Getting things back
 
@@ -231,7 +348,7 @@ new one can't take an archived one's folder name.
 
 **Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
 context and every session, so Courtyard starts as on its first run. Your password, your devices'
-logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothing is lost:
+logins and the Claude, Codex and GitHub sign-ins stay. There's no Undo button, but nothing is lost:
 
 - **The context folder** is cleared as one change titled "Fresh start", so its history (and your
   backup) still has every file. To bring it all back, run this in the context folder, while no turn

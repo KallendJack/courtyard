@@ -18,7 +18,7 @@ import {
 } from "./providers/codex.ts";
 import type { TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
-import { asOwner, followSession, postJson, testWorker } from "./testing.ts";
+import { asOwner, errorOf, followSession, postJson, testWorker } from "./testing.ts";
 
 const dataDir = resolve("/path/to/data");
 const folder = resolve("/path/to/context/garage-gym");
@@ -312,6 +312,7 @@ const runTurn = async (
     model: ModelId.parse("gpt-6.1-sol"),
     effort: undefined,
     folder,
+    code: null,
     framing: {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
@@ -1542,23 +1543,28 @@ describe("Courtyard's tools on a Codex turn, after the review", () => {
     expect(textOf(answers[0])).toContain("notes/rack.md:1: The rack goes against the back wall.");
   });
 
-  it("offers a code workspace the save tool for How to answer me only, as Claude's", async () => {
+  it("isn't used in a code workspace, since it doesn't code yet (ADR 0007)", async () => {
     await writeFile(
       join(workspace, "workspace.json"),
       '{ "mode": "code", "repoPath": "/path/to/repo" }',
     );
+    const codex = standIn({ turn: async (turn) => turn.complete("completed") });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
 
-    const { answers, codex } = await turnCalling([
-      { tool: "save_to_context", args: { action: "add", section: "facts", text: "Has a rack." } },
-    ]);
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where should the rack go?",
+      model: { provider: "codex", model: "gpt-6.1-sol" },
+    });
 
-    const offered = z
-      .object({ dynamicTools: z.array(z.object({ name: z.string(), description: z.string() })) })
-      .parse(codex.requests("thread/start")[0]?.params).dynamicTools;
-    expect(offered.find((tool) => tool.name === "save_to_context")?.description).toMatch(
-      /to How to answer me in the owner context/,
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toBe(
+      "Codex can't code, so it can't work in a code workspace. Pick a model that can.",
     );
-    expect(textOf(answers[0])).toMatch(/In a code workspace you can save only to How to answer me/);
+    expect(codex.requests("thread/start")).toEqual([]);
   });
 });
 

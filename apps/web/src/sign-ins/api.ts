@@ -1,4 +1,4 @@
-import { type ProviderId, ProviderSignIn, SignInList } from "@courtyard/contract";
+import { GitHubConnection, type ProviderId, ProviderSignIn, SignInList } from "@courtyard/contract";
 import { z } from "zod";
 import { fromWorker, sendJson } from "../worker.ts";
 
@@ -22,3 +22,14 @@ export const changeSignIn = (provider: ProviderId, change: "cancel" | "sign-out"
     body: {},
     schema: z.unknown(),
   });
+
+/** Where Courtyard's own GitHub sign-in stands (#99). */
+export const loadGitHub = () => fromWorker("/github", GitHubConnection);
+
+/** Signs in to GitHub, or switches account: the sign-in, now waiting, with the link and code. */
+export const startGitHubSignIn = () =>
+  sendJson({ path: "/github/sign-in", body: {}, schema: GitHubConnection });
+
+/** Gives up a GitHub sign-in in progress, or signs out. */
+export const changeGitHub = (change: "cancel" | "sign-out") =>
+  sendJson({ path: `/github/${change}`, body: {}, schema: z.unknown() });

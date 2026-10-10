@@ -1,9 +1,16 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
-import { asOwner, followSession, startSession, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  codeRepo,
+  codeWorkspace,
+  followSession,
+  startSession,
+  testWorker,
+} from "./testing.ts";
 
 // Web search (ADR 0019): what a turn searched and read, and its sources, kept in the event log.
 
@@ -73,10 +80,8 @@ describe("a turn that searches the web", () => {
   });
 
   it("searches nothing in a code workspace", async () => {
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+    const { repo } = await codeRepo(root);
+    await codeWorkspace(root, "garage-gym", repo);
     const request = await asOwner(
       testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
     );

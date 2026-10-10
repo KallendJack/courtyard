@@ -4,11 +4,17 @@
 
 /*
  * The rich blocks' and Things' classes go in their own stylesheets, off the first load
- * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses.
+ * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses,
+ * of the approval card (approval-card.css), which only a session page shows, of a pull request's
+ * review (review.css), and of the shared pieces only those use.
  */
 @source not "./rich-blocks";
 @source not "./things";
+@source not "./review";
 @source not "./components/sort-button.tsx";
+@source not "./components/approval-card.tsx";
+@source not "./components/thumb-button.tsx";
+@source not "./components/file-tree.tsx";
 
 /*
  * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components
@@ -69,6 +75,10 @@
   --radius-md: 10px;
   --radius-bubble: 14px; /* the owner's message */
   --radius-lg: 16px;
+  /* Handheld (#169): a row in a card's list, a card and its thumb buttons, and an approval card. */
+  --radius-row: 12px;
+  --radius-card: 18px;
+  --radius-ask: 24px;
 
   --container-reading: 680px;
 }

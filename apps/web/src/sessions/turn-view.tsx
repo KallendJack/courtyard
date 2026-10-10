@@ -1,13 +1,15 @@
 import {
   type Activity,
+  CODE_SESSIONS_AT_ONCE,
   type FailureReason,
   type ProviderList,
   type SessionId,
   skillTitle,
   type WorkspaceId,
 } from "@courtyard/contract";
-import { ArrowRightLeft } from "lucide-react";
-import { memo, useState } from "react";
+import { ArrowRightLeft, X } from "lucide-react";
+import { memo, type ReactNode, useState } from "react";
+import { ApprovalCard } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
@@ -15,11 +17,13 @@ import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
+import { classes } from "@/lib/classes";
+import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
-import { attachmentUrl } from "./messages.ts";
+import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
 import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
@@ -38,6 +42,12 @@ const describeActivity = (activity: Activity) => {
       return `Searched the web for “${activity.query}”`;
     case "page-read":
       return `Read ${activity.site}`;
+    case "edited-file":
+      return `Edited ${activity.path}`;
+    case "ran-command":
+      return `Ran ${activity.command}`;
+    case "check-failed":
+      return `Check ${activity.name} failed`;
   }
 };
 
@@ -55,6 +65,11 @@ export const describeFailure = (reason: FailureReason) => {
       return reason.message;
   }
 };
+
+/** A line about where a turn stands, under the owner's message: waiting, or stopped. */
+function TurnNote(props: { children: ReactNode }) {
+  return <p className="border-l-2 pl-3 text-sm text-muted-foreground">{props.children}</p>;
+}
 
 /**
  * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
@@ -165,19 +180,34 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      <OwnerMessage sessionId={sessionId} turn={turn} />
+      {/* A turn the worker started for a failed check opens with the check, in its activity. */}
+      {!turn.fixesChecks && <OwnerMessage sessionId={sessionId} turn={turn} />}
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
           className="space-y-0.5 text-xs wrap-anywhere text-muted-foreground"
         >
           {turn.activities.map((activity, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
-            <li key={index}>{describeActivity(activity)}</li>
+            <li
+              // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
+              key={index}
+              className={classes(
+                activity.kind === "check-failed" && "flex items-center gap-1 text-destructive-text",
+              )}
+            >
+              {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
+              {describeActivity(activity)}
+            </li>
           ))}
         </ul>
       )}
-      {(turn.answer !== "" || turn.state.kind === "running") && (
+      {turn.queued && turn.state.kind === "running" && (
+        <TurnNote>
+          Waiting: {CODE_SESSIONS_AT_ONCE} code sessions are running already. This starts as soon as
+          one of them ends.
+        </TurnNote>
+      )}
+      {(turn.answer !== "" || (turn.state.kind === "running" && !turn.queued)) && (
         // Busy while it streams, so a screen reader reads the answer once, when it's whole.
         <div aria-live="polite" aria-busy={turn.state.kind === "running"}>
           <Answer
@@ -192,6 +222,21 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.approval !== undefined && turn.state.kind === "running" && (
+        <ApprovalCard
+          ask={turn.approval.ask}
+          why={turn.approval.why}
+          onAnswer={async (answer) => {
+            if (turn.approval === undefined) return undefined;
+            const answered = await answerApproval({
+              sessionId,
+              approval: turn.approval.seq,
+              answer,
+            });
+            return answered.kind === "loaded" ? undefined : describeProblem(answered).body;
+          }}
+        />
       )}
       {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
       {turn.answer !== "" && turn.state.kind !== "running" && (
@@ -241,9 +286,7 @@ export const TurnView = memo(function TurnView(props: {
       {onReply && turn.state.kind === "done" && turn.replies.length > 0 && (
         <SuggestedReplies replies={turn.replies} onPick={(reply) => onReply(turn, reply)} />
       )}
-      {turn.state.kind === "stopped" && (
-        <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>
-      )}
+      {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
       {turn.state.kind === "failed" && turn.state.reason.kind === "rate-limited" && (
         <LimitNotice
           turn={turn}

@@ -1,6 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import type { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
@@ -187,6 +198,27 @@ export const removeFile = async (path: string) => {
   }
 };
 
+/** A new empty folder of its own in the machine's temporary folder, its name starting `prefix`. */
+export const makeTemporaryFolder = async (
+  prefix: string,
+): Promise<Result<string, "unwritable">> => {
+  try {
+    return ok(await mkdtemp(join(tmpdir(), prefix)));
+  } catch {
+    return err("unwritable");
+  }
+};
+
+/** Removes a folder and everything in it, if it's there: whether it's gone. */
+export const removeFolder = async (path: string) => {
+  try {
+    await rm(path, { recursive: true, force: true, maxRetries: 5 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Writes a text file, making its folder first if it isn't there yet (see `writeTextFile`): whether
  * it was written.
@@ -201,36 +233,48 @@ export const writeTextFileIn = async (path: string, text: string) => {
 };
 
 /**
- * Writes a file's bytes, readable only by the worker's user, through a temporary file beside it so
- * a crash mid-write never leaves half a file.
+ * Writes a file's bytes through a temporary file beside it (see `writeBytes`); `exclusive`, only
+ * if no file is there yet, in one atomic step, since a hard link fails if its target exists.
  */
-export const writeBytes = async (
-  path: string,
-  bytes: Uint8Array,
-): Promise<Result<null, "unwritable">> => {
+const writeBytesThrough = async (path: string, bytes: Uint8Array, exclusive: boolean) => {
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, bytes, { mode: 0o600 });
-    await move(temporary, path);
-    return ok(null);
+    if (exclusive) await link(temporary, path);
+    else await move(temporary, path);
+    return true;
   } catch {
-    return err("unwritable");
+    return false;
   } finally {
     await rm(temporary, { force: true }).catch(() => undefined);
   }
 };
 
 /**
- * Writes a file's bytes, making its folder first if it isn't there yet (see `writeBytes`): whether
- * it was written.
+ * Writes a file's bytes, readable only by the worker's user, through a temporary file beside it so
+ * a crash mid-write never leaves half a file.
  */
-export const writeBytesIn = async (path: string, bytes: Uint8Array) => {
+export const writeBytes = async (
+  path: string,
+  bytes: Uint8Array,
+): Promise<Result<null, "unwritable">> =>
+  (await writeBytesThrough(path, bytes, false)) ? ok(null) : err("unwritable");
+
+/**
+ * Writes a file's bytes, making its folder first if it isn't there yet (see `writeBytes`): whether
+ * it was written. With `exclusive`, never over a file that's already there.
+ */
+export const writeBytesIn = async (
+  path: string,
+  bytes: Uint8Array,
+  options: { exclusive?: boolean } = {},
+) => {
   try {
     await mkdir(dirname(path), { recursive: true });
   } catch {
     return false;
   }
-  return (await writeBytes(path, bytes)).ok;
+  return writeBytesThrough(path, bytes, options.exclusive ?? false);
 };
 
 /**

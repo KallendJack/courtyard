@@ -139,11 +139,67 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), and Undo
   of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
   (`POST /api/sessions/:id/things/:save/undo`).
+- **`code/`:** code sessions' git and what they may do
+  ([ADR 0007](adr/0007-code-sessions-work-on-a-session-branch-in-its-own-worktree.md)). Starts a session's session
+  branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
+  for GitHub), freshly fetched, in its own worktree in the data folder, so the owner's checkout is never touched; or
+  says why it can't (the repository missing, not git, or its remote unreachable). Decides each edit (inside the
+  worktree once symlinks are followed; a file that decides what allowed commands run, such as a `package.json`, git
+  hooks, `.claude` or git's own `.git`, needs an approval) and each command: `allowlist.ts` is the
+  command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
+  command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
+  refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
+  allowlist is the package scripts, git and gh commands that only look, adding and committing, pushing the session
+  branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
+  PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
+  A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
+  read by `workspaces/`, built by `allowlistFor`). `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
+  worker's say on every edit and command, which records each one allowed as an activity and words each refusal
+  through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
+  module's own fetch from the remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
+  turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
+  this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
+  three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
+  (the repository named by its remote's address) and clears a session's worktree and branch away, and, once its PR
+  is merged or closed, the branch it pushed to GitHub (only a `courtyard/…` one).
+- **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
+  every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
+  as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
+  strip shows. Checks failing on a commit not yet asked about start a turn on the model the owner last used, once
+  the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
+  checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
+  no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
+  added and removed, files changed, #160), which the strip shows too.
+- **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
+  asked of GitHub through `code/` and `github/` each time: its checks by name, the files it changes with their
+  diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
+  base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
+  ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
+  commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or
+  closed on GitHub does.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
+- **`github/`:** the only place that knows GitHub (#99). Courtyard signs in through a GitHub App the owner registered
+  and installed on the repos they chose: a device code from Connections, then the token kept in the data folder,
+  refreshed by a repeating job before it runs out, and forgotten when GitHub stops taking it. GitHub itself is a
+  dependency passed in (`api.ts`, the one real one; `fake.ts` holds it in memory for the tests and the browser
+  tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
+  Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
+  HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
+  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
+  latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
+  merges and closes it (#160). Its routes are
+  `/api/github` and its `sign-in`, `cancel` and `sign-out`.
+- **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
+  (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
+  out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
+  for and each turn's end (its `notify` option); an approval, a finished turn and a failed one each send one
+  notification, carrying only the session's title, what it needs and the session's id. The sender is a dependency
+  passed in (`web-push.ts`, the one real one, through the `web-push` package; `fake.ts` keeps what was sent for the
+  tests and the browser tests). Its routes are `/api/notifications` (the public key) and its `on` and `off`.
 
 **Running Courtyard**
 
@@ -221,19 +277,31 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
-  - **`sign-ins/`:** the home page's sign-in box and Models list.
+  - **`review/`:** a code session's pull request, reviewed on its page in place of the conversation (`?view=review`,
+    #160): check pills, the changed files as a tree (`components/file-tree.tsx`), the chosen file's diff
+    (`diff.tsx`, long lines wrapping so it reads on a phone), and Close PR (confirmed) and Merge (greyed out with
+    its reason) as thumb buttons (`components/thumb-button.tsx`, shared with the approval card). Its own lazy load,
+    with its calls (`api.ts`) and a stylesheet of its own (`review.css`), like `things/`.
+  - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
+    account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
+    load wherever they show.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
+  - **`notifications/`:** the home page's notifications toggle for this device, beside Connections (#173): it
+    subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
+    opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
   heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
-- Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
+- Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
+  session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
+  and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
   keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
   the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
@@ -259,7 +327,8 @@ the web app parses every answer with these schemas.
 
 ### Outside the apps
 
-- **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers;
+- **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers
+  and the fake GitHub;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
 - **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
@@ -324,6 +393,18 @@ Where the rest fits:
   page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each search
   and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
   (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
+- **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
+  session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
+  `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
+  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
+  as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
+  file that decides what allowed commands run (an approval of its own kind, `setup`), is an
+  approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
+  limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
+  `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a
+  denial tells the model why. With three code sessions' turns running, a fourth records `turn-queued` and waits, `turn-dequeued`
+  once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
+  before it starts clears its branch and worktree away.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).
@@ -346,6 +427,11 @@ Where the rest fits:
   first or Get to know named it.
 - **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
   running is recorded as interrupted, so the session can carry on.
+- **Notifications.** Once an `approval-requested`, `turn-completed` or `turn-failed` is recorded, `sessions/` tells
+  `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
+  interrupted one found by the next worker, send none). A code turn's end waits for its PR to be followed, so one
+  ending with the PR's checks still failing says "Checks still failing: e2e", not "Turn finished" (story 31). The
+  service worker shows it and opens the session on a tap.
 
 ## Where things live
 
@@ -373,11 +459,18 @@ things live only in the worker's memory and go when it restarts.
 
 **The data folder** (`COURTYARD_DATA_DIR`):
 
-- `sessions/<session>/`: `session.json` (title and times), `events.jsonl` (the event log) and `attachments/`: each
-  photo or PDF the owner attached, by its id, and each PDF's text beside it.
+- `sessions/<session>/`: `session.json` (title and times, and a code session's branch), `events.jsonl` (the event
+  log) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
+- `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
+  (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
+  a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172).
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
+- `github/`: Courtyard's GitHub sign-in (`sign-in.json`) and the `gh` config folder code sessions use (`gh/`),
+  holding the token while signed in and a stand-in that works nowhere otherwise (#99).
+- `notifications/`: the worker's push keys (`keys.json`) and each device's push subscription, by its device login
+  (`devices.json`) (#173).
 - `codex/`: the Codex home, holding Codex's sign-in
   ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
   `sign-ins.json`: the providers the owner said Not now to.
@@ -392,7 +485,7 @@ things live only in the worker's memory and go when it restarts.
 
 **A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
 moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
-device logins, the sign-ins (the Codex home and Not now) and the usage limits. The README says how to bring things
+device logins, the sign-ins (the Codex home, Not now and GitHub's) and the usage limits. The README says how to bring things
 back.
 
 ## The rules that hold it together
@@ -408,8 +501,8 @@ Each one is written down once, where the link goes.
   [ADR 0003](adr/0003-claude-through-the-agent-sdk-with-the-owners-login-isolated-per-workspace.md)).
 - **Errors are values:** module interfaces return `Result` (`result.ts`); throwing is for bugs (AGENTS.md,
   TypeScript).
-- **Dependencies passed in:** the clock, the providers, the update command and the repeating jobs are options to
-  `createWorker`, so tests control them (AGENTS.md, Where code goes).
+- **Dependencies passed in:** the clock, the providers, GitHub, the notification sender, the update command and the
+  repeating jobs are options to `createWorker`, so tests control them (AGENTS.md, Where code goes).
 - **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
 - **The first-load budget:** the build fails if what the home page needs first grows past its budget
@@ -450,14 +543,18 @@ Everything Courtyard's models read is built in one place, from written rules, an
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
     machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
     message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
-    and `WebFetch`, confined as ADR 0019 says.
+    and `WebFetch`, confined as ADR 0019 says. In a code session it works in the session branch's worktree with
+    `Edit`, `Write` and `Bash` as well, and loads the repository's own project settings (its `CLAUDE.md` or
+    `AGENTS.md`) and only the repository's own skills, still none of the machine's setup
+    ([ADR 0022](adr/0022-code-sessions-follow-the-repositorys-own-claude-code-setup.md)).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
     [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
-    says which attachments it was given ("please look").
+    says which attachments it was given ("please look"). In a code session it edits a file ("edit file …") and runs
+    a command ("run command: …") when the worker allows, and says why when it doesn't; Fake two doesn't code.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
   never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).

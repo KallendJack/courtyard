@@ -4,7 +4,7 @@
 // The worker runs as a live copy whose main has moved on, with a stand-in for the update script.
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
 
@@ -100,7 +100,40 @@ const standInUpdate = () => {
   }, 1500);
 };
 
+// A code workspace, Side project, on a repository of its own whose remote stands in for GitHub
+// (#170): each session there gets a branch of its own from the remote's main.
+const codeDir = resolve(dataDir, "..", "code");
+rmSync(codeDir, { recursive: true, force: true });
+mkdirSync(codeDir, { recursive: true });
+git(codeDir, "init", "-q", "--bare", "-b", "main", "origin.git");
+git(codeDir, "clone", "-q", "origin.git", "repo");
+const repo = join(codeDir, "repo");
+// Its remote is named by its address on GitHub, as a real clone's is (#172), while git reaches
+// origin.git on disk in its place.
+const onGitHub = "https://github.com/octo-owner/side-project.git";
+const origin = join(codeDir, "origin.git");
+git(repo, "remote", "set-url", "origin", onGitHub);
+git(repo, "config", `url.${origin.replaceAll("\\", "/")}.insteadOf`, onGitHub);
+git(repo, "config", "user.name", "Test");
+git(repo, "config", "user.email", "test@example.com");
+writeFileSync(join(repo, "README.md"), "# Side project\n");
+git(repo, "add", ".");
+git(repo, "commit", "-qm", "Start");
+git(repo, "push", "-q", "origin", "main");
+mkdirSync(join(contextDir, "side-project"), { recursive: true });
+writeFileSync(
+  join(contextDir, "side-project", "workspace.json"),
+  JSON.stringify({ name: "Side project", mode: "code", repoPath: repo }),
+);
+
 const { startWorker } = await import("../apps/worker/src/start.ts");
+// GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
+// pushed to origin.git gets a pull request (#172), changing the files the branch changes (#160).
+// Its checks are on each commit pushed: verify passes, and e2e fails, unless the commit's subject
+// says "[e2e running]" or "[e2e passes]".
+const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
+// A push service in memory (#173), so a device turned on in a test is never sent to for real.
+const { createFakePush } = await import("../apps/worker/src/notifications/fake.ts");
 // A context backup that isn't there, so the home page says the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
@@ -108,4 +141,22 @@ rmSync(missingBackup, { recursive: true, force: true });
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
   startUpdate: standInUpdate,
+  github: createFakeGitHub({
+    finishAfterMs: 2000,
+    opensOnPush: {
+      remote: origin,
+      checks: (subject) => [
+        { name: "verify", outcome: "passed" },
+        {
+          name: "e2e",
+          outcome: subject.includes("[e2e running]")
+            ? "running"
+            : subject.includes("[e2e passes]")
+              ? "passed"
+              : "failed",
+        },
+      ],
+    },
+  }).api,
+  sendPush: createFakePush().send,
 });

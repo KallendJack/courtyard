@@ -1,5 +1,7 @@
 import {
+  ApprovalAnswering,
   CarryOnRequest,
+  type CodeSessionList,
   type DocumentChanged,
   FirstMessage,
   GetToKnowRequest,
@@ -7,6 +9,8 @@ import {
   NewMessage,
   type Overflow,
   type ProviderList,
+  PullRequestMerging,
+  type PullRequestReview,
   SaveAsDocument,
   SaveEdit,
   SessionChange,
@@ -21,7 +25,9 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
+import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
+import { gitHubProblem } from "../github/routes.ts";
 import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -77,6 +83,20 @@ const noOverflow = (overflow: Exclude<Overflow, { kind: "carry-on" }>) => {
     }
     case "none":
       return "There's no other provider to carry on with.";
+  }
+};
+
+/** Why a code session's branch couldn't start (ADR 0007), in the owner's words. */
+const branchRefused = (refusal: BranchRefusal) => {
+  switch (refusal.kind) {
+    case "repo-missing":
+      return `This code workspace's repository isn't there: nothing is at ${refusal.repoPath}. Fix repoPath in its workspace.json.`;
+    case "not-git":
+      return `This code workspace's repository, ${refusal.repoPath}, isn't a git repository. Fix repoPath in its workspace.json.`;
+    case "remote":
+      return `The session branch starts from the repository's default branch on its remote (origin), which couldn't be reached: ${refusal.reason}.`;
+    case "git":
+      return `The session branch couldn't be started: ${refusal.reason}.`;
   }
 };
 
@@ -141,6 +161,37 @@ export const sessionError = (c: Context, error: SessionError) => {
       return documentError(c, error.refusal);
     case "thing-refused":
       return thingError(c, error.refusal);
+    case "cannot-code":
+      return apiError(c, {
+        status: 409,
+        error: `${error.provider} can't code, so it can't work in a code workspace. Pick a model that can.`,
+      });
+    case "branch-refused":
+      return apiError(c, { status: 409, error: branchRefused(error.refusal) });
+    case "approval-not-found":
+      return apiError(c, { status: 404, error: "No such approval in this session." });
+    case "approval-closed":
+      return apiError(c, {
+        status: 409,
+        error: "This approval's turn has ended, so nothing is waiting on it now.",
+      });
+    case "pull-request-ended":
+      return apiError(c, {
+        status: 409,
+        error: `This session's pull request was ${error.state}, so it takes no more messages. Start a new session to carry on.`,
+      });
+    case "no-pull-request":
+      return apiError(c, { status: 404, error: "This session has no pull request yet." });
+    case "pull-request-refused":
+      return apiError(c, { status: 409, error: error.reason });
+    case "github":
+      return error.problem.kind === "not-on-github"
+        ? apiError(c, {
+            status: 409,
+            error:
+              "This code workspace's repository isn't on GitHub, so its pull requests aren't either.",
+          })
+        : gitHubProblem(c, error.problem);
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
@@ -193,7 +244,10 @@ export const sessionRoutes = (options: {
     if (!workspace.ok) return contextError(c, workspace.error);
     const list = await sessions.list(workspace.value.summary.id);
     if (!list.ok) return sessionError(c, list.error);
-    return c.json({ sessions: list.value } satisfies SessionList);
+    return c.json({
+      sessions: list.value,
+      running: sessions.codeRunning(),
+    } satisfies SessionList & CodeSessionList);
   });
 
   /** Starts a session in a workspace with its first message, and answers with the session. */
@@ -382,6 +436,41 @@ export const sessionRoutes = (options: {
     const stopped = await sessions.stop(c.req.param("id"), request.value);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
+  });
+
+  // Allow or Deny on an approval a code session's turn is waiting on (#171).
+  routes.post("/sessions/:id/approvals/:approval", async (c) => {
+    const body = await readBody(c, ApprovalAnswering);
+    if (!body.ok) return apiError(c, { status: 400, error: "Say allow or deny" });
+    const answered = await sessions.answerApproval({
+      rawId: c.req.param("id"),
+      // An event number, as a save's is; anything else names no approval.
+      approval: SaveNumber.parse(c.req.param("approval")),
+      answer: body.value.answer,
+    });
+    if (!answered.ok) return sessionError(c, answered.error);
+    return c.json({ answer: answered.value } satisfies ApprovalAnswering);
+  });
+
+  // Reviewing a code session's pull request (#160): what it changes, then Merge or Close.
+  routes.get("/sessions/:id/pull-request", async (c) => {
+    const review = await sessions.pullRequestReview(c.req.param("id"));
+    if (!review.ok) return sessionError(c, review.error);
+    return c.json(review.value satisfies PullRequestReview);
+  });
+
+  routes.post("/sessions/:id/pull-request/merge", async (c) => {
+    const body = await readBody(c, PullRequestMerging);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const merged = await sessions.mergePullRequest(c.req.param("id"), body.value.head);
+    if (!merged.ok) return sessionError(c, merged.error);
+    return c.body(null, 204);
+  });
+
+  routes.post("/sessions/:id/pull-request/close", async (c) => {
+    const closed = await sessions.closePullRequest(c.req.param("id"));
+    if (!closed.ok) return sessionError(c, closed.error);
+    return c.body(null, 204);
   });
 
   // Save as document (ADR 0020): an answer, as a new document in the session's workspace.
