@@ -13,6 +13,7 @@ import { loadOwnerContext } from "../../worker.ts";
 
 // Loaded once the page shows: the page never waits for it, and it stays off the first load.
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
+const Notifications = lazy(() => import("../../notifications/notifications-card.tsx"));
 
 const loggedIn = getRouteApi("/_app");
 
@@ -82,7 +83,14 @@ function Home() {
         </ul>
       )}
       <Suspense fallback={null}>
-        <SignIns part="list" />
+        <SignIns
+          part="list"
+          beside={
+            <Suspense fallback={null}>
+              <Notifications />
+            </Suspense>
+          }
+        />
       </Suspense>
       <div className="mt-7 flex justify-end">
         <Link
