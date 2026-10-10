@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { classes } from "@/lib/classes";
+import { FrameButton } from "./frame-button.tsx";
 import type { MessageBox } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
 
@@ -212,16 +213,12 @@ export function TalkBar(props: {
 
   return (
     <>
-      <button
+      <FrameButton
         ref={cancelKey}
-        type="button"
+        look={wide ? "wideKey" : "key"}
+        lit={overCancel}
         disabled={box === undefined}
         onClick={listeningNow ? () => stop("drop") : props.type}
-        className={classes(
-          "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-card bg-secondary text-[10px]/3 font-bold tracking-[0.08em] text-muted-foreground uppercase ring-1 ring-input outline-none ring-inset focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40 [&_svg]:text-foreground",
-          wide ? "h-15 w-18 [&_svg]:size-6" : "w-16 [&_svg]:size-5.5",
-          overCancel && "bg-muted text-foreground ring-2 ring-foreground",
-        )}
       >
         {listeningNow ? (
           <>
@@ -234,7 +231,7 @@ export function TalkBar(props: {
             Type
           </>
         )}
-      </button>
+      </FrameButton>
       <button
         type="button"
         disabled={box === undefined}

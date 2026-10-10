@@ -3,6 +3,7 @@ import { Book, Flame, UserRound } from "lucide-react";
 import { useId } from "react";
 import { classes } from "@/lib/classes";
 import { CapsLabel } from "./caps-label.tsx";
+import { FrameButton } from "./frame-button.tsx";
 import { nameOf, usable, whyUnusable } from "./skill-list.tsx";
 
 /**
@@ -43,16 +44,12 @@ export function SheetSkills(props: {
               key={`${skill.source}:${skill.name}`}
               className={classes(index === firstUnusable && index > 0 && "mt-1.5 border-t pt-3")}
             >
-              <button
-                type="button"
+              <FrameButton
+                look="choice"
+                lit={picked}
                 disabled={why !== undefined}
                 aria-pressed={picked}
                 onClick={() => usable(skill) && props.pick(skill.name)}
-                className={classes(
-                  "flex min-h-14.5 w-full items-center gap-3.5 rounded-lg px-3.5 py-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:active:bg-accent [&_svg]:size-5 [&_svg]:shrink-0",
-                  picked ? "bg-accent [&_svg]:text-primary-text" : "[&_svg]:text-foreground/70",
-                  why !== undefined && "[&_svg]:opacity-40",
-                )}
               >
                 <SkillIcon name={skill.name} />
                 <span className="flex min-w-0 flex-1 flex-col">
@@ -73,7 +70,7 @@ export function SheetSkills(props: {
                     {why?.text ?? skill.description}
                   </span>
                 </span>
-              </button>
+              </FrameButton>
             </li>
           );
         })}

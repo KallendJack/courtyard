@@ -16,6 +16,7 @@ import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../live-update.tsx";
 import { Button } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
+import { FrameButton } from "./frame-button.tsx";
 import type { Layout, MessageBox } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
@@ -152,18 +153,14 @@ export default function HandheldFrame(props: {
     </Link>
   );
   const settings = (
-    <button
-      type="button"
+    <FrameButton
+      look={tablet ? "round" : "square"}
       aria-label="Settings"
       aria-haspopup="dialog"
       onClick={() => setSheet("settings")}
-      className={classes(
-        "flex shrink-0 items-center justify-center bg-muted/60 text-foreground/70 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-5",
-        tablet ? "size-12 rounded-full" : "size-13 rounded-lg",
-      )}
     >
       <Settings aria-hidden strokeWidth={1.7} />
-    </button>
+    </FrameButton>
   );
   const actions = (
     <>
@@ -373,40 +370,18 @@ function QuickAction({
 }) {
   const name = value === undefined ? label : `${label}: ${value}`;
   return look === "disc" ? (
-    <button
-      type="button"
+    <FrameButton
+      look="disc"
+      lit={lit}
+      caption={label}
       aria-label={name}
       aria-haspopup="dialog"
-      className="group flex flex-col items-center gap-1.5 outline-none disabled:opacity-40"
       {...props}
     >
-      <span
-        className={classes(
-          "flex size-15 items-center justify-center rounded-full text-[15px]/[18px] font-extrabold group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5",
-          lit
-            ? "bg-primary text-primary-foreground shadow-[0_0_0_5px_color-mix(in_oklab,var(--color-primary)_20%,transparent),0_0_24px_color-mix(in_oklab,var(--color-primary)_50%,transparent)]"
-            : "bg-secondary text-foreground ring-1 ring-input ring-inset",
-        )}
-      >
-        {children}
-      </span>
-      <span
-        className={classes(
-          "text-[11px]/3.5 font-bold tracking-[0.06em] uppercase",
-          lit ? "text-foreground" : "text-placeholder",
-        )}
-      >
-        {label}
-      </span>
-    </button>
+      {children}
+    </FrameButton>
   ) : (
-    <button
-      type="button"
-      aria-label={name}
-      aria-haspopup="dialog"
-      className="flex h-12 min-w-0 flex-1 basis-0 items-center justify-center gap-2 rounded-lg bg-secondary px-2 text-xs/4 font-bold text-foreground/85 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40 [&_svg]:size-4.5 [&_svg]:shrink-0"
-      {...props}
-    >
+    <FrameButton look="row" aria-label={name} aria-haspopup="dialog" {...props}>
       {value === undefined ? (
         <>
           {children}
@@ -415,6 +390,6 @@ function QuickAction({
       ) : (
         <span className="truncate font-extrabold">{children}</span>
       )}
-    </button>
+    </FrameButton>
   );
 }

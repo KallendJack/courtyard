@@ -10,6 +10,7 @@
 @source "./talk-strip.tsx";
 @source "./handheld-sheet.tsx";
 @source "./sheet-choices.tsx";
+@source "./frame-button.tsx";
 
 :where([data-handheld]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

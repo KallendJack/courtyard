@@ -25,6 +25,7 @@
 @source not "./components/talk-strip.tsx";
 @source not "./components/handheld-sheet.tsx";
 @source not "./components/sheet-choices.tsx";
+@source not "./components/frame-button.tsx";
 
 /*
  * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components
