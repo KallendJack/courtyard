@@ -52,9 +52,18 @@ export function PhotoViewer(props: {
         if (from === undefined || Math.abs(event.clientX - from) < SWIPE_PX) return;
         step(event.clientX < from ? 1 : -1);
       }}
+      onPointerCancel={() => {
+        swipeFrom.current = undefined;
+      }}
       className="m-0 h-dvh max-h-none w-full max-w-none"
-      // Dark in both modes, so a photo stands out; set here, as only this page needs it.
-      style={{ backgroundColor: "var(--viewer)", color: "var(--viewer-foreground)" }}
+      style={{
+        // Dark in both modes, so a photo stands out; set here, as only this page needs it.
+        backgroundColor: "var(--viewer)",
+        color: "var(--viewer-foreground)",
+        // A finger dragged sideways is the viewer's, not the browser's to pan with: otherwise the
+        // browser takes the touch, cancels the pointer, and the swipe never ends here.
+        touchAction: "pan-y pinch-zoom",
+      }}
     >
       {photo && showing !== undefined && (
         <div className="relative flex h-full flex-col">

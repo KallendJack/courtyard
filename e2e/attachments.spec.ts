@@ -216,3 +216,50 @@ test.describe("on a phone", () => {
     );
   });
 });
+
+// A phone, and a foldable opened out, where the same viewer fills a much wider screen.
+for (const screen of [
+  { name: "a phone", viewport: { width: 390, height: 844 } },
+  { name: "an unfolded foldable", viewport: { width: 884, height: 1104 } },
+])
+  test.describe(`on the touch screen of ${screen.name}`, () => {
+    test.use({ viewport: screen.viewport, hasTouch: true, isMobile: true });
+
+    test("a finger swiped across a photo shows the next one, and back", async ({ page }) => {
+      // A touch screen has the Handheld frame: photos from its Photo button, the box from Type.
+      await page.goto("/workspaces/garage-gym");
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: "Photo", exact: true }).click();
+      await (await chooser).setFiles([photo("garage.png"), photo("hooks.png")]);
+      await page.getByRole("button", { name: "Type" }).click();
+      await page.getByLabel("Message").fill("please look");
+      await page.getByRole("button", { name: "Start" }).click();
+      const session = page.getByRole("list", { name: "Session" });
+      await session.getByRole("button", { name: "View garage.jpg" }).click();
+      await expect(page.getByRole("dialog", { name: "garage.jpg" })).toContainText("1 of 2");
+
+      // A real finger: the browser sees it as a touch it could scroll with, not as a mouse.
+      const swipe = async (fromX: number, toX: number) => {
+        const touch = await page.context().newCDPSession(page);
+        const y = 420;
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: fromX, y }],
+        });
+        for (let step = 1; step <= 6; step++) {
+          const x = fromX + ((toX - fromX) * step) / 6;
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x, y }],
+          });
+        }
+        await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await touch.detach();
+      };
+
+      await swipe(300, 80);
+      await expect(page.getByRole("dialog", { name: "hooks.jpg" })).toContainText("2 of 2");
+      await swipe(80, 300);
+      await expect(page.getByRole("dialog", { name: "garage.jpg" })).toContainText("1 of 2");
+    });
+  });
