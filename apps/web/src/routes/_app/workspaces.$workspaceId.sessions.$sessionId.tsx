@@ -8,7 +8,7 @@ import {
 } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/back-link";
 import { BranchStrip } from "@/components/branch-strip";
 import { IconButton } from "@/components/button";
@@ -34,7 +34,12 @@ import {
   stopTurn,
 } from "../../worker.ts";
 
+// A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
+const Review = lazy(() => import("../../review/review.tsx"));
+
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
+  validateSearch: (search: Record<string, unknown>): { view?: "review" } =>
+    search.view === "review" ? { view: "review" } : {},
   loader: async ({ params }) => {
     const workspaceId = WorkspaceId.safeParse(params.workspaceId);
     const [session, providers, skills] = await Promise.all([
@@ -102,6 +107,16 @@ function Session(props: {
   const [tidying, setTidying] = useState<"rename" | "delete">();
   const router = useRouter();
   const navigate = useNavigate();
+  /** Its pull request's review shows in place of the conversation (#160). */
+  const reviewing = Route.useSearch().view === "review" && session.branch !== undefined;
+  const toConversation = useCallback(
+    () =>
+      navigate({
+        to: "/workspaces/$workspaceId/sessions/$sessionId",
+        params: { workspaceId: session.workspaceId, sessionId: session.id },
+      }),
+    [navigate, session.workspaceId, session.id],
+  );
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
   /** The latest answer offers suggested replies, so the message box says one's own is welcome too (#154). */
@@ -111,9 +126,12 @@ function Session(props: {
   const send = useCallback(
     async (message: NewMessage, files: readonly File[]) => {
       const sent = await sendMessage({ sessionId: session.id, message, files });
-      return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
+      if (sent.kind !== "loaded") return describeProblem(sent).body;
+      // Changes asked for from the review: the session's answer is in the conversation.
+      if (reviewing) await toConversation();
+      return undefined;
     },
-    [session.id],
+    [session.id, reviewing, toConversation],
   );
   const runningTurn = running ? last?.seq : undefined;
   const stop = useCallback(async () => {
@@ -191,7 +209,11 @@ function Session(props: {
     void router.invalidate();
   }, [modelTitle, session.title, router]);
 
-  const above = <BackLink workspaceId={session.workspaceId} />;
+  const above = reviewing ? (
+    <BackLink workspaceId={session.workspaceId} within="Session" session={session.id} />
+  ) : (
+    <BackLink workspaceId={session.workspaceId} />
+  );
   const toggle = (what: "rename" | "delete") =>
     setTidying((was) => (was === what ? undefined : what));
 
@@ -219,31 +241,36 @@ function Session(props: {
         <PageTitle
           above={above}
           actions={
-            <>
-              <IconButton
-                label="Rename session"
-                icon={<Pencil />}
-                onClick={() => toggle("rename")}
-              />
-              <IconButton
-                label="Delete session"
-                icon={<Trash2 />}
-                expanded={tidying === "delete"}
-                look={tidying === "delete" ? "pressed" : "quiet"}
-                onClick={() => toggle("delete")}
-              />
-            </>
+            !reviewing && (
+              <>
+                <IconButton
+                  label="Rename session"
+                  icon={<Pencil />}
+                  onClick={() => toggle("rename")}
+                />
+                <IconButton
+                  label="Delete session"
+                  icon={<Trash2 />}
+                  expanded={tidying === "delete"}
+                  look={tidying === "delete" ? "pressed" : "quiet"}
+                  onClick={() => toggle("delete")}
+                />
+              </>
+            )
           }
         >
-          {session.title}
+          {reviewing && pullRequest !== undefined
+            ? `PR #${pullRequest.number} · ${session.title}`
+            : session.title}
         </PageTitle>
       )}
-      {session.branch !== undefined && (
+      {session.branch !== undefined && !reviewing && (
         <div className="mt-3">
           <BranchStrip
             branch={session.branch}
             pullRequest={pullRequest}
             fixing={running && last?.fixesChecks === true}
+            session={{ workspaceId: session.workspaceId, sessionId: session.id }}
           />
         </div>
       )}
@@ -292,7 +319,11 @@ function Session(props: {
         </div>
       )}
 
-      {problem ? (
+      {reviewing ? (
+        <Suspense>
+          <Review sessionId={session.id} pullRequest={pullRequest} onEnded={toConversation} />
+        </Suspense>
+      ) : problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
         </div>
@@ -324,7 +355,13 @@ function Session(props: {
           }
           {...(running ? { stop } : {})}
           placeholder={
-            running ? "Waiting for the answer…" : suggesting ? "Or type your own reply…" : "Reply…"
+            running
+              ? "Waiting for the answer…"
+              : reviewing
+                ? "Ask for changes…"
+                : suggesting
+                  ? "Or type your own reply…"
+                  : "Reply…"
           }
           compactOnNarrow
           {...(props.skills === undefined ? {} : { skills: props.skills })}

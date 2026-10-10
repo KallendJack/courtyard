@@ -7,6 +7,7 @@
  */
 @reference "../styles.css";
 @source "./approval-card.tsx";
+@source "./thumb-button.tsx";
 
 :where([data-approval-card]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

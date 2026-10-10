@@ -128,7 +128,9 @@ writeFileSync(
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
 // GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
-// pushed to origin.git gets a pull request, whose e2e check fails on every commit (#172).
+// pushed to origin.git gets a pull request (#172), changing the files the branch changes (#160).
+// Its checks are on each commit pushed: verify passes, and e2e fails, unless the commit's subject
+// says "[e2e running]" or "[e2e passes]".
 const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
 // A push service in memory (#173), so a device turned on in a test is never sent to for real.
 const { createFakePush } = await import("../apps/worker/src/notifications/fake.ts");
@@ -141,7 +143,20 @@ startWorker({
   startUpdate: standInUpdate,
   github: createFakeGitHub({
     finishAfterMs: 2000,
-    opensOnPush: { remote: origin, checks: [{ name: "e2e", outcome: "failed" }] },
+    opensOnPush: {
+      remote: origin,
+      checks: (subject) => [
+        { name: "verify", outcome: "passed" },
+        {
+          name: "e2e",
+          outcome: subject.includes("[e2e running]")
+            ? "running"
+            : subject.includes("[e2e passes]")
+              ? "passed"
+              : "failed",
+        },
+      ],
+    },
   }).api,
   sendPush: createFakePush().send,
 });

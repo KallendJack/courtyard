@@ -1,9 +1,9 @@
 import type { ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
 import { useState } from "react";
-import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import css from "./approval-card.css?inline";
 import { FormError } from "./form-error.tsx";
+import { ThumbButton } from "./thumb-button.tsx";
 
 // The card's own stylesheet (approval-card.css), added once, when a session page first loads.
 addStylesheet("approval-card", css);
@@ -24,15 +24,11 @@ const whyLine = (why: string | undefined) => {
   return `${said}${/[.!?]$/.test(said) ? "" : "."} ${deny}`;
 };
 
-/** The Paper boards' thumb-sized buttons (Handheld · 16, 17): Allow wider, on the right. */
-const BUTTON =
-  "flex h-15 basis-0 items-center justify-center rounded-[18px] text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-50";
-
 /**
  * An approval a code session's turn waits on (#171): gold, since it needs the owner, with the
  * exact command (or file), what the model said it's for, and Deny and Allow at the bottom, in
- * thumb reach, one tap each. Its own two buttons are the only ones of their kind. Its classes are
- * in its own stylesheet, off the first load.
+ * thumb reach, one tap each (the shared thumb buttons, Allow wider). Its classes are in its own
+ * stylesheet, off the first load.
  */
 export function ApprovalCard(props: {
   ask: ApprovalAsk;
@@ -71,25 +67,18 @@ export function ApprovalCard(props: {
         <p className="text-xs/[19px] text-muted-foreground">{whyLine(props.why)}</p>
         <FormError message={problem} />
         <div className="mt-3 flex gap-2.5">
-          <button
-            type="button"
-            disabled={sending}
-            onClick={() => void answer("deny")}
-            className={classes(BUTTON, "grow bg-muted font-bold text-foreground hover:bg-muted/70")}
-          >
+          <ThumbButton look="quiet" tall disabled={sending} onClick={() => void answer("deny")}>
             Deny
-          </button>
-          <button
-            type="button"
+          </ThumbButton>
+          <ThumbButton
+            look="main"
+            grow={1.4}
+            tall
             disabled={sending}
             onClick={() => void answer("allow")}
-            className={classes(
-              BUTTON,
-              "grow-[1.4] bg-foreground font-extrabold text-card hover:bg-foreground/85",
-            )}
           >
             Allow
-          </button>
+          </ThumbButton>
         </div>
       </section>
     </div>

@@ -1,4 +1,5 @@
-import type { PullRequest } from "@courtyard/contract";
+import type { PullRequest, SessionId, WorkspaceId } from "@courtyard/contract";
+import { Link } from "@tanstack/react-router";
 import { GitBranch } from "lucide-react";
 import { classes } from "@/lib/classes";
 
@@ -37,14 +38,17 @@ const DOT = {
 
 /**
  * A code session's branch and pull request at a glance (#172), under its title: the session
- * branch, and once it has one, its pull request's number (a link to it on GitHub) and where its
- * checks stand, saying when the session is fixing a failed one. Safe on the first load (ADR 0012).
+ * branch, and once it has one, its pull request's number (which opens its review, #160), where its
+ * checks stand, saying when the session is fixing a failed one, and how much it changes. Safe on
+ * the first load (ADR 0012).
  */
 export function BranchStrip(props: {
   branch: string;
   pullRequest: PullRequest | undefined;
   /** The session is working on a fix for the checks that failed. */
   fixing: boolean;
+  /** The session, whose page shows the pull request's review. */
+  session: { workspaceId: WorkspaceId; sessionId: SessionId };
 }) {
   const { pullRequest } = props;
   const now = pullRequest === undefined ? undefined : standing(pullRequest, props.fixing);
@@ -58,10 +62,10 @@ export function BranchStrip(props: {
         <span className="truncate">{props.branch}</span>
       </span>
       {pullRequest !== undefined && now !== undefined && (
-        <a
-          href={pullRequest.url}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          to="/workspaces/$workspaceId/sessions/$sessionId"
+          params={props.session}
+          search={{ view: "review" }}
           className={classes(CHIP, "hover:bg-muted")}
         >
           <span className="font-extrabold text-foreground">PR #{pullRequest.number}</span>
@@ -74,7 +78,13 @@ export function BranchStrip(props: {
           >
             {now.text}
           </span>
-        </a>
+        </Link>
+      )}
+      {pullRequest !== undefined && pullRequest.changes.files > 0 && (
+        <span className="font-mono text-muted-foreground">
+          +{pullRequest.changes.additions} −{pullRequest.changes.deletions} ·{" "}
+          {pullRequest.changes.files === 1 ? "1 file" : `${pullRequest.changes.files} files`}
+        </span>
       )}
     </section>
   );

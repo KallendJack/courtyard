@@ -1,0 +1,17 @@
+/*
+ * A pull request's review's own classes (#160), with those of the shared pieces only it and the
+ * approval card use. Tailwind puts every class it finds into the first load's stylesheet, even one
+ * only lazily loaded code uses, so styles.css leaves the review out and this stylesheet, loaded
+ * with it, has its classes instead. The theme is by reference: its names, nothing of its own.
+ * They apply only inside the review: coming after the theme's, they'd otherwise outrank its
+ * classes everywhere.
+ */
+@reference "../styles.css";
+@source "./**/*.tsx";
+@source "../components/thumb-button.tsx";
+@source "../components/file-tree.tsx";
+
+:where([data-review]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}
