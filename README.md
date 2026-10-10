@@ -182,6 +182,20 @@ machine:
     "allowlist": { "add": ["cargo test ...", "pnpm lint"], "remove": ["npm ci"] }
   }
   ```
+- **To let its sessions read and draw Paper boards** (Claude only), add Paper to its
+  `workspace.json`: Paper's command on the worker machine and the one Paper file its sessions
+  use, by the id at the end of the file's link in Paper. Sessions read and draw there without
+  asking, ask before deleting anything they didn't make, and show each screenshot they take in
+  the chat. Paper has to be open on the worker machine; when it isn't, the session says so and
+  carries on.
+
+  ```json
+  {
+    "mode": "code",
+    "repoPath": "/path/to/repo",
+    "connections": { "paper": { "command": "/path/to/paper", "fileId": "<file id>" } }
+  }
+  ```
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.
