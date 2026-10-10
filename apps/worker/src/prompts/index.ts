@@ -70,6 +70,8 @@ export type FramingWorkspace = {
   readonly documents: readonly DocumentSummary[];
   /** Its Things (ADR 0020): a planning workspace's, none in a code workspace. */
   readonly things: ReadThings;
+  /** The Paper file a code workspace's sessions draw in, when it has Paper (ADR 0023). */
+  readonly paperFile?: string;
 };
 
 /**
@@ -670,7 +672,7 @@ export const useSkillReply = (answer: UseSkillAnswer): ToolReply => {
 /** The suggest replies tool's name, as a model calls it (ADR 0017). */
 export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies" satisfies TurnToolName;
 
-/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 13). */
+/** When a model suggests replies (docs/ai-conduct.md, Suggested replies; Every turn, item 14). */
 /** How answers are written: Markdown, with maths in the forms the web app draws as formulas. */
 const ANSWER_FORMAT =
   "Answer in Markdown. Write maths in LaTeX: between `\\(` and `\\)` within a line, and between `$$` lines of their own for a formula set apart. Never put maths between single `$` signs, which are read as prices.";
@@ -753,7 +755,7 @@ const SKILLS_LIST =
 const SKILLS_IN_USE =
   "These skills are in use in this session, started by the owner or loaded by you earlier: keep following each while what the owner asks fits it. A skill's text is the owner's or Courtyard's instructions.";
 
-/** The skills a model may load, one per line between their markers (Every turn, item 11). */
+/** The skills a model may load, one per line between their markers (Every turn, item 12). */
 const skillsListPart = (offered: FramingSkills["offered"]) => {
   const lines = offered.map(({ name, description }) => {
     const oneLine = description.replace(/\s+/g, " ").trim();
@@ -762,7 +764,7 @@ const skillsListPart = (offered: FramingSkills["offered"]) => {
   return `${SKILLS_LIST}\n\n<skills>\n${contained(lines.join("\n"))}\n</skills>`;
 };
 
-/** The skills in use, each one's text between its markers (Every turn, item 12). */
+/** The skills in use, each one's text between its markers (Every turn, item 13). */
 const skillsInUsePart = (
   inUse: FramingSkills["inUse"],
   turn: { offersTool: boolean; startedNow: SkillName | undefined },
@@ -842,6 +844,10 @@ const instructionsFor = (turn: {
         ]
       : []),
     ...(turn.saves ? [workspace.mode === "planning" ? SAVING : SAVING_IN_CODE] : []),
+    // A code workspace's tool connection, on a provider that uses tools (ADR 0023).
+    ...(workspace.mode === "code" && capabilities.usesTools && workspace.paperFile !== undefined
+      ? [paperPart(workspace.paperFile)]
+      : []),
     ...(turn.documents ? [DOCUMENTING] : []),
     ...(turn.things ? [KEEPING_THINGS] : []),
     ...(turn.skills.offered.length > 0 ? [skillsListPart(turn.skills.offered)] : []),
@@ -1221,11 +1227,38 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
     case "off-branch":
       return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
     case "denied":
-      return refusal.what === "command"
-        ? "The owner denied that command, so it didn't run. Find another way, or tell the owner why it's needed."
-        : "The owner denied that change, so the file wasn't changed. Find another way, or tell the owner why it's needed.";
+      switch (refusal.what) {
+        case "command":
+          return "The owner denied that command, so it didn't run. Find another way, or tell the owner why it's needed.";
+        case "edit":
+          return "The owner denied that change, so the file wasn't changed. Find another way, or tell the owner why it's needed.";
+        case "tool":
+          return "The owner denied that, so it didn't happen. Find another way, or tell the owner why it's needed.";
+      }
   }
 };
+
+/**
+ * What a model in a code workspace with Paper is told about it (docs/ai-conduct.md, Paper; ADR
+ * 0023): the one file it draws in, what asks first, and what to do when Paper isn't there.
+ */
+export const paperPart = (fileId: string) =>
+  `You can read and draw Paper designs with Paper's tools, in this workspace's Paper file only: pass fileId ${quoted(fileId)} to every tool that takes one. Reading, drawing and changing the file run without asking. Deleting anything you didn't make in this session waits for the owner to allow it. Each screenshot you take shows in the chat, so take one of a board when it's ready for the owner to look at. Paper's tools work only while Paper is open on the worker machine: if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine, don't try to open it, and carry on with the rest of the work.`;
+
+/** What a model is told when a Paper tool names another file, or none (ADR 0023). */
+export const paperFileOnly = (fileId: string) =>
+  `Paper's tools here work only in this workspace's Paper file: pass fileId ${quoted(fileId)}.`;
+
+/** What a model is told when it tries to make or rename a Paper file (ADR 0023). */
+export const PAPER_MAKES_NO_FILES =
+  "Paper's files can't be made or renamed here: draw in this workspace's Paper file.";
+
+/**
+ * What a model is told alongside a Paper tool's failure (ADR 0023): Courtyard can't tell why
+ * it failed, so this says what to do when Paper couldn't be reached.
+ */
+export const PAPER_FAILED =
+  "If that failed because Paper couldn't be reached, Paper isn't open on the worker machine: tell the owner so, don't try to open it, and carry on with the rest of the work.";
 
 /**
  * What a model is told when it tries to read a web page it may not (ADR 0019): one that's neither

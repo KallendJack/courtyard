@@ -50,6 +50,17 @@ export const AllowlistSettings = z.object({
 });
 export type AllowlistSettings = z.infer<typeof AllowlistSettings>;
 
+/**
+ * A code workspace's Paper connection (ADR 0023): Paper's command on the worker machine, which
+ * runs its MCP server with `mcp`, and the one Paper file its sessions use, by its id (the last
+ * part of the file's link in Paper).
+ */
+export const PaperSettings = z.object({
+  command: z.string().trim().min(1),
+  fileId: z.string().trim().min(1),
+});
+export type PaperSettings = z.infer<typeof PaperSettings>;
+
 /** A workspace's optional `workspace.json`. Without one, a workspace is a planning workspace. */
 const WorkspaceConfig = z
   .object({
@@ -59,6 +70,8 @@ const WorkspaceConfig = z
     repoPath: z.string().min(1).optional(),
     /** A code workspace's changes to the default command allowlist, if any. */
     allowlist: AllowlistSettings.optional(),
+    /** A code workspace's tool connections (ADR 0008): for now only Paper (ADR 0023). */
+    connections: z.object({ paper: PaperSettings.optional() }).optional(),
     colour: WorkspaceColour.optional(),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
@@ -75,6 +88,7 @@ type Config =
       readonly colour?: WorkspaceColour;
       readonly repoPath?: string;
       readonly allowlist?: AllowlistSettings;
+      readonly paper?: PaperSettings;
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -89,6 +103,8 @@ export type Workspace = {
   readonly repoPath: string | null;
   /** A code workspace's changes to the default command allowlist: none when its config has none. */
   readonly allowlist: AllowlistSettings;
+  /** A code workspace's Paper connection (ADR 0023), or `null` when its config names none. */
+  readonly paper: PaperSettings | null;
 };
 
 /** A workspace as read from its folder, before its colour is settled. */
@@ -135,7 +151,7 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, colour, repoPath, allowlist } = parsed.data;
+  const { name, mode, colour, repoPath, allowlist, connections } = parsed.data;
   return {
     kind: "read",
     mode,
@@ -143,6 +159,7 @@ const readConfig = async (folder: string): Promise<Config> => {
     ...(colour === undefined ? {} : { colour }),
     ...(repoPath === undefined ? {} : { repoPath }),
     ...(allowlist === undefined ? {} : { allowlist }),
+    ...(connections?.paper === undefined ? {} : { paper: connections.paper }),
   };
 };
 
@@ -178,6 +195,7 @@ const readWorkspace = async (
     contextMarkdown: markdown.value ?? null,
     repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
     allowlist: valid?.allowlist ?? { add: [], remove: [] },
+    paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
   });
 };
 

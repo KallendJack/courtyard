@@ -38,7 +38,9 @@ import {
   attachmentPath,
   attachmentsOf,
   carriedAttachments,
+  imagesShownIn,
   keepAttachments,
+  keepImage,
   type PreparedAttachment,
 } from "../attachments/index.ts";
 import {
@@ -74,6 +76,7 @@ import {
 } from "../files.ts";
 import type { CommandEnv } from "../git.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
+import { paperConnection } from "../paper/index.ts";
 import {
   checksFailedMessage,
   codeRefusalReason,
@@ -129,7 +132,7 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
-import { getWorkspace, isArchived } from "../workspaces/index.ts";
+import { getWorkspace, isArchived, type PaperSettings } from "../workspaces/index.ts";
 
 /** What the owner did to a save from its note. */
 export type NoteAct = "undo" | "edit";
@@ -335,6 +338,12 @@ const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
  * turn starts, and only while it can still be stopped: once the provider has finished, the turn
  * is ending and how it ended is already decided.
  */
+/** What an approval the owner denied was, as its model is told. */
+const deniedWhat = (ask: ApprovalAsk) => {
+  if (ask.kind === "command" || ask.kind === "tool") return ask.kind;
+  return "edit";
+};
+
 type TurnState =
   | { readonly kind: "idle" }
   | {
@@ -358,6 +367,11 @@ type RunningSession = {
   approvals: Map<number, (answer: ApprovalAnswer) => void>;
   /** Resolves once the turn last started here has ended, its end recorded. */
   ended: Promise<void>;
+  /**
+   * The Paper nodes its turns made (ADR 0023), which they may delete without asking. Kept while
+   * the worker runs: after a restart, deleting any of them asks.
+   */
+  paperMade: Set<string>;
 };
 
 /**
@@ -404,6 +418,7 @@ export const createSessions = (options: {
       queue: Promise.resolve(),
       approvals: new Map(),
       ended: Promise.resolve(),
+      paperMade: new Set(),
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -556,6 +571,8 @@ export const createSessions = (options: {
         skills: WorkspaceSkills;
         /** Its command allowlist, for a code session's commands. */
         allowlist: readonly CommandRule[];
+        /** A code workspace's Paper connection (ADR 0023), or null when it has none. */
+        paper: PaperSettings | null;
       },
       string
     >
@@ -587,6 +604,8 @@ export const createSessions = (options: {
       things: things.value,
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
+      paper: workspace.value.paper,
+      ...(workspace.value.paper === null ? {} : { paperFile: workspace.value.paper.fileId }),
     });
   };
 
@@ -840,9 +859,47 @@ export const createSessions = (options: {
           return decide(
             given === "allow"
               ? ok(asking.allowed)
-              : err({ kind: "denied", what: asking.ask.kind === "command" ? "command" : "edit" }),
+              : err({ kind: "denied", what: deniedWhat(asking.ask) }),
           );
         };
+        /**
+         * Shows the owner an image a tool connection gave the model (ADR 0023): kept in the
+         * session's folder, then recorded. One that isn't an image Courtyard shows is left out.
+         */
+        const show = async (shown: {
+          connection: string;
+          of: string;
+          mediaType: string;
+          bytes: Uint8Array;
+        }) => {
+          if (stopper.signal.aborted || recordingLost) return;
+          const kept = await keepImage(folderOf(turn.id), {
+            name: `${shown.connection} screenshot`,
+            mediaType: shown.mediaType,
+            bytes: shown.bytes,
+          });
+          if (!kept.ok) return;
+          const recorded = await append(turn.id, {
+            type: "image-shown",
+            connection: shown.connection,
+            of: shown.of,
+            image: kept.value,
+          });
+          if (!recorded.ok) recordingLost = true;
+        };
+        /** The tool connections the turn offers: a code workspace's Paper (ADR 0023). */
+        const connections =
+          turn.provider.capabilities.usesTools && worktree !== undefined && workspace.value.paper
+            ? [
+                paperConnection({
+                  settings: workspace.value.paper,
+                  made: session.paperMade,
+                  approve: (ask, allowed) => approval({ ask, why: undefined, allowed }),
+                  report,
+                  show: (image) => show({ connection: "Paper", ...image }),
+                }),
+              ]
+            : [];
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
         const codeTurn = (worktree: string, branch: string, env: CommandEnv): CodeTurn => ({
           worktree,
@@ -897,6 +954,7 @@ export const createSessions = (options: {
               worktree === undefined || branch === undefined
                 ? null
                 : codeTurn(worktree, branch, await options.code.commandEnv()),
+            connections,
             framing,
             callTool: (call) => {
               const calling = callTool(call);
@@ -1810,7 +1868,10 @@ export const createSessions = (options: {
       if (!found.ok) return found;
       const events = await readEvents(found.value.id);
       if (!events.ok) return events;
-      const attachment = attachmentsOf(events.value).find(({ id }) => id === rawAttachmentId);
+      // The owner's, or an image a tool connection showed them (ADR 0023).
+      const attachment = [...attachmentsOf(events.value), ...imagesShownIn(events.value)].find(
+        ({ id }) => id === rawAttachmentId,
+      );
       if (attachment === undefined) return err({ kind: "attachment-not-found" });
       const bytes = await readBytes(attachmentPath(folderOf(found.value.id), attachment));
       if (!bytes.ok) return err(STORAGE_ERROR);
