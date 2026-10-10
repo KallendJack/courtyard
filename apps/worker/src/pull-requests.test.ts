@@ -452,6 +452,9 @@ describe("a merged or closed pull request", () => {
       );
       expect(await gitIn(repo, "worktree", "list", "--porcelain")).not.toContain(branch);
       expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
+      // And on GitHub: the session branch it pushed, once only.
+      await runJobs();
+      expect(github.branchesDeleted()).toEqual([{ repo: onGitHub, branch }]);
       // Still readable.
       expect((await request(`/api/sessions/${id}`)).status).toBe(200);
     },

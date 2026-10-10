@@ -410,6 +410,17 @@ export const createGitHub = (options: {
       return closed.ok ? closed : err({ kind: "github", message: closed.error });
     },
 
+    /** Deletes `branch` from `repo`, once its session's pull request was merged or closed. */
+    deleteBranch: async (find: {
+      repo: string;
+      branch: string;
+    }): Promise<Result<null, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const deleted = await signedIn.value.github.deleteBranch(signedIn.value.token, find);
+      return deleted.ok ? deleted : err({ kind: "github", message: deleted.error });
+    },
+
     /** For the worker's repeating jobs: refreshes the sign-in when it's close to running out. */
     keepFresh: async () => {
       if (api !== null) await refreshIfDue(api);

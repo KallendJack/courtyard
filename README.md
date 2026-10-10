@@ -188,8 +188,10 @@ machine:
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.
-- **A finished session's worktree stays** for now, even once the session is deleted. Remove it
-  with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
+- **A session ends when its pull request is merged or closed,** from Courtyard or on GitHub: it
+  stays readable but takes no more messages, and its worktree, its branch and the branch it
+  pushed to GitHub are cleared away (once any turn still running has ended). A session deleted
+  before its first turn started has its worktree and branch cleared away at once.
 
 ### Notifications
 

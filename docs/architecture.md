@@ -158,7 +158,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
   this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
   three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
-  (the repository named by its remote's address) and clears a session's worktree and branch away.
+  (the repository named by its remote's address) and clears a session's worktree and branch away, and, once its PR
+  is merged or closed, the branch it pushed to GitHub (only a `courtyard/…` one).
 - **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
   every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR

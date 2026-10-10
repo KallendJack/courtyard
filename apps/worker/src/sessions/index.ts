@@ -1358,7 +1358,11 @@ export const createSessions = (options: {
         const worktree = options.code.worktreeOf(id);
         const there = await exists(worktree);
         if (there.ok && there.value) {
-          await options.code.clearBranch({ repoPath, sessionBranch: { branch, worktree } });
+          await options.code.clearBranch({
+            repoPath,
+            sessionBranch: { branch, worktree },
+            pushed: true,
+          });
         }
         return;
       }
@@ -1623,7 +1627,7 @@ export const createSessions = (options: {
       };
       const unstarted = async () => {
         if (repoPath !== undefined && sessionBranch !== undefined) {
-          await options.code.clearBranch({ repoPath, sessionBranch });
+          await options.code.clearBranch({ repoPath, sessionBranch, pushed: false });
         }
       };
       try {
@@ -1862,6 +1866,7 @@ export const createSessions = (options: {
           await options.code.clearBranch({
             repoPath,
             sessionBranch: { branch, worktree: options.code.worktreeOf(id) },
+            pushed: false,
           });
         }
         return ok(null);

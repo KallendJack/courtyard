@@ -218,7 +218,7 @@ export const createCode = (options: {
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
   commandEnv: () => CommandEnv;
   /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
-  pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close">;
+  pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close" | "deleteBranch">;
 }) => {
   const { pullRequests } = options;
   /** The repository a code workspace's remote is on GitHub, or why there's none to ask. */
@@ -332,10 +332,15 @@ export const createCode = (options: {
 
     /**
      * Clears a session's worktree and branch away, for a session that never started, or one whose
-     * pull request was merged or closed (#172). Anything
-     * left behind is the repository's to keep, so a failure here is only logged.
+     * pull request was merged or closed (#172): then, `pushed`, its branch on GitHub too (story
+     * 40), only ever one of Courtyard's own (`courtyard/…`). Anything left behind is the
+     * repository's to keep, so a failure here is only logged.
      */
-    clearBranch: async (clear: { repoPath: string; sessionBranch: SessionBranch }) => {
+    clearBranch: async (clear: {
+      repoPath: string;
+      sessionBranch: SessionBranch;
+      pushed: boolean;
+    }) => {
       const { repoPath, sessionBranch } = clear;
       try {
         await git(repoPath, ["worktree", "remove", "--force", sessionBranch.worktree]);
@@ -343,6 +348,12 @@ export const createCode = (options: {
       } catch (error) {
         console.error("A session branch couldn't be cleared away:", gitFailureReason(error));
       }
+      if (!clear.pushed || !sessionBranch.branch.startsWith(BRANCH_PREFIX)) return;
+      const repo = await gitHubRepoOf(repoPath);
+      if (repo === undefined) return;
+      const deleted = await pullRequests.deleteBranch({ repo, branch: sessionBranch.branch });
+      // GitHub may have deleted it already, on merging.
+      if (!deleted.ok) console.error("A session branch on GitHub couldn't be deleted:", deleted.error);
     },
   };
 };

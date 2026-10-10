@@ -89,6 +89,8 @@ export const createFakeGitHub = (
     was?.(how);
   };
 
+  /** Each branch deleted on GitHub, in order. */
+  const deleted: { readonly repo: string; readonly branch: string }[] = [];
   /** Every pull request opened, numbered from 1, with the files it changes (#160). */
   const pulls: (FoundPullRequest & {
     readonly repo: string;
@@ -223,6 +225,16 @@ export const createFakeGitHub = (
       change(number, { state: "closed" });
       return ok(null);
     },
+    deleteBranch: async (accessToken, find) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      deleted.push({ repo: find.repo, branch: find.branch });
+      const onPush = options.opensOnPush;
+      if (onPush !== undefined) {
+        await gitOrNothing(onPush.remote, ["update-ref", "-d", `refs/heads/${find.branch}`]);
+      }
+      return ok(null);
+    },
   };
 
   return {
@@ -252,6 +264,8 @@ export const createFakeGitHub = (
     merge: (number: number) => change(number, { state: "merged" }),
     /** The pull request was closed without merging. */
     close: (number: number) => change(number, { state: "closed" }),
+    /** Each branch Courtyard deleted on GitHub, in order. */
+    branchesDeleted: () => [...deleted],
   };
 };
 

@@ -49,6 +49,11 @@ export type GitHubApi = {
     accessToken: string,
     pull: { readonly repo: string; readonly number: number },
   ) => Promise<Result<null, string>>;
+  /** Deletes `branch` from `repo`, once its session's pull request was merged or closed. */
+  readonly deleteBranch: (
+    accessToken: string,
+    find: { readonly repo: string; readonly branch: string },
+  ) => Promise<Result<null, string>>;
 };
 
 /** A pull request as GitHub has it. */
@@ -460,6 +465,17 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         method: "PATCH",
         body: { state: "closed" },
         fallback: "GitHub couldn't close the pull request.",
+      });
+    },
+
+    deleteBranch: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const ref = find.branch.split("/").map(encodeURIComponent).join("/");
+      return apiChange(accessToken, `/repos/${repo.data}/git/refs/heads/${ref}`, {
+        method: "DELETE",
+        body: {},
+        fallback: "GitHub couldn't delete the branch.",
       });
     },
   };
