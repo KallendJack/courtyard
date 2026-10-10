@@ -226,9 +226,9 @@ export const createWorker = (options: {
       pullRequests: github,
     }),
     now,
-    notify: (session, event) => {
+    notify: (session, event, pullRequest) => {
       notifications
-        .sessionEvent(session, event)
+        .sessionEvent(session, event, pullRequest)
         .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error));
     },
   });

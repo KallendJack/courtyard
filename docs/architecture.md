@@ -426,7 +426,9 @@ Where the rest fits:
   running is recorded as interrupted, so the session can carry on.
 - **Notifications.** Once an `approval-requested`, `turn-completed` or `turn-failed` is recorded, `sessions/` tells
   `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
-  interrupted one found by the next worker, send none). The service worker shows it and opens the session on a tap.
+  interrupted one found by the next worker, send none). A code turn's end waits for its PR to be followed, so one
+  ending with the PR's checks still failing says "Checks still failing: e2e", not "Turn finished" (story 31). The
+  service worker shows it and opens the session on a tap.
 
 ## Where things live
 

@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
   NotificationSubscription,
+  type PullRequest,
   type PushNotice,
   type SessionEvent,
   type SessionId,
@@ -40,15 +41,20 @@ const STORAGE: StorageError = {
   message: "Courtyard couldn't read or keep its notifications in its data folder.",
 };
 
-/** What a session needs, as a notification says it, for the events that send one. */
-const needOf = (event: SessionEvent) => {
+/**
+ * What a session needs, as a notification says it, for the events that send one: a turn that
+ * ends with its code session's pull request still failing checks says which (story 31).
+ */
+const needOf = (event: SessionEvent, pullRequest: PullRequest | undefined) => {
   switch (event.type) {
     case "approval-requested":
       return event.ask.kind === "command"
         ? "Needs your OK to run a command"
         : "Needs your OK to change a file";
     case "turn-completed":
-      return "Turn finished";
+      return pullRequest?.state === "open" && pullRequest.checks.kind === "failed"
+        ? `Checks still failing: ${pullRequest.checks.failed.join(", ")}`
+        : "Turn finished";
     case "turn-failed":
       return "Turn failed";
     default:
@@ -168,8 +174,12 @@ export const createNotifications = (options: {
      * logged in that turned them on. A device whose subscription has gone, or that logged out,
      * is forgotten.
      */
-    sessionEvent: async (session: SessionId, event: SessionEvent) => {
-      const need = needOf(event);
+    sessionEvent: async (
+      session: SessionId,
+      event: SessionEvent,
+      pullRequest: PullRequest | undefined,
+    ) => {
+      const need = needOf(event, pullRequest);
       if (need === undefined) return;
       const [own, devices, loggedIn, title] = await Promise.all([
         ownKeys(),

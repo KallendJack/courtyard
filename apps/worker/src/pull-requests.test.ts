@@ -1,7 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitHubConnection, PullRequestReview, type SessionEvent } from "@courtyard/contract";
+import {
+  GitHubConnection,
+  PullRequestReview,
+  PushNotice,
+  type SessionEvent,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import {
@@ -9,9 +14,11 @@ import {
   codeRepo,
   codeWorkspace,
   createFakeGitHub,
+  createFakePush,
   errorOf,
   FAKE_MODEL,
   type FakeGitHub,
+  type FakePush,
   followSession,
   gitIn,
   postJson,
@@ -28,6 +35,7 @@ let repo: string;
 /** The repository on GitHub, as `owner/name`: what the code workspace's remote names. */
 let onGitHub: string;
 let github: FakeGitHub;
+let push: FakePush;
 let request: Requester;
 /** While set, each turn waits for it before answering, so a turn can be kept running. */
 let holding: Promise<void> | undefined;
@@ -43,12 +51,14 @@ beforeEach(async () => {
   ({ repo, github: onGitHub } = await codeRepo(root));
   await codeWorkspace(root, "side-project", repo);
   github = createFakeGitHub();
+  push = createFakePush();
   jobs = [];
   holding = undefined;
   request = await asOwner(
     testWorker({
       root,
       github: github.api,
+      sendPush: push.send,
       providers: [createFakeProvider({ delayMs: 0, beforeReply: async () => holding })],
       repeat: (_everyMs, job) => {
         jobs.push(job);
@@ -213,6 +223,27 @@ describe("a failing check", () => {
     await runJobs();
 
     await expect.poll(fixingTurns).toBe(2);
+  });
+
+  it("whose fixing turn ends with it still failing says so in the notification, not just that the turn finished", async () => {
+    await postJson(request, "/api/notifications/on", {
+      endpoint: "https://push.example/fold",
+      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+    });
+    const { id, branch } = await codeSession();
+    await expect.poll(() => push.sent.map(({ payload }) => PushNotice.parse(payload).body)).toEqual(["Turn finished"]);
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [
+      { name: "e2e", outcome: "failed" },
+      { name: "check", outcome: "passed" },
+    ]);
+
+    await runJobs();
+
+    await expect
+      .poll(() => push.sent.map(({ payload }) => PushNotice.parse(payload).body))
+      .toEqual(["Turn finished", "Checks still failing: e2e"]);
+    expect(PushNotice.parse(push.sent.at(-1)?.payload).session).toBe(id);
   });
 
   it("waits for a turn already running to end", async () => {
