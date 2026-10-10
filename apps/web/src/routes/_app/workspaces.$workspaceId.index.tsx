@@ -22,6 +22,7 @@ import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page
 import { RenameForm } from "@/components/rename-form";
 import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
+import { classes } from "@/lib/classes";
 import { DocumentsSection } from "../../documents/documents-section.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
@@ -195,8 +196,17 @@ function Workspace() {
         )}
       </div>
 
-      {/* The workspace's cards: what's been said and known, and its skills, on the left; what it has on the right. */}
-      <div className="mt-6 grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] @3xl:items-start">
+      {/*
+        The workspace's cards: what's been said and known, and its skills, on the left; what it has
+        on the right. Only a planning workspace has things, so only it gets the second column.
+      */}
+      <div
+        className={classes(
+          "mt-6 grid gap-4",
+          workspace.mode === "planning" &&
+            "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] @3xl:items-start",
+        )}
+      >
         <div className="flex min-w-0 flex-col gap-4">
           {sessions.kind === "loaded" && <SessionLinks sessions={sessions.data.sessions} />}
           <section aria-label="Context file" className={CARD}>
@@ -209,24 +219,26 @@ function Workspace() {
           </section>
           {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
         </div>
-        <div className="flex min-w-0 flex-col gap-4">
-          {workspace.mode === "planning" && things.kind === "loaded" && (
-            <ThingsSection
-              workspaceId={workspace.id}
-              list={things.data}
-              {...(deleted?.kind === "thing" ? { deleted } : {})}
-              onUndone={undone}
-            />
-          )}
-          {workspace.mode === "planning" && documents.kind === "loaded" && (
-            <DocumentsSection
-              workspaceId={workspace.id}
-              documents={documents.data.documents}
-              {...(deleted?.kind === "document" ? { deleted } : {})}
-              onUndone={undone}
-            />
-          )}
-        </div>
+        {workspace.mode === "planning" && (
+          <div className="flex min-w-0 flex-col gap-4">
+            {things.kind === "loaded" && (
+              <ThingsSection
+                workspaceId={workspace.id}
+                list={things.data}
+                {...(deleted?.kind === "thing" ? { deleted } : {})}
+                onUndone={undone}
+              />
+            )}
+            {documents.kind === "loaded" && (
+              <DocumentsSection
+                workspaceId={workspace.id}
+                documents={documents.data.documents}
+                {...(deleted?.kind === "document" ? { deleted } : {})}
+                onUndone={undone}
+              />
+            )}
+          </div>
+        )}
       </div>
     </Page>
   );
