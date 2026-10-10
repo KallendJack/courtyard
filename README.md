@@ -176,6 +176,28 @@ machine:
 - **A finished session's worktree stays** for now, even once the session is deleted. Remove it
   with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
 
+### Notifications
+
+A device can buzz when a session needs your OK, and when a turn finishes or fails; tapping the
+notification opens the session. It shows only the session's title and what it needs.
+
+**To turn them on,** on each device you want them on, open the home page and switch on
+**Notifications → On this device**, beside Connections, then let the browser show notifications
+when it asks. Each device turns its own on and off.
+
+- **It needs HTTPS** (see [Reaching it](#reaching-it-https-and-a-vpn)): browsers only allow
+  notifications there. **On an iPhone or iPad,** add Courtyard to the Home Screen first (Share →
+  Add to Home Screen, iOS 16.4 or later), and turn them on from there.
+- **If you said no** when the browser asked, the switch says they're blocked: allow notifications
+  for Courtyard in the browser's site settings, then turn them on again.
+- **Nothing buzzes for a session you have open** in front of you on that device.
+- **Logging a device out stops its notifications.** After logging in again, opening the home page
+  picks them up again.
+- **The worker sends them through each browser's own push service** (Google's, Apple's or
+  Mozilla's), so the worker machine needs to reach the internet. Its keys are made on its first run
+  and kept in the data folder's `notifications/`, with each device's subscription; if that folder
+  is lost, turn notifications on again on each device.
+
 ## Settings
 
 Every setting, and what it does, is in [`.env.example`](.env.example). Copy it to `.env` in the live copy and fill it in.

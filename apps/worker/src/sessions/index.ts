@@ -364,6 +364,11 @@ export const createSessions = (options: {
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
   now: () => number;
+  /**
+   * Told of an approval asked for and of each turn's end, once recorded, for the owner's
+   * notifications (#173).
+   */
+  notify?: (session: SessionId, event: SessionEvent) => void;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
@@ -794,7 +799,10 @@ export const createSessions = (options: {
                 ...(asking.why === undefined ? {} : { why: asking.why }),
               },
             });
-            if (recorded.ok) session.approvals.set(recorded.value.seq, answered);
+            if (recorded.ok) {
+              session.approvals.set(recorded.value.seq, answered);
+              options.notify?.(turn.id, recorded.value);
+            }
             return recorded;
           });
           if (!asked.ok) {
@@ -900,6 +908,7 @@ export const createSessions = (options: {
     const ended = await append(turn.id, ending);
     // Only once it's ended, so the next code session waiting starts after it.
     options.code.slots.release(turn.id);
+    if (ended.ok) options.notify?.(turn.id, ended.value);
     // What the turn did to its pull request shows at once, the PR it opened, say (#172).
     if (turn.coding) void followPullRequest(turn.id);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);

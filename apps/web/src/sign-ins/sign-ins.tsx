@@ -1,5 +1,5 @@
 import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
-import { useEffect, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { ConnectionCard, type ConnectionState } from "@/components/connection-card";
@@ -441,7 +441,7 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
  * 29), signed in on the worker machine or why not, with Sign in and Sign out for the ones
  * Courtyard signs in to; and GitHub, which Courtyard signs in to itself (#99).
  */
-function Connections() {
+function Connections(props: { beside: ReactNode }) {
   const models = useModels();
   const { providers, signIns, github } = models;
   if (providers.length === 0 && github === undefined) return null;
@@ -450,25 +450,28 @@ function Connections() {
       <div id="connections">
         <SectionTitle>Connections</SectionTitle>
       </div>
-      <ul className="mt-3 flex flex-col gap-2.5 text-sm/[21px]">
-        {providers.map((provider) => {
-          const signIn = signIns.find((s) => s.provider === provider.id);
-          if (signIn !== undefined) {
+      <div className="mt-3 flex flex-col gap-2.5 lg:flex-row lg:items-start">
+        <ul className="flex min-w-0 flex-1 flex-col gap-2.5 text-sm/[21px]">
+          {providers.map((provider) => {
+            const signIn = signIns.find((s) => s.provider === provider.id);
+            if (signIn !== undefined) {
+              return (
+                <SignInCard key={provider.id} models={models} signIn={signIn} provider={provider} />
+              );
+            }
             return (
-              <SignInCard key={provider.id} models={models} signIn={signIn} provider={provider} />
+              <ConnectionCard
+                key={provider.id}
+                name={provider.label}
+                detail={provider.available ? "Signed in on the worker machine" : provider.reason}
+                state={provider.available ? "connected" : "off"}
+              />
             );
-          }
-          return (
-            <ConnectionCard
-              key={provider.id}
-              name={provider.label}
-              detail={provider.available ? "Signed in on the worker machine" : provider.reason}
-              state={provider.available ? "connected" : "off"}
-            />
-          );
-        })}
-        {github !== undefined && <GitHubCard models={models} github={github} />}
-      </ul>
+          })}
+          {github !== undefined && <GitHubCard models={models} github={github} />}
+        </ul>
+        <div className="shrink-0 lg:w-67.5">{props.beside}</div>
+      </div>
     </section>
   );
 }
@@ -498,14 +501,18 @@ function GitHubNotice() {
 
 /**
  * The home page's sign-in boxes, near its top, or its Connections, at its foot; or, on a code
- * workspace's page, whether GitHub is connected: one lazy load.
+ * workspace's page, whether GitHub is connected: one lazy load. Beside Connections goes
+ * `beside` (the notifications toggle).
  */
-export default function SignIns(props: { part: "boxes" | "list" | "github-notice" }) {
+export default function SignIns(props: {
+  part: "boxes" | "list" | "github-notice";
+  beside?: ReactNode;
+}) {
   switch (props.part) {
     case "boxes":
       return <SignInBoxes />;
     case "list":
-      return <Connections />;
+      return <Connections beside={props.beside} />;
     case "github-notice":
       return <GitHubNotice />;
   }

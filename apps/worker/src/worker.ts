@@ -30,6 +30,9 @@ import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
+import { createNotifications, type SendPush } from "./notifications/index.ts";
+import { notificationRoutes } from "./notifications/routes.ts";
+import { sendWebPush } from "./notifications/web-push.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
@@ -159,6 +162,8 @@ export const createWorker = (options: {
    * settings name, or none when they name none.
    */
   github?: GitHubApi;
+  /** Sends a notification to a device (#173). Tests pass a fake; otherwise it's web push. */
+  sendPush?: SendPush;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -200,6 +205,15 @@ export const createWorker = (options: {
     now,
   });
   const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
+  const notifications = createNotifications({
+    dataDir,
+    send: options.sendPush ?? sendWebPush,
+    devicesLoggedIn: owner.devices,
+    titleOf: async (id) => {
+      const session = await sessions.get(id);
+      return session.ok ? session.value.title : undefined;
+    },
+  });
   const sessions = createSessions({
     dataDir,
     providers,
@@ -212,6 +226,11 @@ export const createWorker = (options: {
       findPullRequest: github.pullRequest,
     }),
     now,
+    notify: (session, event) => {
+      notifications
+        .sessionEvent(session, event)
+        .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error));
+    },
   });
   const live = createLive({
     liveCopy,
@@ -256,6 +275,7 @@ export const createWorker = (options: {
   );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
   api.route("/", gitHubRoutes(github));
+  api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

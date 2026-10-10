@@ -130,6 +130,8 @@ const { startWorker } = await import("../apps/worker/src/start.ts");
 // GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
 // pushed to origin.git gets a pull request, whose e2e check fails on every commit (#172).
 const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
+// A push service in memory (#173), so a device turned on in a test is never sent to for real.
+const { createFakePush } = await import("../apps/worker/src/notifications/fake.ts");
 // A context backup that isn't there, so the home page says the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
@@ -141,4 +143,5 @@ startWorker({
     finishAfterMs: 2000,
     opensOnPush: { remote: origin, checks: [{ name: "e2e", outcome: "failed" }] },
   }).api,
+  sendPush: createFakePush().send,
 });

@@ -180,6 +180,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
   latest pull request and the checks on its latest commit (#172). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
+- **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
+  (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
+  out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
+  for and each turn's end (its `notify` option); an approval, a finished turn and a failed one each send one
+  notification, carrying only the session's title, what it needs and the session's id. The sender is a dependency
+  passed in (`web-push.ts`, the one real one, through the `web-push` package; `fake.ts` keeps what was sent for the
+  tests and the browser tests). Its routes are `/api/notifications` (the public key) and its `on` and `off`.
 
 **Running Courtyard**
 
@@ -261,6 +268,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
+  - **`notifications/`:** the home page's notifications toggle for this device, beside Connections (#173): it
+    subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
+    opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
@@ -271,7 +281,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
-- Beside `src/`: **`public/`** has the service worker and the install manifest, and **`scripts/finish-build.mjs`**
+- Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
+  session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
+  and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
   keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
   the first load needs in one file, so a lazily loaded module that lazy code loads (a chart) can't split what it
@@ -396,6 +408,9 @@ Where the rest fits:
   first or Get to know named it.
 - **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
   running is recorded as interrupted, so the session can carry on.
+- **Notifications.** Once an `approval-requested`, `turn-completed` or `turn-failed` is recorded, `sessions/` tells
+  `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
+  interrupted one found by the next worker, send none). The service worker shows it and opens the session on a tap.
 
 ## Where things live
 
@@ -433,6 +448,8 @@ things live only in the worker's memory and go when it restarts.
   of its secret), and recent wrong guesses.
 - `github/`: Courtyard's GitHub sign-in (`sign-in.json`) and the `gh` config folder code sessions use (`gh/`),
   holding the token while signed in and a stand-in that works nowhere otherwise (#99).
+- `notifications/`: the worker's push keys (`keys.json`) and each device's push subscription, by its device login
+  (`devices.json`) (#173).
 - `codex/`: the Codex home, holding Codex's sign-in
   ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
   `sign-ins.json`: the providers the owner said Not now to.
@@ -463,8 +480,8 @@ Each one is written down once, where the link goes.
   [ADR 0003](adr/0003-claude-through-the-agent-sdk-with-the-owners-login-isolated-per-workspace.md)).
 - **Errors are values:** module interfaces return `Result` (`result.ts`); throwing is for bugs (AGENTS.md,
   TypeScript).
-- **Dependencies passed in:** the clock, the providers, GitHub, the update command and the repeating jobs are options to
-  `createWorker`, so tests control them (AGENTS.md, Where code goes).
+- **Dependencies passed in:** the clock, the providers, GitHub, the notification sender, the update command and the
+  repeating jobs are options to `createWorker`, so tests control them (AGENTS.md, Where code goes).
 - **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
 - **The first-load budget:** the build fails if what the home page needs first grows past its budget
