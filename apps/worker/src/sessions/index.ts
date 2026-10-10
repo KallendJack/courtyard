@@ -1406,18 +1406,30 @@ export const createSessions = (options: {
 
     /**
      * Merges a code session's pull request on GitHub (#160), refused with the reason while it
-     * can't merge, and only the commit the owner reviewed. Once merged, the session ends as one
-     * merged on GitHub does: the merge is recorded, and its worktree and branch are cleared away.
+     * can't merge, and only while its latest commit is `reviewed`, the one the owner looked at. Once
+     * merged, the session ends as one merged on GitHub does: the merge is recorded, and its worktree
+     * and branch are cleared away.
      */
-    mergePullRequest: async (rawId: string): Promise<Result<null, SessionError>> => {
+    mergePullRequest: async (
+      rawId: string,
+      reviewed: string,
+    ): Promise<Result<null, SessionError>> => {
       const found = await reviewIn(rawId);
       if (!found.ok) return found;
       const { id, repoPath, review } = found.value;
+      const { number, head } = review.pullRequest;
+      // Before anything else: the reason it couldn't merge may be new since the owner looked.
+      if (head !== reviewed) {
+        return err({
+          kind: "pull-request-refused",
+          reason: "The pull request changed since you looked. Review it again.",
+        });
+      }
       if (review.merge.kind === "refused") {
         return err({ kind: "pull-request-refused", reason: review.merge.reason });
       }
-      const { number, head } = review.pullRequest;
-      const merged = await options.code.merge({ repoPath, number, head });
+      // GitHub merges it only while its latest commit is still the one reviewed.
+      const merged = await options.code.merge({ repoPath, number, head: reviewed });
       if (!merged.ok) return err({ kind: "github", problem: merged.error });
       await followPullRequest(id);
       return ok(null);

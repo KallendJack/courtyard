@@ -83,3 +83,10 @@ export const PullRequestReview = z.object({
   merge: MergeReadiness,
 });
 export type PullRequestReview = z.infer<typeof PullRequestReview>;
+
+/**
+ * Merging a session's pull request: the latest commit the owner reviewed, so a pull request that
+ * has moved on since is never merged unseen.
+ */
+export const PullRequestMerging = z.object({ head: z.string().min(1) });
+export type PullRequestMerging = z.infer<typeof PullRequestMerging>;

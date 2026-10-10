@@ -66,6 +66,7 @@ export {
   PullRequestChanges,
   PullRequestCheck,
   PullRequestChecks,
+  PullRequestMerging,
   PullRequestReview,
   pullRequestEnded,
 } from "./lib/pull-request.ts";

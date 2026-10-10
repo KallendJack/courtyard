@@ -9,6 +9,7 @@ import {
   NewMessage,
   type Overflow,
   type ProviderList,
+  PullRequestMerging,
   type PullRequestReview,
   SaveAsDocument,
   SaveEdit,
@@ -459,7 +460,9 @@ export const sessionRoutes = (options: {
   });
 
   routes.post("/sessions/:id/pull-request/merge", async (c) => {
-    const merged = await sessions.mergePullRequest(c.req.param("id"));
+    const body = await readBody(c, PullRequestMerging);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const merged = await sessions.mergePullRequest(c.req.param("id"), body.value.head);
     if (!merged.ok) return sessionError(c, merged.error);
     return c.body(null, 204);
   });

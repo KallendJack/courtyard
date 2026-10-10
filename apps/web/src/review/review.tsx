@@ -127,7 +127,7 @@ export default function Review(props: {
     }
   };
 
-  const end = async (how: "merge" | "close") => {
+  const end = async (how: Parameters<typeof endPullRequest>[1]) => {
     const ended = await endPullRequest(sessionId, how);
     if (ended.kind !== "loaded") return describeProblem(ended).body;
     onEnded();
@@ -136,7 +136,7 @@ export default function Review(props: {
 
   const mergeNow = async () => {
     setMerging(true);
-    setProblem(await end("merge"));
+    setProblem(await end({ kind: "merge", head: pullRequest.head }));
     setMerging(false);
   };
 
@@ -177,7 +177,7 @@ export default function Review(props: {
                   question={`Close PR #${pullRequest.number}?`}
                   confirmLabel="Close PR"
                   onCancel={() => setClosing(false)}
-                  confirm={() => end("close")}
+                  confirm={() => end({ kind: "close" })}
                 >
                   It closes on GitHub without merging, and this session ends: its branch and
                   worktree are cleared away.

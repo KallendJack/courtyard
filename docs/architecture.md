@@ -170,8 +170,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
   asked of GitHub through `code/` and `github/` each time: its checks by name, the files it changes with their
   diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
-  base). `pull-request/merge` refuses with that reason, else merges only the commit reviewed; `pull-request/close`
-  closes it. Either then follows the PR at once, so the session ends as one merged or closed on GitHub does.
+  base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
+  ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
+  commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or closed on GitHub does.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.

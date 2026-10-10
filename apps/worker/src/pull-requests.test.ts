@@ -331,7 +331,9 @@ describe("reviewing a pull request", () => {
     github.setConflicts(number, when.conflicts);
 
     expect((await reviewOf(id)).merge).toEqual({ kind: "refused", reason: when.reason });
-    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {
+      head: "c0ffee1",
+    });
 
     expect(merging.status).toBe(409);
     expect(await errorOf(merging)).toBe(when.reason);
@@ -344,7 +346,9 @@ describe("reviewing a pull request", () => {
     github.setChecks(number, [{ name: "e2e", outcome: "passed" }]);
     expect((await reviewOf(id)).merge).toEqual({ kind: "ready" });
 
-    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {
+      head: "c0ffee1",
+    });
 
     expect(merging.status).toBe(204);
     expect(github.stateOf(number)).toBe("merged");
@@ -353,11 +357,34 @@ describe("reviewing a pull request", () => {
     expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
   });
 
+  it("refuses Merge when the pull request changed since the owner reviewed it", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "passed" }]);
+    expect((await reviewOf(id)).pullRequest.head).toBe("c0ffee1");
+    // The session pushed again, and its checks passed, while the owner read the diff.
+    github.setChecks(number, [{ name: "e2e", outcome: "passed" }], "decafe2");
+
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {
+      head: "c0ffee1",
+    });
+    const unsaid = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+
+    expect(merging.status).toBe(409);
+    expect(await errorOf(merging)).toBe(
+      "The pull request changed since you looked. Review it again.",
+    );
+    expect(unsaid.status).toBe(400);
+    expect(github.stateOf(number)).toBe("open");
+  });
+
   it("merges a repository with no checks", async () => {
     const { id, branch } = await codeSession();
     const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
 
-    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {
+      head: "c0ffee1",
+    });
 
     expect(merging.status).toBe(204);
     expect(github.stateOf(number)).toBe("merged");

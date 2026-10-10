@@ -1,4 +1,4 @@
-import { PullRequestReview, type SessionId } from "@courtyard/contract";
+import { type PullRequestMerging, PullRequestReview, type SessionId } from "@courtyard/contract";
 import { z } from "zod";
 import { fromWorker, sendJson } from "../worker.ts";
 
@@ -12,6 +12,16 @@ const pullRequestOf = (sessionId: SessionId) =>
 export const loadReview = (sessionId: SessionId) =>
   fromWorker(pullRequestOf(sessionId), PullRequestReview);
 
-/** Merges, or closes without merging, a code session's pull request on GitHub. */
-export const endPullRequest = (sessionId: SessionId, how: "merge" | "close") =>
-  sendJson({ path: `${pullRequestOf(sessionId)}/${how}`, body: {}, schema: z.unknown() });
+/**
+ * Merges a code session's pull request on GitHub, only while its latest commit is `head`, the one
+ * the owner reviewed; or closes it without merging.
+ */
+export const endPullRequest = (
+  sessionId: SessionId,
+  how: { readonly kind: "merge"; readonly head: string } | { readonly kind: "close" },
+) =>
+  sendJson({
+    path: `${pullRequestOf(sessionId)}/${how.kind}`,
+    body: how.kind === "merge" ? ({ head: how.head } satisfies PullRequestMerging) : {},
+    schema: z.unknown(),
+  });
