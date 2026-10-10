@@ -231,7 +231,9 @@ describe("a failing check", () => {
       keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
     });
     const { id, branch } = await codeSession();
-    await expect.poll(() => push.sent.map(({ payload }) => PushNotice.parse(payload).body)).toEqual(["Turn finished"]);
+    await expect
+      .poll(() => push.sent.map(({ payload }) => PushNotice.parse(payload).body))
+      .toEqual(["Turn finished"]);
     const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
     github.setChecks(number, [
       { name: "e2e", outcome: "failed" },

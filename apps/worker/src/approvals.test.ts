@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SessionEvent } from "@courtyard/contract";
+import { ApprovalAnswering, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Provider } from "./providers/index.ts";
 import {
@@ -181,6 +181,7 @@ describe("answering an approval", () => {
       until: "approval-answered",
     });
 
+    // Two devices answer at once, differently: whichever lands first stands, for both.
     const [first, second] = await Promise.all([
       answer(request, id, asked.seq, "allow"),
       answer(request, id, asked.seq, "deny"),
@@ -188,10 +189,11 @@ describe("answering an approval", () => {
     const again = await answer(request, id, asked.seq, "deny");
 
     expect([first.status, second.status, again.status]).toEqual([200, 200, 200]);
-    expect(await second.json()).toEqual({ answer: "allow" });
-    expect(await again.json()).toEqual({ answer: "allow" });
+    const { answer: stands } = ApprovalAnswering.parse(await first.json());
+    expect(await second.json()).toEqual({ answer: stands });
+    expect(await again.json()).toEqual({ answer: stands });
     expect(await elsewhere).toEqual([
-      expect.objectContaining({ type: "approval-answered", approval: asked.seq, answer: "allow" }),
+      expect.objectContaining({ type: "approval-answered", approval: asked.seq, answer: stands }),
     ]);
     const rest = await followSession(request, {
       sessionId: id,
@@ -199,7 +201,11 @@ describe("answering an approval", () => {
       until: "turn-completed",
     });
     expect(rest.filter((event) => event.type === "approval-answered")).toHaveLength(1);
-    expect(answers).toEqual([{ ok: true, value: null }]);
+    expect(answers).toEqual([
+      stands === "allow"
+        ? { ok: true, value: null }
+        : { ok: false, error: expect.stringMatching(/^The owner denied/) },
+    ]);
   });
 
   it("is refused for an approval the session hasn't got, or whose turn has ended", async () => {

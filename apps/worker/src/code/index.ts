@@ -353,7 +353,8 @@ export const createCode = (options: {
       if (repo === undefined) return;
       const deleted = await pullRequests.deleteBranch({ repo, branch: sessionBranch.branch });
       // GitHub may have deleted it already, on merging.
-      if (!deleted.ok) console.error("A session branch on GitHub couldn't be deleted:", deleted.error);
+      if (!deleted.ok)
+        console.error("A session branch on GitHub couldn't be deleted:", deleted.error);
     },
   };
 };
