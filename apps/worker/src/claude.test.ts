@@ -815,6 +815,37 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("runs nothing in the background, refusing a background command with what to do instead (#178)", async () => {
+    const { worktree, code, asked } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const background = await preToolUse(options, {
+      name: "Bash",
+      input: { command: "pnpm test", run_in_background: true },
+    });
+    const foreground = await preToolUse(options, {
+      name: "Bash",
+      input: { command: "pnpm test", run_in_background: false },
+    });
+
+    // Claude Code's background tasks are off, so Claude isn't offered them at all.
+    expect(options.env).toMatchObject({ CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" });
+    // One asked for anyway is refused before the worker is asked, so nothing starts.
+    expect(background).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: await quotedInGuide("Run it in the foreground"),
+      },
+    });
+    expect(foreground).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    expect(asked).toEqual(["run pnpm test"]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("waits as long as the owner takes to answer an approval, telling the worker what a command is for (#171)", async () => {
     const { worktree } = await codeSession();
     const heard: (string | undefined)[] = [];
