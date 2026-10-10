@@ -1,6 +1,7 @@
 import {
   type Activity,
   ApiError,
+  type ApprovalAsk,
   type Attachment,
   type DocumentSave,
   type Effort,
@@ -80,6 +81,13 @@ export type Turn = {
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
   readonly sources: readonly Source[];
+  /**
+   * The approval the turn is waiting on (#171), by its event number, until the owner answers it
+   * from any device; `undefined` when it waits on none.
+   */
+  readonly approval:
+    | { readonly seq: number; readonly ask: ApprovalAsk; readonly why: string | undefined }
+    | undefined;
   /** Whether it's waiting for one of the code sessions running to end before it starts (#174). */
   readonly queued: boolean;
   readonly state:
@@ -173,6 +181,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             things: [],
             replies: [],
             sources: [],
+            approval: undefined,
             queued: false,
             state: { kind: "running" },
           },
@@ -201,6 +210,17 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "sources":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
+    case "approval-requested":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, approval: { seq, ask: event.ask, why: event.why } }),
+      });
+    case "approval-answered":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.approval?.seq === event.approval,
+        change: (turn) => ({ ...turn, approval: undefined }),
+      });
     case "turn-queued":
     case "turn-dequeued":
       return withLastTurn(log, {

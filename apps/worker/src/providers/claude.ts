@@ -103,6 +103,12 @@ const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
  * worker first (ADR 0007).
  */
 const CODING_TOOLS = ["Edit", "Write", "Bash"];
+/**
+ * How long Claude Code waits on the worker's say in a code session, which may be an approval the
+ * owner answers in the morning (#171): the longest a timer can wait (about 24 days), so in practice
+ * no limit. Only a stop ends the wait sooner.
+ */
+const APPROVAL_WAIT_SECONDS = 2_147_483;
 /** The tools a turn with web search gets as well (ADR 0019). */
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 /** The in-process MCP server Courtyard's own tools are offered through. */
@@ -474,7 +480,7 @@ const askWorker = async (
     }
     case "Bash": {
       const bash = BashInput.safeParse(input);
-      return bash.success ? code.run(bash.data.command) : unchecked;
+      return bash.success ? code.run(bash.data.command, bash.data.description) : unchecked;
     }
     default:
       return undefined;
@@ -776,7 +782,11 @@ export const createClaudeProvider = (
               : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
             hooks: {
               PreToolUse: [
-                { hooks: [confineTo({ folder, report: input.report, courtyardTools, web, code })] },
+                {
+                  hooks: [confineTo({ folder, report: input.report, courtyardTools, web, code })],
+                  // An approval waits on the owner, however long they take (#171).
+                  ...(code === null ? {} : { timeout: APPROVAL_WAIT_SECONDS }),
+                },
               ],
               ...(web === null ? {} : { PostToolUse: [{ hooks: [noteResults(web)] }] }),
             },

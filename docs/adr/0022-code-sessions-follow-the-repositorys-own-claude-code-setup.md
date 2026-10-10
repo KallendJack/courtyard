@@ -15,8 +15,8 @@ owner's checkout.
 
 Edits and commands go through the same check as every other tool call: the adapter's PreToolUse hook asks the worker
 about each one, and nothing is pre-approved. An edit is allowed only inside the worktree, and a command only when it
-matches the command allowlist on its parsed words. Anything else is refused with the reason for now; approvals replace
-the refusal next (#171).
+matches the command allowlist on its parsed words. Anything else waits in the hook for the owner's approval (#171),
+for as long as they take, and runs only if they allow it.
 
 ## Considered options
 

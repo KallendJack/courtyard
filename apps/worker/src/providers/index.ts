@@ -125,10 +125,16 @@ export type CodeTurn = {
    * never the machine's (#99). It names where the sign-in is kept, never the sign-in itself.
    */
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. */
+  /**
+   * Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. One
+   * outside the worktree waits for the owner's approval (#171).
+   */
   readonly edit: (path: string) => Promise<Result<null, string>>;
-  /** Whether `command` may run in the worktree, or why not. */
-  readonly run: (command: string) => Promise<Result<null, string>>;
+  /**
+   * Whether `command` may run in the worktree, or why not. One off the command allowlist waits for
+   * the owner's approval (#171), shown with `why`, what the model said it's for, when it said.
+   */
+  readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
 };
 
 export type TurnInput = {

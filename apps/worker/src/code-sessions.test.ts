@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CodeSessionList, type SessionEvent } from "@courtyard/contract";
+import { type ApprovalAsk, CodeSessionList, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
@@ -45,7 +45,10 @@ afterEach(async () => {
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) =>
   asOwner(testWorker({ root, providers }));
 
-/** Starts a session in the code workspace and follows its first turn to its end. */
+/**
+ * Starts a session in the code workspace and follows its first turn to its end, denying each
+ * approval it asks for (#171): what it asked, and its events.
+ */
 const firstTurn = async (request: Requester, text: string, model = FAKE_MODEL) => {
   const response = await postJson(request, "/api/workspaces/side-project/sessions", {
     text,
@@ -53,11 +56,17 @@ const firstTurn = async (request: Requester, text: string, model = FAKE_MODEL) =
   });
   expect(response.status).toBe(201);
   const { id } = (await response.json()) as { id: string };
+  const asked: ApprovalAsk[] = [];
   const events = await followSession(request, {
     sessionId: id,
     until: (event) => event.type === "turn-completed" || event.type === "turn-failed",
+    onEvent: (event) => {
+      if (event.type !== "approval-requested") return;
+      asked.push(event.ask);
+      void postJson(request, `/api/sessions/${id}/approvals/${event.seq}`, { answer: "deny" });
+    },
   });
-  return { id, events };
+  return { id, events, asked };
 };
 
 /** Each worktree of the owner's repository: its folder and its branch. */
@@ -112,10 +121,10 @@ const activitiesIn = (events: readonly SessionEvent[]) =>
   events.flatMap((event) => (event.type === "activity" ? [event.activity] : []));
 
 describe("a code session's edits", () => {
-  it("apply inside its worktree, each shown in the activity, and are refused outside it", async () => {
+  it("apply inside its worktree, each shown in the activity, and need the owner's approval outside it", async () => {
     const request = await start();
 
-    const { events } = await firstTurn(
+    const { events, asked } = await firstTurn(
       request,
       [
         "edit file notes.md: The rack goes on the back wall",
@@ -135,9 +144,15 @@ describe("a code session's edits", () => {
       { kind: "edited-file", path: "notes.md" },
       { kind: "edited-file", path: "docs/plan.md" },
     ]);
-    const refused = "Only files in your session branch's worktree can be changed.";
-    expect(answerIn(events)).toContain(`Couldn't edit ../outside.txt: ${refused}`);
-    expect(answerIn(events)).toContain(`Couldn't edit .git: ${refused}`);
+    // Git's own file in the worktree counts as outside it.
+    expect(asked).toEqual([
+      { kind: "edit", path: join(root, "data", "worktrees", "outside.txt") },
+      { kind: "edit", path: join(root, "elsewhere.txt") },
+      { kind: "edit", path: join(folder, ".git") },
+    ]);
+    const denied = "The owner denied that change, so the file wasn't changed.";
+    expect(answerIn(events)).toContain(`Couldn't edit ../outside.txt: ${denied}`);
+    expect(answerIn(events)).toContain(`Couldn't edit .git: ${denied}`);
     await expect(readFile(join(root, "data", "worktrees", "outside.txt"))).rejects.toThrow();
     await expect(readFile(join(root, "elsewhere.txt"))).rejects.toThrow();
     expect(await gitIn(folder, "status", "--porcelain")).toBe("?? docs/\n?? notes.md");
@@ -148,13 +163,11 @@ describe("a code session's edits", () => {
 const askAbout = async (commands: readonly string[]) => {
   const { provider, answers } = codingProvider(commands.map((run) => ({ run })));
   const request = await start([provider]);
-  const { events } = await firstTurn(request, "Check your work", CODING_MODEL);
-  return { answers, ran: activitiesIn(events) };
+  const { events, asked } = await firstTurn(request, "Check your work", CODING_MODEL);
+  return { answers, asked, ran: activitiesIn(events) };
 };
 
 const CHAINED = /^Run one command at a time: /;
-const OFF_ALLOWLIST = /isn't on this workspace's command allowlist, so it didn't run\./;
-const REACHES_OUT = /^That command names a path outside your session branch's worktree/;
 
 describe("a code workspace's command allowlist", () => {
   it.each([
@@ -200,42 +213,40 @@ describe("a code workspace's command allowlist", () => {
     ['git commit -m "$(cat notes.md)"', CHAINED],
     ["git log $HOME", CHAINED],
     ["git status\nrm -rf .", CHAINED],
-    ["rm -rf node_modules", OFF_ALLOWLIST],
-    ["curl https://courtyard.example", OFF_ALLOWLIST],
-    ["git push origin main", OFF_ALLOWLIST],
-    ["git checkout main", OFF_ALLOWLIST],
-    ["git branch -D main", OFF_ALLOWLIST],
-    ["git -C /path/to/repo status", OFF_ALLOWLIST],
-    ["pnpm install", OFF_ALLOWLIST],
-    ["pnpm install --frozen-lockfile left-pad", OFF_ALLOWLIST],
-    ["PNPM_HOME=x pnpm test", OFF_ALLOWLIST],
-    ["gh pr merge 12", OFF_ALLOWLIST],
-    ["gh pr view 12 --web", OFF_ALLOWLIST],
-    ["git diff --no-index a.txt b.txt", OFF_ALLOWLIST],
-    ["git log --output=log.txt", OFF_ALLOWLIST],
-    ["git grep -Ocat rack", OFF_ALLOWLIST],
-    ["git diff /path/to/secrets", REACHES_OUT],
-    ["git add ../outside.txt", REACHES_OUT],
-    ["git log -- ~/notes", REACHES_OUT],
-    ["pnpm test --config=../evil.ts", REACHES_OUT],
     ['git commit -m "unclosed', /^That command couldn't be read/],
   ])("never runs %s, and says why", async (command, why) => {
-    const { answers, ran } = await askAbout([command]);
+    const { answers, asked, ran } = await askAbout([command]);
 
     expect(answers).toEqual([{ ok: false, error: expect.stringMatching(why) }]);
+    expect(asked).toEqual([]);
     expect(ran).toEqual([]);
   });
 
-  it("says what's on the allowlist when a command isn't", async () => {
-    const { answers } = await askAbout(["rm -rf node_modules"]);
+  it.each([
+    ["rm -rf node_modules", "off-allowlist"],
+    ["curl https://courtyard.example", "off-allowlist"],
+    ["git push origin main", "off-allowlist"],
+    ["git checkout main", "off-allowlist"],
+    ["git branch -D main", "off-allowlist"],
+    ["git -C /path/to/repo status", "off-allowlist"],
+    ["pnpm install", "off-allowlist"],
+    ["pnpm install --frozen-lockfile left-pad", "off-allowlist"],
+    ["PNPM_HOME=x pnpm test", "off-allowlist"],
+    ["gh pr merge 12", "off-allowlist"],
+    ["gh pr view 12 --web", "off-allowlist"],
+    ["git diff --no-index a.txt b.txt", "off-allowlist"],
+    ["git log --output=log.txt", "off-allowlist"],
+    ["git grep -Ocat rack", "off-allowlist"],
+    ["git diff /path/to/secrets", "reaches-out"],
+    ["git add ../outside.txt", "reaches-out"],
+    ["git log -- ~/notes", "reaches-out"],
+    ["pnpm test --config=../evil.ts", "reaches-out"],
+  ])("asks the owner before running %s, and doesn't once they deny it", async (command, reason) => {
+    const { answers, asked, ran } = await askAbout([command]);
 
-    expect(answers).toEqual([
-      {
-        ok: false,
-        error:
-          "That command isn't on this workspace's command allowlist, so it didn't run. The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another way with those, or tell the owner what you need run.",
-      },
-    ]);
+    expect(asked).toEqual([{ kind: "command", command, reason }]);
+    expect(answers).toEqual([{ ok: false, error: expect.stringMatching(/^The owner denied/) }]);
+    expect(ran).toEqual([]);
   });
 
   it("commits only on the session branch", async () => {
@@ -276,7 +287,7 @@ describe("a code session's commands, through the fake", () => {
     const { folder, branch } = await sessionWorktree();
     expect(await gitIn(folder, "log", "-1", "--format=%s")).toBe("Add the notes");
     expect(answerIn(events)).toContain(`Ran git branch --show-current: ${branch} `);
-    expect(answerIn(events)).toMatch(/Couldn't run git push origin main: That command isn't on/);
+    expect(answerIn(events)).toMatch(/Couldn't run git push origin main: The owner denied/);
     expect(activitiesIn(events)).toEqual([
       { kind: "edited-file", path: "notes.md" },
       { kind: "ran-command", command: "git add notes.md" },

@@ -164,8 +164,9 @@ machine:
 - **Only a model that can code works there** (Claude, for now); others are refused, saying so.
 - **Without asking,** a session edits files in its worktree and runs the package scripts
   (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
-  git and gh commands that only look, and `git add` and `git commit` on its branch. Anything else
-  is refused with the reason, for now: approvals come next.
+  git and gh commands that only look, and `git add` and `git commit` on its branch. Any other
+  command, or an edit outside its worktree, waits for you: the session shows the exact command
+  with Allow and Deny, and waits as long as you take.
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.

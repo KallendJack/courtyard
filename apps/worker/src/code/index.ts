@@ -61,35 +61,40 @@ const defaultBranchOf = async (
 export type CodeRefusal =
   /** The owner stopped the turn: nothing more is done. */
   | { readonly kind: "stopped" }
-  /** An edit outside the session branch's worktree. */
-  | { readonly kind: "outside" }
   /** A command that chains, pipes, redirects or substitutes, so it could run something else. */
   | { readonly kind: "chained" }
   /** A command whose quotes don't close. */
   | { readonly kind: "unreadable" }
-  /** A command that isn't on the command allowlist. */
-  | { readonly kind: "off-allowlist" }
-  /** A command naming a path outside the worktree. */
-  | { readonly kind: "reaches-out" }
   /** A command for the session branch only, such as committing, while the worktree is off it. */
-  | { readonly kind: "off-branch"; readonly branch: string };
+  | { readonly kind: "off-branch"; readonly branch: string }
+  /** The owner denied the approval it needed (#171). */
+  | { readonly kind: "denied"; readonly what: "command" | "edit" };
+
+/**
+ * A command only the owner can allow (#171): one off the command allowlist, or one naming a path
+ * outside the worktree.
+ */
+export type CommandApproval = {
+  readonly kind: "needs-approval";
+  readonly reason: "off-allowlist" | "reaches-out";
+};
 
 /**
  * Whether a command may run in a session's worktree without asking: one command, on the command
  * allowlist, naming no path outside the worktree, and, for committing, with the worktree on the
- * session branch.
+ * session branch. One that could run only with the owner's approval says so.
  */
 export const commandAllowed = async (
   session: { readonly worktree: string; readonly branch: string },
   command: string,
   allowlist: readonly CommandRule[] = DEFAULT_ALLOWLIST,
-): Promise<Result<null, CodeRefusal>> => {
+): Promise<Result<null, CodeRefusal | CommandApproval>> => {
   const words = wordsOf(command);
   if (!words.ok) return err({ kind: words.error });
   const rule = ruleFor(allowlist, words.value);
-  if (rule === undefined) return err({ kind: "off-allowlist" });
+  if (rule === undefined) return err({ kind: "needs-approval", reason: "off-allowlist" });
   if (reachesOut(session.worktree, words.value.slice(rule.words.length))) {
-    return err({ kind: "reaches-out" });
+    return err({ kind: "needs-approval", reason: "reaches-out" });
   }
   if (rule.onSessionBranch) {
     const on = await gitOrNothing(session.worktree, ["branch", "--show-current"]);

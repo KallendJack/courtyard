@@ -1,4 +1,5 @@
 import {
+  ApprovalAnswering,
   CarryOnRequest,
   type CodeSessionList,
   type DocumentChanged,
@@ -164,6 +165,13 @@ export const sessionError = (c: Context, error: SessionError) => {
       });
     case "branch-refused":
       return apiError(c, { status: 409, error: branchRefused(error.refusal) });
+    case "approval-not-found":
+      return apiError(c, { status: 404, error: "No such approval in this session." });
+    case "approval-closed":
+      return apiError(c, {
+        status: 409,
+        error: "This approval's turn has ended, so nothing is waiting on it now.",
+      });
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
@@ -408,6 +416,20 @@ export const sessionRoutes = (options: {
     const stopped = await sessions.stop(c.req.param("id"), request.value);
     if (!stopped.ok) return sessionError(c, stopped.error);
     return c.body(null, 202);
+  });
+
+  // Allow or Deny on an approval a code session's turn is waiting on (#171).
+  routes.post("/sessions/:id/approvals/:approval", async (c) => {
+    const body = await readBody(c, ApprovalAnswering);
+    if (!body.ok) return apiError(c, { status: 400, error: "Say allow or deny" });
+    const answered = await sessions.answerApproval({
+      rawId: c.req.param("id"),
+      // An event number, as a save's is; anything else names no approval.
+      approval: SaveNumber.parse(c.req.param("approval")),
+      answer: body.value.answer,
+    });
+    if (!answered.ok) return sessionError(c, answered.error);
+    return c.json({ answer: answered.value } satisfies ApprovalAnswering);
   });
 
   // Save as document (ADR 0020): an answer, as a new document in the session's workspace.

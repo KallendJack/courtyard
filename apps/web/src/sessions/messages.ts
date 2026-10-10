@@ -1,4 +1,6 @@
 import {
+  type ApprovalAnswer,
+  ApprovalAnswering,
   ATTACHMENTS_FIELD,
   type AttachmentId,
   MESSAGE_FIELD,
@@ -56,6 +58,21 @@ export const sendMessage = (send: {
     message: send.message,
     files: send.files ?? [],
     schema: z.unknown(),
+  });
+
+/**
+ * Allow or Deny on the approval numbered `approval`, which a code session's turn waits on (#171).
+ * The worker answers with the answer that stands: the first given, from whichever device.
+ */
+export const answerApproval = (answering: {
+  sessionId: SessionId;
+  approval: number;
+  answer: ApprovalAnswer;
+}) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(answering.sessionId)}/approvals/${answering.approval}`,
+    body: { answer: answering.answer } satisfies ApprovalAnswering,
+    schema: ApprovalAnswering,
   });
 
 /** Where one of a session's attachments is served from: for a thumbnail, or a PDF in a new tab. */

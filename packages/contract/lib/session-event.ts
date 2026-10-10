@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ApprovalAnswer, ApprovalAsk } from "./approval.ts";
 import { Attachment } from "./attachment.ts";
 import { DocumentSlug } from "./documents.ts";
 import { ChangeId, Effort, ModelRef, PlacedLine } from "./session.ts";
@@ -30,7 +31,10 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("web-searched"), query: z.string() }),
   /** A web page it read, by its address, and its site as the chat names it (its host). */
   z.object({ kind: z.literal("page-read"), url: z.string(), site: z.string() }),
-  /** A file it changed or added in a code session's worktree, as a path inside it (ADR 0007). */
+  /**
+   * A file it changed or added in a code session's worktree, as a path inside it (ADR 0007); or
+   * outside it, once the owner allowed that (#171), by its full path.
+   */
   z.object({ kind: z.literal("edited-file"), path: z.string() }),
   /** A command it ran in a code session's worktree, exactly as it ran it (ADR 0007). */
   z.object({ kind: z.literal("ran-command"), command: z.string() }),
@@ -164,6 +168,24 @@ export const SessionEvent = z.discriminatedUnion("type", [
     ...eventBase,
     type: z.literal("sources"),
     sources: z.array(Source).min(1).max(SOURCES_MAX),
+  }),
+  /**
+   * A code session's model wants to do something only the owner can allow (#171): the turn waits,
+   * with no time limit, until they answer or stop it.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("approval-requested"),
+    ask: ApprovalAsk,
+    /** What the model said it's for, when it said. */
+    why: z.string().optional(),
+  }),
+  /** The owner answered the approval numbered `approval`, from whichever device they did it. */
+  z.object({
+    ...eventBase,
+    type: z.literal("approval-answered"),
+    approval: z.number().int().positive(),
+    answer: ApprovalAnswer,
   }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
