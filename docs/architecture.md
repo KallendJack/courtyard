@@ -166,11 +166,16 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
   allowlist is the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the like; #178), the
-  package scripts, git and gh commands that only look, adding and committing, pushing the session
+  package scripts (in the packages pnpm's `--filter`, `-C` or `-r` pick too, when the script alone would match) and
+  the test tools they run, run directly (`vitest run`, `playwright test`, `tsc --noEmit`, `biome check`; #202), git
+  and gh commands that only look, adding and committing, pushing the session
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
-  another repository, and reads through `gh api` with GET only (#181).
+  another repository, and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
+  download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202). A backslash at a line's end joins the next
+  line on, and a title, body, message or jq filter is checked as a path only as a whole, so a link in it doesn't ask
+  (#202).
   A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
   read by `workspaces/`, built by `allowlistFor`). `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
   worker's say on every edit and command, which records each one allowed as an activity and words each refusal
