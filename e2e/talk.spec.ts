@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   buzzes,
+  goOutOfSight,
   hear,
   listenedIn,
   micOn,
@@ -152,6 +153,21 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       await page.clock.fastForward(20_000);
       await expect(strip(page, /Tap or hold to talk/)).toContainText("Nothing heard for a while");
       await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("The bench");
+      expect(await micOn(page)).toBe(false);
+    });
+
+    test("it stops listening when Courtyard goes out of sight, and what was heard waits in the message box", async ({
+      page,
+    }) => {
+      await page.goto("/workspaces/garage-gym");
+      await strip(page, /Tap or hold to talk/).click();
+      await hear(page, "Pegs for");
+      await expect(strip(page, /Listening · tap to send/)).toContainText("Pegs for");
+
+      await goOutOfSight(page);
+      await expect(strip(page, /Tap or hold to talk/)).toContainText("out of sight");
+      await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("Pegs for");
+      await page.waitForTimeout(500);
       expect(await micOn(page)).toBe(false);
     });
 

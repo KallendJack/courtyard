@@ -56,8 +56,8 @@ export type Listening = {
  * Listens until finished or cancelled, in British English, telling `heard` the words so far as
  * they come. Chrome on Android stops on its own in a pause; this starts it again, keeping what was
  * said, so the owner can think mid-sentence, but not for ever: with nothing new heard for a while,
- * it stops. When it can't listen (the microphone refused, say) or stops like that, `failed` hears
- * why, with the words heard until then.
+ * it stops, and when Courtyard goes out of sight. When it can't listen (the microphone refused,
+ * say) or stops like that, `failed` hears why, with the words heard until then.
  */
 export const listen = (on: {
   heard: (words: string) => void;
@@ -78,6 +78,7 @@ export const listen = (on: {
   const done = () => {
     state = "done";
     window.clearTimeout(quiet);
+    document.removeEventListener("visibilitychange", outOfSight);
   };
   const fail = (problem: string) => {
     done();
@@ -135,8 +136,16 @@ export const listen = (on: {
       fail("The browser couldn't start listening");
     }
   };
+  /** Switched away from, or the screen gone off: nobody's there to talk, so it stops. */
+  function outOfSight() {
+    if (document.visibilityState === "hidden" && state !== "done") {
+      fail("Stopped listening when Courtyard went out of sight");
+    }
+  }
+
   if (Recogniser === undefined) on.failed("This browser can't listen", "");
   else {
+    document.addEventListener("visibilitychange", outOfSight);
     heardNow();
     start();
   }
