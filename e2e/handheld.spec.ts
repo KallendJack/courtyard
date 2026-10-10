@@ -179,7 +179,7 @@ const everywhere = () => {
     expect((await chooser).isMultiple()).toBe(true);
   });
 
-  // The talk strip listens (talk.spec.ts), and opens the box only where the browser can't.
+  // The talk strip listens (talk.spec.ts), opening the box for the words it hears.
   test("Type opens the message box, which closes once the message is sent or the owner taps away", async ({
     page,
   }) => {

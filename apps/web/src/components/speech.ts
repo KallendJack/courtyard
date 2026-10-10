@@ -65,14 +65,14 @@ export const listen = (on: {
   failed: (problem: string, words: string) => void;
 }): Listening => {
   const Recogniser = recogniser();
-  /** The words of the recognisers that have ended, and of the one listening now. */
-  let before = "";
-  let now = "";
+  /** What the recognisers that have ended heard, and the one listening now, result by result. */
+  let before: string[] = [];
+  let now: string[] = [];
   let state: "listening" | "finishing" | "done" = "listening";
   let current: Recogniser | undefined;
   let quickEnds = 0;
   let quiet: number | undefined;
-  const words = () => tidy(`${before} ${now}`);
+  const words = () => joinHeard([...before, ...now]);
 
   /** Listening is over: no more starting again, and the microphone goes off. */
   const done = () => {
@@ -102,9 +102,7 @@ export const listen = (on: {
     recognition.interimResults = true;
     recognition.onresult = (event) => {
       const was = words();
-      now = Array.from({ length: event.results.length }, (_, at) => {
-        return event.results[at]?.[0]?.transcript ?? "";
-      }).join(" ");
+      now = Array.from(event.results, (result) => result[0]?.transcript ?? "");
       if (state !== "listening" || words() === was) return;
       heardNow();
       on.heard(words());
@@ -119,15 +117,16 @@ export const listen = (on: {
     recognition.onend = () => {
       if (recognition !== current) return;
       // One that ends as soon as it starts, again and again, isn't going to listen.
-      quickEnds = now === "" && performance.now() - started < QUICK_END_MS ? quickEnds + 1 : 0;
-      before = words();
-      now = "";
+      quickEnds =
+        now.length === 0 && performance.now() - started < QUICK_END_MS ? quickEnds + 1 : 0;
+      before = [...before, ...now];
+      now = [];
       if (state === "listening" && quickEnds >= QUICK_ENDS) {
         fail("The browser keeps stopping listening");
       } else if (state === "listening") start();
       else if (state === "finishing") {
         done();
-        on.finished(before);
+        on.finished(words());
       }
     };
     try {
@@ -166,6 +165,24 @@ export const listen = (on: {
 };
 
 const tidy = (words: string) => words.replace(/\s+/g, " ").trim();
+/** Words as compared, so "Hi, I" is "hi I" again: only their letters and numbers, in lower case. */
+const bare = (words: string) => words.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * The words of each result heard, in order, joined (#198). Chrome on a desktop gives each part of
+ * what's said its own result; Chrome on Android gives each new result the whole phrase so far
+ * ("hi", "hi I", "hi I just"), so a result that holds the one before it takes its place.
+ */
+const joinHeard = (results: readonly string[]) => {
+  const kept: string[] = [];
+  for (const result of results.map(tidy)) {
+    if (bare(result) === "") continue;
+    const last = kept.at(-1);
+    if (last !== undefined && bare(result).includes(bare(last))) kept[kept.length - 1] = result;
+    else kept.push(result);
+  }
+  return kept.join(" ");
+};
 
 /** The talk strip's haptics (Paper board Handheld · 02), in milliseconds of vibration. */
 const FEELS = {
@@ -173,7 +190,7 @@ const FEELS = {
   tick: 10,
   /** Listening has started. */
   thump: 35,
-  /** Let go, so it's sent. */
+  /** Let go, or tapped again: listening has stopped. */
   doubleTick: [12, 70, 12],
   /** The answer has finished. */
   softTick: 6,

@@ -343,7 +343,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
   it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The talk strip
   (`talk-strip.tsx`, #79, loaded with the frame) listens through the browser's own speech recognition
-  (`speech.ts`, which also vibrates for it) and hands the words to the box to send, or to queue while a turn runs;
+  (`speech.ts`, which also vibrates for it) and puts the words in the box as they are heard (#198), for the owner to
+  send, or to queue while a turn runs;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
   round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
