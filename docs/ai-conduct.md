@@ -109,13 +109,14 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
    (Documents, below), then its Things between `<things>` markers, one labelled line each, or a line saying it
    has none yet (Things, below).
 9. When the turn offers the save tool: the saving rules (Saving context lines, below).
-10. When the turn offers the document and Things tools: when to save a document (Documents, below), then how to keep
+10. In a code workspace with Paper, on a provider that uses tools: its Paper file and how to use it (Paper, below).
+11. When the turn offers the document and Things tools: when to save a document (Documents, below), then how to keep
     Things current (Things, below).
-11. When the workspace has skills a model may load: how to use them, then each one's name and description between
+12. When the workspace has skills a model may load: how to use them, then each one's name and description between
    `<skills>` markers (Skills, below), the same on every turn for every provider.
-12. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
-13. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
-14. When the turn offers web search: when to search, and how to use what's found (Web search, below).
+13. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
+14. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
+15. When the turn offers web search: when to search, and how to use what's found (Web search, below).
 
 A call to one of Courtyard's tools that the turn doesn't offer is refused:
 
@@ -232,20 +233,29 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
 > without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package
-> scripts, git and gh commands that only look, adding and committing on your branch, pushing it, and opening or
-> updating its pull request with gh. Anything else, such as a change outside your working directory, a change to what
-> decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner
-> to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at
-> a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for
-> it to finish: nothing runs in the background here.
+> scripts, git and gh commands that only look, adding and committing on your branch, pushing it, opening or updating
+> its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything
+> else, such as a change outside your working directory, a change to what decides how commands run (a package.json,
+> git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told,
+> so find another way or tell the owner what you need. Run one command at a time, since a command that chains or
+> substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the
+> background here.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
-the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
-same way for every provider. An edit outside the worktree, an edit inside it to a file that decides what its allowed
-commands run (a `package.json` or the package manager's settings, git hooks, `.claude`, git's own `.git`), a command
-off the command allowlist, and a command naming a path outside the worktree each wait for the owner's approval
-(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything
-else refused, tells the model why, in one of these:
+the repository's, so they aren't part of this guide. In a code session Claude has Matt Pocock's skills too, from
+Courtyard's pinned copy of his plugin, loaded by Claude Code itself (ADR 0024); they're his, unchanged, so they aren't
+part of this guide either. Claude loads them, and the repository's own, with its Skill tool, which the adapter allows
+only for a skill the turn turned on, reporting each as "Used <skill>"; it reads their own files with its file tools,
+each shown as a read, and a change there waits for the owner like any outside the worktree. A skill it wasn't given
+is refused:
+
+> That skill isn't one you can load here: the skills you can load are listed for you.
+
+The worker decides each edit and command before it happens, the same way for every provider. An edit outside the
+worktree, an edit inside it to a file that decides what its allowed commands run (a `package.json` or the package
+manager's settings, git hooks, `.claude`, git's own `.git`), a command off the command allowlist, and a command naming
+a path outside the worktree each wait for the owner's approval (#171), with no time limit; the model hears nothing
+until they answer. Allow lets it happen. Deny, and anything else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
   why it's needed."
@@ -283,6 +293,40 @@ session this message (on the model the owner last used), with the failed checks 
 > show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
 > it, say why, so the owner can decide what to do.
 
+## Paper
+
+Built with #180 (ADR 0023). Paper is the first tool connection: a code workspace whose `workspace.json` names Paper
+(its command and the one Paper file its sessions use) has Paper's MCP server passed to its turns, on a provider that
+uses tools (Claude). Paper's own tools and their descriptions come from Paper, so they aren't part of this guide; what
+Courtyard tells a model about them comes after the saving rules (Every turn, item 10):
+
+> You can read and draw Paper designs with Paper's tools, in this workspace's Paper file only: pass fileId <file> to
+> every tool that takes one. Reading, drawing and changing the file run without asking. Deleting anything you didn't
+> make in this session waits for the owner to allow it. Each screenshot you take shows in the chat, so take one of a
+> board when it's ready for the owner to look at. Paper's tools work only while Paper is open on the worker machine:
+> if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine,
+> don't try to open it, and carry on with the rest of the work.
+
+The worker decides each call before it happens. A call naming another Paper file, or none when the tool takes one, is
+refused:
+
+> Paper's tools here work only in this workspace's Paper file: pass fileId <file>.
+
+Making or renaming a Paper file is refused:
+
+> Paper's files can't be made or renamed here: draw in this workspace's Paper file.
+
+Deleting nodes the session didn't make waits for the owner's approval, as an edit outside the worktree does (Coding,
+above); Deny tells the model "The owner denied that, so it didn't happen. Find another way, or tell the owner why it's
+needed." Each call that runs shows as an activity, and each screenshot shows in the chat.
+
+Courtyard can't tell why a Paper tool failed (Paper doesn't say in a way it can rely on), so a failure comes with:
+
+> If that failed because Paper couldn't be reached, Paper isn't open on the worker machine: tell the owner so, don't
+> try to open it, and carry on with the rest of the work.
+
+Paper changes no context, so a change here doesn't run the eval set.
+
 ## Skills
 
 Built with #89 (ADR 0016). A skill is a folder of instructions in the open Agent Skills format: a `SKILL.md` with a
@@ -292,11 +336,16 @@ name, a description and its instructions, and any files they point to. The worke
 (`packages/skills`), the more specific winning by name. A skill that fails the format check, or has `scripts/` in a
 planning workspace, is never offered. Every provider, the fake included, gets the same skills the same way.
 
+The exception is a code workspace's Matt Pocock skills (ADR 0024), from Courtyard's pinned copy of his plugin, between
+the owner's and the house skills (his grilling replaces the house one there). They're never in Courtyard's list or
+its use_skill tool: Claude Code loads them itself (Coding, above). The owner starts one as any other.
+
 A skill starts in one of two ways:
 
-- **The owner starts it,** from the message box's skill picker or a button (Grill this plan, Get to know). The
-  worker puts it into the turn itself, with no tool call, so it works the same on every model. The owner's message
-  carries the skill's tag and is otherwise their own words, unchanged.
+- **The owner starts it,** from the message box's skill picker, by beginning their message with its name
+  (`/implement 157`), or with a button (Grill this plan, Get to know). The worker puts it into the turn itself, with
+  no tool call, so it works the same on every model. The owner's message carries the skill's tag and is otherwise
+  their own words, unchanged.
 - **A model loads it,** with Courtyard's `use_skill` tool, when what the owner asks fits its description. The tool is
   offered beside the save tool, on a turn whose provider takes Courtyard's tools (today, every one that saves), when
   the workspace has a skill to use. Given a skill's name it gives its `SKILL.md`; given a path as well, that file in
@@ -347,7 +396,7 @@ tags, so Retry and Carry on, which send a message again with its tag, keep it) o
 activities). Grilling and Get to know take many turns, and depend on this. A skill that has gone or broken since is
 left out.
 
-What a model is told (Every turn, items 11 and 12). **The list,** on every turn, is this, then each skill's name and
+What a model is told (Every turn, items 12 and 13). **The list,** on every turn, is this, then each skill's name and
 description, one per line, between `<skills>` markers, apart from owner-only ones:
 
 > Skills are instructions for particular kinds of task, written by the owner or by Courtyard. When what the owner
@@ -368,7 +417,8 @@ field for it, and Claude's and Codex's own fields fail the check), and skills wi
 
 ## Grilling
 
-Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning and code workspaces alike: a
+Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning workspaces (and for code
+workspaces only while Matt Pocock's skills aren't loaded, since his grilling replaces it there, ADR 0024): a
 model stress-tests a plan one question at a time, recommending an answer with each, and saves each decision as the
 owner agrees it. It's Courtyard's own, taking Matt Pocock's ideas for grilling (one question at a time, a
 recommendation with each, one thread settled before the next, looking things up rather than asking) but not his text,
@@ -425,7 +475,7 @@ offers them through Courtyard's `suggest_replies` tool, never in its own text, s
 every model. The tool is offered beside the save tool in a planning workspace, on a turn whose provider takes
 Courtyard's tools (today, every one that saves). A code workspace's models aren't offered it.
 
-What a model is told (Every turn, item 13), on a turn that offers the tool:
+What a model is told (Every turn, item 14), on a turn that offers the tool:
 
 > Whenever your answer ends by asking the owner a question that has a few likely answers (yes or no, one option or
 > another, which days they're free), call the suggest_replies tool with two or three of them before you finish, so
@@ -505,7 +555,7 @@ and where its facts came from. Always on: the model decides when. A code workspa
 - **Codex** searches on cached mode (`web_search = "cached"`, set for its thread): results from OpenAI's index, with
   no live fetching, since Courtyard can't limit what Codex opens.
 
-What a model is told (Every turn, item 14), on a turn that offers web search, the same on every provider:
+What a model is told (Every turn, item 15), on a turn that offers web search, the same on every provider:
 
 > You can search the web, and read the pages you find; when the owner sends a link, read that page if you can.
 > Search when the question needs current facts, such as prices, stock, reviews, opening times, or what fits or works
@@ -549,7 +599,7 @@ none yet:
 
 > This workspace has no documents yet.
 
-**The rule** (Every turn, item 10), on a turn that offers the tool: a model may offer to save a document, but never
+**The rule** (Every turn, item 11), on a turn that offers the tool: a model may offer to save a document, but never
 saves one unasked, since a document is the owner's to keep. The tool is offered beside the save tool in a planning
 workspace, on a turn whose provider takes Courtyard's tools.
 
@@ -640,7 +690,7 @@ in place of the second sentence. A Thing's history is never sent with the turn. 
 
 > This workspace has no Things yet.
 
-**The rule** (Every turn, item 10), on a turn that offers the Things tool: a model keeps Things current by itself, as
+**The rule** (Every turn, item 11), on a turn that offers the Things tool: a model keeps Things current by itself, as
 it saves context lines and by the same rules. It offers a Thing's typical parts but adds them only once the owner
 agrees, and a comparison is a table, offered as a document, whose pick becomes a Thing (ADR 0021 draws the table). The
 tool is offered beside the document tool.

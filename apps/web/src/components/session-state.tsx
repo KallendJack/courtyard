@@ -28,12 +28,22 @@ export const doingWords = (doing: Doing) => {
       return `running ${activity.command}`;
     case "check-failed":
       return `fixing the ${activity.name} check`;
+    case "used-tool":
+      return `using ${activity.connection}: ${activity.action}`;
   }
 };
 
 /** What a session waiting on the owner asks to do, in a few words. */
-export const askWords = (ask: ApprovalAsk) =>
-  ask.kind === "command" ? `asks to run ${ask.command}` : `asks to change ${ask.path}`;
+export const askWords = (ask: ApprovalAsk) => {
+  switch (ask.kind) {
+    case "command":
+      return `asks to run ${ask.command}`;
+    case "tool":
+      return `asks to ${ask.action} in ${ask.connection}`;
+    default:
+      return `asks to change ${ask.path}`;
+  }
+};
 
 /** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
 export const elapsedWords = (ms: number) => {

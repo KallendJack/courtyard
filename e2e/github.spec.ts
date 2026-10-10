@@ -200,3 +200,28 @@ test("the owner closes a session's pull request without merging it, once they've
 
   await request.post("/api/github/sign-out", { data: {} });
 });
+
+// The setup check (#181): Side project's repository has none of what Matt Pocock's setup skill
+// writes, so its page offers it, once signed in, as one approval.
+test("the setup check offers what the repository is missing of Matt's setup, and Allow opens a pull request", async ({
+  page,
+  request,
+}) => {
+  await signIn(request);
+
+  await page.goto("/workspaces/side-project");
+  const card = page.getByRole("region", { name: "Needs your OK" });
+  await expect(card).toContainText("Add Matt's setup to this repo?");
+  await expect(card.getByRole("code")).toContainText("docs/agents/issue-tracker.md");
+  await expect(card.getByRole("code")).toContainText("The Agent skills section in AGENTS.md");
+  await expect(card.getByRole("code")).toContainText("Labels on GitHub: needs-triage");
+  await card.getByRole("button", { name: "Allow" }).click();
+
+  const done = page.getByRole("region", { name: "Matt's setup" });
+  await expect(done.getByRole("link", { name: /^pull request #\d+$/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+  await expect(card).toHaveCount(0);
+
+  await request.post("/api/github/sign-out", { data: {} });
+});

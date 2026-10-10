@@ -5,6 +5,8 @@ import {
   type ContextBackup,
   type Health,
   type LiveStatus,
+  type MattSetup,
+  MattSetupAnswer,
   NewWorkspace,
   type OwnerContextDetail,
   type SkillList,
@@ -30,6 +32,13 @@ import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
+import { createMattSetup } from "./matt-setup/index.ts";
+import {
+  createMattSkills,
+  type FetchMattSkills,
+  fetchFromGitHub,
+  type MattPin,
+} from "./matt-skills/index.ts";
 import { createNotifications, type SendPush } from "./notifications/index.ts";
 import { notificationRoutes } from "./notifications/routes.ts";
 import { sendWebPush } from "./notifications/web-push.ts";
@@ -164,6 +173,11 @@ export const createWorker = (options: {
   github?: GitHubApi;
   /** Sends a notification to a device (#173). Tests pass a fake; otherwise it's web push. */
   sendPush?: SendPush;
+  /**
+   * Matt Pocock's skills for code workspaces (ADR 0024): `matt.json`'s pin and his release fetched
+   * from GitHub, unless a test gives its own; `null` for none at all.
+   */
+  mattSkills?: { readonly pin?: MattPin; readonly fetch?: FetchMattSkills } | null;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -205,6 +219,15 @@ export const createWorker = (options: {
     now,
   });
   const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
+  const matt =
+    options.mattSkills === null
+      ? undefined
+      : createMattSkills({
+          dataDir,
+          ...(options.mattSkills?.pin === undefined ? {} : { pin: options.mattSkills.pin }),
+          fetch: options.mattSkills?.fetch ?? fetchFromGitHub,
+          now,
+        });
   const notifications = createNotifications({
     dataDir,
     send: options.sendPush ?? sendWebPush,
@@ -214,17 +237,20 @@ export const createWorker = (options: {
       return session.ok ? session.value.title : undefined;
     },
   });
+  const code = createCode({
+    dataDir,
+    commandEnv: github.commandEnv,
+    pullRequests: github,
+  });
+  const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
   const sessions = createSessions({
     dataDir,
     providers,
     contextDir,
     contextFolder,
     houseSkills,
-    code: createCode({
-      dataDir,
-      commandEnv: github.commandEnv,
-      pullRequests: github,
-    }),
+    matt,
+    code,
     now,
     notify: (session, event, pullRequest) => {
       notifications
@@ -365,8 +391,31 @@ export const createWorker = (options: {
       contextDir,
       houseFolder: houseSkills,
       workspace: workspace.value,
+      matt,
     });
     return c.json({ skills: skillList(skills) } satisfies SkillList);
+  });
+  api.get("/workspaces/:id/matt-setup", async (c) => {
+    const id = WorkspaceId.safeParse(c.req.param("id"));
+    if (!id.success) return contextError(c, { kind: "not-found" });
+    return c.json((await mattSetup.offer(id.data)) satisfies MattSetup);
+  });
+  api.post("/workspaces/:id/matt-setup", async (c) => {
+    const id = WorkspaceId.safeParse(c.req.param("id"));
+    if (!id.success) return contextError(c, { kind: "not-found" });
+    const body = await readBody(c, MattSetupAnswer);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const answered = await mattSetup.answer(id.data, body.value.answer);
+    if (answered.ok) return c.json(answered.value satisfies MattSetup);
+    return answered.error.kind === "not-found"
+      ? apiError(c, {
+          status: 404,
+          error: "There's nothing to set up in this workspace's repository.",
+        })
+      : apiError(c, {
+          status: 502,
+          error: `Matt's setup couldn't be added: ${answered.error.reason}`,
+        });
   });
   api.get("/owner-context", async (c) => {
     const read = await readOwnerContext(contextDir);

@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type ApprovalAsk,
   NotificationSubscription,
   type PullRequest,
   type PushNotice,
@@ -42,6 +43,19 @@ const STORAGE: StorageError = {
   message: "Courtyard couldn't read or keep its notifications in its data folder.",
 };
 
+/** What an approval needs, as a notification says it. */
+const approvalNeed = (ask: ApprovalAsk) => {
+  switch (ask.kind) {
+    case "command":
+      return "Needs your OK to run a command";
+    case "tool":
+      return `Needs your OK to delete something in ${ask.connection}`;
+    case "edit":
+    case "setup":
+      return "Needs your OK to change a file";
+  }
+};
+
 /**
  * What a session needs, as a notification says it, for the events that send one: a turn that
  * ends with its code session's pull request still failing checks says which (story 31).
@@ -49,9 +63,7 @@ const STORAGE: StorageError = {
 const needOf = (event: SessionEvent, pullRequest: PullRequest | undefined) => {
   switch (event.type) {
     case "approval-requested":
-      return event.ask.kind === "command"
-        ? "Needs your OK to run a command"
-        : "Needs your OK to change a file";
+      return approvalNeed(event.ask);
     case "turn-completed":
       return pullRequest?.state === "open" && pullRequest.checks.kind === "failed"
         ? `Checks still failing: ${pullRequest.checks.failed.join(", ")}`

@@ -71,7 +71,7 @@ export type CodeRefusal =
   /** A command for the session branch only, such as committing, while the worktree is off it. */
   | { readonly kind: "off-branch"; readonly branch: string }
   /** The owner denied the approval it needed (#171). */
-  | { readonly kind: "denied"; readonly what: "command" | "edit" };
+  | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" };
 
 /**
  * A command only the owner can allow (#171): one off the command allowlist, or one naming a path
@@ -221,9 +221,41 @@ export const createCode = (options: {
   };
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
+  /**
+   * The repository's default branch on its remote, freshly fetched: its name, and the ref it's
+   * fetched to; or why it can't be.
+   */
+  const freshDefault = async (
+    repoPath: string,
+  ): Promise<Result<{ branch: string; tracking: string }, BranchRefusal>> => {
+    const there = await isFolder(repoPath);
+    if (!there.ok || !there.value) return err({ kind: "repo-missing", repoPath });
+    const top = await gitOrNothing(repoPath, ["rev-parse", "--git-dir"]);
+    if (top === undefined) return err({ kind: "not-git", repoPath });
+    const env = await options.commandEnv();
+    const main = await defaultBranchOf(repoPath, env);
+    if (!main.ok) return main;
+    const tracking = `refs/remotes/${REMOTE}/${main.value}`;
+    try {
+      await git(repoPath, ["fetch", "--quiet", REMOTE, `+refs/heads/${main.value}:${tracking}`], {
+        timeoutMs: REMOTE_TIMEOUT_MS,
+        env,
+      });
+    } catch (error) {
+      return err({ kind: "remote", reason: gitFailureReason(error) });
+    }
+    return ok({ branch: main.value, tracking });
+  };
+
   return {
     /** The folder a session's branch is checked out in. */
     worktreeOf,
+
+    /** The repository's default branch on its remote, freshly fetched (the setup check, #181). */
+    freshDefault,
+
+    /** The repository a code workspace's remote is on GitHub, as `owner/name`, or why there's none. */
+    onGitHub,
 
     /** Which code sessions are running, and which wait for one to end. */
     slots: createCodeSlots(CODE_SESSIONS_AT_ONCE),
@@ -243,22 +275,9 @@ export const createCode = (options: {
       sessionId: SessionId;
     }): Promise<Result<SessionBranch, BranchRefusal>> => {
       const { repoPath, sessionId } = start;
-      const there = await isFolder(repoPath);
-      if (!there.ok || !there.value) return err({ kind: "repo-missing", repoPath });
-      const top = await gitOrNothing(repoPath, ["rev-parse", "--git-dir"]);
-      if (top === undefined) return err({ kind: "not-git", repoPath });
-      const env = await options.commandEnv();
-      const main = await defaultBranchOf(repoPath, env);
-      if (!main.ok) return main;
-      const tracking = `refs/remotes/${REMOTE}/${main.value}`;
-      try {
-        await git(repoPath, ["fetch", "--quiet", REMOTE, `+refs/heads/${main.value}:${tracking}`], {
-          timeoutMs: REMOTE_TIMEOUT_MS,
-          env,
-        });
-      } catch (error) {
-        return err({ kind: "remote", reason: gitFailureReason(error) });
-      }
+      const fresh = await freshDefault(repoPath);
+      if (!fresh.ok) return fresh;
+      const { tracking } = fresh.value;
       const branch = `${BRANCH_PREFIX}${sessionId.slice(0, 8)}`;
       const worktree = worktreeOf(sessionId);
       try {

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ApiError,
@@ -9,15 +9,20 @@ import {
   ProviderId,
   SessionEvent,
   SessionSummary,
+  SkillName,
 } from "@courtyard/contract";
 import type { Hono } from "hono";
+import { makeTemporaryFolder, removeFolder } from "./files.ts";
 import { git } from "./git.ts";
+import { type FetchMattSkills, fetchMattCopy, type MattPin } from "./matt-skills/index.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
 import {
   type CodeTurn,
   createFakeProvider,
   type Framing,
   type Provider,
+  type ToolConnection,
+  type ToolContent,
 } from "./providers/index.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { TestFile } from "./test-files.ts";
@@ -38,6 +43,8 @@ export const testWorker = (
   const worker = createWorker({
     // Nothing runs in the background unless a test asks for the job.
     repeat: () => {},
+    // No Matt Pocock's skills, and never the network, unless a test gives them (mattSkillsIn).
+    mattSkills: null,
     ...rest,
     env: {
       COURTYARD_CONTEXT_DIR: join(root, "context"),
@@ -371,6 +378,74 @@ export const codingProvider = (
   return { provider, answers };
 };
 
+/** For tests: the model the drawing provider offers. */
+export const DRAWING_MODEL = { provider: "drawer", model: "one" };
+
+/**
+ * For tests: one call a drawing provider makes to Paper's connection, and what Paper gives back:
+ * text, an image, or a failure with Paper's own words. Paper itself never runs: this stands in.
+ */
+export type PaperStep = {
+  readonly tool: string;
+  readonly input: Record<string, unknown>;
+  readonly output?: readonly ToolContent[];
+  readonly fails?: string;
+};
+
+/**
+ * For tests: a provider that codes and uses tools (ADR 0023). In each turn it calls Paper's
+ * connection for each step, in order, as Claude Code would: it asks the worker, and only for a call
+ * the worker allowed it hands back what Paper gave (the step's output, or its failure). It keeps
+ * the connections each turn was given, the worker's answers, and what the worker added, and answers
+ * "Drawn."
+ */
+export const drawingProvider = (steps: readonly PaperStep[]) => {
+  const turns: (readonly ToolConnection[])[] = [];
+  const answers: Result<null, string>[] = [];
+  const added: (string | undefined)[] = [];
+  const id = ProviderId.parse("drawer");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: true,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Drawer",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      turns.push(input.connections);
+      const paper = input.connections.find((connection) => connection.name === "paper");
+      for (const step of steps) {
+        if (paper === undefined) break;
+        const call = { tool: step.tool, input: step.input };
+        const answer = await paper.check(call);
+        answers.push(answer);
+        if (!answer.ok) continue;
+        added.push(
+          await paper.done(
+            step.fails === undefined
+              ? { ...call, ok: true, content: step.output ?? [] }
+              : { ...call, ok: false, content: [{ kind: "text", text: step.fails }] },
+          ),
+        );
+      }
+      await input.emit("Drawn.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The drawer only draws." }),
+  };
+  return { provider, turns, answers, added };
+};
+
 /** For tests: the model the running provider offers. */
 export const RUNNING_MODEL = { provider: "runner", model: "one" };
 
@@ -379,7 +454,7 @@ export const RUNNING_MODEL = { provider: "runner", model: "one" };
  * worktree, in the environment the worker gives a code session's commands, as Claude Code runs
  * its commands (#99). It doesn't ask the worker first, so it can run what no model may (`gh auth
  * token`) and show what the environment holds. Keeps whether each one worked and what it printed,
- * and each turn's framing and the environment the worker gave its commands.
+ * and each turn's framing, the environment the worker gave its commands, and its plugin.
  */
 export const runningProvider = (
   commands: readonly { readonly command: readonly string[]; readonly input?: string }[],
@@ -387,6 +462,7 @@ export const runningProvider = (
   const printed: { ok: boolean; output: string }[] = [];
   const framings: Framing[] = [];
   const envs: CodeTurn["env"][] = [];
+  const plugins: CodeTurn["plugin"][] = [];
   const id = ProviderId.parse("runner");
   const capabilities = {
     readsFiles: true,
@@ -410,6 +486,7 @@ export const runningProvider = (
       if (code === null) return err({ kind: "unknown", message: "The runner only codes." });
       framings.push(input.framing);
       envs.push(code.env);
+      plugins.push(code.plugin);
       for (const { command, input: stdin } of commands) {
         const [program = "", ...args] = command;
         const ran = spawnSync(program, args, {
@@ -427,7 +504,7 @@ export const runningProvider = (
     },
     answerOnce: async () => err({ kind: "unknown", message: "The runner only codes." }),
   };
-  return { provider, printed, framings, envs };
+  return { provider, printed, framings, envs, plugins };
 };
 
 /** For tests: one turn the held coder is working on: where, with what, and how to let it end. */
@@ -492,6 +569,103 @@ export const writeSkill = async (
     await mkdir(join(folder, "scripts"));
     await writeFile(join(folder, "scripts", "run.sh"), "echo done\n");
   }
+};
+
+/** For tests: one of Matt Pocock's skills in a stand-in for his plugin. */
+export type MattTestSkill = {
+  readonly name: string;
+  /** His folder it's in: `engineering` unless it says. */
+  readonly category?: string;
+  /** Only the owner starts it (`disable-model-invocation: true`). */
+  readonly ownerStarts?: boolean;
+  readonly body?: string;
+  readonly files?: Readonly<Record<string, string>>;
+};
+
+/** For tests: the skills a stand-in for Matt's plugin has unless a test says. */
+export const MATT_TEST_SKILLS: readonly MattTestSkill[] = [
+  { name: "implement", ownerStarts: true, body: 'Call the Skill tool with "tdd".' },
+  { name: "to-tickets", ownerStarts: true },
+  { name: "tdd", files: { "tests.md": "Good tests.\n" } },
+  { name: "grilling", category: "productivity" },
+];
+
+/**
+ * For tests: a stand-in for Matt Pocock's plugin at `version` in `folder`, laid out as his is:
+ * `.claude-plugin/plugin.json` listing each skill, his licence, and `skills/<category>/<name>/`.
+ */
+export const writeMattPlugin = async (
+  folder: string,
+  options: { version?: string; skills?: readonly MattTestSkill[]; extra?: object } = {},
+) => {
+  const skills = options.skills ?? MATT_TEST_SKILLS;
+  const pathOf = (skill: MattTestSkill) =>
+    `./skills/${skill.category ?? "engineering"}/${skill.name}`;
+  await mkdir(join(folder, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    join(folder, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "mattpocock-skills",
+      version: options.version ?? "1.3.1",
+      license: "MIT",
+      skills: skills.map(pathOf),
+      ...options.extra,
+    }),
+  );
+  await writeFile(join(folder, "LICENSE"), "MIT License\n\nCopyright (c) 2026 Matt Pocock\n");
+  // His repository has more than the plugin keeps.
+  await writeFile(join(folder, "README.md"), "# Skills\n");
+  for (const skill of skills) {
+    const skillFolder = join(folder, ...pathOf(skill).slice(2).split("/"));
+    await mkdir(skillFolder, { recursive: true });
+    const fields = [
+      `name: ${skill.name}`,
+      `description: What ${skill.name} does.`,
+      ...(skill.ownerStarts ? ["disable-model-invocation: true"] : []),
+    ];
+    await writeFile(
+      join(skillFolder, "SKILL.md"),
+      `---\n${fields.join("\n")}\n---\n\n${skill.body ?? "Do it."}\n`,
+    );
+    for (const [path, text] of Object.entries(skill.files ?? {})) {
+      await mkdir(dirname(join(skillFolder, path)), { recursive: true });
+      await writeFile(join(skillFolder, path), text);
+    }
+  }
+};
+
+/**
+ * For tests: Matt's skills as a worker is given them: the stand-in plugin in `folder` at the
+ * version it says, fetched by copying it (never the network), with `matt.json`'s pin for it. The
+ * checksum is the copy's own unless a test gives another; `fetches` lists each version fetched.
+ */
+export const mattSkillsIn = async (
+  folder: string,
+  options: { version?: string; checksum?: string; picker?: readonly string[] } = {},
+) => {
+  const version = options.version ?? "1.3.1";
+  const fetches: string[] = [];
+  const fetch: FetchMattSkills = async (asked) => {
+    fetches.push(asked.version);
+    await cp(folder, asked.into, { recursive: true });
+    return ok(null);
+  };
+  const ownChecksum = async () => {
+    const kept = await makeTemporaryFolder("courtyard-matt-");
+    if (!kept.ok) throw new Error("no temporary folder");
+    const checksum = await fetchMattCopy({ source: folder, version, fetch, into: kept.value });
+    await removeFolder(kept.value);
+    fetches.length = 0;
+    if (!checksum.ok) throw new Error(checksum.error);
+    return checksum.value;
+  };
+  const pin: MattPin = {
+    source: "https://github.com/mattpocock/skills",
+    version,
+    checksum: options.checksum ?? (await ownChecksum()),
+    picker: (options.picker ?? ["implement", "to-tickets"]).map((name) => SkillName.parse(name)),
+  };
+  return { pin, fetch, fetches };
 };
 
 /** For tests: a house skills package in `dir`, with `skills.json` and a stand-in for each skill. */
@@ -569,12 +743,20 @@ export const standInForGitHub = async (repo: string, where: { origin: string; gi
   await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);
 };
 
-/** For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`. */
-export const codeWorkspace = async (root: string, id: string, repoPath: string) => {
+/**
+ * For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`,
+ * with anything else in `more` in its `workspace.json`.
+ */
+export const codeWorkspace = async (
+  root: string,
+  id: string,
+  repoPath: string,
+  more: Record<string, unknown> = {},
+) => {
   await mkdir(join(root, "context", id), { recursive: true });
   await writeFile(
     join(root, "context", id, "workspace.json"),
-    JSON.stringify({ mode: "code", repoPath }),
+    JSON.stringify({ mode: "code", repoPath, ...more }),
   );
 };
 

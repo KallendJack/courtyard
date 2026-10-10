@@ -7,6 +7,7 @@ export {
   MESSAGE_FIELD,
   PDF_TYPE,
   PHOTO_TYPES,
+  PhotoAttachment,
   PhotoMediaType,
 } from "./lib/attachment.ts";
 export {
@@ -52,6 +53,7 @@ export {
 export { GitHubConnection } from "./lib/github.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
+export { MattSetup, MattSetupAnswer, MattSetupPiece } from "./lib/matt-setup.ts";
 export {
   NotificationSubscription,
   NotificationsOff,

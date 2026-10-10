@@ -25,7 +25,7 @@ import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
 import { Sheet } from "@/components/sheet";
-import { SkillChoices, usable } from "@/components/skill-list";
+import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
 import { SkillTag } from "@/components/skill-tag";
 import { classes } from "@/lib/classes";
@@ -185,10 +185,11 @@ export const Composer = memo(function Composer(props: {
   };
 
   const skills = props.skills;
+  const pickerSkills = skills?.list.filter(inPicker) ?? [];
   const slash = SLASH.exec(text)?.[1];
   const menuOpen =
     skills !== undefined && (listOpen || (slash !== undefined && dismissed !== text));
-  const shown = menuOpen ? matchingSkills(skills.list, slash ?? "") : [];
+  const shown = menuOpen ? matchingSkills(pickerSkills, slash ?? "") : [];
   const pickable = shown.filter(usable);
   const highlighted = pickable.find((s) => s.name === active) ?? pickable[0];
 
@@ -299,7 +300,7 @@ export const Composer = memo(function Composer(props: {
               open={choosing === "skill"}
               onClose={() => setChoosing(undefined)}
             >
-              <SkillChoices skills={skills.list} pick={pick} />
+              <SkillChoices skills={pickerSkills} pick={pick} />
             </Sheet>
           )}
         </>

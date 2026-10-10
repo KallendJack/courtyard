@@ -151,6 +151,32 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).not.toMatch(/can't change anything or run commands/i);
   });
 
+  /** Makes garage-gym a code workspace whose sessions draw in Paper's file-1 (ADR 0023). */
+  const withPaper = async () => {
+    const { repo } = await codeRepo(root);
+    await codeWorkspace(root, "garage-gym", repo, {
+      connections: { paper: { command: "/path/to/paper", fileId: "file-1" } },
+    });
+  };
+
+  it("tells a model in a code workspace with Paper which file it draws in, what asks first, and what to do when Paper isn't open (ADR 0023)", async () => {
+    await withPaper();
+
+    const { framing } = await firstTurn({ ...CODES, usesTools: true });
+
+    expect(framing.instructions).toContain(
+      await quotedInGuide("You can read and draw Paper designs", { file: '"file-1"' }),
+    );
+  });
+
+  it("tells a model that uses no tools nothing of Paper, since it isn't given Paper", async () => {
+    await withPaper();
+
+    const { framing } = await firstTurn(CODES);
+
+    expect(framing.instructions).not.toContain("Paper");
+  });
+
   it("tells a model that reads no files only what it can do", async () => {
     const { framing } = await firstTurn({ ...READS_FILES, readsFiles: false });
 

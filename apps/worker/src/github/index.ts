@@ -427,6 +427,41 @@ export const createGitHub = (options: {
       return deleted.ok ? deleted : err({ kind: "github", message: deleted.error });
     },
 
+    /** The names of `repo`'s labels (#181). */
+    labels: async (find: { repo: string }): Promise<Result<readonly string[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const found = await signedIn.value.github.labels(signedIn.value.token, find);
+      return found.ok ? found : err({ kind: "github", message: found.error });
+    },
+
+    /** Makes a label in `repo` (#181). */
+    createLabel: async (label: {
+      repo: string;
+      name: string;
+      color: string;
+      description: string;
+    }): Promise<Result<null, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const made = await signedIn.value.github.createLabel(signedIn.value.token, label);
+      return made.ok ? made : err({ kind: "github", message: made.error });
+    },
+
+    /** Opens a pull request in `repo` from `branch` into `base` (#181). */
+    openPullRequest: async (pull: {
+      repo: string;
+      branch: string;
+      base: string;
+      title: string;
+      body: string;
+    }): Promise<Result<{ number: number; url: string }, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const opened = await signedIn.value.github.openPullRequest(signedIn.value.token, pull);
+      return opened.ok ? opened : err({ kind: "github", message: opened.error });
+    },
+
     /** For the worker's repeating jobs: refreshes the sign-in when it's close to running out. */
     keepFresh: async () => {
       if (api !== null) await refreshIfDue(api);

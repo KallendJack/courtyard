@@ -40,7 +40,9 @@ import {
   attachmentPath,
   attachmentsOf,
   carriedAttachments,
+  imagesShownIn,
   keepAttachments,
+  keepImage,
   type PreparedAttachment,
 } from "../attachments/index.ts";
 import {
@@ -75,7 +77,9 @@ import {
   writeJsonFile,
 } from "../files.ts";
 import type { CommandEnv } from "../git.ts";
+import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
+import { paperConnection } from "../paper/index.ts";
 import {
   checksFailedMessage,
   codeRefusalReason,
@@ -98,6 +102,7 @@ import {
   useSkillReply,
 } from "../prompts/index.ts";
 import {
+  type CodePlugin,
   type CodeTurn,
   firstWithRoom,
   modelsOnOffer,
@@ -131,7 +136,10 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
-import { getWorkspace, isArchived } from "../workspaces/index.ts";
+import { getWorkspace, isArchived, type PaperSettings } from "../workspaces/index.ts";
+
+/** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
+const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
 
 /** What the owner did to a save from its note. */
 export type NoteAct = "undo" | "edit";
@@ -371,6 +379,12 @@ const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
  * turn starts, and only while it can still be stopped: once the provider has finished, the turn
  * is ending and how it ended is already decided.
  */
+/** What an approval the owner denied was, as its model is told. */
+const deniedWhat = (ask: ApprovalAsk) => {
+  if (ask.kind === "command" || ask.kind === "tool") return ask.kind;
+  return "edit";
+};
+
 type TurnState =
   | { readonly kind: "idle" }
   | {
@@ -399,6 +413,11 @@ type RunningSession = {
   queues: boolean;
   /** Resolves once the turn last started here has ended, its end recorded. */
   ended: Promise<void>;
+  /**
+   * The Paper nodes its turns made (ADR 0023), which they may delete without asking. Kept while
+   * the worker runs: after a restart, deleting any of them asks.
+   */
+  paperMade: Set<string>;
 };
 
 /**
@@ -415,6 +434,8 @@ export const createSessions = (options: {
   contextFolder: ContextFolder;
   /** The house skills' folder (ADR 0016). */
   houseSkills: string;
+  /** Matt Pocock's skills, which code workspaces get (ADR 0024); none when they're off. */
+  matt: MattSkills | undefined;
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
   now: () => number;
@@ -446,6 +467,7 @@ export const createSessions = (options: {
       approvals: new Map(),
       queues: false,
       ended: Promise.resolve(),
+      paperMade: new Set(),
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -587,7 +609,22 @@ export const createSessions = (options: {
       contextDir: options.contextDir,
       houseFolder: options.houseSkills,
       workspace,
+      matt: options.matt,
     });
+
+  /**
+   * Matt's skills for a code turn (ADR 0024): the pinned copy, with the skills of it the workspace
+   * can use; `null` when they aren't loaded.
+   */
+  const mattPlugin = async (skills: WorkspaceSkills): Promise<CodePlugin | null> => {
+    const copy = await options.matt?.copy();
+    if (copy === undefined || !copy.ok) return null;
+    return {
+      folder: copy.value.folder,
+      name: copy.value.plugin,
+      skills: skills.usable.flatMap((skill) => (skill.source === "matt" ? [skill.name] : [])),
+    };
+  };
 
   /**
    * What a turn needs from its workspace: its name, mode and folder, its context file as written,
@@ -602,6 +639,8 @@ export const createSessions = (options: {
         skills: WorkspaceSkills;
         /** Its command allowlist, for a code session's commands. */
         allowlist: readonly CommandRule[];
+        /** A code workspace's Paper connection (ADR 0023), or null when it has none. */
+        paper: PaperSettings | null;
       },
       string
     >
@@ -633,6 +672,8 @@ export const createSessions = (options: {
       things: things.value,
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
+      paper: workspace.value.paper,
+      ...(workspace.value.paper === null ? {} : { paperFile: workspace.value.paper.fileId }),
     });
   };
 
@@ -694,7 +735,8 @@ export const createSessions = (options: {
           capabilities: turn.provider.capabilities,
           events: events.value,
           skills: {
-            offered: skills.usable.filter((skill) => !skill.ownerOnly),
+            // Matt's skills load through the provider's own skill loading (ADR 0024).
+            offered: skills.usable.filter((skill) => !skill.ownerOnly && skill.source !== "matt"),
             inUse: await inUseTexts(skills.usable, inUse),
           },
           attachments: await carriedAttachments(folderOf(turn.id), events.value),
@@ -886,12 +928,56 @@ export const createSessions = (options: {
           return decide(
             given === "allow"
               ? ok(asking.allowed)
-              : err({ kind: "denied", what: asking.ask.kind === "command" ? "command" : "edit" }),
+              : err({ kind: "denied", what: deniedWhat(asking.ask) }),
           );
         };
+        /**
+         * Shows the owner an image a tool connection gave the model (ADR 0023): kept in the
+         * session's folder, then recorded. One that isn't an image Courtyard shows is left out.
+         */
+        const show = async (shown: {
+          connection: string;
+          of: string;
+          mediaType: string;
+          bytes: Uint8Array;
+        }) => {
+          if (stopper.signal.aborted || recordingLost) return;
+          const kept = await keepImage(folderOf(turn.id), {
+            name: `${shown.connection} screenshot`,
+            mediaType: shown.mediaType,
+            bytes: shown.bytes,
+          });
+          if (!kept.ok) return;
+          const recorded = await append(turn.id, {
+            type: "image-shown",
+            connection: shown.connection,
+            of: shown.of,
+            image: kept.value,
+          });
+          if (!recorded.ok) recordingLost = true;
+        };
+        /** The tool connections the turn offers: a code workspace's Paper (ADR 0023). */
+        const connections =
+          turn.provider.capabilities.usesTools && worktree !== undefined && workspace.value.paper
+            ? [
+                paperConnection({
+                  settings: workspace.value.paper,
+                  made: session.paperMade,
+                  approve: (ask, allowed) => approval({ ask, why: undefined, allowed }),
+                  report,
+                  show: (image) => show({ connection: "Paper", ...image }),
+                }),
+              ]
+            : [];
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
-        const codeTurn = (worktree: string, branch: string, env: CommandEnv): CodeTurn => ({
+        const codeTurn = (
+          worktree: string,
+          branch: string,
+          env: CommandEnv,
+          plugin: CodePlugin | null,
+        ): CodeTurn => ({
           worktree,
+          plugin,
           // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
           env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)) },
           edit: async (path) => {
@@ -942,7 +1028,13 @@ export const createSessions = (options: {
             code:
               worktree === undefined || branch === undefined
                 ? null
-                : codeTurn(worktree, branch, await options.code.commandEnv()),
+                : codeTurn(
+                    worktree,
+                    branch,
+                    await options.code.commandEnv(),
+                    await mattPlugin(skills),
+                  ),
+            connections,
             framing,
             callTool: (call) => {
               const calling = callTool(call);
@@ -1241,20 +1333,26 @@ export const createSessions = (options: {
   };
 
   /**
-   * Whether the skill a message starts, if any, is one its workspace can use: one of its skills,
-   * not broken, and without scripts in a planning workspace.
+   * A message with the skill it starts, if any, once that's one its workspace can use: one of its
+   * skills, not broken, and without scripts in a planning workspace. The owner starts one from the
+   * skill picker, or by beginning the message with its name, as `/implement 157` (#181).
    */
-  const skillUsable = async (
+  const withSkillStarted = async <M extends { text: string; skill?: SkillName | undefined }>(
     workspaceId: WorkspaceId,
-    message: { skill?: SkillName | undefined },
-  ): Promise<Result<null, SessionError>> => {
-    if (message.skill === undefined) return ok(null);
+    message: M,
+  ): Promise<Result<M, SessionError>> => {
+    const typed = SLASH_SKILL.exec(message.text)?.[1];
+    if (message.skill === undefined && typed === undefined) return ok(message);
     const workspace = await getWorkspace(options.contextDir, workspaceId);
     if (!workspace.ok) return err(STORAGE_ERROR);
     const skills = await skillsOf(workspace.value);
-    return skills.usable.some((skill) => skill.name === message.skill)
-      ? ok(null)
-      : err({ kind: "skill-unavailable" });
+    const usable = (name: string | undefined) =>
+      skills.usable.find((skill) => skill.name === name)?.name;
+    if (message.skill !== undefined) {
+      return usable(message.skill) === undefined ? err({ kind: "skill-unavailable" }) : ok(message);
+    }
+    const skill = usable(typed);
+    return ok(skill === undefined ? message : { ...message, skill });
   };
 
   /** The provider to answer a message: its model must be on offer, and take its effort. */
@@ -1764,10 +1862,10 @@ export const createSessions = (options: {
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
-      const message = await withModel(start.message);
+      const chosen = await withModel(start.message);
+      if (!chosen.ok) return chosen;
+      const message = await withSkillStarted(start.workspaceId, chosen.value);
       if (!message.ok) return message;
-      const usable = await skillUsable(start.workspaceId, message.value);
-      if (!usable.ok) return usable;
       const provider = await providerIn(start.workspaceId, message.value);
       // A fresh start meanwhile may have taken its workspace away.
       if (settingAside || since !== freshStarts) return err({ kind: "starting-fresh" });
@@ -1834,17 +1932,17 @@ export const createSessions = (options: {
       /** The files attached to it, checked (#78). */
       attachments: readonly PreparedAttachment[];
     }): Promise<Result<null, SessionError>> => {
-      const { rawId, message, attachments } = send;
+      const { rawId, attachments } = send;
       const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerIn(session.value.workspaceId, message);
+      const provider = await providerIn(session.value.workspaceId, send.message);
       if (!provider.ok) return provider;
-      const usable = await skillUsable(session.value.workspaceId, message);
-      if (!usable.ok) return usable;
+      const message = await withSkillStarted(session.value.workspaceId, send.message);
+      if (!message.ok) return message;
       const { id } = session.value;
       // What a stopped worker left behind is put right first, so a turn it left open isn't busy.
       await settled(id);
@@ -1852,14 +1950,14 @@ export const createSessions = (options: {
         id,
         workspaceId: session.value.workspaceId,
         provider: provider.value.provider,
-        message,
+        message: message.value,
         since,
         coding: session.value.branch !== undefined,
         attachments,
       });
       // A turn is running, so it waits its turn (#177).
       if (!started.ok && started.error.kind === "busy") {
-        return queueMessage({ id, message, attachments });
+        return queueMessage({ id, message: message.value, attachments });
       }
       return started;
     },
@@ -2024,7 +2122,10 @@ export const createSessions = (options: {
       if (!found.ok) return found;
       const events = await readEvents(found.value.id);
       if (!events.ok) return events;
-      const attachment = attachmentsOf(events.value).find(({ id }) => id === rawAttachmentId);
+      // The owner's, or an image a tool connection showed them (ADR 0023).
+      const attachment = [...attachmentsOf(events.value), ...imagesShownIn(events.value)].find(
+        ({ id }) => id === rawAttachmentId,
+      );
       if (attachment === undefined) return err({ kind: "attachment-not-found" });
       const bytes = await readBytes(attachmentPath(folderOf(found.value.id), attachment));
       if (!bytes.ok) return err(STORAGE_ERROR);

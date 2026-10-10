@@ -26,8 +26,16 @@ const attachmentBase = {
  * An attachment as the owner's message records it, kept in the session's folder by its id: a
  * photo of one of the kinds a model takes, or a PDF.
  */
+/** A photo kept in a session's folder: one the owner attached, or a tool connection's image. */
+export const PhotoAttachment = z.object({
+  ...attachmentBase,
+  kind: z.literal("photo"),
+  mediaType: PhotoMediaType,
+});
+export type PhotoAttachment = z.infer<typeof PhotoAttachment>;
+
 export const Attachment = z.discriminatedUnion("kind", [
-  z.object({ ...attachmentBase, kind: z.literal("photo"), mediaType: PhotoMediaType }),
+  PhotoAttachment,
   z.object({ ...attachmentBase, kind: z.literal("pdf"), mediaType: z.literal(PDF_TYPE) }),
 ]);
 export type Attachment = z.infer<typeof Attachment>;

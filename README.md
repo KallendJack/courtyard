@@ -168,7 +168,9 @@ machine:
   `find`, which can run other commands), the package scripts (`pnpm`/`npm` install with a frozen
   lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look,
   `git add` and `git commit` on its branch, pushing its branch (to `origin`, under its own name,
-  never forced), and opening or updating its own pull request with `gh pr create`/`gh pr edit`.
+  never forced), opening or updating its own pull request with `gh pr create`/`gh pr edit`,
+  filing, labelling, commenting on and closing the repository's issues (`gh issue
+  create|edit|comment|close`, `gh label create|list`), and reading through `gh api` (GET only).
   Any other command, an edit outside its worktree, or an edit to a file that decides what those
   commands run (a `package.json`, git hooks, `.claude`) waits for you: the session shows the
   exact command or file with Allow and Deny, and waits as long as you take.
@@ -186,12 +188,41 @@ machine:
     "allowlist": { "add": ["cargo test ...", "pnpm lint"], "remove": ["npm ci"] }
   }
   ```
+- **To let its sessions read and draw Paper boards** (Claude only), add Paper to its
+  `workspace.json`: Paper's command on the worker machine and the one Paper file its sessions
+  use, by the id at the end of the file's link in Paper. Sessions read and draw there without
+  asking, ask before deleting anything they didn't make, and show each screenshot they take in
+  the chat. Paper has to be open on the worker machine; when it isn't, the session says so and
+  carries on.
+
+  ```json
+  {
+    "mode": "code",
+    "repoPath": "/path/to/repo",
+    "connections": { "paper": { "command": "/path/to/paper", "fileId": "<file id>" } }
+  }
+  ```
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.
+- **Every session gets [Matt Pocock's skills](https://github.com/mattpocock/skills)**, from
+  Courtyard's own pinned copy (ADR 0024), never the worker machine's plugins. The worker fetches
+  the release `packages/skills/matt.json` names from his GitHub into the data folder's
+  `matt-skills/` the first time it starts (and after an Update that moves the pin on), so it needs
+  to reach github.com then; a copy that doesn't match the pin's checksum isn't loaded, and the
+  workspace's Skills section says why. Start one from the Skill picker (implement, to-tickets,
+  triage, pr and the others you start), or begin a message with its name: `/implement 157`. The
+  rest load when the model judges they fit. His grilling replaces Courtyard's here.
+- **His setup, once per repository.** When the repository is missing what his setup writes
+  (`docs/agents/`, the Agent skills section in `AGENTS.md`, the triage labels), the workspace's
+  page offers to add it, once you've signed in to GitHub: **Allow** makes the labels and opens a
+  pull request with the files for you to merge on GitHub; **Not now** and it won't ask again.
+- **Keeping his skills current:** a weekly check on Courtyard's own GitHub repository opens an
+  issue when he has a newer release, with what changed and the new `matt.json`. Merge the bump,
+  then Update.
 - **A session ends when its pull request is merged or closed,** from Courtyard or on GitHub: it
   stays readable but takes no more messages, and its worktree, its branch and the branch it
   pushed to GitHub are cleared away (once any turn still running has ended). A session deleted
@@ -244,8 +275,9 @@ memory, skills or connectors, and in planning workspaces it can only read.
 
 In a code workspace (see [Code workspaces](#code-workspaces)), Claude also follows the
 repository's own Claude Code setup: its `CLAUDE.md` (or the `AGENTS.md` it points to), its
-`.claude/settings.json` and its `.claude/skills`, read from the session's own worktree. Still
-none of the machine's own.
+`.claude/settings.json` and its `.claude/skills`, read from the session's own worktree, and
+Matt Pocock's skills as a plugin from Courtyard's pinned copy. Still none of the machine's own,
+its plugins included.
 
 
 ### Codex

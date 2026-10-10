@@ -69,6 +69,7 @@ describe("a workspace's skills", () => {
         source: "house",
         ownerOnly: true,
         replacesHouse: false,
+        inPicker: true,
       },
       {
         kind: "usable",
@@ -77,6 +78,7 @@ describe("a workspace's skills", () => {
         source: "house",
         ownerOnly: false,
         replacesHouse: false,
+        inPicker: true,
       },
     ]);
   });

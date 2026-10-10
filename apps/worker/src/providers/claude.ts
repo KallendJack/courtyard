@@ -18,6 +18,7 @@ import {
   ModelId,
   ProviderId,
   type ProviderStatus,
+  SkillName,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
@@ -25,28 +26,32 @@ import {
   NOT_IN_BACKGROUND,
   OUTSIDE_WORKSPACE,
   PAGE_NOT_ALLOWED,
+  SKILL_NOT_HERE,
   UNCHECKED_REQUEST,
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
+  type CodePlugin,
   type CodeTurn,
   type CourtyardTool,
   jsonSchemaOf,
   type Provider,
   photosOf,
+  type ToolConnection,
+  type ToolContent,
   type ToolReply,
   type TurnInput,
   type WebSearch,
 } from "./index.ts";
 
 const id = ProviderId.parse("claude");
-/** Claude reads the workspace's files, saves to context and codes; tool connections come later. */
+/** Claude reads the workspace's files, saves to context, codes and uses tool connections. */
 const CAPABILITIES: Capabilities = {
   readsFiles: true,
   codes: true,
-  usesTools: false,
+  usesTools: true,
   savesContext: true,
   searchesWeb: true,
 };
@@ -156,6 +161,87 @@ const courtyardServer = (tools: readonly CourtyardTool[], callTool: TurnInput["c
     ),
   });
 
+/**
+ * A tool connection's MCP server as Claude Code starts it (ADR 0023): its command on the worker
+ * machine, its tools always offered, since a turn has no tool search to find them with.
+ */
+const connectionServer = (connection: ToolConnection) => ({
+  type: "stdio" as const,
+  command: connection.server.command,
+  args: [...connection.server.args],
+  alwaysLoad: true,
+});
+
+/** A tool connection's tool, by the name Claude Code calls it: `mcp__paper__get_screenshot`. */
+const ConnectionTool = /^mcp__(.+?)__(.+)$/;
+
+/** The tool connection a tool belongs to, and the tool by its own name, or `undefined`. */
+const connectionCall = (
+  connections: readonly ToolConnection[],
+  toolName: string,
+  input: unknown,
+) => {
+  const [, server, tool] = ConnectionTool.exec(toolName) ?? [];
+  const connection = connections.find((each) => each.name === server);
+  return connection === undefined || tool === undefined
+    ? undefined
+    : { connection, call: { tool, input } };
+};
+
+/** One part of a tool's result as Claude Code gives it to a hook: text, or an image either way. */
+const ResultPart = z.union([
+  z.object({ type: z.literal("text"), text: z.string() }),
+  z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
+  z.object({
+    type: z.literal("image"),
+    source: z.object({ type: z.literal("base64"), data: z.string(), media_type: z.string() }),
+  }),
+  z.unknown().transform(() => undefined),
+]);
+/** A tool's result: its parts, wrapped or not, or only text. Anything else counts as nothing. */
+const ToolResult = z.union([
+  z.array(ResultPart),
+  z.object({ content: z.array(ResultPart) }).transform((result) => result.content),
+  z.string().transform((text) => [{ type: "text" as const, text }]),
+  z.unknown().transform(() => []),
+]);
+
+/** A tool's result that says it failed. */
+const ToolError = z.object({ isError: z.literal(true) });
+
+/** A tool's result as the worker reads it: its text, and each image as a data URL. */
+const contentOf = (response: unknown): ToolContent[] =>
+  ToolResult.parse(response).flatMap((part): ToolContent[] => {
+    if (part === undefined) return [];
+    if (part.type === "text") return [{ kind: "text", text: part.text }];
+    const [type, data] =
+      "source" in part ? [part.source.media_type, part.source.data] : [part.mimeType, part.data];
+    return [{ kind: "image", dataUrl: `data:${type};base64,${data}` }];
+  });
+
+/**
+ * Checked after every call to a tool connection's tool: its result goes to the worker (ADR
+ * 0023), and anything the worker adds for a failed one goes to Claude.
+ */
+const handResults =
+  (connections: readonly ToolConnection[]): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") {
+      return {};
+    }
+    const found = connectionCall(connections, input.tool_name, input.tool_input);
+    if (found === undefined) return {};
+    const failed = input.hook_event_name === "PostToolUseFailure";
+    const added = await found.connection.done({
+      ...found.call,
+      ok: !failed && !ToolError.safeParse(input.tool_response).success,
+      content: failed ? [{ kind: "text", text: input.error }] : contentOf(input.tool_response),
+    });
+    return added === undefined
+      ? {}
+      : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: added } };
+  };
+
 /** How long a status check may take before Claude counts as unavailable. */
 const CHECK_TIMEOUT_MS = 15_000;
 /** How long a status answer is reused, so listing providers doesn't start Claude Code each time. */
@@ -172,7 +258,10 @@ const WIND_DOWN_MS = 2000;
  */
 const isolatedEnv = (): Record<string, string | undefined> => ({
   ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("COURTYARD_")),
+    Object.entries(process.env).filter(
+      // Nor the folders of plugins the owner's own Claude Code loads (ADR 0024).
+      ([key]) => !key.startsWith("COURTYARD_") && key !== "CLAUDE_CODE_PLUGIN_DIRS",
+    ),
   ),
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
   ENABLE_CLAUDEAI_MCP_SERVERS: "false",
@@ -201,29 +290,77 @@ const PROJECT_SKILLS = join(".claude", "skills");
  * repository's own skills. The machine's user and local settings, memory and connectors stay off,
  * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
  * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Claude Code's
- * background tasks are off.
+ * background tasks are off. Matt Pocock's skills come as one local plugin, Courtyard's pinned
+ * copy, with only the skills it's given turned on (ADR 0024).
  */
 const projectSetup = async (
   worktree: string,
   noPlugins: string,
-): Promise<Partial<Options> & Pick<Options, "env">> => {
+  plugin: CodePlugin | null,
+): Promise<{ options: Partial<Options> & Pick<Options, "env">; projectSkills: string[] }> => {
   const folders = await listSubfolders(join(worktree, PROJECT_SKILLS));
-  const skills = [];
+  const projectSkills = [];
   for (const name of folders.ok ? folders.value : []) {
     const found = await exists(join(worktree, PROJECT_SKILLS, name, "SKILL.md"));
-    if (found.ok && found.value) skills.push(name);
+    if (found.ok && found.value) projectSkills.push(name);
   }
   return {
-    settingSources: ["project"],
-    skills,
-    env: {
-      CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
-      CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
-      // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
-      // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
-      CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+    options: {
+      settingSources: ["project"],
+      skills: [
+        ...projectSkills,
+        ...(plugin?.skills.map((skill) => `${plugin.name}:${skill}`) ?? []),
+      ],
+      ...(plugin === null ? {} : { plugins: [{ type: "local", path: plugin.folder }] }),
+      env: {
+        CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
+        CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+        // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
+        // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+      },
     },
+    projectSkills,
   };
+};
+
+/** The Skill tool's input as Claude Code sends it: which skill, and what's passed to it. */
+const SkillInput = z.strictObject({ skill: z.string(), args: z.string().optional() });
+
+/**
+ * The skill a code turn's Skill tool call loads, when it's one the turn turned on, with where it
+ * comes from: one of Matt's (`mattpocock-skills:tdd`, or its name alone) or the repository's own.
+ */
+const skillLoaded = (
+  skills: { readonly project: readonly string[]; readonly plugin: CodePlugin | null },
+  input: unknown,
+): { name: SkillName; source: "matt" | "project" } | undefined => {
+  const parsed = SkillInput.safeParse(input);
+  if (!parsed.success) return undefined;
+  const { plugin, project } = skills;
+  const asked = parsed.data.skill;
+  const named = (name: string, source: "matt" | "project") => {
+    const skill = SkillName.safeParse(name);
+    return skill.success ? { name: skill.data, source } : undefined;
+  };
+  if (plugin !== null && asked.startsWith(`${plugin.name}:`)) {
+    const name = asked.slice(plugin.name.length + 1);
+    return plugin.skills.some((skill) => skill === name) ? named(name, "matt") : undefined;
+  }
+  if (project.includes(asked)) return named(asked, "project");
+  return plugin?.skills.some((skill) => skill === asked) ? named(asked, "matt") : undefined;
+};
+
+/**
+ * One of Matt's skills' own files, as its read is reported: the skill (its folder in his
+ * `skills/<group>/<name>/`) and the file's path inside it. `undefined` for one in no skill.
+ */
+const skillFileIn = (plugin: CodePlugin, path: string) => {
+  const [top, , name, ...rest] = shownPath(plugin.folder, path).split("/");
+  const skill = SkillName.safeParse(name);
+  return top === "skills" && skill.success && rest.length > 0
+    ? { name: skill.data, path: rest.join("/") }
+    : undefined;
 };
 
 /** Claude Code as it really is: the Agent SDK, with this machine's sign-in. */
@@ -595,15 +732,31 @@ const confineTo =
     courtyardTools: readonly string[];
     web: WebTurn | null;
     code: CodeTurn | null;
+    /** The tool connections the turn offers, each call to one asked of the worker (ADR 0023). */
+    connections: readonly ToolConnection[];
+    /** A code turn's repository skills, turned on by name (ADR 0022). */
+    projectSkills: readonly string[];
   }): HookCallback =>
   async (input) => {
-    const { folder, report, courtyardTools, web, code } = confine;
+    const { folder, report, courtyardTools, web, code, connections } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (courtyardTools.includes(input.tool_name)) return decision(true);
+      const connected = connectionCall(connections, input.tool_name, input.tool_input);
+      if (connected !== undefined) {
+        const checked = await connected.connection.check(connected.call);
+        return checked.ok ? decision(true) : decision(false, checked.error);
+      }
       const asked =
         code === null ? undefined : await askWorker(code, input.tool_name, input.tool_input);
       if (asked !== undefined) return asked.ok ? decision(true) : decision(false, asked.error);
+      if (code !== null && input.tool_name === "Skill") {
+        const skills = { project: confine.projectSkills, plugin: code.plugin };
+        const loaded = skillLoaded(skills, input.tool_input);
+        if (loaded === undefined) return decision(false, SKILL_NOT_HERE);
+        await report({ kind: "skill-loaded", ...loaded });
+        return decision(true);
+      }
       if (web !== null && input.tool_name === "WebSearch") {
         const search = WebSearchInput.safeParse(input.tool_input);
         if (!search.success) return decision(false, "That search couldn't be checked.");
@@ -623,6 +776,17 @@ const confineTo =
       }
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
+
+      // A code turn reads the skills of Matt's it loaded from Courtyard's copy (ADR 0024).
+      const plugin = code?.plugin ?? null;
+      if (plugin !== null && reach.paths.length > 0 && (await staysInside(plugin.folder, reach))) {
+        const file =
+          "readsFile" in reach && reach.readsFile !== undefined
+            ? skillFileIn(plugin, reach.readsFile)
+            : undefined;
+        if (file !== undefined) await report({ kind: "skill-file-read", ...file });
+        return decision(true);
+      }
 
       if (!(await staysInside(folder, reach))) return decision(false, OUTSIDE_WORKSPACE);
 
@@ -776,7 +940,7 @@ export const createClaudeProvider = (
       input.signal.addEventListener("abort", stopClaudeCode);
 
       const { tools } = input.framing;
-      const { code } = input;
+      const { code, connections } = input;
       const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
       const web = webTurnFor(input.framing.webSearch);
       let answer = "";
@@ -788,7 +952,7 @@ export const createClaudeProvider = (
       const setup =
         code === null || noPlugins === undefined
           ? undefined
-          : await projectSetup(folder, noPlugins.value);
+          : await projectSetup(folder, noPlugins.value, code.plugin);
       try {
         const messages = claudeCode.run({
           prompt: turnPrompt(input.framing),
@@ -797,7 +961,10 @@ export const createClaudeProvider = (
             ...(setup === undefined || code === null
               ? {}
               : // Its commands' git and gh use Courtyard's GitHub sign-in, never the machine's (#99).
-                { ...setup, env: { ...isolatedEnv(), ...setup.env, ...code.env } }),
+                {
+                  ...setup.options,
+                  env: { ...isolatedEnv(), ...setup.options.env, ...code.env },
+                }),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
@@ -809,18 +976,49 @@ export const createClaudeProvider = (
             ],
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
-            ...(tools.length === 0
-              ? {}
-              : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
+            mcpServers: {
+              ...(tools.length === 0
+                ? {}
+                : { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) }),
+              ...Object.fromEntries(
+                connections.map((connection) => [connection.name, connectionServer(connection)]),
+              ),
+            },
             hooks: {
               PreToolUse: [
                 {
-                  hooks: [confineTo({ folder, report: input.report, courtyardTools, web, code })],
+                  hooks: [
+                    confineTo({
+                      folder,
+                      report: input.report,
+                      courtyardTools,
+                      web,
+                      code,
+                      connections,
+                      projectSkills: setup?.projectSkills ?? [],
+                    }),
+                  ],
                   // An approval waits on the owner, however long they take (#171).
-                  ...(code === null ? {} : { timeout: APPROVAL_WAIT_SECONDS }),
+                  ...(code === null && connections.length === 0
+                    ? {}
+                    : { timeout: APPROVAL_WAIT_SECONDS }),
                 },
               ],
-              ...(web === null ? {} : { PostToolUse: [{ hooks: [noteResults(web)] }] }),
+              ...(web === null && connections.length === 0
+                ? {}
+                : {
+                    PostToolUse: [
+                      {
+                        hooks: [
+                          ...(web === null ? [] : [noteResults(web)]),
+                          ...(connections.length === 0 ? [] : [handResults(connections)]),
+                        ],
+                      },
+                    ],
+                  }),
+              ...(connections.length === 0
+                ? {}
+                : { PostToolUseFailure: [{ hooks: [handResults(connections)] }] }),
             },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,

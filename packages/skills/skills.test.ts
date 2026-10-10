@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkHouseSkills, HOUSE_SKILLS_FOLDER, readHouseManifest } from "./index.ts";
+import { checkHouseSkills, HOUSE_SKILLS_FOLDER, readHouseManifest, readMattPin } from "./index.ts";
 
 // `pnpm verify` runs this: the house skills and their list, checked against the Agent Skills
 // format (ADR 0016). Each mistake is shown on a copy of the package. The format check's own rules
@@ -11,6 +11,17 @@ import { checkHouseSkills, HOUSE_SKILLS_FOLDER, readHouseManifest } from "./inde
 describe("the house skills", () => {
   it("are each in skills.json, and each passes the Agent Skills format check", async () => {
     expect(await checkHouseSkills(HOUSE_SKILLS_FOLDER)).toEqual([]);
+  });
+});
+
+describe("matt.json", () => {
+  it("pins a release of Matt Pocock's skills, with a checksum and the ones the picker lists (ADR 0024)", async () => {
+    const pin = await readMattPin();
+
+    expect(pin).toMatchObject({
+      ok: true,
+      value: { source: "https://github.com/mattpocock/skills", picker: expect.any(Array) },
+    });
   });
 });
 

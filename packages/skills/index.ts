@@ -40,12 +40,51 @@ export const HouseManifest = z.strictObject({
 export type HouseManifest = z.infer<typeof HouseManifest>;
 export type HouseSkill = HouseManifest["skills"][number];
 
+/**
+ * `matt.json`: the version of Matt Pocock's skills Courtyard pins for code workspaces (ADR 0024),
+ * where they come from, the checksum of the copy kept (`mattChecksum` in the worker), and the
+ * ones the Skill picker lists, since the owner starts them.
+ */
+export const MattPin = z.strictObject({
+  /** His own plugin list (marketplace): a git repository whose tag `v<version>` is the release. */
+  source: z.url(),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  checksum: z.string().regex(/^sha256-[0-9a-f]{64}$/),
+  picker: z.array(SkillName),
+});
+export type MattPin = z.infer<typeof MattPin>;
+
+const MATT_PIN = "matt.json";
+
+/** Reads `matt.json` from the house skills' folder, or says why it can't be used. */
+export const readMattPin = async (
+  folder: string = HOUSE_SKILLS_FOLDER,
+): Promise<Result<MattPin, string>> => {
+  let json: unknown;
+  try {
+    json = JSON.parse(await readFile(join(folder, MATT_PIN), "utf8"));
+  } catch {
+    return err(`${MATT_PIN} can't be read as JSON`);
+  }
+  const parsed = MattPin.safeParse(json);
+  return parsed.success ? ok(parsed.data) : err(`${MATT_PIN} doesn't fit its shape`);
+};
+
 /** A skill that passed the format check: its name, what it's for, and whether it has scripts. */
 export type CheckedSkill = {
   readonly name: SkillName;
   readonly description: string;
   readonly hasScripts: boolean;
+  /** Claude Code never loads it by itself (`disable-model-invocation`), so only the owner starts it. */
+  readonly ownerStarts: boolean;
 };
+
+/**
+ * Claude Code's own SKILL.md fields that a skill Claude Code loads itself may carry (Matt's, ADR
+ * 0024): only the owner starting it, the hint for its arguments, and whether the `/` menu lists
+ * it. Anything else Claude-only (its own hooks, a model, a sub-agent) still fails the check.
+ */
+const CLAUDE_CODE_FIELDS = ["disable-model-invocation", "argument-hint", "user-invocable"];
 
 const hasCode = (error: unknown, code: string) =>
   error instanceof Error && "code" in error && error.code === code;
@@ -84,9 +123,15 @@ const frontmatterOf = (text: string): Result<string, string> => {
 
 /** Checks a skill's fields as the reference validator (skills-ref) does, in the owner's words. */
 const checkFields = (
-  fields: Record<string, unknown>,
+  given: Record<string, unknown>,
   folderName: string,
+  claudeCode: boolean,
 ): Result<z.infer<typeof Frontmatter> & { name: SkillName }, string> => {
+  const fields = claudeCode
+    ? Object.fromEntries(
+        Object.entries(given).filter(([field]) => !CLAUDE_CODE_FIELDS.includes(field)),
+      )
+    : given;
   const unknown = Object.keys(fields).filter((field) => !FIELDS.includes(field));
   if (unknown.length > 0) {
     return err(`its SKILL.md has a field the Agent Skills format doesn't: ${unknown.join(", ")}`);
@@ -125,9 +170,14 @@ const checkFields = (
  * following the rules of its reference validator, skills-ref (agentskills/agentskills, read
  * 2026-10-09): a `SKILL.md` whose frontmatter has a name matching the folder's, a description, and
  * no field the format hasn't got. A skill that fails says why, in words for the owner, without a
- * full stop ("its SKILL.md has no description").
+ * full stop ("its SKILL.md has no description"). A skill Claude Code loads itself (`claudeCode`)
+ * may also carry Claude Code's fields for who starts it (`CLAUDE_CODE_FIELDS`).
  */
-export const checkSkill = async (folder: string): Promise<Result<CheckedSkill, string>> => {
+export const checkSkill = async (
+  folder: string,
+  options: { readonly claudeCode?: boolean } = {},
+): Promise<Result<CheckedSkill, string>> => {
+  const claudeCode = options.claudeCode === true;
   let text: string;
   try {
     text = await readFile(join(folder, SKILL_FILE), "utf8");
@@ -150,12 +200,13 @@ export const checkSkill = async (folder: string): Promise<Result<CheckedSkill, s
   if (!mapping.success || Array.isArray(fields)) {
     return err("its SKILL.md's fields aren't a list of names and values");
   }
-  const checked = checkFields(mapping.data, folder.split(/[\\/]/).at(-1) ?? "");
+  const checked = checkFields(mapping.data, folder.split(/[\\/]/).at(-1) ?? "", claudeCode);
   if (!checked.ok) return checked;
   return ok({
     name: checked.value.name,
     description: checked.value.description,
     hasScripts: await isFolder(join(folder, SCRIPTS)),
+    ownerStarts: claudeCode && mapping.data["disable-model-invocation"] === true,
   });
 };
 

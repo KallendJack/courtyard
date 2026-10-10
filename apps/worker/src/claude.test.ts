@@ -2,13 +2,21 @@ import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { Effort, ModelId, type Source } from "@courtyard/contract";
+import { Effort, ModelId, SkillName, type Source } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
-import type { Activity, CodeTurn, TurnInput, TurnTool } from "./providers/index.ts";
+import type {
+  Activity,
+  CodeTurn,
+  ToolCall,
+  ToolConnection,
+  ToolContent,
+  TurnInput,
+  TurnTool,
+} from "./providers/index.ts";
 import { err, ok } from "./result.ts";
 import { quotedInGuide } from "./testing.ts";
 
@@ -85,6 +93,7 @@ const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {
     effort: undefined,
     folder,
     code: null,
+    connections: [],
     framing: {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
@@ -154,6 +163,38 @@ const postToolUse = async (
   }
 };
 
+/**
+ * The PostToolUseFailure hooks the adapter gave Claude Code, called the way Claude Code would:
+ * what each answered.
+ */
+const postToolUseFailure = async (
+  options: Options,
+  tool: { name: string; input: unknown; error: string },
+) => {
+  const answers: unknown[] = [];
+  for (const matcher of options.hooks?.PostToolUseFailure ?? []) {
+    for (const hook of matcher.hooks) {
+      answers.push(
+        await hook(
+          {
+            hook_event_name: "PostToolUseFailure",
+            tool_name: tool.name,
+            tool_input: tool.input,
+            error: tool.error,
+            tool_use_id: "tool-1",
+            session_id: "s",
+            transcript_path: "",
+            cwd: folder,
+          },
+          "tool-1",
+          { signal: new AbortController().signal },
+        ),
+      );
+    }
+  }
+  return answers;
+};
+
 describe("Claude's status", () => {
   it("is available with its models when Claude Code is logged in", async () => {
     const status = await createClaudeProvider({ claudeCode: stubClaudeCode().claudeCode }).status();
@@ -164,7 +205,7 @@ describe("Claude's status", () => {
     expect(status.capabilities).toEqual({
       readsFiles: true,
       codes: true,
-      usesTools: false,
+      usesTools: true,
       savesContext: true,
       searchesWeb: true,
     });
@@ -678,6 +719,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         GH_CONFIG_DIR: "/path/to/data/github/gh",
         GH_TOKEN: undefined,
       },
+      plugin: null,
       edit: async (path) => {
         asked.push(`edit ${path}`);
         return path.includes("outside") ? err("Not out there.") : ok(null);
@@ -757,6 +799,136 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     expect(pluginsFolder?.startsWith(worktree)).toBe(false);
     await expect(readdir(pluginsFolder ?? worktree)).rejects.toThrow();
     await rm(worktree, { recursive: true, force: true });
+  });
+
+  /** A code session with Courtyard's pinned copy of Matt's plugin (ADR 0024), tdd and grilling on. */
+  const withMattsSkills = async () => {
+    const session = await codeSession();
+    const pluginFolder = await mkdtemp(join(tmpdir(), "courtyard-matt-"));
+    await mkdir(join(pluginFolder, "skills", "engineering", "tdd"), { recursive: true });
+    await writeFile(join(pluginFolder, "skills", "engineering", "tdd", "tests.md"), "Tests.\n");
+    const code: CodeTurn = {
+      ...session.code,
+      plugin: {
+        folder: pluginFolder,
+        name: "mattpocock-skills",
+        skills: ["tdd", "grilling"].map((name) => SkillName.parse(name)),
+      },
+    };
+    const cleanUp = async () => {
+      await rm(session.worktree, { recursive: true, force: true });
+      await rm(pluginFolder, { recursive: true, force: true });
+    };
+    return { ...session, code, pluginFolder, cleanUp };
+  };
+
+  it("loads Matt Pocock's skills from Courtyard's pinned copy as a plugin, only those it's given, never the machine's plugins", async () => {
+    const { worktree, code, pluginFolder, cleanUp } = await withMattsSkills();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    // The owner's own Claude Code may load plugins from folders of theirs.
+    process.env.CLAUDE_CODE_PLUGIN_DIRS = "/path/to/owners/plugins";
+    try {
+      await runTurn(claudeCode, { folder: worktree, code });
+      await runTurn(claudeCode);
+    } finally {
+      delete process.env.CLAUDE_CODE_PLUGIN_DIRS;
+    }
+
+    const [coding, planning] = runs.map((run) => run.options);
+    expect(coding?.plugins).toEqual([{ type: "local", path: pluginFolder }]);
+    expect([...(Array.isArray(coding?.skills) ? coding.skills : [])].sort()).toEqual([
+      "mattpocock-skills:grilling",
+      "mattpocock-skills:tdd",
+      "pr",
+      "tdd",
+    ]);
+    expect(coding?.env?.CLAUDE_CODE_PLUGIN_CACHE_DIR).not.toBe(pluginFolder);
+    // A planning turn never gets them.
+    expect(planning?.plugins ?? []).toEqual([]);
+    expect(planning?.skills).toEqual([]);
+    for (const options of [coding, planning]) {
+      expect(options?.env).not.toHaveProperty("CLAUDE_CODE_PLUGIN_DIRS");
+    }
+    await cleanUp();
+  });
+
+  it("lets Claude load a skill it was given with its Skill tool, and read that skill's files, reporting each", async () => {
+    const { worktree, code, pluginFolder, cleanUp } = await withMattsSkills();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const { activities } = await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const decisions = [
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:tdd" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "grilling", args: "the plan" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "pr" } }),
+      await preToolUse(options, {
+        name: "Read",
+        input: { file_path: join(pluginFolder, "skills", "engineering", "tdd", "tests.md") },
+      }),
+      // Not one it was given, or a field Courtyard doesn't know.
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:retro" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "tdd", model: "opus" } }),
+    ].map((decision) => ("hookSpecificOutput" in decision ? decision.hookSpecificOutput : {}));
+
+    expect(
+      decisions.map(
+        (decision) =>
+          z.object({ permissionDecision: z.string() }).parse(decision).permissionDecision,
+      ),
+    ).toEqual(["allow", "allow", "allow", "allow", "deny", "deny"]);
+    expect(
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:retro" } }),
+    ).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason: await quotedInGuide("That skill isn't one you can load here"),
+      },
+    });
+    expect(activities).toEqual([
+      { kind: "skill-loaded", name: "tdd", source: "matt" },
+      { kind: "skill-loaded", name: "grilling", source: "matt" },
+      { kind: "skill-loaded", name: "pr", source: "project" },
+      { kind: "skill-file-read", name: "tdd", path: "tests.md" },
+    ]);
+    await cleanUp();
+  });
+
+  it("gives a code turn Matt's skills and Paper's server together, its hook answering each (ADR 0023, ADR 0024)", async () => {
+    const { worktree, code, cleanUp } = await withMattsSkills();
+    const checked: unknown[] = [];
+    const paper: ToolConnection = {
+      name: "paper",
+      server: { command: "/path/to/paper", args: ["mcp"] },
+      check: async (call) => {
+        checked.push(call.tool);
+        return ok(null);
+      },
+      done: async () => undefined,
+    };
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const { activities } = await runTurn(claudeCode, {
+      folder: worktree,
+      code,
+      connections: [paper],
+    });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    expect(options.plugins).toEqual([{ type: "local", path: code.plugin?.folder }]);
+    expect(options.mcpServers).toEqual({
+      paper: { type: "stdio", command: "/path/to/paper", args: ["mcp"], alwaysLoad: true },
+    });
+    const decisions = [
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:tdd" } }),
+      await preToolUse(options, { name: "mcp__paper__get_basic_info", input: { fileId: "f" } }),
+    ];
+    for (const decision of decisions) {
+      expect(decision).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    }
+    expect(checked).toEqual(["get_basic_info"]);
+    expect(activities).toEqual([{ kind: "skill-loaded", name: "tdd", source: "matt" }]);
+    await cleanUp();
   });
 
   it("asks the worker before every edit and command, and tells Claude why one is refused", async () => {
@@ -852,6 +1024,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     const code: CodeTurn = {
       worktree,
       env: {},
+      plugin: null,
       edit: async () => ok(null),
       run: async (_command, why) => {
         heard.push(why);
@@ -887,10 +1060,12 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       input: { file_path: join(folder, "notes.md"), content: "Hello" },
     });
     const command = await preToolUse(options, { name: "Bash", input: { command: "pnpm test" } });
+    const skill = await preToolUse(options, { name: "Skill", input: { skill: "tdd" } });
 
     expect(options.skills).toEqual([]);
     expect(edit).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
     expect(command).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(skill).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
   });
 });
 
@@ -1117,6 +1292,127 @@ describe("web search on a Claude turn (ADR 0019)", () => {
         hookSpecificOutput: { permissionDecision: "deny" },
       });
     }
+  });
+});
+
+describe("a tool connection on a Claude turn (ADR 0008, ADR 0023)", () => {
+  /** Paper's connection as the worker hands it over: each call checked, each result kept. */
+  const paperConnection = () => {
+    const checked: ToolCall[] = [];
+    const done: (ToolCall & { ok: boolean; content: readonly ToolContent[] })[] = [];
+    const connection: ToolConnection = {
+      name: "paper",
+      server: { command: "/path/to/paper", args: ["mcp"] },
+      check: async (call) => {
+        checked.push(call);
+        return call.tool === "delete_nodes" ? err("The owner denied that.") : ok(null);
+      },
+      done: async (call) => {
+        done.push(call);
+        return call.ok ? undefined : "Paper may not be open on the worker machine.";
+      },
+    };
+    return { connection, checked, done };
+  };
+
+  it("passes its MCP server to Claude Code as a command on the worker machine, only when the turn has one", async () => {
+    const { connection } = paperConnection();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success, success] });
+
+    await runTurn(claudeCode, { connections: [connection] });
+    await runTurn(claudeCode);
+
+    expect(runs[0]?.options.mcpServers).toEqual({
+      paper: { type: "stdio", command: "/path/to/paper", args: ["mcp"], alwaysLoad: true },
+    });
+    // Still nothing from the machine's own Claude Code setup.
+    expect(runs[0]?.options.strictMcpConfig).toBe(true);
+    expect(runs[1]?.options.mcpServers).toEqual({});
+  });
+
+  it("asks the worker before each of its tools, by the tool's own name, and tells Claude why one is refused", async () => {
+    const { connection, checked } = paperConnection();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { connections: [connection] });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const drawn = await preToolUse(options, {
+      name: "mcp__paper__write_html",
+      input: { fileId: "file-1", html: "<div />", targetNodeId: "A-1", mode: "insert-children" },
+    });
+    const deleted = await preToolUse(options, {
+      name: "mcp__paper__delete_nodes",
+      input: { fileId: "file-1", nodeIds: ["B-2"] },
+    });
+    // A server the turn doesn't have is refused, unasked.
+    const other = await preToolUse(options, { name: "mcp__homelab__restart", input: {} });
+
+    expect(checked).toEqual([
+      {
+        tool: "write_html",
+        input: { fileId: "file-1", html: "<div />", targetNodeId: "A-1", mode: "insert-children" },
+      },
+      { tool: "delete_nodes", input: { fileId: "file-1", nodeIds: ["B-2"] } },
+    ]);
+    expect(drawn).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    expect(deleted).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecision: "deny",
+        permissionDecisionReason: "The owner denied that.",
+      },
+    });
+    expect(other).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    // An approval waits on the owner, however long they take.
+    expect(options.hooks?.PreToolUse?.[0]?.timeout ?? 0).toBeGreaterThanOrEqual(7 * 24 * 60 * 60);
+  });
+
+  it("hands each result to the worker, images as data URLs, and tells Claude what the worker adds to a failure", async () => {
+    const { connection, done } = paperConnection();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { connections: [connection] });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    await postToolUse(options, {
+      name: "mcp__paper__get_screenshot",
+      input: { fileId: "file-1", nodeId: "A-1" },
+      response: [
+        { type: "text", text: '{"fileId":"file-1"}' },
+        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      ],
+    });
+    const failed = await postToolUseFailure(options, {
+      name: "mcp__paper__get_basic_info",
+      input: { fileId: "file-1" },
+      error: "connect ECONNREFUSED 127.0.0.1",
+    });
+
+    expect(done).toEqual([
+      {
+        tool: "get_screenshot",
+        input: { fileId: "file-1", nodeId: "A-1" },
+        ok: true,
+        content: [
+          { kind: "text", text: '{"fileId":"file-1"}' },
+          { kind: "image", dataUrl: "data:image/png;base64,iVBORw0KGgo=" },
+        ],
+      },
+      {
+        tool: "get_basic_info",
+        input: { fileId: "file-1" },
+        ok: false,
+        content: [{ kind: "text", text: "connect ECONNREFUSED 127.0.0.1" }],
+      },
+    ]);
+    expect(failed).toEqual([
+      {
+        hookSpecificOutput: {
+          hookEventName: "PostToolUseFailure",
+          additionalContext: "Paper may not be open on the worker machine.",
+        },
+      },
+    ]);
   });
 });
 
