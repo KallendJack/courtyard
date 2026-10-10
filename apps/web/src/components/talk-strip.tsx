@@ -76,13 +76,16 @@ export function TalkBar(props: {
 
   const begin = () => {
     setTalk({ kind: "listening", held: false, words: "", overCancel: false });
-    listening.current = listen({
+    // It can fail before it returns (the browser refusing to start): then there's nothing to keep.
+    let over = false;
+    const started = listen({
       heard: (words) => setTalk((was) => (was.kind === "listening" ? { ...was, words } : was)),
       finished: (words) => {
         if (words === "") setTalk({ kind: "idle", problem: "Nothing heard, so nothing was sent" });
         else boxNow.current?.say(words);
       },
       failed: (problem, words) => {
+        over = true;
         if (press.current !== undefined) window.clearTimeout(press.current.timer);
         press.current = undefined;
         listening.current = undefined;
@@ -94,6 +97,7 @@ export function TalkBar(props: {
         }
       },
     });
+    if (!over) listening.current = started;
   };
 
   const down = (event: PointerEvent<HTMLButtonElement>) => {
