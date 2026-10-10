@@ -21,7 +21,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
-import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
+import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED, UNCHECKED_REQUEST } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
@@ -482,7 +482,7 @@ const askWorker = async (
   tool: string,
   input: unknown,
 ): Promise<Result<null, string> | undefined> => {
-  const unchecked = err("That request couldn't be checked, so it was refused.");
+  const unchecked = err(UNCHECKED_REQUEST);
   switch (tool) {
     case "Edit":
     case "Write": {
@@ -619,7 +619,7 @@ const confineTo =
       }
       return decision(true);
     } catch {
-      return decision(false, "That request couldn't be checked, so it was refused.");
+      return decision(false, UNCHECKED_REQUEST);
     }
   };
 

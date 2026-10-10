@@ -10,6 +10,7 @@ import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
 import type { Activity, CodeTurn, TurnInput, TurnTool } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
+import { quotedInGuide } from "./testing.ts";
 
 const folder = resolve("/path/to/context/garage-gym");
 
@@ -790,6 +791,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       "run pnpm test",
       "run rm -rf .",
     ]);
+    const unchecked = await quotedInGuide("That request couldn't be checked");
     expect(decisions).toEqual([
       { hookEventName: "PreToolUse", permissionDecision: "allow" },
       {
@@ -803,7 +805,11 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         permissionDecision: "deny",
         permissionDecisionReason: "Not that one.",
       },
-      expect.objectContaining({ permissionDecision: "deny" }),
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: unchecked,
+      },
       expect.objectContaining({ permissionDecision: "deny" }),
     ]);
     await rm(worktree, { recursive: true, force: true });

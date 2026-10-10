@@ -259,6 +259,11 @@ model why, in one of these:
 - Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
   this turn, so nothing more is done."
 
+A tool call whose input can't be checked (a field Courtyard doesn't know, say), or whose check fails, is refused,
+never let through, and Claude is told:
+
+> That request couldn't be checked, so it was refused.
+
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.
 

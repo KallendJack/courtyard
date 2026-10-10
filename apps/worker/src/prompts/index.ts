@@ -1191,6 +1191,12 @@ export const notOfferedReply = (name: string) =>
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
 
 /**
+ * What Claude is told of a tool call whose input can't be checked, or whose check fails: it's
+ * refused, never let through unchecked (docs/ai-conduct.md, Coding).
+ */
+export const UNCHECKED_REQUEST = "That request couldn't be checked, so it was refused.";
+
+/**
  * The message the worker sends a code session when its pull request's checks fail (#172;
  * docs/ai-conduct.md, Coding), naming the checks that failed.
  */
