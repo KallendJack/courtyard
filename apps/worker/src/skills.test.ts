@@ -110,6 +110,27 @@ describe("a workspace's skills", () => {
     expect(byName.get("code-review")).toMatchObject({ replacesHouse: true });
   });
 
+  it("say each one's mark: a house skill's from skills.json, the owner's from its SKILL.md's metadata", async () => {
+    await writeHouseSkills(houseDir(), [
+      { name: "grilling", workspaces: ["planning"], icon: "flame" },
+      { name: "get-to-know", workspaces: ["planning"], start: "owner", icon: "person" },
+    ]);
+    await skill(everywhereSkills(), "shopping-list", { metadata: { icon: "flame" } });
+    await skill(everywhereSkills(), "packing-list", { metadata: { icon: "rocket" } });
+    await skill(everywhereSkills(), "reading-list");
+
+    const skills = await skillsOf(await owner());
+
+    expect(skills.map((s) => [s.name, s.icon])).toEqual([
+      ["get-to-know", "person"],
+      ["grilling", "flame"],
+      // One Courtyard has no mark for, or none at all, gets the book every skill has.
+      ["packing-list", undefined],
+      ["reading-list", undefined],
+      ["shopping-list", "flame"],
+    ]);
+  });
+
   it("keep a house skill only the owner starts that way, even when the owner's replaces it", async () => {
     await skill(workspaceSkills(), "get-to-know", { description: "My own get to know." });
 

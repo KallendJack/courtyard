@@ -363,11 +363,12 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 ### The house skills: `packages/skills`
 
 `@courtyard/skills` holds Courtyard's own skills, a folder each in the Agent Skills format, and `skills.json`: the
-kinds of workspace that get each one and whether only the owner starts it (ADR 0016). It also holds the format check
-(`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the house skills in
-`pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
+kinds of workspace that get each one, whether only the owner starts it (ADR 0016), and its mark in the app (`icon`:
+flame, person or the default book; a skill of the owner's gives one as `icon` in its SKILL.md's `metadata`). It also
+holds the format check (`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the
+house skills in `pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
 `matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
-copy the worker keeps, and the ones the Skill picker lists.
+copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`).
 
 ### The contract: `packages/contract`
 

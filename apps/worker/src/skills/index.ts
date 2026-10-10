@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type {
   Activity,
+  SkillIcon,
   SkillName,
   SkillProblem,
   SkillSource,
@@ -68,6 +69,9 @@ const foundIn = async (skillsDir: string, source: SkillSource): Promise<Found[]>
   );
 };
 
+/** No marks for any skill. */
+const NO_ICONS: Readonly<Record<string, SkillIcon>> = {};
+
 /** Where Matt's skills come from, as a broken skill names them when the copy can't be loaded. */
 const MATT_PLUGIN = "mattpocock-skills";
 
@@ -86,7 +90,7 @@ const mattSkills = async (matt: MattSkills) => {
       ownerOnly: false,
       problem: { kind: "broken", reason: copy.error },
     };
-    return { found: [], picker: new Set<string>(), problem };
+    return { found: [], picker: new Set<string>(), icons: NO_ICONS, problem };
   }
   const found = await Promise.all(
     copy.value.skills.map(
@@ -98,7 +102,12 @@ const mattSkills = async (matt: MattSkills) => {
       }),
     ),
   );
-  return { found, picker: new Set<string>(copy.value.picker), problem: undefined };
+  return {
+    found,
+    picker: new Set<string>(copy.value.picker),
+    icons: copy.value.icons,
+    problem: undefined,
+  };
 };
 
 /** The house skills this kind of workspace gets, from `skills.json`, and every owner-only name. */
@@ -107,7 +116,7 @@ const houseSkills = async (houseFolder: string, mode: WorkspaceMode) => {
   if (!manifest.ok) {
     // verify checks the house skills, so this is a broken install: the owner's still work.
     console.error(`The house skills can't be read: ${manifest.error}.`);
-    return { found: [], ownerOnly: new Set<string>() };
+    return { found: [], ownerOnly: new Set<string>(), icons: new Map<string, SkillIcon>() };
   }
   const { skills } = manifest.value;
   const forMode = skills.filter((skill: HouseSkill) => skill.workspaces.includes(mode));
@@ -120,7 +129,10 @@ const houseSkills = async (houseFolder: string, mode: WorkspaceMode) => {
   const ownerOnly = new Set<string>(
     skills.flatMap((skill: HouseSkill) => (skill.start === "owner" ? [skill.name] : [])),
   );
-  return { found, ownerOnly };
+  const icons = new Map<string, SkillIcon>(
+    skills.flatMap((skill: HouseSkill) => (skill.icon ? [[skill.name, skill.icon] as const] : [])),
+  );
+  return { found, ownerOnly, icons };
 };
 
 const byName = (a: { name: string }, b: { name: string }) =>
@@ -149,7 +161,7 @@ export const workspaceSkills = async (options: {
   const [matt, ...places] = await Promise.all([
     mode === "code" && options.matt !== undefined
       ? mattSkills(options.matt)
-      : { found: [], picker: new Set<string>(), problem: undefined },
+      : { found: [], picker: new Set<string>(), icons: NO_ICONS, problem: undefined },
     foundIn(join(folder, SKILLS_FOLDER), "workspace"),
     mode === "code" && repoPath !== null
       ? foundIn(join(repoPath, SKILLS_FOLDER), "project")
@@ -163,6 +175,16 @@ export const workspaceSkills = async (options: {
   for (const found of [...places.flat(), ...matt.found, ...house.found]) {
     const { checked, folderName, source } = found;
     const ownerOnly = house.ownerOnly.has(folderName) || (checked.ok && checked.value.ownerStarts);
+    // Its mark: a house skill's from skills.json, Matt's from matt.json, the rest's from their own.
+    const icon =
+      source === "house"
+        ? house.icons.get(folderName)
+        : source === "matt"
+          ? matt.icons[folderName]
+          : checked.ok
+            ? checked.value.icon
+            : undefined;
+    const marked = icon === undefined ? {} : { icon };
     const cantUse = (problem: SkillProblem, description: string) =>
       unusable.push({
         kind: "unusable",
@@ -170,6 +192,7 @@ export const workspaceSkills = async (options: {
         description,
         source,
         ownerOnly,
+        ...marked,
         problem,
       });
     if (!checked.ok) {
@@ -188,6 +211,7 @@ export const workspaceSkills = async (options: {
       description,
       source,
       ownerOnly,
+      ...marked,
       replacesHouse: source !== "house" && houseNames.has(name),
       inPicker: source !== "matt" || matt.picker.has(name),
       folder: found.folder,

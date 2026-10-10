@@ -1,4 +1,4 @@
-import type { SkillName, SkillSummary } from "@courtyard/contract";
+import type { SkillIcon, SkillName, SkillSummary } from "@courtyard/contract";
 import { Book, Flame, UserRound } from "lucide-react";
 import { useId } from "react";
 import { classes } from "@/lib/classes";
@@ -13,12 +13,12 @@ import { nameOf, usable, whyUnusable } from "./skill-list.tsx";
  */
 
 /**
- * A skill's mark: the flame for Grilling (as Grill this plan has), a person for Get to know, else
- * the book every skill has elsewhere.
+ * A skill's mark, as the skill gives it: the flame (Grilling, as Grill this plan has), a person
+ * (Get to know), else the book every skill has elsewhere.
  */
-function SkillIcon(props: { name: string }) {
-  if (props.name === "grilling") return <Flame aria-hidden strokeWidth={1.8} />;
-  if (props.name.startsWith("get-to-know")) return <UserRound aria-hidden strokeWidth={1.6} />;
+function SkillMark(props: { icon: SkillIcon | undefined }) {
+  if (props.icon === "flame") return <Flame aria-hidden strokeWidth={1.8} />;
+  if (props.icon === "person") return <UserRound aria-hidden strokeWidth={1.6} />;
   return <Book aria-hidden strokeWidth={1.6} />;
 }
 
@@ -51,7 +51,7 @@ export function SheetSkills(props: {
                 aria-pressed={picked}
                 onClick={() => usable(skill) && props.pick(skill.name)}
               >
-                <SkillIcon name={skill.name} />
+                <SkillMark icon={skill.icon} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span
                     className={classes(

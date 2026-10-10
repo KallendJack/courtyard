@@ -14,5 +14,8 @@
     "wayfinder",
     "prototype",
     "research"
-  ]
+  ],
+  "icons": {
+    "grill-with-docs": "flame"
+  }
 }
