@@ -8,6 +8,7 @@ import {
   type Attachment,
   type CarryOnRequest,
   type ChangeId,
+  type CodeSessionList,
   type Effort,
   endsTurn,
   type FailureReason,
@@ -1199,10 +1200,10 @@ export const createSessions = (options: {
    */
   const sessionsOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<(SessionSummary & { queued: boolean })[], SessionError>> => {
+  ): Promise<Result<CodeSessionList["sessions"], SessionError>> => {
     const folders = await listFolder(sessionsDir);
     if (!folders.ok) return err(STORAGE_ERROR);
-    const summaries: (SessionSummary & { queued: boolean })[] = [];
+    const summaries: CodeSessionList["sessions"] = [];
     for (const folder of folders.value) {
       const id = SessionId.safeParse(folder);
       if (!id.success) continue;
