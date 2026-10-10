@@ -80,6 +80,12 @@ const textDelta = (text: string) => ({
   type: "stream_event",
   event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
 });
+/** One of Claude's messages starting, its own or (with `parent`) a subagent's. */
+const messageStart = (parent: string | null = null) => ({
+  type: "stream_event",
+  parent_tool_use_id: parent,
+  event: { type: "message_start", message: { id: "msg", role: "assistant", content: [] } },
+});
 const success = { type: "result", subtype: "success", is_error: false, result: "" };
 
 /** Runs one turn and collects what it emitted and reported. */
@@ -238,6 +244,27 @@ describe("Claude's status", () => {
       ["Opus 5.5", true],
       ["Sonnet 5.5", undefined],
     ]);
+  });
+
+  it("says which model Default is when Claude Code describes it as the one it uses now", async () => {
+    const { claudeCode } = stubClaudeCode({
+      check: async () => ({
+        account: { subscriptionType: "Claude Max" },
+        models: [
+          {
+            value: "default",
+            displayName: "Default (recommended)",
+            description: "Use the default model (currently Opus 5.5) · Best for everyday tasks",
+          },
+        ],
+      }),
+    });
+
+    const status = await createClaudeProvider({ claudeCode }).status();
+
+    if (!status.available) throw new Error("expected available");
+    expect(status.models[0]?.label).toBe("Claude · Default (Opus 5.5)");
+    expect(status.models[0]?.name).toBe("Opus 5.5");
   });
 
   it("keeps Default's own name when Claude Code's description doesn't name a model", async () => {
@@ -513,6 +540,30 @@ describe("a Claude turn", () => {
     expect(emitted).toEqual(["The rack fits."]);
   });
 
+  it("keeps what Claude writes between what it does apart, each message its own paragraph", async () => {
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        messageStart(),
+        textDelta("Now the contract and worker side."),
+        { type: "assistant", message: { content: [{ type: "tool_use", name: "Read" }] } },
+        // A subagent's messages start too, and don't count.
+        messageStart("tool-1"),
+        messageStart(),
+        textDelta("Good, `classes` is "),
+        textDelta("already imported."),
+        messageStart(),
+        textDelta("Now the queued bubble:"),
+        success,
+      ],
+    });
+
+    const { emitted } = await runTurn(claudeCode);
+
+    expect(emitted.join("")).toBe(
+      "Now the contract and worker side.\n\nGood, `classes` is already imported.\n\nNow the queued bubble:",
+    );
+  });
+
   it("turns a usage limit into a rate-limited failure with the reset time", async () => {
     const resetsAt = Date.parse("2026-10-05T17:00:00Z") / 1000;
     const { claudeCode } = stubClaudeCode({
@@ -531,16 +582,105 @@ describe("a Claude turn", () => {
     });
   });
 
-  it("turns a lost login into an unavailable provider, in plain words", async () => {
-    const { claudeCode } = stubClaudeCode({
-      messages: [{ type: "assistant", error: "authentication_failed", message: { content: [] } }],
+  describe("a failed turn says why, when Claude Code says (#200)", () => {
+    /** The assistant message Claude Code sends in place of an answer that failed. */
+    const failed = (error: string, text: string) => ({
+      type: "assistant",
+      error,
+      message: { content: [{ type: "text", text }] },
+    });
+    const failedResult = {
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      result: "",
+    };
+    /** Claude Code waiting to try again after a request that failed. */
+    const retrying = (status: number | null) => ({
+      type: "system",
+      subtype: "api_retry",
+      attempt: 1,
+      max_retries: 10,
+      retry_delay_ms: 500,
+      error_status: status,
+      error: "unknown",
+    });
+    const signInExpired = {
+      kind: "provider-unavailable",
+      message: "Claude's sign-in expired. Retry in a minute, or sign in again from Connections.",
+    };
+    const noConnection = {
+      kind: "provider-unavailable",
+      message:
+        "Courtyard couldn't reach Claude. Check the worker machine's internet connection, then retry.",
+    };
+    const overloaded = {
+      kind: "unknown",
+      message: "Claude is overloaded right now. Retry in a moment.",
+    };
+
+    it.each([
+      [
+        "its sign-in failed",
+        [failed("authentication_failed", "Failed to authenticate"), failedResult],
+        signInExpired,
+      ],
+      [
+        "its sign-in expired and couldn't be refreshed",
+        [
+          failed(
+            "server_error",
+            "Failed to refresh OAuth token: another Claude Code process is refreshing it. This is usually transient; retry in a moment.",
+          ),
+          failedResult,
+        ],
+        signInExpired,
+      ],
+      [
+        "Claude refused its sign-in",
+        [{ ...failedResult, api_error_status: 401, result: "API Error: 401" }],
+        signInExpired,
+      ],
+      [
+        "it couldn't connect",
+        [
+          retrying(null),
+          retrying(null),
+          failed("unknown", "API Error: Connection error."),
+          failedResult,
+        ],
+        noConnection,
+      ],
+      ["Claude was overloaded", [failed("overloaded", "Overloaded"), failedResult], overloaded],
+      [
+        "Claude was at capacity",
+        [{ ...failedResult, api_error_status: 529, result: "API Error: 529" }],
+        overloaded,
+      ],
+    ])("when %s", async (_, messages, error) => {
+      const { claudeCode } = stubClaudeCode({ messages });
+
+      const { result } = await runTurn(claudeCode);
+
+      expect(result).toEqual({ ok: false, error });
     });
 
-    const { result } = await runTurn(claudeCode);
+    it("says only that it couldn't answer for anything else, even after a dropped connection it got back", async () => {
+      const { claudeCode } = stubClaudeCode({
+        messages: [
+          retrying(null),
+          retrying(500),
+          failed("server_error", "API Error: 500 Internal server error"),
+          failedResult,
+        ],
+      });
 
-    expect(result).toMatchObject({
-      ok: false,
-      error: { kind: "provider-unavailable", message: expect.stringMatching(/log in/i) },
+      const { result } = await runTurn(claudeCode);
+
+      expect(result).toEqual({
+        ok: false,
+        error: { kind: "unknown", message: "Claude couldn't answer this time." },
+      });
     });
   });
 
