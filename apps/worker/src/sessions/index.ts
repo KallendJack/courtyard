@@ -392,6 +392,11 @@ type RunningSession = {
   queue: Promise<unknown>;
   /** The approvals its turn is waiting on (#171), by event number: each takes the owner's answer. */
   approvals: Map<number, (answer: ApprovalAnswer) => void>;
+  /**
+   * Whether its log has had a message queued (#177), so the end of a turn looks for one to send;
+   * a session that never has costs a turn's end nothing.
+   */
+  queues: boolean;
   /** Resolves once the turn last started here has ended, its end recorded. */
   ended: Promise<void>;
 };
@@ -439,6 +444,7 @@ export const createSessions = (options: {
       listeners: new Set(),
       queue: Promise.resolve(),
       approvals: new Map(),
+      queues: false,
       ended: Promise.resolve(),
     };
     running.set(id, created);
@@ -541,6 +547,7 @@ export const createSessions = (options: {
       return;
     }
     session.nextSeq = events.value.length + 1;
+    session.queues = events.value.some((event) => event.type === "message-queued");
     // The owner's Undo and Edit can come after a turn ends, so it's the last turn's own events
     // that say whether it was left open.
     const last = events.value.findLast(
@@ -1169,7 +1176,7 @@ export const createSessions = (options: {
     const since = freshStarts;
     for (;;) {
       const session = running.get(id);
-      if (session === undefined || session.turn.kind !== "idle") return false;
+      if (session === undefined || !session.queues || session.turn.kind !== "idle") return false;
       const [events, file] = await Promise.all([
         readEvents(id),
         readJsonFile(sessionFilePath(id), SessionFile),
@@ -1218,6 +1225,8 @@ export const createSessions = (options: {
     const kept = await keepAttachments(folderOf(id), queue.attachments);
     if (!kept.ok) return err(STORAGE_ERROR);
     const attachments = queue.attachments.map((prepared) => prepared.attachment);
+    // Before it's written, so a turn ending meanwhile looks for it.
+    runningSession(id).queues = true;
     const recorded = await append(id, {
       type: "message-queued",
       text: message.text,
