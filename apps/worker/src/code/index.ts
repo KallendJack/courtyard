@@ -13,6 +13,12 @@ import { type CommandRule, DEFAULT_ALLOWLIST, reachesOut, ruleFor, wordsOf } fro
  * change.
  */
 
+/**
+ * What a code session's git and gh commands get on top of the worker's environment: Courtyard's
+ * own GitHub sign-in, never the machine's (#99). An `undefined` is unset.
+ */
+export type CommandEnv = Readonly<Record<string, string | undefined>>;
+
 /** A session's branch and the folder it's checked out in. */
 export type SessionBranch = { readonly branch: string; readonly worktree: string };
 
@@ -32,10 +38,14 @@ const REMOTE_TIMEOUT_MS = 60_000;
 const BRANCH_PREFIX = "courtyard/";
 
 /** The default branch on the remote, as the remote says (`main`), or why it couldn't be told. */
-const defaultBranchOf = async (repoPath: string): Promise<Result<string, BranchRefusal>> => {
+const defaultBranchOf = async (
+  repoPath: string,
+  env: CommandEnv,
+): Promise<Result<string, BranchRefusal>> => {
   try {
     const answer = await git(repoPath, ["ls-remote", "--symref", REMOTE, "HEAD"], {
       timeoutMs: REMOTE_TIMEOUT_MS,
+      env,
     });
     const branch = /^ref: refs\/heads\/(\S+)\s+HEAD$/m.exec(answer)?.[1];
     return branch === undefined
@@ -102,12 +112,22 @@ export const editableIn = async (worktree: string, path: string) => {
   return shown === "" || first === GIT_FILE ? undefined : shown;
 };
 
-export const createCode = (options: { dataDir: string }) => {
+export const createCode = (options: {
+  dataDir: string;
+  /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
+  commandEnv: () => CommandEnv;
+}) => {
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
   return {
     /** The folder a session's branch is checked out in. */
     worktreeOf,
+
+    /**
+     * What a session's commands get on top of the environment they run in, so its git and gh, and
+     * the worker's own reaching the repository's remote, use only Courtyard's GitHub sign-in.
+     */
+    commandEnv: options.commandEnv,
 
     /**
      * Starts a session's branch from the default branch on the repository's remote, freshly
@@ -122,12 +142,14 @@ export const createCode = (options: { dataDir: string }) => {
       if (!there.ok || !there.value) return err({ kind: "repo-missing", repoPath });
       const top = await gitOrNothing(repoPath, ["rev-parse", "--git-dir"]);
       if (top === undefined) return err({ kind: "not-git", repoPath });
-      const main = await defaultBranchOf(repoPath);
+      const env = options.commandEnv();
+      const main = await defaultBranchOf(repoPath, env);
       if (!main.ok) return main;
       const tracking = `refs/remotes/${REMOTE}/${main.value}`;
       try {
         await git(repoPath, ["fetch", "--quiet", REMOTE, `+refs/heads/${main.value}:${tracking}`], {
           timeoutMs: REMOTE_TIMEOUT_MS,
+          env,
         });
       } catch (error) {
         return err({ kind: "remote", reason: gitFailureReason(error) });

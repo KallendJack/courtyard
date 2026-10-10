@@ -6,26 +6,30 @@ const run = promisify(execFile);
 /**
  * Runs git in `folder` and returns what it prints, trimmed, or throws when git fails. Git never
  * stops to ask for a password, in the terminal or a window, since nobody is there to answer.
- * `config` adds `-c` settings for this one command; a command still running after `timeoutMs` is
- * ended and fails.
+ * `config` adds `-c` settings for this one command, and `env` variables to the worker's own (an
+ * `undefined` is unset); a command still running after `timeoutMs` is ended and fails.
  */
 export const git = async (
   folder: string,
   args: readonly string[],
-  options: { config?: readonly string[]; timeoutMs?: number } = {},
+  options: {
+    config?: readonly string[];
+    timeoutMs?: number;
+    env?: Readonly<Record<string, string | undefined>>;
+  } = {},
 ) => {
   const config = (options.config ?? []).flatMap((setting) => ["-c", setting]);
   const { stdout } = await run("git", [...config, ...args], {
-    ...runIn(folder),
+    ...runIn(folder, options.env),
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
   return stdout.trim();
 };
 
 /** How every git command here runs: in `folder`, never asking for a password, in no window. */
-const runIn = (folder: string) => ({
+const runIn = (folder: string, env: Readonly<Record<string, string | undefined>> = {}) => ({
   cwd: folder,
-  env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
+  env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
   windowsHide: true,
 });
 

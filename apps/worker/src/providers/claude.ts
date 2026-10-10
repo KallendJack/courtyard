@@ -757,6 +757,8 @@ export const createClaudeProvider = (
           options: {
             ...isolatedOptions(),
             ...(code === null ? {} : await projectSetup(folder)),
+            // Its commands' git and gh use Courtyard's GitHub sign-in, never the machine's (#99).
+            ...(code === null ? {} : { env: { ...isolatedEnv(), ...code.env } }),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,

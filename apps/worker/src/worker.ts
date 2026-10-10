@@ -24,6 +24,9 @@ import { createContextFolder, workspaceChange } from "./context-folder/index.ts"
 import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
+import { createGitHubApi, type GitHubApi } from "./github/api.ts";
+import { createGitHub, KEEP_FRESH_EVERY_MS } from "./github/index.ts";
+import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
@@ -145,6 +148,11 @@ export const createWorker = (options: {
   repeat?: Repeat;
   /** The house skills' folder: the `@courtyard/skills` package, unless a test gives its own. */
   houseSkills?: string;
+  /**
+   * GitHub (#99). Tests pass a fake; otherwise it's GitHub itself, through the GitHub App the
+   * settings name, or none when they name none.
+   */
+  github?: GitHubApi;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -161,6 +169,7 @@ export const createWorker = (options: {
     secondFakeProvider,
     liveCopy,
     updateTask,
+    githubClientId,
   } = settings.value;
   const now = options.now ?? Date.now;
   const owner = createOwner({ dataDir, now });
@@ -177,6 +186,13 @@ export const createWorker = (options: {
     now,
   );
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
+  const github = createGitHub({
+    api:
+      options.github ??
+      (githubClientId === null ? null : createGitHubApi({ clientId: githubClientId })),
+    dataDir,
+    now,
+  });
   const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
   const sessions = createSessions({
     dataDir,
@@ -184,7 +200,7 @@ export const createWorker = (options: {
     contextDir,
     contextFolder,
     houseSkills,
-    code: createCode({ dataDir }),
+    code: createCode({ dataDir, commandEnv: github.commandEnv }),
     now,
   });
   const live = createLive({
@@ -194,7 +210,9 @@ export const createWorker = (options: {
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
   });
-  (options.repeat ?? repeatForever)(KEEP_UP_EVERY_MS, contextFolder.keepUp);
+  const repeat = options.repeat ?? repeatForever;
+  repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
+  repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
@@ -226,6 +244,7 @@ export const createWorker = (options: {
     ),
   );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
+  api.route("/", gitHubRoutes(github));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));

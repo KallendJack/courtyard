@@ -60,6 +60,13 @@ const Env = z.object({
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
   COURTYARD_UPDATE_TASK: z.preprocess(unsetIfEmpty, z.string().default("Courtyard update")),
+  COURTYARD_GITHUB_CLIENT_ID: z.preprocess(
+    unsetIfEmpty,
+    z
+      .string()
+      .regex(/^[A-Za-z0-9.]+$/, "must be the GitHub App's client ID, from its settings page")
+      .optional(),
+  ),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -99,6 +106,11 @@ export type Settings = {
   readonly liveCopy: string | null;
   /** The scheduled task that updates the live copy, as install-task.ps1 named it. */
   readonly updateTask: string;
+  /**
+   * The client ID of the GitHub App Courtyard signs in to GitHub through (#99), or `null` when
+   * the owner hasn't registered one, so code sessions can't reach GitHub.
+   */
+  readonly githubClientId: string | null;
 };
 
 /**
@@ -129,5 +141,6 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
         ? null
         : resolve(parsed.data.COURTYARD_LIVE_COPY),
     updateTask: parsed.data.COURTYARD_UPDATE_TASK,
+    githubClientId: parsed.data.COURTYARD_GITHUB_CLIENT_ID ?? null,
   });
 };

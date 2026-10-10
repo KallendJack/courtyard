@@ -17,16 +17,20 @@ const backup = async () => {
 let root: string;
 let contextDir: string;
 let request: Requester;
-/** The job the worker asked to have run at start and every so often. */
+/** Runs the jobs the worker asked to have run at start and every so often, the backup's among them. */
 let keepUp: () => Promise<void>;
 
 const startWorker = async (env: Record<string, string> = {}) => {
+  const jobs: (() => Promise<void>)[] = [];
+  keepUp = async () => {
+    for (const job of jobs) await job();
+  };
   request = await asOwner(
     testWorker({
       root,
       env,
       repeat: (_everyMs, job) => {
-        keepUp = job;
+        jobs.push(job);
       },
     }),
   );

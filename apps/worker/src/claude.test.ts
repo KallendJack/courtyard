@@ -680,9 +680,28 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         asked.push(`run ${command}`);
         return command === "pnpm test" ? ok(null) : err("Not that one.");
       },
+      env: { GH_CONFIG_DIR: "/path/to/data/github/gh", GH_TOKEN: undefined },
     };
     return { worktree, code, asked };
   };
+
+  it("runs its commands with the worker's GitHub sign-in, never the machine's", async () => {
+    const { worktree, code } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    process.env.GH_TOKEN = "ghp_machine";
+    try {
+      await runTurn(claudeCode, { folder: worktree, code });
+    } finally {
+      delete process.env.GH_TOKEN;
+    }
+
+    const env = runs[0]?.options.env;
+    expect(env?.GH_CONFIG_DIR).toBe("/path/to/data/github/gh");
+    expect(env?.GH_TOKEN).toBeUndefined();
+    // Still none of the machine's Claude Code setup.
+    expect(env).toMatchObject({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
+    await rm(worktree, { recursive: true, force: true });
+  });
 
   it("works in its worktree with edit and command tools, loading only the repository's project settings and skills", async () => {
     const { worktree, code } = await codeSession();

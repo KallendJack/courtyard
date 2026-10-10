@@ -47,6 +47,7 @@ export {
   FreshStartSummary,
   RunningTurn,
 } from "./lib/fresh-start.ts";
+export { GitHubConnection } from "./lib/github.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
@@ -12,11 +13,17 @@ import {
 import type { Hono } from "hono";
 import { git } from "./git.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
-import { createFakeProvider, type Framing, type Provider } from "./providers/index.ts";
+import {
+  type CodeTurn,
+  createFakeProvider,
+  type Framing,
+  type Provider,
+} from "./providers/index.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
+export { createFakeGitHub, type FakeGitHub } from "./github/fake.ts";
 export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
 /**
@@ -351,6 +358,65 @@ export const codingProvider = (
     answerOnce: async () => err({ kind: "unknown", message: "The coder only codes." }),
   };
   return { provider, answers };
+};
+
+/** For tests: the model the running provider offers. */
+export const RUNNING_MODEL = { provider: "runner", model: "one" };
+
+/**
+ * For tests: a provider that codes and, in each turn, runs each of `commands` itself in the
+ * worktree, in the environment the worker gives a code session's commands, as Claude Code runs
+ * its commands (#99). It doesn't ask the worker first, so it can run what no model may (`gh auth
+ * token`) and show what the environment holds. Keeps whether each one worked and what it printed,
+ * and each turn's framing and the environment the worker gave its commands.
+ */
+export const runningProvider = (
+  commands: readonly { readonly command: readonly string[]; readonly input?: string }[],
+) => {
+  const printed: { ok: boolean; output: string }[] = [];
+  const framings: Framing[] = [];
+  const envs: CodeTurn["env"][] = [];
+  const id = ProviderId.parse("runner");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Runner",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The runner only codes." });
+      framings.push(input.framing);
+      envs.push(code.env);
+      for (const { command, input: stdin } of commands) {
+        const [program = "", ...args] = command;
+        const ran = spawnSync(program, args, {
+          cwd: code.worktree,
+          env: { ...process.env, ...code.env },
+          input: stdin ?? "",
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 30_000,
+        });
+        printed.push({ ok: ran.status === 0, output: `${ran.stdout ?? ""}${ran.stderr ?? ""}` });
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The runner only codes." }),
+  };
+  return { provider, printed, framings, envs };
 };
 
 /**

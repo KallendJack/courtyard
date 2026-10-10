@@ -122,6 +122,12 @@ export type CodeTurn = {
   readonly edit: (path: string) => Promise<Result<null, string>>;
   /** Whether `command` may run in the worktree, or why not. */
   readonly run: (command: string) => Promise<Result<null, string>>;
+  /**
+   * What the turn's commands get on top of the environment the provider runs them in (an
+   * `undefined` is unset): Courtyard's own GitHub sign-in for `git` and `gh`, never the machine's
+   * (#99). It names where the sign-in is kept, never the sign-in itself.
+   */
+  readonly env: Readonly<Record<string, string | undefined>>;
 };
 
 export type TurnInput = {

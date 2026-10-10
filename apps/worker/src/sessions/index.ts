@@ -741,6 +741,7 @@ export const createSessions = (options: {
             const allowed = await commandAllowed({ worktree, branch }, command);
             return decide(allowed.ok ? ok({ kind: "ran-command", command }) : allowed);
           },
+          env: options.code.commandEnv(),
         });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
