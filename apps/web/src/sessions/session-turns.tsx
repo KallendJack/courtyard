@@ -144,17 +144,41 @@ export function SessionTurns(props: {
 
   // While following, the end stays in view as the turns grow: an answer being revealed, a turn
   // failing, or every turn redrawn. The browser reports a change of size at most once a frame, so
-  // this scrolls in step with the reveal.
+  // this scrolls in step with the reveal. Not while a finger or button is down on a turn: the page
+  // moving under it would make the tap land on whatever moved there (a row, not the table heading
+  // tapped to sort it, #163). Let go, the end comes back into view once the tap has landed; a
+  // press that becomes a scroll leaves the page to the owner.
   useEffect(() => {
     const element = list.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => {
-      if (opened.current && following.current) {
+    let pressed = false;
+    const toTheEnd = () => {
+      if (opened.current && following.current && !pressed) {
         window.scrollTo({ top: document.documentElement.scrollHeight });
       }
-    });
+    };
+    const press = () => {
+      pressed = true;
+    };
+    const letGo = () => {
+      if (!pressed) return;
+      pressed = false;
+      requestAnimationFrame(toTheEnd);
+    };
+    const cancel = () => {
+      pressed = false;
+    };
+    const observer = new ResizeObserver(toTheEnd);
     observer.observe(element);
-    return () => observer.disconnect();
+    element.addEventListener("pointerdown", press);
+    window.addEventListener("pointerup", letGo);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      observer.disconnect();
+      element.removeEventListener("pointerdown", press);
+      window.removeEventListener("pointerup", letGo);
+      window.removeEventListener("pointercancel", cancel);
+    };
   }, []);
 
   const last = turns.at(-1);
