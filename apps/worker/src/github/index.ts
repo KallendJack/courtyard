@@ -1,11 +1,15 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { GitHubConnection } from "@courtyard/contract";
+import {
+  type GitHubConnection,
+  PullRequest,
+  type PullRequestChecks,
+} from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, removeFile, writeBytesIn, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { DeviceSignIn, GitHubApi, UserToken } from "./api.ts";
+import type { DeviceSignIn, FoundCheck, GitHubApi, UserToken } from "./api.ts";
 
 export type { GitHubApi } from "./api.ts";
 
@@ -107,6 +111,20 @@ const GIT_SETTINGS: readonly (readonly [string, string])[] = [
   ["url.https://github.com/.insteadOf", "git@github.com:"],
   ["url.https://github.com/.insteadOf", "ssh://git@github.com/"],
 ];
+
+/**
+ * Where a pull request's checks stand, from each check: failed when any has, by name, so its
+ * session can start on a fix while the rest run; else running while any is.
+ */
+const checksOf = (checks: readonly FoundCheck[]): PullRequestChecks => {
+  const failed = [
+    ...new Set(checks.filter((check) => check.outcome === "failed").map((check) => check.name)),
+  ];
+  const [first, ...more] = failed;
+  if (first !== undefined) return { kind: "failed", failed: [first, ...more] };
+  if (checks.some((check) => check.outcome === "running")) return { kind: "running" };
+  return checks.length === 0 ? { kind: "none" } : { kind: "passed" };
+};
 
 export const createGitHub = (options: {
   api: GitHubApi | null;
@@ -275,6 +293,30 @@ export const createGitHub = (options: {
       if (pending?.kind === "waiting") pending.stop.abort();
       pending = undefined;
       return (await oneAtATime(forget)) ? ok(null) : err({ kind: "storage" });
+    },
+
+    /**
+     * The latest pull request from `branch` in `repo` (`owner/name`), as a session shows it
+     * (#172): `undefined` when there's none, or no one is signed in to ask.
+     */
+    pullRequest: async (find: {
+      repo: string;
+      branch: string;
+    }): Promise<Result<PullRequest | undefined, GitHubProblem>> => {
+      if (api === null) return err({ kind: "not-set-up" });
+      const stored = await read();
+      if (!stored.ok) return err({ kind: "storage" });
+      if (stored.value === undefined) return ok(undefined);
+      const found = await api.pullRequest(stored.value.accessToken, find);
+      if (!found.ok) return err({ kind: "github", message: found.error });
+      if (found.value === null) return ok(undefined);
+      const parsed = PullRequest.safeParse({
+        ...found.value,
+        checks: checksOf(found.value.checks),
+      });
+      return parsed.success
+        ? ok(parsed.data)
+        : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
     },
 
     /** For the worker's repeating jobs: refreshes the sign-in when it's close to running out. */

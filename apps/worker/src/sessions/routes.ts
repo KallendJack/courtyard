@@ -172,6 +172,11 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "This approval's turn has ended, so nothing is waiting on it now.",
       });
+    case "pull-request-ended":
+      return apiError(c, {
+        status: 409,
+        error: `This session's pull request was ${error.state}, so it takes no more messages. Start a new session to carry on.`,
+      });
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }

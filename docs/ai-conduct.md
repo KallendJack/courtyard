@@ -231,8 +231,9 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
-> without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch.
-> Anything else, such as a change outside your working directory or another command, waits for the owner to allow it;
+> without asking: its package scripts, git and gh commands that only look, adding and committing on your branch,
+> pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working
+> directory or another command, waits for the owner to allow it;
 > if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
 > a command that chains or substitutes another never runs.
 
@@ -258,6 +259,14 @@ model why, in one of these:
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.
+
+The session opens its pull request itself, with `gh`, written the way the repository's own instructions or PR skill
+say (#172). The worker follows the PR's checks, and when one fails on a commit it hasn't asked about yet, it sends the
+session this message (on the model the owner last used), with the failed checks in the turn's activity:
+
+> The checks on your pull request #<number> failed: <checks>. Find out why (gh pr checks and gh run view --log-failed
+> show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
+> it, say why, so the owner can decide what to do.
 
 ## Skills
 

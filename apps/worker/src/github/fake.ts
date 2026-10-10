@@ -1,5 +1,13 @@
+import { gitOrNothing } from "../git.ts";
 import { err, ok } from "../result.ts";
-import type { DeviceSignIn, GitHubApi, SignInEnd, UserToken } from "./api.ts";
+import type {
+  DeviceSignIn,
+  FoundCheck,
+  FoundPullRequest,
+  GitHubApi,
+  SignInEnd,
+  UserToken,
+} from "./api.ts";
 
 /** How long the fake's tokens last, as GitHub's do: 8 hours. */
 const TOKEN_SECONDS = 8 * 60 * 60;
@@ -9,9 +17,19 @@ const TOKEN_SECONDS = 8 * 60 * 60;
  * tested with no network. A device sign-in waits until the test says how it ends (`approve`,
  * `deny`, `expire`), or finishes by itself after `finishAfterMs`. Each token it gives out works
  * until it's refreshed; `lapse` makes GitHub refuse the refresh token, as after six months.
+ *
+ * It holds pull requests too (#172): a test opens one for a branch, sets its checks, and merges or
+ * closes it, as the model's gh and GitHub itself would. With `opensOnPush`, for the browser tests,
+ * a branch pushed to that bare repository (GitHub's copy, on disk) has a pull request opened for
+ * it the first time it's asked about, and each commit pushed there gets `checks`.
  */
 export const createFakeGitHub = (
-  options: { account?: string; repos?: readonly string[]; finishAfterMs?: number } = {},
+  options: {
+    account?: string;
+    repos?: readonly string[];
+    finishAfterMs?: number;
+    opensOnPush?: { readonly remote: string; readonly checks: readonly FoundCheck[] };
+  } = {},
 ) => {
   const account = options.account ?? "octo-owner";
   const repos = options.repos ?? [`${account}/courtyard`, `${account}/stacks`];
@@ -31,6 +49,46 @@ export const createFakeGitHub = (
     const was = ending;
     ending = undefined;
     was?.(how);
+  };
+
+  /** Every pull request opened, numbered from 1. */
+  const pulls: (FoundPullRequest & { readonly repo: string; readonly branch: string })[] = [];
+  const pullNumbered = (number: number) => {
+    const at = pulls.findIndex((pull) => pull.number === number);
+    if (at === -1) throw new Error(`The fake GitHub has no pull request #${number}`);
+    return at;
+  };
+  const change = (number: number, to: Partial<FoundPullRequest>) => {
+    const at = pullNumbered(number);
+    const pull = pulls[at];
+    if (pull !== undefined) pulls[at] = { ...pull, ...to };
+  };
+  const openPullRequest = (open: { repo: string; branch: string; head: string }) => {
+    const number = pulls.length + 1;
+    pulls.push({
+      ...open,
+      number,
+      url: `https://github.com/${open.repo}/pull/${number}`,
+      state: "open",
+      checks: [],
+    });
+    return number;
+  };
+  const latestFor = (find: { repo: string; branch: string }) =>
+    pulls.findLast((pull) => pull.repo === find.repo && pull.branch === find.branch);
+
+  /** For the browser tests: the pull request for a branch pushed to GitHub's copy on disk. */
+  const pushed = async (find: { repo: string; branch: string }) => {
+    const onPush = options.opensOnPush;
+    if (onPush === undefined) return;
+    const head = await gitOrNothing(onPush.remote, ["rev-parse", `refs/heads/${find.branch}`]);
+    if (head === undefined) return;
+    const pull = latestFor(find);
+    if (pull === undefined) {
+      change(openPullRequest({ ...find, head }), { checks: onPush.checks });
+    } else if (pull.head !== head && pull.state === "open") {
+      change(pull.number, { head, checks: onPush.checks });
+    }
   };
 
   const api: GitHubApi = {
@@ -70,6 +128,14 @@ export const createFakeGitHub = (
       accessToken === current?.accessToken
         ? ok({ login: account, repos })
         : err("That token doesn't work."),
+    pullRequest: async (accessToken, find) => {
+      if (accessToken !== current?.accessToken) return err("That token doesn't work.");
+      await pushed(find);
+      const pull = latestFor(find);
+      if (pull === undefined) return ok(null);
+      const { repo: _, branch: __, ...found } = pull;
+      return ok(found);
+    },
   };
 
   return {
@@ -86,6 +152,15 @@ export const createFakeGitHub = (
     },
     /** The access token that works now, if any. */
     token: () => current?.accessToken,
+    /** The model opened a pull request from `branch`, its latest commit `head`: its number. */
+    openPullRequest,
+    /** The pull request's checks are now these; on a new commit `head`, if it was pushed. */
+    setChecks: (number: number, checks: readonly FoundCheck[], head?: string) =>
+      change(number, { checks, ...(head === undefined ? {} : { head }) }),
+    /** The pull request was merged, on GitHub or from Courtyard. */
+    merge: (number: number) => change(number, { state: "merged" }),
+    /** The pull request was closed without merging. */
+    close: (number: number) => change(number, { state: "closed" }),
   };
 };
 

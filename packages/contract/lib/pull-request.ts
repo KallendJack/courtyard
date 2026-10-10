@@ -27,5 +27,7 @@ export const PullRequest = z.object({
 export type PullRequest = z.infer<typeof PullRequest>;
 
 /** Whether a pull request has been merged or closed, which ends its session. */
-export const pullRequestEnded = (pullRequest: PullRequest | undefined) =>
+export const pullRequestEnded = (
+  pullRequest: PullRequest | undefined,
+): pullRequest is PullRequest & { state: "merged" | "closed" } =>
   pullRequest !== undefined && pullRequest.state !== "open";

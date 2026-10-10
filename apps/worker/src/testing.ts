@@ -538,21 +538,37 @@ export const quotedInGuide = async (
 /**
  * For tests: a repository a code workspace works on, as on the worker machine: the owner's
  * checkout (`repo`) of a remote (`origin`, standing in for GitHub) whose default branch is `main`,
- * with one commit, `README.md`. Commits made in it are by a test person.
+ * with one commit, `README.md`. Commits made in it are by a test person. The remote is named by
+ * its address on GitHub (`github`, as `owner/name`), which git takes to `origin` on disk.
  */
 export const codeRepo = async (root: string) => {
   const origin = join(root, "origin.git");
   const repo = join(root, "repo");
+  const github = "octo-owner/side-project";
   await mkdir(origin, { recursive: true });
   await gitIn(origin, "init", "--quiet", "--bare", "--initial-branch=main");
   await gitIn(root, "clone", "--quiet", origin, repo);
+  await standInForGitHub(repo, { origin, github });
   await gitIn(repo, "config", "user.name", "Test");
   await gitIn(repo, "config", "user.email", "test@example.com");
   await writeFile(join(repo, "README.md"), "# A project\n");
   await gitIn(repo, "add", ".");
   await gitIn(repo, "commit", "--quiet", "-m", "Start");
   await gitIn(repo, "push", "--quiet", "origin", "main");
-  return { origin, repo };
+  return { origin, repo, github };
+};
+
+/**
+ * For tests: names `repo`'s remote by its address on GitHub (`github`, as `owner/name`), as a
+ * real clone's is, while git reaches the bare repository `origin` on disk in its place.
+ */
+export const standInForGitHub = async (
+  repo: string,
+  where: { origin: string; github: string },
+) => {
+  const address = `https://github.com/${where.github}.git`;
+  await gitIn(repo, "remote", "set-url", "origin", address);
+  await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);
 };
 
 /** For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`. */

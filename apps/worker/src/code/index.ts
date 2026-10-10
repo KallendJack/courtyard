@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { CODE_SESSIONS_AT_ONCE, type SessionId } from "@courtyard/contract";
+import { CODE_SESSIONS_AT_ONCE, type PullRequest, type SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -133,10 +133,28 @@ export const editableIn = async (worktree: string, path: string) => {
  */
 export const slotEnv = (slot: number) => ({ COURTYARD_SESSION_SLOT: String(slot) });
 
+/** A repository on GitHub as `owner/name`, from its remote's address in any of git's forms. */
+const GITHUB_REMOTE =
+  /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?\/?$/;
+
+/**
+ * The repository a code workspace's remote is on GitHub, as `owner/name`, or `undefined` when it
+ * isn't on GitHub. Read as configured, before any `insteadOf` takes it elsewhere.
+ */
+const gitHubRepoOf = async (repoPath: string) => {
+  const address = await gitOrNothing(repoPath, ["config", "--get", `remote.${REMOTE}.url`]);
+  return address === undefined ? undefined : GITHUB_REMOTE.exec(address)?.[1];
+};
+
 export const createCode = (options: {
   dataDir: string;
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
   commandEnv: () => CommandEnv;
+  /** GitHub's latest pull request from a branch (#172), or `undefined` when there's none. */
+  findPullRequest: (find: {
+    repo: string;
+    branch: string;
+  }) => Promise<Result<PullRequest | undefined, unknown>>;
 }) => {
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
@@ -198,7 +216,19 @@ export const createCode = (options: {
     },
 
     /**
-     * Clears a session's worktree and branch away, for a session that never started. Anything
+     * The session branch's pull request on GitHub, as it is now (#172): `undefined` when it has
+     * none, the repository isn't on GitHub, or GitHub can't be asked just now.
+     */
+    pullRequestOf: async (find: { repoPath: string; branch: string }) => {
+      const repo = await gitHubRepoOf(find.repoPath);
+      if (repo === undefined) return undefined;
+      const found = await options.findPullRequest({ repo, branch: find.branch });
+      return found.ok ? found.value : undefined;
+    },
+
+    /**
+     * Clears a session's worktree and branch away, for a session that never started, or one whose
+     * pull request was merged or closed (#172). Anything
      * left behind is the repository's to keep, so a failure here is only logged.
      */
     clearBranch: async (clear: { repoPath: string; sessionBranch: SessionBranch }) => {

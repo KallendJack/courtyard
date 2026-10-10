@@ -17,6 +17,8 @@ import {
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  type PullRequest,
+  pullRequestEnded,
   pullRequestIn,
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
@@ -67,6 +69,7 @@ import {
 } from "../files.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
+  checksFailedMessage,
   codeRefusalReason,
   DOCUMENT_TOOL_NAME,
   documentReply,
@@ -166,6 +169,8 @@ export type SessionError =
   | { readonly kind: "approval-not-found" }
   /** The approval's turn has ended (stopped, or the worker restarted), so nothing waits on it. */
   | { readonly kind: "approval-closed" }
+  /** The session's pull request was merged or closed, so it takes no more messages (#172). */
+  | { readonly kind: "pull-request-ended"; readonly state: "merged" | "closed" }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -199,6 +204,15 @@ type SessionFile = z.infer<typeof SessionFile>;
 /** An event before it's numbered and timed. */
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
 type NewEvent = WithoutNumbering<SessionEvent>;
+
+/** Whether a pull request is as it was last recorded, so nothing about it changed. */
+const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
+  was !== undefined &&
+  now.number === was.number &&
+  now.url === was.url &&
+  now.state === was.state &&
+  now.head === was.head &&
+  JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
 /** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
 const titleFrom = (text: string) => {
@@ -886,6 +900,8 @@ export const createSessions = (options: {
     const ended = await append(turn.id, ending);
     // Only once it's ended, so the next code session waiting starts after it.
     options.code.slots.release(turn.id);
+    // What the turn did to its pull request shows at once, the PR it opened, say (#172).
+    if (turn.coding) void followPullRequest(turn.id);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
       titleSession(turn.id).catch((error: unknown) =>
@@ -956,6 +972,8 @@ export const createSessions = (options: {
     attachments?: readonly PreparedAttachment[];
     /** Attachments already kept that the message carries again (Carry on). */
     keptAttachments?: readonly Attachment[];
+    /** Sent by the worker because the session's pull request's checks failed (#172). */
+    checksFailed?: { pullRequest: number; head: string; checks: [string, ...string[]] };
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -968,6 +986,14 @@ export const createSessions = (options: {
       turn: undefined,
     };
     session.turn = starting;
+
+    if (start.coding) {
+      const ended = await pullRequestEndedIn(start.id);
+      if (ended !== undefined) {
+        session.turn = { kind: "idle" };
+        return err(ended);
+      }
+    }
 
     if (start.carryingOn) {
       const events = await readEvents(start.id);
@@ -996,12 +1022,17 @@ export const createSessions = (options: {
       ...(start.message.effort === undefined ? {} : { effort: start.message.effort }),
       ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
       ...(attachments.length === 0 ? {} : { attachments }),
+      ...(start.checksFailed === undefined ? {} : { checksFailed: start.checksFailed }),
     });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
       return recorded;
     }
     starting.turn = recorded.value.seq;
+    // The checks it fixes start its activity (#172).
+    for (const name of start.checksFailed?.checks ?? []) {
+      await append(start.id, { type: "activity", activity: { kind: "check-failed", name } });
+    }
     await markUpdated(start.id);
     session.ended = runTurn({
       id: start.id,
@@ -1211,7 +1242,119 @@ export const createSessions = (options: {
     });
   };
 
+  /** Why a code session takes no more messages: its pull request was merged or closed (#172). */
+  const pullRequestEndedIn = async (id: SessionId): Promise<SessionError | undefined> => {
+    const events = await readEvents(id);
+    const pullRequest = events.ok ? pullRequestIn(events.value) : undefined;
+    return pullRequest === undefined || pullRequest.state === "open"
+      ? undefined
+      : { kind: "pull-request-ended", state: pullRequest.state };
+  };
+
+  /** Following pull requests runs one session at a time, so no change is recorded twice. */
+  let following: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Looks at a code session's pull request on GitHub (#172) and records what changed. A failing
+   * check on a commit not yet asked about starts a turn asking the model to fix it, once the
+   * session is free; a merged or closed one clears the session's worktree and branch away.
+   */
+  const followPullRequest = (id: SessionId) => {
+    const look = following.then(async () => {
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (!file.ok || file.value?.branch === undefined) return;
+      const { branch, workspaceId } = file.value;
+      const workspace = await getWorkspace(options.contextDir, workspaceId);
+      if (!workspace.ok || typeof workspace.value.repoPath !== "string") return;
+      const { repoPath } = workspace.value;
+      await settled(id);
+      const events = await readEvents(id);
+      if (!events.ok) return;
+      let pullRequest = pullRequestIn(events.value);
+      if (!pullRequestEnded(pullRequest)) {
+        const found = await options.code.pullRequestOf({ repoPath, branch });
+        if (found === undefined) return;
+        if (!samePullRequest(found, pullRequest)) {
+          const recorded = await append(id, { type: "pull-request", pullRequest: found });
+          if (!recorded.ok) return;
+        }
+        pullRequest = found;
+      }
+      const session = running.get(id);
+      if (session !== undefined && session.turn.kind !== "idle") return;
+      if (pullRequest.state !== "open") {
+        const worktree = options.code.worktreeOf(id);
+        const there = await exists(worktree);
+        if (there.ok && there.value) {
+          await options.code.clearBranch({ repoPath, sessionBranch: { branch, worktree } });
+        }
+        return;
+      }
+      if (pullRequest.checks.kind === "failed") {
+        const { failed } = pullRequest.checks;
+        await fixChecks({ id, workspaceId, events: events.value, pullRequest, failed });
+      }
+    });
+    following = look.catch((error: unknown) =>
+      console.error(`Session ${id}: its pull request couldn't be followed`, error),
+    );
+    return following;
+  };
+
+  /**
+   * Starts a turn asking the model to fix the checks that failed on a pull request's latest
+   * commit, or say why it can't (#172), on the model the owner last used: once per commit.
+   */
+  const fixChecks = async (fix: {
+    id: SessionId;
+    workspaceId: WorkspaceId;
+    events: readonly SessionEvent[];
+    pullRequest: PullRequest;
+    /** The checks that failed, by name. */
+    failed: readonly string[];
+  }) => {
+    const { pullRequest } = fix;
+    const asked = fix.events.some(
+      (event) =>
+        event.type === "owner-message" && event.checksFailed?.head === pullRequest.head,
+    );
+    const last = fix.events.findLast((event) => event.type === "owner-message");
+    if (asked || last?.type !== "owner-message") return;
+    const [first, ...more] = fix.failed;
+    if (first === undefined) return;
+    const message: NewMessage = {
+      text: checksFailedMessage({ number: pullRequest.number, checks: [first, ...more] }),
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerFor(message);
+    if (!provider.ok || !provider.value.capabilities.codes) return;
+    await startTurn({
+      id: fix.id,
+      workspaceId: fix.workspaceId,
+      provider: provider.value,
+      message,
+      since: freshStarts,
+      coding: true,
+      checksFailed: { pullRequest: pullRequest.number, head: pullRequest.head, checks: [first, ...more] },
+    });
+  };
+
   return {
+    /**
+     * Follows every code session's pull request on GitHub (#172), for the worker's repeating
+     * jobs: what changed is recorded, a failing check starts a fixing turn, and a merged or closed
+     * one ends its session.
+     */
+    followPullRequests: async () => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return;
+      for (const folder of folders.value) {
+        const id = SessionId.safeParse(folder);
+        if (id.success) await followPullRequest(id.data);
+      }
+    },
+
     /**
      * Save as document (ADR 0020): the whole answer to the owner's message numbered `answer`, as a
      * new document called `name` in the session's workspace, with no model turn. Recorded in the

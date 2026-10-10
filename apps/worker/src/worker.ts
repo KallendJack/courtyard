@@ -108,6 +108,12 @@ const takesFiles = (c: Context) => sendsMessageFiles(c) || sendsThingPhoto(c);
 /** How long the fake's pretend sign-in takes to finish, when it acts signed out. */
 const FAKE_SIGN_IN_MS = 5000;
 
+/**
+ * How often code sessions' pull requests are looked at on GitHub (#172), besides as soon as a
+ * turn in one ends: often enough to see checks run, well inside GitHub's limits.
+ */
+const FOLLOW_PULL_REQUESTS_EVERY_MS = 30_000;
+
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
 
@@ -200,7 +206,11 @@ export const createWorker = (options: {
     contextDir,
     contextFolder,
     houseSkills,
-    code: createCode({ dataDir, commandEnv: github.commandEnv }),
+    code: createCode({
+      dataDir,
+      commandEnv: github.commandEnv,
+      findPullRequest: github.pullRequest,
+    }),
     now,
   });
   const live = createLive({
@@ -213,6 +223,7 @@ export const createWorker = (options: {
   const repeat = options.repeat ?? repeatForever;
   repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
   repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
+  repeat(FOLLOW_PULL_REQUESTS_EVERY_MS, sessions.followPullRequests);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });

@@ -22,6 +22,31 @@ export type GitHubApi = {
   readonly refresh: (refreshToken: string) => Promise<Result<UserToken, "lapsed" | "failed">>;
   /** The account a token signs in as, and the repos the GitHub App is installed on there. */
   readonly account: (accessToken: string) => Promise<Result<GitHubAccount, string>>;
+  /**
+   * The latest pull request from `branch` in `repo` (`owner/name`), whatever its state, with the
+   * checks on its latest commit (#172); `null` when there's none.
+   */
+  readonly pullRequest: (
+    accessToken: string,
+    find: { readonly repo: string; readonly branch: string },
+  ) => Promise<Result<FoundPullRequest | null, string>>;
+};
+
+/** A pull request as GitHub has it. */
+export type FoundPullRequest = {
+  readonly number: number;
+  readonly url: string;
+  readonly state: "open" | "merged" | "closed";
+  /** Its latest commit. */
+  readonly head: string;
+  readonly checks: readonly FoundCheck[];
+};
+
+/** One check on a pull request's latest commit, and how it's going. */
+export type FoundCheck = {
+  readonly name: string;
+  /** `other` for one that ended neither passing nor failing: skipped, cancelled. */
+  readonly outcome: "running" | "passed" | "failed" | "other";
 };
 
 /** A device sign-in in progress. Only `link`, `code` and when it runs out reach the browser. */
@@ -79,6 +104,33 @@ const Repositories = z.object({
   total_count: z.number(),
   repositories: z.array(z.object({ full_name: z.string() })),
 });
+
+const Pulls = z.array(
+  z.object({
+    number: z.number().int().positive(),
+    html_url: z.url({ protocol: /^https$/ }),
+    state: z.enum(["open", "closed"]),
+    merged_at: z.string().nullable(),
+    head: z.object({ sha: z.string().regex(/^[0-9a-f]+$/) }),
+  }),
+);
+const CheckRuns = z.object({
+  check_runs: z.array(
+    z.object({ name: z.string(), status: z.string(), conclusion: z.string().nullable() }),
+  ),
+});
+
+/** What GitHub calls a check that ended in failure. */
+const FAILED = new Set(["failure", "timed_out", "action_required", "startup_failure"]);
+
+const outcomeOf = (run: { status: string; conclusion: string | null }): FoundCheck["outcome"] => {
+  if (run.status !== "completed") return "running";
+  if (run.conclusion === "success") return "passed";
+  return run.conclusion !== null && FAILED.has(run.conclusion) ? "failed" : "other";
+};
+
+/** A repository as `owner/name`, and a branch, safe to put in GitHub's addresses. */
+const RepoName = z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/);
 
 const tokenOf = (answer: z.infer<typeof TokenAnswer>): UserToken => ({
   accessToken: answer.access_token,
@@ -222,6 +274,35 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         return ok({ login: user.login, repos: repos.sort() });
       } catch {
         return err("GitHub couldn't be asked who's signed in.");
+      }
+    },
+
+    pullRequest: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const [owner] = repo.data.split("/");
+      try {
+        const head = encodeURIComponent(`${owner}:${find.branch}`);
+        const [pull] = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/pulls?head=${head}&state=all&per_page=1`,
+          Pulls,
+        );
+        if (pull === undefined) return ok(null);
+        const { check_runs } = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/commits/${pull.head.sha}/check-runs?per_page=${PAGE}`,
+          CheckRuns,
+        );
+        return ok({
+          number: pull.number,
+          url: pull.html_url,
+          state: pull.merged_at !== null ? "merged" : pull.state,
+          head: pull.head.sha,
+          checks: check_runs.map((run) => ({ name: run.name, outcome: outcomeOf(run) })),
+        });
+      } catch {
+        return err("GitHub couldn't be asked about the pull request.");
       }
     },
   };

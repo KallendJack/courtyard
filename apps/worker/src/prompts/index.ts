@@ -118,7 +118,7 @@ const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim()
 
 /** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
 const CODING_ACCESS =
-  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch. Anything else, such as a change outside your working directory or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, adding and committing on your branch, pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working directory or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
 
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
   // Only a provider that codes works in a code workspace (ADR 0007).
@@ -1189,6 +1189,16 @@ export const notOfferedReply = (name: string) =>
  * Courtyard's: the same reason whichever provider it's on.
  */
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
+
+/**
+ * The message the worker sends a code session when its pull request's checks fail (#172;
+ * docs/ai-conduct.md, Coding), naming the checks that failed.
+ */
+export const checksFailedMessage = (failed: {
+  number: number;
+  checks: readonly [string, ...string[]];
+}) =>
+  `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
 
 /**
  * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
