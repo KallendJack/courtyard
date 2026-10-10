@@ -372,7 +372,11 @@ function Session(props: {
         </div>
       )}
 
-      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:pb-[calc(--spacing(6)+env(safe-area-inset-bottom))]">
+      {/* Above the Handheld frame's bottom bar, on a touch screen (#193). */}
+      <div
+        data-above-frame=""
+        className="sticky bottom-0 mt-6 bg-card pt-2 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:pb-[calc(--spacing(6)+env(safe-area-inset-bottom))]"
+      >
         {away && !reviewing && problem === undefined && (
           <JumpToLatest answering={running} onJump={toLatest} />
         )}

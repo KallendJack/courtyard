@@ -20,10 +20,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
+import { useDock } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -31,7 +33,7 @@ import { SkillTag } from "@/components/skill-tag";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
-import { choiceSummary, ModelPickers, useModelChoice } from "./model-pickers.tsx";
+import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
 /** The tallest the skill list grows, and the least room above the box it opens into. */
@@ -155,6 +157,9 @@ export const Composer = memo(function Composer(props: {
   const picker = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
   const full = attaching.length >= ATTACHMENTS.perMessage;
+  /** On a touch screen, the Handheld frame's place for the box above its bottom bar (#193). */
+  const dock = useDock();
+  const docked = dock !== undefined;
 
   // The tray's thumbnails go with the box.
   const attachingNow = useRef(attaching);
@@ -169,6 +174,8 @@ export const Composer = memo(function Composer(props: {
       const { ready, problems } = await prepareFiles(files, attachingNow.current.length);
       setAttaching((was) => [...was, ...ready]);
       send.setError(problems.length === 0 ? undefined : problems.join(" "));
+      // In the Handheld frame, the box opens to show what's attached (or why it can't be).
+      dock?.open();
     } finally {
       setPreparing((count) => count - 1);
     }
@@ -214,8 +221,25 @@ export const Composer = memo(function Composer(props: {
     if (SLASH.test(text)) setText("");
     setChoosing(undefined);
     closeList();
+    // In the Handheld frame, picked from its Skills button: the box opens to type in.
+    if (dock !== undefined) flushSync(dock.open);
     box.current?.focus();
   };
+
+  // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193).
+  const model = modelName(choice);
+  const hasSkills = skills !== undefined;
+  useEffect(
+    () =>
+      dock?.offer({
+        focus: () => box.current?.focus(),
+        pickPhotos: () => picker.current?.click(),
+        chooseModel: () => setChoosing("model"),
+        ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
+        model,
+      }),
+    [dock, model, hasSkills],
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -239,6 +263,7 @@ export const Composer = memo(function Composer(props: {
       setSkill(undefined);
       releasePreviews(attaching);
       setAttaching([]);
+      dock?.close();
     }
   };
 
@@ -271,40 +296,41 @@ export const Composer = memo(function Composer(props: {
   // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      {compact && (
-        <>
-          <div className="flex items-center gap-2 md:hidden">
-            <Chip onClick={() => setChoosing("model")}>{choiceSummary(choice)}</Chip>
-            {skills !== undefined && (
-              <Chip
-                icon={<Book />}
-                open={choosing === "skill"}
-                onClick={() => setChoosing("skill")}
-              >
-                Skill
-              </Chip>
-            )}
-          </div>
-          <Sheet
-            title="Model for this session"
-            open={choosing === "model"}
-            onClose={() => setChoosing(undefined)}
-          >
-            <ModelPickers models={models} choice={choice} look="field" />
-          </Sheet>
-          {skills !== undefined && (
-            <Sheet
-              title="Use a skill"
-              open={choosing === "skill"}
-              onClose={() => setChoosing(undefined)}
-            >
-              <SkillChoices skills={pickerSkills} pick={pick} />
-            </Sheet>
-          )}
-        </>
+  // The sheets the chips above a phone's box open, and the Handheld frame's buttons (#193).
+  const sheets = (compact || docked) && (
+    <>
+      <Sheet
+        title="Model for this session"
+        open={choosing === "model"}
+        onClose={() => setChoosing(undefined)}
+      >
+        <ModelPickers models={models} choice={choice} look="field" />
+      </Sheet>
+      {skills !== undefined && (
+        <Sheet
+          title="Use a skill"
+          open={choosing === "skill"}
+          onClose={() => setChoosing(undefined)}
+        >
+          <SkillChoices skills={pickerSkills} pick={pick} />
+        </Sheet>
       )}
+    </>
+  );
+
+  const messageBox = (
+    <div className="flex flex-col gap-1.5">
+      {compact && !docked && (
+        <div className="flex items-center gap-2 md:hidden">
+          <Chip onClick={() => setChoosing("model")}>{choiceSummary(choice)}</Chip>
+          {skills !== undefined && (
+            <Chip icon={<Book />} open={choosing === "skill"} onClick={() => setChoosing("skill")}>
+              Skill
+            </Chip>
+          )}
+        </div>
+      )}
+      {!docked && sheets}
       <div className="relative">
         <input
           ref={picker}
@@ -534,5 +560,15 @@ export const Composer = memo(function Composer(props: {
       )}
       <FormError message={send.error} />
     </div>
+  );
+
+  // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page.
+  return docked ? (
+    <>
+      {sheets}
+      {createPortal(messageBox, dock.element)}
+    </>
+  ) : (
+    messageBox
   );
 });

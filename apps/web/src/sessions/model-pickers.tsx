@@ -61,6 +61,17 @@ export const choiceSummary = ({ model, effort }: ModelChoice) =>
       : `${model.label} · ${effortLabel(model, effort)}`;
 
 /**
+ * The model alone, in a word or two, as the Handheld frame's Model button shows it (#193):
+ * "Claude · Sonnet 5" as "Sonnet 5", and Claude Code's "Default (Opus 5.5)" as "Opus 5.5".
+ */
+export const modelName = ({ model }: ModelChoice) => {
+  if (model === undefined) return "No models";
+  const name = model.label.split(" · ").at(-1) ?? model.label;
+  const inDefault = /^Default \((.+)\)$/.exec(name)?.[1];
+  return inDefault ?? name.replace(/\s*\(.*\)$/, "");
+};
+
+/**
  * The model picker, and beside it the effort picker for a model that takes levels of effort:
  * "Default effort" first, then each level.
  */
