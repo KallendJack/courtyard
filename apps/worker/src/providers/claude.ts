@@ -756,7 +756,9 @@ export const createClaudeProvider = (
           prompt: turnPrompt(input.framing),
           options: {
             ...isolatedOptions(),
-            ...(code === null ? {} : await projectSetup(folder)),
+            ...(code === null
+              ? {}
+              : { ...(await projectSetup(folder)), env: { ...isolatedEnv(), ...code.env } }),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,

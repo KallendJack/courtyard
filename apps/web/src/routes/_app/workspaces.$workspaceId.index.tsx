@@ -1,6 +1,8 @@
 import {
   ChangeId,
+  CODE_SESSIONS_AT_ONCE,
   CONTEXT_FILE_LONG_CHARACTERS,
+  type CodeSessionList,
   type ContextFile,
   hasLines,
   type OwnerContextShared,
@@ -13,16 +15,18 @@ import {
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { useState } from "react";
-import { IconButton } from "@/components/button";
+import { Button, IconButton } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
+import { FormError } from "@/components/form-error";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
+import { useAction } from "@/lib/use-action";
 import { DocumentsSection } from "../../documents/documents-section.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
@@ -31,7 +35,7 @@ import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { startSession } from "../../sessions/messages.ts";
 import { ThingsSection } from "../../things/things-section.tsx";
 import { describeWhen } from "../../when.ts";
-import { archiveWorkspace, changeWorkspace } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, deleteSession } from "../../worker.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
@@ -208,7 +212,9 @@ function Workspace() {
         )}
       >
         <div className="flex min-w-0 flex-col gap-4">
-          {sessions.kind === "loaded" && <SessionLinks sessions={sessions.data.sessions} />}
+          {sessions.kind === "loaded" && (
+            <SessionLinks list={sessions.data} mode={workspace.mode} />
+          )}
           <section aria-label="Context file" className={CARD}>
             <ContextFileCard
               workspaceId={workspace.id}
@@ -358,28 +364,69 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
   );
 }
 
-function SessionLinks({ sessions }: { sessions: readonly SessionSummary[] }) {
+/**
+ * The workspace's sessions, latest first. In a code workspace, how many code sessions are running
+ * across the worker, and any session waiting for one of them to end, which can be removed (#174).
+ */
+function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
+  const { sessions, running } = props.list;
   if (sessions.length === 0) return null;
   return (
     <section aria-label="Sessions" className={CARD}>
-      <SectionTitle>Sessions</SectionTitle>
+      <div className="flex items-baseline justify-between gap-4">
+        <SectionTitle>Sessions</SectionTitle>
+        {props.mode === "code" && (
+          <span className="text-xs text-muted-foreground">
+            {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
+          </span>
+        )}
+      </div>
       <ul className="mt-2 divide-y">
         {sessions.map((session) => (
-          <li key={session.id}>
+          <li key={session.id} className="flex items-center gap-2">
             <Link
               to="/workspaces/$workspaceId/sessions/$sessionId"
               params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-              className={LIST_ROW}
+              className={classes(LIST_ROW, "min-w-0 flex-1")}
             >
               <span className="truncate font-medium">{session.title}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {session.busy ? "Running…" : describeWhen(session.updatedAt)}
+              <span
+                className={classes(
+                  "shrink-0 text-xs text-muted-foreground",
+                  session.queued && "font-semibold tracking-[0.08em] uppercase",
+                )}
+              >
+                {session.queued
+                  ? "Queued · starts when a slot frees"
+                  : session.busy
+                    ? "Running…"
+                    : describeWhen(session.updatedAt)}
               </span>
             </Link>
+            {session.queued && <RemoveQueued session={session} />}
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Remove, for a session waiting to start: it goes, with the message it was waiting to answer. */
+function RemoveQueued(props: { session: SessionSummary }) {
+  const router = useRouter();
+  const remove = useAction(async () => {
+    const removed = await deleteSession(props.session.id);
+    if (removed.kind !== "loaded") return describeProblem(removed).body;
+    await router.invalidate();
+    return undefined;
+  });
+  return (
+    <div className="flex shrink-0 flex-col items-end">
+      <Button variant="quiet" size="xs" disabled={remove.busy} onClick={() => remove.run()}>
+        Remove
+      </Button>
+      <FormError message={remove.error} />
+    </div>
   );
 }
 

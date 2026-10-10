@@ -27,6 +27,7 @@ export {
   Undone,
 } from "./lib/changes.ts";
 export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
+export { CODE_SESSIONS_AT_ONCE, CodeSessionList } from "./lib/code-sessions.ts";
 export {
   DOCUMENT_MAX_CHARACTERS,
   DOCUMENT_NAME_MAX_LENGTH,

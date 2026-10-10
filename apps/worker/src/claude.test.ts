@@ -672,6 +672,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     const asked: string[] = [];
     const code: CodeTurn = {
       worktree,
+      env: { COURTYARD_SESSION_SLOT: "2" },
       edit: async (path) => {
         asked.push(`edit ${path}`);
         return path.includes("outside") ? err("Not out there.") : ok(null);
@@ -703,9 +704,11 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     expect(options?.plugins ?? []).toEqual([]);
     expect(options?.strictMcpConfig).toBe(true);
     expect(options?.mcpServers).toEqual({});
+    // Its commands get its slot among the code sessions running, so their checks never share ports.
     expect(options?.env).toMatchObject({
       CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+      COURTYARD_SESSION_SLOT: "2",
     });
     await rm(worktree, { recursive: true, force: true });
   });

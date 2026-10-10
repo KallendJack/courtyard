@@ -326,12 +326,20 @@ const firstLine = (output: string) =>
     .map((line) => line.trim())
     .find((line) => line !== "");
 
-/** Runs a command the worker allowed in the worktree, as a shell would, and says how it went. */
-const runIn = (worktree: string, command: string) =>
+/**
+ * Runs a command the worker allowed in the worktree, with what the session gives its commands, as
+ * a shell would, and says how it went.
+ */
+const runIn = (code: CodeTurn, command: string) =>
   new Promise<string>((resolve) => {
     exec(
       command,
-      { cwd: worktree, windowsHide: true, timeout: 60_000 },
+      {
+        cwd: code.worktree,
+        env: { ...process.env, ...code.env },
+        windowsHide: true,
+        timeout: 60_000,
+      },
       (error, stdout, stderr) => {
         const said = firstLine(error ? `${stderr}\n${stdout}` : stdout);
         const how = error ? `${command} failed` : `Ran ${command}`;
@@ -358,7 +366,7 @@ const scriptedCoding = async (code: CodeTurn, message: string) => {
     } else if (command !== undefined) {
       const allowed = await code.run(command);
       said += allowed.ok
-        ? await runIn(code.worktree, command)
+        ? await runIn(code, command)
         : `Couldn't run ${command}: ${allowed.error} `;
     }
   }

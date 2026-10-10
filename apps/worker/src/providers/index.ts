@@ -118,6 +118,11 @@ export type ToolReply = { readonly ok: boolean; readonly content: readonly ToolC
 export type CodeTurn = {
   /** The session branch's worktree: the turn's working directory, and the only place it edits. */
   readonly worktree: string;
+  /**
+   * What every command it runs gets in its environment as well: the session's slot among the
+   * code sessions running, so their checks never share ports (spec #169, story 6).
+   */
+  readonly env: Readonly<Record<string, string>>;
   /** Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. */
   readonly edit: (path: string) => Promise<Result<null, string>>;
   /** Whether `command` may run in the worktree, or why not. */

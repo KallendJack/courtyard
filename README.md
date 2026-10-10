@@ -166,6 +166,9 @@ machine:
   (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
   git and gh commands that only look, and `git add` and `git commit` on its branch. Anything else
   is refused with the reason, for now: approvals come next.
+- **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
+  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
+  the same, for the repository's checks to pick their test servers' ports from.
 - **A finished session's worktree stays** for now, even once the session is deleted. Remove it
   with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
 
