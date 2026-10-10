@@ -150,12 +150,22 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   refused, and committing needs the worktree on the session branch. The default allowlist is the package scripts,
   git and gh commands that only look, and adding and committing; pushing and the session's own PR join it with the
   GitHub sign-in. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
-  command, which records each one allowed as an activity and words each refusal through `prompts/`.
+  command, which records each one allowed as an activity and words each refusal through `prompts/`, and the
+  environment its commands run in, from `github/`; the module's own fetch from the remote uses that environment too.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
 - **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
   Not now.
+- **`github/`:** the only place that knows GitHub (#99). Courtyard signs in through a GitHub App the owner registered
+  and installed on the repos they chose: a device code from Connections, then the token kept in the data folder,
+  refreshed by a repeating job before it runs out, and forgotten when GitHub stops taking it. GitHub itself is a
+  dependency passed in (`api.ts`, the one real one; `fake.ts` holds it in memory for the tests and the browser
+  tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
+  Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
+  HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
+  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. Its routes are
+  `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 
 **Running Courtyard**
 
@@ -233,14 +243,16 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
-  - **`sign-ins/`:** the home page's sign-in box and Models list.
+  - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
+    account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
+    load wherever they show.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices and so on), used
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
   heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
@@ -271,7 +283,8 @@ the web app parses every answer with these schemas.
 
 ### Outside the apps
 
-- **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers;
+- **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers
+  and the fake GitHub;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
 - **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
@@ -399,6 +412,8 @@ things live only in the worker's memory and go when it restarts.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
+- `github/`: Courtyard's GitHub sign-in (`sign-in.json`) and the `gh` config folder code sessions use (`gh/`),
+  holding the token while signed in and a stand-in that works nowhere otherwise (#99).
 - `codex/`: the Codex home, holding Codex's sign-in
   ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
   `sign-ins.json`: the providers the owner said Not now to.
@@ -413,7 +428,7 @@ things live only in the worker's memory and go when it restarts.
 
 **A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
 moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
-device logins, the sign-ins (the Codex home and Not now) and the usage limits. The README says how to bring things
+device logins, the sign-ins (the Codex home, Not now and GitHub's) and the usage limits. The README says how to bring things
 back.
 
 ## The rules that hold it together
@@ -429,7 +444,7 @@ Each one is written down once, where the link goes.
   [ADR 0003](adr/0003-claude-through-the-agent-sdk-with-the-owners-login-isolated-per-workspace.md)).
 - **Errors are values:** module interfaces return `Result` (`result.ts`); throwing is for bugs (AGENTS.md,
   TypeScript).
-- **Dependencies passed in:** the clock, the providers, the update command and the repeating jobs are options to
+- **Dependencies passed in:** the clock, the providers, GitHub, the update command and the repeating jobs are options to
   `createWorker`, so tests control them (AGENTS.md, Where code goes).
 - **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).

@@ -175,6 +175,17 @@ link and a one-time code to finish on any device, and kept in the provider's own
 and code. The owner can say Not now to it (ADR 0015).
 _Avoid_: device login (that's the owner's login to Courtyard), token, credentials
 
+**Connections**:
+The list at the foot of the home page of what Courtyard is signed in to: each provider, and GitHub, with Sign in
+and Sign out.
+_Avoid_: integrations, accounts, models list
+
+**GitHub sign-in**:
+Courtyard's own sign-in to GitHub, through a GitHub App the owner registered and installed on the repos code
+sessions may reach: started from Connections with a device code, kept in the data folder, and given only to a code
+session's `git` and `gh`, never the worker machine's own login (#99).
+_Avoid_: GitHub token, GitHub account, OAuth app
+
 **Usage limit**:
 The point at which a provider stops answering until a reset time, under the owner's subscription. The worker remembers
 it until then, and the model picker shows it.

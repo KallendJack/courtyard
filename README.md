@@ -166,6 +166,9 @@ machine:
   (`pnpm`/`npm` install with a frozen lockfile, check, typecheck, test, build, e2e and verify),
   git and gh commands that only look, and `git add` and `git commit` on its branch. Anything else
   is refused with the reason, for now: approvals come next.
+- **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
+  worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
+  says its sessions can't push or open a pull request.
 - **A finished session's worktree stays** for now, even once the session is deleted. Remove it
   with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
 
@@ -209,7 +212,7 @@ version, never a Codex you've installed elsewhere.
   touch the other.
 - **Sign in from the home page,** on any device, with a ChatGPT plan. While Codex is signed out,
   the home page offers Sign in to Codex: it shows a link and a one-time code to finish in any
-  browser, and carries on by itself once you have. The Models list at the foot of the home page
+  browser, and carries on by itself once you have. Connections, at the foot of the home page,
   shows who Codex is signed in as, with Sign out. If ChatGPT refuses the code, switch on device
   code sign-in at chatgpt.com (Settings, Security) first. To sign in on the worker machine
   instead, in PowerShell from Courtyard's folder:
@@ -226,6 +229,51 @@ version, never a Codex you've installed elsewhere.
 Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
 Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.
 Courtyard never reads, stores or logs its sign-in.
+
+### GitHub
+
+Code sessions reach GitHub through Courtyard's own sign-in, never the worker machine's `git` or
+`gh` login: a **GitHub App** you register once and install on only the repos sessions may use, so
+they can't reach any other. You sign in to it from Connections, on the home page, with a device
+code. It needs [`gh`](https://cli.github.com) installed on the worker machine (git gets its
+GitHub credentials through it). Until it's set up, a code workspace says its sessions can't push
+or open a pull request.
+
+**Register the GitHub App, once:**
+
+1. On GitHub, open **Settings → Developer settings → GitHub Apps → New GitHub App**
+   (`https://github.com/settings/apps/new`).
+2. Give it a name nobody else has used ("Courtyard for <your name>"), and any homepage URL (this
+   repo's, say). Leave the callback URL empty and "Request user authorization (OAuth) during
+   installation" off. Leave **Expire user authorization tokens** on: Courtyard refreshes them.
+3. Tick **Enable Device Flow**.
+4. Under **Webhook**, untick **Active**: Courtyard asks GitHub, it isn't told.
+5. Under **Repository permissions**, give it: **Contents** read and write (push the session's
+   branch), **Pull requests** read and write (open, update, merge and close its PR), **Checks**,
+   **Commit statuses**, **Actions** and **Issues** read-only (follow the PR's checks, read the issue
+   a session works on); **Metadata** read-only is always on. Add **Workflows** read and write only
+   if sessions may change the repo's `.github/workflows`. Nothing under account permissions.
+6. Choose **Only on this account**, then **Create GitHub App**.
+7. On the app's page, copy its **Client ID** (not the App ID), and set it in the worker's `.env`:
+   `COURTYARD_GITHUB_CLIENT_ID=<client ID>`. It needs no client secret or private key. Restart the
+   worker (or run an Update) to pick it up.
+
+**Install it on the repos sessions may use:** on the app's page, **Install App**, pick your
+account, choose **Only select repositories**, pick them, and **Install**. To change them later:
+**Settings → Applications → Installed GitHub Apps → Configure**. Connections lists the repos it
+reaches.
+
+**Sign in from Connections,** on any device: **Sign in to GitHub** shows a code; **Copy, open
+GitHub** copies it and opens github.com/login/device to enter it, and the page carries on by itself
+once you've said yes. **Switch** signs in as another account (the one signed in stays until the new
+sign-in finishes), and **Sign out** forgets the sign-in on the worker. To withdraw it on GitHub's
+side too: **Settings → Applications → Authorized GitHub Apps → Revoke**.
+
+**Where it's kept:** in the data folder's `github` folder: `sign-in.json` (the token, refreshed
+before it runs out every eight hours, and forgotten if GitHub stops accepting it, after six months
+unused) and `gh/`, the `gh` config folder code sessions use. A session's `git` and `gh` get
+it there, through the environment their commands run in; it never reaches the browser, a
+session's events, the context folder or a model. A fresh start keeps it.
 
 ## Getting things back
 
@@ -257,7 +305,7 @@ new one can't take an archived one's folder name.
 
 **Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
 context and every session, so Courtyard starts as on its first run. Your password, your devices'
-logins and the Claude and Codex sign-ins stay. There's no Undo button, but nothing is lost:
+logins and the Claude, Codex and GitHub sign-ins stay. There's no Undo button, but nothing is lost:
 
 - **The context folder** is cleared as one change titled "Fresh start", so its history (and your
   backup) still has every file. To bring it all back, run this in the context folder, while no turn
