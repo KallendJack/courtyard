@@ -44,6 +44,16 @@ export const standInSpeechRecognition = (page: Page) =>
         );
         this.onresult?.({ resultIndex: this.results.length - 1, results: this.results });
       }
+      /**
+       * Hears the whole phrase so far as a new result, kept beside the earlier ones, as Chrome on
+       * Android does: "hi", then "hi I", then "hi I just", often settled as each comes.
+       */
+      hearAnew(words: string, final: boolean) {
+        this.results.push(
+          Object.assign([{ transcript: words, confidence: 0.9 }], { isFinal: final }),
+        );
+        this.onresult?.({ resultIndex: this.results.length - 1, results: this.results });
+      }
       /** Settles the last words and ends, as the browser does when asked to stop or in a pause. */
       end() {
         if (listening === this) stopListening();
@@ -80,6 +90,11 @@ export const standInSpeechRecognition = (page: Page) =>
       if (!(event instanceof CustomEvent && typeof event.detail === "string")) return;
       if (listening === undefined) unheard = event.detail;
       else listening.hear(event.detail);
+    });
+    addEventListener("stand-in-hear-anew", (event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const { words, final }: { words: unknown; final: unknown } = event.detail;
+      if (typeof words === "string") listening?.hearAnew(words, final === true);
     });
     addEventListener("stand-in-pause", () => listening?.end());
     addEventListener("stand-in-hide", () => {
@@ -119,6 +134,16 @@ export const withoutSpeechRecognition = (page: Page) =>
 /** The owner says `words` (so far): what the browser has heard of them. */
 export const hear = (page: Page, words: string) =>
   page.evaluate((detail) => dispatchEvent(new CustomEvent("stand-in-hear", { detail })), words);
+
+/**
+ * The owner says `words` (so far), heard as Chrome on Android hears them: the whole phrase again
+ * as a new result each time, `final` or not.
+ */
+export const hearAnew = (page: Page, words: string, final: boolean) =>
+  page.evaluate((detail) => dispatchEvent(new CustomEvent("stand-in-hear-anew", { detail })), {
+    words,
+    final,
+  });
 
 /** The browser stops listening on its own, as Chrome on Android does in a pause. */
 export const pause = (page: Page) =>

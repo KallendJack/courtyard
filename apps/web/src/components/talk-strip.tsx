@@ -10,7 +10,7 @@ import {
 } from "react";
 import { classes } from "@/lib/classes";
 import { FrameButton } from "./frame-button.tsx";
-import type { MessageBox } from "./handheld.ts";
+import type { Dictation, MessageBox } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
 
 /** How long a finger stays on the strip before it's a hold (push to talk) rather than a tap. */
@@ -40,19 +40,21 @@ const SAYS: Record<Showing, (now: Now) => { title: string; detail: string }> = {
     detail: now.problem ?? "What you say now queues",
   }),
   listening: (now) => ({
-    title: "Listening · tap to send",
+    title: "Listening · tap to stop",
     detail: now.words === "" ? now.where : `“${now.words}”`,
   }),
-  held: () => ({ title: "Let go to send", detail: "Slide onto Cancel to drop it" }),
-  dropping: () => ({ title: "Let go to drop it", detail: "Slide back to send it" }),
+  held: () => ({ title: "Let go to stop", detail: "Slide onto Cancel to drop it" }),
+  dropping: () => ({ title: "Let go to drop it", detail: "Slide back to keep it" }),
 };
 
 /**
  * The Handheld frame's Type key and talk strip (#79, Paper board Handheld · 02). A tap on the
- * strip listens hands-free, showing the words as they're heard, and a second tap sends them; Type
- * becomes Cancel meanwhile. Held, it's push to talk: it fills violet, letting go sends, and sliding
- * onto Cancel drops it. While a turn runs, what's said is queued (#177). Each step has its own
- * vibration. Where the browser can't listen, the strip opens the keyboard, as Type does.
+ * strip opens the message box and listens hands-free, putting the words in the box as they're
+ * heard, after anything typed, and a second tap stops; the owner sends them with Send (#198). Type
+ * becomes Cancel meanwhile, which drops what was said. Held, it's push to talk: it fills violet,
+ * letting go stops, and sliding onto Cancel drops it. While a turn runs, what's sent is queued
+ * (#177). Each step has its own vibration. Where the browser can't listen, the strip opens the
+ * keyboard, as Type does.
  */
 export function TalkBar(props: {
   wide: boolean;
@@ -66,33 +68,36 @@ export function TalkBar(props: {
   const { box, wide } = props;
   const [talk, setTalk] = useState<Talk>({ kind: "idle" });
   const listening = useRef<Listening>(undefined);
+  /** Where what's heard now goes: the message box, opened for it. */
+  const dictation = useRef<Dictation>(undefined);
   /** The finger that started listening, until it lifts, and whether it has become a hold. */
   const press = useRef<{ pointer: number; timer: number; held: boolean }>(undefined);
   const cancelKey = useRef<HTMLButtonElement>(null);
-  // What's heard goes to the box that's there once it's heard, not the one there when it began.
-  const boxNow = useRef(box);
-  boxNow.current = box;
-  const typeNow = useRef(props.type);
-  typeNow.current = props.type;
 
   const answering = box?.answering === true;
   const wasAnswering = useRef(answering);
+  const hasBox = box !== undefined;
   useEffect(() => {
-    if (wasAnswering.current && !answering && boxNow.current !== undefined) feel("softTick");
+    if (wasAnswering.current && !answering && hasBox) feel("softTick");
     wasAnswering.current = answering;
-  }, [answering]);
+  }, [answering, hasBox]);
 
-  const stop = (how: "send" | "drop") => {
+  /**
+   * Stops listening: keeping what was said (the browser settles the last words first), dropping
+   * it, or because the box sent it.
+   */
+  const stop = (how: "keep" | "drop" | "sent") => {
     if (press.current !== undefined) window.clearTimeout(press.current.timer);
     press.current = undefined;
-    if (how === "send") listening.current?.finish();
+    if (how === "keep") listening.current?.finish();
     else listening.current?.cancel();
+    if (how === "drop") dictation.current?.drop();
     listening.current = undefined;
+    dictation.current = undefined;
     setTalk({ kind: "idle" });
   };
 
-  // Nowhere to send it (a page without a box, Home say), or the frame gone: listening stops.
-  const hasBox = box !== undefined;
+  // Nowhere to put it (a page without a box, Home say), or the frame gone: listening stops.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the box going is the trigger
   useEffect(() => {
     if (!hasBox && listening.current !== undefined) stop("drop");
@@ -100,26 +105,34 @@ export function TalkBar(props: {
   useEffect(() => () => listening.current?.cancel(), []);
 
   const begin = () => {
+    if (box === undefined) return;
     setTalk({ kind: "listening", held: false, words: "", overCancel: false });
+    // Sent from the box while it listens: listening stops, and what was said has gone with it.
+    const into: Dictation = box.dictate(() => {
+      if (dictation.current === into) stop("sent");
+    });
+    dictation.current = into;
     // It can fail before it returns (the browser refusing to start): then there's nothing to keep.
     let over = false;
     const started = listen({
-      heard: (words) => setTalk((was) => (was.kind === "listening" ? { ...was, words } : was)),
+      heard: (words) => {
+        setTalk((was) => (was.kind === "listening" ? { ...was, words } : was));
+        into.hear(words);
+      },
+      // The browser's last word on what was said, once it has settled.
       finished: (words) => {
-        if (words === "") setTalk({ kind: "idle", problem: "Nothing heard, so nothing was sent" });
-        else boxNow.current?.say(words);
+        if (words === "") setTalk({ kind: "idle", problem: "Nothing heard" });
+        else into.hear(words);
       },
       failed: (problem, words) => {
         over = true;
         if (press.current !== undefined) window.clearTimeout(press.current.timer);
         press.current = undefined;
         listening.current = undefined;
+        if (dictation.current === into) dictation.current = undefined;
         setTalk({ kind: "idle", problem });
-        // Nothing said is lost: it waits in the box, to finish by keyboard.
-        if (words !== "") {
-          boxNow.current?.write(words);
-          typeNow.current();
-        }
+        // Nothing said is lost: it waits in the box, to send or finish by keyboard.
+        if (words !== "") into.hear(words);
       },
     });
     if (!over) listening.current = started;
@@ -157,10 +170,10 @@ export function TalkBar(props: {
   const up = (event: PointerEvent<HTMLButtonElement>) => {
     const pressed = press.current;
     if (pressed === undefined) {
-      // A second tap, while it listens hands-free: send, with the same feel as letting go.
+      // A second tap, while it listens hands-free: it stops, with the same feel as letting go.
       if (talk.kind === "listening" && event.button === 0) {
         feel("doubleTick");
-        stop("send");
+        stop("keep");
       }
       return;
     }
@@ -174,10 +187,10 @@ export function TalkBar(props: {
     }
     if (talk.kind === "listening" && talk.overCancel) return stop("drop");
     feel("doubleTick");
-    stop("send");
+    stop("keep");
   };
 
-  // A browser that took the finger away (to scroll, say) drops a hold rather than sending it.
+  // A browser that took the finger away (to scroll, say) drops a hold rather than keeping it.
   const lost = (event: PointerEvent<HTMLButtonElement>) => {
     if (press.current?.pointer === event.pointerId) stop("drop");
   };
@@ -188,7 +201,7 @@ export function TalkBar(props: {
     // A finger or the mouse is handled as it goes down and up; Enter or Space toggles.
     if (event.detail !== 0) return;
     if (talk.kind === "idle") begin();
-    else stop("send");
+    else stop("keep");
   };
 
   const titleId = useId();

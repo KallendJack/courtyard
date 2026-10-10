@@ -347,7 +347,8 @@ _Avoid_: sidebar, nav bar, toolbar
 
 **Talk strip**:
 The wide bar along the bottom of the Handheld frame, beside Type, that listens to the owner (#79): a tap listens
-hands-free and a second tap sends, or held it's push to talk.
+hands-free and a second tap stops, or held it's push to talk. What it hears goes into the message box as it's heard,
+for the owner to send (#198).
 _Avoid_: mic button, voice bar, push-to-talk button
 
 **Dock**:

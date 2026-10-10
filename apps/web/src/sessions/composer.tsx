@@ -27,7 +27,7 @@ import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
-import { type MessageBox, useDock } from "@/components/handheld";
+import { useDock } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -165,6 +165,11 @@ export const Composer = memo(function Composer(props: {
   /** On a touch screen, the Handheld frame's place for the box above its bottom bar (#193). */
   const dock = useDock();
   const docked = dock !== undefined;
+  // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
+  const textNow = useRef(text);
+  textNow.current = text;
+  /** Told once the box sends while the talk strip listens, so it stops. */
+  const dictating = useRef<() => void>(undefined);
 
   // The tray's thumbnails go with the box.
   const attachingNow = useRef(attaching);
@@ -258,6 +263,8 @@ export const Composer = memo(function Composer(props: {
       releasePreviews(attaching);
       setAttaching([]);
       dock?.close();
+      dictating.current?.();
+      dictating.current = undefined;
     }
     return sent;
   };
@@ -265,23 +272,6 @@ export const Composer = memo(function Composer(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     await sendText(text, text);
-  };
-
-  /** What the owner said in the talk strip (#79), after anything they'd typed. */
-  const afterTyped = (words: string) => (text.trim() === "" ? words : `${text.trimEnd()} ${words}`);
-  const voice = useRef<Pick<MessageBox, "say" | "write">>({ say: () => {}, write: () => {} });
-  voice.current = {
-    // It goes as Send would send it, or waits in the open box, saying why, when it can't.
-    say: (words) => {
-      const message = afterTyped(words);
-      const waiting = send.busy || preparing > 0 || props.disabled === true || !choice.model;
-      void (async () => {
-        if (!waiting && (await sendText(message, text))) return;
-        setText(message);
-        dock?.open();
-      })();
-    },
-    write: (words) => setText(afterTyped(words)),
   };
 
   // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193, #79).
@@ -298,8 +288,16 @@ export const Composer = memo(function Composer(props: {
         model,
         ...(choosing === undefined ? {} : { choosing }),
         answering,
-        say: (words) => voice.current.say(words),
-        write: (words) => voice.current.write(words),
+        dictate: (sent) => {
+          const typed = textNow.current;
+          dictating.current = sent;
+          dock?.open();
+          const put = (words: string) =>
+            setText(
+              words === "" ? typed : typed.trim() === "" ? words : `${typed.trimEnd()} ${words}`,
+            );
+          return { hear: put, drop: () => put("") };
+        },
       }),
     [dock, model, hasSkills, choosing, answering],
   );
