@@ -1,12 +1,12 @@
 // Starts the worker for the browser tests on a fresh data folder, so every run begins as a new
-// install with no owner yet, plus one long session to check that long sessions stay smooth. The
+// install with no owner yet, plus long sessions to check that long sessions stay smooth. The
 // context folder is a fresh copy of the fixtures, so adding a workspace never touches the repo.
 // The worker runs as a live copy whose main has moved on, with a stand-in for the update script.
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
-import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
+import { LONG_SESSION_ID, LONG_SESSION_TURNS, READING_SESSION_ID } from "./long-session.ts";
 
 const dataDir = process.env.COURTYARD_DATA_DIR;
 if (!dataDir)
@@ -19,30 +19,34 @@ if (!contextDir)
 rmSync(contextDir, { recursive: true, force: true });
 cpSync(join(import.meta.dirname, "fixtures", "context"), contextDir, { recursive: true });
 
-// The long session, written in the worker's own formats: parsing each record with the contract's
+// The long sessions, written in the worker's own formats: parsing each record with the contract's
 // schemas means a format change fails here, by name, rather than as a blank page in a test.
-const folder = join(dataDir, "sessions", LONG_SESSION_ID);
-mkdirSync(folder, { recursive: true });
-const at = "2026-10-01T12:00:00.000Z";
-const session = SessionSummary.omit({ busy: true }).parse({
-  id: LONG_SESSION_ID,
-  workspaceId: "garage-gym",
-  title: "A long session",
-  createdAt: at,
-  updatedAt: at,
-});
-writeFileSync(join(folder, "session.json"), JSON.stringify(session));
+const seedLongSession = (id, title) => {
+  const folder = join(dataDir, "sessions", id);
+  mkdirSync(folder, { recursive: true });
+  const at = "2026-10-01T12:00:00.000Z";
+  const session = SessionSummary.omit({ busy: true }).parse({
+    id,
+    workspaceId: "garage-gym",
+    title,
+    createdAt: at,
+    updatedAt: at,
+  });
+  writeFileSync(join(folder, "session.json"), JSON.stringify(session));
 
-const model = { provider: "fake", model: "echo" };
-const events = [];
-let seq = 0;
-for (let turn = 1; turn <= LONG_SESSION_TURNS; turn++) {
-  events.push({ seq: ++seq, at, type: "owner-message", text: `Message ${turn}`, model });
-  events.push({ seq: ++seq, at, type: "text-delta", text: `You said: Message ${turn}` });
-  events.push({ seq: ++seq, at, type: "turn-completed" });
-}
-const lines = events.map((event) => JSON.stringify(SessionEvent.parse(event)));
-writeFileSync(join(folder, "events.jsonl"), `${lines.join("\n")}\n`);
+  const model = { provider: "fake", model: "echo" };
+  const events = [];
+  let seq = 0;
+  for (let turn = 1; turn <= LONG_SESSION_TURNS; turn++) {
+    events.push({ seq: ++seq, at, type: "owner-message", text: `Message ${turn}`, model });
+    events.push({ seq: ++seq, at, type: "text-delta", text: `You said: Message ${turn}` });
+    events.push({ seq: ++seq, at, type: "turn-completed" });
+  }
+  const lines = events.map((event) => JSON.stringify(SessionEvent.parse(event)));
+  writeFileSync(join(folder, "events.jsonl"), `${lines.join("\n")}\n`);
+};
+seedLongSession(LONG_SESSION_ID, "A long session");
+seedLongSession(READING_SESSION_ID, "A long read");
 
 // A live copy one commit behind its remote's main, as if a PR had just been merged.
 const liveDir = join(dataDir, "..", "live");
