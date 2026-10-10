@@ -149,7 +149,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
-  allowlist is the package scripts, git and gh commands that only look, adding and committing, pushing the session
+  allowlist is the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the like; #178), the
+  package scripts, git and gh commands that only look, adding and committing, pushing the session
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
@@ -396,7 +397,9 @@ Where the rest fits:
 - **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
   `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
-  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
+  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. Claude Code's
+  background tasks are off, and the hook refuses a `Bash` call asking for the background without asking (#178): a
+  turn's commands end with it. What's allowed shows
   as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
   file that decides what allowed commands run (an approval of its own kind, `setup`), is an
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
