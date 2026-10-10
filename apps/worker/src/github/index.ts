@@ -1,11 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type GitHubConnection,
-  PullRequest,
-  type PullRequestChecks,
-} from "@courtyard/contract";
+import { type GitHubConnection, PullRequest, type PullRequestChecks } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, removeFile, writeBytesIn, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";

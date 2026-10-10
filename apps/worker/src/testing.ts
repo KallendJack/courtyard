@@ -562,10 +562,7 @@ export const codeRepo = async (root: string) => {
  * For tests: names `repo`'s remote by its address on GitHub (`github`, as `owner/name`), as a
  * real clone's is, while git reaches the bare repository `origin` on disk in its place.
  */
-export const standInForGitHub = async (
-  repo: string,
-  where: { origin: string; github: string },
-) => {
+export const standInForGitHub = async (repo: string, where: { origin: string; github: string }) => {
   const address = `https://github.com/${where.github}.git`;
   await gitIn(repo, "remote", "set-url", "origin", address);
   await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);

@@ -46,3 +46,58 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await signedIn.getByRole("button", { name: "Sign out" }).click();
   await expect(github).toContainText("Not connected");
 });
+
+// From session to pull request (#172): on this worker the fake GitHub opens a pull request for a
+// session branch once it's pushed, and its e2e check fails on every commit.
+test("a code session shows its branch and pull request, and a failing check starts a turn to fix it", async ({
+  page,
+  request,
+}) => {
+  await request.post("/api/github/sign-in", { data: {} });
+  await expect
+    .poll(
+      async () => ((await (await request.get("/api/github")).json()) as { kind: string }).kind,
+      {
+        timeout: 15_000,
+      },
+    )
+    .toBe("signed-in");
+
+  await page.goto("/workspaces/side-project");
+  await page.getByLabel("Model").selectOption("fake/echo");
+  await page
+    .getByLabel("Message")
+    .fill(
+      [
+        "edit file talk.md: Talk into the message box",
+        "run command: git add talk.md",
+        'run command: git commit -m "Talk into the message box"',
+        "run command: git push -u origin HEAD",
+      ].join("\n"),
+    );
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/workspaces\/side-project\/sessions\//);
+
+  const strip = page.getByRole("region", { name: "Branch and pull request" });
+  await expect(strip).toContainText(/courtyard\/\w+/);
+  await expect(strip.getByRole("link", { name: /^PR #\d+/ })).toBeVisible();
+  await expect(strip).toContainText("e2e failed · fixing it");
+  // The turn the failed check started opens with it, in its activity.
+  const failedCheck = page
+    .getByRole("list", { name: "What the model did" })
+    .getByRole("listitem")
+    .filter({ hasText: "Check e2e failed" });
+  await expect(failedCheck).toBeVisible();
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "You said: The checks on your pull request",
+  );
+  // Once the fixing turn has ended, the check is still failed: nothing new was pushed.
+  await expect(strip).toContainText("e2e failed");
+  await expect(strip).not.toContainText("fixing it");
+
+  await page.reload();
+  await expect(strip).toContainText("e2e failed");
+  await expect(failedCheck).toBeVisible();
+
+  await request.post("/api/github/sign-out", { data: {} });
+});

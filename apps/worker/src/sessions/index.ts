@@ -1315,8 +1315,7 @@ export const createSessions = (options: {
   }) => {
     const { pullRequest } = fix;
     const asked = fix.events.some(
-      (event) =>
-        event.type === "owner-message" && event.checksFailed?.head === pullRequest.head,
+      (event) => event.type === "owner-message" && event.checksFailed?.head === pullRequest.head,
     );
     const last = fix.events.findLast((event) => event.type === "owner-message");
     if (asked || last?.type !== "owner-message") return;
@@ -1336,7 +1335,11 @@ export const createSessions = (options: {
       message,
       since: freshStarts,
       coding: true,
-      checksFailed: { pullRequest: pullRequest.number, head: pullRequest.head, checks: [first, ...more] },
+      checksFailed: {
+        pullRequest: pullRequest.number,
+        head: pullRequest.head,
+        checks: [first, ...more],
+      },
     });
   };
 

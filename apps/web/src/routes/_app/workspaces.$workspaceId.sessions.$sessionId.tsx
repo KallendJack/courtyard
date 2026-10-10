@@ -10,6 +10,7 @@ import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/
 import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/back-link";
+import { BranchStrip } from "@/components/branch-strip";
 import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FormError } from "@/components/form-error";
@@ -92,7 +93,10 @@ function Session(props: {
   documents?: DocumentsHere;
 }) {
   const { session } = props;
-  const { turns, modelTitle, problem, reconnecting } = useSessionTurns(session.id);
+  const { turns, modelTitle, pullRequest, problem, reconnecting } = useSessionTurns(session.id);
+  /** Its pull request was merged or closed, so it takes no more messages (#172). */
+  const ended =
+    pullRequest !== undefined && pullRequest.state !== "open" ? pullRequest.state : undefined;
   const [sendProblem, setSendProblem] = useState<string>();
   /** What the owner is doing to the session itself, if anything. */
   const [tidying, setTidying] = useState<"rename" | "delete">();
@@ -234,6 +238,15 @@ function Session(props: {
           {session.title}
         </PageTitle>
       )}
+      {session.branch !== undefined && (
+        <div className="mt-3">
+          <BranchStrip
+            branch={session.branch}
+            pullRequest={pullRequest}
+            fixing={running && last?.fixesChecks === true}
+          />
+        </div>
+      )}
       {tidying === "delete" && (
         <div className="mt-4">
           <ConfirmStep
@@ -260,6 +273,14 @@ function Session(props: {
             Its workspace is archived, so this session can be read but not carried on. To bring the
             workspace back, move its folder out of the <code>archived</code> folder in your context
             folder.
+          </Notice>
+        </div>
+      )}
+      {ended !== undefined && (
+        <div className="mt-4">
+          <Notice>
+            Its pull request was {ended}, so this session can be read but takes no more messages.
+            Its branch and worktree are cleared away. Start a new session to carry on.
           </Notice>
         </div>
       )}
@@ -298,7 +319,9 @@ function Session(props: {
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
           {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
-          disabled={running || problem !== undefined || session.workspaceArchived}
+          disabled={
+            running || problem !== undefined || session.workspaceArchived || ended !== undefined
+          }
           {...(running ? { stop } : {})}
           placeholder={
             running ? "Waiting for the answer…" : suggesting ? "Or type your own reply…" : "Reply…"

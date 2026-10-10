@@ -53,6 +53,7 @@ export { GitHubConnection } from "./lib/github.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
+export { PullRequest, PullRequestChecks, pullRequestEnded } from "./lib/pull-request.ts";
 export {
   Capabilities,
   CarryOnRequest,
@@ -97,7 +98,6 @@ export {
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
 } from "./lib/session-event.ts";
-export { PullRequest, PullRequestChecks, pullRequestEnded } from "./lib/pull-request.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {

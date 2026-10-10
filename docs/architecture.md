@@ -147,15 +147,24 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   worktree once symlinks are followed, never git's own `.git` file there) and each command: `allowlist.ts` is the
   command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
-  refused, and committing needs the worktree on the session branch. The default allowlist is the package scripts,
-  git and gh commands that only look, and adding and committing; pushing and the session's own PR join it with the
-  GitHub sign-in. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
+  refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
+  allowlist is the package scripts, git and gh commands that only look, adding and committing, pushing the session
+  branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
+  PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
   command, which records each one allowed as an activity and words each refusal through `prompts/`, and the
   environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the module's own fetch from the
   remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
   turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
   this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
-  three waits, first come first served, until one ends.
+  three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
+  (the repository named by its remote's address) and clears a session's worktree and branch away.
+- **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
+  every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
+  as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
+  strip shows. Checks failing on a commit not yet asked about start a turn on the model the owner last used, once
+  the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
+  checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
+  no turn runs its worktree and branch are cleared away.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -168,7 +177,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
   Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
   HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
-  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. Its routes are
+  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
+  latest pull request and the checks on its latest commit (#172). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 
 **Running Courtyard**
@@ -417,7 +427,7 @@ things live only in the worker's memory and go when it restarts.
   log) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
 - `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
   (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
-  a fresh start, until clearing it away is built (with pull requests, #169).
+  a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172).
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

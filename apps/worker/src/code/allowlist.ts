@@ -179,7 +179,9 @@ const ghParts = (rest: readonly string[], flags: GhFlags) => {
     const inline = equals === -1 ? undefined : word.slice(equals + 1);
     if (flags.alone.has(flag) && inline === undefined) continue;
     if (!flags.withValue.has(flag)) return undefined;
-    const value = inline ?? rest[(at += 1)];
+    // Its value is in it, after `=`, or the next word, which is then read.
+    if (inline === undefined) at += 1;
+    const value = inline ?? rest[at];
     if (value === undefined) return undefined;
     values.push([flag, value]);
   }
@@ -215,7 +217,9 @@ const opensOwn = (rest: readonly string[], { branch }: OwnWork) => {
   return (
     parts !== undefined &&
     parts.positionals.length === 0 &&
-    parts.values.every(([flag, value]) => (flag === "--head" || flag === "-H" ? value === branch : true))
+    parts.values.every(([flag, value]) =>
+      flag === "--head" || flag === "-H" ? value === branch : true,
+    )
   );
 };
 

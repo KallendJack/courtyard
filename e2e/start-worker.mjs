@@ -108,6 +108,12 @@ mkdirSync(codeDir, { recursive: true });
 git(codeDir, "init", "-q", "--bare", "-b", "main", "origin.git");
 git(codeDir, "clone", "-q", "origin.git", "repo");
 const repo = join(codeDir, "repo");
+// Its remote is named by its address on GitHub, as a real clone's is (#172), while git reaches
+// origin.git on disk in its place.
+const onGitHub = "https://github.com/octo-owner/side-project.git";
+const origin = join(codeDir, "origin.git");
+git(repo, "remote", "set-url", "origin", onGitHub);
+git(repo, "config", `url.${origin.replaceAll("\\", "/")}.insteadOf`, onGitHub);
 git(repo, "config", "user.name", "Test");
 git(repo, "config", "user.email", "test@example.com");
 writeFileSync(join(repo, "README.md"), "# Side project\n");
@@ -121,7 +127,8 @@ writeFileSync(
 );
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
-// GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts.
+// GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
+// pushed to origin.git gets a pull request, whose e2e check fails on every commit (#172).
 const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
 // A context backup that isn't there, so the home page says the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
@@ -130,5 +137,8 @@ rmSync(missingBackup, { recursive: true, force: true });
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
   startUpdate: standInUpdate,
-  github: createFakeGitHub({ finishAfterMs: 2000 }).api,
+  github: createFakeGitHub({
+    finishAfterMs: 2000,
+    opensOnPush: { remote: origin, checks: [{ name: "e2e", outcome: "failed" }] },
+  }).api,
 });

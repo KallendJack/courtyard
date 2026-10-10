@@ -288,7 +288,8 @@ _Avoid_: whitelist, safe commands
 
 **Session branch**:
 The git branch, checked out in its own folder (a worktree), that holds everything a session changed in a code
-workspace until the owner merges or discards it.
+workspace. The session pushes it and opens its pull request; once that is merged or closed, the session ends and its
+branch is cleared away.
 _Avoid_: feature branch, working branch, task branch
 
 **Notification**:

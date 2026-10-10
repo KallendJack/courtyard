@@ -158,6 +158,8 @@ export type SessionSummary = z.infer<typeof SessionSummary>;
 export const SessionDetail = SessionSummary.extend({
   /** Its workspace is archived, so the session can be read but not carried on. */
   workspaceArchived: z.boolean(),
+  /** A code session's session branch (ADR 0007), shown with its pull request (#172). */
+  branch: z.string().optional(),
 });
 export type SessionDetail = z.infer<typeof SessionDetail>;
 

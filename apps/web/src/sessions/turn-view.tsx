@@ -7,7 +7,7 @@ import {
   skillTitle,
   type WorkspaceId,
 } from "@courtyard/contract";
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useState } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
@@ -17,6 +17,7 @@ import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
+import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
@@ -45,6 +46,8 @@ const describeActivity = (activity: Activity) => {
       return `Edited ${activity.path}`;
     case "ran-command":
       return `Ran ${activity.command}`;
+    case "check-failed":
+      return `Check ${activity.name} failed`;
   }
 };
 
@@ -177,15 +180,24 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      <OwnerMessage sessionId={sessionId} turn={turn} />
+      {/* A turn the worker started for a failed check opens with the check, in its activity. */}
+      {!turn.fixesChecks && <OwnerMessage sessionId={sessionId} turn={turn} />}
       {turn.activities.length > 0 && (
         <ul
           aria-label="What the model did"
           className="space-y-0.5 text-xs wrap-anywhere text-muted-foreground"
         >
           {turn.activities.map((activity, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
-            <li key={index}>{describeActivity(activity)}</li>
+            <li
+              // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
+              key={index}
+              className={classes(
+                activity.kind === "check-failed" && "flex items-center gap-1 text-destructive-text",
+              )}
+            >
+              {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
+              {describeActivity(activity)}
+            </li>
           ))}
         </ul>
       )}

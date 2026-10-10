@@ -223,7 +223,10 @@ describe("a failing check", () => {
     holding = new Promise((resolve) => {
       answer = resolve;
     });
-    await postJson(request, `/api/sessions/${id}/messages`, { text: "And this", model: FAKE_MODEL });
+    await postJson(request, `/api/sessions/${id}/messages`, {
+      text: "And this",
+      model: FAKE_MODEL,
+    });
 
     await runJobs();
     holding = undefined;
