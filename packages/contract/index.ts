@@ -95,7 +95,6 @@ export {
   SessionChange,
   SessionDetail,
   SessionId,
-  SessionList,
   SessionSummary,
   StopRequest,
   takesEffort,
@@ -114,6 +113,7 @@ export {
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
 } from "./lib/session-event.ts";
+export { Doing, ListedSession, SessionList, TurnNow } from "./lib/session-state.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {

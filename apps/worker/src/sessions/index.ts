@@ -30,6 +30,7 @@ import {
   SOURCES_MAX,
   type Source,
   type StopRequest,
+  type TurnNow,
   takesEffort,
   WorkspaceId,
 } from "@courtyard/contract";
@@ -328,6 +329,36 @@ const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
     ending.reason.kind === "rate-limited"
     ? message
     : undefined;
+};
+
+/**
+ * Whose turn it is in a session whose turn is running (#179), from its events: the owner's while
+ * the turn waits on an approval they haven't answered; otherwise the model's, since the turn's
+ * message, doing what its latest activity or text says.
+ */
+const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
+  const start = events.findLastIndex((event) => event.type === "owner-message");
+  const turn = events.slice(Math.max(start, 0));
+  const answered = new Set(
+    turn.flatMap((event) => (event.type === "approval-answered" ? [event.approval] : [])),
+  );
+  const waiting = turn.findLast(
+    (event) => event.type === "approval-requested" && !answered.has(event.seq),
+  );
+  if (waiting?.type === "approval-requested") {
+    return { kind: "needs-you", since: waiting.at, ask: waiting.ask };
+  }
+  const latest = turn.findLast((event) => event.type === "activity" || event.type === "text-delta");
+  return {
+    kind: "working",
+    since: turn[0]?.at ?? new Date(0).toISOString(),
+    doing:
+      latest?.type === "activity"
+        ? { kind: "activity", activity: latest.activity }
+        : latest?.type === "text-delta"
+          ? { kind: "writing" }
+          : { kind: "thinking" },
+  };
 };
 
 /**
@@ -1195,8 +1226,22 @@ export const createSessions = (options: {
   };
 
   /**
-   * A workspace's sessions, most recently active first, each with whether it's waiting for a code
-   * session to end.
+   * Whose turn it is in a session (#179): the owner's while no turn runs; otherwise, from the
+   * running turn's events, the approval it waits on, or what its model is doing now.
+   */
+  const turnNowOf = async (id: SessionId): Promise<Result<TurnNow, SessionError>> => {
+    const session = running.get(id);
+    if (session === undefined || session.turn.kind === "idle" || session.turn.kind === "deleting") {
+      return ok({ kind: "your-turn" });
+    }
+    const events = await readEvents(id);
+    if (!events.ok) return events;
+    return ok(turnNowIn(events.value));
+  };
+
+  /**
+   * A workspace's sessions, most recently active first, each with whose turn it is and whether
+   * it's waiting for a code session to end.
    */
   const sessionsOf = async (
     workspaceId: WorkspaceId,
@@ -1211,7 +1256,13 @@ export const createSessions = (options: {
       if (!file.ok) return err(STORAGE_ERROR);
       if (file.value?.workspaceId !== workspaceId) continue;
       await settled(file.value.id);
-      summaries.push({ ...summaryOf(file.value), queued: options.code.slots.waits(file.value.id) });
+      const now = await turnNowOf(file.value.id);
+      if (!now.ok) return now;
+      summaries.push({
+        ...summaryOf(file.value),
+        now: now.value,
+        queued: options.code.slots.waits(file.value.id),
+      });
     }
     return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   };
