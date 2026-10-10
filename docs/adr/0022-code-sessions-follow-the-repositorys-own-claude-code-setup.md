@@ -19,7 +19,11 @@ matches the command allowlist on its parsed words. Anything else waits in the ho
 for as long as they take, and runs only if they allow it. The default allowlist starts with the shell commands a
 model looks around with, `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg` (never with `--pre` or `--hostname-bin`,
 which run a program), `pwd` and `diff`, under the same rules as every allowed command: one at a time, naming no path
-outside the worktree (#178). `find` isn't among them, since `-exec` runs anything.
+outside the worktree (#178). `find` isn't among them, since `-exec` runs anything. The package scripts are allowed
+in the packages pnpm's `--filter`, `-C` or `-r` pick too, when the script alone would be, and the test tools those
+scripts run are allowed run directly (`vitest run`, `playwright test`, `tsc --noEmit`, `biome check`, with `npx`,
+`pnpm` or `pnpm exec`), since they run the same code the scripts do; `npx` of anything else asks, since it can fetch
+and run any package (#202).
 
 Every command runs in the foreground (#178). A turn's background commands stop when it ends, and nothing wakes the
 model when one finishes, so a model that backgrounds `pnpm verify` and ends its turn waits for a message that never

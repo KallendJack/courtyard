@@ -105,7 +105,7 @@ export const commandAllowed = async (
     pullRequest: session.pullRequest,
   });
   if (rule === undefined) return err({ kind: "needs-approval", reason: "off-allowlist" });
-  if (reachesOut(session.worktree, words.value.slice(rule.words.length))) {
+  if (reachesOut(session.worktree, rule, words.value)) {
     return err({ kind: "needs-approval", reason: "reaches-out" });
   }
   if (rule.onSessionBranch) {

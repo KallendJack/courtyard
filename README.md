@@ -166,8 +166,11 @@ machine:
 - **Without asking,** a session edits files in its worktree and runs the command allowlist:
   `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg`, `pwd` and `diff` inside its worktree (never `tail -f`, which never ends, nor
   `find`, which can run other commands), the package scripts (`pnpm`/`npm` install with a frozen
-  lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look,
-  `git add` and `git commit` on its branch, pushing its branch (to `origin`, under its own name,
+  lockfile, check, typecheck, test, build, e2e and verify), in some packages too (pnpm's
+  `--filter`/`-F`, `-C`/`--dir`, `-r`), the tools they run, run directly (`vitest run`,
+  `playwright test`, `tsc --noEmit`, `biome check`, with `npx`, `pnpm` or `pnpm exec`; `npx` of
+  nothing else), git and gh commands that only look (`gh run view --log-failed` among them),
+  downloading a run's artifacts into its worktree (`gh run download`), `git add` and `git commit` on its branch, pushing its branch (to `origin`, under its own name,
   never forced), opening or updating its own pull request with `gh pr create`/`gh pr edit`,
   filing, labelling, commenting on and closing the repository's issues (`gh issue
   create|edit|comment|close`, `gh label create|list`), and reading through `gh api` (GET only).

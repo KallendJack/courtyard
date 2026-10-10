@@ -23,6 +23,17 @@ export type CommandRule = {
    * session's own branch and pull request; for `gh api`, whether it only reads (#181).
    */
   readonly own?: (rest: readonly string[], work: OwnWork) => boolean;
+  /**
+   * Its options whose value is text, never a path: a title, a body, a message, a jq filter (#202).
+   * Such a value is still checked as a path, but as a whole: a link or a `:` in it isn't split.
+   */
+  readonly texts?: readonly string[];
+  /**
+   * For a command that picks where another runs (pnpm's workspace options, #202): that other
+   * command, which must match a rule of its own that isn't for the session branch only, or
+   * `undefined` when it names none.
+   */
+  readonly runs?: (rest: readonly string[]) => readonly string[] | undefined;
 };
 
 /** A session's own branch, and its pull request's number once it has one. */
@@ -41,9 +52,19 @@ const OPERATORS = new Set([";", "&", "|", "<", ">", "(", ")", "`", "$", "\n", "\
 const ESCAPED_IN_DOUBLE_QUOTES = new Set(["$", "`", '"', "\\"]);
 
 /**
+ * How long the line continuation at a backslash is (#202): the backslash and the line ending after
+ * it, which the shell drops, so a command split over lines is one command. 0 when it isn't one.
+ */
+const continuationAt = (command: string, at: number) => {
+  if (command[at + 1] === "\n") return 2;
+  return command.startsWith("\r\n", at + 1) ? 3 : 0;
+};
+
+/**
  * A command's words, as a POSIX shell reads its quotes and backslashes, or why it can't be
  * matched: anything that could make it run more than one command, or substitute something into
- * it, isn't read further.
+ * it, isn't read further. Quoted text may hold line breaks (a pull request's body), and a
+ * backslash at a line's end joins the next line on (#202).
  */
 export const wordsOf = (command: string): Result<string[], UnmatchableCommand> => {
   const words: string[] = [];
@@ -63,8 +84,9 @@ export const wordsOf = (command: string): Result<string[], UnmatchableCommand> =
     } else if (char === "\\") {
       const next = command[at + 1];
       if (next === undefined) return err("unreadable");
-      add(next);
-      at += 2;
+      const continues = continuationAt(command, at);
+      if (continues === 0) add(next);
+      at += continues || 2;
     } else if (char === "'") {
       const end = command.indexOf("'", at + 1);
       if (end === -1) return err("unreadable");
@@ -79,7 +101,10 @@ export const wordsOf = (command: string): Result<string[], UnmatchableCommand> =
         at += 1;
         if (inside === '"') break;
         if (inside === "$" || inside === "`") return err("chained");
-        if (inside === "\\" && ESCAPED_IN_DOUBLE_QUOTES.has(command[at] ?? "")) {
+        const continues = inside === "\\" ? continuationAt(command, at - 1) : 0;
+        if (continues > 0) {
+          at += continues - 1;
+        } else if (inside === "\\" && ESCAPED_IN_DOUBLE_QUOTES.has(command[at] ?? "")) {
           add(command[at] ?? "");
           at += 1;
         } else {
@@ -119,6 +144,40 @@ const LOOKS = ["cat", "ls", "head", "wc", "grep", "diff"];
 
 /** The package scripts a session runs to check its own work. */
 const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify"];
+/**
+ * The tools those scripts run, run directly (#202), never in a mode that waits forever. They run
+ * the same code the scripts do; `biome check --write` formats only files in the worktree, since a
+ * path it's given outside it asks.
+ */
+const TEST_TOOLS: readonly { readonly words: readonly string[]; readonly never: RegExp[] }[] = [
+  { words: ["vitest", "run"], never: [/^--watch/, /^-w$/, /^--ui/] },
+  { words: ["playwright", "test"], never: [/^--ui/, /^--debug/] },
+  { words: ["tsc", "--noEmit"], never: [/^--watch/, /^-w$/] },
+  { words: ["biome", "check"], never: [] },
+];
+/** What runs them: npx only for them, which could otherwise fetch and run any package. */
+const TOOL_RUNNERS = [["npx"], ["pnpm"], ["pnpm", "exec"]];
+
+/** Pnpm's options that pick the workspace packages a command runs in, with a value. */
+const PNPM_PICKS = new Set(["--filter", "-F", "--dir", "-C"]);
+/** And those without one: every package. */
+const PNPM_EVERY = new Set(["-r", "--recursive"]);
+
+/**
+ * The pnpm command that pnpm's workspace options pick packages for (`pnpm --filter <name>
+ * <script>`, `-F`, `-C <dir>`, `--dir`, `-r`, `--recursive`), or `undefined` without any (#202).
+ */
+const pickedCommand = (rest: readonly string[]) => {
+  let at = 0;
+  for (;;) {
+    const word = rest[at] ?? "";
+    if (PNPM_EVERY.has(word) || /^--(filter|dir)=./.test(word)) at += 1;
+    else if (PNPM_PICKS.has(word) && rest[at + 1] !== undefined) at += 2;
+    else break;
+  }
+  return at === 0 || at === rest.length ? undefined : ["pnpm", ...rest.slice(at)];
+};
+
 /** Git's commands that only look. */
 const GIT_LOOKS = [
   "status",
@@ -197,6 +256,9 @@ const ghParts = (rest: readonly string[], flags: GhFlags) => {
   }
   return { positionals, values };
 };
+
+/** The text a pull request or an issue is given: its title, body, comment or description. */
+const GH_TEXTS = ["--title", "-t", "--body", "-b", "--comment", "-c", "--description", "-d"];
 
 const PR_TEXT = ["--title", "-t", "--body", "-b", "--body-file", "-F", "--base", "-B"];
 const PR_MILESTONE = ["--milestone", "-m"];
@@ -279,7 +341,8 @@ const readsOnly = (rest: readonly string[]) => {
 /**
  * A code workspace's command allowlist when its settings name none: the shell commands that look
  * around the worktree (#178), the repository's package scripts (install with a frozen lockfile,
- * check, typecheck, test, build, e2e and verify), git and gh commands that only look, adding and
+ * check, typecheck, test, build, e2e and verify), in the packages pnpm's workspace options pick
+ * too, and the tools they run, run directly (#202), git and gh commands that only look, adding and
  * committing on the session branch, pushing it, and opening and updating its own pull request
  * (#172), and filing, labelling, commenting on and closing the repository's issues, as Matt
  * Pocock's skills do (#181).
@@ -297,18 +360,47 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     { words: ["npm", "run", script], more: true },
   ]),
   { words: ["npm", "test"], more: true },
+  ...TEST_TOOLS.flatMap(({ words, never }) =>
+    TOOL_RUNNERS.map((runner) => ({ words: [...runner, ...words], more: true, never })),
+  ),
+  { words: ["pnpm"], more: true, runs: pickedCommand },
   ...GIT_LOOKS.map((look) => ({ words: ["git", look], more: true, never: GIT_NEVER })),
   { words: ["git", "branch"], more: false },
   { words: ["git", "branch", "--show-current"], more: false },
   { words: ["git", "remote", "-v"], more: false },
   { words: ["git", "add"], more: true, never: GIT_NEVER },
-  { words: ["git", "commit"], more: true, never: GIT_NEVER, onSessionBranch: true },
+  {
+    words: ["git", "commit"],
+    more: true,
+    never: GIT_NEVER,
+    onSessionBranch: true,
+    texts: ["-m", "--message"],
+  },
   ...GH_LOOKS.map((look) => ({ words: ["gh", ...look], more: true, never: GH_NEVER })),
-  ...GH_ISSUES.map((words) => ({ words: ["gh", ...words], more: true, never: GH_ELSEWHERE })),
-  { words: ["gh", "api"], more: true, own: readsOnly },
+  ...GH_ISSUES.map((words) => ({
+    words: ["gh", ...words],
+    more: true,
+    never: GH_ELSEWHERE,
+    texts: GH_TEXTS,
+  })),
+  // A run's artifacts, into the worktree (its -D folder is checked as a path), for a fixing turn.
+  { words: ["gh", "run", "download"], more: true, never: GH_ELSEWHERE },
+  { words: ["gh", "api"], more: true, own: readsOnly, texts: ["--jq", "-q", "--template", "-t"] },
   { words: ["git", "push"], more: true, onSessionBranch: true, own: pushesOwn },
-  { words: ["gh", "pr", "create"], more: true, onSessionBranch: true, own: opensOwn },
-  { words: ["gh", "pr", "edit"], more: true, onSessionBranch: true, own: editsOwn },
+  {
+    words: ["gh", "pr", "create"],
+    more: true,
+    onSessionBranch: true,
+    own: opensOwn,
+    texts: GH_TEXTS,
+  },
+  {
+    words: ["gh", "pr", "edit"],
+    more: true,
+    onSessionBranch: true,
+    own: editsOwn,
+    texts: GH_TEXTS,
+  },
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
@@ -335,19 +427,25 @@ export const allowlistFor = (settings: {
 
 /**
  * The rule a command's words match, or `undefined` when none does. A push or a pull request
- * command matches only when it names the session's own branch and pull request.
+ * command matches only when it names the session's own branch and pull request, and one that
+ * picks where another runs only when that other matches too.
  */
 export const ruleFor = (
   allowlist: readonly CommandRule[],
   words: readonly string[],
   work: OwnWork,
-) =>
+): CommandRule | undefined =>
   allowlist.find((rule) => {
     if (words.length < rule.words.length) return false;
     if (!rule.words.every((first, index) => words[index] === first)) return false;
     const rest = words.slice(rule.words.length);
     if (!rule.more && rest.length > 0) return false;
     if (rule.own !== undefined && !rule.own(rest, work)) return false;
+    if (rule.runs !== undefined) {
+      const runs = rule.runs(rest);
+      const inner = runs === undefined ? undefined : ruleFor(allowlist, runs, work);
+      if (inner === undefined || inner.onSessionBranch) return false;
+    }
     return !rest.some((argument) => rule.never?.some((never) => never.test(argument)));
   });
 
@@ -371,12 +469,37 @@ const pathsIn = (argument: string) => {
 };
 
 /**
- * Whether any of a command's arguments names a path outside the worktree: one from the home
- * folder (`~`), an absolute one elsewhere, one that climbs out with `..`, or one naming a drive
- * that isn't absolute here (`C:/x` off Windows, `C:x` on it), whose place the worker can't tell.
+ * The paths a command matching a rule could name: those in each argument after the rule's words
+ * (`pathsIn`), but only the whole of a text option's value (`texts`), so a link in a pull
+ * request's body isn't read as a path (#202).
  */
-export const reachesOut = (worktree: string, words: readonly string[]) =>
-  words.flatMap(pathsIn).some((path) => {
+const pathsNamed = (rule: CommandRule, words: readonly string[]) => {
+  const rest = words.slice(rule.words.length);
+  const texts = new Set(rule.texts);
+  const paths: string[] = [];
+  for (let at = 0; at < rest.length; at += 1) {
+    const word = rest[at] ?? "";
+    const equals = word.startsWith("--") ? word.indexOf("=") : -1;
+    if (texts.has(word)) {
+      paths.push(word, ...rest.slice(at + 1, at + 2));
+      at += 1;
+    } else if (equals !== -1 && texts.has(word.slice(0, equals))) {
+      paths.push(word.slice(equals + 1));
+    } else {
+      paths.push(...pathsIn(word));
+    }
+  }
+  return paths;
+};
+
+/**
+ * Whether a command matching a rule names a path outside the worktree (`pathsNamed`): one from
+ * the home folder (`~`), an absolute one elsewhere, one that climbs out with `..`, or one naming
+ * a drive that isn't absolute here (`C:/x` off Windows, `C:x` on it), whose place the worker
+ * can't tell.
+ */
+export const reachesOut = (worktree: string, rule: CommandRule, words: readonly string[]) =>
+  pathsNamed(rule, words).some((path) => {
     if (path.startsWith("~")) return true;
     const absolute = isAbsolute(path);
     if (/^[A-Za-z]:/.test(path) && !absolute) return true;

@@ -226,6 +226,26 @@ describe("a code workspace's command allowlist", () => {
     "npm ci",
     "npm test",
     "npm run build",
+    // The same package scripts, in the workspace packages pnpm's options pick (#202).
+    "pnpm --filter @courtyard/web build",
+    "pnpm --filter=@courtyard/worker test -- src/code-sessions.test.ts",
+    "pnpm -F @courtyard/worker typecheck",
+    "pnpm -C apps/web run build",
+    "pnpm --dir apps/worker test",
+    "pnpm --dir=apps/worker test",
+    "pnpm -r typecheck",
+    "pnpm --recursive --filter @courtyard/web test",
+    // The tools those scripts run, run directly (#202).
+    "npx vitest run src/code-sessions.test.ts",
+    "pnpm vitest run -t allowlist",
+    "pnpm --filter @courtyard/worker exec vitest run src/code-sessions.test.ts",
+    "npx playwright test e2e/chat.spec.ts --workers=1",
+    "pnpm exec playwright test",
+    "npx tsc --noEmit -p apps/worker",
+    "npx biome check apps/worker/src",
+    "npx biome check --write apps/worker/src",
+    // A command split over lines (#202).
+    "pnpm test \\\n  -- apps/worker/src/code-sessions.test.ts",
     "git status",
     "git diff --stat",
     "git log --oneline -5",
@@ -260,8 +280,23 @@ describe("a code workspace's command allowlist", () => {
     'gh api --paginate repos/{owner}/{repo}/pulls --jq ".[].number"',
     "gh api -X GET repos/{owner}/{repo}/labels",
     "gh api --method=get repos/{owner}/{repo}/issues/79/sub_issues",
+    // Reading a failed check's annotations, as a fixing turn does (#202).
+    "gh api repos/octo-owner/side-project/check-runs/123/annotations",
+    "gh api repos/octo-owner/side-project/check-runs/123/annotations --jq '.[] | \"\\(.path):\\(.start_line) \\(.message)\"'",
+    'gh api -H "Accept: application/vnd.github+json" repos/octo-owner/side-project/check-runs/123/annotations',
     "gh pr list --state open",
     "gh pr diff 12",
+    // A failed run's logs and artifacts, for a fixing turn (#202).
+    "gh run view 123 --log-failed",
+    "gh run view 123 --log",
+    "gh run view 123 --json jobs --jq '.jobs[] | select(.conclusion == \"failure\") | .name'",
+    "gh run list --limit 5",
+    "gh run download 123",
+    "gh run download 123 -n playwright-report -D test-results/ci",
+    // A title, body, comment or message is text, never a path (#202).
+    'gh issue comment 79 --body "Fixed: see https://courtyard.example/pull/80"',
+    'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down"',
+    'git commit -m "Link the docs: https://courtyard.example/docs"',
   ])("runs %s without asking, shown in the activity", async (command) => {
     const { answers, ran } = await askAbout([command]);
 
@@ -282,6 +317,8 @@ describe("a code workspace's command allowlist", () => {
     ['git commit -m "$(cat notes.md)"', CHAINED],
     ["git log $HOME", CHAINED],
     ["git status\nrm -rf .", CHAINED],
+    ["git status \\\n; rm -rf .", CHAINED],
+    ["gh pr create --title Rack --body \"$(cat <<'EOF'\nWhy\nEOF\n)\"", CHAINED],
     ['git commit -m "unclosed', /^That command couldn't be read/],
   ])("never runs %s, and says why", async (command, why) => {
     const { answers, asked, ran } = await askAbout([command]);
@@ -301,6 +338,25 @@ describe("a code workspace's command allowlist", () => {
     ["pnpm install", "off-allowlist"],
     ["pnpm install --frozen-lockfile left-pad", "off-allowlist"],
     ["PNPM_HOME=x pnpm test", "off-allowlist"],
+    // Picking workspace packages runs only what runs without them, in packages inside it (#202).
+    ["pnpm --filter x exec rm -rf .", "off-allowlist"],
+    ["pnpm --filter x deploy out", "off-allowlist"],
+    ["pnpm -r", "off-allowlist"],
+    ["pnpm --filter x", "off-allowlist"],
+    ["pnpm -C ../.. build", "reaches-out"],
+    ["pnpm --dir=/path/to/repo test", "reaches-out"],
+    // Only the test tools run directly, never another package, and none that waits forever.
+    ["npx some-package", "off-allowlist"],
+    ["npx -y vitest run", "off-allowlist"],
+    ["npx --package=some-package vitest run", "off-allowlist"],
+    ["pnpm dlx vitest run", "off-allowlist"],
+    ["npx vitest", "off-allowlist"],
+    ["npx vitest run --watch", "off-allowlist"],
+    ["npx playwright test --ui", "off-allowlist"],
+    ["npx tsc", "off-allowlist"],
+    ["npx tsc --noEmit --watch", "off-allowlist"],
+    ["npx biome check --write ../elsewhere", "reaches-out"],
+    ["npx vitest run --config=../evil.ts", "reaches-out"],
     ["gh pr merge 12", "off-allowlist"],
     ["gh pr view 12 --web", "off-allowlist"],
     // Only reading through gh api, and only this repository's issues and labels (#181).
@@ -332,6 +388,17 @@ describe("a code workspace's command allowlist", () => {
     ["git grep -fC:/path/to/patterns.txt rack", "reaches-out"],
     ["git grep -f/path/to/patterns.txt rack", "reaches-out"],
     ["git log -n1 --format=%s -- notes.md HEAD:../outside.txt", "reaches-out"],
+    // A run's artifacts land only in the worktree, from this repository; nothing else changes a run.
+    ["gh run download 123 -D ../x", "reaches-out"],
+    ["gh run download 123 --dir=/path/to/x", "reaches-out"],
+    ["gh run download 123 -R someone/else", "off-allowlist"],
+    ["gh run download 123 --repo=someone/else", "off-allowlist"],
+    ["gh run rerun 123", "off-allowlist"],
+    ["gh run cancel 123", "off-allowlist"],
+    ["gh run view 123 --web", "off-allowlist"],
+    // A body read from a file is still a path (#202).
+    ["gh issue create --title Rack --body-file ../secret.md", "reaches-out"],
+    ["git commit -m Rack -F ../secret.md", "reaches-out"],
     // Looking around stays inside the worktree, and runs nothing else (#178).
     ["cat ../../x", "reaches-out"],
     ["cat -- C:/x", "reaches-out"],
@@ -364,6 +431,11 @@ describe("a code workspace's command allowlist", () => {
     "gh pr create --fill",
     'gh pr create --title "Add the notes" --body "Why it helps"',
     "gh pr create --head <branch> --base main --fill --draft",
+    // A command split over lines, and a body over several, with links (#202).
+    "gh pr create --title 'Add the notes' \\\n  --body 'Why it helps' \\\r\n  --base main",
+    'gh pr edit --body "Why it helps, \\\nin one line"',
+    "gh pr edit --body 'It doesn'\\''t break `pnpm test` or $HOME'",
+    "gh pr create --title 'Add the notes' --body '## Summary\n\nWhy: https://courtyard.example/docs\n\nCloses #79'",
     'gh pr edit --title "Add the notes, tidied"',
     "gh pr edit <branch> --add-label bug",
   ])(
