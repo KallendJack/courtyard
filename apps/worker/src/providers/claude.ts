@@ -20,7 +20,7 @@ import {
   type ProviderStatus,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { exists, listSubfolders, readBytes } from "../files.ts";
+import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
 import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
@@ -194,16 +194,27 @@ const PROJECT_SKILLS = join(".claude", "skills");
  * What a code session takes from its repository (ADR 0022): Claude Code's project settings
  * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
  * repository's own skills. The machine's user and local settings, memory and connectors stay off,
- * as on every turn.
+ * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
+ * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's.
  */
-const projectSetup = async (worktree: string): Promise<Partial<Options>> => {
+const projectSetup = async (
+  worktree: string,
+  noPlugins: string,
+): Promise<Partial<Options> & Pick<Options, "env">> => {
   const folders = await listSubfolders(join(worktree, PROJECT_SKILLS));
   const skills = [];
   for (const name of folders.ok ? folders.value : []) {
     const found = await exists(join(worktree, PROJECT_SKILLS, name, "SKILL.md"));
     if (found.ok && found.value) skills.push(name);
   }
-  return { settingSources: ["project"], skills };
+  return {
+    settingSources: ["project"],
+    skills,
+    env: {
+      CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
+      CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+    },
+  };
 };
 
 /** Claude Code as it really is: the Agent SDK, with this machine's sign-in. */
@@ -757,15 +768,24 @@ export const createClaudeProvider = (
       const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
       const web = webTurnFor(input.framing.webSearch);
       let answer = "";
+      const noPlugins = code === null ? undefined : await makeTemporaryFolder("courtyard-plugins-");
+      if (noPlugins !== undefined && !noPlugins.ok) {
+        input.signal.removeEventListener("abort", stopClaudeCode);
+        return err({ kind: "unknown", message: "Claude Code couldn't be set up for this turn." });
+      }
+      const setup =
+        code === null || noPlugins === undefined
+          ? undefined
+          : await projectSetup(folder, noPlugins.value);
       try {
         const messages = claudeCode.run({
           prompt: turnPrompt(input.framing),
           options: {
             ...isolatedOptions(),
-            ...(code === null
+            ...(setup === undefined || code === null
               ? {}
               : // Its commands' git and gh use Courtyard's GitHub sign-in, never the machine's (#99).
-                { ...(await projectSetup(folder)), env: { ...isolatedEnv(), ...code.env } }),
+                { ...setup, env: { ...isolatedEnv(), ...setup.env, ...code.env } }),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
@@ -814,6 +834,7 @@ export const createClaudeProvider = (
         if (!input.signal.aborted) progress.failure ??= claudeCodeStopped(error);
       } finally {
         input.signal.removeEventListener("abort", stopClaudeCode);
+        if (noPlugins?.ok) await removeFolder(noPlugins.value);
       }
       if (input.signal.aborted) return ok(null);
       const failure =

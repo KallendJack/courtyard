@@ -1,6 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import type { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
@@ -181,6 +192,27 @@ export const writeTextFile = async (
 export const removeFile = async (path: string) => {
   try {
     await rm(path, { force: true, maxRetries: 5 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** A new empty folder of its own in the machine's temporary folder, its name starting `prefix`. */
+export const makeTemporaryFolder = async (
+  prefix: string,
+): Promise<Result<string, "unwritable">> => {
+  try {
+    return ok(await mkdtemp(join(tmpdir(), prefix)));
+  } catch {
+    return err("unwritable");
+  }
+};
+
+/** Removes a folder and everything in it, if it's there: whether it's gone. */
+export const removeFolder = async (path: string) => {
+  try {
+    await rm(path, { recursive: true, force: true, maxRetries: 5 });
     return true;
   } catch {
     return false;

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
@@ -732,6 +732,29 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       COURTYARD_SESSION_SLOT: "2",
     });
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("finds none of the machine's installed plugins, whatever the repository's settings enable", async () => {
+    const { worktree, code } = await codeSession();
+    let pluginsFolder: string | undefined;
+    let found: string[] | undefined;
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        async (options: Options) => {
+          pluginsFolder = options.env?.CLAUDE_CODE_PLUGIN_CACHE_DIR;
+          if (pluginsFolder !== undefined) found = await readdir(pluginsFolder);
+        },
+        success,
+      ],
+    });
+
+    await runTurn(claudeCode, { folder: worktree, code });
+
+    // Claude Code looks for plugins in an empty folder of the turn's own, gone once it ends.
+    expect(found).toEqual([]);
+    expect(pluginsFolder?.startsWith(worktree)).toBe(false);
+    await expect(readdir(pluginsFolder ?? worktree)).rejects.toThrow();
     await rm(worktree, { recursive: true, force: true });
   });
 
