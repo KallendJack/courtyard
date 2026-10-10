@@ -3,6 +3,9 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
+/** Variables a command gets on top of the worker's environment: an `undefined` is unset. */
+export type CommandEnv = Readonly<Record<string, string | undefined>>;
+
 /**
  * Runs git in `folder` and returns what it prints, trimmed, or throws when git fails. Git never
  * stops to ask for a password, in the terminal or a window, since nobody is there to answer.
@@ -15,7 +18,7 @@ export const git = async (
   options: {
     config?: readonly string[];
     timeoutMs?: number;
-    env?: Readonly<Record<string, string | undefined>>;
+    env?: CommandEnv;
   } = {},
 ) => {
   const config = (options.config ?? []).flatMap((setting) => ["-c", setting]);
@@ -27,7 +30,7 @@ export const git = async (
 };
 
 /** How every git command here runs: in `folder`, never asking for a password, in no window. */
-const runIn = (folder: string, env: Readonly<Record<string, string | undefined>> = {}) => ({
+const runIn = (folder: string, env: CommandEnv = {}) => ({
   cwd: folder,
   env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
   windowsHide: true,

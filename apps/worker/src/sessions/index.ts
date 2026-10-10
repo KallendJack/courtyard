@@ -71,6 +71,7 @@ import {
   readTextFile,
   writeJsonFile,
 } from "../files.ts";
+import type { CommandEnv } from "../git.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
   checksFailedMessage,
@@ -842,10 +843,10 @@ export const createSessions = (options: {
           );
         };
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
-        const codeTurn = (worktree: string, branch: string): CodeTurn => ({
+        const codeTurn = (worktree: string, branch: string, env: CommandEnv): CodeTurn => ({
           worktree,
           // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
-          env: { ...options.code.commandEnv(), ...(slot === undefined ? {} : slotEnv(slot)) },
+          env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)) },
           edit: async (path) => {
             const place = await editPlaceIn(worktree, path);
             if (place.kind === "inside") {
@@ -892,7 +893,9 @@ export const createSessions = (options: {
             effort: turn.effort,
             folder: worktree ?? workspace.value.folder,
             code:
-              worktree === undefined || branch === undefined ? null : codeTurn(worktree, branch),
+              worktree === undefined || branch === undefined
+                ? null
+                : codeTurn(worktree, branch, await options.code.commandEnv()),
             framing,
             callTool: (call) => {
               const calling = callTool(call);

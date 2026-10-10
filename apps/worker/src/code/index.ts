@@ -1,15 +1,14 @@
 import { isAbsolute, join } from "node:path";
 import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
-import { git, gitFailureReason, gitOrNothing } from "../git.ts";
+import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { GitHub, GitHubProblem } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+import { createCodeSlots } from "./slots.ts";
 
 export { allowlistFor, type CommandRule } from "./allowlist.ts";
-
-import { createCodeSlots } from "./slots.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -17,12 +16,6 @@ import { createCodeSlots } from "./slots.ts";
  * remote. The owner's own checkout is never touched: only the repository's refs and worktree list
  * change.
  */
-
-/**
- * What a code session's git and gh commands get on top of the worker's environment: Courtyard's
- * own GitHub sign-in, never the machine's (#99). An `undefined` is unset.
- */
-export type CommandEnv = Readonly<Record<string, string | undefined>>;
 
 /** Why a session's pull request couldn't be reviewed, merged or closed (#160). */
 export type PullRequestProblem =
@@ -216,7 +209,7 @@ const gitHubRepoOf = async (repoPath: string) => {
 export const createCode = (options: {
   dataDir: string;
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
-  commandEnv: () => CommandEnv;
+  commandEnv: () => Promise<CommandEnv>;
   /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
   pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close" | "deleteBranch">;
 }) => {
@@ -254,7 +247,7 @@ export const createCode = (options: {
       if (!there.ok || !there.value) return err({ kind: "repo-missing", repoPath });
       const top = await gitOrNothing(repoPath, ["rev-parse", "--git-dir"]);
       if (top === undefined) return err({ kind: "not-git", repoPath });
-      const env = options.commandEnv();
+      const env = await options.commandEnv();
       const main = await defaultBranchOf(repoPath, env);
       if (!main.ok) return main;
       const tracking = `refs/remotes/${REMOTE}/${main.value}`;

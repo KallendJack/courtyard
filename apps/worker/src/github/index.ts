@@ -1,4 +1,3 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -9,7 +8,9 @@ import {
   PullRequestReview,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { readJsonFile, removeFile, writeBytesIn, writeJsonFile } from "../files.ts";
+import { exists, readJsonFile, removeFile, writeBytesIn, writeJsonFile } from "../files.ts";
+import type { CommandEnv } from "../git.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { DeviceSignIn, FoundCheck, FoundPullRequest, GitHubApi, UserToken } from "./api.ts";
 
@@ -168,12 +169,7 @@ export const createGitHub = (options: {
   let pending: Pending | undefined;
   let repos: { token: string; at: number; repos: readonly string[] | null } | undefined;
   /** Changes to the sign-in, one at a time, so a refresh and a sign-out never cross. */
-  let changing: Promise<unknown> = Promise.resolve();
-  const oneAtATime = <T>(change: () => Promise<T>): Promise<T> => {
-    const done = changing.then(change);
-    changing = done.catch(() => undefined);
-    return done;
-  };
+  const oneAtATime = createOneAtATime();
 
   const read = async (): Promise<Result<Stored | undefined, "storage">> => {
     const stored = await readJsonFile(signInFile, Stored);
@@ -205,21 +201,22 @@ export const createGitHub = (options: {
     return (await removeFile(signInFile)) && (await writeGh(STAND_IN, STAND_IN));
   };
 
+  /** Whether `gh`'s record of who is signed in is in Courtyard's `gh` config folder. */
+  const ghSignedIn = async () => {
+    const there = await exists(ghHostsFile);
+    return there.ok && there.value;
+  };
+
   /**
    * Makes sure `gh`'s config folder is there before a command reads it, with the stand-in while
-   * no one has signed in yet. Synchronous, as building a command's environment is; it never
-   * replaces a sign-in written meanwhile.
+   * no one has signed in yet. It never replaces a sign-in written meanwhile.
    */
-  const ensureGh = () => {
-    if (existsSync(ghHostsFile)) return true;
-    try {
-      mkdirSync(ghFolder, { recursive: true });
-      writeFileSync(ghConfigFile, GH_CONFIG, { mode: 0o600 });
-      writeFileSync(ghHostsFile, ghHosts(STAND_IN, STAND_IN), { mode: 0o600, flag: "wx" });
-    } catch {
-      // Written meanwhile (the sign-in just kept), or it can't be written.
-    }
-    return existsSync(ghHostsFile);
+  const ensureGh = async () => {
+    if (await ghSignedIn()) return true;
+    await writeBytesIn(ghConfigFile, Buffer.from(GH_CONFIG));
+    // Written meanwhile (the sign-in just kept), or it can't be written: either way, it's asked.
+    await writeBytesIn(ghHostsFile, Buffer.from(ghHosts(STAND_IN, STAND_IN)), { exclusive: true });
+    return ghSignedIn();
   };
 
   const storedFrom = (account: string, token: UserToken): Stored => ({
@@ -433,9 +430,9 @@ export const createGitHub = (options: {
      * it, only where `gh` keeps Courtyard's; or, if that folder can't be written, the stand-in, so
      * `gh` still never reaches for the machine's keyring.
      */
-    commandEnv: (): Readonly<Record<string, string | undefined>> => ({
+    commandEnv: async (): Promise<CommandEnv> => ({
       ...Object.fromEntries(MACHINE_LOGINS.map((name) => [name, undefined])),
-      ...(ensureGh() ? {} : { GH_TOKEN: STAND_IN }),
+      ...((await ensureGh()) ? {} : { GH_TOKEN: STAND_IN }),
       GH_CONFIG_DIR: ghFolder,
       GH_PROMPT_DISABLED: "1",
       GH_NO_UPDATE_NOTIFIER: "1",

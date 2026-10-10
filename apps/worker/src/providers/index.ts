@@ -13,6 +13,7 @@ import type {
   Source,
 } from "@courtyard/contract";
 import { z } from "zod";
+import type { CommandEnv } from "../git.ts";
 import type { Result } from "../result.ts";
 
 export type { Activity };
@@ -124,7 +125,7 @@ export type CodeTurn = {
    * never share ports (spec #169, story 6), and Courtyard's own GitHub sign-in for `git` and `gh`,
    * never the machine's (#99). It names where the sign-in is kept, never the sign-in itself.
    */
-  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly env: CommandEnv;
   /**
    * Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. One
    * outside the worktree waits for the owner's approval (#171).
