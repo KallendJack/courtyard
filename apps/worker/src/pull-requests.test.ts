@@ -250,17 +250,19 @@ describe("a failing check", () => {
 
   it("waits for a turn already running to end", async () => {
     const { id, branch, lastSeq } = await codeSession();
-    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
-    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
     // The owner's own message is still being answered.
     let answer: () => void = () => {};
     holding = new Promise((resolve) => {
       answer = resolve;
     });
-    await postJson(request, `/api/sessions/${id}/messages`, {
+    const sent = await postJson(request, `/api/sessions/${id}/messages`, {
       text: "And this",
       model: FAKE_MODEL,
     });
+    expect(sent.status).toBe(202);
+    // Its checks fail meanwhile.
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
 
     await runJobs();
     holding = undefined;
