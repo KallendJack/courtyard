@@ -313,6 +313,10 @@ describe("a code workspace's command allowlist", () => {
     ["rg --pre=./script.sh foo", "off-allowlist"],
     ["rg --hostname-bin ./script.sh --hyperlink-format default foo", "off-allowlist"],
     ["pwd -P extra", "off-allowlist"],
+    // Following a file never ends, so the turn would wait forever.
+    ["tail -f notes.md", "off-allowlist"],
+    ["tail -n 5 -F notes.md", "off-allowlist"],
+    ["tail --follow=name notes.md", "off-allowlist"],
   ])("asks the owner before running %s, and doesn't once they deny it", async (command, reason) => {
     const { answers, asked, ran } = await askAbout([command]);
 

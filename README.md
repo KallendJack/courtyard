@@ -163,7 +163,7 @@ machine:
   the data folder's `worktrees/`. Your own checkout is never touched.
 - **Only a model that can code works there** (Claude, for now); others are refused, saying so.
 - **Without asking,** a session edits files in its worktree and runs the command allowlist:
-  `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg`, `pwd` and `diff` inside its worktree (never
+  `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg`, `pwd` and `diff` inside its worktree (never `tail -f`, which never ends, nor
   `find`, which can run other commands), the package scripts (`pnpm`/`npm` install with a frozen
   lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look,
   `git add` and `git commit` on its branch, pushing its branch (to `origin`, under its own name,
