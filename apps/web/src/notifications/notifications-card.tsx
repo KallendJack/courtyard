@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CapsLabel } from "@/components/caps-label";
 import { FormError } from "@/components/form-error";
 import { CARD } from "@/components/page";
 import { Switch } from "@/components/switch";
@@ -118,12 +119,9 @@ export default function NotificationsCard() {
 
   return (
     <section aria-labelledby="notifications" className={classes(CARD, "flex flex-col gap-3")}>
-      <h3
-        id="notifications"
-        className="text-[11px]/4 font-bold tracking-[0.08em] text-muted-foreground uppercase"
-      >
+      <CapsLabel tone="muted" heading={{ id: "notifications" }}>
         Notifications
-      </h3>
+      </CapsLabel>
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-0.75">
           <span id="notifications-here" className="font-extrabold">

@@ -2,6 +2,7 @@ import type { ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
 import { useState } from "react";
 import { addStylesheet } from "@/lib/stylesheet";
 import css from "./approval-card.css?inline";
+import { CapsLabel } from "./caps-label.tsx";
 import { FormError } from "./form-error.tsx";
 import { ThumbButton } from "./thumb-button.tsx";
 
@@ -54,9 +55,7 @@ export function ApprovalCard(props: {
         aria-label="Needs your OK"
         className="flex flex-col gap-3 rounded-ask bg-surface p-4.5 ring-[1.5px] ring-warning/55 ring-inset"
       >
-        <p className="text-[11px]/4 font-bold tracking-[0.08em] text-warning uppercase">
-          Needs your OK
-        </p>
+        <CapsLabel tone="warning">Needs your OK</CapsLabel>
         <h2 className="display-section text-[19px]/6 tracking-[-0.015em] text-foreground">
           {question(props.ask)}
         </h2>

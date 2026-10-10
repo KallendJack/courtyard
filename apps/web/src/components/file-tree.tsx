@@ -1,4 +1,5 @@
 import { classes } from "@/lib/classes";
+import { CapsLabel } from "./caps-label.tsx";
 
 /** A file in the tree: where it is, and the lines it adds and removes. */
 export type TreeFile = { path: string; additions: number; deletions: number };
@@ -38,9 +39,9 @@ export function FileTree(props: {
       aria-label="Changed files"
       className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card bg-surface p-2 md:max-h-none"
     >
-      <p className="px-2.5 pt-1.5 pb-1 text-[11px]/4 font-bold tracking-[0.08em] text-muted-foreground uppercase">
+      <CapsLabel tone="muted" inList>
         {count === 1 ? "1 file" : `${count} files`}
-      </p>
+      </CapsLabel>
       {byFolder(props.files).map(([folder, files]) => (
         <div key={folder} className="flex flex-col gap-0.5">
           {folder !== "" && (
