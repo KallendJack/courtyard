@@ -334,7 +334,8 @@ function Tile(props: {
       onClick={again}
       onContextMenu={again}
       className={classes(
-        "flex shrink-0 items-center justify-center font-semibold outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        // Held, it's the recent sessions, not the browser's preview of the link or a selection.
+        "flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
         props.look === "rail"
           ? "h-18 w-20 flex-col gap-2 rounded-[20px] px-1.5 text-center text-[12px]/[15px] [&>span:first-child]:size-3.5"
           : "h-13 gap-2 rounded-lg px-4 text-sm/[18px] whitespace-nowrap",
