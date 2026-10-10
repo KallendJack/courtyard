@@ -20,8 +20,8 @@ import {
 } from "../workspace-files/index.ts";
 
 /**
- * A workspace's skills (ADR 0016), worked out in one place: four places, the more specific
- * winning by name, each skill's source kept beside it. A skill that fails the Agent Skills format
+ * A workspace's skills (ADR 0016), worked out in one place: five places (Matt Pocock's in a code
+ * workspace, ADR 0023), the more specific winning by name, each skill's source kept beside it. A skill that fails the Agent Skills format
  * check, or has scripts in a planning workspace, can't be used, and says why.
  */
 
@@ -127,9 +127,11 @@ const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, "en", { sensitivity: "base" });
 
 /**
- * A workspace's skills, from the four places in order (ADR 0016): the workspace's own
- * `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
- * one, then the house skills for its kind of workspace. The first usable skill of each name wins.
+ * A workspace's skills, from the places in order (ADR 0016): the workspace's own `.agents/skills`
+ * in the context folder, a code workspace's repo's, the context folder's top-level one, a code
+ * workspace's Matt Pocock skills (ADR 0023; when his copy can't be loaded, one broken entry says
+ * why), then the house skills for its kind of workspace. The first usable skill of each name wins.
+ * Matt's own `disable-model-invocation` makes one owner-only.
  * A broken skill, or one with scripts in a planning workspace, replaces nothing, and is listed
  * after the rest with why. "Only the owner starts it" goes with a house skill's name, so a skill of
  * the owner's that replaces it is owner-only too.
