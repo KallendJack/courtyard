@@ -18,6 +18,7 @@ import {
   type ThingSave,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
+import type { Queued } from "@/components/queued-message";
 
 /**
  * A save the model made, shown as a note under its answer, and what the owner has done with it
@@ -115,7 +116,12 @@ type Log = {
   readonly modelTitle: string | undefined;
   /** A code session's pull request as it last stood (#172), once it has one. */
   readonly pullRequest: PullRequest | undefined;
+  /** The owner's messages waiting for the running turn to end (#177), first first. */
+  readonly queuedMessages: readonly QueuedMessage[];
 };
+
+/** A message the owner sent while a turn ran (#177), waiting to go, by its event number. */
+export type QueuedMessage = Queued;
 
 /** Writing its answer, kept as one object so text arriving doesn't make a new one each time. */
 const WRITING: Doing = { kind: "writing" };
@@ -174,9 +180,15 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
   switch (event.type) {
     case "owner-message": {
       const before = log.turns.at(-1)?.model;
+      const { queued } = event;
       return {
         ...log,
         lastSeq: seq,
+        // Sent from the queue, so it waits no more.
+        queuedMessages:
+          queued === undefined
+            ? log.queuedMessages
+            : log.queuedMessages.filter((message) => message.seq !== queued),
         turns: [
           ...log.turns,
           {
@@ -207,6 +219,21 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         ],
       };
     }
+    case "message-queued":
+      return {
+        ...log,
+        lastSeq: seq,
+        queuedMessages: [
+          ...log.queuedMessages,
+          { seq, text: event.text, attachments: event.attachments?.length ?? 0 },
+        ],
+      };
+    case "queued-message-removed":
+      return {
+        ...log,
+        lastSeq: seq,
+        queuedMessages: log.queuedMessages.filter((message) => message.seq !== event.queued),
+      };
     // The owner message after it shows the change; nothing else to show.
     case "model-changed":
       return { ...log, lastSeq: seq };
@@ -369,6 +396,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     turns: [],
     modelTitle: undefined,
     pullRequest: undefined,
+    queuedMessages: [],
   });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
@@ -454,6 +482,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     turns: log.turns,
     modelTitle: log.modelTitle,
     pullRequest: log.pullRequest,
+    queuedMessages: log.queuedMessages,
     problem,
     reconnecting,
   };

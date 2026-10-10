@@ -15,6 +15,7 @@ import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
 import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
+import { type Queued, QueuedMessages } from "@/components/queued-message";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
 import { TurnEndMark, WorkingLine } from "@/components/working-line";
@@ -165,6 +166,11 @@ export const TurnView = memo(function TurnView(props: {
   documents?: DocumentsHere;
   /** It's the session's latest turn, so its end is marked once it ends (#179). */
   latest?: boolean;
+  /** The owner's messages waiting for it to end (#177), on the latest turn only, and removing one. */
+  queued?: {
+    readonly messages: readonly Queued[];
+    readonly remove: (queued: number) => Promise<string | undefined>;
+  };
 }) {
   const { sessionId, turn, providers, onRetry, onCarryOn, onReply, workspaceId, documents } = props;
   const latest = props.latest === true;
@@ -238,6 +244,13 @@ export const TurnView = memo(function TurnView(props: {
             });
             return answered.kind === "loaded" ? undefined : describeProblem(answered).body;
           }}
+        />
+      )}
+      {props.queued !== undefined && (
+        <QueuedMessages
+          messages={props.queued.messages}
+          running={turn.state.kind === "running"}
+          onRemove={props.queued.remove}
         />
       )}
       {turn.sources.length > 0 && <SourceList sources={turn.sources} />}

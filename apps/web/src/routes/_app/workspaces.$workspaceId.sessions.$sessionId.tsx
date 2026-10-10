@@ -21,7 +21,7 @@ import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import type { DocumentsHere } from "../../sessions/documents.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
-import { sendMessage } from "../../sessions/messages.ts";
+import { removeQueued, sendMessage } from "../../sessions/messages.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import {
   carryOn,
@@ -98,7 +98,18 @@ function Session(props: {
   documents?: DocumentsHere;
 }) {
   const { session } = props;
-  const { turns, modelTitle, pullRequest, problem, reconnecting } = useSessionTurns(session.id);
+  const { turns, modelTitle, pullRequest, queuedMessages, problem, reconnecting } = useSessionTurns(
+    session.id,
+  );
+  const removeQueuedMessage = useCallback(
+    async (queued: number) => {
+      const removed = await removeQueued({ sessionId: session.id, queued });
+      // "Gone already" (409) needs no word: it's left the queue as a turn of its own.
+      const goneAnyway = removed.kind === "failed" && removed.status === 409;
+      return removed.kind === "loaded" || goneAnyway ? undefined : describeProblem(removed).body;
+    },
+    [session.id],
+  );
   /** Its pull request was merged or closed, so it takes no more messages (#172). */
   const ended =
     pullRequest !== undefined && pullRequest.state !== "open" ? pullRequest.state : undefined;
@@ -340,6 +351,8 @@ function Session(props: {
           {...(session.workspaceArchived ? {} : { onReply: reply })}
           workspaceId={session.workspaceId}
           {...(props.documents === undefined ? {} : { documents: props.documents })}
+          queuedMessages={queuedMessages}
+          onRemoveQueued={removeQueuedMessage}
         />
       )}
       {sendProblem && (
@@ -353,13 +366,12 @@ function Session(props: {
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
           {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
-          disabled={
-            running || problem !== undefined || session.workspaceArchived || ended !== undefined
-          }
+          // While a turn runs, a message is queued until it ends (#177).
+          disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
           {...(running ? { stop } : {})}
           placeholder={
             running
-              ? "Waiting for the answer…"
+              ? "Queue a message…"
               : reviewing
                 ? "Ask for changes…"
                 : suggesting

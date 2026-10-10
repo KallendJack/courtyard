@@ -69,3 +69,49 @@ test.describe("whose turn it is", () => {
     await expect(working).toContainText("Your turn", { timeout: 45_000 });
   });
 });
+
+test.describe("messages sent while a turn runs", () => {
+  test("queue under the Working line, can be removed, and go in order once the turn ends", async ({
+    page,
+    context,
+  }) => {
+    await startSession(page, words(150));
+    const session = sessionOn(page);
+    await expect(session.getByText("Working", { exact: true })).toBeVisible();
+
+    const message = page.getByRole("textbox", { name: "Message" });
+    await expect(message).toHaveAttribute("placeholder", "Queue a message…");
+    await message.fill("Also check the cover screen in light mode");
+    await page.getByRole("button", { name: "Send" }).click();
+    await message.fill("and write the PR the repo's way");
+    await message.press("Enter");
+
+    const queued = page.getByRole("list", { name: "Queued messages" });
+    await expect(queued.getByRole("listitem")).toHaveText([
+      /Also check the cover screen in light mode.*Queued · sends when this turn ends/,
+      /and write the PR the repo's way.*Queued · 2nd/,
+    ]);
+    // Stop is still there while it answers.
+    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+
+    // The same session on another device shows the queue, and removing one there removes it here.
+    const other = await context.newPage();
+    await other.goto(page.url());
+    const queuedThere = other.getByRole("list", { name: "Queued messages" });
+    await expect(queuedThere.getByRole("listitem")).toHaveCount(2);
+    await queuedThere
+      .getByRole("listitem")
+      .first()
+      .getByRole("button", { name: "Remove queued message" })
+      .click();
+    await expect(queued.getByRole("listitem")).toHaveText([
+      /and write the PR the repo's way.*Queued · sends when this turn ends/,
+    ]);
+
+    await expect(session).toContainText("You said: and write the PR the repo's way", {
+      timeout: 45_000,
+    });
+    await expect(queued).toHaveCount(0);
+    await expect(session).not.toContainText("You said: Also check the cover screen");
+  });
+});

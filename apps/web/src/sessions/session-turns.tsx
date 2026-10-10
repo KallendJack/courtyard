@@ -1,8 +1,8 @@
 import type { ProviderList, SessionId, WorkspaceId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DocumentsHere } from "./documents.tsx";
-import type { Turn } from "./events.ts";
+import type { QueuedMessage, Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
 
 /** A first guess at a turn's height, before it's been measured. */
@@ -36,9 +36,18 @@ export function SessionTurns(props: {
   workspaceId: WorkspaceId;
   /** Where Save as document saves; left out where answers can't be saved as documents. */
   documents?: DocumentsHere;
+  /** The owner's messages waiting for the running turn to end (#177), shown under the latest. */
+  queuedMessages: readonly QueuedMessage[];
+  /** Removes a queued message: what went wrong, or nothing once it's removed. */
+  onRemoveQueued: (queued: number) => Promise<string | undefined>;
 }) {
   const { sessionId, turns, providers, onRetry, onCarryOn, onReply, workspaceId, documents } =
     props;
+  const { queuedMessages, onRemoveQueued } = props;
+  const queued = useMemo(
+    () => ({ messages: queuedMessages, remove: onRemoveQueued }),
+    [queuedMessages, onRemoveQueued],
+  );
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -133,7 +142,7 @@ export function SessionTurns(props: {
               // Only the last turn can be retried, carried on or replied to, so only it gets the
               // handlers.
               {...(turn === last
-                ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}), latest: true }
+                ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}), latest: true, queued }
                 : {})}
             />
           </li>
