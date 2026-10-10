@@ -341,12 +341,23 @@ test("folding and unfolding keeps the place in a session and a half-written mess
   await expect(message(page)).toBeHidden();
 
   // Reading back: the turn in the middle of the screen stays on screen as the Fold folds and opens.
+  // Only the turns near the screen are drawn, a frame or so after it scrolls, so wait for the one
+  // across the middle to be there.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight / 2));
-  const index = await page.evaluate(() => {
-    const turns = [...document.querySelectorAll<HTMLElement>('[aria-label="Session"] > li')];
-    const middle = turns.find((turn) => turn.getBoundingClientRect().bottom > innerHeight / 2);
-    return middle?.dataset.index ?? "";
-  });
+  let index = "";
+  await expect
+    .poll(async () => {
+      index = await page.evaluate(() => {
+        const turns = [...document.querySelectorAll<HTMLElement>('[aria-label="Session"] > li')];
+        const middle = turns.find((turn) => {
+          const { top, bottom } = turn.getBoundingClientRect();
+          return top <= innerHeight / 2 && bottom > innerHeight / 2;
+        });
+        return middle?.dataset.index ?? "";
+      });
+      return index;
+    })
+    .not.toBe("");
   const reading = session(page).locator(`:scope > li[data-index="${index}"]`);
   await page.setViewportSize(COVER);
   await expect(reading).toBeInViewport();
