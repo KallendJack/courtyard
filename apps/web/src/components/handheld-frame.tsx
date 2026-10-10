@@ -1,6 +1,6 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link, useLocation, useParams } from "@tanstack/react-router";
-import { Camera, Keyboard, LogOut, Mic, Plus, Settings, Sparkle } from "lucide-react";
+import { Camera, LogOut, Plus, Settings, Sparkle } from "lucide-react";
 import {
   type ComponentProps,
   type ReactNode,
@@ -20,6 +20,7 @@ import type { Layout, MessageBox } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
 import { RecentSessions } from "./recent-sessions.tsx";
 import { Sheet } from "./sheet.tsx";
+import { TalkBar } from "./talk-strip.tsx";
 import { WorkspaceDot } from "./workspace-colour.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
@@ -40,8 +41,8 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
  * touch screen. On a tablet or the unfolded Fold: workspace tiles on a thumb rail down the left,
  * Settings and the Skills, Photo and Model buttons on one down the right, and along the bottom
  * Type and the talk strip. On a phone or the folded Fold: tiles across the top, and the buttons
- * in a row above Type and the talk strip. Type and the strip open the page's message box above
- * the bar (voice comes with #79). Loaded only on a touch screen.
+ * in a row above Type and the talk strip. Type opens the page's message box above the bar, and
+ * the strip listens (talk-strip.tsx, #79). Loaded only on a touch screen.
  */
 export default function HandheldFrame(props: {
   layout: Exclude<Layout, "desktop">;
@@ -260,23 +261,11 @@ export default function HandheldFrame(props: {
           >
             {!tablet && <div className="flex gap-2">{actions}</div>}
             <div className={classes("flex", tablet ? "flex-1 gap-3" : "h-16 gap-2")}>
-              <button
-                type="button"
-                disabled={box === undefined}
-                onClick={type}
-                className={classes(
-                  "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-[18px] bg-secondary text-[10px]/3 font-bold tracking-[0.08em] text-muted-foreground uppercase ring-1 ring-input outline-none ring-inset focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40 [&_svg]:text-foreground",
-                  tablet ? "h-15 w-18 [&_svg]:size-6" : "w-16 [&_svg]:size-5.5",
-                )}
-              >
-                <Keyboard aria-hidden strokeWidth={1.6} />
-                Type
-              </button>
-              <TalkStrip
+              <TalkBar
                 wide={tablet}
                 where={here?.name ?? (pathname === "/" ? "Home" : "Courtyard")}
-                disabled={box === undefined}
-                onClick={type}
+                box={box}
+                type={type}
               />
             </div>
           </div>
@@ -396,67 +385,6 @@ function QuickAction({
         </>
       ) : (
         <span className="truncate font-extrabold">{children}</span>
-      )}
-    </button>
-  );
-}
-
-/**
- * The talk strip (Paper board 02, idle): "Tap or hold to talk" over where the owner is, in violet
- * with a light along its top. Until voice comes (#79) a tap opens the message box, as Type does.
- */
-function TalkStrip(props: {
-  wide: boolean;
-  where: string;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={props.disabled}
-      onClick={props.onClick}
-      className={classes(
-        "relative flex min-w-0 flex-1 items-center overflow-clip rounded-[18px] bg-primary/5 text-left ring-1 ring-primary/30 outline-none ring-inset focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40",
-        props.wide ? "h-15 gap-3.5 pr-6 pl-5" : "gap-3 px-4.5",
-      )}
-    >
-      <span
-        aria-hidden
-        className="absolute inset-x-4.5 top-0 h-0.5 rounded-[2px] bg-linear-to-r from-transparent via-primary-text to-transparent shadow-[0_0_12px_1px] shadow-primary/70"
-      />
-      <Mic aria-hidden className="size-6 shrink-0 text-primary-text" strokeWidth={1.8} />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span
-          className={classes(
-            "font-extrabold tracking-[-0.01em] text-foreground",
-            props.wide ? "text-[17px]/5" : "text-base/5",
-          )}
-        >
-          Tap or hold to talk
-        </span>
-        <span className="truncate text-xs/[18px] text-muted-foreground">{props.where}</span>
-      </span>
-      {props.wide && (
-        <svg aria-hidden viewBox="0 0 120 28" className="h-7 w-30 shrink-0 fill-primary/25">
-          {[
-            [11, 6],
-            [8, 12],
-            [4, 20],
-            [9, 10],
-            [2, 24],
-            [7, 14],
-            [10, 8],
-            [5, 18],
-            [9, 10],
-            [6, 16],
-            [10, 8],
-            [11, 6],
-          ].map(([y, height], at) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: the bars are fixed, a drawing's parts
-            <rect key={at} x={at * 10} y={y} width="4" height={height} rx="2" />
-          ))}
-        </svg>
       )}
     </button>
   );

@@ -341,8 +341,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`): thumb rails and a bottom
   bar with Type and the talk strip on a tablet or the unfolded Fold, tiles across the top on the folded one. The
   page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
-  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The page stays mounted
-  in the same place whichever frame is round it, so folding keeps its scroll and a half-written message.
+  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The talk strip
+  (`talk-strip.tsx`, #79, loaded with the frame) listens through the browser's own speech recognition
+  (`speech.ts`, which also vibrates for it) and hands the words to the box to send, or to queue while a turn runs;
+  nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
+  round it, so folding keeps its scroll and a half-written message.
   **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that

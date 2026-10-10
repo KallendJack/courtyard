@@ -7,7 +7,7 @@
  * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses,
  * of the approval card (approval-card.css), which only a session page shows, of a pull request's
  * review (review.css), of the shared pieces only those use, and of the pieces that keep a
- * session's flow (chat-flow.css), and the Handheld frame's (handheld-frame.css), which only a
+ * session's flow (chat-flow.css), and the Handheld frame's and its talk strip's (handheld-frame.css), which only a
  * touch screen loads.
  */
 @source not "./rich-blocks";
@@ -22,6 +22,7 @@
 @source not "./components/queued-message.tsx";
 @source not "./components/jump-to-latest.tsx";
 @source not "./components/handheld-frame.tsx";
+@source not "./components/talk-strip.tsx";
 
 /*
  * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components

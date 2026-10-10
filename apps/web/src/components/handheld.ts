@@ -39,6 +39,15 @@ export type MessageBox = {
   chooseSkill?: () => void;
   /** The model it sends with, in a word or two ("Sonnet 5"). */
   model: string;
+  /** A turn is running, so what's sent now is queued until it ends (#177). */
+  answering: boolean;
+  /**
+   * Sends what the owner said in the talk strip (#79), after anything they'd typed, as Send would.
+   * When it can't go, it waits in the opened box, saying why.
+   */
+  say: (words: string) => void;
+  /** Puts what the owner said in the box, after anything typed, to finish by keyboard. */
+  write: (words: string) => void;
 };
 
 /**
