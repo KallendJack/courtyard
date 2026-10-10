@@ -334,12 +334,14 @@ const pathsIn = (argument: string) => {
 
 /**
  * Whether any of a command's arguments names a path outside the worktree: one from the home
- * folder (`~`), an absolute one elsewhere, or one that climbs out with `..`.
+ * folder (`~`), an absolute one elsewhere, one that climbs out with `..`, or one naming a drive
+ * that isn't absolute here (`C:/x` off Windows, `C:x` on it), whose place the worker can't tell.
  */
 export const reachesOut = (worktree: string, words: readonly string[]) =>
   words.flatMap(pathsIn).some((path) => {
     if (path.startsWith("~")) return true;
-    const absolute = isAbsolute(path) || /^[A-Za-z]:/.test(path);
+    const absolute = isAbsolute(path);
+    if (/^[A-Za-z]:/.test(path) && !absolute) return true;
     if (!absolute && !path.split(/[\\/]/).includes("..")) return false;
     const fromWorktree = relative(worktree, resolve(worktree, path));
     return fromWorktree.startsWith("..") || isAbsolute(fromWorktree);
