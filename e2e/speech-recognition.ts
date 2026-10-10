@@ -4,8 +4,9 @@ import type { Page } from "@playwright/test";
  * A stand-in for the browser's speech recognition and vibration, for Chromium as Playwright runs
  * it, which has no microphone to listen with and nothing to vibrate. The test speaks for the owner
  * (`hear`), and can make it stop on its own in a pause as Chrome on Android does (`pause`), or
- * refuse the microphone (`refuse`). What the page asked for (the language, each vibration) is kept
- * in the page's storage for the test to read. Everything from the words on (the talk strip, the
+ * refuse the microphone (`refuse`), or send the page out of sight (`goOutOfSight`). What the page
+ * asked for (the language, the microphone on or off, each vibration) is kept in the page's storage
+ * for the test to read. Everything from the words on (the talk strip, the
  * message sent) is real.
  */
 export const standInSpeechRecognition = (page: Page) =>
@@ -29,6 +30,7 @@ export const standInSpeechRecognition = (page: Page) =>
       start() {
         listening = this;
         localStorage.setItem("stand-in-speech-lang", this.lang);
+        localStorage.setItem("stand-in-mic", "on");
         const words = unheard;
         unheard = undefined;
         if (words !== undefined) setTimeout(() => this.hear(words), 50);
@@ -44,7 +46,7 @@ export const standInSpeechRecognition = (page: Page) =>
       }
       /** Settles the last words and ends, as the browser does when asked to stop or in a pause. */
       end() {
-        if (listening === this) listening = undefined;
+        if (listening === this) stopListening();
         setTimeout(() => {
           const last = this.results.at(-1);
           if (last !== undefined && !last.isFinal) {
@@ -58,13 +60,18 @@ export const standInSpeechRecognition = (page: Page) =>
         this.end();
       }
       abort() {
-        if (listening === this) listening = undefined;
+        if (listening === this) stopListening();
         setTimeout(() => {
           this.onerror?.({ error: "aborted" });
           this.onend?.({});
         }, 50);
       }
     }
+
+    const stopListening = () => {
+      listening = undefined;
+      localStorage.setItem("stand-in-mic", "off");
+    };
 
     for (const name of ["SpeechRecognition", "webkitSpeechRecognition"]) {
       Object.defineProperty(window, name, { configurable: true, value: StandIn });
@@ -75,9 +82,14 @@ export const standInSpeechRecognition = (page: Page) =>
       else listening.hear(event.detail);
     });
     addEventListener("stand-in-pause", () => listening?.end());
+    addEventListener("stand-in-hide", () => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      Object.defineProperty(document, "hidden", { configurable: true, value: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     addEventListener("stand-in-refuse", () => {
       const refused = listening;
-      listening = undefined;
+      stopListening();
       refused?.onerror?.({ error: "not-allowed" });
       refused?.onend?.({});
     });
@@ -116,13 +128,27 @@ export const pause = (page: Page) =>
 export const refuse = (page: Page) =>
   page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-refuse")));
 
+/** The owner switches away from Courtyard, or the screen goes off: the page is out of sight. */
+export const goOutOfSight = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-hide")));
+
+/** Whether the microphone is on: something is listening. */
+export const micOn = (page: Page) =>
+  page.evaluate(() => localStorage.getItem("stand-in-mic") === "on");
+
 /** The language the page last listened in. */
 export const listenedIn = (page: Page) =>
   page.evaluate(() => localStorage.getItem("stand-in-speech-lang"));
 
-/** How many times the page has asked the phone to vibrate. */
-export const buzzes = (page: Page) =>
-  page.evaluate(() => {
+/** Each vibration the page has asked the phone for, in milliseconds, in order. */
+const buzzed = (page: Page) =>
+  page.evaluate((): unknown[] => {
     const kept: unknown = JSON.parse(localStorage.getItem("stand-in-buzzes") ?? "[]");
-    return Array.isArray(kept) ? kept.length : 0;
+    return Array.isArray(kept) ? kept : [];
   });
+
+/** How many times the page has asked the phone to vibrate. */
+export const buzzes = async (page: Page) => (await buzzed(page)).length;
+
+/** The last vibration the page asked the phone for. */
+export const lastBuzz = async (page: Page) => (await buzzed(page)).at(-1);

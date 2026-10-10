@@ -3,6 +3,7 @@ import {
   buzzes,
   hear,
   listenedIn,
+  micOn,
   pause,
   refuse,
   standInSpeechRecognition,
@@ -133,6 +134,25 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
 
       await strip(page, /Listening · tap to send/).click();
       await expect(session(page)).toContainText("You said: The rack by the window");
+    });
+
+    test("hands-free, it stops listening once nothing new is heard for a while, and what was heard waits in the message box", async ({
+      page,
+    }) => {
+      await page.clock.install();
+      await page.goto("/workspaces/garage-gym");
+      await strip(page, /Tap or hold to talk/).click();
+      await hear(page, "The bench");
+      await expect(strip(page, /Listening · tap to send/)).toContainText("The bench");
+      // Chrome on Android stops on its own in a pause, and is started again.
+      await page.clock.fastForward(8_000);
+      await pause(page);
+      await expect.poll(() => micOn(page)).toBe(true);
+
+      await page.clock.fastForward(20_000);
+      await expect(strip(page, /Tap or hold to talk/)).toContainText("Nothing heard for a while");
+      await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("The bench");
+      expect(await micOn(page)).toBe(false);
     });
 
     test("when the microphone isn't allowed, it says so, and what was heard waits in the message box", async ({

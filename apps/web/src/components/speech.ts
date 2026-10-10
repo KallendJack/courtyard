@@ -42,6 +42,8 @@ const PROBLEMS: Partial<Record<SpeechRecognitionErrorCode, string>> = {
 /** How soon, and how many times running, a recogniser can end on its own before listening gives up. */
 const QUICK_END_MS = 1000;
 const QUICK_ENDS = 3;
+/** How long listening goes on with nothing new heard before it stops, so the microphone isn't left on. */
+const QUIET_MS = 20_000;
 
 export type Listening = {
   /** Stops listening and hands over everything heard, once the browser has settled the words. */
@@ -53,8 +55,9 @@ export type Listening = {
 /**
  * Listens until finished or cancelled, in British English, telling `heard` the words so far as
  * they come. Chrome on Android stops on its own in a pause; this starts it again, keeping what was
- * said, so the owner can think mid-sentence. When it can't listen (the microphone refused, say),
- * `failed` hears why, with the words heard until then.
+ * said, so the owner can think mid-sentence, but not for ever: with nothing new heard for a while,
+ * it stops. When it can't listen (the microphone refused, say) or stops like that, `failed` hears
+ * why, with the words heard until then.
  */
 export const listen = (on: {
   heard: (words: string) => void;
@@ -68,7 +71,26 @@ export const listen = (on: {
   let state: "listening" | "finishing" | "done" = "listening";
   let current: Recogniser | undefined;
   let quickEnds = 0;
+  let quiet: number | undefined;
   const words = () => tidy(`${before} ${now}`);
+
+  /** Listening is over: no more starting again, and the microphone goes off. */
+  const done = () => {
+    state = "done";
+    window.clearTimeout(quiet);
+  };
+  const fail = (problem: string) => {
+    done();
+    current?.abort();
+    on.failed(problem, words());
+  };
+  /** Something new was heard, or listening began: the quiet starts again from now. */
+  const heardNow = () => {
+    window.clearTimeout(quiet);
+    quiet = window.setTimeout(() => {
+      if (state === "listening") fail("Nothing heard for a while, so it stopped listening");
+    }, QUIET_MS);
+  };
 
   const start = () => {
     if (Recogniser === undefined) return;
@@ -78,17 +100,19 @@ export const listen = (on: {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
+      const was = words();
       now = Array.from({ length: event.results.length }, (_, at) => {
         return event.results[at]?.[0]?.transcript ?? "";
       }).join(" ");
-      if (state === "listening") on.heard(words());
+      if (state !== "listening" || words() === was) return;
+      heardNow();
+      on.heard(words());
     };
     recognition.onerror = (event) => {
       const problem = PROBLEMS[event.error];
       // A pause with nothing said ends it like any other, and "aborted" is a cancel.
       if (problem === undefined || state === "done") return;
-      state = "done";
-      on.failed(problem, words());
+      fail(problem);
     };
     const started = performance.now();
     recognition.onend = () => {
@@ -98,33 +122,35 @@ export const listen = (on: {
       before = words();
       now = "";
       if (state === "listening" && quickEnds >= QUICK_ENDS) {
-        state = "done";
-        on.failed("The browser keeps stopping listening", before);
+        fail("The browser keeps stopping listening");
       } else if (state === "listening") start();
       else if (state === "finishing") {
-        state = "done";
+        done();
         on.finished(before);
       }
     };
     try {
       recognition.start();
     } catch {
-      state = "done";
-      on.failed("The browser couldn't start listening", words());
+      fail("The browser couldn't start listening");
     }
   };
   if (Recogniser === undefined) on.failed("This browser can't listen", "");
-  else start();
+  else {
+    heardNow();
+    start();
+  }
 
   return {
     finish: () => {
       if (state !== "listening") return;
       state = "finishing";
+      window.clearTimeout(quiet);
       current?.stop();
     },
     cancel: () => {
       if (state === "done") return;
-      state = "done";
+      done();
       current?.abort();
     },
   };
