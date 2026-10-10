@@ -31,17 +31,19 @@ import {
   jsonSchemaOf,
   type Provider,
   photosOf,
+  type ToolConnection,
+  type ToolContent,
   type ToolReply,
   type TurnInput,
   type WebSearch,
 } from "./index.ts";
 
 const id = ProviderId.parse("claude");
-/** Claude reads the workspace's files, saves to context and codes; tool connections come later. */
+/** Claude reads the workspace's files, saves to context, codes and uses tool connections. */
 const CAPABILITIES: Capabilities = {
   readsFiles: true,
   codes: true,
-  usesTools: false,
+  usesTools: true,
   savesContext: true,
   searchesWeb: true,
 };
@@ -150,6 +152,87 @@ const courtyardServer = (tools: readonly CourtyardTool[], callTool: TurnInput["c
       ),
     ),
   });
+
+/**
+ * A tool connection's MCP server as Claude Code starts it (ADR 0023): its command on the worker
+ * machine, its tools always offered, since a turn has no tool search to find them with.
+ */
+const connectionServer = (connection: ToolConnection) => ({
+  type: "stdio" as const,
+  command: connection.server.command,
+  args: [...connection.server.args],
+  alwaysLoad: true,
+});
+
+/** A tool connection's tool, by the name Claude Code calls it: `mcp__paper__get_screenshot`. */
+const ConnectionTool = /^mcp__(.+?)__(.+)$/;
+
+/** The tool connection a tool belongs to, and the tool by its own name, or `undefined`. */
+const connectionCall = (
+  connections: readonly ToolConnection[],
+  toolName: string,
+  input: unknown,
+) => {
+  const [, server, tool] = ConnectionTool.exec(toolName) ?? [];
+  const connection = connections.find((each) => each.name === server);
+  return connection === undefined || tool === undefined
+    ? undefined
+    : { connection, call: { tool, input } };
+};
+
+/** One part of a tool's result as Claude Code gives it to a hook: text, or an image either way. */
+const ResultPart = z.union([
+  z.object({ type: z.literal("text"), text: z.string() }),
+  z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
+  z.object({
+    type: z.literal("image"),
+    source: z.object({ type: z.literal("base64"), data: z.string(), media_type: z.string() }),
+  }),
+  z.unknown().transform(() => undefined),
+]);
+/** A tool's result: its parts, wrapped or not, or only text. Anything else counts as nothing. */
+const ToolResult = z.union([
+  z.array(ResultPart),
+  z.object({ content: z.array(ResultPart) }).transform((result) => result.content),
+  z.string().transform((text) => [{ type: "text" as const, text }]),
+  z.unknown().transform(() => []),
+]);
+
+/** A tool's result that says it failed. */
+const ToolError = z.object({ isError: z.literal(true) });
+
+/** A tool's result as the worker reads it: its text, and each image as a data URL. */
+const contentOf = (response: unknown): ToolContent[] =>
+  ToolResult.parse(response).flatMap((part): ToolContent[] => {
+    if (part === undefined) return [];
+    if (part.type === "text") return [{ kind: "text", text: part.text }];
+    const [type, data] =
+      "source" in part ? [part.source.media_type, part.source.data] : [part.mimeType, part.data];
+    return [{ kind: "image", dataUrl: `data:${type};base64,${data}` }];
+  });
+
+/**
+ * Checked after every call to a tool connection's tool: its result goes to the worker (ADR
+ * 0023), and anything the worker adds for a failed one goes to Claude.
+ */
+const handResults =
+  (connections: readonly ToolConnection[]): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") {
+      return {};
+    }
+    const found = connectionCall(connections, input.tool_name, input.tool_input);
+    if (found === undefined) return {};
+    const failed = input.hook_event_name === "PostToolUseFailure";
+    const added = await found.connection.done({
+      ...found.call,
+      ok: !failed && !ToolError.safeParse(input.tool_response).success,
+      content: failed ? [{ kind: "text", text: input.error }] : contentOf(input.tool_response),
+    });
+    return added === undefined
+      ? {}
+      : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: added } };
+  };
 
 /** How long a status check may take before Claude counts as unavailable. */
 const CHECK_TIMEOUT_MS = 15_000;
@@ -583,12 +666,19 @@ const confineTo =
     courtyardTools: readonly string[];
     web: WebTurn | null;
     code: CodeTurn | null;
+    /** The tool connections the turn offers, each call to one asked of the worker (ADR 0023). */
+    connections: readonly ToolConnection[];
   }): HookCallback =>
   async (input) => {
-    const { folder, report, courtyardTools, web, code } = confine;
+    const { folder, report, courtyardTools, web, code, connections } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (courtyardTools.includes(input.tool_name)) return decision(true);
+      const connected = connectionCall(connections, input.tool_name, input.tool_input);
+      if (connected !== undefined) {
+        const checked = await connected.connection.check(connected.call);
+        return checked.ok ? decision(true) : decision(false, checked.error);
+      }
       const asked =
         code === null ? undefined : await askWorker(code, input.tool_name, input.tool_input);
       if (asked !== undefined) return asked.ok ? decision(true) : decision(false, asked.error);
@@ -764,7 +854,7 @@ export const createClaudeProvider = (
       input.signal.addEventListener("abort", stopClaudeCode);
 
       const { tools } = input.framing;
-      const { code } = input;
+      const { code, connections } = input;
       const courtyardTools = tools.map((offered) => courtyardTool(offered.name));
       const web = webTurnFor(input.framing.webSearch);
       let answer = "";
@@ -797,18 +887,48 @@ export const createClaudeProvider = (
             ],
             // Nothing is pre-approved: the hook allows each call or it's refused.
             permissionMode: "dontAsk",
-            ...(tools.length === 0
-              ? {}
-              : { mcpServers: { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) } }),
+            mcpServers: {
+              ...(tools.length === 0
+                ? {}
+                : { [COURTYARD_SERVER]: courtyardServer(tools, input.callTool) }),
+              ...Object.fromEntries(
+                connections.map((connection) => [connection.name, connectionServer(connection)]),
+              ),
+            },
             hooks: {
               PreToolUse: [
                 {
-                  hooks: [confineTo({ folder, report: input.report, courtyardTools, web, code })],
+                  hooks: [
+                    confineTo({
+                      folder,
+                      report: input.report,
+                      courtyardTools,
+                      web,
+                      code,
+                      connections,
+                    }),
+                  ],
                   // An approval waits on the owner, however long they take (#171).
-                  ...(code === null ? {} : { timeout: APPROVAL_WAIT_SECONDS }),
+                  ...(code === null && connections.length === 0
+                    ? {}
+                    : { timeout: APPROVAL_WAIT_SECONDS }),
                 },
               ],
-              ...(web === null ? {} : { PostToolUse: [{ hooks: [noteResults(web)] }] }),
+              ...(web === null && connections.length === 0
+                ? {}
+                : {
+                    PostToolUse: [
+                      {
+                        hooks: [
+                          ...(web === null ? [] : [noteResults(web)]),
+                          ...(connections.length === 0 ? [] : [handResults(connections)]),
+                        ],
+                      },
+                    ],
+                  }),
+              ...(connections.length === 0
+                ? {}
+                : { PostToolUseFailure: [{ hooks: [handResults(connections)] }] }),
             },
             includePartialMessages: true,
             maxTurns: MAX_TURNS,

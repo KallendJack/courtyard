@@ -313,6 +313,7 @@ const runTurn = async (
     effort: undefined,
     folder,
     code: null,
+    connections: [],
     framing: {
       instructions: "The turn's instructions.",
       message: "Where should the rack go?",
