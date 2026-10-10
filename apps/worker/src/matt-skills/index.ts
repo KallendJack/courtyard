@@ -9,7 +9,7 @@ import { git, gitFailureReason } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /**
- * Matt Pocock's skills for code workspaces (ADR 0023): Courtyard's pinned copy of his plugin,
+ * Matt Pocock's skills for code workspaces (ADR 0024): Courtyard's pinned copy of his plugin,
  * fetched from his own plugin list at the version `matt.json` names, kept in the data folder, and
  * loaded only when it matches `matt.json`'s checksum. Never the worker machine's installed plugin.
  */

@@ -41,7 +41,7 @@ export type HouseManifest = z.infer<typeof HouseManifest>;
 export type HouseSkill = HouseManifest["skills"][number];
 
 /**
- * `matt.json`: the version of Matt Pocock's skills Courtyard pins for code workspaces (ADR 0023),
+ * `matt.json`: the version of Matt Pocock's skills Courtyard pins for code workspaces (ADR 0024),
  * where they come from, the checksum of the copy kept (`mattChecksum` in the worker), and the
  * ones the Skill picker lists, since the owner starts them.
  */
@@ -81,7 +81,7 @@ export type CheckedSkill = {
 
 /**
  * Claude Code's own SKILL.md fields that a skill Claude Code loads itself may carry (Matt's, ADR
- * 0023): only the owner starting it, the hint for its arguments, and whether the `/` menu lists
+ * 0024): only the owner starting it, the hint for its arguments, and whether the `/` menu lists
  * it. Anything else Claude-only (its own hooks, a model, a sub-agent) still fails the check.
  */
 const CLAUDE_CODE_FIELDS = ["disable-model-invocation", "argument-hint", "user-invocable"];

@@ -162,8 +162,10 @@ describe("a code session's pull request", () => {
 
   it("isn't followed while GitHub isn't connected", async () => {
     const { id, branch } = await codeSession();
-    github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    // Signed out before the pull request exists: the follow that runs as the session's turn ends
+    // would otherwise see the pull request while still signed in.
     await postJson(request, "/api/github/sign-out", {});
+    github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
 
     await runJobs();
 

@@ -15,7 +15,7 @@ describe("the house skills", () => {
 });
 
 describe("matt.json", () => {
-  it("pins a release of Matt Pocock's skills, with a checksum and the ones the picker lists (ADR 0023)", async () => {
+  it("pins a release of Matt Pocock's skills, with a checksum and the ones the picker lists (ADR 0024)", async () => {
     const pin = await readMattPin();
 
     expect(pin).toMatchObject({

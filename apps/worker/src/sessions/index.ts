@@ -379,7 +379,7 @@ export const createSessions = (options: {
   contextFolder: ContextFolder;
   /** The house skills' folder (ADR 0016). */
   houseSkills: string;
-  /** Matt Pocock's skills, which code workspaces get (ADR 0023); none when they're off. */
+  /** Matt Pocock's skills, which code workspaces get (ADR 0024); none when they're off. */
   matt: MattSkills | undefined;
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
@@ -552,7 +552,7 @@ export const createSessions = (options: {
     });
 
   /**
-   * Matt's skills for a code turn (ADR 0023): the pinned copy, with the skills of it the workspace
+   * Matt's skills for a code turn (ADR 0024): the pinned copy, with the skills of it the workspace
    * can use; `null` when they aren't loaded.
    */
   const mattPlugin = async (skills: WorkspaceSkills): Promise<CodePlugin | null> => {
@@ -670,7 +670,7 @@ export const createSessions = (options: {
           capabilities: turn.provider.capabilities,
           events: events.value,
           skills: {
-            // Matt's skills load through the provider's own skill loading (ADR 0023).
+            // Matt's skills load through the provider's own skill loading (ADR 0024).
             offered: skills.usable.filter((skill) => !skill.ownerOnly && skill.source !== "matt"),
             inUse: await inUseTexts(skills.usable, inUse),
           },

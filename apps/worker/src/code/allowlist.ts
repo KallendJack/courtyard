@@ -106,6 +106,16 @@ const GIT_NEVER = [
   /^--exec/,
 ];
 const GH_NEVER = [/^--web$/, /^-w$/];
+/** What ripgrep is never asked for: running a program on each file, or for the host's name. */
+const RG_NEVER = [/^--pre/, /^--hostname-bin/];
+/** What tail is never asked for: following a file, which never ends, so the turn would wait forever. */
+const TAIL_NEVER = [/^-[A-Za-z0-9]*[fF]/, /^--follow/];
+
+/**
+ * The shell commands a model looks around the worktree with (#178), none of which can run another
+ * program or write a file. `find` isn't one: it can `-exec`.
+ */
+const LOOKS = ["cat", "ls", "head", "wc", "grep", "diff"];
 
 /** The package scripts a session runs to check its own work. */
 const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify"];
@@ -267,13 +277,18 @@ const readsOnly = (rest: readonly string[]) => {
 };
 
 /**
- * A code workspace's command allowlist when its settings name none: the repository's package
- * scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and
- * gh commands that only look, adding and committing on the session branch, pushing it, and
- * opening and updating its own pull request (#172), and filing, labelling, commenting on and
- * closing the repository's issues, as Matt Pocock's skills do (#181).
+ * A code workspace's command allowlist when its settings name none: the shell commands that look
+ * around the worktree (#178), the repository's package scripts (install with a frozen lockfile,
+ * check, typecheck, test, build, e2e and verify), git and gh commands that only look, adding and
+ * committing on the session branch, pushing it, and opening and updating its own pull request
+ * (#172), and filing, labelling, commenting on and closing the repository's issues, as Matt
+ * Pocock's skills do (#181).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
+  ...LOOKS.map((look) => ({ words: [look], more: true })),
+  { words: ["tail"], more: true, never: TAIL_NEVER },
+  { words: ["rg"], more: true, never: RG_NEVER },
+  { words: ["pwd"], more: false },
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
   { words: ["npm", "ci"], more: false },
   ...PACKAGE_SCRIPTS.flatMap((script) => [
@@ -357,12 +372,14 @@ const pathsIn = (argument: string) => {
 
 /**
  * Whether any of a command's arguments names a path outside the worktree: one from the home
- * folder (`~`), an absolute one elsewhere, or one that climbs out with `..`.
+ * folder (`~`), an absolute one elsewhere, one that climbs out with `..`, or one naming a drive
+ * that isn't absolute here (`C:/x` off Windows, `C:x` on it), whose place the worker can't tell.
  */
 export const reachesOut = (worktree: string, words: readonly string[]) =>
   words.flatMap(pathsIn).some((path) => {
     if (path.startsWith("~")) return true;
-    const absolute = isAbsolute(path) || /^[A-Za-z]:/.test(path);
+    const absolute = isAbsolute(path);
+    if (/^[A-Za-z]:/.test(path) && !absolute) return true;
     if (!absolute && !path.split(/[\\/]/).includes("..")) return false;
     const fromWorktree = relative(worktree, resolve(worktree, path));
     return fromWorktree.startsWith("..") || isAbsolute(fromWorktree);

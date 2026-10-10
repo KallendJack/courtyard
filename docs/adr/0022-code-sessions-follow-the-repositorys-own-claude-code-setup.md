@@ -16,7 +16,16 @@ owner's checkout.
 Edits and commands go through the same check as every other tool call: the adapter's PreToolUse hook asks the worker
 about each one, and nothing is pre-approved. An edit is allowed only inside the worktree, and a command only when it
 matches the command allowlist on its parsed words. Anything else waits in the hook for the owner's approval (#171),
-for as long as they take, and runs only if they allow it.
+for as long as they take, and runs only if they allow it. The default allowlist starts with the shell commands a
+model looks around with, `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg` (never with `--pre` or `--hostname-bin`,
+which run a program), `pwd` and `diff`, under the same rules as every allowed command: one at a time, naming no path
+outside the worktree (#178). `find` isn't among them, since `-exec` runs anything.
+
+Every command runs in the foreground (#178). A turn's background commands stop when it ends, and nothing wakes the
+model when one finishes, so a model that backgrounds `pnpm verify` and ends its turn waits for a message that never
+comes. The adapter turns Claude Code's background tasks off (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS`), so the `Bash`
+tool doesn't offer `run_in_background`, and its hook refuses a `Bash` call that asks for it anyway, before the worker
+is asked, telling Claude to run it in the foreground.
 
 Inside the worktree, the files that decide what an allowed command runs need an approval too: a `package.json` (and
 the package manager's settings: `pnpm-workspace.yaml`, `.npmrc`, `.pnpmfile.cjs`), git hooks (`.husky`, `.githooks`,
@@ -42,7 +51,7 @@ turn and run it through `pnpm test` or `git commit` in the next.
   installed plugins in an empty folder of the turn's own (`CLAUDE_CODE_PLUGIN_CACHE_DIR`), so nothing installed on
   the machine comes in. Its permission rules change nothing: the hook decides every tool call, and a refusal from it
   can't be overridden. A repository whose settings change how Claude signs in (an API key helper, say) changes it for
-  its own sessions.
+  its own sessions. Its settings' environment could turn background tasks back on; the hook still refuses them.
 - **The boundary is the worktree and the session's environment, not the code.** An allowed command such as `pnpm
   test` runs code the model wrote (a test file, say), as with any coding agent; no filter on commands can close
   that. What that code can reach is the worktree, the worker machine's user account, and the session's environment,

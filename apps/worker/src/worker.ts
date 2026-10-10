@@ -174,7 +174,7 @@ export const createWorker = (options: {
   /** Sends a notification to a device (#173). Tests pass a fake; otherwise it's web push. */
   sendPush?: SendPush;
   /**
-   * Matt Pocock's skills for code workspaces (ADR 0023): `matt.json`'s pin and his release fetched
+   * Matt Pocock's skills for code workspaces (ADR 0024): `matt.json`'s pin and his release fetched
    * from GitHub, unless a test gives its own; `null` for none at all.
    */
   mattSkills?: { readonly pin?: MattPin; readonly fetch?: FetchMattSkills } | null;

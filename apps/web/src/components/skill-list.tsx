@@ -37,7 +37,7 @@ export const usable = (skill: SkillSummary): skill is UsableSkillSummary => skil
 
 /**
  * Whether the skill picker lists the skill: every one but Matt Pocock's that the model loads
- * itself (ADR 0023), and each that can't be used, greyed, saying why.
+ * itself (ADR 0024), and each that can't be used, greyed, saying why.
  */
 export const inPicker = (skill: SkillSummary) => skill.kind === "unusable" || skill.inPicker;
 

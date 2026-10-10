@@ -209,7 +209,7 @@ _Avoid_: slash command, skill menu
 **Matt Pocock's skills**:
 The house process's skills (ADR 0018), which every code workspace gets from Courtyard's **pinned copy** of his
 plugin: the release `packages/skills/matt.json` names, fetched into the data folder and loaded by Claude Code itself
-only when it matches the pin's checksum (ADR 0023). His grilling replaces the house one there.
+only when it matches the pin's checksum (ADR 0024). His grilling replaces the house one there.
 _Avoid_: the plugin, Matt's plugin (for the copy), installed skills
 
 **Setup check**:

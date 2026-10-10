@@ -119,12 +119,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   tools, and the text for Tidy and titling a session.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
   workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
-  one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0023, each marked for the picker or not), then the
+  one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
   house skills for its kind of workspace from `packages/skills`. It keeps each
   skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
   skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
 - **`matt-skills/`:** Matt Pocock's skills for code workspaces
-  ([ADR 0023](adr/0023-code-workspaces-load-matt-pococks-skills-as-a-plugin-from-a-pinned-copy.md)): fetches the
+  ([ADR 0024](adr/0024-code-workspaces-load-matt-pococks-skills-as-a-plugin-from-a-pinned-copy.md)): fetches the
   release `packages/skills/matt.json` names from his plugin list into the data folder, keeping only his `plugin.json`,
   licence and the skills it lists, and gives the copy (`copy()`) only when it matches the pin's checksum
   (`mattChecksum`), or why not; a failure is tried again after five minutes. Fetching is a dependency passed in
@@ -162,7 +162,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
-  allowlist is the package scripts, git and gh commands that only look, adding and committing, pushing the session
+  allowlist is the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the like; #178), the
+  package scripts, git and gh commands that only look, adding and committing, pushing the session
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
@@ -332,7 +333,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 kinds of workspace that get each one and whether only the owner starts it (ADR 0016). It also holds the format check
 (`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the house skills in
 `pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
-`matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0023): its version, the checksum of the
+`matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
 copy the worker keeps, and the ones the Skill picker lists.
 
 ### The contract: `packages/contract`
@@ -355,7 +356,7 @@ the web app parses every answer with these schemas.
 - **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
 - **`.github/workflows/matt-skills.yml`:** once a week, runs `scripts/matt-skills/check.ts`, which compares
   `matt.json` with Matt's newest release and, when it's behind, writes an issue with his CHANGELOG lines and the new
-  pin (its checksum worked out as the worker checks it); the workflow opens it, once per release (ADR 0023).
+  pin (its checksum worked out as the worker checks it); the workflow opens it, once per release (ADR 0024).
 
 ## How a turn flows
 
@@ -420,7 +421,9 @@ Where the rest fits:
 - **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
   `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
-  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
+  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. Claude Code's
+  background tasks are off, and the hook refuses a `Bash` call asking for the background without asking (#178): a
+  turn's commands end with it. What's allowed shows
   as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
   file that decides what allowed commands run (an approval of its own kind, `setup`), is an
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
@@ -485,7 +488,7 @@ things live only in the worker's memory and go when it restarts.
 
 - `sessions/<session>/`: `session.json` (title and times, and a code session's branch), `events.jsonl` (the event
   log) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
-- `matt-skills/<version>/`: Courtyard's copy of Matt Pocock's plugin at the pinned release (ADR 0023): his
+- `matt-skills/<version>/`: Courtyard's copy of Matt Pocock's plugin at the pinned release (ADR 0024): his
   `plugin.json`, licence and skills, checked against `matt.json`'s checksum. `matt-setup.json`: each code workspace's
   answer to the setup check (#181).
 - `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
@@ -556,7 +559,7 @@ the owner talks to in a session) read what the second list builds; only an app t
   machine of whoever works on the repo from Matt's own plugin list, so it updates itself; AGENTS.md's Agent skills
   section says which docs they read. Skills for building Courtyard would go in `.agents/skills/` at the repo's top
   (none yet); how every repo carries this is #88. Inside Courtyard, every code workspace gets his skills from the
-  pinned copy instead (ADR 0023).
+  pinned copy instead (ADR 0024).
 
 ### Models inside it
 
@@ -576,7 +579,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
     `AGENTS.md`) and only the repository's own skills, still none of the machine's setup
     ([ADR 0022](adr/0022-code-sessions-follow-the-repositorys-own-claude-code-setup.md)), and Matt Pocock's skills as
     a local plugin from Courtyard's pinned copy, those the workspace can use turned on by name, which its Skill tool
-    loads and its file tools read (ADR 0023).
+    loads and its file tools read (ADR 0024).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).

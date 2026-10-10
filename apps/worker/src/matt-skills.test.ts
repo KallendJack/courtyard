@@ -20,7 +20,7 @@ import {
   writeMattPlugin,
 } from "./testing.ts";
 
-// Matt Pocock's skills in every code workspace (#181, ADR 0023): Courtyard's pinned copy of his
+// Matt Pocock's skills in every code workspace (#181, ADR 0024): Courtyard's pinned copy of his
 // plugin, fetched at the version matt.json names and loaded only when it matches its checksum.
 
 let root: string;

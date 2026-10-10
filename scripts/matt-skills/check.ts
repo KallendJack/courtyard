@@ -1,4 +1,4 @@
-// The weekly check for Matt Pocock's next release (#181, ADR 0023; .github/workflows/matt-skills.yml).
+// The weekly check for Matt Pocock's next release (#181, ADR 0024; .github/workflows/matt-skills.yml).
 // Compares packages/skills/matt.json with the newest release on his plugin list and, when the pin is
 // behind, writes the issue that asks for the bump to the file named by its one argument: his
 // CHANGELOG lines since the pinned version, and matt.json as it should be, its checksum worked out
@@ -67,7 +67,7 @@ try {
   await writeFile(
     bodyFile,
     [
-      `Matt Pocock's skills ${newest} is out; Courtyard pins ${pinned} (\`packages/skills/matt.json\`, ADR 0023).`,
+      `Matt Pocock's skills ${newest} is out; Courtyard pins ${pinned} (\`packages/skills/matt.json\`, ADR 0024).`,
       "",
       "Bump the pin to this, then check the Skill picker's list still names his owner-started skills:",
       "",

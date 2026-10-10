@@ -23,6 +23,7 @@ import {
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
 import {
+  NOT_IN_BACKGROUND,
   OUTSIDE_WORKSPACE,
   PAGE_NOT_ALLOWED,
   SKILL_NOT_HERE,
@@ -175,7 +176,7 @@ const WIND_DOWN_MS = 2000;
 const isolatedEnv = (): Record<string, string | undefined> => ({
   ...Object.fromEntries(
     Object.entries(process.env).filter(
-      // Nor the folders of plugins the owner's own Claude Code loads (ADR 0023).
+      // Nor the folders of plugins the owner's own Claude Code loads (ADR 0024).
       ([key]) => !key.startsWith("COURTYARD_") && key !== "CLAUDE_CODE_PLUGIN_DIRS",
     ),
   ),
@@ -205,9 +206,9 @@ const PROJECT_SKILLS = join(".claude", "skills");
  * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
  * repository's own skills. The machine's user and local settings, memory and connectors stay off,
  * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
- * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Matt Pocock's
- * skills come as one local plugin, Courtyard's pinned copy, with only the skills it's given turned
- * on (ADR 0023).
+ * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Claude Code's
+ * background tasks are off. Matt Pocock's skills come as one local plugin, Courtyard's pinned
+ * copy, with only the skills it's given turned on (ADR 0024).
  */
 const projectSetup = async (
   worktree: string,
@@ -231,6 +232,9 @@ const projectSetup = async (
       env: {
         CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
         CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+        // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
+        // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
       },
     },
     projectSkills,
@@ -550,7 +554,10 @@ const askWorker = async (
     }
     case "Bash": {
       const bash = BashInput.safeParse(input);
-      return bash.success ? code.run(bash.data.command, bash.data.description) : unchecked;
+      if (!bash.success) return unchecked;
+      // Should a repository's settings turn background tasks back on (#178), they're still refused.
+      if (bash.data.run_in_background === true) return err(NOT_IN_BACKGROUND);
+      return code.run(bash.data.command, bash.data.description);
     }
     default:
       return undefined;
@@ -680,7 +687,7 @@ const confineTo =
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
 
-      // A code turn reads the skills of Matt's it loaded from Courtyard's copy (ADR 0023).
+      // A code turn reads the skills of Matt's it loaded from Courtyard's copy (ADR 0024).
       const plugin = code?.plugin ?? null;
       if (plugin !== null && reach.paths.length > 0 && (await staysInside(plugin.folder, reach))) {
         const file =

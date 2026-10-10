@@ -1,4 +1,4 @@
-# Keeping Matt Pocock's skills current (#181, ADR 0023): once a week, compares the pin in
+# Keeping Matt Pocock's skills current (#181, ADR 0024): once a week, compares the pin in
 # packages/skills/matt.json with his newest release, and when it's behind opens an issue with his
 # CHANGELOG lines and the new matt.json (once per release).
 name: Matt's skills
