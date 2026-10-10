@@ -30,7 +30,9 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
 - **Workspaces differ by their data, never by their code.** A workspace's page is built from general blocks (Things,
   documents, plans, rich blocks) that fill themselves from that workspace's own context; no screen, card or branch of
   code is made for one workspace (its name, its kind of hobby). A new kind of view is a new general block any
-  workspace can use.
+  workspace can use. The test, in designs and in code: before adding a block, name three unrelated workspaces that
+  would use it. If you can't, it isn't a new block; it's that workspace's data in an existing one (a tyre pressure is
+  a value on a pin, a lift's weight week by week is a chart).
 - **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`http.ts`), files through
   `files.ts`, workspace errors through one handler, and tests through `testing.ts`. Check there before writing a
   helper; if one is missing, add it there.
