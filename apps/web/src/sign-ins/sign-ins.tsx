@@ -1,29 +1,43 @@
-import type { ProviderSignIn, ProviderStatus } from "@courtyard/contract";
+import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
+import { ButtonLink } from "@/components/button-link";
+import { ConnectionCard, type ConnectionState } from "@/components/connection-card";
 import { CopyButton } from "@/components/copy-button";
 import { FormError } from "@/components/form-error";
 import { InfoBox, Notice, WaitingDot } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
+import { WebButton } from "@/components/web-link";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { loadProviders } from "../worker.ts";
-import { changeSignIn, loadSignIns, startSignIn } from "./api.ts";
+import {
+  changeGitHub,
+  changeSignIn,
+  loadGitHub,
+  loadSignIns,
+  startGitHubSignIn,
+  startSignIn,
+} from "./api.ts";
 
 /** How often the page asks whether a sign-in has finished on the owner's other device. */
 const FOLLOW_EVERY_MS = 3000;
 
-/** The providers and the sign-ins Courtyard handles (ADR 0015), as last asked. */
+/**
+ * The providers, the sign-ins Courtyard handles (ADR 0015) and its own GitHub sign-in (#99), as
+ * last asked.
+ */
 type Snapshot = {
   readonly providers: readonly ProviderStatus[];
   readonly signIns: readonly ProviderSignIn[];
+  readonly github: GitHubConnection | undefined;
 };
 
 /**
- * One copy for the home page's sign-in box and its Models list, which change together: either
+ * One copy for the home page's sign-in box and its Connections, which change together: either
  * acting on a sign-in shows in both.
  */
-let snapshot: Snapshot = { providers: [], signIns: [] };
+let snapshot: Snapshot = { providers: [], signIns: [], github: undefined };
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -36,11 +50,16 @@ let asked = 0;
 const reload = async () => {
   asked += 1;
   const thisAsk = asked;
-  const [providers, signIns] = await Promise.all([loadProviders(), loadSignIns()]);
+  const [providers, signIns, github] = await Promise.all([
+    loadProviders(),
+    loadSignIns(),
+    loadGitHub(),
+  ]);
   if (thisAsk !== asked) return;
   snapshot = {
     providers: providers.kind === "loaded" ? providers.data.providers : snapshot.providers,
     signIns: signIns.kind === "loaded" ? signIns.data.signIns : snapshot.signIns,
+    github: github.kind === "loaded" ? github.data : snapshot.github,
   };
   for (const listener of listeners) listener();
 };
@@ -61,7 +80,9 @@ const useFollowing = (models: Models) => {
   useEffect(() => {
     void reload();
   }, []);
-  const waiting = models.signIns.some((signIn) => signIn.state.kind === "waiting");
+  const waiting =
+    models.signIns.some((signIn) => signIn.state.kind === "waiting") ||
+    models.github?.kind === "waiting";
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => void reload(), FOLLOW_EVERY_MS);
@@ -218,11 +239,12 @@ function SignInBoxes() {
 const planName = (plan: string) => `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
 
 /** Where a provider Courtyard signs in to stands, and what the owner can do about it. */
-function SignInRow(props: { models: Models; signIn: ProviderSignIn; provider: ProviderStatus }) {
+function SignInCard(props: { models: Models; signIn: ProviderSignIn; provider: ProviderStatus }) {
   const { models, signIn } = props;
   const action = useSignInAction(models, signIn);
   const { state } = signIn;
   let said: string;
+  let standing: ConnectionState = "off";
   let act: "start" | "sign-out" | undefined;
   switch (state.kind) {
     case "signed-in": {
@@ -232,17 +254,19 @@ function SignInRow(props: { models: Models; signIn: ProviderSignIn; provider: Pr
       ];
       // Signed in, but still unavailable (Codex needing an update, say): why, as for any provider.
       said = props.provider.available
-        ? `signed in ${who.join(", ")}`.trim()
+        ? `Signed in ${who.join(", ")}`.trim()
         : props.provider.reason;
+      if (props.provider.available) standing = "connected";
       act = "sign-out";
       break;
     }
     case "waiting":
-      said = "signing in: enter the code above";
+      said = "Signing in: enter the code above";
+      standing = "waiting";
       break;
     case "signed-out":
     case "not-finished":
-      said = "not signed in";
+      said = "Not signed in";
       act = "start";
       break;
     case "unavailable":
@@ -250,12 +274,12 @@ function SignInRow(props: { models: Models; signIn: ProviderSignIn; provider: Pr
       break;
   }
   return (
-    <li className="py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <span>
-          {signIn.label} · {said}
-        </span>
-        {act !== undefined && (
+    <ConnectionCard
+      name={signIn.label}
+      detail={said}
+      state={standing}
+      actions={
+        act !== undefined && (
           <Button
             variant={act === "start" ? "quietPrimary" : "quiet"}
             size="xs"
@@ -264,47 +288,225 @@ function SignInRow(props: { models: Models; signIn: ProviderSignIn; provider: Pr
           >
             {act === "start" ? "Sign in" : "Sign out"}
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
       <FormError message={action.error} />
-    </li>
+    </ConnectionCard>
   );
 }
 
-/**
- * Every provider and whether it can be used (story 29), at the foot of the home page: signed in
- * on the worker machine, or why not, with Sign in and Sign out for the ones Courtyard signs in to.
- */
-function ModelsList() {
-  const models = useModels();
-  const { providers, signIns } = models;
-  if (providers.length === 0) return null;
+/** Acts on the GitHub sign-in, then shows where everything stands. */
+const useGitHubAction = (models: Models) =>
+  useAction(async (change: "start" | "cancel" | "sign-out") => {
+    const done = change === "start" ? await startGitHubSignIn() : await changeGitHub(change);
+    await models.reload();
+    return done.kind === "loaded" ? undefined : describeProblem(done).body;
+  });
+
+/** Copies the code to the clipboard as GitHub's page opens, so it's ready to paste there. */
+const copyCode = (code: string) => {
+  void navigator.clipboard?.writeText(code).catch(() => undefined);
+};
+
+/** The repos a sign-in reaches, by name, as the card's line says them. */
+const reposLine = (repos: readonly string[] | null) => {
+  if (repos === null) return "Couldn't ask GitHub for its repos just now.";
+  if (repos.length === 0) {
+    return "No repos yet: install Courtyard's GitHub App on the ones sessions may use.";
+  }
   return (
-    <section aria-labelledby="models" className="mt-12">
-      <div id="models">
-        <SectionTitle>Models</SectionTitle>
+    <span className="font-mono">{repos.map((repo) => repo.split("/").at(-1)).join(" · ")}</span>
+  );
+};
+
+/**
+ * Courtyard's own GitHub sign-in (#99): the device code to enter on GitHub, then the account and
+ * the repos its GitHub App reaches, with Switch and Sign out.
+ */
+function GitHubCard(props: { models: Models; github: GitHubConnection }) {
+  const { models, github } = props;
+  const action = useGitHubAction(models);
+  const error = <FormError message={action.error} />;
+  const signIn = (label: string) => (
+    <Button size="sm" onClick={() => void action.run("start")} disabled={action.busy}>
+      {label}
+    </Button>
+  );
+
+  switch (github.kind) {
+    case "not-set-up":
+      return (
+        <ConnectionCard
+          name="GitHub"
+          detail="Not set up: register Courtyard's GitHub App, as the README says."
+          state="off"
+        />
+      );
+    case "signed-out":
+      return (
+        <ConnectionCard
+          name="GitHub"
+          detail="Code sessions push their branch and open a pull request through it."
+          state="off"
+          actions={signIn("Sign in to GitHub")}
+        >
+          {error}
+        </ConnectionCard>
+      );
+    case "not-finished":
+      return (
+        <ConnectionCard
+          name="GitHub"
+          detail={
+            github.why === "expired"
+              ? "The code ran out before it was used."
+              : github.why === "denied"
+                ? "GitHub was told no, so it didn't sign in."
+                : "The sign-in didn't finish."
+          }
+          state="off"
+          actions={signIn("Get a new code")}
+        >
+          {error}
+        </ConnectionCard>
+      );
+    case "waiting":
+      return (
+        <ConnectionCard name="GitHub" state="waiting">
+          <p className="text-xs text-muted-foreground">
+            Open {github.link.replace(/^https:\/\//, "")} and enter this code. Code sessions can
+            only reach the repos you install Courtyard's GitHub App on.
+          </p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="rounded-md border bg-field px-4 py-1 font-mono text-[28px]/[34px] font-semibold tracking-[0.1em]">
+              {github.code}
+            </span>
+            <WebButton href={github.link} size="lg" onClick={() => copyCode(github.code)}>
+              Copy, open GitHub
+            </WebButton>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <WaitingDot />
+              The code works for 15 minutes.
+            </p>
+            <Button
+              variant="quiet"
+              size="xs"
+              onClick={() => void action.run("cancel")}
+              disabled={action.busy}
+            >
+              Cancel
+            </Button>
+          </div>
+          {error}
+        </ConnectionCard>
+      );
+    case "signed-in":
+      return (
+        <ConnectionCard
+          name={`GitHub · ${github.account}`}
+          detail={reposLine(github.repos)}
+          state="connected"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => void action.run("start")}
+                disabled={action.busy}
+              >
+                Switch
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => void action.run("sign-out")}
+                disabled={action.busy}
+              >
+                Sign out
+              </Button>
+            </>
+          }
+        >
+          {error}
+        </ConnectionCard>
+      );
+  }
+}
+
+/**
+ * Connections, at the foot of the home page: every provider and whether it can be used (story
+ * 29), signed in on the worker machine or why not, with Sign in and Sign out for the ones
+ * Courtyard signs in to; and GitHub, which Courtyard signs in to itself (#99).
+ */
+function Connections() {
+  const models = useModels();
+  const { providers, signIns, github } = models;
+  if (providers.length === 0 && github === undefined) return null;
+  return (
+    <section aria-labelledby="connections" className="mt-12">
+      <div id="connections">
+        <SectionTitle>Connections</SectionTitle>
       </div>
-      <ul className="mt-3 divide-y border-y text-sm/[21px]">
+      <ul className="mt-3 flex flex-col gap-2.5 text-sm/[21px]">
         {providers.map((provider) => {
           const signIn = signIns.find((s) => s.provider === provider.id);
           if (signIn !== undefined) {
             return (
-              <SignInRow key={provider.id} models={models} signIn={signIn} provider={provider} />
+              <SignInCard key={provider.id} models={models} signIn={signIn} provider={provider} />
             );
           }
           return (
-            <li key={provider.id} className="py-2.5">
-              {provider.label} ·{" "}
-              {provider.available ? "signed in on the worker machine" : provider.reason}
-            </li>
+            <ConnectionCard
+              key={provider.id}
+              name={provider.label}
+              detail={provider.available ? "Signed in on the worker machine" : provider.reason}
+              state={provider.available ? "connected" : "off"}
+            />
           );
         })}
+        {github !== undefined && <GitHubCard models={models} github={github} />}
       </ul>
     </section>
   );
 }
 
-/** The home page's sign-in boxes, near its top, or its Models list, at its foot: one lazy load. */
-export default function SignIns(props: { part: "boxes" | "list" }) {
-  return props.part === "boxes" ? <SignInBoxes /> : <ModelsList />;
+/**
+ * On a code workspace's page, where a session would start: that its sessions can't reach GitHub
+ * until Courtyard is signed in to it (#99), with the way to Connections.
+ */
+function GitHubNotice() {
+  const { github } = useModels();
+  useEffect(() => {
+    void reload();
+  }, []);
+  if (github === undefined || github.kind === "signed-in") return null;
+  return (
+    <InfoBox label="GitHub isn't connected">
+      <span className="min-w-60 flex-1">
+        A session here can work, but can't push its branch or open a pull request until Courtyard is
+        signed in to GitHub.
+      </span>
+      <ButtonLink size="sm" to="/" hash="connections">
+        Sign in to GitHub
+      </ButtonLink>
+    </InfoBox>
+  );
+}
+
+/**
+ * The home page's sign-in boxes, near its top, or its Connections, at its foot; or, on a code
+ * workspace's page, whether GitHub is connected: one lazy load.
+ */
+export default function SignIns(props: { part: "boxes" | "list" | "github-notice" }) {
+  switch (props.part) {
+    case "boxes":
+      return <SignInBoxes />;
+    case "list":
+      return <Connections />;
+    case "github-notice":
+      return <GitHubNotice />;
+  }
 }

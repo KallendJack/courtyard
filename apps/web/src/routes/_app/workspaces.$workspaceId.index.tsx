@@ -12,7 +12,7 @@ import {
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { IconButton } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
@@ -32,6 +32,9 @@ import { startSession } from "../../sessions/messages.ts";
 import { ThingsSection } from "../../things/things-section.tsx";
 import { describeWhen } from "../../when.ts";
 import { archiveWorkspace, changeWorkspace } from "../../worker.ts";
+
+// Loaded only for a code workspace, with the home page's Connections (#99).
+const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
@@ -172,6 +175,12 @@ function Workspace() {
         </div>
       )}
 
+      {workspace.mode === "code" && (
+        // Where a session would start, so the owner knows to sign in to GitHub first (#99).
+        <Suspense fallback={null}>
+          <SignIns part="github-notice" />
+        </Suspense>
+      )}
       <div className="mt-6 md:mt-8">
         {providers.kind === "loaded" ? (
           <Composer

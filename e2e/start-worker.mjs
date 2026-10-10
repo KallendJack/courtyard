@@ -121,6 +121,8 @@ writeFileSync(
 );
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
+// GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts.
+const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
 // A context backup that isn't there, so the home page says the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
@@ -128,4 +130,5 @@ rmSync(missingBackup, { recursive: true, force: true });
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
   startUpdate: standInUpdate,
+  github: createFakeGitHub({ finishAfterMs: 2000 }).api,
 });
