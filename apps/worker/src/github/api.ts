@@ -54,6 +54,32 @@ export type GitHubApi = {
     accessToken: string,
     find: { readonly repo: string; readonly branch: string },
   ) => Promise<Result<null, string>>;
+  /** The names of `repo`'s labels (#181). */
+  readonly labels: (
+    accessToken: string,
+    find: { readonly repo: string },
+  ) => Promise<Result<readonly string[], string>>;
+  /** Makes a label in `repo` (#181): GitHub's reason in plain words when it won't. */
+  readonly createLabel: (
+    accessToken: string,
+    label: {
+      readonly repo: string;
+      readonly name: string;
+      readonly color: string;
+      readonly description: string;
+    },
+  ) => Promise<Result<null, string>>;
+  /** Opens a pull request in `repo` from `branch` into `base` (#181): its number and address. */
+  readonly openPullRequest: (
+    accessToken: string,
+    pull: {
+      readonly repo: string;
+      readonly branch: string;
+      readonly base: string;
+      readonly title: string;
+      readonly body: string;
+    },
+  ) => Promise<Result<{ readonly number: number; readonly url: string }, string>>;
 };
 
 /** A pull request as GitHub has it. */
@@ -173,6 +199,12 @@ const PullFiles = z.array(
   }),
 );
 const Refusal = z.object({ message: z.string() });
+const Labels = z.array(z.object({ name: z.string() }));
+/** A pull request just opened. */
+const Opened = z.object({
+  number: z.number().int().positive(),
+  html_url: z.url({ protocol: /^https$/ }),
+});
 
 /** GitHub's file statuses as Courtyard shows them: a copied file is added, say. */
 const statusOf = (status: string): FoundFile["status"] => {
@@ -477,6 +509,59 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         body: {},
         fallback: "GitHub couldn't delete the branch.",
       });
+    },
+
+    labels: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        const names: string[] = [];
+        for (let page = 1; page <= FILE_PAGES; page += 1) {
+          const listed = await apiGet(
+            accessToken,
+            `/repos/${repo.data}/labels?per_page=${PAGE}&page=${page}`,
+            Labels,
+          );
+          names.push(...listed.map((label) => label.name));
+          if (listed.length < PAGE) break;
+        }
+        return ok(names);
+      } catch {
+        return err("GitHub couldn't be asked for the repository's labels.");
+      }
+    },
+
+    createLabel: async (accessToken, label) => {
+      const repo = RepoName.safeParse(label.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      return apiChange(accessToken, `/repos/${repo.data}/labels`, {
+        method: "POST",
+        body: { name: label.name, color: label.color, description: label.description },
+        fallback: `GitHub couldn't make the label ${label.name}.`,
+      });
+    },
+
+    openPullRequest: async (accessToken, pull) => {
+      const repo = RepoName.safeParse(pull.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const fallback = "GitHub couldn't open the pull request.";
+      try {
+        const response = await apiRequest(accessToken, `/repos/${repo.data}/pulls`, {
+          method: "POST",
+          body: { head: pull.branch, base: pull.base, title: pull.title, body: pull.body },
+        });
+        const answer: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          const refused = Refusal.safeParse(answer);
+          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
+        }
+        const opened = Opened.safeParse(answer);
+        return opened.success
+          ? ok({ number: opened.data.number, url: opened.data.html_url })
+          : err(fallback);
+      } catch {
+        return err(fallback);
+      }
     },
   };
 };

@@ -62,6 +62,8 @@ export const createFakeGitHub = (
     account?: string;
     repos?: readonly string[];
     finishAfterMs?: number;
+    /** Each repository's labels to start with (#181). */
+    labels?: Readonly<Record<string, readonly string[]>>;
     opensOnPush?: {
       readonly remote: string;
       /** The checks on a commit pushed, from its subject. */
@@ -89,6 +91,10 @@ export const createFakeGitHub = (
     was?.(how);
   };
 
+  /** Each repository's labels, in the order they were made (#181). */
+  const labels = new Map(
+    Object.entries(options.labels ?? {}).map(([repo, names]) => [repo, [...names]]),
+  );
   /** Each branch deleted on GitHub, in order. */
   const deleted: { readonly repo: string; readonly branch: string }[] = [];
   /** Every pull request opened, numbered from 1, with the files it changes (#160). */
@@ -235,6 +241,27 @@ export const createFakeGitHub = (
       }
       return ok(null);
     },
+    labels: async (accessToken, { repo }) =>
+      refusedToken(accessToken) ?? ok([...(labels.get(repo) ?? [])]),
+    createLabel: async (accessToken, label) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const names = labels.get(label.repo) ?? [];
+      if (names.includes(label.name)) return err("GitHub said: Validation Failed");
+      labels.set(label.repo, [...names, label.name]);
+      return ok(null);
+    },
+    openPullRequest: async (accessToken, pull) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const onPush = options.opensOnPush;
+      const head =
+        onPush === undefined
+          ? undefined
+          : await gitOrNothing(onPush.remote, ["rev-parse", `refs/heads/${pull.branch}`]);
+      const number = openPullRequest({ repo: pull.repo, branch: pull.branch, head: head ?? "" });
+      return ok({ number, url: `https://github.com/${pull.repo}/pull/${number}` });
+    },
   };
 
   return {
@@ -266,6 +293,10 @@ export const createFakeGitHub = (
     close: (number: number) => change(number, { state: "closed" }),
     /** Each branch Courtyard deleted on GitHub, in order. */
     branchesDeleted: () => [...deleted],
+    /** A repository's labels now, in the order they were made (#181). */
+    labelsOf: (repo: string) => [...(labels.get(repo) ?? [])],
+    /** The number of the latest pull request from `branch`, if any. */
+    pullRequestFrom: (branch: string) => pulls.findLast((pull) => pull.branch === branch)?.number,
   };
 };
 
