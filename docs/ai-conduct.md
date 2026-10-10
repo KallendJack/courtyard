@@ -231,12 +231,13 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
-> without asking: its package scripts, git and gh commands that only look, adding and committing on your branch,
-> pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working
-> directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another
-> command, waits for the owner to allow it;
-> if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
-> a command that chains or substitutes another never runs.
+> without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package
+> scripts, git and gh commands that only look, adding and committing on your branch, pushing it, and opening or
+> updating its pull request with gh. Anything else, such as a change outside your working directory, a change to what
+> decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner
+> to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at
+> a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for
+> it to finish: nothing runs in the background here.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
@@ -263,6 +264,13 @@ A tool call whose input can't be checked (a field Courtyard doesn't know, say), 
 never let through, and Claude is told:
 
 > That request couldn't be checked, so it was refused.
+
+A command runs in the foreground, inside the turn (#178): one left running in the background would stop when the turn
+ends, and nothing would wake the model when it finished, so the session would sit waiting. Claude Code's background
+tasks are off in a code session, so Claude isn't offered them, and a command Claude asks to run in the background
+anyway is refused before the worker is asked, with:
+
+> Run it in the foreground: a turn's background commands stop when it ends, and nothing tells you when one finishes.
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.

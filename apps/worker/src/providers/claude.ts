@@ -21,7 +21,12 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
-import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED, UNCHECKED_REQUEST } from "../prompts/index.ts";
+import {
+  NOT_IN_BACKGROUND,
+  OUTSIDE_WORKSPACE,
+  PAGE_NOT_ALLOWED,
+  UNCHECKED_REQUEST,
+} from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
@@ -195,7 +200,8 @@ const PROJECT_SKILLS = join(".claude", "skills");
  * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
  * repository's own skills. The machine's user and local settings, memory and connectors stay off,
  * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
- * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's.
+ * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Claude Code's
+ * background tasks are off.
  */
 const projectSetup = async (
   worktree: string,
@@ -213,6 +219,9 @@ const projectSetup = async (
     env: {
       CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
       CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+      // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
+      // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
+      CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     },
   };
 };
@@ -491,7 +500,10 @@ const askWorker = async (
     }
     case "Bash": {
       const bash = BashInput.safeParse(input);
-      return bash.success ? code.run(bash.data.command, bash.data.description) : unchecked;
+      if (!bash.success) return unchecked;
+      // Should a repository's settings turn background tasks back on (#178), they're still refused.
+      if (bash.data.run_in_background === true) return err(NOT_IN_BACKGROUND);
+      return code.run(bash.data.command, bash.data.description);
     }
     default:
       return undefined;
