@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -496,4 +497,26 @@ describe("a merged or closed pull request", () => {
       expect((await request(`/api/sessions/${id}`)).status).toBe(200);
     },
   );
+
+  it("clears away a worktree git has already half-removed, folder and all, and only once", async () => {
+    const { id, branch } = await codeSession();
+    const worktree = join(root, "data", "worktrees", id);
+    // What `git worktree remove` leaves on Windows when a package install nests deeper than its
+    // path limit: git has forgotten the worktree, but the folder and its files are still there.
+    const deep = join(worktree, "node_modules", ...Array.from({ length: 12 }, () => "nested-pkg"));
+    await mkdir(deep, { recursive: true });
+    await writeFile(join(deep, "index.js"), "");
+    await rm(join(worktree, ".git"), { force: true });
+    await gitIn(repo, "worktree", "prune");
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    await runJobs();
+    github.merge(number);
+
+    await runJobs();
+    await runJobs();
+
+    expect(existsSync(worktree)).toBe(false);
+    expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
+    expect(github.branchesDeleted()).toEqual([{ repo: onGitHub, branch }]);
+  });
 });

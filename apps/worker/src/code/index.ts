@@ -1,6 +1,6 @@
 import { isAbsolute, join } from "node:path";
 import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
-import { isFolder } from "../files.ts";
+import { isFolder, removeFolder } from "../files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { GitHub, GitHubProblem } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -354,9 +354,16 @@ export const createCode = (options: {
       pushed: boolean;
     }) => {
       const { repoPath, sessionBranch } = clear;
+      // The folder goes first, by Node, then git forgets it: `git worktree remove` can't delete a
+      // package install nested past Windows' path limit, and once it has half-removed a worktree
+      // it refuses to touch it again ("is not a working tree").
+      if (!(await removeFolder(sessionBranch.worktree))) {
+        console.error("A session's worktree couldn't be cleared away:", sessionBranch.worktree);
+      }
       try {
-        await git(repoPath, ["worktree", "remove", "--force", sessionBranch.worktree]);
-        await git(repoPath, ["branch", "-D", sessionBranch.branch]);
+        await git(repoPath, ["worktree", "prune"]);
+        const there = await git(repoPath, ["branch", "--list", sessionBranch.branch]);
+        if (there.trim() !== "") await git(repoPath, ["branch", "-D", sessionBranch.branch]);
       } catch (error) {
         console.error("A session branch couldn't be cleared away:", gitFailureReason(error));
       }
