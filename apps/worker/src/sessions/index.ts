@@ -133,6 +133,9 @@ import {
 } from "../things/index.ts";
 import { getWorkspace, isArchived } from "../workspaces/index.ts";
 
+/** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
+const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
+
 /** What the owner did to a save from its note. */
 export type NoteAct = "undo" | "edit";
 
@@ -1132,20 +1135,26 @@ export const createSessions = (options: {
   };
 
   /**
-   * Whether the skill a message starts, if any, is one its workspace can use: one of its skills,
-   * not broken, and without scripts in a planning workspace.
+   * A message with the skill it starts, if any, once that's one its workspace can use: one of its
+   * skills, not broken, and without scripts in a planning workspace. The owner starts one from the
+   * skill picker, or by beginning the message with its name, as `/implement 157` (#181).
    */
-  const skillUsable = async (
+  const withSkillStarted = async <M extends { text: string; skill?: SkillName | undefined }>(
     workspaceId: WorkspaceId,
-    message: { skill?: SkillName | undefined },
-  ): Promise<Result<null, SessionError>> => {
-    if (message.skill === undefined) return ok(null);
+    message: M,
+  ): Promise<Result<M, SessionError>> => {
+    const typed = SLASH_SKILL.exec(message.text)?.[1];
+    if (message.skill === undefined && typed === undefined) return ok(message);
     const workspace = await getWorkspace(options.contextDir, workspaceId);
     if (!workspace.ok) return err(STORAGE_ERROR);
     const skills = await skillsOf(workspace.value);
-    return skills.usable.some((skill) => skill.name === message.skill)
-      ? ok(null)
-      : err({ kind: "skill-unavailable" });
+    const usable = (name: string | undefined) =>
+      skills.usable.find((skill) => skill.name === name)?.name;
+    if (message.skill !== undefined) {
+      return usable(message.skill) === undefined ? err({ kind: "skill-unavailable" }) : ok(message);
+    }
+    const skill = usable(typed);
+    return ok(skill === undefined ? message : { ...message, skill });
   };
 
   /** The provider to answer a message: its model must be on offer, and take its effort. */
@@ -1635,10 +1644,10 @@ export const createSessions = (options: {
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
-      const message = await withModel(start.message);
+      const chosen = await withModel(start.message);
+      if (!chosen.ok) return chosen;
+      const message = await withSkillStarted(start.workspaceId, chosen.value);
       if (!message.ok) return message;
-      const usable = await skillUsable(start.workspaceId, message.value);
-      if (!usable.ok) return usable;
       const provider = await providerIn(start.workspaceId, message.value);
       // A fresh start meanwhile may have taken its workspace away.
       if (settingAside || since !== freshStarts) return err({ kind: "starting-fresh" });
@@ -1705,22 +1714,22 @@ export const createSessions = (options: {
       /** The files attached to it, checked (#78). */
       attachments: readonly PreparedAttachment[];
     }): Promise<Result<null, SessionError>> => {
-      const { rawId, message, attachments } = send;
+      const { rawId, attachments } = send;
       const since = freshStarts;
       const session = await findSession(rawId);
       if (!session.ok) return session;
       if (await isArchived(options.contextDir, session.value.workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const provider = await providerIn(session.value.workspaceId, message);
+      const provider = await providerIn(session.value.workspaceId, send.message);
       if (!provider.ok) return provider;
-      const usable = await skillUsable(session.value.workspaceId, message);
-      if (!usable.ok) return usable;
+      const message = await withSkillStarted(session.value.workspaceId, send.message);
+      if (!message.ok) return message;
       return startTurn({
         id: session.value.id,
         workspaceId: session.value.workspaceId,
         provider: provider.value.provider,
-        message,
+        message: message.value,
         since,
         coding: session.value.branch !== undefined,
         attachments,

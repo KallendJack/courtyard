@@ -163,6 +163,22 @@ describe("Matt Pocock's skills", () => {
     expect(framings[0]?.instructions).not.toContain("What tdd does.");
   });
 
+  it("start from a message that begins with one's name, as /implement 157", async () => {
+    const matt = await mattSkillsIn(pluginDir());
+    const { provider, framings } = runningProvider([]);
+    const request = await asOwner(
+      testWorker({ root, houseSkills: houseDir(), mattSkills: matt, providers: [provider] }),
+    );
+
+    const started = await codeTurn(request, "/implement 157");
+    const other = await codeTurn(request, "/deploy now, or /implement");
+
+    const skillOf = (events: typeof started) =>
+      events.find((event) => event.type === "owner-message")?.skill;
+    expect([skillOf(started), skillOf(other)]).toEqual(["implement", undefined]);
+    expect(framings[0]?.instructions).toContain('Call the Skill tool with "tdd".');
+  });
+
   it("go to no code turn when they aren't loaded", async () => {
     const matt = await mattSkillsIn(pluginDir(), { checksum: `sha256-${"0".repeat(64)}` });
     const { provider, plugins } = runningProvider([]);
