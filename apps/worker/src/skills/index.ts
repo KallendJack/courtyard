@@ -11,6 +11,7 @@ import type {
 import { checkSkill, type HouseSkill, readHouseManifest, readSkillFile } from "@courtyard/skills";
 import { z } from "zod";
 import { listEntries } from "../files.ts";
+import type { MattSkills } from "../matt-skills/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import {
   type FileToolFound,
@@ -67,6 +68,39 @@ const foundIn = async (skillsDir: string, source: SkillSource): Promise<Found[]>
   );
 };
 
+/** Where Matt's skills come from, as a broken skill names them when the copy can't be loaded. */
+const MATT_PLUGIN = "mattpocock-skills";
+
+/**
+ * Matt Pocock's skills, for a code workspace (ADR 0023): each in Courtyard's pinned copy, checked
+ * as Claude Code loads it, with the ones the picker lists; or why the copy can't be loaded.
+ */
+const mattSkills = async (matt: MattSkills) => {
+  const copy = await matt.copy();
+  if (!copy.ok) {
+    const problem: SkillSummary = {
+      kind: "unusable",
+      name: MATT_PLUGIN,
+      description: "",
+      source: "matt",
+      ownerOnly: false,
+      problem: { kind: "broken", reason: copy.error },
+    };
+    return { found: [], picker: new Set<string>(), problem };
+  }
+  const found = await Promise.all(
+    copy.value.skills.map(
+      async ({ name, folder }): Promise<Found> => ({
+        folderName: name,
+        folder,
+        source: "matt",
+        checked: await checkSkill(folder, { claudeCode: true }),
+      }),
+    ),
+  );
+  return { found, picker: new Set<string>(copy.value.picker), problem: undefined };
+};
+
 /** The house skills this kind of workspace gets, from `skills.json`, and every owner-only name. */
 const houseSkills = async (houseFolder: string, mode: WorkspaceMode) => {
   const manifest = await readHouseManifest(houseFolder);
@@ -104,11 +138,16 @@ export const workspaceSkills = async (options: {
   contextDir: string;
   houseFolder: string;
   workspace: SkillsWorkspace;
+  /** Matt Pocock's skills, which a code workspace gets (ADR 0023); none when they're off. */
+  matt: MattSkills | undefined;
 }): Promise<WorkspaceSkills> => {
   const { folder, repoPath, summary } = options.workspace;
   const { mode } = summary;
   const house = await houseSkills(options.houseFolder, mode);
-  const places = await Promise.all([
+  const [matt, ...places] = await Promise.all([
+    mode === "code" && options.matt !== undefined
+      ? mattSkills(options.matt)
+      : { found: [], picker: new Set<string>(), problem: undefined },
     foundIn(join(folder, SKILLS_FOLDER), "workspace"),
     mode === "code" && repoPath !== null
       ? foundIn(join(repoPath, SKILLS_FOLDER), "project")
@@ -118,10 +157,10 @@ export const workspaceSkills = async (options: {
   const houseNames = new Set(house.found.map((found) => found.folderName));
 
   const usable = new Map<string, UsableSkill>();
-  const unusable: SkillSummary[] = [];
-  for (const found of [...places.flat(), ...house.found]) {
+  const unusable: SkillSummary[] = matt.problem === undefined ? [] : [matt.problem];
+  for (const found of [...places.flat(), ...matt.found, ...house.found]) {
     const { checked, folderName, source } = found;
-    const ownerOnly = house.ownerOnly.has(folderName);
+    const ownerOnly = house.ownerOnly.has(folderName) || (checked.ok && checked.value.ownerStarts);
     const cantUse = (problem: SkillProblem, description: string) =>
       unusable.push({
         kind: "unusable",
@@ -148,6 +187,7 @@ export const workspaceSkills = async (options: {
       source,
       ownerOnly,
       replacesHouse: source !== "house" && houseNames.has(name),
+      inPicker: source !== "matt" || matt.picker.has(name),
       folder: found.folder,
     });
   }

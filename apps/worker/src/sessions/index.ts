@@ -73,6 +73,7 @@ import {
   writeJsonFile,
 } from "../files.ts";
 import type { CommandEnv } from "../git.ts";
+import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
   checksFailedMessage,
@@ -96,6 +97,7 @@ import {
   useSkillReply,
 } from "../prompts/index.ts";
 import {
+  type CodePlugin,
   type CodeTurn,
   firstWithRoom,
   modelsOnOffer,
@@ -374,6 +376,8 @@ export const createSessions = (options: {
   contextFolder: ContextFolder;
   /** The house skills' folder (ADR 0016). */
   houseSkills: string;
+  /** Matt Pocock's skills, which code workspaces get (ADR 0023); none when they're off. */
+  matt: MattSkills | undefined;
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
   now: () => number;
@@ -541,7 +545,22 @@ export const createSessions = (options: {
       contextDir: options.contextDir,
       houseFolder: options.houseSkills,
       workspace,
+      matt: options.matt,
     });
+
+  /**
+   * Matt's skills for a code turn (ADR 0023): the pinned copy, with the skills of it the workspace
+   * can use; `null` when they aren't loaded.
+   */
+  const mattPlugin = async (skills: WorkspaceSkills): Promise<CodePlugin | null> => {
+    const copy = await options.matt?.copy();
+    if (copy === undefined || !copy.ok) return null;
+    return {
+      folder: copy.value.folder,
+      name: copy.value.plugin,
+      skills: skills.usable.flatMap((skill) => (skill.source === "matt" ? [skill.name] : [])),
+    };
+  };
 
   /**
    * What a turn needs from its workspace: its name, mode and folder, its context file as written,
@@ -648,7 +667,8 @@ export const createSessions = (options: {
           capabilities: turn.provider.capabilities,
           events: events.value,
           skills: {
-            offered: skills.usable.filter((skill) => !skill.ownerOnly),
+            // Matt's skills load through the provider's own skill loading (ADR 0023).
+            offered: skills.usable.filter((skill) => !skill.ownerOnly && skill.source !== "matt"),
             inUse: await inUseTexts(skills.usable, inUse),
           },
           attachments: await carriedAttachments(folderOf(turn.id), events.value),
@@ -844,8 +864,14 @@ export const createSessions = (options: {
           );
         };
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
-        const codeTurn = (worktree: string, branch: string, env: CommandEnv): CodeTurn => ({
+        const codeTurn = (
+          worktree: string,
+          branch: string,
+          env: CommandEnv,
+          plugin: CodePlugin | null,
+        ): CodeTurn => ({
           worktree,
+          plugin,
           // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
           env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)) },
           edit: async (path) => {
@@ -896,7 +922,12 @@ export const createSessions = (options: {
             code:
               worktree === undefined || branch === undefined
                 ? null
-                : codeTurn(worktree, branch, await options.code.commandEnv()),
+                : codeTurn(
+                    worktree,
+                    branch,
+                    await options.code.commandEnv(),
+                    await mattPlugin(skills),
+                  ),
             framing,
             callTool: (call) => {
               const calling = callTool(call);

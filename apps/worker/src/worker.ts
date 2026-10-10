@@ -30,6 +30,12 @@ import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
+import {
+  createMattSkills,
+  type FetchMattSkills,
+  fetchFromGitHub,
+  type MattPin,
+} from "./matt-skills/index.ts";
 import { createNotifications, type SendPush } from "./notifications/index.ts";
 import { notificationRoutes } from "./notifications/routes.ts";
 import { sendWebPush } from "./notifications/web-push.ts";
@@ -164,6 +170,11 @@ export const createWorker = (options: {
   github?: GitHubApi;
   /** Sends a notification to a device (#173). Tests pass a fake; otherwise it's web push. */
   sendPush?: SendPush;
+  /**
+   * Matt Pocock's skills for code workspaces (ADR 0023): `matt.json`'s pin and his release fetched
+   * from GitHub, unless a test gives its own; `null` for none at all.
+   */
+  mattSkills?: { readonly pin?: MattPin; readonly fetch?: FetchMattSkills } | null;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -205,6 +216,15 @@ export const createWorker = (options: {
     now,
   });
   const houseSkills = options.houseSkills ?? HOUSE_SKILLS_FOLDER;
+  const matt =
+    options.mattSkills === null
+      ? undefined
+      : createMattSkills({
+          dataDir,
+          ...(options.mattSkills?.pin === undefined ? {} : { pin: options.mattSkills.pin }),
+          fetch: options.mattSkills?.fetch ?? fetchFromGitHub,
+          now,
+        });
   const notifications = createNotifications({
     dataDir,
     send: options.sendPush ?? sendWebPush,
@@ -220,6 +240,7 @@ export const createWorker = (options: {
     contextDir,
     contextFolder,
     houseSkills,
+    matt,
     code: createCode({
       dataDir,
       commandEnv: github.commandEnv,
@@ -361,6 +382,7 @@ export const createWorker = (options: {
       contextDir,
       houseFolder: houseSkills,
       workspace: workspace.value,
+      matt,
     });
     return c.json({ skills: skillList(skills) } satisfies SkillList);
   });

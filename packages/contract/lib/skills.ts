@@ -6,6 +6,7 @@ export const SKILL_SOURCE_NAMES: Record<SkillSource, string> = {
   workspace: "Yours",
   project: "Project",
   everywhere: "Yours, everywhere",
+  matt: "Matt Pocock's",
   house: "House",
 };
 
@@ -34,6 +35,11 @@ export const UsableSkillSummary = z.object({
   ...SkillAbout,
   /** One of the owner's, or a project's, with a house skill's name, which it replaces here. */
   replacesHouse: z.boolean(),
+  /**
+   * The message box's skill picker lists it: every skill but Matt Pocock's that the model loads
+   * itself, of which the picker lists only those the owner starts (`picker` in `matt.json`).
+   */
+  inPicker: z.boolean(),
 });
 export type UsableSkillSummary = z.infer<typeof UsableSkillSummary>;
 
