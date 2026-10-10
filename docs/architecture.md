@@ -342,7 +342,12 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   bar with Type and the talk strip on a tablet or the unfolded Fold, tiles across the top on the folded one. The
   page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
   it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The page stays mounted
-  in the same place whichever frame is round it, so folding keeps its scroll and a half-written message.
+  in the same place whichever frame is round it, so folding keeps its scroll and a half-written message. The
+  frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
+  beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
+  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; both files' classes
+  are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
+  (`sheet.tsx`).
   **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that

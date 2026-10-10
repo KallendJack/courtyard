@@ -12,8 +12,10 @@ import { ArrowUp, Book, Camera, Paperclip, Square } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  lazy,
   memo,
   type RefObject,
+  Suspense,
   useEffect,
   useId,
   useLayoutEffect,
@@ -35,6 +37,9 @@ import { useAction } from "@/lib/use-action";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
 import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
+
+/** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
+const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
 
 /** The tallest the skill list grows, and the least room above the box it opens into. */
 const LIST_HEIGHT = 448;
@@ -237,8 +242,9 @@ export const Composer = memo(function Composer(props: {
         chooseModel: () => setChoosing("model"),
         ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
         model,
+        ...(choosing === undefined ? {} : { choosing }),
       }),
-    [dock, model, hasSkills],
+    [dock, model, hasSkills, choosing],
   );
 
   const submit = async (event: FormEvent) => {
@@ -296,8 +302,9 @@ export const Composer = memo(function Composer(props: {
   // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
 
-  // The sheets the chips above a phone's box open, and the Handheld frame's buttons (#193).
-  const sheets = (compact || docked) && (
+  // The sheets the chips above a narrow desktop window's box open. The Handheld frame's buttons
+  // open its own sheets instead (#194).
+  const sheets = compact && !docked && (
     <>
       <Sheet
         title="Model for this session"
@@ -330,7 +337,7 @@ export const Composer = memo(function Composer(props: {
           )}
         </div>
       )}
-      {!docked && sheets}
+      {sheets}
       <div className="relative">
         <input
           ref={picker}
@@ -565,7 +572,17 @@ export const Composer = memo(function Composer(props: {
   // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page.
   return docked ? (
     <>
-      {sheets}
+      <Suspense fallback={null}>
+        <HandheldChoices
+          choosing={choosing}
+          close={() => setChoosing(undefined)}
+          models={models}
+          choice={choice}
+          skills={skills && { workspaceName: skills.workspaceName, list: pickerSkills }}
+          skill={skill}
+          pick={pick}
+        />
+      </Suspense>
       {createPortal(messageBox, dock.element)}
     </>
   ) : (

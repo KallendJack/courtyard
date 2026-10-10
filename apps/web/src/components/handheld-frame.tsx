@@ -18,8 +18,8 @@ import { Button } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import type { Layout, MessageBox } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
+import { HandheldSheet } from "./handheld-sheet.tsx";
 import { RecentSessions } from "./recent-sessions.tsx";
-import { Sheet } from "./sheet.tsx";
 import { WorkspaceDot } from "./workspace-colour.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
@@ -169,6 +169,7 @@ export default function HandheldFrame(props: {
       <QuickAction
         look={tablet ? "disc" : "row"}
         label="Skills"
+        lit={box?.choosing === "skill"}
         disabled={box?.chooseSkill === undefined}
         onClick={() => box?.chooseSkill?.()}
       >
@@ -177,6 +178,7 @@ export default function HandheldFrame(props: {
       <QuickAction
         look={tablet ? "disc" : "row"}
         label="Photo"
+        lit={false}
         disabled={box === undefined}
         onClick={() => box?.pickPhotos()}
       >
@@ -185,6 +187,7 @@ export default function HandheldFrame(props: {
       <QuickAction
         look={tablet ? "disc" : "row"}
         label="Model"
+        lit={box?.choosing === "model"}
         {...(box === undefined ? {} : { value: box.model })}
         disabled={box === undefined}
         onClick={() => box?.chooseModel()}
@@ -283,15 +286,25 @@ export default function HandheldFrame(props: {
         </div>
       </div>
 
-      <Sheet title="Settings" open={sheet === "settings"} onClose={() => setSheet(undefined)}>
+      <HandheldSheet
+        title="Settings"
+        open={sheet === "settings"}
+        onClose={() => setSheet(undefined)}
+        fits="top"
+      >
         <LiveUpdate />
         <Button variant="outline" onClick={props.onLogOut}>
           <LogOut aria-hidden />
           Log out
         </Button>
-      </Sheet>
+      </HandheldSheet>
       {here !== undefined && (
-        <Sheet title={here.name} open={sheet === "recent"} onClose={() => setSheet(undefined)}>
+        <HandheldSheet
+          title={here.name}
+          open={sheet === "recent"}
+          onClose={() => setSheet(undefined)}
+          fits="top"
+        >
           <Link
             to="/workspaces/$workspaceId"
             params={{ workspaceId: here.id }}
@@ -300,7 +313,7 @@ export default function HandheldFrame(props: {
             Open {here.name}
           </Link>
           <RecentSessions workspaces={props.workspaces} />
-        </Sheet>
+        </HandheldSheet>
       )}
     </>
   );
@@ -357,12 +370,15 @@ function QuickAction({
   look,
   label,
   value,
+  lit,
   children,
   ...props
 }: Omit<ComponentProps<"button">, "className" | "aria-label" | "children"> & {
   look: "disc" | "row";
   label: string;
   value?: string;
+  /** Its sheet is open: the disc shows lit beside it (Paper board 09). */
+  lit: boolean;
   children: ReactNode;
 }) {
   const name = value === undefined ? label : `${label}: ${value}`;
@@ -374,10 +390,22 @@ function QuickAction({
       className="group flex flex-col items-center gap-1.5 outline-none disabled:opacity-40"
       {...props}
     >
-      <span className="flex size-15 items-center justify-center rounded-full bg-secondary text-[15px]/[18px] font-extrabold text-foreground ring-1 ring-input ring-inset group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5">
+      <span
+        className={classes(
+          "flex size-15 items-center justify-center rounded-full text-[15px]/[18px] font-extrabold group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5",
+          lit
+            ? "bg-primary text-primary-foreground shadow-[0_0_0_5px_color-mix(in_oklab,var(--color-primary)_20%,transparent),0_0_24px_color-mix(in_oklab,var(--color-primary)_50%,transparent)]"
+            : "bg-secondary text-foreground ring-1 ring-input ring-inset",
+        )}
+      >
         {children}
       </span>
-      <span className="text-[11px]/3.5 font-bold tracking-[0.06em] text-placeholder uppercase">
+      <span
+        className={classes(
+          "text-[11px]/3.5 font-bold tracking-[0.06em] uppercase",
+          lit ? "text-foreground" : "text-placeholder",
+        )}
+      >
         {label}
       </span>
     </button>

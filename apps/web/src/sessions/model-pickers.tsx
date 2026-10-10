@@ -61,15 +61,32 @@ export const choiceSummary = ({ model, effort }: ModelChoice) =>
       : `${model.label} · ${effortLabel(model, effort)}`;
 
 /**
- * The model alone, in a word or two, as the Handheld frame's Model button shows it (#193):
- * "Claude · Sonnet 5" as "Sonnet 5", and Claude Code's "Default (Opus 5.5)" as "Opus 5.5".
+ * A model in a word or two, as the Handheld frame shows it (#193): "Claude · Sonnet 5" as
+ * "Sonnet 5", and Claude Code's "Default (Opus 5.5)" as "Opus 5.5".
  */
-export const modelName = ({ model }: ModelChoice) => {
-  if (model === undefined) return "No models";
+export const shortModelName = (model: OfferedModel) => {
   const name = model.label.split(" · ").at(-1) ?? model.label;
   const inDefault = /^Default \((.+)\)$/.exec(name)?.[1];
   return inDefault ?? name.replace(/\s*\(.*\)$/, "");
 };
+
+/** The model alone, as the Handheld frame's Model button shows it (#193). */
+export const modelName = ({ model }: ModelChoice) =>
+  model === undefined ? "No models" : shortModelName(model);
+
+/**
+ * A word under a model's name in the Handheld frame's Model row (#194), to tell models apart: its
+ * usage limit if it's at one, "default" for its provider's default, else whose it is ("Claude").
+ */
+export const modelWord = (model: OfferedModel) => {
+  if (model.limit !== undefined) return limitLabel(model.limit);
+  const [provider, name] = model.label.split(" · ");
+  if (name === undefined) return /\((.+)\)$/.exec(model.label)?.[1] ?? "";
+  return /^Default \(/.test(name) ? "default" : (provider ?? "");
+};
+
+/** A model's key, as the pickers' values name it. */
+export const modelKey = keyOf;
 
 /**
  * The model picker, and beside it the effort picker for a model that takes levels of effort:

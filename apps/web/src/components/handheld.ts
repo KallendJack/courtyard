@@ -39,6 +39,8 @@ export type MessageBox = {
   chooseSkill?: () => void;
   /** The model it sends with, in a word or two ("Sonnet 5"). */
   model: string;
+  /** Which of its sheets is open, so the button that opened it shows lit (#194). */
+  choosing?: "skill" | "model";
 };
 
 /**

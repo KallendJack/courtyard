@@ -2,8 +2,9 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { Button } from "./button.tsx";
 
 /**
- * A panel that rises from the bottom of a phone's screen over the page, for a few choices, with
- * Done to close it (the model and effort for a session). The browser's own dialog, so Escape,
+ * A panel that rises from the bottom of a narrow window over the page, for a few choices, with
+ * Done to close it (the model and effort for a session). A touch screen's Handheld frame has its own
+ * sheets (handheld-sheet.tsx). The browser's own dialog, so Escape,
  * focus and screen readers work as they should. Tapping the dimmed page closes it too. What's in it
  * is only there while it's open, so the page never holds a second copy of its controls. Safe on
  * the first load (ADR 0012): it brings no class-merging code, as a component library's dialog would.
