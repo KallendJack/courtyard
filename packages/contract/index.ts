@@ -1,4 +1,5 @@
 export { ApiError } from "./lib/api-error.ts";
+export { ApprovalAnswer, ApprovalAnswering, ApprovalAsk } from "./lib/approval.ts";
 export {
   ATTACHMENTS_FIELD,
   Attachment,

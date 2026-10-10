@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   type Activity,
+  type ApprovalAnswer,
+  type ApprovalAsk,
   type Attachment,
   type CarryOnRequest,
   type ChangeId,
@@ -158,6 +160,10 @@ export type SessionError =
   | { readonly kind: "cannot-code"; readonly provider: string }
   /** A code session couldn't start its session branch (ADR 0007), and why. */
   | { readonly kind: "branch-refused"; readonly refusal: BranchRefusal }
+  /** No approval in the session has that event number (#171). */
+  | { readonly kind: "approval-not-found" }
+  /** The approval's turn has ended (stopped, or the worker restarted), so nothing waits on it. */
+  | { readonly kind: "approval-closed" }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -319,6 +325,8 @@ type RunningSession = {
   listeners: Set<(event: SessionEvent) => void>;
   /** Appends and subscriptions run one at a time, so events are gapless and none is missed. */
   queue: Promise<unknown>;
+  /** The approvals its turn is waiting on (#171), by event number: each takes the owner's answer. */
+  approvals: Map<number, (answer: ApprovalAnswer) => void>;
 };
 
 /**
@@ -358,6 +366,7 @@ export const createSessions = (options: {
       nextSeq: undefined,
       listeners: new Set(),
       queue: Promise.resolve(),
+      approvals: new Map(),
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -726,20 +735,75 @@ export const createSessions = (options: {
           await report(decided.value);
           return ok(null);
         };
+        /**
+         * Asks the owner's approval (#171) and waits for it, with no time limit: Allow decides it
+         * as `allowed`, Deny refuses it, and a stop ends the wait.
+         */
+        const approval = async (asking: {
+          ask: ApprovalAsk;
+          why: string | undefined;
+          allowed: Activity;
+        }): Promise<Result<null, string>> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return err(codeRefusalReason({ kind: "stopped" }));
+          }
+          let answered: (answer: ApprovalAnswer | "stopped") => void = () => {};
+          const answer = new Promise<ApprovalAnswer | "stopped">((resolve) => {
+            answered = resolve;
+          });
+          const onStop = () => answered("stopped");
+          stopper.signal.addEventListener("abort", onStop, { once: true });
+          // Waited on from the moment it's recorded, so an answer can't arrive before the wait.
+          const asked = await inOrder(session, async () => {
+            const recorded = await writeEvent({
+              id: turn.id,
+              session,
+              event: {
+                type: "approval-requested",
+                ask: asking.ask,
+                ...(asking.why === undefined ? {} : { why: asking.why }),
+              },
+            });
+            if (recorded.ok) session.approvals.set(recorded.value.seq, answered);
+            return recorded;
+          });
+          if (!asked.ok) {
+            recordingLost = true;
+            answered("stopped");
+          }
+          const given = await answer;
+          stopper.signal.removeEventListener("abort", onStop);
+          if (asked.ok) session.approvals.delete(asked.value.seq);
+          if (given === "stopped") return err(codeRefusalReason({ kind: "stopped" }));
+          return decide(
+            given === "allow"
+              ? ok(asking.allowed)
+              : err({ kind: "denied", what: asking.ask.kind === "command" ? "command" : "edit" }),
+          );
+        };
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
         const codeTurn = (worktree: string, branch: string): CodeTurn => ({
           worktree,
           edit: async (path) => {
             const shown = await editableIn(worktree, path);
-            return decide(
-              shown === undefined
-                ? err({ kind: "outside" })
-                : ok({ kind: "edited-file", path: shown }),
-            );
+            if (shown !== undefined) return decide(ok({ kind: "edited-file", path: shown }));
+            const outside = resolve(worktree, path);
+            return approval({
+              ask: { kind: "edit", path: outside },
+              why: undefined,
+              allowed: { kind: "edited-file", path: outside },
+            });
           },
-          run: async (command) => {
+          run: async (command, why) => {
             const allowed = await commandAllowed({ worktree, branch }, command);
-            return decide(allowed.ok ? ok({ kind: "ran-command", command }) : allowed);
+            if (allowed.ok) return decide(ok({ kind: "ran-command", command }));
+            const refused = allowed.error;
+            if (refused.kind !== "needs-approval") return decide(err(refused));
+            return approval({
+              ask: { kind: "command", command, reason: refused.reason },
+              why,
+              allowed: { kind: "ran-command", command },
+            });
           },
         });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
@@ -1375,6 +1439,49 @@ export const createSessions = (options: {
       }
       current.stopper.abort();
       return ok(null);
+    },
+
+    /**
+     * The owner's answer to an approval its turn is waiting on (#171), by the approval's event
+     * number. Recorded in the session, so every device sees it answered, and only the first answer
+     * counts: answering again, from any device, gives back the one that stands.
+     */
+    answerApproval: async (answering: {
+      rawId: string;
+      approval: number;
+      answer: ApprovalAnswer;
+    }): Promise<Result<ApprovalAnswer, SessionError>> => {
+      const found = await findSession(answering.rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      return inOrder(session, async (): Promise<Result<ApprovalAnswer, SessionError>> => {
+        const events = await readEvents(id);
+        if (!events.ok) return events;
+        const asked = events.value.some(
+          (event) => event.type === "approval-requested" && event.seq === answering.approval,
+        );
+        if (!asked) return err({ kind: "approval-not-found" });
+        const earlier = events.value.find(
+          (event) => event.type === "approval-answered" && event.approval === answering.approval,
+        );
+        if (earlier?.type === "approval-answered") return ok(earlier.answer);
+        const waiting = session.approvals.get(answering.approval);
+        if (waiting === undefined) return err({ kind: "approval-closed" });
+        const recorded = await writeEvent({
+          id,
+          session,
+          event: {
+            type: "approval-answered",
+            approval: answering.approval,
+            answer: answering.answer,
+          },
+        });
+        if (!recorded.ok) return recorded;
+        session.approvals.delete(answering.approval);
+        waiting(answering.answer);
+        return ok(answering.answer);
+      });
     },
 
     /** One of the session's attachments (#78) and its bytes, by its id. */

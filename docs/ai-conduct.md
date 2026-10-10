@@ -232,28 +232,28 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
 > without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch.
-> Anything else, such as a change outside your working directory or another command, is refused with the reason: find
-> another way, or tell the owner what you need. Run one command at a time, since a command that chains or substitutes
-> another never runs.
+> Anything else, such as a change outside your working directory or another command, waits for the owner to allow it;
+> if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
+> a command that chains or substitutes another never runs.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
-same way for every provider, and a refusal tells the model why, in one of these:
+same way for every provider. An edit outside the worktree (or to git's own file there), a command off the command
+allowlist, and a command naming a path outside the worktree each wait for the owner's approval (#171), with no time
+limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything else refused, tells the
+model why, in one of these:
 
-- An edit outside the worktree, or to git's own file there: "Only files in your session branch's worktree can be
-  changed."
+- A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
+  why it's needed."
+- An edit the owner denied: "The owner denied that change, so the file wasn't changed. Find another way, or tell the
+  owner why it's needed."
 - A command that chains, pipes, redirects or substitutes: "Run one command at a time: a command that chains, pipes,
   redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own."
-- A command off the command allowlist: "That command isn't on this workspace's command allowlist, so it didn't run.
-  The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build,
-  e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another
-  way with those, or tell the owner what you need run." Approvals take its place next (#171).
-- A command naming a path outside the worktree: "That command names a path outside your session branch's worktree, so
-  it didn't run."
 - A commit while the worktree is off the session branch: "Commits go on your session branch, <branch>, and the
   worktree isn't on it now, so that didn't run."
 - A command whose quotes don't close: "That command couldn't be read: check its quotes close."
-- Anything asked after the owner stopped the turn: "The owner stopped this turn, so nothing more is done."
+- Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
+  this turn, so nothing more is done."
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.

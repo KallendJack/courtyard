@@ -118,10 +118,16 @@ export type ToolReply = { readonly ok: boolean; readonly content: readonly ToolC
 export type CodeTurn = {
   /** The session branch's worktree: the turn's working directory, and the only place it edits. */
   readonly worktree: string;
-  /** Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. */
+  /**
+   * Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. One
+   * outside the worktree waits for the owner's approval (#171).
+   */
   readonly edit: (path: string) => Promise<Result<null, string>>;
-  /** Whether `command` may run in the worktree, or why not. */
-  readonly run: (command: string) => Promise<Result<null, string>>;
+  /**
+   * Whether `command` may run in the worktree, or why not. One off the command allowlist waits for
+   * the owner's approval (#171), shown with `why`, what the model said it's for, when it said.
+   */
+  readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
 };
 
 export type TurnInput = {

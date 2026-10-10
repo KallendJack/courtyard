@@ -761,6 +761,35 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("waits as long as the owner takes to answer an approval, telling the worker what a command is for (#171)", async () => {
+    const { worktree } = await codeSession();
+    const heard: (string | undefined)[] = [];
+    const code: CodeTurn = {
+      worktree,
+      edit: async () => ok(null),
+      run: async (_command, why) => {
+        heard.push(why);
+        return ok(null);
+      },
+    };
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    await preToolUse(options, {
+      name: "Bash",
+      input: { command: "pnpm add left-pad", description: "Add the padding package" },
+    });
+    await preToolUse(options, { name: "Bash", input: { command: "git status" } });
+
+    expect(heard).toEqual(["Add the padding package", undefined]);
+    // Claude Code gives up on a hook after its timeout: a paused night is far shorter than this.
+    const timeout = options.hooks?.PreToolUse?.[0]?.timeout ?? 0;
+    expect(timeout).toBeGreaterThanOrEqual(7 * 24 * 60 * 60);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("gives a planning turn no edits, commands, settings or skills of its own", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     await runTurn(claudeCode);

@@ -317,7 +317,7 @@ const seen = (attachments: readonly FramedAttachment[]) => {
 };
 
 const EDIT_FILE = /^edit file (\S+): (.*)$/i;
-const RUN_COMMAND = /^run command: (.+)$/i;
+const RUN_COMMAND = /^run command: (.+?)(?: \(for: (.+)\))?$/i;
 
 /** The first line a command printed, or nothing. */
 const firstLine = (output: string) =>
@@ -343,20 +343,21 @@ const runIn = (worktree: string, command: string) =>
 /**
  * What a message scripts the fake doing in a code session (ADR 0007), one per line, in order:
  * "edit file notes.md: The rack goes on the back wall" writes that line as the file, and "run
- * command: git status" runs the command in the worktree, each only once the worker allows it.
- * Says how each went, or why it was refused.
+ * command: git status" runs the command in the worktree, each only once the worker allows it (or
+ * the owner does, #171). A command can say what it's for at the end: "run command: git --version
+ * (for: To check which git runs here)". Says how each went, or why it was refused.
  */
 const scriptedCoding = async (code: CodeTurn, message: string) => {
   let said = "";
   for (const line of message.split("\n").map((each) => each.trim())) {
     const [, path, text] = EDIT_FILE.exec(line) ?? [];
-    const [, command] = RUN_COMMAND.exec(line) ?? [];
+    const [, command, why] = RUN_COMMAND.exec(line) ?? [];
     if (path !== undefined && text !== undefined) {
       const allowed = await code.edit(path);
       if (!allowed.ok) said += `Couldn't edit ${path}: ${allowed.error} `;
       else await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
     } else if (command !== undefined) {
-      const allowed = await code.run(command);
+      const allowed = await code.run(command, why);
       said += allowed.ok
         ? await runIn(code.worktree, command)
         : `Couldn't run ${command}: ${allowed.error} `;

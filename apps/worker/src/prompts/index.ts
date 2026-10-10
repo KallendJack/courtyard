@@ -118,7 +118,7 @@ const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim()
 
 /** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
 const CODING_ACCESS =
-  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch. Anything else, such as a change outside your working directory or another command, is refused with the reason: find another way, or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: its package scripts, git and gh commands that only look, and adding and committing on your branch. Anything else, such as a change outside your working directory or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs.";
 
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
   // Only a provider that codes works in a code workspace (ADR 0007).
@@ -1190,26 +1190,24 @@ export const notOfferedReply = (name: string) =>
  */
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
 
-/** What a model in a code session is told when it edits outside its worktree (ADR 0007). */
-export const OUTSIDE_WORKTREE = "Only files in your session branch's worktree can be changed.";
-
-/** Why a code session's edit or command didn't happen, as its model is told (ADR 0007). */
+/**
+ * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
+ * the owner can allow waits for their approval instead (#171), and is told only if they deny it.
+ */
 export const codeRefusalReason = (refusal: CodeRefusal) => {
   switch (refusal.kind) {
     case "stopped":
       return "The owner stopped this turn, so nothing more is done.";
-    case "outside":
-      return OUTSIDE_WORKTREE;
     case "chained":
       return "Run one command at a time: a command that chains, pipes, redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own.";
     case "unreadable":
       return "That command couldn't be read: check its quotes close.";
-    case "off-allowlist":
-      return "That command isn't on this workspace's command allowlist, so it didn't run. The allowlist has the repository's package scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and gh commands that only look, and adding and committing on your session branch. Find another way with those, or tell the owner what you need run.";
-    case "reaches-out":
-      return "That command names a path outside your session branch's worktree, so it didn't run.";
     case "off-branch":
       return `Commits go on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
+    case "denied":
+      return refusal.what === "command"
+        ? "The owner denied that command, so it didn't run. Find another way, or tell the owner why it's needed."
+        : "The owner denied that change, so the file wasn't changed. Find another way, or tell the owner why it's needed.";
   }
 };
 

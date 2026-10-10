@@ -318,7 +318,11 @@ export const CODING_MODEL = { provider: "coder", model: "one" };
  * answers "Done." It never edits or runs anything itself, so any command can be asked about.
  */
 export const codingProvider = (
-  steps: readonly ({ readonly edit: string } | { readonly run: string })[],
+  steps: readonly (
+    | { readonly edit: string }
+    /** A command, and what the model says it's for (shown on an approval, #171). */
+    | { readonly run: string; readonly why?: string }
+  )[],
 ) => {
   const answers: Result<null, string>[] = [];
   const id = ProviderId.parse("coder");
@@ -343,7 +347,9 @@ export const codingProvider = (
       const { code } = input;
       if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
       for (const step of steps) {
-        answers.push("edit" in step ? await code.edit(step.edit) : await code.run(step.run));
+        answers.push(
+          "edit" in step ? await code.edit(step.edit) : await code.run(step.run, step.why),
+        );
       }
       await input.emit("Done.");
       return ok(null);

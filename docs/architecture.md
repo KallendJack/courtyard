@@ -340,8 +340,11 @@ Where the rest fits:
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
   `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
   Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
-  as an activity (`edited-file`, `ran-command`); anything else is refused with the reason, for now (approvals come
-  next, #171).
+  as an activity (`edited-file`, `ran-command`). A command off the allowlist, or an edit outside the worktree, is an
+  approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
+  limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
+  `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a
+  denial tells the model why.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).
