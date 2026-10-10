@@ -241,6 +241,13 @@ describe("a code workspace's command allowlist", () => {
     ["git add ../outside.txt", "reaches-out"],
     ["git log -- ~/notes", "reaches-out"],
     ["pnpm test --config=../evil.ts", "reaches-out"],
+    // A short option's value written onto it, alone or after other short options.
+    ["git commit -F../../github/gh/hosts.yml", "reaches-out"],
+    ["git commit -qF../../github/gh/hosts.yml", "reaches-out"],
+    ["git grep -f../patterns.txt rack", "reaches-out"],
+    ["git grep -fC:/path/to/patterns.txt rack", "reaches-out"],
+    ["git grep -f/path/to/patterns.txt rack", "reaches-out"],
+    ["git log -n1 --format=%s -- notes.md HEAD:../outside.txt", "reaches-out"],
   ])("asks the owner before running %s, and doesn't once they deny it", async (command, reason) => {
     const { answers, asked, ran } = await askAbout([command]);
 

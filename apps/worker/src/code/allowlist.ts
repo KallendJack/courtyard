@@ -279,10 +279,23 @@ export const ruleFor = (
     return !rest.some((argument) => rule.never?.some((never) => never.test(argument)));
   });
 
-/** The paths an argument could name: itself, and what follows `=` in `--option=value`. */
+/**
+ * The paths an argument could name: itself; whatever follows an `=` or a `:` in it
+ * (`--option=value`, `HEAD:path`), a drive's colon aside; and, for short options, whatever follows
+ * each letter, since a short option's value can be written onto it, after others too (`-F../x`,
+ * `-qF../x`).
+ */
 const pathsIn = (argument: string) => {
-  const value = /^--?[^=]+=(.*)$/.exec(argument)?.[1];
-  return value === undefined ? [argument] : [argument, value];
+  const paths = [argument];
+  for (let at = 0; at < argument.length; at += 1) {
+    const char = argument[at];
+    const drive = char === ":" && at === 1 && /^[A-Za-z]$/.test(argument[0] ?? "");
+    if ((char === "=" || char === ":") && !drive) paths.push(argument.slice(at + 1));
+  }
+  if (/^-[^-]/.test(argument)) {
+    for (let at = 2; at < argument.length; at += 1) paths.push(argument.slice(at));
+  }
+  return paths;
 };
 
 /**
