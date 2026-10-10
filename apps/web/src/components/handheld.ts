@@ -41,6 +41,15 @@ export type MessageBox = {
   model: string;
   /** Which of its sheets is open, so the button that opened it shows lit (#194). */
   choosing?: "skill" | "model";
+  /** A turn is running, so what's sent now is queued until it ends (#177). */
+  answering: boolean;
+  /**
+   * Sends what the owner said in the talk strip (#79), after anything they'd typed, as Send would.
+   * When it can't go, it waits in the opened box, saying why.
+   */
+  say: (words: string) => void;
+  /** Puts what the owner said in the box, after anything typed, to finish by keyboard. */
+  write: (words: string) => void;
 };
 
 /**

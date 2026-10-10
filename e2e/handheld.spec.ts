@@ -156,7 +156,8 @@ const everywhere = () => {
     expect((await chooser).isMultiple()).toBe(true);
   });
 
-  test("Type and the talk strip open the message box, which closes once the message is sent or the owner taps away", async ({
+  // The talk strip listens (talk.spec.ts), and opens the box only where the browser can't.
+  test("Type opens the message box, which closes once the message is sent or the owner taps away", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
@@ -169,7 +170,7 @@ const everywhere = () => {
     await expect(session(page)).toContainText("You said: Where should the rack go?");
     await expect(message(page)).toBeHidden();
 
-    await page.getByRole("button", { name: /Tap or hold to talk/ }).click();
+    await page.getByRole("button", { name: "Type" }).click();
     await expect(message(page)).toBeFocused();
     await message(page).fill("And the bikes?");
     await page.getByRole("button", { name: "Send" }).click();

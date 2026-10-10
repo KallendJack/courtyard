@@ -341,9 +341,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`): thumb rails and a bottom
   bar with Type and the talk strip on a tablet or the unfolded Fold, tiles across the top on the folded one. The
   page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
-  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The page stays mounted
-  in the same place whichever frame is round it, so folding keeps its scroll and a half-written message. The
-  frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
+  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The talk strip
+  (`talk-strip.tsx`, #79, loaded with the frame) listens through the browser's own speech recognition
+  (`speech.ts`, which also vibrates for it) and hands the words to the box to send, or to queue while a turn runs;
+  nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
+  round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
   (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; both files' classes
   are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets

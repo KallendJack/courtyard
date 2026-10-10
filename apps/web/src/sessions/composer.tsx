@@ -27,7 +27,7 @@ import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
-import { useDock } from "@/components/handheld";
+import { type MessageBox, useDock } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -231,9 +231,63 @@ export const Composer = memo(function Composer(props: {
     box.current?.focus();
   };
 
-  // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193).
+  /**
+   * Sends `message` with the box's model, effort, skill and attachments, and says whether it went.
+   * Once it has, the box empties of what was `typed` for it.
+   */
+  const sendText = async (message: string, typed: string) => {
+    const { model, effort } = choice;
+    if (!model) {
+      send.setError("No model is available. Check the providers' settings.");
+      return false;
+    }
+    if (message.trim() === "") return false;
+    const sent = await send.run(
+      {
+        text: message,
+        model: model.ref,
+        ...(effort === undefined ? {} : { effort }),
+        ...(skill === undefined ? {} : { skill }),
+      },
+      attaching.map((each) => each.file),
+    );
+    if (sent) {
+      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
+      setText((now) => (now === typed ? "" : now));
+      setSkill(undefined);
+      releasePreviews(attaching);
+      setAttaching([]);
+      dock?.close();
+    }
+    return sent;
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    await sendText(text, text);
+  };
+
+  /** What the owner said in the talk strip (#79), after anything they'd typed. */
+  const afterTyped = (words: string) => (text.trim() === "" ? words : `${text.trimEnd()} ${words}`);
+  const voice = useRef<Pick<MessageBox, "say" | "write">>({ say: () => {}, write: () => {} });
+  voice.current = {
+    // It goes as Send would send it, or waits in the open box, saying why, when it can't.
+    say: (words) => {
+      const message = afterTyped(words);
+      const waiting = send.busy || preparing > 0 || props.disabled === true || !choice.model;
+      void (async () => {
+        if (!waiting && (await sendText(message, text))) return;
+        setText(message);
+        dock?.open();
+      })();
+    },
+    write: (words) => setText(afterTyped(words)),
+  };
+
+  // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193, #79).
   const model = modelName(choice);
   const hasSkills = skills !== undefined;
+  const answering = props.stop !== undefined;
   useEffect(
     () =>
       dock?.offer({
@@ -243,35 +297,12 @@ export const Composer = memo(function Composer(props: {
         ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
         model,
         ...(choosing === undefined ? {} : { choosing }),
+        answering,
+        say: (words) => voice.current.say(words),
+        write: (words) => voice.current.write(words),
       }),
-    [dock, model, hasSkills, choosing],
+    [dock, model, hasSkills, choosing, answering],
   );
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const { model, effort } = choice;
-    if (!model) return send.setError("No model is available. Check the providers' settings.");
-    if (text.trim() === "") return;
-    const message = {
-      text,
-      model: model.ref,
-      ...(effort === undefined ? {} : { effort }),
-      ...(skill === undefined ? {} : { skill }),
-    };
-    if (
-      await send.run(
-        message,
-        attaching.map((each) => each.file),
-      )
-    ) {
-      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
-      setText((now) => (now === text ? "" : now));
-      setSkill(undefined);
-      releasePreviews(attaching);
-      setAttaching([]);
-      dock?.close();
-    }
-  };
 
   /** Arrows move through the skill list, Enter picks, Escape closes it. */
   const onListKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
