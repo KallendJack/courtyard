@@ -16,7 +16,7 @@ import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../live-update.tsx";
 import { Button } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
-import { FrameButton } from "./frame-button.tsx";
+import { FrameButton, modelMark } from "./frame-button.tsx";
 import type { Layout, MessageBox } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
@@ -26,13 +26,6 @@ import { WorkspaceDot } from "./workspace-colour.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
 addStylesheet("handheld-frame", css);
-
-/** The model in a disc on the rail: its initials and numbers, "Sonnet 5" as "S5". */
-const initials = (model: string) =>
-  model
-    .split(/[\s-]+/)
-    .map((word) => (/^\d/.test(word) ? word : word.charAt(0).toUpperCase()))
-    .join("");
 
 /** The frame's pieces, set on the page so the page keeps clear of them (handheld-frame.css). */
 const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"] as const;
@@ -221,7 +214,7 @@ export default function HandheldFrame(props: {
         disabled={box === undefined}
         onClick={() => box?.chooseModel()}
       >
-        {box !== undefined && (tablet ? initials(box.model) : box.model)}
+        {box !== undefined && (tablet ? modelMark(box.model) : box.model)}
       </QuickAction>
     </>
   );

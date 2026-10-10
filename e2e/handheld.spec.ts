@@ -18,6 +18,87 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return box;
 };
 
+/** The line at the Skills sheet's foot (#201): the model a message goes with, and Change. */
+const changeModel = (sheet: ReturnType<Page["locator"]>) =>
+  sheet.getByRole("button", { name: /Change$/ });
+
+/** A choice in one of a sheet's radio groups, as a finger taps it: its whole row or tile. */
+const choiceIn = (group: ReturnType<Page["locator"]>, name: string | RegExp) =>
+  group.locator("label", { has: group.page().getByRole("radio", { name }) });
+
+const effortsOf = (levels: readonly string[]) =>
+  levels.map((id) => ({
+    id,
+    label:
+      { medium: "Medium", xhigh: "Extra high" }[id] ?? id.charAt(0).toUpperCase() + id.slice(1),
+  }));
+const CAN = {
+  readsFiles: true,
+  codes: true,
+  usesTools: true,
+  savesContext: true,
+  searchesWeb: true,
+};
+const CLAUDE_EFFORTS = effortsOf(["low", "medium", "high", "xhigh", "max"]);
+const CODEX_EFFORTS = effortsOf(["low", "medium", "high", "xhigh"]);
+/** The longest-named model the real providers offer, much as Codex names one. */
+const LONGEST = "GPT-5.5-codex-long-context-experimental";
+const CODEX_NAMES = [
+  "GPT-6.1",
+  "GPT-6-codex",
+  "GPT-6.1-codex-max",
+  "GPT-6-codex-mini",
+  "GPT-5.6-codex",
+  "GPT-5.6 Thinking (extended reasoning preview)",
+  LONGEST,
+];
+
+/**
+ * The providers offering as many models, as long-named, as the real Claude and Codex do (#201):
+ * Claude Code's default (Opus 5.5) and four named models, and Codex's seven.
+ */
+const offerManyModels = (page: Page) =>
+  page.route("**/api/providers", (route) =>
+    route.fulfill({
+      json: {
+        providers: [
+          {
+            id: "claude",
+            label: "Claude",
+            available: true,
+            capabilities: CAN,
+            models: [
+              ["default", "Opus 5.5"],
+              ["opus", "Opus 5.5"],
+              ["fable", "Fable 5.1"],
+              ["sonnet", "Sonnet 5.5"],
+              ["haiku", "Haiku 4.5"],
+            ].map(([id, name]) => ({
+              id,
+              label: id === "default" ? `Claude · Default (${name})` : `Claude · ${name}`,
+              name,
+              ...(id === "default" ? { followsDefault: true } : {}),
+              efforts: CLAUDE_EFFORTS,
+            })),
+          },
+          {
+            id: "codex",
+            label: "Codex",
+            available: true,
+            capabilities: CAN,
+            models: CODEX_NAMES.map((name) => ({
+              id: name.toLowerCase().replaceAll(/[^a-z0-9.-]+/g, "-"),
+              label: `Codex · ${name}`,
+              name,
+              efforts: CODEX_EFFORTS,
+              defaultEffort: "medium",
+            })),
+          },
+        ],
+      },
+    }),
+  );
+
 const message = (page: Page) => page.getByRole("textbox", { name: "Message" });
 const session = (page: Page) => page.getByRole("list", { name: "Session" });
 
@@ -158,11 +239,9 @@ const everywhere = () => {
         : { radio: /^Fake two/, name: "Model: Fake two" };
     await modelButton.click();
     const model = page.getByRole("dialog", { name: "Model" });
-    // Each choice is a tile to tap, holding its radio button.
+    // Each choice is a row or a tile to tap, holding its radio button.
     const tile = (group: string, name: string | RegExp) =>
-      model
-        .getByRole("radiogroup", { name: group })
-        .locator("label", { has: page.getByRole("radio", { name }) });
+      choiceIn(model.getByRole("radiogroup", { name: group }), name);
     await tile("Model", other.radio).tap();
     await tile("Effort", "High").tap();
     await page.keyboard.press("Escape");
@@ -177,6 +256,93 @@ const everywhere = () => {
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Photo", exact: true }).click();
     expect((await chooser).isMultiple()).toBe(true);
+  });
+
+  test("the message box is only the message and Send: skills, photos and the model come from the frame's buttons", async ({
+    page,
+  }) => {
+    // A workspace's box, which starts a session, and a session's.
+    for (const [where, button] of [
+      ["/workspaces/garage-gym", "Start"],
+      [`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`, "Send"],
+    ] as const) {
+      await page.goto(where);
+      await page.getByRole("button", { name: "Type" }).click();
+      await expect(message(page)).toBeFocused();
+      const box = page.locator("form", { has: message(page) });
+      await expect(box.getByRole("button")).toHaveText([button]);
+      await expect(box.getByRole("combobox")).toHaveCount(0);
+
+      // A `/` is only a slash: no list of skills opens in the box.
+      await message(page).fill("/");
+      await expect(page.getByRole("listbox")).toHaveCount(0);
+      await message(page).fill("");
+    }
+  });
+
+  test("with as many models as the providers offer, Model lists each by its full name, by provider", async ({
+    page,
+  }) => {
+    await offerManyModels(page);
+    await page.goto("/workspaces/garage-gym");
+
+    // The Skills sheet's foot says the model, its provider and effort, and changes it.
+    await page.getByRole("button", { name: "Skills" }).click();
+    const skills = page.getByRole("dialog", { name: "Skills" });
+    await expect(changeModel(skills)).toContainText("Opus 5.5");
+    await expect(changeModel(skills)).toContainText("Claude · default effort");
+    await changeModel(skills).click();
+    await expect(skills).toBeHidden();
+    const sheet = page.getByRole("dialog", { name: "Model" });
+    await expect(sheet).toBeVisible();
+    const models = sheet.getByRole("radiogroup", { name: "Model" });
+
+    // Claude Code's default is the model it resolves to, once, saying so, and chosen.
+    const opus = models.getByRole("radio", { name: /^Opus 5\.5/ });
+    await expect(opus).toHaveCount(1);
+    await expect(opus).toBeChecked();
+    await expect(choiceIn(models, /^Opus 5\.5/)).toContainText("Claude's default");
+
+    // By provider: each of Claude's; Codex's first few, the rest folded under a line.
+    await expect(models.getByRole("group", { name: "Claude" }).getByRole("radio")).toHaveCount(4);
+    const codex = models.getByRole("group", { name: "Codex" });
+    await expect(codex.getByRole("radio")).toHaveCount(3);
+    await codex.getByRole("button", { name: "4 more Codex models" }).click();
+    await expect(codex.getByRole("radio")).toHaveCount(7);
+
+    // Every name whole, never cut short, and inside the sheet.
+    const edges = await boxOf(sheet);
+    for (const name of ["Fable 5.1", "Sonnet 5.5", "Haiku 4.5", ...CODEX_NAMES]) {
+      const text = models.getByText(name, { exact: true });
+      await text.scrollIntoViewIfNeeded();
+      expect(await text.evaluate((shown) => shown.scrollWidth <= shown.clientWidth)).toBe(true);
+      const box = await boxOf(text);
+      expect(box.x).toBeGreaterThanOrEqual(edges.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(edges.x + edges.width);
+    }
+
+    // Effort: Default and each level, on one line at the sheet's foot.
+    const effort = sheet.getByRole("radiogroup", { name: "Effort" });
+    await expect(effort).toBeInViewport();
+    const tiles = effort.locator("label");
+    await expect(tiles).toHaveText(["Default", "Low", "Med", "High", "XHigh", "Max"]);
+    const tops = await tiles.evaluateAll((all) =>
+      all.map((tile) => tile.getBoundingClientRect().top),
+    );
+    expect(new Set(tops).size).toBe(1);
+
+    // Picking one, the longest named.
+    await choiceIn(models, LONGEST).tap();
+    await expect(models.getByRole("radio", { name: LONGEST })).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: `Model: ${LONGEST}` })).toBeVisible();
+
+    // The chosen one is never folded away.
+    await page.getByRole("button", { name: /^Model: / }).click();
+    await expect(models.getByRole("radio", { name: LONGEST })).toBeChecked();
+    await expect(codex.getByRole("radio")).toHaveCount(4);
+    await expect(codex.getByRole("button", { name: "3 more Codex models" })).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   // The talk strip listens (talk.spec.ts), opening the box for the words it hears.
@@ -349,12 +515,13 @@ test.describe("unfolded", () => {
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(type.y);
     // The skills, each with what it's for, then the model and its effort at the foot.
+    // The skills, each with what it's for, then at its foot one line for the model (#201).
     const skills = await boxOf(sheet.getByRole("list", { name: "Skills" }));
-    const models = await boxOf(sheet.getByRole("radiogroup", { name: "Model" }));
-    const effort = await boxOf(sheet.getByRole("radiogroup", { name: "Effort" }));
-    expect(skills.y).toBeLessThan(models.y);
-    expect(models.y).toBeGreaterThan(box.y + box.height / 2);
-    expect(effort.y + effort.height).toBeLessThanOrEqual(box.y + box.height);
+    const model = await boxOf(changeModel(sheet));
+    expect(skills.y).toBeLessThan(model.y);
+    expect(model.y).toBeGreaterThan(box.y + box.height * 0.75);
+    expect(model.y + model.height).toBeLessThanOrEqual(box.y + box.height);
+    await expect(sheet.getByRole("radiogroup")).toHaveCount(0);
     await expect(sheet.getByRole("button", { name: /^Programme check/ })).toBeEnabled();
     await expect(sheet.getByRole("button", { name: /^Ride log chart/ })).toBeDisabled();
 
@@ -414,7 +581,8 @@ test.describe("on the cover screen", () => {
     expect(box.y + box.height).toBeGreaterThan(COVER.height - 1);
     expect(box.y + box.height).toBeLessThanOrEqual(COVER.height + 1);
     expect(box.height).toBeLessThanOrEqual(COVER.height * 0.85 + 1);
-    await expect(sheet.getByRole("radiogroup", { name: "Model" })).toBeInViewport();
+    await expect(changeModel(sheet)).toBeInViewport();
+    await expect(sheet.getByRole("radiogroup")).toHaveCount(0);
 
     // The last skill is further down the list than there's room for: it scrolls into view inside.
     const last = sheet.getByRole("button", { name: /^warm-up/ });

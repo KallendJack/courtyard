@@ -2,8 +2,18 @@ import type { ComponentProps, ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
 /**
- * The Handheld frame's buttons (#193, #194, Paper boards Handheld · 00, 09, 10): thumb-sized, each
- * pressing in a little under a finger, with the theme's ring for the keyboard. Its classes are off
+ * A model as short as it goes, as the Model disc and the model line in the Skills sheet show it:
+ * its initials and numbers, "Sonnet 5" as "S5".
+ */
+export const modelMark = (model: string) =>
+  model
+    .split(/[\s-]+/)
+    .map((word) => (/^\d/.test(word) ? word : word.charAt(0).toUpperCase()))
+    .join("");
+
+/**
+ * The Handheld frame's buttons (#193, #194, #201, Paper boards Handheld · 00, 09, 10, 28, 29):
+ * thumb-sized, each pressing in a little under a finger, with the theme's ring for the keyboard. Its classes are off
  * the first load, in handheld-frame.css, and apply only inside the frame's own pieces. Since
  * nothing merges classes, each look sets its colours either lit (`on`) or not (`off`), never both.
  */
@@ -61,6 +71,24 @@ const LOOKS = {
     base: "flex min-h-14.5 w-full items-center gap-3.5 rounded-lg px-3.5 py-2 text-left focus-visible:ring-3 focus-visible:ring-ring/50 enabled:active:bg-accent disabled:[&_svg]:opacity-40 [&_svg]:size-5 [&_svg]:shrink-0",
     off: "[&_svg]:text-foreground/70",
     on: "bg-accent [&_svg]:text-primary-text",
+  },
+  /** The line at a sheet's foot that opens another (the model, Paper board Handheld · 28). */
+  line: {
+    base: classes(
+      PRESS,
+      "flex w-full items-center gap-3 rounded-lg bg-secondary px-3.5 py-3 text-left [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-foreground/70",
+    ),
+    off: "",
+    on: "",
+  },
+  /** "4 more Codex models": a few more to show in a sheet's list (Paper board Handheld · 29). */
+  more: {
+    base: classes(
+      PRESS,
+      "flex items-center gap-2 self-start rounded-bubble px-3 py-2.5 text-[12px]/4 font-bold text-foreground/70 [&_svg]:size-3 [&_svg]:shrink-0",
+    ),
+    off: "",
+    on: "",
   },
 } as const;
 

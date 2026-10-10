@@ -204,8 +204,9 @@ export const Composer = memo(function Composer(props: {
   const skills = props.skills;
   const pickerSkills = skills?.list.filter(inPicker) ?? [];
   const slash = SLASH.exec(text)?.[1];
+  // Docked in the Handheld frame, skills come only from its Skills sheet (#201).
   const menuOpen =
-    skills !== undefined && (listOpen || (slash !== undefined && dismissed !== text));
+    !docked && skills !== undefined && (listOpen || (slash !== undefined && dismissed !== text));
   const shown = menuOpen ? matchingSkills(pickerSkills, slash ?? "") : [];
   const pickable = shown.filter(usable);
   const highlighted = pickable.find((s) => s.name === active) ?? pickable[0];
@@ -470,7 +471,7 @@ export const Composer = memo(function Composer(props: {
               compact && "max-md:flex max-md:items-center max-md:gap-1",
             )}
           >
-            {compact && (
+            {compact && !docked && (
               <span className="contents md:hidden">
                 <AttachButtons
                   look="plain"
@@ -530,35 +531,40 @@ export const Composer = memo(function Composer(props: {
               className="block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
             />
             <div className="flex items-center gap-2">
-              <span className={classes("contents", compact && "max-md:hidden")}>
-                <AttachButtons
-                  look="disc"
-                  camera={!compact}
-                  full={full}
-                  picker={picker}
-                  cameraInput={camera}
-                />
-                {full && (
-                  <span className="text-xs text-muted-foreground">
-                    {attaching.length} of {ATTACHMENTS.perMessage}
+              {/* Docked in the Handheld frame, its Photo, Model and Skills buttons do these (#201). */}
+              {!docked && (
+                <>
+                  <span className={classes("contents", compact && "max-md:hidden")}>
+                    <AttachButtons
+                      look="disc"
+                      camera={!compact}
+                      full={full}
+                      picker={picker}
+                      cameraInput={camera}
+                    />
+                    {full && (
+                      <span className="text-xs text-muted-foreground">
+                        {attaching.length} of {ATTACHMENTS.perMessage}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
-              {skills !== undefined && (
-                <Chip
-                  icon={<Book />}
-                  opens="listbox"
-                  open={menuOpen}
-                  wideOnly={compact}
-                  onClick={() => {
-                    if (menuOpen) closeList();
-                    else setListOpen(true);
-                    box.current?.focus();
-                  }}
-                >
-                  Skill
-                </Chip>
+                  <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
+                  {skills !== undefined && (
+                    <Chip
+                      icon={<Book />}
+                      opens="listbox"
+                      open={menuOpen}
+                      wideOnly={compact}
+                      onClick={() => {
+                        if (menuOpen) closeList();
+                        else setListOpen(true);
+                        box.current?.focus();
+                      }}
+                    >
+                      Skill
+                    </Chip>
+                  )}
+                </>
               )}
               <span className={classes("flex-1", compact && "max-md:hidden")} />
               {props.stop && (
@@ -605,6 +611,7 @@ export const Composer = memo(function Composer(props: {
         <HandheldChoices
           choosing={choosing}
           close={() => setChoosing(undefined)}
+          changeModel={() => setChoosing("model")}
           models={models}
           choice={choice}
           skills={skills && { workspaceName: skills.workspaceName, list: pickerSkills }}
