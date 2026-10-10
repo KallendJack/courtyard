@@ -193,16 +193,30 @@ _Avoid_: quota, rate limit (except for the failure reason)
 
 **Skill**:
 A folder of instructions a model loads when it needs them, such as grilling a plan, in the open Agent Skills format.
-The owner starts one from a button or the skill picker, or a model loads one when its description fits. Courtyard
-loads them itself, never a provider's own skills (ADR 0016). Once started or loaded, a skill stays in use for the rest
-of its session. Each comes from one of four places, its **source**: the owner's for one workspace (Yours), a code
-workspace's project, the owner's for every workspace (Yours, everywhere), or a house skill.
+The owner starts one from a button or the skill picker, or by beginning a message with its name (`/implement 157`),
+or a model loads one when its description fits. Courtyard loads them itself, never a provider's own skills (ADR 0016),
+apart from Matt Pocock's skills in a code workspace. Once started or loaded, a skill stays in use for the rest of its
+session. Each comes from one of five places, its **source**: the owner's for one workspace (Yours), a code
+workspace's project, the owner's for every workspace (Yours, everywhere), Matt Pocock's, or a house skill.
 _Avoid_: prompt, plugin, command, agent
 
 **Skill picker**:
 The list of a workspace's skills that opens from the message box (a `/` at its start, or the Skill pill), or as a
-sheet on a phone. A picked skill sits in the box as a tag and goes with the message.
+sheet on a phone. A picked skill sits in the box as a tag and goes with the message. Of Matt Pocock's skills it lists
+only those the owner starts.
 _Avoid_: slash command, skill menu
+
+**Matt Pocock's skills**:
+The house process's skills (ADR 0018), which every code workspace gets from Courtyard's **pinned copy** of his
+plugin: the release `packages/skills/matt.json` names, fetched into the data folder and loaded by Claude Code itself
+only when it matches the pin's checksum (ADR 0023). His grilling replaces the house one there.
+_Avoid_: the plugin, Matt's plugin (for the copy), installed skills
+
+**Setup check**:
+What a code workspace's page offers, once, when its repository is missing what Matt's setup skill writes (its
+`docs/agents/` files, the Agent skills section, the triage labels): one approval that makes the labels and opens a
+pull request with the files.
+_Avoid_: onboarding, setup wizard
 
 **House skill**:
 A skill that comes with Courtyard, in the `@courtyard/skills` package. The owner's own skills, and a project's, with

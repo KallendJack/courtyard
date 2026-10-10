@@ -837,6 +837,13 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
           z.object({ permissionDecision: z.string() }).parse(decision).permissionDecision,
       ),
     ).toEqual(["allow", "allow", "allow", "allow", "deny", "deny"]);
+    expect(
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:retro" } }),
+    ).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason: await quotedInGuide("That skill isn't one you can load here"),
+      },
+    });
     expect(activities).toEqual([
       { kind: "skill-loaded", name: "tdd", source: "matt" },
       { kind: "skill-loaded", name: "grilling", source: "matt" },

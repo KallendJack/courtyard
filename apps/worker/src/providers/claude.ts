@@ -22,7 +22,12 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
-import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED, UNCHECKED_REQUEST } from "../prompts/index.ts";
+import {
+  OUTSIDE_WORKSPACE,
+  PAGE_NOT_ALLOWED,
+  SKILL_NOT_HERE,
+  UNCHECKED_REQUEST,
+} from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
@@ -651,7 +656,7 @@ const confineTo =
       if (code !== null && input.tool_name === "Skill") {
         const skills = { project: confine.projectSkills, plugin: code.plugin };
         const loaded = skillLoaded(skills, input.tool_input);
-        if (loaded === undefined) return decision(false, "That skill isn't one you can load here.");
+        if (loaded === undefined) return decision(false, SKILL_NOT_HERE);
         await report({ kind: "skill-loaded", ...loaded });
         return decision(true);
       }
