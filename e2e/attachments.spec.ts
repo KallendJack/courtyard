@@ -226,8 +226,12 @@ for (const screen of [
     test.use({ viewport: screen.viewport, hasTouch: true, isMobile: true });
 
     test("a finger swiped across a photo shows the next one, and back", async ({ page }) => {
+      // A touch screen has the Handheld frame: photos from its Photo button, the box from Type.
       await page.goto("/workspaces/garage-gym");
-      await attach(page, [photo("garage.png"), photo("hooks.png")]);
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: "Photo", exact: true }).click();
+      await (await chooser).setFiles([photo("garage.png"), photo("hooks.png")]);
+      await page.getByRole("button", { name: "Type" }).click();
       await page.getByLabel("Message").fill("please look");
       await page.getByRole("button", { name: "Start" }).click();
       const session = page.getByRole("list", { name: "Session" });
