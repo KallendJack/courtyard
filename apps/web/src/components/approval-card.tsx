@@ -11,6 +11,7 @@ addStylesheet("approval-card", css);
 /** What the card asks, in a few words: its title. */
 const question = (ask: ApprovalAsk) => {
   if (ask.kind === "edit") return "Change a file outside the worktree?";
+  if (ask.kind === "setup") return "Change how commands run?";
   return ask.reason === "off-allowlist"
     ? "Run a command? It isn't on the allowlist."
     : "Run a command? It names a path outside the worktree.";
@@ -45,7 +46,7 @@ export function ApprovalCard(props: {
     // Once answered, the card goes with the answer's event; until then it can be answered again.
     if (failed !== undefined) setSending(false);
   };
-  const exact = props.ask.kind === "edit" ? props.ask.path : props.ask.command;
+  const exact = props.ask.kind === "command" ? props.ask.command : props.ask.path;
   return (
     // Where the card's own classes apply (approval-card.css).
     <div data-approval-card="">

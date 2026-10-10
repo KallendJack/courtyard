@@ -144,11 +144,11 @@ describe("a code session's edits", () => {
       { kind: "edited-file", path: "notes.md" },
       { kind: "edited-file", path: "docs/plan.md" },
     ]);
-    // Git's own file in the worktree counts as outside it.
     expect(asked).toEqual([
       { kind: "edit", path: join(root, "data", "worktrees", "outside.txt") },
       { kind: "edit", path: join(root, "elsewhere.txt") },
-      { kind: "edit", path: join(folder, ".git") },
+      // Git's own file in the worktree decides where its git commands go.
+      { kind: "setup", path: ".git" },
     ]);
     const denied = "The owner denied that change, so the file wasn't changed.";
     expect(answerIn(events)).toContain(`Couldn't edit ../outside.txt: ${denied}`);
@@ -156,6 +156,49 @@ describe("a code session's edits", () => {
     await expect(readFile(join(root, "data", "worktrees", "outside.txt"))).rejects.toThrow();
     await expect(readFile(join(root, "elsewhere.txt"))).rejects.toThrow();
     expect(await gitIn(folder, "status", "--porcelain")).toBe("?? docs/\n?? notes.md");
+  });
+
+  it("need the owner's approval for a file that decides what its allowed commands run", async () => {
+    // The repository keeps its git hooks in a folder of its own, as husky has it do.
+    await gitIn(repo, "config", "core.hooksPath", "tools/hooks");
+    const request = await start();
+    const setupFiles = [
+      "package.json",
+      "apps/web/package.json",
+      "pnpm-workspace.yaml",
+      ".npmrc",
+      ".pnpmfile.cjs",
+      ".husky/pre-commit",
+      ".githooks/pre-push",
+      "tools/hooks/pre-commit",
+      "lefthook.yml",
+      ".lefthook-local.yml",
+      ".claude/settings.json",
+      ".claude/hooks/check.sh",
+      // Names Windows takes for the same files.
+      ".GIT",
+      ".git.",
+      "PACKAGE.JSON",
+      "package.json::$DATA",
+      ".Claude/settings.json",
+      "GIT~1",
+      // Git's own folder anywhere, as a submodule's.
+      "vendor/lib/.git/config",
+    ];
+
+    const { asked, events } = await firstTurn(
+      request,
+      [
+        ...setupFiles.map((path) => `edit file ${path}: echo hacked`),
+        "edit file notes.md: Fine",
+      ].join("\n"),
+    );
+
+    const { folder } = await sessionWorktree();
+    expect(asked).toEqual(setupFiles.map((path) => ({ kind: "setup", path })));
+    expect(activitiesIn(events)).toEqual([{ kind: "edited-file", path: "notes.md" }]);
+    await expect(readFile(join(folder, ".husky", "pre-commit"))).rejects.toThrow();
+    expect(await readFile(join(folder, "notes.md"), "utf8")).toBe("Fine\n");
   });
 });
 

@@ -144,7 +144,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
   for GitHub), freshly fetched, in its own worktree in the data folder, so the owner's checkout is never touched; or
   says why it can't (the repository missing, not git, or its remote unreachable). Decides each edit (inside the
-  worktree once symlinks are followed, never git's own `.git` file there) and each command: `allowlist.ts` is the
+  worktree once symlinks are followed; a file that decides what allowed commands run, such as a `package.json`, git
+  hooks, `.claude` or git's own `.git`, needs an approval) and each command: `allowlist.ts` is the
   command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
@@ -391,7 +392,8 @@ Where the rest fits:
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
   `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
   Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. What's allowed shows
-  as an activity (`edited-file`, `ran-command`). A command off the allowlist, or an edit outside the worktree, is an
+  as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
+  file that decides what allowed commands run (an approval of its own kind, `setup`), is an
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
   limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
   `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a

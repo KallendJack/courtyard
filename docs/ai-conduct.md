@@ -233,15 +233,17 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
 > without asking: its package scripts, git and gh commands that only look, adding and committing on your branch,
 > pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working
-> directory or another command, waits for the owner to allow it;
+> directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another
+> command, waits for the owner to allow it;
 > if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
 > a command that chains or substitutes another never runs.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
-same way for every provider. An edit outside the worktree (or to git's own file there), a command off the command
-allowlist, and a command naming a path outside the worktree each wait for the owner's approval (#171), with no time
-limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything else refused, tells the
+same way for every provider. An edit outside the worktree, an edit inside it to a file that decides what its allowed
+commands run (a `package.json` or the package manager's settings, git hooks, `.claude`, git's own `.git`), a command
+off the command allowlist, and a command naming a path outside the worktree each wait for the owner's approval
+(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything else refused, tells the
 model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner

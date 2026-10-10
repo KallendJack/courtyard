@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
@@ -118,19 +118,75 @@ export const commandAllowed = async (
   return ok(null);
 };
 
-/** Git's own file in a worktree, which says where the repository is: never a model's to change. */
-const GIT_FILE = ".git";
+/**
+ * Folders that decide what a repository's allowed commands run, wherever they are in it: git's own
+ * (`.git`, a file in a worktree, saying where the repository is), git hooks' usual homes, and
+ * Claude Code's project settings and hooks.
+ */
+const SETUP_FOLDERS = new Set([".git", ".githooks", ".husky", ".lefthook", ".claude"]);
+/** Files that do, by name: package scripts and the package managers' own settings. */
+const SETUP_FILES = new Set([
+  "package.json",
+  "package.json5",
+  "package.yaml",
+  "pnpm-workspace.yaml",
+  ".npmrc",
+  ".yarnrc",
+  ".yarnrc.yml",
+  ".pnpmfile.cjs",
+  ".pnpmfile.mjs",
+]);
 
 /**
- * Whether a model may edit the file at `path` (from the worktree, or absolute) in a session's
- * worktree: only inside it, once symlinks are followed, and never git's own file there. Its path as
- * the owner sees it in the activity, or `undefined` when it may not.
+ * A path's part as Windows reads it: case aside, without trailing dots and spaces, or a stream
+ * after a colon (`.GIT.` and `package.json::$DATA` are `.git` and `package.json` there).
  */
-export const editableIn = async (worktree: string, path: string) => {
-  if (!(await staysInside(worktree, { paths: [path], globs: [] }))) return undefined;
+const asWindowsReads = (part: string) =>
+  (part.split(":")[0] ?? "").replace(/[. ]+$/, "").toLowerCase();
+
+/**
+ * Whether a path in a worktree (as the owner sees it, from the worktree) is a file that decides
+ * what its allowed commands run: one of `SETUP_FILES`, lefthook's settings, anything in one of
+ * `SETUP_FOLDERS` or in the repository's own git hooks folder (`hooks`, from the worktree), or a
+ * name Windows could shorten one of those to (`GIT~1`).
+ */
+const isSetup = (shown: string, hooks: string | undefined) => {
+  const parts = shown.split("/").map(asWindowsReads);
+  const name = parts.at(-1) ?? "";
+  const hooksParts = hooks?.split("/").map(asWindowsReads);
+  return (
+    SETUP_FILES.has(name) ||
+    /^\.?lefthook/.test(name) ||
+    parts.some((part) => SETUP_FOLDERS.has(part) || /~\d/.test(part)) ||
+    hooksParts?.every((part, at) => parts[at] === part) === true
+  );
+};
+
+/** Where an edit a model asks for in a session's worktree would land. */
+export type EditPlace =
+  /** Inside the worktree: it applies without asking. By its path as the owner sees it. */
+  | { readonly kind: "inside"; readonly shown: string }
+  /** Inside, but on a file that decides what its allowed commands run: it needs an approval. */
+  | { readonly kind: "setup"; readonly shown: string }
+  /** Outside the worktree, once symlinks are followed: it needs an approval. */
+  | { readonly kind: "outside" };
+
+/**
+ * Where an edit of the file at `path` (from the worktree, or absolute) lands in a session's
+ * worktree: inside it, on a file that decides what its allowed commands run (`isSetup`, which
+ * includes the folder the repository's `core.hooksPath` names), or outside it.
+ */
+export const editPlaceIn = async (worktree: string, path: string): Promise<EditPlace> => {
+  if (!(await staysInside(worktree, { paths: [path], globs: [] }))) return { kind: "outside" };
   const shown = shownPath(worktree, path);
-  const [first] = shown.split("/");
-  return shown === "" || first === GIT_FILE ? undefined : shown;
+  if (shown === "") return { kind: "outside" };
+  const hooksPath = await gitOrNothing(worktree, ["config", "--get", "core.hooksPath"]);
+  const hooks =
+    hooksPath === undefined || hooksPath === "" ? undefined : shownPath(worktree, hooksPath);
+  const inHooks = hooks !== undefined && !hooks.startsWith("..") && !isAbsolute(hooks);
+  return isSetup(shown, inHooks ? hooks : undefined)
+    ? { kind: "setup", shown }
+    : { kind: "inside", shown };
 };
 
 /**

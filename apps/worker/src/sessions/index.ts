@@ -45,7 +45,7 @@ import {
   type Code,
   type CodeRefusal,
   commandAllowed,
-  editableIn,
+  editPlaceIn,
   type PullRequestProblem,
   slotEnv,
 } from "../code/index.ts";
@@ -834,8 +834,17 @@ export const createSessions = (options: {
           // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
           env: { ...options.code.commandEnv(), ...(slot === undefined ? {} : slotEnv(slot)) },
           edit: async (path) => {
-            const shown = await editableIn(worktree, path);
-            if (shown !== undefined) return decide(ok({ kind: "edited-file", path: shown }));
+            const place = await editPlaceIn(worktree, path);
+            if (place.kind === "inside") {
+              return decide(ok({ kind: "edited-file", path: place.shown }));
+            }
+            if (place.kind === "setup") {
+              return approval({
+                ask: { kind: "setup", path: place.shown },
+                why: undefined,
+                allowed: { kind: "edited-file", path: place.shown },
+              });
+            }
             const outside = resolve(worktree, path);
             return approval({
               ask: { kind: "edit", path: outside },

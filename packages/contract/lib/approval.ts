@@ -14,6 +14,12 @@ export const ApprovalAsk = z.discriminatedUnion("kind", [
   }),
   /** A change to a file outside the session branch's worktree, by its full path. */
   z.object({ kind: z.literal("edit"), path: z.string() }),
+  /**
+   * A change, inside the worktree, to a file that decides what its allowed commands run: a
+   * `package.json`, git hooks, Claude Code's `.claude` folder, git's own `.git`. By its path from
+   * the worktree.
+   */
+  z.object({ kind: z.literal("setup"), path: z.string() }),
 ]);
 export type ApprovalAsk = z.infer<typeof ApprovalAsk>;
 
