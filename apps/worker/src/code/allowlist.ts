@@ -20,7 +20,7 @@ export type CommandRule = {
   readonly onSessionBranch?: boolean;
   /**
    * For pushing and the pull request (#172): whether the arguments after the words name only the
-   * session's own branch and pull request.
+   * session's own branch and pull request; for `gh api`, whether it only reads (#181).
    */
   readonly own?: (rest: readonly string[], work: OwnWork) => boolean;
 };
@@ -235,10 +235,43 @@ const editsOwn = (rest: readonly string[], { branch, pullRequest }: OwnWork) => 
 };
 
 /**
+ * Gh's flags for another repository, a browser or an editor, which the commands on the
+ * repository's issues and labels never take.
+ */
+const GH_ELSEWHERE = [/^--repo/, /^-R/, /^--web/, /^-w$/, /^--editor/, /^-e$/];
+
+/** What Matt Pocock's skills change on the repository's issues and labels (#181). */
+const GH_ISSUES = [
+  ["issue", "create"],
+  ["issue", "edit"],
+  ["issue", "comment"],
+  ["issue", "close"],
+  ["label", "create"],
+  ["label", "list"],
+];
+
+/** The flags `gh api` takes when it only reads: none that sends fields or a body. */
+const API_READ: GhFlags = {
+  withValue: new Set(["--method", "-X", "--jq", "-q", "--template", "-t", "--header", "-H"]),
+  alone: new Set(["--paginate", "--slurp", "--include", "-i", "--silent", "--verbose"]),
+};
+
+/** Whether `gh api` only reads: one REST path, asked with GET, sending nothing (#181). */
+const readsOnly = (rest: readonly string[]) => {
+  const parts = ghParts(rest, API_READ);
+  if (parts === undefined || parts.positionals.length !== 1) return false;
+  if (parts.positionals[0] === "graphql") return false;
+  return parts.values.every(([flag, value]) =>
+    flag === "--method" || flag === "-X" ? value.toUpperCase() === "GET" : true,
+  );
+};
+
+/**
  * A code workspace's command allowlist when its settings name none: the repository's package
  * scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and
  * gh commands that only look, adding and committing on the session branch, pushing it, and
- * opening and updating its own pull request (#172).
+ * opening and updating its own pull request (#172), and filing, labelling, commenting on and
+ * closing the repository's issues, as Matt Pocock's skills do (#181).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
@@ -256,6 +289,8 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["git", "add"], more: true, never: GIT_NEVER },
   { words: ["git", "commit"], more: true, never: GIT_NEVER, onSessionBranch: true },
   ...GH_LOOKS.map((look) => ({ words: ["gh", ...look], more: true, never: GH_NEVER })),
+  ...GH_ISSUES.map((words) => ({ words: ["gh", ...words], more: true, never: GH_ELSEWHERE })),
+  { words: ["gh", "api"], more: true, own: readsOnly },
   { words: ["git", "push"], more: true, onSessionBranch: true, own: pushesOwn },
   { words: ["gh", "pr", "create"], more: true, onSessionBranch: true, own: opensOwn },
   { words: ["gh", "pr", "edit"], more: true, onSessionBranch: true, own: editsOwn },
