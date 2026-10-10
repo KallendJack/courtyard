@@ -4,11 +4,11 @@ import {
   goOutOfSight,
   hear,
   listenedIn,
-  vibrations,
   micOn,
   pause,
   refuse,
   standInSpeechRecognition,
+  vibrations,
   withoutSpeechRecognition,
 } from "./speech-recognition.ts";
 
@@ -27,7 +27,12 @@ const SCREENS = {
 
 test.use({ hasTouch: true, isMobile: true });
 
-const strip = (page: Page, name: RegExp) => page.getByRole("button", { name });
+/**
+ * The talk strip, by its name, which stays the same whatever it says, showing `says`: what it is
+ * doing, and the words heard.
+ */
+const strip = (page: Page, says: RegExp) =>
+  page.getByRole("button", { name: "Talk", exact: true }).filter({ hasText: says });
 const session = (page: Page) => page.getByRole("list", { name: "Session" });
 
 /** Where a finger goes to press something. */
@@ -48,10 +53,12 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       page,
     }) => {
       await page.goto("/workspaces/garage-gym");
+      await expect(strip(page, /Tap or hold to talk/)).toHaveAttribute("aria-pressed", "false");
       await strip(page, /Tap or hold to talk/).click();
 
+      // Pressed while it listens; what's heard is its description, not its name.
       const listening = strip(page, /Listening · tap to send/);
-      await expect(listening).toBeVisible();
+      await expect(listening).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
       expect(await listenedIn(page)).toBe("en-GB");
       expect(await buzzes(page)).toBeGreaterThan(0);
@@ -60,6 +67,7 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       await expect(listening).toContainText("Could the bench");
       await hear(page, "Could the bench go sideways instead?");
       await expect(listening).toContainText("Could the bench go sideways instead?");
+      await expect(listening).toHaveAccessibleDescription(/Could the bench go sideways instead\?/);
 
       await listening.click();
       await expect(session(page)).toContainText("You said: Could the bench go sideways instead?");
@@ -186,6 +194,10 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       await expect(strip(page, /Tap or hold to talk/)).toContainText(
         "The microphone isn't allowed",
       );
+      // Said out loud too, for a screen reader.
+      await expect(
+        page.getByRole("status").filter({ hasText: "The microphone isn't allowed" }),
+      ).toHaveCount(1);
       await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("Half of a");
     });
   });

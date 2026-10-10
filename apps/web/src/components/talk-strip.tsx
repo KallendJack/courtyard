@@ -4,6 +4,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -166,6 +167,8 @@ export function TalkBar(props: {
     else stop("send");
   };
 
+  const titleId = useId();
+  const detailId = useId();
   const listeningNow = talk.kind === "listening";
   const held = listeningNow && talk.held;
   const overCancel = held && talk.overCancel;
@@ -216,6 +219,10 @@ export function TalkBar(props: {
       <button
         type="button"
         disabled={box === undefined}
+        // Its name stays the same: what it says now, the words heard included, describes it.
+        aria-label="Talk"
+        aria-pressed={listeningNow}
+        aria-describedby={`${titleId} ${detailId}`}
         data-talk={held ? "held" : listeningNow ? "listening" : answering ? "answering" : "idle"}
         onPointerDown={down}
         onPointerMove={move}
@@ -256,6 +263,7 @@ export function TalkBar(props: {
         />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span
+            id={titleId}
             className={classes(
               "truncate font-extrabold tracking-[-0.01em]",
               wide ? "text-[17px]/5" : "text-base/5",
@@ -265,6 +273,7 @@ export function TalkBar(props: {
             {title}
           </span>
           <span
+            id={detailId}
             className={classes(
               "truncate text-xs/[18px]",
               held
@@ -291,6 +300,10 @@ export function TalkBar(props: {
             <Bars heights={IDLE_BARS} />
           ))}
       </button>
+      {/* Why it couldn't listen, said out loud for a screen reader as it happens. */}
+      <span role="status" className="sr-only">
+        {talk.kind === "idle" ? talk.problem : undefined}
+      </span>
     </>
   );
 }
