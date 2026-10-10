@@ -233,7 +233,8 @@ export const Composer = memo(function Composer(props: {
         attaching.map((each) => each.file),
       )
     ) {
-      setText("");
+      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
+      setText((now) => (now === text ? "" : now));
       setSkill(undefined);
       releasePreviews(attaching);
       setAttaching([]);
