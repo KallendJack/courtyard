@@ -132,7 +132,9 @@ export function SessionTurns(props: {
               {...(documents === undefined ? {} : { documents })}
               // Only the last turn can be retried, carried on or replied to, so only it gets the
               // handlers.
-              {...(turn === last ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}) } : {})}
+              {...(turn === last
+                ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}), latest: true }
+                : {})}
             />
           </li>
         );

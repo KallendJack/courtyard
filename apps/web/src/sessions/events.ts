@@ -4,6 +4,7 @@ import {
   type ApprovalAsk,
   type Attachment,
   type DocumentSave,
+  type Doing,
   type Effort,
   type FailureReason,
   type ModelRef,
@@ -96,10 +97,14 @@ export type Turn = {
    * failed (#172): the failed checks open its activity in place of the owner's message.
    */
   readonly fixesChecks: boolean;
+  /** When the owner's message was recorded, which the Working line counts from (#179). */
+  readonly startedAt: string;
+  /** What its model is doing now, while it runs: its latest activity, or writing its answer. */
+  readonly doing: Doing;
   readonly state:
     | { readonly kind: "running" }
-    | { readonly kind: "done" }
-    | { readonly kind: "stopped" }
+    | { readonly kind: "done"; readonly at: string }
+    | { readonly kind: "stopped"; readonly at: string }
     | { readonly kind: "failed"; readonly reason: FailureReason };
 };
 
@@ -111,6 +116,9 @@ type Log = {
   /** A code session's pull request as it last stood (#172), once it has one. */
   readonly pullRequest: PullRequest | undefined;
 };
+
+/** Writing its answer, kept as one object so text arriving doesn't make a new one each time. */
+const WRITING: Doing = { kind: "writing" };
 
 /** Swaps in a new last turn and leaves every other turn object as it was. */
 const withLastTurn = (log: Log, update: { seq: number; change: (turn: Turn) => Turn }): Log => {
@@ -192,6 +200,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             approval: undefined,
             queued: false,
             fixesChecks: event.checksFailed !== undefined,
+            startedAt: event.at,
+            doing: { kind: "thinking" },
             state: { kind: "running" },
           },
         ],
@@ -209,13 +219,22 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => {
           const answer = turn.answer + event.text;
-          return { ...turn, answer, replayed: replayed ? answer.length : turn.replayed };
+          return {
+            ...turn,
+            answer,
+            replayed: replayed ? answer.length : turn.replayed,
+            doing: WRITING,
+          };
         },
       });
     case "activity":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, activities: [...turn.activities, event.activity] }),
+        change: (turn) => ({
+          ...turn,
+          activities: [...turn.activities, event.activity],
+          doing: { kind: "activity", activity: event.activity },
+        }),
       });
     case "suggested-replies":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
@@ -239,11 +258,14 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         change: (turn) => ({ ...turn, queued: event.type === "turn-queued" }),
       });
     case "turn-completed":
-      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, state: { kind: "done", at: event.at } }),
+      });
     case "turn-stopped":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, state: { kind: "stopped" } }),
+        change: (turn) => ({ ...turn, state: { kind: "stopped", at: event.at } }),
       });
     case "turn-failed":
       return withLastTurn(log, {
