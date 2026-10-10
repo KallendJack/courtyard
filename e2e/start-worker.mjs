@@ -144,8 +144,32 @@ const { createFakePush } = await import("../apps/worker/src/notifications/fake.t
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
 
+// Matt Pocock's skills for code workspaces (#181), from a stand-in for his plugin on disk, so
+// GitHub is never reached: a few of his skills, and his setup skill's templates.
+const { MATT_TEST_SKILLS, mattSkillsIn, writeMattPlugin } = await import(
+  "../apps/worker/src/testing.ts"
+);
+const mattPlugin = join(dataDir, "..", "matt-plugin");
+rmSync(mattPlugin, { recursive: true, force: true });
+await writeMattPlugin(mattPlugin, {
+  skills: [
+    ...MATT_TEST_SKILLS,
+    {
+      name: "setup-matt-pocock-skills",
+      ownerStarts: true,
+      files: {
+        "issue-tracker-github.md": "# Issue tracker: GitHub\n",
+        "triage-labels.md": "# Triage Labels\n",
+        "domain.md": "# Domain Docs\n",
+      },
+    },
+  ],
+});
+const { pin, fetch } = await mattSkillsIn(mattPlugin);
+
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
+  mattSkills: { pin, fetch },
   startUpdate: standInUpdate,
   github: createFakeGitHub({
     finishAfterMs: 2000,

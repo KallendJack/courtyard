@@ -18,14 +18,22 @@ import {
   ModelId,
   ProviderId,
   type ProviderStatus,
+  SkillName,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
-import { OUTSIDE_WORKSPACE, PAGE_NOT_ALLOWED, UNCHECKED_REQUEST } from "../prompts/index.ts";
+import {
+  NOT_IN_BACKGROUND,
+  OUTSIDE_WORKSPACE,
+  PAGE_NOT_ALLOWED,
+  SKILL_NOT_HERE,
+  UNCHECKED_REQUEST,
+} from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
+  type CodePlugin,
   type CodeTurn,
   type CourtyardTool,
   jsonSchemaOf,
@@ -250,7 +258,10 @@ const WIND_DOWN_MS = 2000;
  */
 const isolatedEnv = (): Record<string, string | undefined> => ({
   ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("COURTYARD_")),
+    Object.entries(process.env).filter(
+      // Nor the folders of plugins the owner's own Claude Code loads (ADR 0024).
+      ([key]) => !key.startsWith("COURTYARD_") && key !== "CLAUDE_CODE_PLUGIN_DIRS",
+    ),
   ),
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
   ENABLE_CLAUDEAI_MCP_SERVERS: "false",
@@ -278,26 +289,78 @@ const PROJECT_SKILLS = join(".claude", "skills");
  * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
  * repository's own skills. The machine's user and local settings, memory and connectors stay off,
  * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
- * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's.
+ * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Claude Code's
+ * background tasks are off. Matt Pocock's skills come as one local plugin, Courtyard's pinned
+ * copy, with only the skills it's given turned on (ADR 0024).
  */
 const projectSetup = async (
   worktree: string,
   noPlugins: string,
-): Promise<Partial<Options> & Pick<Options, "env">> => {
+  plugin: CodePlugin | null,
+): Promise<{ options: Partial<Options> & Pick<Options, "env">; projectSkills: string[] }> => {
   const folders = await listSubfolders(join(worktree, PROJECT_SKILLS));
-  const skills = [];
+  const projectSkills = [];
   for (const name of folders.ok ? folders.value : []) {
     const found = await exists(join(worktree, PROJECT_SKILLS, name, "SKILL.md"));
-    if (found.ok && found.value) skills.push(name);
+    if (found.ok && found.value) projectSkills.push(name);
   }
   return {
-    settingSources: ["project"],
-    skills,
-    env: {
-      CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
-      CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+    options: {
+      settingSources: ["project"],
+      skills: [
+        ...projectSkills,
+        ...(plugin?.skills.map((skill) => `${plugin.name}:${skill}`) ?? []),
+      ],
+      ...(plugin === null ? {} : { plugins: [{ type: "local", path: plugin.folder }] }),
+      env: {
+        CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
+        CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
+        // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
+        // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+      },
     },
+    projectSkills,
   };
+};
+
+/** The Skill tool's input as Claude Code sends it: which skill, and what's passed to it. */
+const SkillInput = z.strictObject({ skill: z.string(), args: z.string().optional() });
+
+/**
+ * The skill a code turn's Skill tool call loads, when it's one the turn turned on, with where it
+ * comes from: one of Matt's (`mattpocock-skills:tdd`, or its name alone) or the repository's own.
+ */
+const skillLoaded = (
+  skills: { readonly project: readonly string[]; readonly plugin: CodePlugin | null },
+  input: unknown,
+): { name: SkillName; source: "matt" | "project" } | undefined => {
+  const parsed = SkillInput.safeParse(input);
+  if (!parsed.success) return undefined;
+  const { plugin, project } = skills;
+  const asked = parsed.data.skill;
+  const named = (name: string, source: "matt" | "project") => {
+    const skill = SkillName.safeParse(name);
+    return skill.success ? { name: skill.data, source } : undefined;
+  };
+  if (plugin !== null && asked.startsWith(`${plugin.name}:`)) {
+    const name = asked.slice(plugin.name.length + 1);
+    return plugin.skills.some((skill) => skill === name) ? named(name, "matt") : undefined;
+  }
+  if (project.includes(asked)) return named(asked, "project");
+  return plugin?.skills.some((skill) => skill === asked) ? named(asked, "matt") : undefined;
+};
+
+/**
+ * One of Matt's skills' own files, as its read is reported: the skill (its folder in his
+ * `skills/<group>/<name>/`) and the file's path inside it. `undefined` for one in no skill.
+ */
+const skillFileIn = (plugin: CodePlugin, path: string) => {
+  const [top, , name, ...rest] = shownPath(plugin.folder, path).split("/");
+  const skill = SkillName.safeParse(name);
+  return top === "skills" && skill.success && rest.length > 0
+    ? { name: skill.data, path: rest.join("/") }
+    : undefined;
 };
 
 /** Claude Code as it really is: the Agent SDK, with this machine's sign-in. */
@@ -574,7 +637,10 @@ const askWorker = async (
     }
     case "Bash": {
       const bash = BashInput.safeParse(input);
-      return bash.success ? code.run(bash.data.command, bash.data.description) : unchecked;
+      if (!bash.success) return unchecked;
+      // Should a repository's settings turn background tasks back on (#178), they're still refused.
+      if (bash.data.run_in_background === true) return err(NOT_IN_BACKGROUND);
+      return code.run(bash.data.command, bash.data.description);
     }
     default:
       return undefined;
@@ -668,6 +734,8 @@ const confineTo =
     code: CodeTurn | null;
     /** The tool connections the turn offers, each call to one asked of the worker (ADR 0023). */
     connections: readonly ToolConnection[];
+    /** A code turn's repository skills, turned on by name (ADR 0022). */
+    projectSkills: readonly string[];
   }): HookCallback =>
   async (input) => {
     const { folder, report, courtyardTools, web, code, connections } = confine;
@@ -682,6 +750,13 @@ const confineTo =
       const asked =
         code === null ? undefined : await askWorker(code, input.tool_name, input.tool_input);
       if (asked !== undefined) return asked.ok ? decision(true) : decision(false, asked.error);
+      if (code !== null && input.tool_name === "Skill") {
+        const skills = { project: confine.projectSkills, plugin: code.plugin };
+        const loaded = skillLoaded(skills, input.tool_input);
+        if (loaded === undefined) return decision(false, SKILL_NOT_HERE);
+        await report({ kind: "skill-loaded", ...loaded });
+        return decision(true);
+      }
       if (web !== null && input.tool_name === "WebSearch") {
         const search = WebSearchInput.safeParse(input.tool_input);
         if (!search.success) return decision(false, "That search couldn't be checked.");
@@ -701,6 +776,17 @@ const confineTo =
       }
       const reach = reachOf(input.tool_name, input.tool_input);
       if (!reach) return decision(false, "Only reading this workspace's files is allowed here.");
+
+      // A code turn reads the skills of Matt's it loaded from Courtyard's copy (ADR 0024).
+      const plugin = code?.plugin ?? null;
+      if (plugin !== null && reach.paths.length > 0 && (await staysInside(plugin.folder, reach))) {
+        const file =
+          "readsFile" in reach && reach.readsFile !== undefined
+            ? skillFileIn(plugin, reach.readsFile)
+            : undefined;
+        if (file !== undefined) await report({ kind: "skill-file-read", ...file });
+        return decision(true);
+      }
 
       if (!(await staysInside(folder, reach))) return decision(false, OUTSIDE_WORKSPACE);
 
@@ -866,7 +952,7 @@ export const createClaudeProvider = (
       const setup =
         code === null || noPlugins === undefined
           ? undefined
-          : await projectSetup(folder, noPlugins.value);
+          : await projectSetup(folder, noPlugins.value, code.plugin);
       try {
         const messages = claudeCode.run({
           prompt: turnPrompt(input.framing),
@@ -875,7 +961,10 @@ export const createClaudeProvider = (
             ...(setup === undefined || code === null
               ? {}
               : // Its commands' git and gh use Courtyard's GitHub sign-in, never the machine's (#99).
-                { ...setup, env: { ...isolatedEnv(), ...setup.env, ...code.env } }),
+                {
+                  ...setup.options,
+                  env: { ...isolatedEnv(), ...setup.options.env, ...code.env },
+                }),
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
@@ -906,6 +995,7 @@ export const createClaudeProvider = (
                       web,
                       code,
                       connections,
+                      projectSkills: setup?.projectSkills ?? [],
                     }),
                   ],
                   // An approval waits on the owner, however long they take (#171).

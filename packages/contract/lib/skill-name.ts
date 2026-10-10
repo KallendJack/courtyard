@@ -13,8 +13,8 @@ export type SkillName = z.infer<typeof SkillName>;
 
 /**
  * Where a workspace's skill comes from, the more specific first (ADR 0016): the owner's skills for
- * this workspace, a code workspace's project, the owner's skills for every workspace, or Courtyard's
- * house skills.
+ * this workspace, a code workspace's project, the owner's skills for every workspace, Matt Pocock's
+ * (a code workspace's, from Courtyard's pinned copy, ADR 0024), or Courtyard's house skills.
  */
-export const SkillSource = z.enum(["workspace", "project", "everywhere", "house"]);
+export const SkillSource = z.enum(["workspace", "project", "everywhere", "matt", "house"]);
 export type SkillSource = z.infer<typeof SkillSource>;

@@ -35,6 +35,12 @@ const SIZES = {
 /** Whether the skill can be picked: it can be used here. */
 export const usable = (skill: SkillSummary): skill is UsableSkillSummary => skill.kind === "usable";
 
+/**
+ * Whether the skill picker lists the skill: every one but Matt Pocock's that the model loads
+ * itself (ADR 0024), and each that can't be used, greyed, saying why.
+ */
+export const inPicker = (skill: SkillSummary) => skill.kind === "unusable" || skill.inPicker;
+
 /** A skill's name as a row shows it: a broken one by its folder's name, as it is. */
 const nameOf = (skill: SkillSummary) =>
   skill.kind === "unusable" && skill.problem.kind === "broken"

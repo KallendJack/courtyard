@@ -1,0 +1,37 @@
+# Keeping Matt Pocock's skills current (#181, ADR 0024): once a week, compares the pin in
+# packages/skills/matt.json with his newest release, and when it's behind opens an issue with his
+# CHANGELOG lines and the new matt.json (once per release).
+name: Matt's skills
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: check
+        run: node scripts/matt-skills/check.ts "$RUNNER_TEMP/matt-skills.md" >> "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          title="Matt Pocock's skills $VERSION is out"
+          filed=$(gh issue list --state all --search "\"$title\" in:title" --json title --jq "map(select(.title == \"$title\")) | length")
+          if [ "$filed" = "0" ]; then
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/matt-skills.md"
+          fi

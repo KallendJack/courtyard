@@ -9,7 +9,7 @@ import {
 } from "@courtyard/contract";
 import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useState } from "react";
-import { ApprovalCard } from "@/components/approval-card";
+import { ApprovalCard, approvalWords } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
@@ -259,8 +259,7 @@ export const TurnView = memo(function TurnView(props: {
       {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
       {turn.approval !== undefined && turn.state.kind === "running" && (
         <ApprovalCard
-          ask={turn.approval.ask}
-          why={turn.approval.why}
+          {...approvalWords(turn.approval.ask, turn.approval.why)}
           onAnswer={async (answer) => {
             if (turn.approval === undefined) return undefined;
             const answered = await answerApproval({

@@ -232,20 +232,30 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
-> without asking: its package scripts, git and gh commands that only look, adding and committing on your branch,
-> pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working
-> directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another
-> command, waits for the owner to allow it;
-> if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since
-> a command that chains or substitutes another never runs.
+> without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package
+> scripts, git and gh commands that only look, adding and committing on your branch, pushing it, opening or updating
+> its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything
+> else, such as a change outside your working directory, a change to what decides how commands run (a package.json,
+> git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told,
+> so find another way or tell the owner what you need. Run one command at a time, since a command that chains or
+> substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the
+> background here.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
-the repository's, so they aren't part of this guide. The worker decides each edit and command before it happens, the
-same way for every provider. An edit outside the worktree, an edit inside it to a file that decides what its allowed
-commands run (a `package.json` or the package manager's settings, git hooks, `.claude`, git's own `.git`), a command
-off the command allowlist, and a command naming a path outside the worktree each wait for the owner's approval
-(#171), with no time limit; the model hears nothing until they answer. Allow lets it happen. Deny, and anything
-else refused, tells the model why, in one of these:
+the repository's, so they aren't part of this guide. In a code session Claude has Matt Pocock's skills too, from
+Courtyard's pinned copy of his plugin, loaded by Claude Code itself (ADR 0024); they're his, unchanged, so they aren't
+part of this guide either. Claude loads them, and the repository's own, with its Skill tool, which the adapter allows
+only for a skill the turn turned on, reporting each as "Used <skill>"; it reads their own files with its file tools,
+each shown as a read, and a change there waits for the owner like any outside the worktree. A skill it wasn't given
+is refused:
+
+> That skill isn't one you can load here: the skills you can load are listed for you.
+
+The worker decides each edit and command before it happens, the same way for every provider. An edit outside the
+worktree, an edit inside it to a file that decides what its allowed commands run (a `package.json` or the package
+manager's settings, git hooks, `.claude`, git's own `.git`), a command off the command allowlist, and a command naming
+a path outside the worktree each wait for the owner's approval (#171), with no time limit; the model hears nothing
+until they answer. Allow lets it happen. Deny, and anything else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
   why it's needed."
@@ -264,6 +274,13 @@ A tool call whose input can't be checked (a field Courtyard doesn't know, say), 
 never let through, and Claude is told:
 
 > That request couldn't be checked, so it was refused.
+
+A command runs in the foreground, inside the turn (#178): one left running in the background would stop when the turn
+ends, and nothing would wake the model when it finished, so the session would sit waiting. Claude Code's background
+tasks are off in a code session, so Claude isn't offered them, and a command Claude asks to run in the background
+anyway is refused before the worker is asked, with:
+
+> Run it in the foreground: a turn's background commands stop when it ends, and nothing tells you when one finishes.
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.
@@ -319,11 +336,16 @@ name, a description and its instructions, and any files they point to. The worke
 (`packages/skills`), the more specific winning by name. A skill that fails the format check, or has `scripts/` in a
 planning workspace, is never offered. Every provider, the fake included, gets the same skills the same way.
 
+The exception is a code workspace's Matt Pocock skills (ADR 0024), from Courtyard's pinned copy of his plugin, between
+the owner's and the house skills (his grilling replaces the house one there). They're never in Courtyard's list or
+its use_skill tool: Claude Code loads them itself (Coding, above). The owner starts one as any other.
+
 A skill starts in one of two ways:
 
-- **The owner starts it,** from the message box's skill picker or a button (Grill this plan, Get to know). The
-  worker puts it into the turn itself, with no tool call, so it works the same on every model. The owner's message
-  carries the skill's tag and is otherwise their own words, unchanged.
+- **The owner starts it,** from the message box's skill picker, by beginning their message with its name
+  (`/implement 157`), or with a button (Grill this plan, Get to know). The worker puts it into the turn itself, with
+  no tool call, so it works the same on every model. The owner's message carries the skill's tag and is otherwise
+  their own words, unchanged.
 - **A model loads it,** with Courtyard's `use_skill` tool, when what the owner asks fits its description. The tool is
   offered beside the save tool, on a turn whose provider takes Courtyard's tools (today, every one that saves), when
   the workspace has a skill to use. Given a skill's name it gives its `SKILL.md`; given a path as well, that file in
@@ -395,7 +417,8 @@ field for it, and Claude's and Codex's own fields fail the check), and skills wi
 
 ## Grilling
 
-Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning and code workspaces alike: a
+Built with #90. Grilling is a house skill (`packages/skills/grilling`), for planning workspaces (and for code
+workspaces only while Matt Pocock's skills aren't loaded, since his grilling replaces it there, ADR 0024): a
 model stress-tests a plan one question at a time, recommending an answer with each, and saves each decision as the
 owner agrees it. It's Courtyard's own, taking Matt Pocock's ideas for grilling (one question at a time, a
 recommendation with each, one thread settled before the next, looking things up rather than asking) but not his text,
