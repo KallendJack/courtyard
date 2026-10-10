@@ -134,11 +134,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
   turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
-  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. Its routes include the event stream, the
+  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. It queues a message
+  sent while a turn runs and sends it once the turn ends (#177), and its list of a workspace's sessions says whose
+  turn it is in each (#179). Its routes include the event stream, the
   list of models, Get to know (a session started with its house skill), Grill this plan, each attachment
-  (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), and Undo
+  (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), Undo
   of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
-  (`POST /api/sessions/:id/things/:save/undo`).
+  (`POST /api/sessions/:id/things/:save/undo`), and removing a queued message
+  (`DELETE /api/sessions/:id/queued/:queued`).
 - **`code/`:** code sessions' git and what they may do
   ([ADR 0007](adr/0007-code-sessions-work-on-a-session-branch-in-its-own-worktree.md)). Starts a session's session
   branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
@@ -223,7 +226,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 
 ### The web app: `apps/web/src`
 
-- **`main.tsx`** starts the router. **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
+- **`main.tsx`** starts the router, which moves the scroll only for a move to another page (to the top, or back
+  to where that page was), never when a page reloads its data (#168). **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
   workspaces down the side or across the top; the rest are pages.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
@@ -236,7 +240,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     blocks Courtyard draws come from `rich-blocks/`), code blocks with
     their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
     block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
-    finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list, the
+    finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list
+    (`session-turns.tsx`, which follows the end only while the owner is at it, never moving them while they read
+    back, and offers Jump to latest, #168), the
     message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
     and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
     load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
@@ -298,7 +304,12 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
   heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
-  the folder's, and it's styled only inside a `RichBlock`. **`lib/`:** small
+  the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
+  #168) have a stylesheet of their own too (`chat-flow.css`), added when one first shows and applying only inside a
+  `ChatFlowScope`: whose turn it is in a session (`session-state.tsx`, in the chat, a workspace's sessions and the
+  sidebar's recent ones, which ask again every few seconds while one is working), the Working line and the Your turn
+  mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
+  **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
   session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
@@ -319,7 +330,8 @@ kinds of workspace that get each one and whether only the owner starts it (ADR 0
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
 topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
-`session-event.ts` for the events, which only the session page parses), attachments (an event's in `attachment.ts`,
+`session-event.ts` for the events, which only the session page parses, and `session-state.ts` for whose turn it
+is in each session a list shows, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
@@ -419,6 +431,17 @@ Where the rest fits:
   Each is a change of its own, and the session records what the owner did to its save.
 - **Stop.** The worker tells the provider to stop, stops waiting for it at once, and drops anything it sends
   after. What was written so far stays, and the turn is recorded as stopped.
+- **Queued messages** (#177). A message sent while a turn runs (waiting for a code session's slot or an approval
+  included) is recorded as `message-queued`, its attachments kept already, and every device shows it under the
+  turn. Once the turn ends, however it ended, the first still queued goes as its own turn, its `owner-message`
+  naming it (`queued`), checked in the session's queue so one removed meanwhile (`queued-message-removed`) never
+  goes; after a usage limit they wait for the owner's next turn (Carry on, say). A queued message going first means
+  no fixing turn for failed checks starts then (#172), and no "Turn finished" notification goes. One a stopped
+  worker left waiting goes once the next worker starts (`resumeQueued`).
+- **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,
+  on the latest activity or the answer), an approval waiting, or the turn's end, marked Your turn. A workspace's
+  list of sessions has the worker's say for each (`now`: working, needs-you or your-turn), which the workspace page
+  and the sidebar ask for again every few seconds while one is working or needs the owner.
 - **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`
   remembers that until the reset, and the model pickers show it. Nothing switches model by itself, but whatever has
   no model named avoids one at its limit: a new session, Get to know, Tidy and a session's title each go to the first
@@ -429,7 +452,7 @@ Where the rest fits:
 - **Titles.** After the first turn completes, a model gives the session a short title, unless the owner renamed it
   first or Get to know named it.
 - **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
-  running is recorded as interrupted, so the session can carry on.
+  running is recorded as interrupted, so the session can carry on, and its next queued message, if any, goes.
 - **Notifications.** Once an `approval-requested`, `turn-completed` or `turn-failed` is recorded, `sessions/` tells
   `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
   interrupted one found by the next worker, send none). A code turn's end waits for its PR to be followed, so one
