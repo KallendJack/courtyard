@@ -24,6 +24,29 @@ type Talk =
   | { kind: "listening"; held: boolean; words: string; overCancel: boolean };
 
 /**
+ * What the strip shows: waiting, or waiting while a turn runs; listening hands-free; held, push to
+ * talk; or held with the finger slid onto Cancel, to drop it.
+ */
+type Showing = "idle" | "answering" | "listening" | "held" | "dropping";
+
+type Now = { where: string; problem: string | undefined; words: string };
+
+/** What the strip says in each, in a line and a smaller one under it (Paper board Handheld · 02). */
+const SAYS: Record<Showing, (now: Now) => { title: string; detail: string }> = {
+  idle: (now) => ({ title: "Tap or hold to talk", detail: now.problem ?? now.where }),
+  answering: (now) => ({
+    title: "Answering · talk to add",
+    detail: now.problem ?? "What you say now queues",
+  }),
+  listening: (now) => ({
+    title: "Listening · tap to send",
+    detail: now.words === "" ? now.where : `“${now.words}”`,
+  }),
+  held: () => ({ title: "Let go to send", detail: "Slide onto Cancel to drop it" }),
+  dropping: () => ({ title: "Let go to drop it", detail: "Slide back to send it" }),
+};
+
+/**
  * The Handheld frame's Type key and talk strip (#79, Paper board Handheld · 02). A tap on the
  * strip listens hands-free, showing the words as they're heard, and a second tap sends them; Type
  * becomes Cancel meanwhile. Held, it's push to talk: it fills violet, letting go sends, and sliding
@@ -172,24 +195,20 @@ export function TalkBar(props: {
   const listeningNow = talk.kind === "listening";
   const held = listeningNow && talk.held;
   const overCancel = held && talk.overCancel;
-  const title = !listeningNow
+  const showing: Showing = !listeningNow
     ? answering
-      ? "Answering · talk to add"
-      : "Tap or hold to talk"
+      ? "answering"
+      : "idle"
     : !held
-      ? "Listening · tap to send"
+      ? "listening"
       : overCancel
-        ? "Let go to drop it"
-        : "Let go to send";
-  const detail = !listeningNow
-    ? (talk.problem ?? (answering ? "What you say now queues" : props.where))
-    : held
-      ? overCancel
-        ? "Slide back to send it"
-        : "Slide onto Cancel to drop it"
-      : talk.words === ""
-        ? props.where
-        : `“${talk.words}”`;
+        ? "dropping"
+        : "held";
+  const { title, detail } = SAYS[showing]({
+    where: props.where,
+    problem: talk.kind === "idle" ? talk.problem : undefined,
+    words: talk.kind === "listening" ? talk.words : "",
+  });
 
   return (
     <>
@@ -223,7 +242,7 @@ export function TalkBar(props: {
         aria-label="Talk"
         aria-pressed={listeningNow}
         aria-describedby={`${titleId} ${detailId}`}
-        data-talk={held ? "held" : listeningNow ? "listening" : answering ? "answering" : "idle"}
+        data-talk={showing}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
