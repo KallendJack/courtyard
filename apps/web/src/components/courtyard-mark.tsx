@@ -31,7 +31,7 @@ export function CourtyardLockup() {
   return (
     <span className="flex items-center gap-2.5">
       <CourtyardMark />
-      <span className="font-display text-xl font-semibold tracking-[-0.02em]">Courtyard</span>
+      <span className="display-section text-xl tracking-[-0.02em]">Courtyard</span>
     </span>
   );
 }

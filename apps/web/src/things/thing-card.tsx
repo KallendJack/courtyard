@@ -163,7 +163,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
         )}
         {history.length > 0 && (
           <section aria-label="History" className="flex flex-col gap-2.5 border-t pt-5">
-            <h2 className="font-display text-[18px]/[26px] font-semibold">History</h2>
+            <h2 className="display-section text-[18px]/[26px]">History</h2>
             <ul className="flex flex-col gap-2.5">
               {history.map((entry, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: a history only changes as a whole, when the Thing does

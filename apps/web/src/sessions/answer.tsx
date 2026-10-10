@@ -16,7 +16,7 @@ import { CodeBlock } from "./code-block.tsx";
 import { hasMaths, writeMathsForRemark } from "./maths.ts";
 import { useReveal } from "./reveal.ts";
 
-const SUBHEADING = "font-display text-xl/7 font-semibold";
+const SUBHEADING = "display-section text-xl/7";
 
 /**
  * How each part of an answer looks. Markdown becomes elements, never raw HTML, so an answer can't
@@ -25,7 +25,7 @@ const SUBHEADING = "font-display text-xl/7 font-semibold";
 const ELEMENTS: Components = {
   h1: ({ node: _, ...props }) => <h2 className={SUBHEADING} {...props} />,
   h2: ({ node: _, ...props }) => <h3 className={SUBHEADING} {...props} />,
-  h3: ({ node: _, ...props }) => <h4 className="font-display text-lg/7 font-semibold" {...props} />,
+  h3: ({ node: _, ...props }) => <h4 className="display-section text-lg/7" {...props} />,
   h4: ({ node: _, ...props }) => <h5 className="font-semibold" {...props} />,
   h5: ({ node: _, ...props }) => <h6 className="font-semibold" {...props} />,
   h6: ({ node: _, ...props }) => <h6 className="font-semibold" {...props} />,

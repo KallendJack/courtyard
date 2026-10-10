@@ -17,8 +17,9 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   passed in as dependencies.
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
-- **The web app's look comes from one theme**, Moorland, in `apps/web/src/styles.css` (the Paper design chosen in
-  issue #2). Colours, fonts and radii are used by name, never by value. Components join classes with
+- **The web app's look comes from one theme**, in `apps/web/src/styles.css`: Moorland by day (the Paper design
+  chosen in issue #2) and Handheld by night (the Paper boards "Handheld ·"). Colours, fonts and radii are used by
+  name, never by value. Components join classes with
   `lib/classes.ts`, which merges nothing, so no class-merging code reaches the first load.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
