@@ -223,7 +223,7 @@ export const createWorker = (options: {
     code: createCode({
       dataDir,
       commandEnv: github.commandEnv,
-      findPullRequest: github.pullRequest,
+      pullRequests: github,
     }),
     now,
     notify: (session, event) => {

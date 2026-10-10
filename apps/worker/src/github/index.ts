@@ -1,11 +1,17 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type GitHubConnection, PullRequest, type PullRequestChecks } from "@courtyard/contract";
+import {
+  type GitHubConnection,
+  type MergeReadiness,
+  PullRequest,
+  type PullRequestChecks,
+  PullRequestReview,
+} from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, removeFile, writeBytesIn, writeJsonFile } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { DeviceSignIn, FoundCheck, GitHubApi, UserToken } from "./api.ts";
+import type { DeviceSignIn, FoundCheck, FoundPullRequest, GitHubApi, UserToken } from "./api.ts";
 
 export type { GitHubApi } from "./api.ts";
 
@@ -44,6 +50,8 @@ export const KEEP_FRESH_EVERY_MS = 5 * 60 * 1000;
 /** Why the GitHub sign-in couldn't be acted on. */
 export type GitHubProblem =
   | { readonly kind: "not-set-up" }
+  /** No one is signed in to GitHub from Connections. */
+  | { readonly kind: "signed-out" }
   /** GitHub couldn't do it, in plain words. */
   | { readonly kind: "github"; readonly message: string }
   | { readonly kind: "storage" };
@@ -120,6 +128,32 @@ const checksOf = (checks: readonly FoundCheck[]): PullRequestChecks => {
   if (first !== undefined) return { kind: "failed", failed: [first, ...more] };
   if (checks.some((check) => check.outcome === "running")) return { kind: "running" };
   return checks.length === 0 ? { kind: "none" } : { kind: "passed" };
+};
+
+/** Names in a sentence: "e2e", "verify and e2e", "check, verify and e2e". */
+const namesOf = (names: readonly string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/**
+ * Whether Merge can merge a pull request now (#160), or why not in the owner's words: never while
+ * it conflicts with its base, or a check on its latest commit fails or is still running.
+ */
+const mergeReadiness = (pull: FoundPullRequest): MergeReadiness => {
+  const refused = (reason: string) => ({ kind: "refused", reason }) as const;
+  if (pull.state !== "open") return refused(`It's ${pull.state} already.`);
+  if (pull.conflicts) {
+    return refused(
+      `It conflicts with ${pull.base}. Ask the session to bring its branch up to date.`,
+    );
+  }
+  const named = (outcome: FoundCheck["outcome"]) => [
+    ...new Set(pull.checks.filter((check) => check.outcome === outcome).map((check) => check.name)),
+  ];
+  const failed = named("failed");
+  if (failed.length > 0) return refused(`Merge waits for ${namesOf(failed)} to pass.`);
+  const running = named("running");
+  if (running.length > 0) return refused(`Merge waits for ${namesOf(running)} to finish.`);
+  return { kind: "ready" };
 };
 
 export const createGitHub = (options: {
@@ -239,6 +273,17 @@ export const createGitHub = (options: {
       else if (refreshed.error === "lapsed") await forget();
     });
 
+  /** GitHub and the access token signed in now, or why there's none to ask with. */
+  const tokenFor = async (
+    github: GitHubApi | null,
+  ): Promise<Result<{ github: GitHubApi; token: string }, GitHubProblem>> => {
+    if (github === null) return err({ kind: "not-set-up" });
+    const stored = await read();
+    if (!stored.ok) return err({ kind: "storage" });
+    if (stored.value === undefined) return err({ kind: "signed-out" });
+    return ok({ github, token: stored.value.accessToken });
+  };
+
   return {
     status: async (): Promise<Result<GitHubConnection, "storage">> => {
       if (api === null) return ok({ kind: "not-set-up" });
@@ -313,6 +358,56 @@ export const createGitHub = (options: {
       return parsed.success
         ? ok(parsed.data)
         : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
+    },
+
+    /**
+     * The latest pull request from `branch` in `repo` as the owner reviews it (#160): the files it
+     * changes with their diffs, its checks by name, and whether Merge can merge it now.
+     */
+    review: async (find: {
+      repo: string;
+      branch: string;
+    }): Promise<Result<PullRequestReview | undefined, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const { github, token } = signedIn.value;
+      const found = await github.pullRequest(token, find);
+      if (!found.ok) return err({ kind: "github", message: found.error });
+      if (found.value === null) return ok(undefined);
+      const pull = found.value;
+      const files = await github.pullRequestFiles(token, { repo: find.repo, number: pull.number });
+      if (!files.ok) return err({ kind: "github", message: files.error });
+      const parsed = PullRequestReview.safeParse({
+        pullRequest: { ...pull, checks: checksOf(pull.checks) },
+        branch: find.branch,
+        base: pull.base,
+        checks: pull.checks,
+        files: files.value,
+        merge: mergeReadiness(pull),
+      });
+      return parsed.success
+        ? ok(parsed.data)
+        : err({ kind: "github", message: "GitHub's pull request couldn't be read." });
+    },
+
+    /** Merges pull request `number` in `repo`, only while its latest commit is `head` (#160). */
+    merge: async (pull: {
+      repo: string;
+      number: number;
+      head: string;
+    }): Promise<Result<null, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const merged = await signedIn.value.github.merge(signedIn.value.token, pull);
+      return merged.ok ? merged : err({ kind: "github", message: merged.error });
+    },
+
+    /** Closes pull request `number` in `repo` without merging it (#160). */
+    close: async (pull: { repo: string; number: number }): Promise<Result<null, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const closed = await signedIn.value.github.close(signedIn.value.token, pull);
+      return closed.ok ? closed : err({ kind: "github", message: closed.error });
     },
 
     /** For the worker's repeating jobs: refreshes the sign-in when it's close to running out. */

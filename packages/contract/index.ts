@@ -59,7 +59,16 @@ export {
   PushNotice,
 } from "./lib/notifications.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
-export { PullRequest, PullRequestChecks, pullRequestEnded } from "./lib/pull-request.ts";
+export {
+  ChangedFile,
+  MergeReadiness,
+  PullRequest,
+  PullRequestChanges,
+  PullRequestCheck,
+  PullRequestChecks,
+  PullRequestReview,
+  pullRequestEnded,
+} from "./lib/pull-request.ts";
 export {
   Capabilities,
   CarryOnRequest,

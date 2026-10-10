@@ -164,7 +164,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   strip shows. Checks failing on a commit not yet asked about start a turn on the model the owner last used, once
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
-  no turn runs its worktree and branch are cleared away.
+  no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
+  added and removed, files changed, #160), which the strip shows too.
+- **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
+  asked of GitHub through `code/` and `github/` each time: its checks by name, the files it changes with their
+  diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
+  base). `pull-request/merge` refuses with that reason, else merges only the commit reviewed; `pull-request/close`
+  closes it. Either then follows the PR at once, so the session ends as one merged or closed on GitHub does.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -178,7 +184,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
   HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
   stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
-  latest pull request and the checks on its latest commit (#172). Its routes are
+  latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
+  merges and closes it (#160). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
   (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
@@ -264,6 +271,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
+  - **`review/`:** a code session's pull request, reviewed on its page in place of the conversation (`?view=review`,
+    #160): check pills, the changed files as a tree (`components/file-tree.tsx`), the chosen file's diff
+    (`diff.tsx`, long lines wrapping so it reads on a phone), and Close PR (confirmed) and Merge (greyed out with
+    its reason) as thumb buttons (`components/thumb-button.tsx`, shared with the approval card). Its own lazy load,
+    with its calls (`api.ts`) and a stylesheet of its own (`review.css`), like `things/`.
   - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.

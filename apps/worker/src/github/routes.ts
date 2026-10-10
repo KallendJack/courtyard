@@ -5,12 +5,18 @@ import type { GitHub, GitHubProblem } from "./index.ts";
 
 const STORAGE = "Courtyard couldn't read or keep its GitHub sign-in.";
 
-const problem = (c: Context, why: GitHubProblem) => {
+/** Why GitHub couldn't be acted on, as the API answers it, for every route that asks GitHub. */
+export const gitHubProblem = (c: Context, why: GitHubProblem) => {
   switch (why.kind) {
     case "not-set-up":
       return apiError(c, {
         status: 404,
         error: "GitHub isn't set up on this worker: register Courtyard's GitHub App first.",
+      });
+    case "signed-out":
+      return apiError(c, {
+        status: 409,
+        error: "GitHub isn't connected. Sign in to GitHub from Connections on the home page.",
       });
     case "github":
       return apiError(c, { status: 502, error: why.message });
@@ -34,7 +40,7 @@ export const gitHubRoutes = (github: GitHub) => {
   /** Signs in, or switches account: answers with the device code to enter. */
   routes.post("/github/sign-in", async (c) => {
     const started = await github.start();
-    return started.ok ? answer(c) : problem(c, started.error);
+    return started.ok ? answer(c) : gitHubProblem(c, started.error);
   });
   routes.post("/github/cancel", (c) => {
     github.cancel();
@@ -42,7 +48,7 @@ export const gitHubRoutes = (github: GitHub) => {
   });
   routes.post("/github/sign-out", async (c) => {
     const signedOut = await github.signOut();
-    return signedOut.ok ? c.body(null, 204) : problem(c, signedOut.error);
+    return signedOut.ok ? c.body(null, 204) : gitHubProblem(c, signedOut.error);
   });
 
   return routes;

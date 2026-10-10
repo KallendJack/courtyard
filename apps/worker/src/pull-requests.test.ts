@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitHubConnection, type SessionEvent } from "@courtyard/contract";
+import { GitHubConnection, PullRequestReview, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import {
@@ -125,10 +125,11 @@ describe("a code session's pull request", () => {
     await runJobs();
 
     const url = `https://github.com/${onGitHub}/pull/${number}`;
+    const changes = { additions: 0, deletions: 0, files: 0 };
     expect(pullRequestsIn(await eventsOf(id))).toEqual([
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "none" } },
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "running" } },
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "passed" } },
+      { number, url, state: "open", head: "c0ffee1", checks: { kind: "none" }, changes },
+      { number, url, state: "open", head: "c0ffee1", checks: { kind: "running" }, changes },
+      { number, url, state: "open", head: "c0ffee1", checks: { kind: "passed" }, changes },
     ]);
   });
 
@@ -241,6 +242,163 @@ describe("a failing check", () => {
       undefined,
       expect.objectContaining({ head: "c0ffee1" }),
     ]);
+  });
+});
+
+// Reviewing a session's pull request in Courtyard (#160): its changed files with their diffs, and
+// Merge (refused with the reason until it can merge) and Close.
+
+/** The review of a session's pull request, as the session page asks for it. */
+const reviewOf = async (id: string) => {
+  const response = await request(`/api/sessions/${id}/pull-request`);
+  expect(response.status).toBe(200);
+  return PullRequestReview.parse(await response.json());
+};
+
+const TALK_PATCH =
+  "@@ -1,2 +1,3 @@\n const listen = useSpeech({\n-  keyboard: true,\n+  onWords: show,\n+  onStop: send,";
+
+describe("reviewing a pull request", () => {
+  it("shows the files it changes, each with its diff, and its checks by name", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch,
+      head: "c0ffee1",
+      files: [
+        {
+          path: "apps/web/src/talk-button.tsx",
+          status: "modified",
+          additions: 2,
+          deletions: 1,
+          patch: TALK_PATCH,
+        },
+        { path: "e2e/talk.spec.ts", status: "added", additions: 18, deletions: 0, patch: null },
+      ],
+    });
+    github.setChecks(number, [
+      { name: "verify", outcome: "passed" },
+      { name: "e2e", outcome: "running" },
+    ]);
+
+    const review = await reviewOf(id);
+
+    expect(review).toMatchObject({
+      pullRequest: { number, state: "open", changes: { additions: 20, deletions: 1, files: 2 } },
+      branch,
+      base: "main",
+      checks: [
+        { name: "verify", outcome: "passed" },
+        { name: "e2e", outcome: "running" },
+      ],
+      files: [
+        { path: "apps/web/src/talk-button.tsx", additions: 2, deletions: 1, patch: TALK_PATCH },
+        { path: "e2e/talk.spec.ts", status: "added", patch: null },
+      ],
+    });
+  });
+
+  it.each([
+    {
+      what: "a check is running",
+      checks: [
+        { name: "verify", outcome: "passed" },
+        { name: "e2e", outcome: "running" },
+      ],
+      conflicts: false,
+      reason: "Merge waits for e2e to finish.",
+    },
+    {
+      what: "checks failed",
+      checks: [
+        { name: "check", outcome: "failed" },
+        { name: "e2e", outcome: "failed" },
+        { name: "build", outcome: "running" },
+      ],
+      conflicts: false,
+      reason: "Merge waits for check and e2e to pass.",
+    },
+    {
+      what: "it conflicts",
+      checks: [{ name: "e2e", outcome: "passed" }],
+      conflicts: true,
+      reason: "It conflicts with main. Ask the session to bring its branch up to date.",
+    },
+  ] as const)("refuses Merge with the reason while $what", async (when) => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, when.checks);
+    github.setConflicts(number, when.conflicts);
+
+    expect((await reviewOf(id)).merge).toEqual({ kind: "refused", reason: when.reason });
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+
+    expect(merging.status).toBe(409);
+    expect(await errorOf(merging)).toBe(when.reason);
+    expect(github.stateOf(number)).toBe("open");
+  });
+
+  it("merges once its checks pass, which ends the session and clears its worktree and branch away", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "passed" }]);
+    expect((await reviewOf(id)).merge).toEqual({ kind: "ready" });
+
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+
+    expect(merging.status).toBe(204);
+    expect(github.stateOf(number)).toBe("merged");
+    expect(pullRequestsIn(await eventsOf(id)).at(-1)?.state).toBe("merged");
+    expect(await gitIn(repo, "worktree", "list", "--porcelain")).not.toContain(branch);
+    expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
+  });
+
+  it("merges a repository with no checks", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+
+    const merging = await postJson(request, `/api/sessions/${id}/pull-request/merge`, {});
+
+    expect(merging.status).toBe(204);
+    expect(github.stateOf(number)).toBe("merged");
+  });
+
+  it("closes it without merging, which ends the session and clears its worktree and branch away", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
+
+    const closing = await postJson(request, `/api/sessions/${id}/pull-request/close`, {});
+
+    expect(closing.status).toBe(204);
+    expect(github.stateOf(number)).toBe("closed");
+    expect(pullRequestsIn(await eventsOf(id)).at(-1)?.state).toBe("closed");
+    expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
+    const again = await postJson(request, `/api/sessions/${id}/pull-request/close`, {});
+    expect(again.status).toBe(409);
+    expect(await errorOf(again)).toBe("It's closed already.");
+  });
+
+  it("says GitHub isn't connected when no one is signed in", async () => {
+    const { id, branch } = await codeSession();
+    github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    await postJson(request, "/api/github/sign-out", {});
+
+    const response = await request(`/api/sessions/${id}/pull-request`);
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toBe(
+      "GitHub isn't connected. Sign in to GitHub from Connections on the home page.",
+    );
+  });
+
+  it("says when the session has no pull request yet", async () => {
+    const { id } = await codeSession();
+
+    const response = await request(`/api/sessions/${id}/pull-request`);
+
+    expect(response.status).toBe(404);
+    expect(await errorOf(response)).toBe("This session has no pull request yet.");
   });
 });
 

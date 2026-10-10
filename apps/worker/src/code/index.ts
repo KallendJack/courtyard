@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import { CODE_SESSIONS_AT_ONCE, type PullRequest, type SessionId } from "@courtyard/contract";
+import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import { isFolder } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
+import type { GitHub, GitHubProblem } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, DEFAULT_ALLOWLIST, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
@@ -19,6 +20,12 @@ import { createCodeSlots } from "./slots.ts";
  * own GitHub sign-in, never the machine's (#99). An `undefined` is unset.
  */
 export type CommandEnv = Readonly<Record<string, string | undefined>>;
+
+/** Why a session's pull request couldn't be reviewed, merged or closed (#160). */
+export type PullRequestProblem =
+  | GitHubProblem
+  /** The code workspace's remote isn't on GitHub. */
+  | { readonly kind: "not-on-github" };
 
 /** A session's branch and the folder it's checked out in. */
 export type SessionBranch = { readonly branch: string; readonly worktree: string };
@@ -150,12 +157,15 @@ export const createCode = (options: {
   dataDir: string;
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
   commandEnv: () => CommandEnv;
-  /** GitHub's latest pull request from a branch (#172), or `undefined` when there's none. */
-  findPullRequest: (find: {
-    repo: string;
-    branch: string;
-  }) => Promise<Result<PullRequest | undefined, unknown>>;
+  /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
+  pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close">;
 }) => {
+  const { pullRequests } = options;
+  /** The repository a code workspace's remote is on GitHub, or why there's none to ask. */
+  const onGitHub = async (repoPath: string): Promise<Result<string, PullRequestProblem>> => {
+    const repo = await gitHubRepoOf(repoPath);
+    return repo === undefined ? err({ kind: "not-on-github" }) : ok(repo);
+  };
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
   return {
@@ -222,8 +232,42 @@ export const createCode = (options: {
     pullRequestOf: async (find: { repoPath: string; branch: string }) => {
       const repo = await gitHubRepoOf(find.repoPath);
       if (repo === undefined) return undefined;
-      const found = await options.findPullRequest({ repo, branch: find.branch });
+      const found = await pullRequests.pullRequest({ repo, branch: find.branch });
       return found.ok ? found.value : undefined;
+    },
+
+    /**
+     * The session branch's pull request as the owner reviews it (#160): `undefined` when it has
+     * none yet.
+     */
+    reviewOf: async (find: {
+      repoPath: string;
+      branch: string;
+    }): Promise<Result<PullRequestReview | undefined, PullRequestProblem>> => {
+      const repo = await onGitHub(find.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.review({ repo: repo.value, branch: find.branch });
+    },
+
+    /** Merges the session's pull request on GitHub, only while its latest commit is `head`. */
+    merge: async (pull: {
+      repoPath: string;
+      number: number;
+      head: string;
+    }): Promise<Result<null, PullRequestProblem>> => {
+      const repo = await onGitHub(pull.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.merge({ repo: repo.value, number: pull.number, head: pull.head });
+    },
+
+    /** Closes the session's pull request on GitHub without merging it. */
+    close: async (pull: {
+      repoPath: string;
+      number: number;
+    }): Promise<Result<null, PullRequestProblem>> => {
+      const repo = await onGitHub(pull.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.close({ repo: repo.value, number: pull.number });
     },
 
     /**

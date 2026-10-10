@@ -4,7 +4,8 @@ import { err, ok, type Result } from "../result.ts";
 
 /**
  * GitHub itself, as the worker asks it (#99): signing in through Courtyard's GitHub App with a
- * device code, refreshing the sign-in, and who is signed in with which repos. Passed in to the
+ * device code, refreshing the sign-in, who is signed in with which repos, and a session branch's
+ * pull request: its state and checks (#172), its files, Merge and Close (#160). Passed in to the
  * worker like the clock, so tests use an in-memory fake; this file is the one real one.
  */
 export type GitHubApi = {
@@ -30,6 +31,24 @@ export type GitHubApi = {
     accessToken: string,
     find: { readonly repo: string; readonly branch: string },
   ) => Promise<Result<FoundPullRequest | null, string>>;
+  /** The files pull request `number` in `repo` changes, each with its diff (#160). */
+  readonly pullRequestFiles: (
+    accessToken: string,
+    pull: { readonly repo: string; readonly number: number },
+  ) => Promise<Result<readonly FoundFile[], string>>;
+  /**
+   * Merges pull request `number` in `repo`, only while its latest commit is still `head` (#160):
+   * GitHub's reason in plain words when it won't.
+   */
+  readonly merge: (
+    accessToken: string,
+    pull: { readonly repo: string; readonly number: number; readonly head: string },
+  ) => Promise<Result<null, string>>;
+  /** Closes pull request `number` in `repo` without merging it (#160). */
+  readonly close: (
+    accessToken: string,
+    pull: { readonly repo: string; readonly number: number },
+  ) => Promise<Result<null, string>>;
 };
 
 /** A pull request as GitHub has it. */
@@ -39,7 +58,26 @@ export type FoundPullRequest = {
   readonly state: "open" | "merged" | "closed";
   /** Its latest commit. */
   readonly head: string;
+  /** The branch it merges into. */
+  readonly base: string;
   readonly checks: readonly FoundCheck[];
+  /** Lines added and removed, and files changed, over the whole pull request. */
+  readonly changes: {
+    readonly additions: number;
+    readonly deletions: number;
+    readonly files: number;
+  };
+  /** It conflicts with its base, so GitHub can't merge it. */
+  readonly conflicts: boolean;
+};
+
+/** A file a pull request changes, and its diff: `null` when GitHub shows none (binary, too large). */
+export type FoundFile = {
+  readonly path: string;
+  readonly status: "added" | "removed" | "modified" | "renamed";
+  readonly additions: number;
+  readonly deletions: number;
+  readonly patch: string | null;
 };
 
 /** One check on a pull request's latest commit, and how it's going. */
@@ -105,15 +143,45 @@ const Repositories = z.object({
   repositories: z.array(z.object({ full_name: z.string() })),
 });
 
-const Pulls = z.array(
+const Pulls = z.array(z.object({ number: z.number().int().positive() }));
+/** One pull request, with what only asking for it alone gives: its size and whether it merges. */
+const Pull = z.object({
+  number: z.number().int().positive(),
+  html_url: z.url({ protocol: /^https$/ }),
+  state: z.enum(["open", "closed"]),
+  merged_at: z.string().nullable(),
+  head: z.object({ sha: z.string().regex(/^[0-9a-f]+$/) }),
+  base: z.object({ ref: z.string() }),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  changed_files: z.number().int().nonnegative(),
+  /** `null` while GitHub is still working it out. */
+  mergeable: z.boolean().nullable(),
+});
+const PullFiles = z.array(
   z.object({
-    number: z.number().int().positive(),
-    html_url: z.url({ protocol: /^https$/ }),
-    state: z.enum(["open", "closed"]),
-    merged_at: z.string().nullable(),
-    head: z.object({ sha: z.string().regex(/^[0-9a-f]+$/) }),
+    filename: z.string().min(1),
+    status: z.string(),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    patch: z.string().optional(),
   }),
 );
+const Refusal = z.object({ message: z.string() });
+
+/** GitHub's file statuses as Courtyard shows them: a copied file is added, say. */
+const statusOf = (status: string): FoundFile["status"] => {
+  switch (status) {
+    case "added":
+    case "copied":
+      return "added";
+    case "removed":
+    case "renamed":
+      return status;
+    default:
+      return "modified";
+  }
+};
 const CheckRuns = z.object({
   check_runs: z.array(
     z.object({ name: z.string(), status: z.string(), conclusion: z.string().nullable() }),
@@ -144,6 +212,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const SLOW_DOWN_SECONDS = 5;
 /** The most repos read from one installation: a page of GitHub's at a time. */
 const PAGE = 100;
+/** The most pages of a pull request's files read: GitHub lists up to 3,000, a review shows 300. */
+const FILE_PAGES = 3;
 
 /**
  * GitHub, through the GitHub App whose client ID the owner set (`COURTYARD_GITHUB_CLIENT_ID`).
@@ -161,19 +231,49 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     return (await response.json()) as unknown;
   };
 
-  /** Reads one of GitHub's API answers as the account signed in with `token`. */
-  const apiGet = async <T>(token: string, path: string, schema: z.ZodType<T>) => {
-    const response = await fetch(`https://api.github.com${path}`, {
+  /** Asks GitHub's API as the account signed in with `token`, sending `body` as JSON if any. */
+  const apiRequest = (token: string, path: string, send?: { method: string; body: unknown }) =>
+    fetch(`https://api.github.com${path}`, {
+      ...(send === undefined
+        ? {}
+        : {
+            method: send.method,
+            body: JSON.stringify(send.body),
+          }),
       headers: {
         accept: "application/vnd.github+json",
         authorization: `Bearer ${token}`,
         "user-agent": "Courtyard",
         "x-github-api-version": "2022-11-28",
+        ...(send === undefined ? {} : { "content-type": "application/json" }),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+
+  /** Reads one of GitHub's API answers as the account signed in with `token`. */
+  const apiGet = async <T>(token: string, path: string, schema: z.ZodType<T>) => {
+    const response = await apiRequest(token, path);
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
     return schema.parse(await response.json());
+  };
+
+  /**
+   * Changes something on GitHub: nothing once it's done, or GitHub's reason in its own words when
+   * it won't (`fallback` when it gives none, or can't be reached).
+   */
+  const apiChange = async (
+    token: string,
+    path: string,
+    change: { method: string; body: unknown; fallback: string },
+  ): Promise<Result<null, string>> => {
+    try {
+      const response = await apiRequest(token, path, change);
+      if (response.ok) return ok(null);
+      const refused = Refusal.safeParse(await response.json().catch(() => undefined));
+      return err(refused.success ? `GitHub said: ${refused.data.message}` : change.fallback);
+    } catch {
+      return err(change.fallback);
+    }
   };
 
   return {
@@ -283,12 +383,13 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       const [owner] = repo.data.split("/");
       try {
         const head = encodeURIComponent(`${owner}:${find.branch}`);
-        const [pull] = await apiGet(
+        const [latest] = await apiGet(
           accessToken,
           `/repos/${repo.data}/pulls?head=${head}&state=all&per_page=1`,
           Pulls,
         );
-        if (pull === undefined) return ok(null);
+        if (latest === undefined) return ok(null);
+        const pull = await apiGet(accessToken, `/repos/${repo.data}/pulls/${latest.number}`, Pull);
         const { check_runs } = await apiGet(
           accessToken,
           `/repos/${repo.data}/commits/${pull.head.sha}/check-runs?per_page=${PAGE}`,
@@ -299,11 +400,67 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           url: pull.html_url,
           state: pull.merged_at !== null ? "merged" : pull.state,
           head: pull.head.sha,
+          base: pull.base.ref,
           checks: check_runs.map((run) => ({ name: run.name, outcome: outcomeOf(run) })),
+          changes: {
+            additions: pull.additions,
+            deletions: pull.deletions,
+            files: pull.changed_files,
+          },
+          conflicts: pull.mergeable === false,
         });
       } catch {
         return err("GitHub couldn't be asked about the pull request.");
       }
+    },
+
+    pullRequestFiles: async (accessToken, pull) => {
+      const repo = RepoName.safeParse(pull.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        const files: FoundFile[] = [];
+        for (let page = 1; page <= FILE_PAGES; page += 1) {
+          const listed = await apiGet(
+            accessToken,
+            `/repos/${repo.data}/pulls/${pull.number}/files?per_page=${PAGE}&page=${page}`,
+            PullFiles,
+          );
+          files.push(
+            ...listed.map((file) => ({
+              path: file.filename,
+              status: statusOf(file.status),
+              additions: file.additions,
+              deletions: file.deletions,
+              patch: file.patch ?? null,
+            })),
+          );
+          if (listed.length < PAGE) break;
+        }
+        return ok(files);
+      } catch {
+        return err("GitHub couldn't be asked what the pull request changes.");
+      }
+    },
+
+    merge: async (accessToken, pull) => {
+      const repo = RepoName.safeParse(pull.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      return apiChange(accessToken, `/repos/${repo.data}/pulls/${pull.number}/merge`, {
+        method: "PUT",
+        // Only the commit the owner reviewed: GitHub refuses if more was pushed since.
+        body: { sha: pull.head },
+        fallback: "GitHub couldn't merge the pull request.",
+      });
+    },
+
+    close: async (accessToken, pull) => {
+      const repo = RepoName.safeParse(pull.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      return apiChange(accessToken, `/repos/${repo.data}/pulls/${pull.number}`, {
+        method: "PATCH",
+        body: { state: "closed" },
+        fallback: "GitHub couldn't close the pull request.",
+      });
     },
   };
 };

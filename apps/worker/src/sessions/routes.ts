@@ -9,6 +9,7 @@ import {
   NewMessage,
   type Overflow,
   type ProviderList,
+  type PullRequestReview,
   SaveAsDocument,
   SaveEdit,
   SessionChange,
@@ -25,6 +26,7 @@ import { z } from "zod";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
 import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
+import { gitHubProblem } from "../github/routes.ts";
 import { apiError, contextError, NO_SAVING_MODEL, readBody, readMessage } from "../http.ts";
 import { firstSavingModel, type Provider } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -177,6 +179,18 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: `This session's pull request was ${error.state}, so it takes no more messages. Start a new session to carry on.`,
       });
+    case "no-pull-request":
+      return apiError(c, { status: 404, error: "This session has no pull request yet." });
+    case "pull-request-refused":
+      return apiError(c, { status: 409, error: error.reason });
+    case "github":
+      return error.problem.kind === "not-on-github"
+        ? apiError(c, {
+            status: 409,
+            error:
+              "This code workspace's repository isn't on GitHub, so its pull requests aren't either.",
+          })
+        : gitHubProblem(c, error.problem);
     case "storage":
       return apiError(c, { status: 500, error: error.message });
   }
@@ -435,6 +449,25 @@ export const sessionRoutes = (options: {
     });
     if (!answered.ok) return sessionError(c, answered.error);
     return c.json({ answer: answered.value } satisfies ApprovalAnswering);
+  });
+
+  // Reviewing a code session's pull request (#160): what it changes, then Merge or Close.
+  routes.get("/sessions/:id/pull-request", async (c) => {
+    const review = await sessions.pullRequestReview(c.req.param("id"));
+    if (!review.ok) return sessionError(c, review.error);
+    return c.json(review.value satisfies PullRequestReview);
+  });
+
+  routes.post("/sessions/:id/pull-request/merge", async (c) => {
+    const merged = await sessions.mergePullRequest(c.req.param("id"));
+    if (!merged.ok) return sessionError(c, merged.error);
+    return c.body(null, 204);
+  });
+
+  routes.post("/sessions/:id/pull-request/close", async (c) => {
+    const closed = await sessions.closePullRequest(c.req.param("id"));
+    if (!closed.ok) return sessionError(c, closed.error);
+    return c.body(null, 204);
   });
 
   // Save as document (ADR 0020): an answer, as a new document in the session's workspace.

@@ -18,6 +18,7 @@ import {
   overflowFrom,
   type PlacedLine,
   type PullRequest,
+  type PullRequestReview,
   pullRequestEnded,
   pullRequestIn,
   SESSION_TITLE_MAX_LENGTH,
@@ -45,6 +46,7 @@ import {
   type CodeRefusal,
   commandAllowed,
   editableIn,
+  type PullRequestProblem,
   slotEnv,
 } from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
@@ -171,6 +173,12 @@ export type SessionError =
   | { readonly kind: "approval-closed" }
   /** The session's pull request was merged or closed, so it takes no more messages (#172). */
   | { readonly kind: "pull-request-ended"; readonly state: "merged" | "closed" }
+  /** The session has no pull request to review yet, or isn't a code session (#160). */
+  | { readonly kind: "no-pull-request" }
+  /** Merge or Close can't act on the pull request now, in the owner's words (#160). */
+  | { readonly kind: "pull-request-refused"; readonly reason: string }
+  /** GitHub couldn't be asked, or wouldn't do it (#160). */
+  | { readonly kind: "github"; readonly problem: PullRequestProblem }
   | { readonly kind: "storage"; readonly message: string };
 
 /**
@@ -212,6 +220,7 @@ const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
   now.url === was.url &&
   now.state === was.state &&
   now.head === was.head &&
+  JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
   JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
 /** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
@@ -1260,6 +1269,33 @@ export const createSessions = (options: {
       : { kind: "pull-request-ended", state: pullRequest.state };
   };
 
+  /** A code session's branch and its workspace's repository, or `undefined` for any other. */
+  const codeBranchOf = async (file: SessionFile) => {
+    if (file.branch === undefined) return undefined;
+    const workspace = await getWorkspace(options.contextDir, file.workspaceId);
+    if (!workspace.ok || typeof workspace.value.repoPath !== "string") return undefined;
+    return { branch: file.branch, repoPath: workspace.value.repoPath };
+  };
+
+  /**
+   * A code session's pull request as the owner reviews it (#160), with the session and its
+   * repository, or why it can't be reviewed.
+   */
+  const reviewIn = async (
+    rawId: string,
+  ): Promise<
+    Result<{ id: SessionId; repoPath: string; review: PullRequestReview }, SessionError>
+  > => {
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const code = await codeBranchOf(found.value);
+    if (code === undefined) return err({ kind: "no-pull-request" });
+    const review = await options.code.reviewOf(code);
+    if (!review.ok) return err({ kind: "github", problem: review.error });
+    if (review.value === undefined) return err({ kind: "no-pull-request" });
+    return ok({ id: found.value.id, repoPath: code.repoPath, review: review.value });
+  };
+
   /** Following pull requests runs one session at a time, so no change is recorded twice. */
   let following: Promise<unknown> = Promise.resolve();
 
@@ -1271,11 +1307,11 @@ export const createSessions = (options: {
   const followPullRequest = (id: SessionId) => {
     const look = following.then(async () => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
-      if (!file.ok || file.value?.branch === undefined) return;
-      const { branch, workspaceId } = file.value;
-      const workspace = await getWorkspace(options.contextDir, workspaceId);
-      if (!workspace.ok || typeof workspace.value.repoPath !== "string") return;
-      const { repoPath } = workspace.value;
+      if (!file.ok || file.value === undefined) return;
+      const { workspaceId } = file.value;
+      const code = await codeBranchOf(file.value);
+      if (code === undefined) return;
+      const { branch, repoPath } = code;
       await settled(id);
       const events = await readEvents(id);
       if (!events.ok) return;
@@ -1353,6 +1389,49 @@ export const createSessions = (options: {
   };
 
   return {
+    /** A code session's pull request as the owner reviews it (#160). */
+    pullRequestReview: async (rawId: string): Promise<Result<PullRequestReview, SessionError>> => {
+      const found = await reviewIn(rawId);
+      return found.ok ? ok(found.value.review) : found;
+    },
+
+    /**
+     * Merges a code session's pull request on GitHub (#160), refused with the reason while it
+     * can't merge, and only the commit the owner reviewed. Once merged, the session ends as one
+     * merged on GitHub does: the merge is recorded, and its worktree and branch are cleared away.
+     */
+    mergePullRequest: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const found = await reviewIn(rawId);
+      if (!found.ok) return found;
+      const { id, repoPath, review } = found.value;
+      if (review.merge.kind === "refused") {
+        return err({ kind: "pull-request-refused", reason: review.merge.reason });
+      }
+      const { number, head } = review.pullRequest;
+      const merged = await options.code.merge({ repoPath, number, head });
+      if (!merged.ok) return err({ kind: "github", problem: merged.error });
+      await followPullRequest(id);
+      return ok(null);
+    },
+
+    /**
+     * Closes a code session's pull request on GitHub without merging it (#160); the session ends
+     * as one closed on GitHub does.
+     */
+    closePullRequest: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const found = await reviewIn(rawId);
+      if (!found.ok) return found;
+      const { id, repoPath, review } = found.value;
+      const { number, state } = review.pullRequest;
+      if (state !== "open") {
+        return err({ kind: "pull-request-refused", reason: `It's ${state} already.` });
+      }
+      const closed = await options.code.close({ repoPath, number });
+      if (!closed.ok) return err({ kind: "github", problem: closed.error });
+      await followPullRequest(id);
+      return ok(null);
+    },
+
     /**
      * Follows every code session's pull request on GitHub (#172), for the worker's repeating
      * jobs: what changed is recorded, a failing check starts a fixing turn, and a merged or closed
