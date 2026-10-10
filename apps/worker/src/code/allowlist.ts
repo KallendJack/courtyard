@@ -16,9 +16,17 @@ export type CommandRule = {
   readonly more: boolean;
   /** Arguments that are never allowed after them, as patterns. */
   readonly never?: readonly RegExp[];
-  /** Only while the worktree is on the session branch: committing, and later pushing it. */
+  /** Only while the worktree is on the session branch: committing, pushing, its pull request. */
   readonly onSessionBranch?: boolean;
+  /**
+   * For pushing and the pull request (#172): whether the arguments after the words name only the
+   * session's own branch and pull request.
+   */
+  readonly own?: (rest: readonly string[], work: OwnWork) => boolean;
 };
+
+/** A session's own branch, and its pull request's number once it has one. */
+export type OwnWork = { readonly branch: string; readonly pullRequest: number | undefined };
 
 /** Why a command can't be matched against the allowlist at all. */
 export type UnmatchableCommand =
@@ -128,11 +136,105 @@ const GH_LOOKS = [
   ["repo", "view"],
 ];
 
+/** What `git push` may say besides the remote and the branch: nothing that forces or deletes. */
+const PUSH_FLAGS = new Set(["-u", "--set-upstream", "-q", "--quiet"]);
+
+/**
+ * Whether a push sends only the session branch to its remote, under its own name: `git push -u
+ * origin HEAD`, `git push origin <branch>` or `git push origin HEAD:<branch>`.
+ */
+const pushesOwn = (rest: readonly string[], { branch }: OwnWork) => {
+  const named = rest.filter((word) => !PUSH_FLAGS.has(word));
+  const [remote, refspec, ...more] = named;
+  if (remote !== "origin" || refspec === undefined || more.length > 0) return false;
+  return [
+    "HEAD",
+    branch,
+    `refs/heads/${branch}`,
+    `HEAD:${branch}`,
+    `HEAD:refs/heads/${branch}`,
+    `${branch}:${branch}`,
+  ].includes(refspec);
+};
+
+/** A gh command's flags: those that take a value, and those that stand alone. */
+type GhFlags = { readonly withValue: ReadonlySet<string>; readonly alone: ReadonlySet<string> };
+
+/**
+ * A gh command's arguments read with its flags: what isn't a flag, and each flag with its value.
+ * `undefined` for a flag it doesn't know, which could do anything (`--repo`, `--web`), or one
+ * missing its value.
+ */
+const ghParts = (rest: readonly string[], flags: GhFlags) => {
+  const positionals: string[] = [];
+  const values: (readonly [string, string])[] = [];
+  for (let at = 0; at < rest.length; at += 1) {
+    const word = rest[at] ?? "";
+    if (!word.startsWith("-")) {
+      positionals.push(word);
+      continue;
+    }
+    const equals = word.startsWith("--") ? word.indexOf("=") : -1;
+    const flag = equals === -1 ? word : word.slice(0, equals);
+    const inline = equals === -1 ? undefined : word.slice(equals + 1);
+    if (flags.alone.has(flag) && inline === undefined) continue;
+    if (!flags.withValue.has(flag)) return undefined;
+    const value = inline ?? rest[(at += 1)];
+    if (value === undefined) return undefined;
+    values.push([flag, value]);
+  }
+  return { positionals, values };
+};
+
+const PR_TEXT = ["--title", "-t", "--body", "-b", "--body-file", "-F", "--base", "-B"];
+const PR_MILESTONE = ["--milestone", "-m"];
+
+const PR_CREATE: GhFlags = {
+  withValue: new Set([
+    ...PR_TEXT,
+    ...PR_MILESTONE,
+    ...["--head", "-H", "--label", "-l", "--reviewer", "-r", "--assignee", "-a"],
+    ...["--project", "-p", "--template", "-T"],
+  ]),
+  alone: new Set(["--fill", "-f", "--fill-first", "--fill-verbose", "--draft", "-d", "--dry-run"]),
+};
+
+const PR_EDIT: GhFlags = {
+  withValue: new Set([
+    ...PR_TEXT,
+    ...PR_MILESTONE,
+    ...["--add-label", "--remove-label", "--add-reviewer", "--remove-reviewer"],
+    ...["--add-assignee", "--remove-assignee", "--add-project", "--remove-project"],
+  ]),
+  alone: new Set(["--remove-milestone"]),
+};
+
+/** Whether `gh pr create` opens the session branch's own pull request, in its own repository. */
+const opensOwn = (rest: readonly string[], { branch }: OwnWork) => {
+  const parts = ghParts(rest, PR_CREATE);
+  return (
+    parts !== undefined &&
+    parts.positionals.length === 0 &&
+    parts.values.every(([flag, value]) => (flag === "--head" || flag === "-H" ? value === branch : true))
+  );
+};
+
+/**
+ * Whether `gh pr edit` changes the session's own pull request: the current branch's, or one named
+ * by the session branch or its number.
+ */
+const editsOwn = (rest: readonly string[], { branch, pullRequest }: OwnWork) => {
+  const parts = ghParts(rest, PR_EDIT);
+  if (parts === undefined || parts.positionals.length > 1) return false;
+  const [named] = parts.positionals;
+  return named === undefined || named === branch || named === String(pullRequest ?? "");
+};
+
 /**
  * A code workspace's command allowlist when its settings name none: the repository's package
  * scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and
- * gh commands that only look, and adding and committing on the session branch. Pushing the
- * session branch and its own pull request join it with the GitHub sign-in (#99, #172).
+ * gh commands that only look, adding and committing on the session branch, pushing it, and
+ * opening and updating its own pull request (#172).
  */
 export const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
@@ -150,15 +252,26 @@ export const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   { words: ["git", "add"], more: true, never: GIT_NEVER },
   { words: ["git", "commit"], more: true, never: GIT_NEVER, onSessionBranch: true },
   ...GH_LOOKS.map((look) => ({ words: ["gh", ...look], more: true, never: GH_NEVER })),
+  { words: ["git", "push"], more: true, onSessionBranch: true, own: pushesOwn },
+  { words: ["gh", "pr", "create"], more: true, onSessionBranch: true, own: opensOwn },
+  { words: ["gh", "pr", "edit"], more: true, onSessionBranch: true, own: editsOwn },
 ];
 
-/** The rule a command's words match, or `undefined` when none does. */
-export const ruleFor = (allowlist: readonly CommandRule[], words: readonly string[]) =>
+/**
+ * The rule a command's words match, or `undefined` when none does. A push or a pull request
+ * command matches only when it names the session's own branch and pull request.
+ */
+export const ruleFor = (
+  allowlist: readonly CommandRule[],
+  words: readonly string[],
+  work: OwnWork,
+) =>
   allowlist.find((rule) => {
     if (words.length < rule.words.length) return false;
     if (!rule.words.every((first, index) => words[index] === first)) return false;
     const rest = words.slice(rule.words.length);
     if (!rule.more && rest.length > 0) return false;
+    if (rule.own !== undefined && !rule.own(rest, work)) return false;
     return !rest.some((argument) => rule.never?.some((never) => never.test(argument)));
   });
 

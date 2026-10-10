@@ -249,8 +249,9 @@ model why, in one of these:
   owner why it's needed."
 - A command that chains, pipes, redirects or substitutes: "Run one command at a time: a command that chains, pipes,
   redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own."
-- A commit while the worktree is off the session branch: "Commits go on your session branch, <branch>, and the
-  worktree isn't on it now, so that didn't run."
+- A commit, a push or a pull request command while the worktree is off the session branch: "Committing, pushing and
+  opening your pull request work only on your session branch, <branch>, and the worktree isn't on it now, so that
+  didn't run."
 - A command whose quotes don't close: "That command couldn't be read: check its quotes close."
 - Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
   this turn, so nothing more is done."

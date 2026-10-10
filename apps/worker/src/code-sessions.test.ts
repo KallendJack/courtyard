@@ -249,10 +249,70 @@ describe("a code workspace's command allowlist", () => {
     expect(ran).toEqual([]);
   });
 
-  it("commits only on the session branch", async () => {
-    const { provider, answers } = codingProvider([{ run: 'git commit -m "Add the notes"' }]);
+  it.each([
+    "git push origin HEAD",
+    "git push -u origin HEAD",
+    "git push --set-upstream origin <branch>",
+    "git push origin <branch>",
+    "git push --quiet origin HEAD:<branch>",
+    "gh pr create --fill",
+    'gh pr create --title "Add the notes" --body "Why it helps"',
+    "gh pr create --head <branch> --base main --fill --draft",
+    'gh pr edit --title "Add the notes, tidied"',
+    "gh pr edit <branch> --add-label bug",
+  ])(
+    "pushes the session branch and opens or updates its own PR without asking: %s (#172)",
+    async (command) => {
+      const { answers, asked, ran } = await askAbout([command]);
+      const { branch } = await sessionWorktree();
+
+      expect(asked).toEqual([]);
+      expect(answers).toEqual([{ ok: true, value: null }]);
+      expect(ran).toEqual([
+        { kind: "ran-command", command: command.replaceAll("<branch>", branch ?? "") },
+      ]);
+    },
+  );
+
+  it.each([
+    "git push",
+    "git push origin main",
+    "git push origin HEAD:main",
+    "git push origin <branch>:main",
+    "git push origin <branch> main",
+    "git push --force origin HEAD",
+    "git push --delete origin <branch>",
+    "git push upstream HEAD",
+    "gh pr create --head main --fill",
+    "gh pr create --repo someone/else --fill",
+    "gh pr create --fill --web",
+    "gh pr create --recover pr.json",
+    "gh pr edit 12 --title Mine",
+    "gh pr edit main --title Mine",
+    "gh pr close 12",
+    "gh pr merge 12",
+  ])("asks the owner before any other push or PR: %s (#172)", async (command) => {
+    const { asked, ran } = await askAbout([command]);
+    const { branch } = await sessionWorktree();
+
+    expect(asked).toEqual([
+      {
+        kind: "command",
+        command: command.replaceAll("<branch>", branch ?? ""),
+        reason: "off-allowlist",
+      },
+    ]);
+    expect(ran).toEqual([]);
+  });
+
+  it("commits, pushes and opens its PR only on the session branch", async () => {
+    const { provider, answers } = codingProvider([
+      { run: 'git commit -m "Add the notes"' },
+      { run: "git push origin HEAD" },
+      { run: "gh pr create --fill" },
+    ]);
     const request = await start([provider]);
-    const { id } = await firstTurn(request, "Hello", CODING_MODEL);
+    const { id, events } = await firstTurn(request, "Hello", CODING_MODEL);
     const { folder, branch } = await sessionWorktree();
     await gitIn(folder, "switch", "--quiet", "-c", "somewhere-else");
 
@@ -260,12 +320,17 @@ describe("a code workspace's command allowlist", () => {
       text: "Commit it",
       model: CODING_MODEL,
     });
-    await followSession(request, { sessionId: id, until: "turn-completed", after: 4 });
-
-    expect(answers[1]).toEqual({
-      ok: false,
-      error: `Commits go on your session branch, ${branch}, and the worktree isn't on it now, so that didn't run.`,
+    await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: events.at(-1)?.seq ?? 0,
     });
+
+    const offBranch = {
+      ok: false,
+      error: `Committing, pushing and opening your pull request work only on your session branch, ${branch}, and the worktree isn't on it now, so that didn't run.`,
+    };
+    expect(answers.slice(3)).toEqual([offBranch, offBranch, offBranch]);
   });
 });
 

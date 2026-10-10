@@ -322,7 +322,8 @@ export const CODING_MODEL = { provider: "coder", model: "one" };
 /**
  * For tests: a provider that codes (ADR 0007). In each turn it asks the worker about each edit
  * (`edit`, a path) and command (`run`) scripted for it, in order, keeps the worker's answers, and
- * answers "Done." It never edits or runs anything itself, so any command can be asked about.
+ * answers "Done." It never edits or runs anything itself, so any command can be asked about. A
+ * `<branch>` in a command stands for the branch its worktree is on, the session branch.
  */
 export const codingProvider = (
   steps: readonly (
@@ -353,9 +354,12 @@ export const codingProvider = (
     runTurn: async (input) => {
       const { code } = input;
       if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const branch = await git(code.worktree, ["branch", "--show-current"]);
       for (const step of steps) {
         answers.push(
-          "edit" in step ? await code.edit(step.edit) : await code.run(step.run, step.why),
+          "edit" in step
+            ? await code.edit(step.edit)
+            : await code.run(step.run.replaceAll("<branch>", branch), step.why),
         );
       }
       await input.emit("Done.");

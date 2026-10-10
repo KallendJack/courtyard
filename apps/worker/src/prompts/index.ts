@@ -1203,7 +1203,7 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
     case "unreadable":
       return "That command couldn't be read: check its quotes close.";
     case "off-branch":
-      return `Commits go on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
+      return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
     case "denied":
       return refusal.what === "command"
         ? "The owner denied that command, so it didn't run. Find another way, or tell the owner why it's needed."

@@ -85,13 +85,21 @@ export type CommandApproval = {
  * session branch. One that could run only with the owner's approval says so.
  */
 export const commandAllowed = async (
-  session: { readonly worktree: string; readonly branch: string },
+  session: {
+    readonly worktree: string;
+    readonly branch: string;
+    /** Its pull request's number, once it has one (#172). */
+    readonly pullRequest?: number | undefined;
+  },
   command: string,
   allowlist: readonly CommandRule[] = DEFAULT_ALLOWLIST,
 ): Promise<Result<null, CodeRefusal | CommandApproval>> => {
   const words = wordsOf(command);
   if (!words.ok) return err({ kind: words.error });
-  const rule = ruleFor(allowlist, words.value);
+  const rule = ruleFor(allowlist, words.value, {
+    branch: session.branch,
+    pullRequest: session.pullRequest,
+  });
   if (rule === undefined) return err({ kind: "needs-approval", reason: "off-allowlist" });
   if (reachesOut(session.worktree, words.value.slice(rule.words.length))) {
     return err({ kind: "needs-approval", reason: "reaches-out" });

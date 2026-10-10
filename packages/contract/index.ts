@@ -89,6 +89,7 @@ export {
   DocumentSave,
   endsTurn,
   FailureReason,
+  pullRequestIn,
   Save,
   SessionEvent,
   SOURCES_MAX,
@@ -96,6 +97,7 @@ export {
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
 } from "./lib/session-event.ts";
+export { PullRequest, PullRequestChecks, pullRequestEnded } from "./lib/pull-request.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {

@@ -17,6 +17,7 @@ import {
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  pullRequestIn,
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
@@ -812,7 +813,10 @@ export const createSessions = (options: {
             });
           },
           run: async (command, why) => {
-            const allowed = await commandAllowed({ worktree, branch }, command);
+            const allowed = await commandAllowed(
+              { worktree, branch, pullRequest: pullRequestIn(events.value)?.number },
+              command,
+            );
             if (allowed.ok) return decide(ok({ kind: "ran-command", command }));
             const refused = allowed.error;
             if (refused.kind !== "needs-approval") return decide(err(refused));
