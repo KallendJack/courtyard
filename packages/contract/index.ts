@@ -106,6 +106,7 @@ export {
   endsTurn,
   FailureReason,
   pullRequestIn,
+  queuedIn,
   Save,
   SessionEvent,
   SOURCES_MAX,

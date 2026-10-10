@@ -175,6 +175,10 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "This approval's turn has ended, so nothing is waiting on it now.",
       });
+    case "queued-not-found":
+      return apiError(c, { status: 404, error: "No such queued message in this session." });
+    case "queued-sent":
+      return apiError(c, { status: 409, error: "That message has gone already." });
     case "pull-request-ended":
       return apiError(c, {
         status: 409,
@@ -400,12 +404,23 @@ export const sessionRoutes = (options: {
     return c.body(null, 204);
   });
 
+  // A message: its turn starts now, or, while a turn runs, it's queued until that ends (#177).
   routes.post(MESSAGE_ROUTES.nextMessage, async (c) => {
     const message = await readMessageWithAttachments(c, NewMessage);
     if (!message.ok) return message.error;
     const sent = await sessions.send({ rawId: c.req.param("id"), ...message.value });
     if (!sent.ok) return sessionError(c, sent.error);
     return c.body(null, 202);
+  });
+
+  // × on a queued message (#177), by its event number.
+  routes.delete("/sessions/:id/queued/:queued", async (c) => {
+    const removed = await sessions.removeQueued(
+      c.req.param("id"),
+      SaveNumber.parse(c.req.param("queued")),
+    );
+    if (!removed.ok) return sessionError(c, removed.error);
+    return c.body(null, 204);
   });
 
   // An attachment, for the chat's thumbnails, the full-size view and a PDF opened in a new tab.

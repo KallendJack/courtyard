@@ -8,10 +8,8 @@ import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
 import {
   asOwner,
-  errorOf,
   FAKE_MODEL,
   followSession,
-  gatedProvider,
   postJson,
   startSession,
   testWorker,
@@ -157,35 +155,6 @@ describe("a session", () => {
     });
 
     expect(replayed).toEqual(live);
-  });
-
-  it("refuses a message while a turn is running", async () => {
-    const gated = gatedProvider();
-    const api = await start([gated.provider]);
-    const session = await startSession(api.request, "Take your time");
-
-    const busy = await api.post(`/api/sessions/${session.id}/messages`, {
-      text: "Hurry",
-      model: FAKE_MODEL,
-    });
-
-    expect(busy.status).toBe(409);
-    expect(await errorOf(busy)).toMatch(/already/i);
-    gated.release();
-    const first = await followSession(api.request, {
-      sessionId: session.id,
-      until: "turn-completed",
-    });
-    expect(
-      (await api.post(`/api/sessions/${session.id}/messages`, { text: "Now", model: FAKE_MODEL }))
-        .status,
-    ).toBe(202);
-    // Let the second turn finish before the test's folder is removed.
-    await followSession(api.request, {
-      sessionId: session.id,
-      until: "turn-completed",
-      after: first.length,
-    });
   });
 
   it("records what the model did, such as a file it read, in the event log", async () => {

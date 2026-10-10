@@ -22,6 +22,7 @@ import {
   type PullRequestReview,
   pullRequestEnded,
   pullRequestIn,
+  queuedIn,
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
@@ -176,6 +177,10 @@ export type SessionError =
   | { readonly kind: "approval-not-found" }
   /** The approval's turn has ended (stopped, or the worker restarted), so nothing waits on it. */
   | { readonly kind: "approval-closed" }
+  /** No message waiting in the session's queue has that event number (#177). */
+  | { readonly kind: "queued-not-found" }
+  /** The queued message has gone already, as a turn of its own. */
+  | { readonly kind: "queued-sent" }
   /** The session's pull request was merged or closed, so it takes no more messages (#172). */
   | { readonly kind: "pull-request-ended"; readonly state: "merged" | "closed" }
   /** The session has no pull request to review yet, or isn't a code session (#160). */
@@ -438,7 +443,10 @@ export const createSessions = (options: {
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
-    void inOrder(created, () => recover(id, created));
+    void inOrder(created, () => recover(id, created)).then(
+      // A queued message a stopped worker left waiting goes now (#177).
+      () => sendNextQueued(id),
+    );
     return created;
   };
 
@@ -979,10 +987,13 @@ export const createSessions = (options: {
     const ended = await append(turn.id, ending);
     // Only once it's ended, so the next code session waiting starts after it.
     options.code.slots.release(turn.id);
+    // The owner's next queued message goes at once (#177), before a fixing turn could (#172).
+    const queuedGoes = ended.ok && (await sendNextQueued(turn.id));
     // What the turn did to its pull request shows at once, the PR it opened, say (#172), and its
     // notification then says when the PR's checks still fail (story 31).
     if (turn.coding) await followPullRequest(turn.id);
-    if (ended.ok) {
+    // It isn't the owner's turn when their queued message has just gone.
+    if (ended.ok && !queuedGoes) {
       const events = turn.coding ? await readEvents(turn.id) : undefined;
       options.notify?.(turn.id, ended.value, events?.ok ? pullRequestIn(events.value) : undefined);
     }
@@ -1058,6 +1069,8 @@ export const createSessions = (options: {
     keptAttachments?: readonly Attachment[];
     /** Sent by the worker because the session's pull request's checks failed (#172). */
     checksFailed?: { pullRequest: number; head: string; checks: [string, ...string[]] };
+    /** Sends the owner's queued message with this event number (#177), unless it's gone meanwhile. */
+    fromQueue?: number;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -1099,7 +1112,7 @@ export const createSessions = (options: {
       ...(start.keptAttachments ?? []),
       ...(start.attachments ?? []).map((prepared) => prepared.attachment),
     ];
-    const recorded = await append(start.id, {
+    const message: NewEvent = {
       type: "owner-message",
       text: start.message.text,
       model: start.message.model,
@@ -1107,7 +1120,22 @@ export const createSessions = (options: {
       ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
       ...(attachments.length === 0 ? {} : { attachments }),
       ...(start.checksFailed === undefined ? {} : { checksFailed: start.checksFailed }),
-    });
+      ...(start.fromQueue === undefined ? {} : { queued: start.fromQueue }),
+    };
+    const { fromQueue } = start;
+    // A queued message goes only while it's still queued: checked in the session's queue, so the
+    // owner removing it can't land between the check and its sending.
+    const recorded =
+      fromQueue === undefined
+        ? await append(start.id, message)
+        : await inOrder(session, async (): Promise<Result<SessionEvent, SessionError>> => {
+            const events = await readEvents(start.id);
+            if (!events.ok) return events;
+            if (!queuedIn(events.value).some((queued) => queued.seq === fromQueue)) {
+              return err({ kind: "queued-not-found" });
+            }
+            return writeEvent({ id: start.id, session, event: message });
+          });
     if (!recorded.ok) {
       session.turn = { kind: "idle" };
       return recorded;
@@ -1128,6 +1156,78 @@ export const createSessions = (options: {
       coding: start.coding,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
+    return ok(null);
+  };
+
+  /**
+   * Sends the session's next queued message (#177) as a turn of its own, once the session is free:
+   * the first still waiting, unless the last turn ended on a usage limit, when they wait for the
+   * owner's next turn (Carry on, say). One whose model can't answer now stays queued. Says whether
+   * one went.
+   */
+  const sendNextQueued = async (id: SessionId): Promise<boolean> => {
+    const since = freshStarts;
+    for (;;) {
+      const session = running.get(id);
+      if (session === undefined || session.turn.kind !== "idle") return false;
+      const [events, file] = await Promise.all([
+        readEvents(id),
+        readJsonFile(sessionFilePath(id), SessionFile),
+      ]);
+      if (!events.ok || !file.ok || file.value === undefined) return false;
+      const last = events.value.findLast((event) => event.type === "owner-message");
+      if (last !== undefined && limitedTurn(events.value, last.seq) !== undefined) return false;
+      const next = queuedIn(events.value)[0];
+      if (next === undefined) return false;
+      const message: NewMessage = {
+        text: next.text,
+        model: next.model,
+        ...(next.effort === undefined ? {} : { effort: next.effort }),
+        ...(next.skill === undefined ? {} : { skill: next.skill }),
+      };
+      const provider = await providerIn(file.value.workspaceId, message);
+      if (!provider.ok) return false;
+      const started = await startTurn({
+        id,
+        workspaceId: file.value.workspaceId,
+        provider: provider.value.provider,
+        message,
+        since,
+        coding: file.value.branch !== undefined,
+        fromQueue: next.seq,
+        ...(next.attachments === undefined ? {} : { keptAttachments: next.attachments }),
+      });
+      if (started.ok) return true;
+      // Removed meanwhile, so the one after it goes instead.
+      if (started.error.kind !== "queued-not-found") return false;
+    }
+  };
+
+  /**
+   * Queues a message the owner sent while a turn runs (#177), its attachments kept in the
+   * session's folder now, and sends it at once if that turn ended meanwhile.
+   */
+  const queueMessage = async (queue: {
+    id: SessionId;
+    message: NewMessage;
+    attachments: readonly PreparedAttachment[];
+  }): Promise<Result<null, SessionError>> => {
+    const { id, message } = queue;
+    const ended = await pullRequestEndedIn(id);
+    if (ended !== undefined) return err(ended);
+    const kept = await keepAttachments(folderOf(id), queue.attachments);
+    if (!kept.ok) return err(STORAGE_ERROR);
+    const attachments = queue.attachments.map((prepared) => prepared.attachment);
+    const recorded = await append(id, {
+      type: "message-queued",
+      text: message.text,
+      model: message.model,
+      ...(message.effort === undefined ? {} : { effort: message.effort }),
+      ...(message.skill === undefined ? {} : { skill: message.skill }),
+      ...(attachments.length === 0 ? {} : { attachments }),
+    });
+    if (!recorded.ok) return recorded;
+    void sendNextQueued(id);
     return ok(null);
   };
 
@@ -1736,8 +1836,11 @@ export const createSessions = (options: {
       if (!provider.ok) return provider;
       const usable = await skillUsable(session.value.workspaceId, message);
       if (!usable.ok) return usable;
-      return startTurn({
-        id: session.value.id,
+      const { id } = session.value;
+      // What a stopped worker left behind is put right first, so a turn it left open isn't busy.
+      await settled(id);
+      const started = await startTurn({
+        id,
         workspaceId: session.value.workspaceId,
         provider: provider.value.provider,
         message,
@@ -1745,6 +1848,57 @@ export const createSessions = (options: {
         coding: session.value.branch !== undefined,
         attachments,
       });
+      // A turn is running, so it waits its turn (#177).
+      if (!started.ok && started.error.kind === "busy") {
+        return queueMessage({ id, message, attachments });
+      }
+      return started;
+    },
+
+    /**
+     * Removes one of the session's queued messages before it goes (#177), by its event number,
+     * from any device; recorded in the session, so it goes from every device.
+     */
+    removeQueued: async (rawId: string, queued: number): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+        const events = await readEvents(id);
+        if (!events.ok) return events;
+        const was = events.value.some(
+          (event) => event.type === "message-queued" && event.seq === queued,
+        );
+        if (!was) return err({ kind: "queued-not-found" });
+        const sent = events.value.some(
+          (event) => event.type === "owner-message" && event.queued === queued,
+        );
+        if (sent) return err({ kind: "queued-sent" });
+        // Removed already, from another device: it's gone, as asked.
+        if (!queuedIn(events.value).some((event) => event.seq === queued)) return ok(null);
+        const recorded = await writeEvent({
+          id,
+          session,
+          event: { type: "queued-message-removed", queued },
+        });
+        return recorded.ok ? ok(null) : recorded;
+      });
+    },
+
+    /**
+     * Sends the queued messages a stopped worker left waiting (#177), for the worker to call as
+     * it starts: each such session is put right, as the first touch does, and its next one goes.
+     */
+    resumeQueued: async () => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return;
+      for (const folder of folders.value) {
+        const id = SessionId.safeParse(folder);
+        if (!id.success) continue;
+        const text = await readTextFile(eventsPath(id.data));
+        if (text.ok && text.value?.includes('"message-queued"')) runningSession(id.data);
+      }
     },
 
     /**

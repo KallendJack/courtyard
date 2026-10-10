@@ -113,6 +113,28 @@ export const SessionEvent = z.discriminatedUnion("type", [
         checks: z.array(z.string()).min(1),
       })
       .optional(),
+    /** Sent from the queue (#177): the queued message, by its event number, it sends. */
+    queued: z.number().int().positive().optional(),
+  }),
+  /**
+   * A message the owner sent while a turn ran (#177): it waits, in order behind any queued before
+   * it, and goes as soon as the session can take a turn, unless the owner removes it first.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("message-queued"),
+    text: z.string(),
+    model: ModelRef,
+    effort: Effort.optional(),
+    skill: SkillName.optional(),
+    /** The photos and PDFs it carries, kept in the session's folder already (#78). */
+    attachments: z.array(Attachment).optional(),
+  }),
+  /** The owner removed the queued message numbered `queued` before it went. */
+  z.object({
+    ...eventBase,
+    type: z.literal("queued-message-removed"),
+    queued: z.number().int().positive(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
@@ -209,6 +231,21 @@ export type SessionEvent = z.infer<typeof SessionEvent>;
 /** Whether an event ends its turn: completed, stopped by the owner, or failed. */
 export const endsTurn = (event: SessionEvent) =>
   event.type === "turn-completed" || event.type === "turn-stopped" || event.type === "turn-failed";
+
+/**
+ * A session's queued messages that are still waiting (#177), first first: queued, and neither
+ * removed nor sent yet.
+ */
+export const queuedIn = (events: readonly SessionEvent[]) => {
+  const gone = new Set<number>();
+  for (const event of events) {
+    if (event.type === "queued-message-removed") gone.add(event.queued);
+    if (event.type === "owner-message" && event.queued !== undefined) gone.add(event.queued);
+  }
+  return events.flatMap((event) =>
+    event.type === "message-queued" && !gone.has(event.seq) ? [event] : [],
+  );
+};
 
 /** A session's pull request as it last stood, from its events, or `undefined` before it has one. */
 export const pullRequestIn = (events: readonly SessionEvent[]) => {
