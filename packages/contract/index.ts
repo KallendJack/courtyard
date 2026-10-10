@@ -52,6 +52,12 @@ export {
 export { GitHubConnection } from "./lib/github.ts";
 export { Health } from "./lib/health.ts";
 export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
+export {
+  NotificationSubscription,
+  NotificationsOff,
+  NotificationsStatus,
+  PushNotice,
+} from "./lib/notifications.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
   Capabilities,

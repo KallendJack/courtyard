@@ -24,6 +24,7 @@ import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
 export { createFakeGitHub, type FakeGitHub } from "./github/fake.ts";
+export { createFakePush, type FakePush } from "./notifications/fake.ts";
 export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
 /**

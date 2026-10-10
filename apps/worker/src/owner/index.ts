@@ -12,6 +12,13 @@ export const LoginSecret = z
   .brand<"LoginSecret">();
 export type LoginSecret = z.infer<typeof LoginSecret>;
 
+/**
+ * One device login, as other modules name it (a device's notifications, say): its secret's hash,
+ * the same one its login is kept by, so it's gone once that device logs out.
+ */
+export const DeviceLogin = z.string().min(1).brand<"DeviceLogin">();
+export type DeviceLogin = z.infer<typeof DeviceLogin>;
+
 /** scrypt's cost settings: about 16 MB of memory per hash, so guessing in bulk is expensive. */
 const COST = { N: 2 ** 14, r: 8, p: 1 };
 const MAX_MEMORY = 64 * 1024 * 1024;
@@ -65,6 +72,8 @@ export type Owner = {
   readonly logOut: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
   /** Ends every device login except this one, so a lost device can be cut off. */
   readonly logOutOthers: (secret: LoginSecret) => Promise<Result<null, StorageError>>;
+  /** The devices logged in now. */
+  readonly devices: () => Promise<Result<ReadonlySet<DeviceLogin>, StorageError>>;
 };
 
 const scryptKey = (password: string, salt: Buffer, cost: { N: number; r: number; p: number }) =>
@@ -75,6 +84,9 @@ const scryptKey = (password: string, salt: Buffer, cost: { N: number; r: number;
   });
 
 const hashSecret = (secret: string) => createHash("sha256").update(secret).digest("base64url");
+
+/** The device login a login secret is. */
+export const deviceLoginOf = (secret: LoginSecret) => DeviceLogin.parse(hashSecret(secret));
 
 const storage = (message: string): StorageError => ({ kind: "storage", message });
 
@@ -215,6 +227,14 @@ export const createOwner = (options: { dataDir: string; now: () => number }): Ow
     logOutOthers: (secret) => {
       const secretHash = hashSecret(secret);
       return keepLogins((hash) => hash === secretHash);
+    },
+
+    devices: async () => {
+      const file = await read(loginsPath, DeviceLoginsFile);
+      if (!file.ok) return file;
+      return ok(
+        new Set((file.value?.logins ?? []).map((login) => DeviceLogin.parse(login.secretHash))),
+      );
     },
   };
 };
