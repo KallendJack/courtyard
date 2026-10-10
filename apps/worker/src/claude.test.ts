@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { Effort, ModelId, type Source } from "@courtyard/contract";
+import { Effort, ModelId, SkillName, type Source } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
@@ -678,6 +678,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         GH_CONFIG_DIR: "/path/to/data/github/gh",
         GH_TOKEN: undefined,
       },
+      plugin: null,
       edit: async (path) => {
         asked.push(`edit ${path}`);
         return path.includes("outside") ? err("Not out there.") : ok(null);
@@ -757,6 +758,99 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     expect(pluginsFolder?.startsWith(worktree)).toBe(false);
     await expect(readdir(pluginsFolder ?? worktree)).rejects.toThrow();
     await rm(worktree, { recursive: true, force: true });
+  });
+
+  /** A code session with Courtyard's pinned copy of Matt's plugin (ADR 0024), tdd and grilling on. */
+  const withMattsSkills = async () => {
+    const session = await codeSession();
+    const pluginFolder = await mkdtemp(join(tmpdir(), "courtyard-matt-"));
+    await mkdir(join(pluginFolder, "skills", "engineering", "tdd"), { recursive: true });
+    await writeFile(join(pluginFolder, "skills", "engineering", "tdd", "tests.md"), "Tests.\n");
+    const code: CodeTurn = {
+      ...session.code,
+      plugin: {
+        folder: pluginFolder,
+        name: "mattpocock-skills",
+        skills: ["tdd", "grilling"].map((name) => SkillName.parse(name)),
+      },
+    };
+    const cleanUp = async () => {
+      await rm(session.worktree, { recursive: true, force: true });
+      await rm(pluginFolder, { recursive: true, force: true });
+    };
+    return { ...session, code, pluginFolder, cleanUp };
+  };
+
+  it("loads Matt Pocock's skills from Courtyard's pinned copy as a plugin, only those it's given, never the machine's plugins", async () => {
+    const { worktree, code, pluginFolder, cleanUp } = await withMattsSkills();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    // The owner's own Claude Code may load plugins from folders of theirs.
+    process.env.CLAUDE_CODE_PLUGIN_DIRS = "/path/to/owners/plugins";
+    try {
+      await runTurn(claudeCode, { folder: worktree, code });
+      await runTurn(claudeCode);
+    } finally {
+      delete process.env.CLAUDE_CODE_PLUGIN_DIRS;
+    }
+
+    const [coding, planning] = runs.map((run) => run.options);
+    expect(coding?.plugins).toEqual([{ type: "local", path: pluginFolder }]);
+    expect([...(Array.isArray(coding?.skills) ? coding.skills : [])].sort()).toEqual([
+      "mattpocock-skills:grilling",
+      "mattpocock-skills:tdd",
+      "pr",
+      "tdd",
+    ]);
+    expect(coding?.env?.CLAUDE_CODE_PLUGIN_CACHE_DIR).not.toBe(pluginFolder);
+    // A planning turn never gets them.
+    expect(planning?.plugins ?? []).toEqual([]);
+    expect(planning?.skills).toEqual([]);
+    for (const options of [coding, planning]) {
+      expect(options?.env).not.toHaveProperty("CLAUDE_CODE_PLUGIN_DIRS");
+    }
+    await cleanUp();
+  });
+
+  it("lets Claude load a skill it was given with its Skill tool, and read that skill's files, reporting each", async () => {
+    const { worktree, code, pluginFolder, cleanUp } = await withMattsSkills();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const { activities } = await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const decisions = [
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:tdd" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "grilling", args: "the plan" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "pr" } }),
+      await preToolUse(options, {
+        name: "Read",
+        input: { file_path: join(pluginFolder, "skills", "engineering", "tdd", "tests.md") },
+      }),
+      // Not one it was given, or a field Courtyard doesn't know.
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:retro" } }),
+      await preToolUse(options, { name: "Skill", input: { skill: "tdd", model: "opus" } }),
+    ].map((decision) => ("hookSpecificOutput" in decision ? decision.hookSpecificOutput : {}));
+
+    expect(
+      decisions.map(
+        (decision) =>
+          z.object({ permissionDecision: z.string() }).parse(decision).permissionDecision,
+      ),
+    ).toEqual(["allow", "allow", "allow", "allow", "deny", "deny"]);
+    expect(
+      await preToolUse(options, { name: "Skill", input: { skill: "mattpocock-skills:retro" } }),
+    ).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason: await quotedInGuide("That skill isn't one you can load here"),
+      },
+    });
+    expect(activities).toEqual([
+      { kind: "skill-loaded", name: "tdd", source: "matt" },
+      { kind: "skill-loaded", name: "grilling", source: "matt" },
+      { kind: "skill-loaded", name: "pr", source: "project" },
+      { kind: "skill-file-read", name: "tdd", path: "tests.md" },
+    ]);
+    await cleanUp();
   });
 
   it("asks the worker before every edit and command, and tells Claude why one is refused", async () => {
@@ -852,6 +946,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     const code: CodeTurn = {
       worktree,
       env: {},
+      plugin: null,
       edit: async () => ok(null),
       run: async (_command, why) => {
         heard.push(why);
@@ -887,10 +982,12 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       input: { file_path: join(folder, "notes.md"), content: "Hello" },
     });
     const command = await preToolUse(options, { name: "Bash", input: { command: "pnpm test" } });
+    const skill = await preToolUse(options, { name: "Skill", input: { skill: "tdd" } });
 
     expect(options.skills).toEqual([]);
     expect(edit).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
     expect(command).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(skill).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
   });
 });
 

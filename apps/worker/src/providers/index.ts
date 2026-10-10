@@ -10,6 +10,7 @@ import type {
   ProviderId,
   ProviderStatus,
   SignInState,
+  SkillName,
   Source,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -127,6 +128,12 @@ export type CodeTurn = {
    */
   readonly env: CommandEnv;
   /**
+   * Matt Pocock's skills (ADR 0024), for a provider that loads skills itself (Claude, as a local
+   * plugin): Courtyard's pinned copy of his plugin, its name, and the skills of it to turn on,
+   * those the workspace can use. `null` when they aren't loaded. Never the machine's own plugins.
+   */
+  readonly plugin: CodePlugin | null;
+  /**
    * Whether the file at `path` (from the worktree, or absolute) may be edited, or why not. One
    * outside the worktree waits for the owner's approval (#171).
    */
@@ -136,6 +143,13 @@ export type CodeTurn = {
    * the owner's approval (#171), shown with `why`, what the model said it's for, when it said.
    */
   readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
+};
+
+/** A plugin a code turn's provider loads itself: its folder, its name and the skills to turn on. */
+export type CodePlugin = {
+  readonly folder: string;
+  readonly name: string;
+  readonly skills: readonly SkillName[];
 };
 
 export type TurnInput = {

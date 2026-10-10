@@ -118,7 +118,7 @@ const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim()
 
 /** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
 const CODING_ACCESS =
-  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts, git and gh commands that only look, adding and committing on your branch, pushing it, and opening or updating its pull request with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the background here.";
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts, git and gh commands that only look, adding and committing on your branch, pushing it, opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the background here.";
 
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
   // Only a provider that codes works in a code workspace (ADR 0007).
@@ -1189,6 +1189,10 @@ export const notOfferedReply = (name: string) =>
  * Courtyard's: the same reason whichever provider it's on.
  */
 export const OUTSIDE_WORKSPACE = "Only files in this workspace's folder can be read.";
+
+/** What Claude is told of a Skill tool call for a skill the code turn didn't turn on (ADR 0024). */
+export const SKILL_NOT_HERE =
+  "That skill isn't one you can load here: the skills you can load are listed for you.";
 
 /**
  * What Claude is told of a tool call whose input can't be checked, or whose check fails: it's

@@ -3,3 +3,7 @@ the rest of Courtyard (the MIT License in the repository's LICENSE file). A skil
 elsewhere keeps its original licence and notices in its own folder, and is listed here.
 
 Copied skills: none.
+
+Matt Pocock's skills, which code workspaces get, aren't copied here: `matt.json` names the release
+of his (https://github.com/mattpocock/skills, MIT License, Copyright (c) 2026 Matt Pocock), and the
+worker fetches it into its data folder with his LICENSE file beside his skills.

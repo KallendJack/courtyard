@@ -39,6 +39,8 @@ import { archiveWorkspace, changeWorkspace, deleteSession } from "../../worker.t
 
 // Loaded only for a code workspace, with the home page's Connections (#99).
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
+// Loaded only for a code workspace: the setup check's offer (#181).
+const MattSetupOffer = lazy(() => import("../../matt-setup/matt-setup-offer.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
@@ -183,6 +185,7 @@ function Workspace() {
         // Where a session would start, so the owner knows to sign in to GitHub first (#99).
         <Suspense fallback={null}>
           <SignIns part="github-notice" />
+          <MattSetupOffer workspaceId={workspace.id} />
         </Suspense>
       )}
       <div className="mt-6 md:mt-8">
