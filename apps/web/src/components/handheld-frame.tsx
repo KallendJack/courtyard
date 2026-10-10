@@ -1,5 +1,5 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
-import { Link, useLocation, useParams } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Camera, LogOut, Plus, Settings, Sparkle } from "lucide-react";
 import {
   type ComponentProps,
@@ -114,6 +114,37 @@ export default function HandheldFrame(props: {
     flushSync(() => setBoxOpen(true));
     box.focus();
   };
+
+  // New session, from the recent sessions (#159): the workspace's page, with its box open for it.
+  const navigate = useNavigate();
+  /** The page a new session starts on, and the box there was before going to it. */
+  const arriving = useRef<{ page: string; from: MessageBox | undefined }>(undefined);
+  const [focusBox, setFocusBox] = useState(false);
+  const newSession = (workspace: WorkspaceSummary) => {
+    const page = `/workspaces/${workspace.id}`;
+    setSheet(undefined);
+    if (pathname === page) {
+      setBoxOpen(true);
+      setFocusBox(true);
+      return;
+    }
+    arriving.current = { page, from: box };
+    void navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: workspace.id } });
+  };
+  // Once there, and its page has offered its own box, the box opens.
+  useEffect(() => {
+    const wanted = arriving.current;
+    if (wanted === undefined || pathname !== wanted.page) return;
+    if (box === undefined || box === wanted.from) return;
+    arriving.current = undefined;
+    setBoxOpen(true);
+    setFocusBox(true);
+  }, [pathname, box, setBoxOpen]);
+  useEffect(() => {
+    if (!focusBox || !boxOpen || box === undefined) return;
+    setFocusBox(false);
+    box.focus();
+  }, [focusBox, boxOpen, box]);
 
   const tile = (workspace: WorkspaceSummary) => (
     <Tile
@@ -291,6 +322,10 @@ export default function HandheldFrame(props: {
           onClose={() => setSheet(undefined)}
           fits="top"
         >
+          <Button onClick={() => newSession(here)}>
+            <Plus aria-hidden />
+            New session
+          </Button>
           <Link
             to="/workspaces/$workspaceId"
             params={{ workspaceId: here.id }}

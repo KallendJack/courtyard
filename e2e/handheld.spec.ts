@@ -99,6 +99,29 @@ const everywhere = () => {
     await expect(workspaces.getByRole("link", { name: "New workspace" })).toBeVisible();
   });
 
+  test("the recent sessions start a new session, with the workspace's message box open for it", async ({
+    page,
+  }) => {
+    await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    const recent = page.getByRole("dialog", { name: "Garage gym" });
+    await recent.getByRole("button", { name: "New session" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+    await expect(recent).toBeHidden();
+    await expect(message(page)).toBeFocused();
+    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+
+    // From the workspace's own page, too.
+    await page.getByRole("heading", { level: 1 }).click();
+    await expect(message(page)).toBeHidden();
+    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await recent.getByRole("button", { name: "New session" }).click();
+    await expect(recent).toBeHidden();
+    await expect(message(page)).toBeFocused();
+  });
+
   test("Settings has Update and Log out", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
     await page.getByRole("button", { name: "Settings" }).click();
