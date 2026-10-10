@@ -19,20 +19,23 @@ import {
 } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { pageRead, turnSources } from "../sources/index.ts";
+import { pngOf } from "../test-files.ts";
 import type {
   Activity,
   CodeTurn,
   FramedAttachment,
   Provider,
   SignIn,
+  ToolConnection,
+  ToolContent,
   TurnToolName,
 } from "./index.ts";
 
-/** The fake reads nothing; it echoes, and saves and codes when a message scripts it. */
+/** The fake reads nothing; it echoes, and saves, codes and uses Paper when a message scripts it. */
 const CAPABILITIES: Capabilities = {
   readsFiles: false,
   codes: true,
-  usesTools: false,
+  usesTools: true,
   savesContext: true,
   searchesWeb: true,
 };
@@ -374,6 +377,61 @@ const scriptedCoding = async (code: CodeTurn, message: string) => {
   return said;
 };
 
+const PAPER_CALL = /^paper (\w+)(?: (\{.*\}))?$/i;
+
+/** A board the fake draws when a turn asks for a screenshot: a small PNG in Paper's colours. */
+const BOARD = Buffer.from(
+  pngOf(32, 20, (x, y) => (y < 4 ? [91, 74, 160] : x < 8 ? [212, 175, 55] : [24, 22, 32])),
+);
+
+/**
+ * What Paper would give back for a call, as the fake plays it: a screenshot is the board above,
+ * a new board or node is named by a made-up id, and anything else is the file's id.
+ */
+const paperAnswer = (tool: string, input: Record<string, unknown>, made: number): ToolContent[] => {
+  const header = { fileId: input.fileId };
+  if (tool === "get_screenshot") {
+    return [
+      { kind: "text", text: JSON.stringify(header) },
+      { kind: "image", dataUrl: `data:image/png;base64,${BOARD.toString("base64")}` },
+    ];
+  }
+  const id = `fake-${made}`;
+  return [
+    { kind: "text", text: JSON.stringify(tool.startsWith("create") ? { ...header, id } : header) },
+  ];
+};
+
+/**
+ * What a message scripts the fake doing in Paper (ADR 0023), one call per line: "paper
+ * get_screenshot {"fileId": "file-1", "nodeId": "board-1"}" calls the tool with that input, once
+ * the worker allows it (or the owner does). Paper itself never runs: the fake plays its answers
+ * (see `paperAnswer`). Says when a call was refused, and why.
+ */
+const scriptedPaper = async (paper: ToolConnection, message: string) => {
+  let said = "";
+  let made = 0;
+  for (const line of message.split("\n").map((each) => each.trim())) {
+    const [, tool, json] = PAPER_CALL.exec(line) ?? [];
+    if (tool === undefined) continue;
+    let input: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(json ?? "{}");
+      if (typeof parsed === "object" && parsed !== null) input = { ...parsed };
+    } catch {
+      // Sent as no input at all.
+    }
+    const allowed = await paper.check({ tool, input });
+    if (!allowed.ok) {
+      said += `Couldn't use Paper's ${tool}: ${allowed.error} `;
+      continue;
+    }
+    made += 1;
+    await paper.done({ tool, input, ok: true, content: paperAnswer(tool, input, made) });
+  }
+  return said;
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -397,7 +455,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
  * (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
- * allows (see `scriptedCoding`); Fake two doesn't code.
+ * allows (see `scriptedCoding`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
+ * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`).
  */
 export const createFakeProvider = (
   options: {
@@ -442,7 +501,18 @@ export const createFakeProvider = (
       capabilities,
     }),
 
-    runTurn: async ({ model, effort, framing, code, emit, report, cite, callTool, signal }) => {
+    runTurn: async ({
+      model,
+      effort,
+      framing,
+      code,
+      connections,
+      emit,
+      report,
+      cite,
+      callTool,
+      signal,
+    }) => {
       options.heard?.({ model, effort });
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
@@ -468,8 +538,10 @@ export const createFakeProvider = (
         });
       }
       const coded = code === null ? "" : await scriptedCoding(code, last);
+      const paper = connections.find((connection) => connection.name === "paper");
+      const drew = paper === undefined ? "" : await scriptedPaper(paper, last);
       const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
-      for (const word of `${coded}${saw}You said: ${last}`.split(/(?<= )/)) {
+      for (const word of `${coded}${drew}${saw}You said: ${last}`.split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);

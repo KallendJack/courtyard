@@ -178,6 +178,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
   (the repository named by its remote's address) and clears a session's worktree and branch away, and, once its PR
   is merged or closed, the branch it pushed to GitHub (only a `courtyard/…` one).
+- **`paper/`:** Paper in code workspaces, the first tool connection
+  ([ADR 0023](adr/0023-paper-is-the-first-tool-connection-in-code-workspaces.md)). Builds the turn's
+  `ToolConnection` (`providers/`) from the workspace's Paper settings (`connections.paper` in `workspace.json`,
+  read by `workspaces/`): Paper's MCP server as a command, and the worker's say on each call. Reading and drawing in
+  the workspace's one Paper file run, each an activity (`used-tool`); another file, or making a file, is refused;
+  deleting a node the session didn't make is an approval. It notes the nodes each call says it made (kept on the
+  running session), hands each screenshot to `sessions/` to keep and show, and words a failed call through
+  `prompts/`.
 - **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
   every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
@@ -432,6 +440,13 @@ Where the rest fits:
   denial tells the model why. With three code sessions' turns running, a fourth records `turn-queued` and waits, `turn-dequeued`
   once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
   before it starts clears its branch and worktree away.
+- **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
+  `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
+  starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and
+  `PostToolUseFailure` hooks hand each result back, adding what the worker says to a failure. A delete that asks is
+  an approval of its own kind (`tool`), on the same card. Each screenshot is kept in the session's folder beside its
+  attachments and recorded as an `image-shown` event, which the browser shows under the answer as a thumbnail, the
+  newest of each board, from the attachment route.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).
@@ -471,7 +486,7 @@ things live only in the worker's memory and go when it restarts.
 
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
 - `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour
-  (and a code workspace's repo).
+  (and a code workspace's repo, allowlist changes and Paper connection).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
@@ -579,7 +594,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
     `AGENTS.md`) and only the repository's own skills, still none of the machine's setup
     ([ADR 0022](adr/0022-code-sessions-follow-the-repositorys-own-claude-code-setup.md)), and Matt Pocock's skills as
     a local plugin from Courtyard's pinned copy, those the workspace can use turned on by name, which its Skill tool
-    loads and its file tools read (ADR 0024).
+    loads and its file tools read (ADR 0024). With Paper, Paper's MCP server too, started as a command, its tools
+    asked of the worker (ADR 0023).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
     finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
@@ -587,7 +603,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
     says which attachments it was given ("please look"). In a code session it edits a file ("edit file …") and runs
-    a command ("run command: …") when the worker allows, and says why when it doesn't; Fake two doesn't code.
+    a command ("run command: …") when the worker allows, and says why when it doesn't; Fake two doesn't code. With
+    Paper, it plays Paper ("paper <tool> {…}"), so the browser tests never start the real app.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
   never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).

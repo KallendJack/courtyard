@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApprovalAnswer, ApprovalAsk } from "./approval.ts";
-import { Attachment } from "./attachment.ts";
+import { Attachment, PhotoAttachment } from "./attachment.ts";
 import { DocumentSlug } from "./documents.ts";
 import { PullRequest } from "./pull-request.ts";
 import { ChangeId, Effort, ModelRef, PlacedLine } from "./session.ts";
@@ -41,6 +41,8 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ran-command"), command: z.string() }),
   /** A check that failed on the session's pull request, which the turn is fixing (#172). */
   z.object({ kind: z.literal("check-failed"), name: z.string() }),
+  /** An action of a tool connection it took (ADR 0008), by the connection's name and the action's. */
+  z.object({ kind: z.literal("used-tool"), connection: z.string(), action: z.string() }),
 ]);
 export type Activity = z.infer<typeof Activity>;
 
@@ -196,6 +198,18 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The session's pull request as it is now on GitHub, each time it changes (#172). */
   z.object({ ...eventBase, type: z.literal("pull-request"), pullRequest: PullRequest }),
+  /**
+   * An image a tool connection gave the model, shown in the chat: a screenshot of a Paper board,
+   * say (ADR 0023), kept in the session's folder. By what it shows (a node of the board), so the
+   * chat can show the newest of each.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("image-shown"),
+    connection: z.string(),
+    of: z.string(),
+    image: PhotoAttachment,
+  }),
   /** The owner answered the approval numbered `approval`, from whichever device they did it. */
   z.object({
     ...eventBase,

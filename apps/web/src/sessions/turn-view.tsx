@@ -21,7 +21,7 @@ import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
-import type { Turn } from "./events.ts";
+import type { ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
@@ -48,8 +48,41 @@ const describeActivity = (activity: Activity) => {
       return `Ran ${activity.command}`;
     case "check-failed":
       return `Check ${activity.name} failed`;
+    case "used-tool":
+      return `Used ${activity.connection}: ${activity.action}`;
   }
 };
+
+/**
+ * The images a turn's tool connections showed (ADR 0023), such as screenshots of a Paper board:
+ * thumbnails that open full size, as the owner's photos do.
+ */
+function ShownImages(props: { sessionId: SessionId; images: readonly ShownImage[] }) {
+  const [viewing, setViewing] = useState<number>();
+  const photos = props.images.map(({ image }) => ({
+    src: attachmentUrl(props.sessionId, image.id),
+    name: image.name,
+  }));
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {photos.map((photo, index) => (
+        <PhotoThumb
+          key={photo.src}
+          in="message"
+          src={photo.src}
+          name={photo.name}
+          onOpen={() => setViewing(index)}
+        />
+      ))}
+      <PhotoViewer
+        photos={photos}
+        showing={viewing}
+        show={setViewing}
+        onClose={() => setViewing(undefined)}
+      />
+    </div>
+  );
+}
 
 /** A failure's reason in plain words. */
 export const describeFailure = (reason: FailureReason) => {
@@ -223,6 +256,7 @@ export const TurnView = memo(function TurnView(props: {
           )}
         </div>
       )}
+      {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
       {turn.approval !== undefined && turn.state.kind === "running" && (
         <ApprovalCard
           {...approvalWords(turn.approval.ask, turn.approval.why)}

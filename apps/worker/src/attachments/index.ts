@@ -8,6 +8,8 @@ import {
   AttachmentId,
   AttachmentMediaType,
   attachmentType,
+  type PhotoAttachment,
+  PhotoMediaType,
   type SessionEvent,
   TOO_MANY_ATTACHMENTS,
 } from "@courtyard/contract";
@@ -149,6 +151,32 @@ export const keepAttachments = async (
   return ok(null);
 };
 
+/**
+ * Keeps an image a tool connection gave a model (ADR 0023) in its session's folder, beside the
+ * owner's attachments, as a photo named `name` with its kind's ending. One whose bytes aren't the
+ * kind of photo it says is refused.
+ */
+export const keepImage = async (
+  sessionFolder: string,
+  image: { name: string; mediaType: string; bytes: Uint8Array },
+): Promise<Result<PhotoAttachment, "not-a-photo" | "unwritable">> => {
+  const mediaType = PhotoMediaType.safeParse(image.mediaType);
+  if (!mediaType.success || !STARTS[mediaType.data](image.bytes) || image.bytes.length === 0) {
+    return err("not-a-photo");
+  }
+  const photo: PhotoAttachment = {
+    id: AttachmentId.parse(randomUUID()),
+    name: `${image.name}${ENDINGS[mediaType.data]}`,
+    kind: "photo",
+    mediaType: mediaType.data,
+    size: image.bytes.length,
+  };
+  const kept = await keepAttachments(sessionFolder, [
+    { attachment: photo, bytes: image.bytes, text: undefined },
+  ]);
+  return kept.ok ? ok(photo) : kept;
+};
+
 /** Every attachment a session's owner messages carried, each once, oldest first. */
 export const attachmentsOf = (events: readonly SessionEvent[]): Attachment[] => {
   const seen = new Map<string, Attachment>();
@@ -161,6 +189,10 @@ export const attachmentsOf = (events: readonly SessionEvent[]): Attachment[] => 
   }
   return [...seen.values()];
 };
+
+/** Every image a session's tool connections showed the owner (ADR 0023), oldest first. */
+export const imagesShownIn = (events: readonly SessionEvent[]): PhotoAttachment[] =>
+  events.flatMap((event) => (event.type === "image-shown" ? [event.image] : []));
 
 /**
  * What a turn carries (#78): the session's last ten attachments, oldest first, each photo by its

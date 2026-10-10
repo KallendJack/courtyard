@@ -21,6 +21,8 @@ import {
   createFakeProvider,
   type Framing,
   type Provider,
+  type ToolConnection,
+  type ToolContent,
 } from "./providers/index.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { TestFile } from "./test-files.ts";
@@ -376,6 +378,74 @@ export const codingProvider = (
   return { provider, answers };
 };
 
+/** For tests: the model the drawing provider offers. */
+export const DRAWING_MODEL = { provider: "drawer", model: "one" };
+
+/**
+ * For tests: one call a drawing provider makes to Paper's connection, and what Paper gives back:
+ * text, an image, or a failure with Paper's own words. Paper itself never runs: this stands in.
+ */
+export type PaperStep = {
+  readonly tool: string;
+  readonly input: Record<string, unknown>;
+  readonly output?: readonly ToolContent[];
+  readonly fails?: string;
+};
+
+/**
+ * For tests: a provider that codes and uses tools (ADR 0023). In each turn it calls Paper's
+ * connection for each step, in order, as Claude Code would: it asks the worker, and only for a call
+ * the worker allowed it hands back what Paper gave (the step's output, or its failure). It keeps
+ * the connections each turn was given, the worker's answers, and what the worker added, and answers
+ * "Drawn."
+ */
+export const drawingProvider = (steps: readonly PaperStep[]) => {
+  const turns: (readonly ToolConnection[])[] = [];
+  const answers: Result<null, string>[] = [];
+  const added: (string | undefined)[] = [];
+  const id = ProviderId.parse("drawer");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: true,
+    savesContext: false,
+    searchesWeb: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Drawer",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      turns.push(input.connections);
+      const paper = input.connections.find((connection) => connection.name === "paper");
+      for (const step of steps) {
+        if (paper === undefined) break;
+        const call = { tool: step.tool, input: step.input };
+        const answer = await paper.check(call);
+        answers.push(answer);
+        if (!answer.ok) continue;
+        added.push(
+          await paper.done(
+            step.fails === undefined
+              ? { ...call, ok: true, content: step.output ?? [] }
+              : { ...call, ok: false, content: [{ kind: "text", text: step.fails }] },
+          ),
+        );
+      }
+      await input.emit("Drawn.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The drawer only draws." }),
+  };
+  return { provider, turns, answers, added };
+};
+
 /** For tests: the model the running provider offers. */
 export const RUNNING_MODEL = { provider: "runner", model: "one" };
 
@@ -673,12 +743,20 @@ export const standInForGitHub = async (repo: string, where: { origin: string; gi
   await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);
 };
 
-/** For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`. */
-export const codeWorkspace = async (root: string, id: string, repoPath: string) => {
+/**
+ * For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`,
+ * with anything else in `more` in its `workspace.json`.
+ */
+export const codeWorkspace = async (
+  root: string,
+  id: string,
+  repoPath: string,
+  more: Record<string, unknown> = {},
+) => {
   await mkdir(join(root, "context", id), { recursive: true });
   await writeFile(
     join(root, "context", id, "workspace.json"),
-    JSON.stringify({ mode: "code", repoPath }),
+    JSON.stringify({ mode: "code", repoPath, ...more }),
   );
 };
 

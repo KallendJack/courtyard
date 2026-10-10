@@ -7,6 +7,7 @@ import {
   type Effort,
   type FailureReason,
   type ModelRef,
+  type PhotoAttachment,
   type PlacedLine,
   type PullRequest,
   type Save,
@@ -51,6 +52,13 @@ export type ThingNote = {
   readonly undone: boolean;
 };
 
+/** An image a tool connection showed (ADR 0023), by what it shows. */
+export type ShownImage = {
+  readonly connection: string;
+  readonly of: string;
+  readonly image: PhotoAttachment;
+};
+
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -82,6 +90,11 @@ export type Turn = {
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
   readonly sources: readonly Source[];
+  /**
+   * The images its tool connections showed, such as screenshots of Paper boards (ADR 0023): the
+   * newest of each thing shown, in the order each was first shown.
+   */
+  readonly images: readonly ShownImage[];
   /**
    * The approval the turn is waiting on (#171), by its event number, until the owner answers it
    * from any device; `undefined` when it waits on none.
@@ -189,6 +202,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             things: [],
             replies: [],
             sources: [],
+            images: [],
             approval: undefined,
             queued: false,
             fixesChecks: event.checksFailed !== undefined,
@@ -221,6 +235,19 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "sources":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
+    case "image-shown": {
+      const shown: ShownImage = { connection: event.connection, of: event.of, image: event.image };
+      // A newer screenshot of the same thing takes the older one's place.
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          images: turn.images.some((each) => each.of === shown.of)
+            ? turn.images.map((each) => (each.of === shown.of ? shown : each))
+            : [...turn.images, shown],
+        }),
+      });
+    }
     case "approval-requested":
       return withLastTurn(log, {
         seq,

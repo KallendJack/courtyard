@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 // Approvals (#171, ADR 0007): what a code session asks the owner before it runs a command off the
-// command allowlist or changes a file outside its worktree, and the owner's answer.
+// command allowlist, changes a file outside its worktree or takes an action of a tool connection
+// that isn't safe (ADR 0008), and the owner's answer.
 
 /** What a model wants to do that needs the owner's approval, exactly as it would happen. */
 export const ApprovalAsk = z.discriminatedUnion("kind", [
@@ -20,6 +21,18 @@ export const ApprovalAsk = z.discriminatedUnion("kind", [
    * the worktree.
    */
   z.object({ kind: z.literal("setup"), path: z.string() }),
+  /**
+   * An action of a tool connection that isn't safe (ADR 0008): by the connection's name, the
+   * action's, and its input as the model sent it, in JSON. For now only Paper's deleting something
+   * the session didn't make (ADR 0023).
+   */
+  z.object({
+    kind: z.literal("tool"),
+    connection: z.string(),
+    action: z.string(),
+    input: z.string(),
+    reason: z.enum(["deletes-unmade"]),
+  }),
 ]);
 export type ApprovalAsk = z.infer<typeof ApprovalAsk>;
 

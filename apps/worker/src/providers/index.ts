@@ -145,6 +145,34 @@ export type CodeTurn = {
   readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
 };
 
+/** A call to one of a tool connection's tools: the tool by its own name, its input as the model sent it. */
+export type ToolCall = { readonly tool: string; readonly input: unknown };
+
+/**
+ * A tool connection the turn offers (ADR 0008): an MCP server on the worker machine, such as
+ * Paper's (ADR 0023). A provider that uses tools starts its server, offers its tools, asks the
+ * worker before every call, does only what's allowed, and hands the worker each call's result.
+ */
+export type ToolConnection = {
+  /** Its name, which is its MCP server's: `paper`. */
+  readonly name: string;
+  /** Its MCP server: a command on the worker machine, spoken to over its input and output. */
+  readonly server: { readonly command: string; readonly args: readonly string[] };
+  /**
+   * Whether the call may go ahead, or why not. One that needs the owner's approval waits for it
+   * (#171), as long as they take.
+   */
+  readonly check: (call: ToolCall) => Promise<Result<null, string>>;
+  /**
+   * What an allowed call gave back, or the tool's error when it failed: the worker notes what it
+   * made and shows the owner its images. Answers what to add for the model, if anything, such as
+   * why a call may have failed.
+   */
+  readonly done: (
+    call: ToolCall & { readonly ok: boolean; readonly content: readonly ToolContent[] },
+  ) => Promise<string | undefined>;
+};
+
 /** A plugin a code turn's provider loads itself: its folder, its name and the skills to turn on. */
 export type CodePlugin = {
   readonly folder: string;
@@ -164,6 +192,8 @@ export type TurnInput = {
   readonly folder: string;
   /** A code session's turn, which only a provider that codes is given; `null` otherwise. */
   readonly code: CodeTurn | null;
+  /** The tool connections the turn offers, which only a provider that uses tools is given. */
+  readonly connections: readonly ToolConnection[];
   /** Delivered as given: a provider never writes prompt text of its own. */
   readonly framing: Framing;
   /** Hands over the next piece of the answer as it's written. */

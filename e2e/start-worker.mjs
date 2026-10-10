@@ -123,7 +123,13 @@ git(repo, "push", "-q", "origin", "main");
 mkdirSync(join(contextDir, "side-project"), { recursive: true });
 writeFileSync(
   join(contextDir, "side-project", "workspace.json"),
-  JSON.stringify({ name: "Side project", mode: "code", repoPath: repo }),
+  // Its sessions draw in Paper (ADR 0023): the fake plays Paper, so the command never runs.
+  JSON.stringify({
+    name: "Side project",
+    mode: "code",
+    repoPath: repo,
+    connections: { paper: { command: "/path/to/paper", fileId: "file-1" } },
+  }),
 );
 
 const { startWorker } = await import("../apps/worker/src/start.ts");

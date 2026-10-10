@@ -71,7 +71,7 @@ export type CodeRefusal =
   /** A command for the session branch only, such as committing, while the worktree is off it. */
   | { readonly kind: "off-branch"; readonly branch: string }
   /** The owner denied the approval it needed (#171). */
-  | { readonly kind: "denied"; readonly what: "command" | "edit" };
+  | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" };
 
 /**
  * A command only the owner can allow (#171): one off the command allowlist, or one naming a path

@@ -13,9 +13,23 @@ addStylesheet("approval-card", css);
 const question = (ask: ApprovalAsk) => {
   if (ask.kind === "edit") return "Change a file outside the worktree?";
   if (ask.kind === "setup") return "Change how commands run?";
+  if (ask.kind === "tool") return `Delete something in ${ask.connection} this session didn't make?`;
   return ask.reason === "off-allowlist"
     ? "Run a command? It isn't on the allowlist."
     : "Run a command? It names a path outside the worktree.";
+};
+
+/** Exactly what would happen: the command, the file, or the tool connection's action and input. */
+const exactly = (ask: ApprovalAsk) => {
+  switch (ask.kind) {
+    case "command":
+      return ask.command;
+    case "edit":
+    case "setup":
+      return ask.path;
+    case "tool":
+      return `${ask.action} ${ask.input}`;
+  }
 };
 
 /** What the model said it's for, as a sentence, and what Deny does. */
@@ -26,19 +40,22 @@ const whyLine = (why: string | undefined) => {
   return `${said}${/[.!?]$/.test(said) ? "" : "."} ${deny}`;
 };
 
-/** What an approval a code session's turn waits on says (#171): its title, the exact command or file, and why. */
+/**
+ * What an approval a code session's turn waits on says (#171): its title, the exact command, file
+ * or tool connection's action, and why.
+ */
 export const approvalWords = (ask: ApprovalAsk, why: string | undefined) => ({
   title: question(ask),
-  exact: ask.kind === "command" ? ask.command : ask.path,
+  exact: exactly(ask),
   note: whyLine(why),
 });
 
 /**
  * Something that needs the owner's OK: an approval a code session's turn waits on (#171,
  * `approvalWords`), or the setup check's offer (#181). Gold, since it needs the owner, with the
- * exact command, file or list, a line on what it's for, and Deny and Allow at the bottom, in
- * thumb reach, one tap each (the shared thumb buttons, Allow wider). Its classes are in its own
- * stylesheet, off the first load.
+ * exact command, file, tool connection's action or list, a line on what it's for, and Deny and
+ * Allow at the bottom, in thumb reach, one tap each (the shared thumb buttons, Allow wider). Its
+ * classes are in its own stylesheet, off the first load.
  */
 export function ApprovalCard(props: {
   title: string;
