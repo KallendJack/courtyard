@@ -449,10 +449,15 @@ const labelFor = (model: z.infer<typeof ClaudeModel>) => {
   return named ? `${LABEL} · Default (${named})` : `${LABEL} · ${model.displayName}`;
 };
 
-/** The model Claude Code's Default is, when its description says. */
+/**
+ * The model Claude Code's Default is, when its description says: "Use the default model
+ * (currently Opus 5.5) · …", or "Opus 5.5 · …".
+ */
 const defaultsTo = (model: z.infer<typeof ClaudeModel>) => {
   if (model.value !== "default") return undefined;
   const [first, ...rest] = model.description.split(" · ");
+  const now = /\(currently ([^)]+)\)/.exec(first ?? "")?.[1]?.trim();
+  if (now !== undefined) return now || undefined;
   return rest.length > 0 ? first?.trim() || undefined : undefined;
 };
 
@@ -468,6 +473,17 @@ const TextDelta = z.object({
     delta: z.object({ type: z.literal("text_delta"), text: z.string() }),
   }),
 });
+/** One of Claude's messages starting: its own, or a subagent's (with the tool use it's under). */
+const MessageStart = z.object({
+  type: z.literal("stream_event"),
+  parent_tool_use_id: z.string().nullable().optional(),
+  event: z.object({ type: z.literal("message_start") }),
+});
+/**
+ * What goes between the text of two of Claude's messages: a new paragraph, as Claude shows it,
+ * so what it writes between what it does never runs together (#200).
+ */
+const BETWEEN_MESSAGES = "\n\n";
 const RateLimitEvent = z.object({
   type: z.literal("rate_limit_event"),
   rate_limit_info: z.object({ status: z.string(), resetsAt: z.number().optional() }),
@@ -482,27 +498,67 @@ const AnswerError = z
     "account_on_hold",
     "verification_required",
     "overloaded",
+    "cloud_credential_error",
     "unknown",
   ])
   .catch("unknown");
 type AnswerError = z.infer<typeof AnswerError>;
 /**
- * An assistant message that failed. Ordinary assistant messages have no `error` at all; the field
- * has to be there before its value is read, or every answer would count as a failure.
+ * An assistant message that failed, and what it says. Ordinary assistant messages have no `error`
+ * at all; the field has to be there before its value is read, or every answer would count as a
+ * failure.
  */
 const AssistantError = z.object({
   type: z.literal("assistant"),
   error: z.string().pipe(AnswerError),
+  message: z
+    .object({ content: z.array(z.unknown()) })
+    .optional()
+    .catch(undefined),
 });
 const ResultMessage = z.object({
   type: z.literal("result"),
   is_error: z.boolean().optional(),
+  /** The HTTP status Claude's API answered with, when a turn ended on an error from it. */
+  api_error_status: z.number().nullable().optional().catch(undefined),
   /** A one-off question's answer, in the shape it asked for. */
   structured_output: z.unknown().optional(),
+});
+/** Claude Code trying a request again; with no status, it got no answer at all (#200). */
+const RetryMessage = z.object({
+  type: z.literal("system"),
+  subtype: z.literal("api_retry"),
+  error_status: z.number().nullable(),
 });
 
 const SIGNED_OUT =
   "Claude Code isn't logged in on the worker machine. Run `claude` there and log in, or set an API key.";
+
+/** Plain words for why a turn failed (#200), as the session shows them. */
+const FAILED = {
+  signInExpired: {
+    kind: "provider-unavailable",
+    message: "Claude's sign-in expired. Retry in a minute, or sign in again from Connections.",
+  },
+  noConnection: {
+    kind: "provider-unavailable",
+    message:
+      "Courtyard couldn't reach Claude. Check the worker machine's internet connection, then retry.",
+  },
+  overloaded: { kind: "unknown", message: "Claude is overloaded right now. Retry in a moment." },
+  account: {
+    kind: "provider-unavailable",
+    message: "Claude's account needs attention. Check it at claude.ai.",
+  },
+  other: { kind: "unknown", message: "Claude couldn't answer this time." },
+} as const satisfies Record<string, FailureReason>;
+
+/** What Claude Code says when its sign-in is refused, expired or couldn't be refreshed. */
+const SIGN_IN_WORDS = /oauth|authenticat|\/login|api key/i;
+/** What Claude Code says when it couldn't reach Claude at all. */
+const OFFLINE_WORDS = /connection error|unable to connect|connection refused|fetch failed/i;
+/** What Claude Code says when Claude is too busy to answer. */
+const BUSY_WORDS = /overloaded|at capacity/i;
 
 /** `resetsAt` arrives as a Unix time; accept seconds or milliseconds. */
 const resetTimeFrom = (resetsAt: number | undefined) =>
@@ -510,54 +566,96 @@ const resetTimeFrom = (resetsAt: number | undefined) =>
     ? undefined
     : new Date(resetsAt < 1e12 ? resetsAt * 1000 : resetsAt).toISOString();
 
-/** Plain words for each way Claude Code reports a failed answer. */
-const failureFor = (error: AnswerError, resetAt: string | undefined): FailureReason => {
+/** What a run's messages said about a failure: its words and HTTP status, as far as they said. */
+type Heard = {
+  resetAt?: string | undefined;
+  /** The failed answer's words, which only ever pick the reason, never reach the owner. */
+  said?: string;
+  status?: number | null | undefined;
+  /** Claude Code's last retry got no answer at all. */
+  offline?: boolean;
+};
+
+/**
+ * Plain words for each way Claude Code reports a failed answer. An error it gives no kind of its
+ * own (a server error, say) is named by what it said, and only the rest is the generic line.
+ */
+const failureFor = (error: AnswerError, heard: Heard): FailureReason => {
+  const { resetAt, said = "", status } = heard;
   switch (error) {
     case "rate_limit":
       return { kind: "rate-limited", ...(resetAt ? { resetAt } : {}) };
     case "authentication_failed":
+    case "cloud_credential_error":
+      return FAILED.signInExpired;
     case "oauth_org_not_allowed":
-      return { kind: "provider-unavailable", message: SIGNED_OUT };
     case "billing_error":
     case "account_on_hold":
     case "verification_required":
-      return {
-        kind: "provider-unavailable",
-        message: "Claude's account needs attention. Check it at claude.ai.",
-      };
+      return FAILED.account;
     case "overloaded":
-      return { kind: "unknown", message: "Claude is overloaded right now. Try again in a moment." };
+      return FAILED.overloaded;
     case "unknown":
-      return { kind: "unknown", message: "Claude couldn't answer this time." };
+      if (status === 401 || status === 403 || SIGN_IN_WORDS.test(said)) return FAILED.signInExpired;
+      if (status === 529 || BUSY_WORDS.test(said)) return FAILED.overloaded;
+      if (heard.offline === true || OFFLINE_WORDS.test(said)) return FAILED.noConnection;
+      return FAILED.other;
   }
 };
 
 /** What a run's messages have said so far about how it went. */
 type Progress = {
   resetAt?: string | undefined;
+  /** Claude Code's last retry got no answer at all. */
+  offline?: boolean;
   failure?: FailureReason;
   result?: z.infer<typeof ResultMessage>;
 };
 
-/** Notes what a message says about the run: a usage limit, a failed answer, or its result. */
+/** The words of a failed answer. */
+const saidIn = (message: z.infer<typeof AssistantError>["message"]) =>
+  (message?.content ?? [])
+    .flatMap((block) => {
+      const text = z.object({ type: z.literal("text"), text: z.string() }).safeParse(block);
+      return text.success ? [text.data.text] : [];
+    })
+    .join("\n");
+
+/**
+ * Notes what a message says about the run: a usage limit, a retry, a failed answer, or its
+ * result.
+ */
 const noteProgress = (message: unknown, progress: Progress) => {
   const limit = RateLimitEvent.safeParse(message);
   if (limit.success) {
     if (limit.data.rate_limit_info.status === "rejected") {
       progress.resetAt = resetTimeFrom(limit.data.rate_limit_info.resetsAt);
-      progress.failure = failureFor("rate_limit", progress.resetAt);
+      progress.failure = failureFor("rate_limit", progress);
     }
+    return;
+  }
+  const retry = RetryMessage.safeParse(message);
+  if (retry.success) {
+    progress.offline = retry.data.error_status === null;
     return;
   }
   const assistant = AssistantError.safeParse(message);
   if (assistant.success) {
-    progress.failure ??= failureFor(assistant.data.error, progress.resetAt);
+    progress.failure ??= failureFor(assistant.data.error, {
+      ...progress,
+      said: saidIn(assistant.data.message),
+    });
     return;
   }
   const result = ResultMessage.safeParse(message);
   if (result.success) {
     progress.result = result.data;
-    if (result.data.is_error) progress.failure ??= failureFor("unknown", progress.resetAt);
+    if (result.data.is_error) {
+      progress.failure ??= failureFor("unknown", {
+        ...progress,
+        status: result.data.api_error_status,
+      });
+    }
   }
 };
 
@@ -1042,13 +1140,23 @@ export const createClaudeProvider = (
           },
         });
 
+        // Whether a message of Claude's own has started since the last of its text.
+        let newMessage = false;
         for await (const message of untilStopped(messages, stop.signal)) {
           const delta = TextDelta.safeParse(message);
           if (delta.success) {
             if (!delta.data.parent_tool_use_id) {
-              answer += delta.data.event.delta.text;
-              await input.emit(delta.data.event.delta.text);
+              const between = newMessage && answer !== "" ? BETWEEN_MESSAGES : "";
+              const text = `${between}${delta.data.event.delta.text}`;
+              newMessage = false;
+              answer += text;
+              await input.emit(text);
             }
+            continue;
+          }
+          const started = MessageStart.safeParse(message);
+          if (started.success) {
+            if (!started.data.parent_tool_use_id) newMessage = true;
             continue;
           }
           noteProgress(message, progress);
@@ -1065,7 +1173,7 @@ export const createClaudeProvider = (
       if (input.signal.aborted) return ok(null);
       const failure =
         progress.failure ??
-        (progress.result === undefined ? failureFor("unknown", progress.resetAt) : undefined);
+        (progress.result === undefined ? failureFor("unknown", progress) : undefined);
       if (failure) return err(failure);
       if (web !== null && (web.searched || web.read.length > 0)) {
         const sources = turnSources({ answer, read: web.read, searches: web.searches });
@@ -1110,7 +1218,7 @@ export const createClaudeProvider = (
       if (input.signal.aborted) return err({ kind: "unknown", message: "It was stopped." });
       if (progress.failure !== undefined) return err(progress.failure);
       const answer = progress.result?.structured_output;
-      return answer === undefined ? err(failureFor("unknown", progress.resetAt)) : ok(answer);
+      return answer === undefined ? err(failureFor("unknown", progress)) : ok(answer);
     },
   };
 };

@@ -226,6 +226,91 @@ test.describe("unfolded", () => {
     await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
   });
 
+  test("the Model button shows the model it sends with by its short name, inside the button", async ({
+    page,
+  }) => {
+    // The providers as the worker lists them with Claude and Codex signed in (#200).
+    const capabilities = {
+      readsFiles: true,
+      codes: true,
+      usesTools: true,
+      savesContext: true,
+      searchesWeb: true,
+    };
+    const model = (id: string, name: string, more: object = {}) => ({
+      id,
+      label: name,
+      name,
+      efforts: [],
+      ...more,
+    });
+    await page.route("**/api/providers", (route) =>
+      route.fulfill({
+        json: {
+          providers: [
+            {
+              id: "claude",
+              label: "Claude",
+              available: true,
+              capabilities,
+              models: [
+                model("default", "Opus 5.5", { followsDefault: true }),
+                model("sonnet", "Sonnet 5"),
+              ],
+            },
+            {
+              id: "codex",
+              label: "Codex",
+              available: true,
+              capabilities,
+              models: [model("gpt-6.1-sol", "GPT-6.1-Sol")],
+            },
+            {
+              id: "fake",
+              label: "Fake",
+              available: true,
+              capabilities,
+              models: [model("echo", "Fake")],
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto("/workspaces/garage-gym");
+    const button = page.getByRole("button", { name: /^Model: / });
+    const sheet = page.getByRole("dialog", { name: "Model" });
+
+    for (const [name, short] of [
+      ["Opus 5.5", "O5.5"],
+      ["Sonnet 5", "S5"],
+      ["GPT-6.1-Sol", "G6.1S"],
+      ["Fake", "F"],
+    ] as const) {
+      await button.click();
+      await sheet
+        .getByRole("radiogroup", { name: "Model" })
+        .locator("label", { has: page.getByRole("radio", { name: new RegExp(`^${name}`) }) })
+        .tap();
+      await page.keyboard.press("Escape");
+      await expect(button).toHaveAccessibleName(`Model: ${name}`);
+      // The disc, and its label: the short name, never spilling out of the disc.
+      const disc = button.locator("span").first();
+      await expect(disc).toHaveText(short);
+      const { label, room } = await disc.evaluate((element) => {
+        const text = document.createRange();
+        text.selectNodeContents(element);
+        const label = text.getBoundingClientRect();
+        const room = element.getBoundingClientRect();
+        return {
+          label: { left: label.left, right: label.right },
+          room: { left: room.left, right: room.right },
+        };
+      });
+      expect(label.left).toBeGreaterThanOrEqual(room.left);
+      expect(label.right).toBeLessThanOrEqual(room.right);
+    }
+  });
+
   test("Settings is at the top of the right rail, and Skills, Photo and Model at its foot, beside the page", async ({
     page,
   }) => {
