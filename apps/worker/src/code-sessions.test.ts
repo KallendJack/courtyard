@@ -236,6 +236,17 @@ describe("a code workspace's command allowlist", () => {
     "gh pr view 12",
     "gh pr checks",
     "gh issue view 79",
+    // Looking around the worktree (#178).
+    "cat package.json",
+    "ls apps",
+    "ls -la",
+    "head -n 20 notes.md",
+    "tail -5 notes.md",
+    "wc -l notes.md",
+    "grep -rn foo apps",
+    "rg foo apps",
+    "pwd",
+    "diff notes.md README.md",
   ])("runs %s without asking, shown in the activity", async (command) => {
     const { answers, ran } = await askAbout([command]);
 
@@ -291,6 +302,17 @@ describe("a code workspace's command allowlist", () => {
     ["git grep -fC:/path/to/patterns.txt rack", "reaches-out"],
     ["git grep -f/path/to/patterns.txt rack", "reaches-out"],
     ["git log -n1 --format=%s -- notes.md HEAD:../outside.txt", "reaches-out"],
+    // Looking around stays inside the worktree, and runs nothing else (#178).
+    ["cat ../../x", "reaches-out"],
+    ["cat -- C:/x", "reaches-out"],
+    ["ls ~", "reaches-out"],
+    ["grep -rn foo /path/to/repo", "reaches-out"],
+    ["diff notes.md ../outside.txt", "reaches-out"],
+    ["find . -exec rm {} +", "off-allowlist"],
+    ["rg --pre ./script.sh foo", "off-allowlist"],
+    ["rg --pre=./script.sh foo", "off-allowlist"],
+    ["rg --hostname-bin ./script.sh --hyperlink-format default foo", "off-allowlist"],
+    ["pwd -P extra", "off-allowlist"],
   ])("asks the owner before running %s, and doesn't once they deny it", async (command, reason) => {
     const { answers, asked, ran } = await askAbout([command]);
 

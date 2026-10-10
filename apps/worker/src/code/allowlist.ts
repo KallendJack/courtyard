@@ -106,6 +106,14 @@ const GIT_NEVER = [
   /^--exec/,
 ];
 const GH_NEVER = [/^--web$/, /^-w$/];
+/** What ripgrep is never asked for: running a program on each file, or for the host's name. */
+const RG_NEVER = [/^--pre/, /^--hostname-bin/];
+
+/**
+ * The shell commands a model looks around the worktree with (#178), none of which can run another
+ * program or write a file. `find` isn't one: it can `-exec`.
+ */
+const LOOKS = ["cat", "ls", "head", "tail", "wc", "grep", "diff"];
 
 /** The package scripts a session runs to check its own work. */
 const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify"];
@@ -235,12 +243,16 @@ const editsOwn = (rest: readonly string[], { branch, pullRequest }: OwnWork) => 
 };
 
 /**
- * A code workspace's command allowlist when its settings name none: the repository's package
- * scripts (install with a frozen lockfile, check, typecheck, test, build, e2e and verify), git and
- * gh commands that only look, adding and committing on the session branch, pushing it, and
- * opening and updating its own pull request (#172).
+ * A code workspace's command allowlist when its settings name none: the shell commands that look
+ * around the worktree (#178), the repository's package scripts (install with a frozen lockfile,
+ * check, typecheck, test, build, e2e and verify), git and gh commands that only look, adding and
+ * committing on the session branch, pushing it, and opening and updating its own pull request
+ * (#172).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
+  ...LOOKS.map((look) => ({ words: [look], more: true })),
+  { words: ["rg"], more: true, never: RG_NEVER },
+  { words: ["pwd"], more: false },
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
   { words: ["npm", "ci"], more: false },
   ...PACKAGE_SCRIPTS.flatMap((script) => [
