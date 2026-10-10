@@ -218,7 +218,7 @@ export function TalkBar(props: {
         disabled={box === undefined}
         onClick={listeningNow ? () => stop("drop") : props.type}
         className={classes(
-          "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-[18px] bg-secondary text-[10px]/3 font-bold tracking-[0.08em] text-muted-foreground uppercase ring-1 ring-input outline-none ring-inset focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40 [&_svg]:text-foreground",
+          "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-card bg-secondary text-[10px]/3 font-bold tracking-[0.08em] text-muted-foreground uppercase ring-1 ring-input outline-none ring-inset focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40 [&_svg]:text-foreground",
           wide ? "h-15 w-18 [&_svg]:size-6" : "w-16 [&_svg]:size-5.5",
           overCancel && "bg-muted text-foreground ring-2 ring-foreground",
         )}
@@ -254,7 +254,7 @@ export function TalkBar(props: {
         // A held finger is push to talk, not the browser's menu or a text selection.
         onContextMenu={(event) => event.preventDefault()}
         className={classes(
-          "relative flex min-w-0 flex-1 touch-none items-center overflow-clip rounded-[18px] text-left outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40",
+          "relative flex min-w-0 flex-1 touch-none items-center overflow-clip rounded-card text-left outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40",
           wide ? "h-15 gap-3.5 pr-6 pl-5" : "gap-3 px-4.5",
           !listeningNow && "bg-primary/5 ring-1 ring-primary/30 ring-inset active:translate-y-px",
           !listeningNow && answering && "bg-linear-to-r from-primary/14 to-primary/0 to-45%",
@@ -268,7 +268,7 @@ export function TalkBar(props: {
           <span
             aria-hidden
             className={classes(
-              "absolute inset-x-4.5 top-0 h-0.5 rounded-[2px] bg-linear-to-r from-transparent via-primary-text to-transparent",
+              "absolute inset-x-4.5 top-0 h-0.5 rounded-hair bg-linear-to-r from-transparent via-primary-text to-transparent",
               listeningNow
                 ? "shadow-[0_0_14px_2px] shadow-primary"
                 : "shadow-[0_0_12px_1px] shadow-primary/70",
@@ -313,7 +313,7 @@ export function TalkBar(props: {
           ) : answering ? (
             <span
               aria-hidden
-              className="h-0.5 w-15 shrink-0 rounded-[2px] bg-primary shadow-[0_0_10px] shadow-primary"
+              className="h-0.5 w-15 shrink-0 rounded-hair bg-primary shadow-[0_0_10px] shadow-primary"
             />
           ) : (
             <Bars heights={IDLE_BARS} />

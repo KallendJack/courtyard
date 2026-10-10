@@ -89,6 +89,10 @@
   --radius-row: 12px;
   --radius-card: 18px;
   --radius-ask: 24px;
+  /* The Handheld frame (#193, #194): a line of light, a workspace's tile, and a sheet. */
+  --radius-hair: 2px;
+  --radius-tile: 20px;
+  --radius-sheet: 26px;
 
   --container-reading: 680px;
 }
