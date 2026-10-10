@@ -4,11 +4,13 @@
 
 /*
  * The rich blocks' and Things' classes go in their own stylesheets, off the first load
- * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses.
+ * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses
+ * and of the approval card (approval-card.css), which only a session page shows.
  */
 @source not "./rich-blocks";
 @source not "./things";
 @source not "./components/sort-button.tsx";
+@source not "./components/approval-card.tsx";
 
 /*
  * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components

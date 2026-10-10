@@ -8,6 +8,7 @@ import {
 } from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
 import { memo, useState } from "react";
+import { ApprovalCard } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
@@ -15,11 +16,12 @@ import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
+import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
 import type { Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
-import { attachmentUrl } from "./messages.ts";
+import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
 import { SaveNote } from "./save-note.tsx";
 import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
@@ -196,6 +198,21 @@ export const TurnView = memo(function TurnView(props: {
             />
           )}
         </div>
+      )}
+      {turn.approval !== undefined && turn.state.kind === "running" && (
+        <ApprovalCard
+          ask={turn.approval.ask}
+          why={turn.approval.why}
+          onAnswer={async (answer) => {
+            if (turn.approval === undefined) return undefined;
+            const answered = await answerApproval({
+              sessionId,
+              approval: turn.approval.seq,
+              answer,
+            });
+            return answered.kind === "loaded" ? undefined : describeProblem(answered).body;
+          }}
+        />
       )}
       {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
       {turn.answer !== "" && turn.state.kind !== "running" && (
