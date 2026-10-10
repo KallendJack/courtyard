@@ -21,9 +21,9 @@ model looks around with, `cat`, `ls`, `head`, `tail`, `wc`, `grep`, `rg` (never 
 which run a program), `pwd` and `diff`, under the same rules as every allowed command: one at a time, naming no path
 outside the worktree (#178). `find` isn't among them, since `-exec` runs anything. The package scripts are allowed
 in the packages pnpm's `--filter`, `-C` or `-r` pick too, when the script alone would be, and the test tools those
-scripts run are allowed run directly (`vitest run`, `playwright test`, `tsc --noEmit`, `biome check`, with `npx`,
-`pnpm` or `pnpm exec`), since they run the same code the scripts do; `npx` of anything else asks, since it can fetch
-and run any package (#202).
+scripts run are allowed run directly as the repository installed them (`vitest run`, `playwright test`, `tsc
+--noEmit`, `biome check`, with `pnpm` or `pnpm exec`), since they run the same code the scripts do; `npx` always
+asks, since it can fetch and run any package (#202).
 
 Every command runs in the foreground (#178). A turn's background commands stop when it ends, and nothing wakes the
 model when one finishes, so a model that backgrounds `pnpm verify` and ends its turn waits for a message that never
@@ -35,7 +35,9 @@ Inside the worktree, the files that decide what an allowed command runs need an 
 the package manager's settings: `pnpm-workspace.yaml`, `.npmrc`, `.pnpmfile.cjs`), git hooks (`.husky`, `.githooks`,
 lefthook's files, the folder `core.hooksPath` names), Claude Code's `.claude` folder (its settings, hooks and skills,
 which the next turn loads) and git's own `.git`. Without that, a model could add a package script or a hook in one
-turn and run it through `pnpm test` or `git commit` in the next.
+turn and run it through `pnpm test` or `git commit` in the next. For the same reason `gh run download`, which
+unpacks a run's artifacts, runs without asking only with `-D` naming a folder git ignores in the worktree that is
+neither the worktree itself nor one of those files; anywhere else it asks, since an artifact could carry one (#202).
 
 ## Considered options
 

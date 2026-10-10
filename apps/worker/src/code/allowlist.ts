@@ -34,6 +34,12 @@ export type CommandRule = {
    * `undefined` when it names none.
    */
   readonly runs?: (rest: readonly string[]) => readonly string[] | undefined;
+  /**
+   * For a command that unpacks files (`gh run download`, #202): the folder it unpacks into, which
+   * the code module allows only when git ignores it and it's neither the worktree itself nor a
+   * file that decides what allowed commands run.
+   */
+  readonly unpacksInto?: (rest: readonly string[]) => string | undefined;
 };
 
 /** A session's own branch, and its pull request's number once it has one. */
@@ -155,8 +161,8 @@ const TEST_TOOLS: readonly { readonly words: readonly string[]; readonly never: 
   { words: ["tsc", "--noEmit"], never: [/^--watch/, /^-w$/] },
   { words: ["biome", "check"], never: [] },
 ];
-/** What runs them: npx only for them, which could otherwise fetch and run any package. */
-const TOOL_RUNNERS = [["npx"], ["pnpm"], ["pnpm", "exec"]];
+/** What runs them as the repository installed them: never npx, which can fetch any package. */
+const TOOL_RUNNERS = [["pnpm"], ["pnpm", "exec"]];
 
 /** Pnpm's options that pick the workspace packages a command runs in, with a value. */
 const PNPM_PICKS = new Set(["--filter", "-F", "--dir", "-C"]);
@@ -322,6 +328,23 @@ const GH_ISSUES = [
   ["label", "list"],
 ];
 
+/** The flags `gh run download` takes: none for another repository. */
+const RUN_DOWNLOAD: GhFlags = {
+  withValue: new Set(["--dir", "-D", "--name", "-n", "--pattern", "-p"]),
+  alone: new Set(),
+};
+
+/**
+ * The one folder `gh run download` is told to unpack a run's artifacts into (`-D`), or `undefined`
+ * when it names none, or a flag it doesn't take.
+ */
+const downloadFolder = (rest: readonly string[]) => {
+  const parts = ghParts(rest, RUN_DOWNLOAD);
+  if (parts === undefined || parts.positionals.length > 1) return undefined;
+  const folders = parts.values.filter(([flag]) => flag === "--dir" || flag === "-D");
+  return folders.length === 1 ? folders[0]?.[1] : undefined;
+};
+
 /** The flags `gh api` takes when it only reads: none that sends fields or a body. */
 const API_READ: GhFlags = {
   withValue: new Set(["--method", "-X", "--jq", "-q", "--template", "-t", "--header", "-H"]),
@@ -383,8 +406,13 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     never: GH_ELSEWHERE,
     texts: GH_TEXTS,
   })),
-  // A run's artifacts, into the worktree (its -D folder is checked as a path), for a fixing turn.
-  { words: ["gh", "run", "download"], more: true, never: GH_ELSEWHERE },
+  // A run's artifacts, for a fixing turn, into a folder git ignores (#202).
+  {
+    words: ["gh", "run", "download"],
+    more: true,
+    own: (rest) => downloadFolder(rest) !== undefined,
+    unpacksInto: downloadFolder,
+  },
   { words: ["gh", "api"], more: true, own: readsOnly, texts: ["--jq", "-q", "--template", "-t"] },
   { words: ["git", "push"], more: true, onSessionBranch: true, own: pushesOwn },
   {

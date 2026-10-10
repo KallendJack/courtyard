@@ -235,15 +235,14 @@ describe("a code workspace's command allowlist", () => {
     "pnpm --dir=apps/worker test",
     "pnpm -r typecheck",
     "pnpm --recursive --filter @courtyard/web test",
-    // The tools those scripts run, run directly (#202).
-    "npx vitest run src/code-sessions.test.ts",
+    // The tools those scripts run, run directly as installed (#202).
+    "pnpm exec vitest run src/code-sessions.test.ts",
     "pnpm vitest run -t allowlist",
     "pnpm --filter @courtyard/worker exec vitest run src/code-sessions.test.ts",
-    "npx playwright test e2e/chat.spec.ts --workers=1",
-    "pnpm exec playwright test",
-    "npx tsc --noEmit -p apps/worker",
-    "npx biome check apps/worker/src",
-    "npx biome check --write apps/worker/src",
+    "pnpm exec playwright test e2e/chat.spec.ts --workers=1",
+    "pnpm exec tsc --noEmit -p apps/worker",
+    "pnpm exec biome check apps/worker/src",
+    "pnpm biome check --write apps/worker/src",
     // A command split over lines (#202).
     "pnpm test \\\n  -- apps/worker/src/code-sessions.test.ts",
     "git status",
@@ -291,8 +290,6 @@ describe("a code workspace's command allowlist", () => {
     "gh run view 123 --log",
     "gh run view 123 --json jobs --jq '.jobs[] | select(.conclusion == \"failure\") | .name'",
     "gh run list --limit 5",
-    "gh run download 123",
-    "gh run download 123 -n playwright-report -D test-results/ci",
     // A title, body, comment or message is text, never a path (#202).
     'gh issue comment 79 --body "Fixed: see https://courtyard.example/pull/80"',
     'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down"',
@@ -345,18 +342,19 @@ describe("a code workspace's command allowlist", () => {
     ["pnpm --filter x", "off-allowlist"],
     ["pnpm -C ../.. build", "reaches-out"],
     ["pnpm --dir=/path/to/repo test", "reaches-out"],
-    // Only the test tools run directly, never another package, and none that waits forever.
+    // Only the test tools run directly, as installed (npx could fetch any package), and none
+    // that waits forever.
     ["npx some-package", "off-allowlist"],
-    ["npx -y vitest run", "off-allowlist"],
-    ["npx --package=some-package vitest run", "off-allowlist"],
+    ["npx vitest run", "off-allowlist"],
+    ["npx --no-install vitest run", "off-allowlist"],
     ["pnpm dlx vitest run", "off-allowlist"],
-    ["npx vitest", "off-allowlist"],
-    ["npx vitest run --watch", "off-allowlist"],
-    ["npx playwright test --ui", "off-allowlist"],
-    ["npx tsc", "off-allowlist"],
-    ["npx tsc --noEmit --watch", "off-allowlist"],
-    ["npx biome check --write ../elsewhere", "reaches-out"],
-    ["npx vitest run --config=../evil.ts", "reaches-out"],
+    ["pnpm exec vitest", "off-allowlist"],
+    ["pnpm exec vitest run --watch", "off-allowlist"],
+    ["pnpm exec playwright test --ui", "off-allowlist"],
+    ["pnpm exec tsc", "off-allowlist"],
+    ["pnpm exec tsc --noEmit --watch", "off-allowlist"],
+    ["pnpm exec biome check --write ../elsewhere", "reaches-out"],
+    ["pnpm exec vitest run --config=../evil.ts", "reaches-out"],
     ["gh pr merge 12", "off-allowlist"],
     ["gh pr view 12 --web", "off-allowlist"],
     // Only reading through gh api, and only this repository's issues and labels (#181).
@@ -388,11 +386,7 @@ describe("a code workspace's command allowlist", () => {
     ["git grep -fC:/path/to/patterns.txt rack", "reaches-out"],
     ["git grep -f/path/to/patterns.txt rack", "reaches-out"],
     ["git log -n1 --format=%s -- notes.md HEAD:../outside.txt", "reaches-out"],
-    // A run's artifacts land only in the worktree, from this repository; nothing else changes a run.
-    ["gh run download 123 -D ../x", "reaches-out"],
-    ["gh run download 123 --dir=/path/to/x", "reaches-out"],
-    ["gh run download 123 -R someone/else", "off-allowlist"],
-    ["gh run download 123 --repo=someone/else", "off-allowlist"],
+    // Nothing else changes a run (#202).
     ["gh run rerun 123", "off-allowlist"],
     ["gh run cancel 123", "off-allowlist"],
     ["gh run view 123 --web", "off-allowlist"],
@@ -547,6 +541,46 @@ describe("a code workspace's command allowlist", () => {
       error: `Committing, pushing and opening your pull request work only on your session branch, ${branch}, and the worktree isn't on it now, so that didn't run.`,
     };
     expect(answers.slice(3)).toEqual([offBranch, offBranch, offBranch]);
+  });
+});
+
+describe("a code session's downloads of a run's artifacts (#202)", () => {
+  beforeEach(async () => {
+    // The repository ignores its test results, and Claude Code's folder too, as some do.
+    await writeFile(join(repo, ".gitignore"), "test-results/\n.claude/\n");
+    await gitIn(repo, "add", ".gitignore");
+    await gitIn(repo, "commit", "--quiet", "-m", "Ignore test results");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+  });
+
+  it.each([
+    "gh run download 123 -D test-results/ci",
+    "gh run download 123 -n playwright-report --dir=test-results/ci",
+  ])("run without asking into a folder git ignores: %s", async (command) => {
+    const { answers, ran } = await askAbout([command]);
+
+    expect(answers).toEqual([{ ok: true, value: null }]);
+    expect(ran).toEqual([{ kind: "ran-command", command }]);
+  });
+
+  it.each([
+    // Unpacked anywhere else, a package.json, git hook or Claude Code setting could arrive
+    // without the approval an edit to one needs.
+    ["gh run download 123", "off-allowlist"],
+    ["gh run download 123 -D .", "off-allowlist"],
+    ["gh run download 123 -D .claude", "off-allowlist"],
+    ["gh run download 123 -D .claude/ci", "off-allowlist"],
+    ["gh run download 123 -D apps", "off-allowlist"],
+    ["gh run download 123 -D test-results/ci -D apps", "off-allowlist"],
+    ["gh run download 123 -D ../x", "reaches-out"],
+    ["gh run download 123 --dir=/path/to/x", "reaches-out"],
+    ["gh run download 123 -D test-results/ci -R someone/else", "off-allowlist"],
+    ["gh run download 123 -D test-results/ci --repo=someone/else", "off-allowlist"],
+  ])("ask the owner anywhere else: %s", async (command, reason) => {
+    const { asked, ran } = await askAbout([command]);
+
+    expect(asked).toEqual([{ kind: "command", command, reason }]);
+    expect(ran).toEqual([]);
   });
 });
 

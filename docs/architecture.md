@@ -172,8 +172,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
-  another repository, and reads through `gh api` with GET only (#181), and downloads a run's artifacts into the
-  worktree with `gh run download` (#202). A backslash at a line's end joins the next
+  another repository, and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
+  download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202). A backslash at a line's end joins the next
   line on, and a title, body, message or jq filter is checked as a path only as a whole, so a link in it doesn't ask
   (#202).
   A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,

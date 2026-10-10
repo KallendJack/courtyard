@@ -108,6 +108,12 @@ export const commandAllowed = async (
   if (reachesOut(session.worktree, rule, words.value)) {
     return err({ kind: "needs-approval", reason: "reaches-out" });
   }
+  if (rule.unpacksInto !== undefined) {
+    const folder = rule.unpacksInto(words.value.slice(rule.words.length));
+    if (folder === undefined || !(await unpacksSafely(session.worktree, folder))) {
+      return err({ kind: "needs-approval", reason: "off-allowlist" });
+    }
+  }
   if (rule.onSessionBranch) {
     const on = await gitOrNothing(session.worktree, ["branch", "--show-current"]);
     if (on !== session.branch) return err({ kind: "off-branch", branch: session.branch });
@@ -184,6 +190,25 @@ export const editPlaceIn = async (worktree: string, path: string): Promise<EditP
   return isSetup(shown, inHooks ? hooks : undefined)
     ? { kind: "setup", shown }
     : { kind: "inside", shown };
+};
+
+/**
+ * Whether a command may unpack files into a folder of the worktree without asking (`gh run
+ * download -D`, #202): one git ignores, that's neither the worktree itself nor a file that decides
+ * what allowed commands run (`editPlaceIn`). Anywhere else, what it unpacks could replace one of
+ * those without the approval an edit to it needs.
+ */
+const unpacksSafely = async (worktree: string, folder: string) => {
+  const place = await editPlaceIn(worktree, folder);
+  if (place.kind !== "inside") return false;
+  // With a trailing slash, git reads it as a folder even before the download makes it.
+  const ignored = await gitOrNothing(worktree, [
+    "check-ignore",
+    "--quiet",
+    "--",
+    `${place.shown}/`,
+  ]);
+  return ignored !== undefined;
 };
 
 /**

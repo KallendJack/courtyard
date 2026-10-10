@@ -234,9 +234,9 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
 > without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package
 > scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and
-> biome check (with npx, pnpm or pnpm exec), git and gh commands that only look, gh run download into your working
-> directory, adding and committing on your branch, pushing it, opening or updating its pull request, and filing, labelling, commenting on and closing the
-> repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what
+> biome check (with pnpm exec, never npx), git and gh commands that only look, gh run download with -D naming a
+> folder in your working directory that git ignores, adding and committing on your branch, pushing it, opening or
+> updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what
 > decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner
 > to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a
 > time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it
