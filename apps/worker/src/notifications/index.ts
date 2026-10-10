@@ -177,13 +177,15 @@ export const createNotifications = (options: {
     ) => {
       const need = needOf(event, pullRequest);
       if (need === undefined) return;
-      const [own, devices, loggedIn, title] = await Promise.all([
+      // No device has them on: nothing to send, nor keys to make.
+      const devices = await readDevices();
+      if (!devices.ok || devices.value.length === 0) return;
+      const [own, loggedIn, title] = await Promise.all([
         ownKeys(),
-        readDevices(),
         options.devicesLoggedIn(),
         options.titleOf(session),
       ]);
-      if (!own.ok || !devices.ok || !loggedIn.ok || title === undefined) return;
+      if (!own.ok || !loggedIn.ok || title === undefined) return;
       const notice: PushNotice = { title, body: need, session };
       const payload = JSON.stringify(notice);
       const sending = devices.value.filter(({ device }) => loggedIn.value.has(device));
