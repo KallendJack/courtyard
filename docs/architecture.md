@@ -150,7 +150,11 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   refused, and committing needs the worktree on the session branch. The default allowlist is the package scripts,
   git and gh commands that only look, and adding and committing; pushing and the session's own PR join it with the
   GitHub sign-in. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the worker's say on every edit and
-  command, which records each one allowed as an activity and words each refusal through `prompts/`.
+  command, which records each one allowed as an activity and words each refusal through `prompts/`. `slots.ts`
+  keeps up to three code sessions running at once across the worker (#174), each turn holding a numbered slot no
+  other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which this repository's Playwright
+  config picks its ports from, so side-by-side checks never share them. A turn beyond three waits, first come first
+  served, until one ends.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -344,7 +348,9 @@ Where the rest fits:
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
   limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
   `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a
-  denial tells the model why.
+  denial tells the model why. With three code sessions' turns running, a fourth records `turn-queued` and waits, `turn-dequeued`
+  once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
+  before it starts clears its branch and worktree away.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).

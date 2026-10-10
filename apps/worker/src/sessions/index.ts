@@ -42,6 +42,7 @@ import {
   type CodeRefusal,
   commandAllowed,
   editableIn,
+  slotEnv,
 } from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import {
@@ -327,6 +328,8 @@ type RunningSession = {
   queue: Promise<unknown>;
   /** The approvals its turn is waiting on (#171), by event number: each takes the owner's answer. */
   approvals: Map<number, (answer: ApprovalAnswer) => void>;
+  /** Resolves once the turn last started here has ended, its end recorded. */
+  ended: Promise<void>;
 };
 
 /**
@@ -367,6 +370,7 @@ export const createSessions = (options: {
       listeners: new Set(),
       queue: Promise.resolve(),
       approvals: new Map(),
+      ended: Promise.resolve(),
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -558,6 +562,8 @@ export const createSessions = (options: {
     provider: Provider;
     model: ModelRef["model"];
     effort: Effort | undefined;
+    /** Whether it's in a code session, so it runs only once it has a slot among them. */
+    coding: boolean;
     /** Whether it answers the session's first message, so the session is titled once it completes. */
     firstTurn: boolean;
   }) => {
@@ -571,13 +577,22 @@ export const createSessions = (options: {
     let recordingLost = false;
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
     const callsUnderway = new Set<Promise<unknown>>();
+    const taken = turn.coding ? options.code.slots.take(turn.id, stopper.signal) : undefined;
+    // Every device sees the turn wait, and start (ADR 0006).
+    if (taken?.queued && !(await append(turn.id, { type: "turn-queued" })).ok) recordingLost = true;
+    const slot = await taken?.slot;
+    if (taken?.queued && slot !== undefined) {
+      if (!(await append(turn.id, { type: "turn-dequeued" })).ok) recordingLost = true;
+    }
     try {
       const [events, workspace, file] = await Promise.all([
         readEvents(turn.id),
         turnWorkspaceOf(turn.workspaceId),
         readJsonFile(sessionFilePath(turn.id), SessionFile),
       ]);
-      if (!events.ok || !file.ok) {
+      if (taken !== undefined && slot === undefined) {
+        // Stopped while it waited for a slot, so it never ran.
+      } else if (!events.ok || !file.ok) {
         failure = { kind: "unknown", message: "The session's event log can't be read." };
       } else if (!workspace.ok) {
         failure = { kind: "unknown", message: workspace.error };
@@ -784,6 +799,7 @@ export const createSessions = (options: {
         /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
         const codeTurn = (worktree: string, branch: string): CodeTurn => ({
           worktree,
+          env: slot === undefined ? {} : slotEnv(slot),
           edit: async (path) => {
             const shown = await editableIn(worktree, path);
             if (shown !== undefined) return decide(ok({ kind: "edited-file", path: shown }));
@@ -863,6 +879,8 @@ export const createSessions = (options: {
         ? { type: "turn-failed", reason: failure }
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
+    // Only once it's ended, so the next code session waiting starts after it.
+    options.code.slots.release(turn.id);
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
       titleSession(turn.id).catch((error: unknown) =>
@@ -925,6 +943,8 @@ export const createSessions = (options: {
     carryingOn?: { turn: number };
     /** How many fresh starts there had been when the turn was asked for. */
     since: number;
+    /** It's in a code session, so it runs only once it has a slot among them. */
+    coding: boolean;
     /** It answers the session's first message, so the session is titled once it completes. */
     firstTurn?: boolean;
     /** The files the owner attached, checked, to keep in the session's folder (#78). */
@@ -978,13 +998,14 @@ export const createSessions = (options: {
     }
     starting.turn = recorded.value.seq;
     await markUpdated(start.id);
-    runTurn({
+    session.ended = runTurn({
       id: start.id,
       stopper: starting.stopper,
       workspaceId: start.workspaceId,
       provider: start.provider,
       model: start.message.model.model,
       effort: start.message.effort,
+      coding: start.coding,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     return ok(null);
@@ -1084,13 +1105,16 @@ export const createSessions = (options: {
     return ok(undefined);
   };
 
-  /** A workspace's sessions, most recently active first. */
+  /**
+   * A workspace's sessions, most recently active first, each with whether it's waiting for a code
+   * session to end.
+   */
   const sessionsOf = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<SessionSummary[], SessionError>> => {
+  ): Promise<Result<(SessionSummary & { queued: boolean })[], SessionError>> => {
     const folders = await listFolder(sessionsDir);
     if (!folders.ok) return err(STORAGE_ERROR);
-    const summaries: SessionSummary[] = [];
+    const summaries: (SessionSummary & { queued: boolean })[] = [];
     for (const folder of folders.value) {
       const id = SessionId.safeParse(folder);
       if (!id.success) continue;
@@ -1098,7 +1122,7 @@ export const createSessions = (options: {
       if (!file.ok) return err(STORAGE_ERROR);
       if (file.value?.workspaceId !== workspaceId) continue;
       await settled(file.value.id);
-      summaries.push(summaryOf(file.value));
+      summaries.push({ ...summaryOf(file.value), queued: options.code.slots.waits(file.value.id) });
     }
     return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   };
@@ -1338,6 +1362,7 @@ export const createSessions = (options: {
             provider: provider.value.provider,
             message: message.value,
             since,
+            coding: sessionBranch !== undefined,
             firstTurn: true,
             ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
           })
@@ -1376,6 +1401,7 @@ export const createSessions = (options: {
         provider: provider.value.provider,
         message,
         since,
+        coding: session.value.branch !== undefined,
         attachments,
       });
     },
@@ -1420,6 +1446,7 @@ export const createSessions = (options: {
           ...(message.skill === undefined ? {} : { skill: message.skill }),
         },
         carryingOn: { turn: request.turn },
+        coding: found.value.branch !== undefined,
         // Its attachments go again too, already in the session's folder.
         ...(message.attachments === undefined ? {} : { keptAttachments: message.attachments }),
         // Carrying on the first message is still the session's first turn.
@@ -1525,8 +1552,20 @@ export const createSessions = (options: {
     remove: async (rawId: string): Promise<Result<null, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
+      const { id, workspaceId, branch } = found.value;
       const session = runningSession(id);
+      // A turn waiting for a code session to end hasn't started: it's stopped, and the session goes.
+      if (options.code.slots.waits(id) && session.turn.kind === "running") {
+        session.turn.stopper.abort();
+        await session.ended;
+      }
+      const events = await readEvents(id);
+      // Nothing ever ran on its session branch, so that goes too (ADR 0007).
+      const neverRan =
+        events.ok &&
+        events.value.filter((event) => event.type === "owner-message").length === 1 &&
+        events.value.some((event) => event.type === "turn-queued") &&
+        !events.value.some((event) => event.type === "turn-dequeued");
       // In the session's queue, so nothing is being written to it as its folder goes.
       return inOrder(session, async (): Promise<Result<null, SessionError>> => {
         if (session.turn.kind !== "idle") return err({ kind: "delete-while-running" });
@@ -1539,6 +1578,14 @@ export const createSessions = (options: {
           return err(STORAGE_ERROR);
         }
         running.delete(id);
+        const workspace = await getWorkspace(options.contextDir, workspaceId);
+        const repoPath = workspace.ok ? workspace.value.repoPath : null;
+        if (neverRan && branch !== undefined && typeof repoPath === "string") {
+          await options.code.clearBranch({
+            repoPath,
+            sessionBranch: { branch, worktree: options.code.worktreeOf(id) },
+          });
+        }
         return ok(null);
       });
     },
@@ -1549,8 +1596,11 @@ export const createSessions = (options: {
       return list.ok ? ok(list.value.some((session) => session.busy)) : list;
     },
 
-    /** A workspace's sessions, most recently active first. */
+    /** A workspace's sessions, most recently active first, each with whether it's waiting. */
     list: sessionsOf,
+
+    /** How many code sessions are running, across the worker. */
+    codeRunning: () => options.code.slots.running(),
 
     /** How many sessions there are, in every workspace. */
     count: async (): Promise<Result<number, SessionError>> => {

@@ -1,5 +1,6 @@
 import {
   type Activity,
+  CODE_SESSIONS_AT_ONCE,
   type FailureReason,
   type ProviderList,
   type SessionId,
@@ -7,7 +8,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { ArrowRightLeft } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, type ReactNode, useState } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
@@ -61,6 +62,11 @@ export const describeFailure = (reason: FailureReason) => {
       return reason.message;
   }
 };
+
+/** A line about where a turn stands, under the owner's message: waiting, or stopped. */
+function TurnNote(props: { children: ReactNode }) {
+  return <p className="border-l-2 pl-3 text-sm text-muted-foreground">{props.children}</p>;
+}
 
 /**
  * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
@@ -183,7 +189,13 @@ export const TurnView = memo(function TurnView(props: {
           ))}
         </ul>
       )}
-      {(turn.answer !== "" || turn.state.kind === "running") && (
+      {turn.queued && turn.state.kind === "running" && (
+        <TurnNote>
+          Waiting: {CODE_SESSIONS_AT_ONCE} code sessions are running already. This starts as soon as
+          one of them ends.
+        </TurnNote>
+      )}
+      {(turn.answer !== "" || (turn.state.kind === "running" && !turn.queued)) && (
         // Busy while it streams, so a screen reader reads the answer once, when it's whole.
         <div aria-live="polite" aria-busy={turn.state.kind === "running"}>
           <Answer
@@ -262,9 +274,7 @@ export const TurnView = memo(function TurnView(props: {
       {onReply && turn.state.kind === "done" && turn.replies.length > 0 && (
         <SuggestedReplies replies={turn.replies} onPick={(reply) => onReply(turn, reply)} />
       )}
-      {turn.state.kind === "stopped" && (
-        <p className="border-l-2 pl-3 text-sm text-muted-foreground">You stopped this turn.</p>
-      )}
+      {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
       {turn.state.kind === "failed" && turn.state.reason.kind === "rate-limited" && (
         <LimitNotice
           turn={turn}

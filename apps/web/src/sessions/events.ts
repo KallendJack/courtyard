@@ -88,6 +88,8 @@ export type Turn = {
   readonly approval:
     | { readonly seq: number; readonly ask: ApprovalAsk; readonly why: string | undefined }
     | undefined;
+  /** Whether it's waiting for one of the code sessions running to end before it starts (#174). */
+  readonly queued: boolean;
   readonly state:
     | { readonly kind: "running" }
     | { readonly kind: "done" }
@@ -180,6 +182,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             replies: [],
             sources: [],
             approval: undefined,
+            queued: false,
             state: { kind: "running" },
           },
         ],
@@ -217,6 +220,12 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         holds: (turn) => turn.approval?.seq === event.approval,
         change: (turn) => ({ ...turn, approval: undefined }),
+      });
+    case "turn-queued":
+    case "turn-dequeued":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, queued: event.type === "turn-queued" }),
       });
     case "turn-completed":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, state: { kind: "done" } }) });

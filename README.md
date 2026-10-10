@@ -167,6 +167,9 @@ machine:
   git and gh commands that only look, and `git add` and `git commit` on its branch. Any other
   command, or an edit outside its worktree, waits for you: the session shows the exact command
   with Allow and Deny, and waits as long as you take.
+- **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
+  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
+  the same, for the repository's checks to pick their test servers' ports from.
 - **A finished session's worktree stays** for now, even once the session is deleted. Remove it
   with `git worktree remove <path>` in the repository, and its branch with `git branch -D`.
 

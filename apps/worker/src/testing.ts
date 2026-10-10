@@ -359,6 +359,40 @@ export const codingProvider = (
   return { provider, answers };
 };
 
+/** For tests: one turn the held coder is working on: where, with what, and how to let it end. */
+export type HeldCodeTurn = {
+  readonly worktree: string;
+  /** What its commands run with as well. */
+  readonly env: Readonly<Record<string, string>>;
+  /** Lets the turn end, answering "Done.". */
+  readonly finish: () => void;
+};
+
+/**
+ * For tests: a provider that codes (ADR 0007) and holds each turn open until the test finishes it
+ * (or it's stopped), so several code sessions can be running at once. `turns` lists every turn it
+ * has started, in order, as it starts.
+ */
+export const heldCoder = () => {
+  const turns: HeldCodeTurn[] = [];
+  const { provider: coder } = codingProvider([]);
+  const provider: Provider = {
+    ...coder,
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const finished = new Promise<void>((finish) => {
+        turns.push({ worktree: code.worktree, env: code.env, finish });
+        input.signal.addEventListener("abort", () => finish(), { once: true });
+      });
+      await finished;
+      if (!input.signal.aborted) await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, turns };
+};
+
 /**
  * For tests: writes a skill's folder in `skillsDir`: a SKILL.md with its name and description
  * (none when it's empty) and `body`, any other files given, and a script when it has one.

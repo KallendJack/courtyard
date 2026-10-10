@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { ApprovalAsk, SessionEvent } from "@courtyard/contract";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type ApprovalAsk, CodeSessionList, type SessionEvent } from "@courtyard/contract";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
 import {
@@ -15,10 +15,13 @@ import {
   FAKE_MODEL,
   followSession,
   gitIn,
+  heldCoder,
   postJson,
   type Requester,
   SAVING_MODEL,
   savingProvider,
+  sendJson,
+  startSession,
   testWorker,
 } from "./testing.ts";
 
@@ -319,6 +322,107 @@ describe("a code workspace's models", () => {
     });
     expect(sent.status).toBe(409);
     expect(await errorOf(sent)).toMatch(/^Saver can't code/);
+  });
+});
+
+/** Starts a session in the code workspace on the coding model, without waiting for its turn. */
+const startCoding = async (request: Requester, text: string) => {
+  const response = await postJson(request, "/api/workspaces/side-project/sessions", {
+    text,
+    model: CODING_MODEL,
+  });
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+};
+
+describe("several code sessions at once (#174)", () => {
+  it("runs three at once, each in its own worktree, with a port slot no other running one has", async () => {
+    const { provider, turns } = heldCoder();
+    const request = await start([provider]);
+
+    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
+      await startCoding(request, text);
+    }
+
+    await vi.waitFor(() => expect(turns).toHaveLength(3));
+    expect(new Set(turns.map((turn) => turn.worktree)).size).toBe(3);
+    expect(turns.map((turn) => turn.env.COURTYARD_SESSION_SLOT).sort()).toEqual(["1", "2", "3"]);
+  });
+
+  it("has a fourth wait, saying so, and start in the first slot that frees", async () => {
+    const { provider, turns } = heldCoder();
+    const request = await start([provider]);
+    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
+      await startCoding(request, text);
+    }
+    await vi.waitFor(() => expect(turns).toHaveLength(3));
+
+    const fourth = await startCoding(request, "From session to pull request");
+
+    const waited = await followSession(request, { sessionId: fourth, until: "turn-queued" });
+    expect(waited.map((event) => event.type)).toEqual(["owner-message", "turn-queued"]);
+    const listed = CodeSessionList.parse(
+      await (await request("/api/workspaces/side-project/sessions")).json(),
+    );
+    expect(listed.running).toBe(3);
+    expect(listed.sessions.find((session) => session.id === fourth)).toMatchObject({
+      title: "From session to pull request",
+      busy: true,
+      queued: true,
+    });
+    expect(listed.sessions.filter((session) => session.queued)).toHaveLength(1);
+    expect(turns).toHaveLength(3);
+
+    const [first] = turns;
+    first?.finish();
+
+    await followSession(request, { sessionId: fourth, until: "turn-dequeued", after: 2 });
+    await vi.waitFor(() => expect(turns).toHaveLength(4));
+    expect(turns[3]?.env).toEqual(first?.env);
+    turns[3]?.finish();
+    await followSession(request, { sessionId: fourth, until: "turn-completed", after: 3 });
+  });
+
+  it("lets a waiting session be removed before it starts, clearing its branch and worktree away", async () => {
+    const { provider, turns } = heldCoder();
+    const request = await start([provider]);
+    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
+      await startCoding(request, text);
+    }
+    await vi.waitFor(() => expect(turns).toHaveLength(3));
+    const fourth = await startCoding(request, "From session to pull request");
+    await followSession(request, { sessionId: fourth, until: "turn-queued" });
+
+    const removed = await sendJson(request, `/api/sessions/${fourth}`, "DELETE", {});
+
+    expect(removed.status).toBe(204);
+    // The owner's checkout and the three running sessions' worktrees.
+    expect(await worktreesOf(repo)).toHaveLength(4);
+    const listed = CodeSessionList.parse(
+      await (await request("/api/workspaces/side-project/sessions")).json(),
+    );
+    expect(listed.sessions.map((session) => session.id)).not.toContain(fourth);
+    // It's left the queue: the next to wait is the next to start.
+    const fifth = await startCoding(request, "Chat scrolling, again");
+    await followSession(request, { sessionId: fifth, until: "turn-queued" });
+    turns[0]?.finish();
+    await followSession(request, { sessionId: fifth, until: "turn-dequeued", after: 2 });
+    await vi.waitFor(() => expect(turns).toHaveLength(4));
+  });
+
+  it("never holds back a planning workspace's sessions", async () => {
+    const { provider, turns } = heldCoder();
+    await mkdir(join(root, "context", "garage-gym"), { recursive: true });
+    const request = await start([provider, createFakeProvider({ delayMs: 0 })]);
+    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
+      await startCoding(request, text);
+    }
+    await vi.waitFor(() => expect(turns).toHaveLength(3));
+
+    const { id } = await startSession(request, "Where does the rack go?");
+
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(events.map((event) => event.type)).not.toContain("turn-queued");
   });
 });
 

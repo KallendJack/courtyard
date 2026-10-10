@@ -180,7 +180,7 @@ describe("attaching photos and PDFs to a message", () => {
       },
     ]);
     const list = await request("/api/workspaces/garage-gym/sessions");
-    expect(await list.json()).toEqual({ sessions: [] });
+    expect(await list.json()).toEqual({ sessions: [], running: 0 });
   });
 
   it("deletes its attachments with the session", async () => {

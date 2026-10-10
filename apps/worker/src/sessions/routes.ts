@@ -1,6 +1,7 @@
 import {
   ApprovalAnswering,
   CarryOnRequest,
+  type CodeSessionList,
   type DocumentChanged,
   FirstMessage,
   GetToKnowRequest,
@@ -223,7 +224,10 @@ export const sessionRoutes = (options: {
     if (!workspace.ok) return contextError(c, workspace.error);
     const list = await sessions.list(workspace.value.summary.id);
     if (!list.ok) return sessionError(c, list.error);
-    return c.json({ sessions: list.value } satisfies SessionList);
+    return c.json({
+      sessions: list.value,
+      running: sessions.codeRunning(),
+    } satisfies SessionList & CodeSessionList);
   });
 
   /** Starts a session in a workspace with its first message, and answers with the session. */
