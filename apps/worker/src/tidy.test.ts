@@ -178,7 +178,7 @@ const scripted = (answer: unknown) => {
       id,
       label: "Scripted",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     answerOnce: async ({ instructions, message }) => {

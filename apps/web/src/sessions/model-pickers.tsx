@@ -4,7 +4,8 @@ import { Select } from "@/components/select";
 import { limitLabel } from "./limits.ts";
 import { effortLabel, type OfferedModel } from "./models.ts";
 
-const keyOf = (model: ModelRef) => `${model.provider}/${model.model}`;
+/** A model's key, as the pickers' values name it. */
+export const modelKey = (model: ModelRef) => `${model.provider}/${model.model}`;
 
 /** The effort picker's value for a model's default: never a level's name, which can't be empty. */
 const DEFAULT = "";
@@ -25,11 +26,11 @@ export const useModelChoice = (choice: {
   /** Set once the owner picks an effort, or a model (which settles the effort too). */
   const [chosenEffort, setChosenEffort] = useState<{ effort: Effort | undefined }>();
 
-  const followedKey = choice.followModel ? keyOf(choice.followModel) : undefined;
-  const following = chosenKey === undefined && models.some((m) => keyOf(m.ref) === followedKey);
-  const modelKey = chosenKey ?? (following ? followedKey : undefined);
+  const followedKey = choice.followModel ? modelKey(choice.followModel) : undefined;
+  const following = chosenKey === undefined && models.some((m) => modelKey(m.ref) === followedKey);
+  const wantedKey = chosenKey ?? (following ? followedKey : undefined);
   const model =
-    models.find((m) => keyOf(m.ref) === modelKey) ??
+    models.find((m) => modelKey(m.ref) === wantedKey) ??
     models.find((m) => m.limit === undefined) ??
     models[0];
   const wanted = chosenEffort ? chosenEffort.effort : following ? choice.followEffort : undefined;
@@ -39,7 +40,7 @@ export const useModelChoice = (choice: {
     model,
     effort,
     pickModel: (key: string) => {
-      const picked = models.find((m) => keyOf(m.ref) === key);
+      const picked = models.find((m) => modelKey(m.ref) === key);
       setChosenKey(key);
       const kept = picked !== undefined && takesEffort(picked, effort);
       setChosenEffort({ effort: kept ? effort : undefined });
@@ -59,6 +60,24 @@ export const choiceSummary = ({ model, effort }: ModelChoice) =>
     : model.efforts.length === 0
       ? model.label
       : `${model.label} · ${effortLabel(model, effort)}`;
+
+/** The model alone, as the Handheld frame's Model button shows it (#193). */
+export const modelName = ({ model }: ModelChoice) =>
+  model === undefined ? "No models" : model.name;
+
+/**
+ * A word under a model's name in the Handheld frame's Model row (#194), to tell models apart: its
+ * usage limit if it's at one, "default" for its provider's default, else whose it is ("Claude"),
+ * unless that only says its name again.
+ */
+export const modelWord = (model: OfferedModel) =>
+  model.limit !== undefined
+    ? limitLabel(model.limit)
+    : model.followsDefault
+      ? "default"
+      : model.providerLabel === model.name
+        ? ""
+        : model.providerLabel;
 
 /**
  * The model picker, and beside it the effort picker for a model that takes levels of effort:
@@ -80,12 +99,12 @@ export function ModelPickers(props: {
         label="Model"
         look={look}
         wideOnly={wideOnly}
-        value={model ? keyOf(model.ref) : ""}
+        value={model ? modelKey(model.ref) : ""}
         options={
           models.length === 0
             ? [{ value: "", label: "No models available" }]
             : models.map((m) => ({
-                value: keyOf(m.ref),
+                value: modelKey(m.ref),
                 label: m.limit ? `${m.label} · ${limitLabel(m.limit)}` : m.label,
               }))
         }

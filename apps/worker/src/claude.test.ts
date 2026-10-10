@@ -233,6 +233,11 @@ describe("Claude's status", () => {
       "Claude · Default (Opus 5.5)",
       "Claude · Sonnet 5.5",
     ]);
+    // Where there's little room, each by its model alone, Default saying it's Claude Code's default.
+    expect(status.models.map((m) => [m.name, m.followsDefault])).toEqual([
+      ["Opus 5.5", true],
+      ["Sonnet 5.5", undefined],
+    ]);
   });
 
   it("keeps Default's own name when Claude Code's description doesn't name a model", async () => {
@@ -240,6 +245,7 @@ describe("Claude's status", () => {
 
     if (!status.available) throw new Error("expected available");
     expect(status.models[0]?.label).toBe("Claude · Default (recommended)");
+    expect(status.models[0]?.name).toBe("Default");
   });
 
   it("lists the levels of effort each model takes, in Claude's words, and none for a model without", async () => {

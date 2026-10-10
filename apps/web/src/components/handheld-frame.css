@@ -1,0 +1,170 @@
+/*
+ * The Handheld frame's classes (#193): its thumb rails, tiles, bottom bar and talk strip, and its
+ * sheets' (#194). Only a touch screen loads the frame, so styles.css leaves them out and this
+ * stylesheet, loaded with it, has their classes instead. The theme is by reference: its names,
+ * nothing of its own. They apply only inside the frame's own pieces: coming after the theme's,
+ * they'd otherwise outrank its classes everywhere.
+ */
+@reference "../styles.css";
+@source "./handheld-frame.tsx";
+@source "./talk-strip.tsx";
+@source "./handheld-sheet.tsx";
+@source "./sheet-choices.tsx";
+@source "./frame-button.tsx";
+
+:where([data-handheld]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}
+
+/*
+ * The page keeps clear of the frame: of its rails, and of its bottom bar and the message box open
+ * above it. The frame measures them as they are. A page's own bar pinned to the bottom (Jump to
+ * latest on a session's page) sits just above them.
+ */
+[data-frame-column] {
+  padding-left: var(--frame-left, 0px);
+  padding-right: var(--frame-right, 0px);
+  padding-bottom: var(--frame-bottom, 0px);
+}
+[data-above-frame] {
+  bottom: var(--frame-bottom, 0px);
+}
+
+/*
+ * The bottom bar, and the message box above it when it's open: the page's box, so outside the
+ * frame's scope above, and styled here, by the theme's names, rather than by classes.
+ */
+[data-frame-bottom] {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  /* Beside the open box, the rails take the taps. */
+  pointer-events: none;
+}
+[data-frame-bottom] > * {
+  pointer-events: auto;
+}
+[data-dock] {
+  background: var(--color-card);
+  padding: --spacing(3) --spacing(3) --spacing(2);
+  border-top: 1px solid var(--color-border);
+}
+/* On a tablet, between the rails, which stay in reach. */
+[data-dock="tablet"] {
+  margin-inline: calc(--spacing(28) + env(safe-area-inset-left))
+    calc(--spacing(28) + env(safe-area-inset-right));
+  padding-inline: --spacing(4.5);
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* The talk strip's sound bars move while it listens (talk-strip.tsx, #79), unless the device asks for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-talk-bars] rect {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: talk-bar 0.9s ease-in-out infinite alternate;
+  }
+  [data-talk-bars] rect:nth-child(3n + 2) {
+    animation-delay: -0.3s;
+  }
+  [data-talk-bars] rect:nth-child(3n) {
+    animation-delay: -0.6s;
+  }
+}
+@keyframes talk-bar {
+  to {
+    transform: scaleY(0.45);
+  }
+}
+
+/*
+ * The frame's sheets (handheld-sheet.tsx, #194, Paper board Handheld · 09). The dialog and its
+ * parts are styled here, by the theme's names, rather than by classes: what's in a sheet (Settings'
+ * Update, say) keeps the theme's classes as they are everywhere else, outside the frame's scope.
+ */
+[data-sheet] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  /* The theme's own names: its Tailwind colours would put themselves on the first load. */
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+[data-sheet][open] {
+  display: flex;
+  flex-direction: column;
+}
+/* The page dims under a sheet. */
+[data-sheet]::backdrop {
+  background: color-mix(in oklab, var(--color-card) 70%, transparent);
+}
+[data-sheet-body] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: --spacing(3);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: --spacing(1) --spacing(4) --spacing(2);
+}
+[data-sheet-foot] {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: --spacing(3);
+  padding: --spacing(1) --spacing(4) --spacing(4);
+}
+
+/* On a tablet: from the right edge, beside the right rail, from the top down to the bottom bar. */
+[data-sheet="right"] {
+  inset: --spacing(3.5) var(--frame-right, 0px) calc(var(--frame-bottom, 0px) + --spacing(3.5)) auto;
+  width: min(--spacing(93), calc(100vw - var(--frame-left, 0px) - var(--frame-right, 0px)));
+  height: auto;
+  border-radius: --theme(--radius-sheet);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    -30px 0 60px color-mix(in oklab, var(--color-card) 80%, transparent);
+}
+/* One with only a little in it: as tall as that, by the button that opened it. */
+[data-sheet="right"][data-fits] {
+  max-height: calc(100dvh - var(--frame-bottom, 0px) - --spacing(7));
+}
+[data-sheet="right"][data-fits="top"] {
+  bottom: auto;
+}
+[data-sheet="right"][data-fits="bottom"] {
+  top: auto;
+}
+/*
+ * The rails and the bottom bar don't dim, so the button that opened the sheet still shows lit; the
+ * backdrop is still there over them, clear, so a tap on them is outside the sheet and closes it.
+ */
+[data-sheet="right"]::backdrop {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 0 var(--frame-right, 0px) var(--frame-bottom, 0px) var(--frame-left, 0px);
+  background-clip: padding-box;
+}
+
+/* On a phone: from the bottom, up to most of the screen. */
+[data-sheet="bottom"] {
+  inset: auto 0 0;
+  width: 100%;
+  height: auto;
+  max-height: 85dvh;
+  border-radius: --theme(--radius-sheet) --theme(--radius-sheet) 0 0;
+}
+[data-sheet="bottom"] > :last-child {
+  padding-bottom: calc(--spacing(4) + env(safe-area-inset-bottom));
+}

@@ -86,6 +86,20 @@ describe("Matt Pocock's skills", () => {
     expect(byName.get("grilling")).toMatchObject({ replacesHouse: true, inPicker: false });
   });
 
+  it("have the marks matt.json gives them", async () => {
+    const matt = await mattSkillsIn(pluginDir(), { icons: { implement: "flame" } });
+    const request = await asOwner(testWorker({ root, houseSkills: houseDir(), mattSkills: matt }));
+
+    const skills = await skillsOf(request, "side-project");
+
+    expect(skills.map((skill) => [skill.name, skill.icon])).toEqual([
+      ["grilling", undefined],
+      ["implement", "flame"],
+      ["tdd", undefined],
+      ["to-tickets", undefined],
+    ]);
+  });
+
   it("never reach a planning workspace", async () => {
     const matt = await mattSkillsIn(pluginDir());
     const request = await asOwner(testWorker({ root, houseSkills: houseDir(), mattSkills: matt }));

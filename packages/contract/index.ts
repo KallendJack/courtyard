@@ -121,6 +121,7 @@ export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {
   SKILL_SOURCE_NAMES,
+  SkillIcon,
   SkillList,
   SkillProblem,
   SkillSummary,

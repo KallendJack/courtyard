@@ -331,3 +331,31 @@ _Avoid_: integration, plugin, connector, MCP (on its own)
 An action of a tool connection that only looks at things, and so runs without an approval. The owner's settings decide
 which actions are safe, not the tool's author.
 _Avoid_: read-only tool, allowed tool
+
+### On a touch screen
+
+**Handheld frame**:
+What a touch screen shows in place of the sidebar (#193): thumb rails on a tablet or the unfolded Fold, and the cover
+layout (workspace tiles across the top, buttons in a row above the bottom bar) on a phone or the folded Fold. A
+desktop keeps the sidebar.
+_Avoid_: mobile view, tablet mode, shell
+
+**Thumb rail**:
+One of the Handheld frame's two columns on a tablet, in reach of a thumb: workspace tiles down the left, and Settings,
+Skills, Photo and Model down the right.
+_Avoid_: sidebar, nav bar, toolbar
+
+**Talk strip**:
+The wide bar along the bottom of the Handheld frame, beside Type, that listens to the owner (#79): a tap listens
+hands-free and a second tap sends, or held it's push to talk.
+_Avoid_: mic button, voice bar, push-to-talk button
+
+**Dock**:
+Where a page's message box goes in the Handheld frame: just above the bottom bar, shown when the owner taps Type or
+what they said waits in it, and gone again once it's sent or they tap away.
+_Avoid_: drawer, tray, composer area
+
+**Handheld sheet**:
+A panel in the Handheld frame for a few choices (Skills, Model, Settings, a workspace's recent sessions): from the
+right edge beside the right rail on a tablet, from the bottom on a phone.
+_Avoid_: modal, drawer, popup

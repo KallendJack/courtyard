@@ -336,6 +336,20 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   `ChatFlowScope`: whose turn it is in a session (`session-state.tsx`, in the chat, a workspace's sessions and the
   sidebar's recent ones, which ask again every few seconds while one is working), the Working line and the Your turn
   mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
+  The frame round every page is picked by `handheld.ts` (#193): a desktop keeps the sidebar (`app-sidebar.tsx`) and,
+  in a narrow window, the strip (`workspace-strip.tsx`); a touch screen gets the Handheld frame
+  (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`): thumb rails and a bottom
+  bar with Type and the talk strip on a tablet or the unfolded Fold, tiles across the top on the folded one. The
+  page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
+  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The talk strip
+  (`talk-strip.tsx`, #79, loaded with the frame) listens through the browser's own speech recognition
+  (`speech.ts`, which also vibrates for it) and hands the words to the box to send, or to queue while a turn runs;
+  nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
+  round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
+  beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
+  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; both files' classes
+  are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
+  (`sheet.tsx`).
   **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
@@ -349,11 +363,12 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 ### The house skills: `packages/skills`
 
 `@courtyard/skills` holds Courtyard's own skills, a folder each in the Agent Skills format, and `skills.json`: the
-kinds of workspace that get each one and whether only the owner starts it (ADR 0016). It also holds the format check
-(`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the house skills in
-`pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
+kinds of workspace that get each one, whether only the owner starts it (ADR 0016), and its mark in the app (`icon`:
+flame, person or the default book; a skill of the owner's gives one as `icon` in its SKILL.md's `metadata`). It also
+holds the format check (`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the
+house skills in `pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
 `matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
-copy the worker keeps, and the ones the Skill picker lists.
+copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`).
 
 ### The contract: `packages/contract`
 

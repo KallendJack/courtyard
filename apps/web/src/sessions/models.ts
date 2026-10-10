@@ -10,6 +10,11 @@ export const availableModels = (providers: ProviderList["providers"]) =>
       ? provider.models.map((model) => ({
           ref: { provider: provider.id, model: model.id },
           label: model.label,
+          /** The model alone, where there's little room: "Sonnet 5". */
+          name: model.name,
+          /** Whose it is: "Claude". */
+          providerLabel: provider.label,
+          followsDefault: model.followsDefault === true,
           efforts: model.efforts,
           defaultEffort: model.defaultEffort,
           /** The usage limit it's at, if any: it's still offered, labelled. */

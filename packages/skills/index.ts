@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { SkillName, WorkspaceMode } from "@courtyard/contract";
+import { SkillIcon, SkillName, WorkspaceMode } from "@courtyard/contract";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
@@ -34,6 +34,8 @@ export const HouseManifest = z.strictObject({
       workspaces: z.array(WorkspaceMode).min(1),
       /** Only the owner starts it, from a button or the skill picker; a model never loads it. */
       start: z.literal("owner").optional(),
+      /** Its mark in the app, in place of the book every skill has. */
+      icon: SkillIcon.optional(),
     }),
   ),
 });
@@ -42,8 +44,8 @@ export type HouseSkill = HouseManifest["skills"][number];
 
 /**
  * `matt.json`: the version of Matt Pocock's skills Courtyard pins for code workspaces (ADR 0024),
- * where they come from, the checksum of the copy kept (`mattChecksum` in the worker), and the
- * ones the Skill picker lists, since the owner starts them.
+ * where they come from, the checksum of the copy kept (`mattChecksum` in the worker), the ones
+ * the Skill picker lists, since the owner starts them, and the marks some of them show in the app.
  */
 export const MattPin = z.strictObject({
   /** His own plugin list (marketplace): a git repository whose tag `v<version>` is the release. */
@@ -51,6 +53,8 @@ export const MattPin = z.strictObject({
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   checksum: z.string().regex(/^sha256-[0-9a-f]{64}$/),
   picker: z.array(SkillName),
+  /** A skill's mark by its name, in place of the book; his own files are kept as they are. */
+  icons: z.record(z.string(), SkillIcon).optional(),
 });
 export type MattPin = z.infer<typeof MattPin>;
 
@@ -77,6 +81,8 @@ export type CheckedSkill = {
   readonly hasScripts: boolean;
   /** Claude Code never loads it by itself (`disable-model-invocation`), so only the owner starts it. */
   readonly ownerStarts: boolean;
+  /** Its mark in the app (`icon` in its metadata), when it's one the app draws. */
+  readonly icon: SkillIcon | undefined;
 };
 
 /**
@@ -207,6 +213,7 @@ export const checkSkill = async (
     description: checked.value.description,
     hasScripts: await isFolder(join(folder, SCRIPTS)),
     ownerStarts: claudeCode && mapping.data["disable-model-invocation"] === true,
+    icon: SkillIcon.safeParse(checked.value.metadata?.icon).data,
   });
 };
 

@@ -19,8 +19,17 @@ export const SkillProblem = z.discriminatedUnion("kind", [
 ]);
 export type SkillProblem = z.infer<typeof SkillProblem>;
 
+/**
+ * A skill's mark, from a small set the app draws: the flame (Grilling), a person (Get to know).
+ * A skill without one, or with one Courtyard doesn't draw, has the book every skill has.
+ */
+export const SkillIcon = z.enum(["book", "flame", "person"]);
+export type SkillIcon = z.infer<typeof SkillIcon>;
+
 /** What every skill a workspace lists says of it. */
 const SkillAbout = {
+  /** Its mark, when it gives one (`icon` in `skills.json`, `matt.json` or its SKILL.md's metadata). */
+  icon: SkillIcon.optional(),
   /** What it's for; empty for a broken skill without one. */
   description: z.string(),
   source: SkillSource,

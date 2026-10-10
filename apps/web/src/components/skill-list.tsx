@@ -42,7 +42,7 @@ export const usable = (skill: SkillSummary): skill is UsableSkillSummary => skil
 export const inPicker = (skill: SkillSummary) => skill.kind === "unusable" || skill.inPicker;
 
 /** A skill's name as a row shows it: a broken one by its folder's name, as it is. */
-const nameOf = (skill: SkillSummary) =>
+export const nameOf = (skill: SkillSummary) =>
   skill.kind === "unusable" && skill.problem.kind === "broken"
     ? skill.name
     : skillTitle(skill.name);
@@ -50,17 +50,25 @@ const nameOf = (skill: SkillSummary) =>
 /** Text ending in a full stop, so more can follow it. */
 const sentence = (text: string) => (/[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`);
 
+/** Why a skill can't be used, as its row says it, and whether it's broken (said in red). */
+export const whyUnusable = (skill: SkillSummary & { kind: "unusable" }) =>
+  skill.problem.kind === "broken"
+    ? { broken: true, text: `Can't be used: ${skill.problem.reason}` }
+    : { broken: false, text: "Needs a code workspace: it runs a script" };
+
 /** What a row says under the name: what the skill is for, or why it can't be used. */
 function About(props: { skill: SkillSummary; more: boolean; className: string }) {
   const { skill } = props;
   if (skill.kind === "unusable") {
-    return skill.problem.kind === "broken" ? (
-      <span className={classes("text-destructive-text", props.className)}>
-        Can't be used: {skill.problem.reason}
-      </span>
-    ) : (
-      <span className={classes("text-muted-foreground", props.className)}>
-        Needs a code workspace: it runs a script
+    const why = whyUnusable(skill);
+    return (
+      <span
+        className={classes(
+          why.broken ? "text-destructive-text" : "text-muted-foreground",
+          props.className,
+        )}
+      >
+        {why.text}
       </span>
     );
   }

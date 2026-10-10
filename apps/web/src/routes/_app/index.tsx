@@ -6,7 +6,6 @@ import { LIST_ROW, Page, PageTitle } from "@/components/page";
 import { WorkspaceDot } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
 import { BackupStatus } from "../../backup-status.tsx";
-import { LiveUpdate } from "../../live-update.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
 import { OwnerContextPanel } from "../../owner-context-panel.tsx";
 import { loadOwnerContext } from "../../worker.ts";
@@ -14,6 +13,10 @@ import { loadOwnerContext } from "../../worker.ts";
 // Loaded once the page shows: the page never waits for it, and it stays off the first load.
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
 const Notifications = lazy(() => import("../../notifications/notifications-card.tsx"));
+// Asked for once the page shows anyway: it waits for the worker's word on whether main has moved on.
+const LiveUpdate = lazy(() =>
+  import("../../live-update.tsx").then((module) => ({ default: module.LiveUpdate })),
+);
 
 const loggedIn = getRouteApi("/_app");
 
@@ -31,7 +34,9 @@ function Home() {
   return (
     <Page>
       <PageTitle>Workspaces</PageTitle>
-      <LiveUpdate />
+      <Suspense fallback={null}>
+        <LiveUpdate />
+      </Suspense>
       <BackupStatus />
       <Suspense fallback={null}>
         <SignIns part="boxes" />

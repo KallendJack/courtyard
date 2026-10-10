@@ -78,7 +78,7 @@ const recorder = (capabilities: Capabilities, replies: readonly (string | typeof
       id,
       label: "Recorder",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {

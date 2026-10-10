@@ -42,7 +42,12 @@ export type UsageLimit = z.infer<typeof UsageLimit>;
 
 export const ModelInfo = z.object({
   id: ModelId,
+  /** The provider and the model, as a picker lists it: "Claude · Sonnet 5.5". */
   label: z.string(),
+  /** The model alone, in a word or two, where there's little room (a touch screen): "Sonnet 5.5". */
+  name: z.string(),
+  /** It's the provider's own default, which follows the model the provider recommends. */
+  followsDefault: z.literal(true).optional(),
   /** The levels of effort it takes, least first; none when it takes no effort at all. */
   efforts: z.array(EffortInfo),
   /** The level it uses when a message names none, when the provider says. */

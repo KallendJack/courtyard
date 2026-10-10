@@ -494,6 +494,7 @@ export const createFakeProvider = (
         {
           id: ModelId.parse("echo"),
           label: `${label} (echoes you)`,
+          name: label,
           efforts: EFFORTS,
           defaultEffort: Effort.parse("medium"),
         },

@@ -11,10 +11,11 @@ import {
   SessionSummary,
   SkillName,
 } from "@courtyard/contract";
+import { MattPin } from "@courtyard/skills";
 import type { Hono } from "hono";
 import { makeTemporaryFolder, removeFolder } from "./files.ts";
 import { git } from "./git.ts";
-import { type FetchMattSkills, fetchMattCopy, type MattPin } from "./matt-skills/index.ts";
+import { type FetchMattSkills, fetchMattCopy } from "./matt-skills/index.ts";
 import { SAVE_TOOL_NAME } from "./prompts/index.ts";
 import {
   type CodeTurn,
@@ -286,7 +287,7 @@ export const savingProvider = (
       id,
       label: "Saver",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -356,7 +357,7 @@ export const codingProvider = (
       id,
       label: "Coder",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -418,7 +419,7 @@ export const drawingProvider = (steps: readonly PaperStep[]) => {
       id,
       label: "Drawer",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -478,7 +479,7 @@ export const runningProvider = (
       id,
       label: "Runner",
       available: true,
-      models: [{ id: ModelId.parse("one"), label: "One", efforts: [] }],
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
       capabilities,
     }),
     runTurn: async (input) => {
@@ -553,12 +554,21 @@ export const writeSkill = async (
     body?: string;
     files?: Readonly<Record<string, string>>;
     scripts?: boolean;
+    /** The format's own `metadata` field: its names and values, as text. */
+    metadata?: Readonly<Record<string, string>>;
   } = {},
 ) => {
   const folder = join(skillsDir, name);
   await mkdir(folder, { recursive: true });
   const description = options.description ?? `What ${name} does.`;
-  const fields = [`name: ${name}`, ...(description === "" ? [] : [`description: ${description}`])];
+  const metadata = Object.entries(options.metadata ?? {});
+  const fields = [
+    `name: ${name}`,
+    ...(description === "" ? [] : [`description: ${description}`]),
+    ...(metadata.length === 0
+      ? []
+      : ["metadata:", ...metadata.map(([field, value]) => `  ${field}: ${value}`)]),
+  ];
   const body = options.body ?? "Do it.";
   await writeFile(join(folder, "SKILL.md"), `---\n${fields.join("\n")}\n---\n\n${body}\n`);
   for (const [path, text] of Object.entries(options.files ?? {})) {
@@ -641,7 +651,12 @@ export const writeMattPlugin = async (
  */
 export const mattSkillsIn = async (
   folder: string,
-  options: { version?: string; checksum?: string; picker?: readonly string[] } = {},
+  options: {
+    version?: string;
+    checksum?: string;
+    picker?: readonly string[];
+    icons?: Readonly<Record<string, string>>;
+  } = {},
 ) => {
   const version = options.version ?? "1.3.1";
   const fetches: string[] = [];
@@ -664,6 +679,7 @@ export const mattSkillsIn = async (
     version,
     checksum: options.checksum ?? (await ownChecksum()),
     picker: (options.picker ?? ["implement", "to-tickets"]).map((name) => SkillName.parse(name)),
+    ...(options.icons === undefined ? {} : { icons: MattPin.shape.icons.parse(options.icons) }),
   };
   return { pin, fetch, fetches };
 };
@@ -671,7 +687,7 @@ export const mattSkillsIn = async (
 /** For tests: a house skills package in `dir`, with `skills.json` and a stand-in for each skill. */
 export const writeHouseSkills = async (
   dir: string,
-  skills: readonly { name: string; workspaces: readonly string[]; start?: string }[],
+  skills: readonly { name: string; workspaces: readonly string[]; start?: string; icon?: string }[],
 ) => {
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "skills.json"), JSON.stringify({ skills }));

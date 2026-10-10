@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SkillName } from "@courtyard/contract";
+import type { SkillIcon, SkillName } from "@courtyard/contract";
 import { type MattPin, readMattPin } from "@courtyard/skills";
 import { z } from "zod";
 import { exists, listSubfolders, move, removeFolder } from "../files.ts";
@@ -82,6 +82,8 @@ export type MattCopy = {
   readonly skills: readonly MattSkill[];
   /** The ones the Skill picker lists, since the owner starts them (`picker` in `matt.json`). */
   readonly picker: readonly SkillName[];
+  /** Marks some of them show in the app, by name (`icons` in `matt.json`). */
+  readonly icons: Readonly<Record<string, SkillIcon>>;
 };
 
 /** The plugin's manifest in `folder`, or why it can't be kept. */
@@ -181,6 +183,7 @@ const copyIn = async (folder: string, pin: MattPin): Promise<Result<MattCopy, st
     plugin: manifest.value.name,
     version: manifest.value.version,
     picker: pin.picker,
+    icons: pin.icons ?? {},
     skills: manifest.value.skills.map((path) => {
       const name = path.split("/").at(-1) ?? "";
       return { name, folder: join(folder, ...path.slice(2).split("/")) };

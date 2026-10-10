@@ -1047,6 +1047,7 @@ export const createCodexProvider = (options: {
           return {
             id: ModelId.parse(model.id),
             label: `${LABEL} · ${model.displayName}`,
+            name: model.displayName,
             efforts,
             ...(defaultEffort ? { defaultEffort: defaultEffort.id } : {}),
             ...(resetAt ? { limit: { resetAt } } : {}),

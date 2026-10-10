@@ -12,18 +12,22 @@ import { ArrowUp, Book, Camera, Paperclip, Square } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  lazy,
   memo,
   type RefObject,
+  Suspense,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
+import { type MessageBox, useDock } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -31,8 +35,11 @@ import { SkillTag } from "@/components/skill-tag";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
-import { choiceSummary, ModelPickers, useModelChoice } from "./model-pickers.tsx";
+import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
+
+/** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
+const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
 
 /** The tallest the skill list grows, and the least room above the box it opens into. */
 const LIST_HEIGHT = 448;
@@ -155,6 +162,9 @@ export const Composer = memo(function Composer(props: {
   const picker = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
   const full = attaching.length >= ATTACHMENTS.perMessage;
+  /** On a touch screen, the Handheld frame's place for the box above its bottom bar (#193). */
+  const dock = useDock();
+  const docked = dock !== undefined;
 
   // The tray's thumbnails go with the box.
   const attachingNow = useRef(attaching);
@@ -169,6 +179,8 @@ export const Composer = memo(function Composer(props: {
       const { ready, problems } = await prepareFiles(files, attachingNow.current.length);
       setAttaching((was) => [...was, ...ready]);
       send.setError(problems.length === 0 ? undefined : problems.join(" "));
+      // In the Handheld frame, the box opens to show what's attached (or why it can't be).
+      dock?.open();
     } finally {
       setPreparing((count) => count - 1);
     }
@@ -214,33 +226,83 @@ export const Composer = memo(function Composer(props: {
     if (SLASH.test(text)) setText("");
     setChoosing(undefined);
     closeList();
+    // In the Handheld frame, picked from its Skills button: the box opens to type in.
+    if (dock !== undefined) flushSync(dock.open);
     box.current?.focus();
+  };
+
+  /**
+   * Sends `message` with the box's model, effort, skill and attachments, and says whether it went.
+   * Once it has, the box empties of what was `typed` for it.
+   */
+  const sendText = async (message: string, typed: string) => {
+    const { model, effort } = choice;
+    if (!model) {
+      send.setError("No model is available. Check the providers' settings.");
+      return false;
+    }
+    if (message.trim() === "") return false;
+    const sent = await send.run(
+      {
+        text: message,
+        model: model.ref,
+        ...(effort === undefined ? {} : { effort }),
+        ...(skill === undefined ? {} : { skill }),
+      },
+      attaching.map((each) => each.file),
+    );
+    if (sent) {
+      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
+      setText((now) => (now === typed ? "" : now));
+      setSkill(undefined);
+      releasePreviews(attaching);
+      setAttaching([]);
+      dock?.close();
+    }
+    return sent;
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const { model, effort } = choice;
-    if (!model) return send.setError("No model is available. Check the providers' settings.");
-    if (text.trim() === "") return;
-    const message = {
-      text,
-      model: model.ref,
-      ...(effort === undefined ? {} : { effort }),
-      ...(skill === undefined ? {} : { skill }),
-    };
-    if (
-      await send.run(
-        message,
-        attaching.map((each) => each.file),
-      )
-    ) {
-      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
-      setText((now) => (now === text ? "" : now));
-      setSkill(undefined);
-      releasePreviews(attaching);
-      setAttaching([]);
-    }
+    await sendText(text, text);
   };
+
+  /** What the owner said in the talk strip (#79), after anything they'd typed. */
+  const afterTyped = (words: string) => (text.trim() === "" ? words : `${text.trimEnd()} ${words}`);
+  const voice = useRef<Pick<MessageBox, "say" | "write">>({ say: () => {}, write: () => {} });
+  voice.current = {
+    // It goes as Send would send it, or waits in the open box, saying why, when it can't.
+    say: (words) => {
+      const message = afterTyped(words);
+      const waiting = send.busy || preparing > 0 || props.disabled === true || !choice.model;
+      void (async () => {
+        if (!waiting && (await sendText(message, text))) return;
+        setText(message);
+        dock?.open();
+      })();
+    },
+    write: (words) => setText(afterTyped(words)),
+  };
+
+  // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193, #79).
+  const model = modelName(choice);
+  const hasSkills = skills !== undefined;
+  const answering = props.stop !== undefined;
+  useEffect(
+    () =>
+      dock?.offer({
+        focus: () => box.current?.focus(),
+        pickPhotos: () => picker.current?.click(),
+        chooseModel: () => setChoosing("model"),
+        ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
+        model,
+        ...(choosing === undefined ? {} : { choosing }),
+        answering,
+        say: (words) => voice.current.say(words),
+        write: (words) => voice.current.write(words),
+      }),
+    [dock, model, hasSkills, choosing, answering],
+  );
 
   /** Arrows move through the skill list, Enter picks, Escape closes it. */
   const onListKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -271,40 +333,42 @@ export const Composer = memo(function Composer(props: {
   // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      {compact && (
-        <>
-          <div className="flex items-center gap-2 md:hidden">
-            <Chip onClick={() => setChoosing("model")}>{choiceSummary(choice)}</Chip>
-            {skills !== undefined && (
-              <Chip
-                icon={<Book />}
-                open={choosing === "skill"}
-                onClick={() => setChoosing("skill")}
-              >
-                Skill
-              </Chip>
-            )}
-          </div>
-          <Sheet
-            title="Model for this session"
-            open={choosing === "model"}
-            onClose={() => setChoosing(undefined)}
-          >
-            <ModelPickers models={models} choice={choice} look="field" />
-          </Sheet>
-          {skills !== undefined && (
-            <Sheet
-              title="Use a skill"
-              open={choosing === "skill"}
-              onClose={() => setChoosing(undefined)}
-            >
-              <SkillChoices skills={pickerSkills} pick={pick} />
-            </Sheet>
-          )}
-        </>
+  // The sheets the chips above a narrow desktop window's box open. The Handheld frame's buttons
+  // open its own sheets instead (#194).
+  const sheets = compact && !docked && (
+    <>
+      <Sheet
+        title="Model for this session"
+        open={choosing === "model"}
+        onClose={() => setChoosing(undefined)}
+      >
+        <ModelPickers models={models} choice={choice} look="field" />
+      </Sheet>
+      {skills !== undefined && (
+        <Sheet
+          title="Use a skill"
+          open={choosing === "skill"}
+          onClose={() => setChoosing(undefined)}
+        >
+          <SkillChoices skills={pickerSkills} pick={pick} />
+        </Sheet>
       )}
+    </>
+  );
+
+  const messageBox = (
+    <div className="flex flex-col gap-1.5">
+      {compact && !docked && (
+        <div className="flex items-center gap-2 md:hidden">
+          <Chip onClick={() => setChoosing("model")}>{choiceSummary(choice)}</Chip>
+          {skills !== undefined && (
+            <Chip icon={<Book />} open={choosing === "skill"} onClick={() => setChoosing("skill")}>
+              Skill
+            </Chip>
+          )}
+        </div>
+      )}
+      {sheets}
       <div className="relative">
         <input
           ref={picker}
@@ -534,5 +598,25 @@ export const Composer = memo(function Composer(props: {
       )}
       <FormError message={send.error} />
     </div>
+  );
+
+  // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page.
+  return docked ? (
+    <>
+      <Suspense fallback={null}>
+        <HandheldChoices
+          choosing={choosing}
+          close={() => setChoosing(undefined)}
+          models={models}
+          choice={choice}
+          skills={skills && { workspaceName: skills.workspaceName, list: pickerSkills }}
+          skill={skill}
+          pick={pick}
+        />
+      </Suspense>
+      {createPortal(messageBox, dock.element)}
+    </>
+  ) : (
+    messageBox
   );
 });
