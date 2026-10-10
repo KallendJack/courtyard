@@ -13,9 +13,23 @@ addStylesheet("approval-card", css);
 const question = (ask: ApprovalAsk) => {
   if (ask.kind === "edit") return "Change a file outside the worktree?";
   if (ask.kind === "setup") return "Change how commands run?";
+  if (ask.kind === "tool") return `Delete something in ${ask.connection} this session didn't make?`;
   return ask.reason === "off-allowlist"
     ? "Run a command? It isn't on the allowlist."
     : "Run a command? It names a path outside the worktree.";
+};
+
+/** Exactly what would happen: the command, the file, or the tool connection's action and input. */
+const exactly = (ask: ApprovalAsk) => {
+  switch (ask.kind) {
+    case "command":
+      return ask.command;
+    case "edit":
+    case "setup":
+      return ask.path;
+    case "tool":
+      return `${ask.action} ${ask.input}`;
+  }
 };
 
 /** What the model said it's for, as a sentence, and what Deny does. */
@@ -28,9 +42,9 @@ const whyLine = (why: string | undefined) => {
 
 /**
  * An approval a code session's turn waits on (#171): gold, since it needs the owner, with the
- * exact command (or file), what the model said it's for, and Deny and Allow at the bottom, in
- * thumb reach, one tap each (the shared thumb buttons, Allow wider). Its classes are in its own
- * stylesheet, off the first load.
+ * exact command (or file, or tool connection's action), what the model said it's for, and Deny
+ * and Allow at the bottom, in thumb reach, one tap each (the shared thumb buttons, Allow wider).
+ * Its classes are in its own stylesheet, off the first load.
  */
 export function ApprovalCard(props: {
   ask: ApprovalAsk;
@@ -47,7 +61,7 @@ export function ApprovalCard(props: {
     // Once answered, the card goes with the answer's event; until then it can be answered again.
     if (failed !== undefined) setSending(false);
   };
-  const exact = props.ask.kind === "command" ? props.ask.command : props.ask.path;
+  const exact = exactly(props.ask);
   return (
     // Where the card's own classes apply (approval-card.css).
     <div data-approval-card="">

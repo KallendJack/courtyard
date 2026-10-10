@@ -85,6 +85,54 @@ test("stopping a turn that waits on an approval ends it, and the card goes", asy
   await expect(approvalOn(page)).toHaveCount(0);
 });
 
+test("a screenshot of a Paper board shows in the chat, the newest of each board, and opens full size (ADR 0023)", async ({
+  page,
+}) => {
+  await startOnPage(page, [
+    'paper create_artboard {"fileId": "file-1", "name": "Board", "styles": {}}',
+    'paper get_screenshot {"fileId": "file-1", "nodeId": "fake-1"}',
+    'paper get_screenshot {"fileId": "file-1", "nodeId": "fake-1"}',
+  ]);
+
+  for (const reloaded of [false, true]) {
+    if (reloaded) await page.reload();
+    await expect(
+      page.getByRole("list", { name: "What the model did" }).getByRole("listitem"),
+    ).toHaveText([
+      "Used Paper: create_artboard",
+      "Used Paper: get_screenshot",
+      "Used Paper: get_screenshot",
+    ]);
+    // Two screenshots of the same board: only the newest shows.
+    const shown = page.getByRole("button", { name: "View Paper screenshot.png" });
+    await expect(shown).toHaveCount(1);
+    await expect(shown.getByRole("img")).toHaveJSProperty("complete", true);
+    await shown.click();
+    const viewer = page.getByRole("dialog", { name: "Paper screenshot.png" });
+    await expect(viewer.getByRole("img", { name: "Paper screenshot.png" })).toBeVisible();
+    await viewer.getByRole("button", { name: "Close" }).click();
+    await expect(viewer).toBeHidden();
+  }
+});
+
+test("deleting in Paper what the session didn't make waits for the owner, showing what (ADR 0023)", async ({
+  page,
+}) => {
+  await startOnPage(page, ['paper delete_nodes {"fileId": "file-1", "nodeIds": ["board-7"]}']);
+  const card = approvalOn(page);
+  await expect(card).toContainText("Delete something in Paper this session didn't make?");
+  await expect(card.getByRole("code")).toHaveText(
+    'delete_nodes {"fileId":"file-1","nodeIds":["board-7"]}',
+  );
+
+  await card.getByRole("button", { name: "Deny" }).click();
+
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "Couldn't use Paper's delete_nodes: The owner denied that, so it didn't happen.",
+  );
+});
+
 test("a model that can't code is refused in a code workspace, with the reason", async ({
   page,
 }) => {
