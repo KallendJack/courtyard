@@ -14,6 +14,7 @@ import { BranchStrip } from "@/components/branch-strip";
 import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FormError } from "@/components/form-error";
+import { JumpToLatest } from "@/components/jump-to-latest";
 import { Notice, StatusPill } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
@@ -134,15 +135,23 @@ function Session(props: {
   const suggesting =
     last?.state.kind === "done" && last.replies.length > 0 && !session.workspaceArchived;
 
+  /** The owner has scrolled back from the end to read, so Jump to latest shows (#168). */
+  const [away, setAway] = useState(false);
+  /** Goes to the end of the session and follows it again, once its turns are drawn. */
+  const follow = useRef<() => void>(null);
+  const toLatest = useCallback(() => follow.current?.(), []);
+
   const send = useCallback(
     async (message: NewMessage, files: readonly File[]) => {
       const sent = await sendMessage({ sessionId: session.id, message, files });
       if (sent.kind !== "loaded") return describeProblem(sent).body;
       // Changes asked for from the review: the session's answer is in the conversation.
       if (reviewing) await toConversation();
+      // What the owner just sent is at the end, so that's where they go.
+      else toLatest();
       return undefined;
     },
-    [session.id, reviewing, toConversation],
+    [session.id, reviewing, toConversation, toLatest],
   );
   const runningTurn = running ? last?.seq : undefined;
   const stop = useCallback(async () => {
@@ -353,6 +362,8 @@ function Session(props: {
           {...(props.documents === undefined ? {} : { documents: props.documents })}
           queuedMessages={queuedMessages}
           onRemoveQueued={removeQueuedMessage}
+          onAway={setAway}
+          follow={follow}
         />
       )}
       {sendProblem && (
@@ -362,6 +373,9 @@ function Session(props: {
       )}
 
       <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:pb-[calc(--spacing(6)+env(safe-area-inset-bottom))]">
+        {away && !reviewing && problem === undefined && (
+          <JumpToLatest answering={running} onJump={toLatest} />
+        )}
         <Composer
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}

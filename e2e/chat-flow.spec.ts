@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { READING_SESSION_ID } from "./long-session.ts";
 
 // A session's flow: whose turn it is (#179), messages queued while a turn runs (#177), and
 // scrolling that never moves the owner away from where they are (#168).
@@ -113,5 +114,172 @@ test.describe("messages sent while a turn runs", () => {
     });
     await expect(queued).toHaveCount(0);
     await expect(session).not.toContainText("You said: Also check the cover screen");
+  });
+});
+
+/** The Fold's cover screen, folded, in CSS pixels. */
+const COVER_SCREEN = { width: 400, height: 640 };
+
+const READING_SESSION = `/workspaces/garage-gym/sessions/${READING_SESSION_ID}`;
+
+/** An answer many lines long, so it grows well past the bottom of the screen as it streams. */
+const manyLines = (count: number) =>
+  Array.from({ length: count }, (_, i) => `line ${i + 1}`).join("\n");
+
+/** How far the bottom of the screen is from the end of the page, in pixels. */
+const fromTheEnd = (page: Page) =>
+  page.evaluate(
+    () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
+  );
+
+/** Scrolls back up to read, as the owner does with a finger or a wheel. */
+const readBack = async (page: Page) => {
+  await page.mouse.move(200, 300);
+  await page.mouse.wheel(0, -900);
+  await expect.poll(() => fromTheEnd(page)).toBeGreaterThan(400);
+};
+
+/**
+ * Where the owner is reading: the first turn on screen (perhaps begun above it), by its place in
+ * the session, and how far down the screen its top is.
+ */
+const readingAt = (page: Page) =>
+  page.evaluate(() => {
+    const turns = [...document.querySelectorAll<HTMLElement>('[aria-label="Session"] > li')];
+    const seen = turns.find((turn) => turn.getBoundingClientRect().bottom > 0);
+    if (seen === undefined) throw new Error("no turn on screen");
+    return { index: seen.dataset.index ?? "", top: Math.round(seen.getBoundingClientRect().top) };
+  });
+
+/** Where that same turn's top is on screen now. */
+const topNow = (page: Page, index: string) =>
+  page.evaluate((at) => {
+    const turn = document.querySelector(`[aria-label="Session"] > li[data-index="${at}"]`);
+    return turn === null ? undefined : Math.round(turn.getBoundingClientRect().top);
+  }, index);
+
+/** Two frames, so anything a change moves has moved. */
+const frames = (page: Page) =>
+  page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+
+/** Expects the owner to be reading just where they were: that turn's top where it was on screen. */
+const stillAt = async (page: Page, reading: { index: string; top: number }) => {
+  await frames(page);
+  expect(await topNow(page, reading.index)).toBe(reading.top);
+};
+
+test.describe("reading back while it answers", () => {
+  test.use({ viewport: COVER_SCREEN });
+
+  test("new text never moves the owner, and Jump to latest, live while it answers, brings them down", async ({
+    page,
+  }) => {
+    await page.goto(READING_SESSION);
+    await page.getByRole("textbox", { name: "Message" }).fill(manyLines(80));
+    await page.getByRole("button", { name: "Send" }).click();
+    const session = sessionOn(page);
+    await expect(session).toContainText("line 10");
+
+    await readBack(page);
+    const jump = page.getByRole("button", { name: /Jump to latest/ });
+    await expect(jump).toHaveText("Jump to latest · still answering");
+    const reading = await readingAt(page);
+    await expect(session).toContainText("line 40");
+    await stillAt(page, reading);
+
+    await jump.click();
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+    await expect(jump).toBeHidden();
+    // Following again: the end stays in view as the rest arrives.
+    await expect(session).toContainText(/Your turn · finished/, { timeout: 45_000 });
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+
+    await readBack(page);
+    await expect(jump).toHaveText("Jump to latest");
+  });
+
+  test("the keyboard opening or closing doesn't move the page", async ({ page }) => {
+    await page.goto(READING_SESSION);
+    await expect(sessionOn(page)).toContainText("You said:");
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+
+    // At the end, the end stays in view above the message box as the keyboard takes its room.
+    await page.setViewportSize({ width: 400, height: 360 });
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+    await page.setViewportSize(COVER_SCREEN);
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+
+    // Reading back, what's on screen stays where it is.
+    await readBack(page);
+    const reading = await readingAt(page);
+    await page.setViewportSize({ width: 400, height: 360 });
+    await stillAt(page, reading);
+    await page.setViewportSize(COVER_SCREEN);
+    await stillAt(page, reading);
+    await expect(page.getByRole("button", { name: /Jump to latest/ })).toBeVisible();
+  });
+});
+
+test.describe("the chat never jumps back to the top", () => {
+  test.use({ viewport: COVER_SCREEN });
+
+  test("when a turn ends and a model titles the session", async ({ page }) => {
+    await startSession(page, `reading back while it ends\n${manyLines(80)}`);
+    const session = sessionOn(page);
+    await expect(session).toContainText("line 20");
+    await readBack(page);
+    const reading = await readingAt(page);
+
+    await expect(session).toContainText(/Your turn · finished/, { timeout: 45_000 });
+    // The fake titles it from its first words, once its first answer is in.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Reading Back/);
+    await stillAt(page, reading);
+  });
+
+  test("when the worker comes back after being away", async ({ page }) => {
+    await page.goto(READING_SESSION);
+    await expect(sessionOn(page)).toContainText("You said:");
+    await readBack(page);
+    const reading = await readingAt(page);
+
+    await page.route("**/api/health", (route) => route.abort());
+    const away = page.getByText("Can't reach Courtyard's worker. Retrying…");
+    await expect(away).toBeVisible({ timeout: 15_000 });
+    await page.unroute("**/api/health");
+    await expect(away).toBeHidden({ timeout: 15_000 });
+
+    await stillAt(page, reading);
+  });
+
+  test("when another device sends a message, and an approval card comes and goes", async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/workspaces/side-project");
+    await page.getByLabel("Model").selectOption("fake/echo");
+    await page.getByRole("textbox", { name: "Message" }).fill(manyLines(60));
+    await page.getByRole("button", { name: "Start" }).click();
+    const session = sessionOn(page);
+    await expect(session).toContainText(/Your turn · finished/, { timeout: 45_000 });
+    await readBack(page);
+    const reading = await readingAt(page);
+
+    const other = await context.newPage();
+    await other.goto(page.url());
+    await other.getByRole("textbox", { name: "Message" }).fill("run command: rm -rf node_modules");
+    await other.getByRole("button", { name: "Send" }).click();
+    const card = page.getByRole("region", { name: "Needs your OK" });
+    await expect(card).toBeAttached();
+    await stillAt(page, reading);
+
+    await other
+      .getByRole("region", { name: "Needs your OK" })
+      .getByRole("button", { name: "Deny" })
+      .click();
+    await expect(card).toHaveCount(0);
+    await expect(session).toContainText(/Your turn · finished/);
+    await stillAt(page, reading);
   });
 });

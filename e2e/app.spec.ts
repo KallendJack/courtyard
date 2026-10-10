@@ -143,20 +143,7 @@ test.describe("at the end of a long session", () => {
     await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
   });
 
-  test("stops following once the owner scrolls back up to read", async ({ page }) => {
-    await page.goto(LONG_SESSION);
-    const lines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n");
-    await page.getByLabel("Message").fill(lines);
-    await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByRole("list", { name: "Session" })).toContainText("line 10");
-
-    await page.mouse.move(200, 300);
-    await page.mouse.wheel(0, -600);
-    await expect.poll(() => fromTheEnd(page)).toBeGreaterThan(400);
-    const reading = await page.evaluate(() => window.scrollY);
-    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
-    expect(await page.evaluate(() => window.scrollY)).toBe(reading);
-  });
+  // Reading back while it answers, and Jump to latest, are in chat-flow.spec.ts (#168).
 
   test("scrolls a failed turn's reason into view", async ({ page }) => {
     await page.goto(LONG_SESSION);
