@@ -47,7 +47,7 @@ export function Diff(props: { file: ChangedFile; place: string }) {
   return (
     <section
       aria-label={`Diff of ${file.path}`}
-      className="flex min-w-0 flex-col overflow-clip rounded-[18px] bg-surface"
+      className="flex min-w-0 flex-col overflow-clip rounded-card bg-surface"
     >
       <div className="flex items-baseline justify-between gap-3 px-3.5 py-3 shadow-[inset_0_-1px_0] shadow-border">
         <p className="min-w-0 truncate font-mono text-xs/4 text-foreground" title={file.path}>

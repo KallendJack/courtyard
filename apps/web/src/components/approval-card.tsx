@@ -52,7 +52,7 @@ export function ApprovalCard(props: {
     <div data-approval-card="">
       <section
         aria-label="Needs your OK"
-        className="flex flex-col gap-3 rounded-[24px] bg-surface p-4.5 ring-[1.5px] ring-warning/55 ring-inset"
+        className="flex flex-col gap-3 rounded-ask bg-surface p-4.5 ring-[1.5px] ring-warning/55 ring-inset"
       >
         <p className="text-[11px]/4 font-bold tracking-[0.08em] text-warning uppercase">
           Needs your OK
@@ -60,7 +60,7 @@ export function ApprovalCard(props: {
         <h2 className="display-section text-[19px]/6 tracking-[-0.015em] text-foreground">
           {question(props.ask)}
         </h2>
-        <div className="rounded-[14px] bg-card px-3.5 py-3 ring-1 ring-border ring-inset">
+        <div className="rounded-bubble bg-card px-3.5 py-3 ring-1 ring-border ring-inset">
           <code className="font-mono text-sm/5 wrap-anywhere whitespace-pre-wrap text-foreground">
             {exact}
           </code>

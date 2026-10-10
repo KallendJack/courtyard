@@ -75,6 +75,10 @@
   --radius-md: 10px;
   --radius-bubble: 14px; /* the owner's message */
   --radius-lg: 16px;
+  /* Handheld (#169): a row in a card's list, a card and its thumb buttons, and an approval card. */
+  --radius-row: 12px;
+  --radius-card: 18px;
+  --radius-ask: 24px;
 
   --container-reading: 680px;
 }

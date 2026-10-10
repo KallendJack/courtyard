@@ -36,7 +36,7 @@ export function FileTree(props: {
   return (
     <nav
       aria-label="Changed files"
-      className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-[18px] bg-surface p-2 md:max-h-none"
+      className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card bg-surface p-2 md:max-h-none"
     >
       <p className="px-2.5 pt-1.5 pb-1 text-[11px]/4 font-bold tracking-[0.08em] text-muted-foreground uppercase">
         {count === 1 ? "1 file" : `${count} files`}
@@ -58,7 +58,7 @@ export function FileTree(props: {
                 title={file.path}
                 onClick={() => props.onChoose(file.path)}
                 className={classes(
-                  "flex h-11 shrink-0 items-center justify-between gap-3 rounded-[12px] pr-3 text-left font-mono text-xs/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "flex h-11 shrink-0 items-center justify-between gap-3 rounded-row pr-3 text-left font-mono text-xs/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                   folder === "" ? "pl-2.5" : "pl-5.5",
                   chosen ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
                 )}

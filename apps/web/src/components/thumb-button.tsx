@@ -8,7 +8,7 @@ import { classes } from "@/lib/classes";
  * review.css), and apply only inside those pieces.
  */
 const BASE =
-  "flex basis-0 items-center justify-center gap-2 rounded-[18px] text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
+  "flex basis-0 items-center justify-center gap-2 rounded-card text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
 
 const LOOKS = {
   /** The way out: Deny, Close PR. */

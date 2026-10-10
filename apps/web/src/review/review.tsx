@@ -164,7 +164,7 @@ export default function Review(props: {
           {files.length > 0 ? (
             <FileTree files={files} chosen={file?.path} onChoose={choose} />
           ) : (
-            <p className="rounded-[18px] bg-surface p-4 text-sm text-muted-foreground">
+            <p className="rounded-card bg-surface p-4 text-sm text-muted-foreground">
               It changes no files.
             </p>
           )}
