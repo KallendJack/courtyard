@@ -111,7 +111,7 @@ export const Composer = memo(function Composer(props: {
   initialModel?: ModelRef;
   initialEffort?: Effort;
   disabled?: boolean;
-  /** While a turn runs: stops it, shown in place of Send. */
+  /** While a turn runs: stops it, shown in place of Send until there's a message to queue (#177). */
   stop?: () => void;
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
@@ -234,7 +234,8 @@ export const Composer = memo(function Composer(props: {
         attaching.map((each) => each.file),
       )
     ) {
-      setText("");
+      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
+      setText((now) => (now === text ? "" : now));
       setSkill(undefined);
       releasePreviews(attaching);
       setAttaching([]);
@@ -265,7 +266,7 @@ export const Composer = memo(function Composer(props: {
     return false;
   };
 
-  const label = props.stop ? "Stop" : (props.submitLabel ?? "Send");
+  const label = props.submitLabel ?? "Send";
   // On a narrow screen a session's box is one line with a round button, and the chip above it
   // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
@@ -498,20 +499,26 @@ export const Composer = memo(function Composer(props: {
                 </Chip>
               )}
               <span className={classes("flex-1", compact && "max-md:hidden")} />
-              <Button
-                {...(props.stop
-                  ? { variant: "outline", onClick: props.stop }
-                  : {
-                      type: "submit",
-                      disabled: send.busy || preparing > 0 || props.disabled || models.length === 0,
-                    })}
-                {...(compact
-                  ? { narrowIcon: props.stop ? <Square className="fill-current" /> : <ArrowUp /> }
-                  : {})}
-              >
-                {props.stop && <Square className="fill-current" />}
-                {label}
-              </Button>
+              {props.stop && (
+                <Button
+                  variant="outline"
+                  onClick={props.stop}
+                  {...(compact ? { narrowIcon: <Square className="fill-current" /> } : {})}
+                >
+                  <Square className="fill-current" />
+                  Stop
+                </Button>
+              )}
+              {/* While a turn runs, Send shows once there's something to queue (#177). */}
+              {(!props.stop || text.trim() !== "" || attaching.length > 0) && (
+                <Button
+                  type="submit"
+                  disabled={send.busy || preparing > 0 || props.disabled || models.length === 0}
+                  {...(compact ? { narrowIcon: <ArrowUp /> } : {})}
+                >
+                  {label}
+                </Button>
+              )}
             </div>
           </div>
         </form>

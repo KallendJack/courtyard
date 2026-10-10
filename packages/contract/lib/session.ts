@@ -176,9 +176,6 @@ export const SessionChange = z.object({
 });
 export type SessionChange = z.infer<typeof SessionChange>;
 
-export const SessionList = z.object({ sessions: z.array(SessionSummary) });
-export type SessionList = z.infer<typeof SessionList>;
-
 /** Which file a line is written in: the workspace's context file, or the owner context (ADR 0013). */
 export const LinePlace = z.enum(["workspace", "owner"]);
 export type LinePlace = z.infer<typeof LinePlace>;

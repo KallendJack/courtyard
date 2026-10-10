@@ -12,13 +12,15 @@ import { fromWorker, renameSession } from "../worker.ts";
 import { GROUP_HEADING } from "./app-sidebar.tsx";
 import { IconButton } from "./button.tsx";
 import { RenameForm } from "./rename-form.tsx";
+import { SessionStateDot, useRefreshWhileBusy } from "./session-state.tsx";
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;
 
 /**
  * The open workspace's latest sessions in the sidebar, refreshed as the owner moves around and whenever a page
- * reloads its data (after a session is renamed, say). Each can be renamed in place.
+ * reloads its data (after a session is renamed, say), and every few seconds while one is working or needs the
+ * owner, which a dot before its title says (#179). Each can be renamed in place.
  */
 export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
   const { workspaceId } = useParams({ strict: false });
@@ -33,8 +35,11 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
   const [renaming, setRenaming] = useState<SessionId>();
   const workspace = props.workspaces.find((w) => w.id === workspaceId);
   const sessions = listed && listed.workspaceId === workspaceId ? listed.sessions : [];
+  const shown = sessions.slice(0, RECENT_SESSIONS);
+  const [asked, setAsked] = useState(0);
+  useRefreshWhileBusy(shown, () => setAsked((times) => times + 1));
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname and loadedAt are the triggers: moving between pages (starting a session, say) or a page reloading its data refreshes the list
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname, loadedAt and asked are the triggers: moving between pages (starting a session, say), a page reloading its data, or a session still working refreshes the list
   useEffect(() => {
     if (workspaceId === undefined) return;
     let current = true;
@@ -47,7 +52,7 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
     return () => {
       current = false;
     };
-  }, [workspaceId, pathname, loadedAt]);
+  }, [workspaceId, pathname, loadedAt, asked]);
 
   if (!workspace || sessions.length === 0) return null;
   return (
@@ -57,7 +62,7 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
     >
       <h2 className={GROUP_HEADING}>Recent in {workspace.name}</h2>
       <ul>
-        {sessions.slice(0, RECENT_SESSIONS).map((session) =>
+        {shown.map((session) =>
           renaming === session.id ? (
             <li key={session.id} className="px-1 py-1">
               <RenameForm
@@ -67,7 +72,9 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
                 save={async (title) => {
                   const renamed = await renameSession(session.id, { title });
                   if (renamed.kind !== "loaded") return describeProblem(renamed).body;
-                  const others = sessions.map((s) => (s.id === session.id ? renamed.data : s));
+                  const others = sessions.map((s) =>
+                    s.id === session.id ? { ...s, ...renamed.data } : s,
+                  );
                   setListed({ workspaceId: session.workspaceId, sessions: others });
                   // The session's own page, if it's open, shows the new title too.
                   await router.invalidate();
@@ -83,6 +90,7 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
                 params={{ workspaceId: session.workspaceId, sessionId: session.id }}
                 className="block truncate rounded-md py-1.5 pr-9 pl-3 text-sm text-muted-foreground hover:bg-muted/60 data-[status=active]:font-medium data-[status=active]:text-foreground"
               >
+                <SessionStateDot now={session.now} />
                 {session.title}
               </Link>
               {/* Shown on hover or focus with a mouse; always on a touch screen, which can't hover. */}

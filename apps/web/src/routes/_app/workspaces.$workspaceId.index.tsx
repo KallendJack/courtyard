@@ -2,7 +2,7 @@ import {
   ChangeId,
   CODE_SESSIONS_AT_ONCE,
   CONTEXT_FILE_LONG_CHARACTERS,
-  type CodeSessionList,
+  CodeSessionList,
   type ContextFile,
   hasLines,
   type OwnerContextShared,
@@ -23,6 +23,7 @@ import { FormError } from "@/components/form-error";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
+import { ListedSessionText, useRefreshWhileBusy } from "@/components/session-state";
 import { SkillList } from "@/components/skill-list";
 import { ColourChooser } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
@@ -35,7 +36,7 @@ import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { startSession } from "../../sessions/messages.ts";
 import { ThingsSection } from "../../things/things-section.tsx";
 import { describeWhen } from "../../when.ts";
-import { archiveWorkspace, changeWorkspace, deleteSession } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, deleteSession, fromWorker } from "../../worker.ts";
 
 // Loaded only for a code workspace, with the home page's Connections (#99).
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
@@ -377,11 +378,27 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
 }
 
 /**
- * The workspace's sessions, latest first. In a code workspace, how many code sessions are running
- * across the worker, and any session waiting for one of them to end, which can be removed (#174).
+ * The workspace's sessions, latest first, each saying whose turn it is (#179), asked again every
+ * few seconds while one is working or needs the owner. In a code workspace, how many code sessions
+ * are running across the worker, and any session waiting for one of them to end, which can be
+ * removed (#174).
  */
 function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
-  const { sessions, running } = props.list;
+  const [asked, setAsked] = useState<{ from: CodeSessionList; now: CodeSessionList }>();
+  // The page's own list until a newer one is asked for, and again whenever the page reloads it.
+  const list = asked?.from === props.list ? asked.now : props.list;
+  const workspaceId = list.sessions[0]?.workspaceId;
+  useRefreshWhileBusy(list.sessions, () => {
+    if (workspaceId === undefined) return;
+    const from = props.list;
+    void fromWorker(
+      `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
+      CodeSessionList,
+    ).then((result) => {
+      if (result.kind === "loaded") setAsked({ from, now: result.data });
+    });
+  });
+  const { sessions, running } = list;
   if (sessions.length === 0) return null;
   return (
     <section aria-label="Sessions" className={CARD}>
@@ -401,19 +418,13 @@ function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
               params={{ workspaceId: session.workspaceId, sessionId: session.id }}
               className={classes(LIST_ROW, "min-w-0 flex-1")}
             >
-              <span className="truncate font-medium">{session.title}</span>
-              <span
-                className={classes(
-                  "shrink-0 text-xs text-muted-foreground",
-                  session.queued && "font-semibold tracking-[0.08em] uppercase",
-                )}
-              >
-                {session.queued
-                  ? "Queued · starts when a slot frees"
-                  : session.busy
-                    ? "Running…"
-                    : describeWhen(session.updatedAt)}
-              </span>
+              <ListedSessionText
+                title={session.title}
+                now={session.now}
+                updatedAt={session.updatedAt}
+                waitsForSlot={session.queued}
+                when={describeWhen}
+              />
             </Link>
             {session.queued && <RemoveQueued session={session} />}
           </li>

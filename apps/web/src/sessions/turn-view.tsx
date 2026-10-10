@@ -15,8 +15,10 @@ import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
 import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
+import { type Queued, QueuedMessages } from "@/components/queued-message";
 import { SkillTag } from "@/components/skill-tag";
 import { SuggestedReplies } from "@/components/suggested-replies";
+import { TurnEndMark, WorkingLine } from "@/components/working-line";
 import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
@@ -195,8 +197,16 @@ export const TurnView = memo(function TurnView(props: {
   workspaceId?: WorkspaceId;
   /** Where Save as document saves, in a planning workspace that isn't archived; none otherwise. */
   documents?: DocumentsHere;
+  /** It's the session's latest turn, so its end is marked once it ends (#179). */
+  latest?: boolean;
+  /** The owner's messages waiting for it to end (#177), on the latest turn only, and removing one. */
+  queued?: {
+    readonly messages: readonly Queued[];
+    readonly remove: (queued: number) => Promise<string | undefined>;
+  };
 }) {
   const { sessionId, turn, providers, onRetry, onCarryOn, onReply, workspaceId, documents } = props;
+  const latest = props.latest === true;
 
   return (
     <div className="space-y-4">
@@ -240,7 +250,7 @@ export const TurnView = memo(function TurnView(props: {
           one of them ends.
         </TurnNote>
       )}
-      {(turn.answer !== "" || (turn.state.kind === "running" && !turn.queued)) && (
+      {turn.answer !== "" && (
         // Busy while it streams, so a screen reader reads the answer once, when it's whole.
         <div aria-live="polite" aria-busy={turn.state.kind === "running"}>
           <Answer
@@ -248,15 +258,13 @@ export const TurnView = memo(function TurnView(props: {
             running={turn.state.kind === "running"}
             replayed={turn.replayed}
           />
-          {turn.state.kind === "running" && (
-            <span
-              aria-hidden
-              className="mt-1 inline-block h-5 w-2 animate-pulse rounded-xs bg-primary-text"
-            />
-          )}
         </div>
       )}
       {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
+      {/* While it runs, what it's doing now (#179); an approval it waits on says so itself. */}
+      {turn.state.kind === "running" && !turn.queued && turn.approval === undefined && (
+        <WorkingLine since={turn.startedAt} doing={turn.doing} />
+      )}
       {turn.approval !== undefined && turn.state.kind === "running" && (
         <ApprovalCard
           {...approvalWords(turn.approval.ask, turn.approval.why)}
@@ -269,6 +277,13 @@ export const TurnView = memo(function TurnView(props: {
             });
             return answered.kind === "loaded" ? undefined : describeProblem(answered).body;
           }}
+        />
+      )}
+      {props.queued !== undefined && (
+        <QueuedMessages
+          messages={props.queued.messages}
+          running={turn.state.kind === "running"}
+          onRemove={props.queued.remove}
         />
       )}
       {turn.sources.length > 0 && <SourceList sources={turn.sources} />}
@@ -316,10 +331,14 @@ export const TurnView = memo(function TurnView(props: {
           ))}
         </ul>
       )}
+      {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
+      {/* The latest turn's end, so a finished session never looks like one still working (#179). */}
+      {latest && (turn.state.kind === "done" || turn.state.kind === "stopped") && (
+        <TurnEndMark at={turn.state.at} stopped={turn.state.kind === "stopped"} />
+      )}
       {onReply && turn.state.kind === "done" && turn.replies.length > 0 && (
         <SuggestedReplies replies={turn.replies} onPick={(reply) => onReply(turn, reply)} />
       )}
-      {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
       {turn.state.kind === "failed" && turn.state.reason.kind === "rate-limited" && (
         <LimitNotice
           turn={turn}

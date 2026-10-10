@@ -268,6 +268,17 @@ The owner ending a running turn early. Whatever the model wrote so far stays, an
 recorded as stopped, apart from failures.
 _Avoid_: cancel, abort, interrupt (that's the worker stopping mid-turn)
 
+**Queued message**:
+A message the owner sends while a turn runs. It waits under that turn, in order, and goes as its own turn as soon as
+the session can take one; the owner can remove it from any device until then. Not a code session's turn waiting for
+one of the others to end, which is a waiting turn.
+_Avoid_: pending message, draft, steering
+
+**Whose turn it is**:
+What a session shows at a glance: **Working** (the model, on what and for how long), **Needs you** (an approval
+waits), or **Your turn** (no turn is running).
+_Avoid_: status, busy, idle (in the app's words)
+
 **Event log**:
 The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript

@@ -141,7 +141,8 @@ is ready (it checks every few hours), or run:
 - **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
   and builds, then starts the worker and waits for it to answer. It shuts the worker down first
   because Windows can refuse to replace files a running worker has open. A turn running at that
-  moment is recorded as interrupted.
+  moment is recorded as interrupted; any messages you'd queued behind it go once the worker is
+  back.
 - **If any step fails,** it puts the previous version back and starts that instead.
 - **Only one update runs at a time.** If something other than the worker answers on its port,
   the update stops without changing anything.
@@ -241,7 +242,8 @@ when it asks. Each device turns its own on and off.
   Add to Home Screen, iOS 16.4 or later), and turn them on from there.
 - **If you said no** when the browser asked, the switch says they're blocked: allow notifications
   for Courtyard in the browser's site settings, then turn them on again.
-- **Nothing buzzes for a session you have open** in front of you on that device.
+- **Nothing buzzes for a session you have open** in front of you on that device, nor for a turn
+  that ends with a message you queued going next: it isn't your turn yet.
 - **Logging a device out stops its notifications.** After logging in again, opening the home page
   picks them up again.
 - **The worker sends them through each browser's own push service** (Google's, Apple's or

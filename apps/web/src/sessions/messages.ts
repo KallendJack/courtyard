@@ -75,6 +75,15 @@ export const answerApproval = (answering: {
     schema: ApprovalAnswering,
   });
 
+/** Removes the owner's queued message numbered `queued` before it goes (#177). */
+export const removeQueued = (remove: { sessionId: SessionId; queued: number }) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(remove.sessionId)}/queued/${remove.queued}`,
+    method: "DELETE",
+    body: {},
+    schema: z.unknown(),
+  });
+
 /** Where one of a session's attachments is served from: for a thumbnail, or a PDF in a new tab. */
 export const attachmentUrl = (sessionId: SessionId, id: AttachmentId) =>
   `/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(id)}`;

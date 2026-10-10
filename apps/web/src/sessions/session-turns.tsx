@@ -1,8 +1,16 @@
 import type { ProviderList, SessionId, WorkspaceId } from "@courtyard/contract";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { DocumentsHere } from "./documents.tsx";
-import type { Turn } from "./events.ts";
+import type { QueuedMessage, Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
 
 /** A first guess at a turn's height, before it's been measured. */
@@ -19,7 +27,7 @@ const atTheEnd = () =>
  * A session's turns, drawing only those near the screen, so a session hundreds of turns long
  * stays smooth. Each drawn turn is measured, so turns of any height (or one still streaming) sit
  * in the right place. Opens at the end, and follows new text only while already at the end, so
- * reading back up isn't interrupted.
+ * reading back up isn't interrupted: nothing that arrives, ends or goes moves the owner then (#168).
  *
  * Turns not drawn can't be found with the browser's Find, and screen readers only see the drawn
  * ones (each says where it sits, "turn 180 of 200"): the price of a long session staying smooth.
@@ -36,9 +44,22 @@ export function SessionTurns(props: {
   workspaceId: WorkspaceId;
   /** Where Save as document saves; left out where answers can't be saved as documents. */
   documents?: DocumentsHere;
+  /** The owner's messages waiting for the running turn to end (#177), shown under the latest. */
+  queuedMessages: readonly QueuedMessage[];
+  /** Removes a queued message: what went wrong, or nothing once it's removed. */
+  onRemoveQueued: (queued: number) => Promise<string | undefined>;
+  /** Told when the owner scrolls away from the end to read back, and when they're back (#168). */
+  onAway?: (away: boolean) => void;
+  /** Set to what goes to the end and follows again: Jump to latest, or the owner sending (#168). */
+  follow?: Ref<() => void>;
 }) {
   const { sessionId, turns, providers, onRetry, onCarryOn, onReply, workspaceId, documents } =
     props;
+  const { queuedMessages, onRemoveQueued } = props;
+  const queued = useMemo(
+    () => ({ messages: queuedMessages, remove: onRemoveQueued }),
+    [queuedMessages, onRemoveQueued],
+  );
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);
   const opened = useRef(false);
@@ -64,18 +85,52 @@ export function SessionTurns(props: {
     getItemKey: (index) => turns[index]?.seq ?? index,
   });
 
-  // Only scrolling up stops following. The page grows between scrolling to the end and the
+  // The page hears when the owner is away from the end, for Jump to latest (#168), which follows
+  // again through `follow`.
+  const onAway = useRef(props.onAway);
+  onAway.current = props.onAway;
+  const setFollowing = useRef((now: boolean) => {
+    if (following.current === now) return;
+    following.current = now;
+    onAway.current?.(!now);
+  }).current;
+  useImperativeHandle(
+    props.follow,
+    () => () => {
+      setFollowing(true);
+      window.scrollTo({ top: document.documentElement.scrollHeight });
+    },
+    [setFollowing],
+  );
+
+  // Only scrolling up stops following: the page grows between scrolling to the end and the
   // browser reporting it, by more than "near the end" on a slow frame, which isn't the owner
-  // reading back.
+  // reading back. Only scrolling down to the end follows again: the browser moving the page up
+  // because it got shorter for a moment (a new turn not measured yet) isn't the owner coming back.
   useEffect(() => {
     let lastScrollY = window.scrollY;
     const onScroll = () => {
-      following.current = atTheEnd() || (following.current && window.scrollY >= lastScrollY);
+      const down = window.scrollY > lastScrollY;
+      setFollowing(
+        following.current ? atTheEnd() || window.scrollY >= lastScrollY : atTheEnd() && down,
+      );
       lastScrollY = window.scrollY;
     };
+    // The keyboard opening or closing changes the screen's height (#168): at the end, the end
+    // stays in view above the message box; reading back, the page stays where it is, which the
+    // browser does by itself.
+    const onResize = () => {
+      if (opened.current && following.current) {
+        window.scrollTo({ top: document.documentElement.scrollHeight });
+      }
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [setFollowing]);
 
   // A new turn (or the session opening) goes to the end, which may not be drawn yet.
   useLayoutEffect(() => {
@@ -132,7 +187,9 @@ export function SessionTurns(props: {
               {...(documents === undefined ? {} : { documents })}
               // Only the last turn can be retried, carried on or replied to, so only it gets the
               // handlers.
-              {...(turn === last ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}) } : {})}
+              {...(turn === last
+                ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}), latest: true, queued }
+                : {})}
             />
           </li>
         );

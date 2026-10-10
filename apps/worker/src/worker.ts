@@ -265,6 +265,10 @@ export const createWorker = (options: {
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
   });
+  // Queued messages a stopped worker left waiting go now (#177).
+  sessions
+    .resumeQueued()
+    .catch((error: unknown) => console.error("Queued messages couldn't be resumed", error));
   const repeat = options.repeat ?? repeatForever;
   repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
   repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
