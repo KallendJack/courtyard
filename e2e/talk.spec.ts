@@ -4,6 +4,7 @@ import {
   goOutOfSight,
   hear,
   listenedIn,
+  vibrations,
   micOn,
   pause,
   refuse,
@@ -62,6 +63,8 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
 
       await listening.click();
       await expect(session(page)).toContainText("You said: Could the bench go sideways instead?");
+      // Sent: the same double tick as letting go of a hold.
+      expect(await vibrations(page)).toContainEqual([12, 70, 12]);
       await expect(strip(page, /Tap or hold to talk/)).toBeVisible();
       await expect(page.getByRole("button", { name: "Type" })).toBeVisible();
     });
@@ -90,6 +93,7 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       await hear(page, "Pegs for the bands");
       await page.mouse.up();
       await expect(session(page)).toContainText("You said: Pegs for the bands");
+      expect(await vibrations(page)).toContainEqual([12, 70, 12]);
       await expect(strip(page, /Tap or hold to talk/)).toBeVisible();
 
       await page.mouse.move(talk.x, talk.y);

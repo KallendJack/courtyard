@@ -132,8 +132,11 @@ export function TalkBar(props: {
   const up = (event: PointerEvent<HTMLButtonElement>) => {
     const pressed = press.current;
     if (pressed === undefined) {
-      // A second tap, while it listens hands-free: send.
-      if (talk.kind === "listening" && event.button === 0) stop("send");
+      // A second tap, while it listens hands-free: send, with the same feel as letting go.
+      if (talk.kind === "listening" && event.button === 0) {
+        feel("doubleTick");
+        stop("send");
+      }
       return;
     }
     if (pressed.pointer !== event.pointerId) return;

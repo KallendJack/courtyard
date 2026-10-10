@@ -141,14 +141,11 @@ export const listenedIn = (page: Page) =>
   page.evaluate(() => localStorage.getItem("stand-in-speech-lang"));
 
 /** Each vibration the page has asked the phone for, in milliseconds, in order. */
-const buzzed = (page: Page) =>
+export const vibrations = (page: Page) =>
   page.evaluate((): unknown[] => {
     const kept: unknown = JSON.parse(localStorage.getItem("stand-in-buzzes") ?? "[]");
     return Array.isArray(kept) ? kept : [];
   });
 
 /** How many times the page has asked the phone to vibrate. */
-export const buzzes = async (page: Page) => (await buzzed(page)).length;
-
-/** The last vibration the page asked the phone for. */
-export const lastBuzz = async (page: Page) => (await buzzed(page)).at(-1);
+export const buzzes = async (page: Page) => (await vibrations(page)).length;
