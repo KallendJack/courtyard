@@ -335,8 +335,8 @@ export default function HandheldFrame(props: {
 
 /**
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
- * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). Tapping the open one again, or holding it, shows its recent
- * sessions.
+ * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). Tapping the
+ * open one again, or holding it, shows its recent sessions.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
