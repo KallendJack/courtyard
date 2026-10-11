@@ -184,6 +184,42 @@ const pickedCommand = (rest: readonly string[]) => {
   return at === 0 || at === rest.length ? undefined : ["pnpm", ...rest.slice(at)];
 };
 
+/**
+ * The package scripts that build or test, which wait their turn in the builds queue (#281). The
+ * others (`check`, `typecheck`) are light enough to run at once.
+ */
+const BUILD_SCRIPTS = new Set(["test", "build", "e2e", "verify"]);
+
+/** Whether a command's words, after any runner, start one of the test tools that build or test. */
+const startsBuildTool = (words: readonly string[]) => {
+  const [tool, mode] = words;
+  return tool === "vitest" || (tool === "playwright" && mode === "test");
+};
+
+/**
+ * Whether a command is a heavy check, which waits its turn in the builds queue (#281): one of the
+ * package scripts that build or test (`pnpm verify`, `pnpm run test`, `npm test`, in any packages
+ * pnpm's workspace options pick), or a test tool run directly (`vitest`, `playwright test`, run
+ * bare or by `pnpm`, `pnpm exec`, `npx`). Anything else, and anything that can't be read as one
+ * command, is light.
+ */
+export const isBuild = (command: string) => {
+  const read = wordsOf(command);
+  if (!read.ok) return false;
+  const [runner, ...rest] = read.value;
+  if (runner === "npm") {
+    const [first, second] = rest;
+    return first === "test" || (first === "run" && BUILD_SCRIPTS.has(second ?? ""));
+  }
+  if (runner === "npx") return startsBuildTool(rest);
+  if (runner !== "pnpm") return startsBuildTool(read.value);
+  const picked = pickedCommand(rest)?.slice(1) ?? rest;
+  const [first, ...after] = picked;
+  if (first === "exec") return startsBuildTool(after);
+  if (first === "run") return BUILD_SCRIPTS.has(after[0] ?? "");
+  return BUILD_SCRIPTS.has(first ?? "") || startsBuildTool(picked);
+};
+
 /** Git's commands that only look. */
 const GIT_LOOKS = [
   "status",

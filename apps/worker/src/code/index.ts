@@ -6,9 +6,10 @@ import type { GitHub, GitHubProblem } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
-export { allowlistFor, type CommandRule } from "./allowlist.ts";
+export { allowlistFor, type CommandRule, isBuild } from "./allowlist.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -238,6 +239,8 @@ export const createCode = (options: {
   commandEnv: () => Promise<CommandEnv>;
   /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
   pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close" | "deleteBranch">;
+  /** How many heavy checks code sessions may run at once across the worker (#281). */
+  buildsAtOnce: number;
 }) => {
   const { pullRequests } = options;
   /** The repository a code workspace's remote is on GitHub, or why there's none to ask. */
@@ -285,6 +288,9 @@ export const createCode = (options: {
 
     /** Which code sessions are running, and which wait for one to end. */
     slots: createCodeSlots(CODE_SESSIONS_AT_ONCE),
+
+    /** The builds queue (#281): which heavy checks run, and which wait for one to end. */
+    builds: createBuildsQueue(options.buildsAtOnce),
 
     /**
      * What a session's commands get on top of the environment they run in, so its git and gh, and

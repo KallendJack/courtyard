@@ -118,8 +118,9 @@ const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
 const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill"];
 /**
  * How long Claude Code waits on the worker's say in a code session, which may be an approval the
- * owner answers in the morning (#171): the longest a timer can wait (about 24 days), so in practice
- * no limit. Only a stop ends the wait sooner.
+ * owner answers in the morning (#171), or a heavy check's turn in the builds queue (#281): the
+ * longest a timer can wait (about 24 days), so in practice no limit. Only a stop ends the wait
+ * sooner.
  */
 const APPROVAL_WAIT_SECONDS = 2_147_483;
 /** The tools a turn with web search gets as well (ADR 0019). */
@@ -762,6 +763,22 @@ const askWorker = async (
   }
 };
 
+/**
+ * Checked after every command in a code session, however it ended: the worker hears it has ended,
+ * so a heavy check frees its place in the builds queue (#281).
+ */
+const noteEnded =
+  (code: CodeTurn): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") {
+      return {};
+    }
+    if (input.tool_name !== "Bash") return {};
+    const bash = BashInput.safeParse(input.tool_input);
+    if (bash.success) code.ran(bash.data.command);
+    return {};
+  };
+
 /** What WebSearch gives back: its hits, among commentary. Anything else in it is ignored. */
 const WebSearchOutput = z.object({
   results: z.array(
@@ -1140,7 +1157,7 @@ export const createClaudeProvider = (
                     : { timeout: APPROVAL_WAIT_SECONDS }),
                 },
               ],
-              ...(web === null && connections.length === 0
+              ...(web === null && connections.length === 0 && code === null
                 ? {}
                 : {
                     PostToolUse: [
@@ -1148,13 +1165,23 @@ export const createClaudeProvider = (
                         hooks: [
                           ...(web === null ? [] : [noteResults(web)]),
                           ...(connections.length === 0 ? [] : [handResults(connections)]),
+                          ...(code === null ? [] : [noteEnded(code)]),
                         ],
                       },
                     ],
                   }),
-              ...(connections.length === 0
+              ...(connections.length === 0 && code === null
                 ? {}
-                : { PostToolUseFailure: [{ hooks: [handResults(connections)] }] }),
+                : {
+                    PostToolUseFailure: [
+                      {
+                        hooks: [
+                          ...(connections.length === 0 ? [] : [handResults(connections)]),
+                          ...(code === null ? [] : [noteEnded(code)]),
+                        ],
+                      },
+                    ],
+                  }),
             },
             includePartialMessages: true,
             // A code turn runs until Claude finishes, the owner stops it, or a usage limit.

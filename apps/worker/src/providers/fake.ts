@@ -386,9 +386,12 @@ const scriptedCoding = async (code: CodeTurn, message: string, report: TurnInput
       else await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
     } else if (command !== undefined) {
       const allowed = await code.run(command, why);
-      said += allowed.ok
-        ? await runIn(code, command)
-        : `Couldn't run ${command}: ${allowed.error} `;
+      if (allowed.ok) {
+        said += await runIn(code, command);
+        code.ran(command);
+      } else {
+        said += `Couldn't run ${command}: ${allowed.error} `;
+      }
     }
   }
   return said;

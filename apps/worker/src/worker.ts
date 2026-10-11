@@ -200,6 +200,7 @@ export const createWorker = (options: {
     liveCopy,
     updateTask,
     githubClientId,
+    buildsAtOnce,
   } = settings.value;
   const now = options.now ?? Date.now;
   const background = options.background ?? (() => {});
@@ -247,6 +248,7 @@ export const createWorker = (options: {
     dataDir,
     commandEnv: github.commandEnv,
     pullRequests: github,
+    buildsAtOnce,
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
   const sessions = createSessions({
