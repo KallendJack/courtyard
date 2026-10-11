@@ -86,6 +86,29 @@ function ShownImages(props: { sessionId: SessionId; images: readonly ShownImage[
   );
 }
 
+/** What a model did between two pieces of what it wrote, a line each. */
+function Activities(props: { activities: readonly Activity[] }) {
+  return (
+    <ul
+      aria-label="What the model did"
+      className="space-y-0.5 text-xs wrap-anywhere text-muted-foreground"
+    >
+      {props.activities.map((activity, index) => (
+        <li
+          // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
+          key={index}
+          className={classes(
+            activity.kind === "check-failed" && "flex items-center gap-1 text-destructive-text",
+          )}
+        >
+          {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
+          {describeActivity(activity)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** A failure's reason in plain words. */
 export const describeFailure = (reason: FailureReason) => {
   switch (reason.kind) {
@@ -225,40 +248,26 @@ export const TurnView = memo(function TurnView(props: {
       )}
       {/* A turn the worker started for a failed check opens with the check, in its activity. */}
       {!turn.fixesChecks && <OwnerMessage sessionId={sessionId} turn={turn} />}
-      {turn.activities.length > 0 && (
-        <ul
-          aria-label="What the model did"
-          className="space-y-0.5 text-xs wrap-anywhere text-muted-foreground"
-        >
-          {turn.activities.map((activity, index) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
-              key={index}
-              className={classes(
-                activity.kind === "check-failed" && "flex items-center gap-1 text-destructive-text",
-              )}
-            >
-              {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
-              {describeActivity(activity)}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* What it wrote, each piece between the activities it's about (#200). */}
+      {turn.parts.map((part, index) => {
+        // Only the last piece can still be arriving.
+        const running = turn.state.kind === "running" && index === turn.parts.length - 1;
+        return part.kind === "activities" ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts only ever grow, in order
+          <Activities key={index} activities={part.activities} />
+        ) : (
+          // Busy while it streams, so a screen reader reads each piece once, when it's whole.
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts only ever grow, in order
+          <div key={index} aria-live="polite" aria-busy={running}>
+            <Answer text={part.text} running={running} replayed={part.replayed} />
+          </div>
+        );
+      })}
       {turn.queued && turn.state.kind === "running" && (
         <TurnNote>
           Waiting: {CODE_SESSIONS_AT_ONCE} code sessions are running already. This starts as soon as
           one of them ends.
         </TurnNote>
-      )}
-      {turn.answer !== "" && (
-        // Busy while it streams, so a screen reader reads the answer once, when it's whole.
-        <div aria-live="polite" aria-busy={turn.state.kind === "running"}>
-          <Answer
-            text={turn.answer}
-            running={turn.state.kind === "running"}
-            replayed={turn.replayed}
-          />
-        </div>
       )}
       {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
       {/* While it runs, what it's doing now (#179); an approval it waits on says so itself. */}

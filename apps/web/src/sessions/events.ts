@@ -61,6 +61,50 @@ export type ShownImage = {
   readonly image: PhotoAttachment;
 };
 
+/**
+ * A piece of a turn's answer: text the model wrote, or what it did next (such as files it read),
+ * up to the text after it.
+ */
+export type AnswerPart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      /**
+       * How much of the text was replayed from the event log (opening the session, or
+       * reconnecting) rather than streamed live. It shows at once; only the rest is revealed.
+       */
+      readonly replayed: number;
+    }
+  | { readonly kind: "activities"; readonly activities: readonly Activity[] };
+
+/** Text after a turn's parts so far: added to the text it's writing, or a new piece. */
+const withText = (
+  parts: readonly AnswerPart[],
+  text: string,
+  replayed: boolean,
+): readonly AnswerPart[] => {
+  const last = parts.at(-1);
+  if (last?.kind === "text") {
+    const whole = last.text + text;
+    return [
+      ...parts.slice(0, -1),
+      { kind: "text", text: whole, replayed: replayed ? whole.length : last.replayed },
+    ];
+  }
+  // A new piece starts at its first words, not at the break before them.
+  const start = text.trimStart();
+  if (start === "") return parts;
+  return [...parts, { kind: "text", text: start, replayed: replayed ? start.length : 0 }];
+};
+
+/** An activity after a turn's parts so far: with the ones just before it, or after the text. */
+const withActivity = (parts: readonly AnswerPart[], activity: Activity): readonly AnswerPart[] => {
+  const last = parts.at(-1);
+  return last?.kind === "activities"
+    ? [...parts.slice(0, -1), { kind: "activities", activities: [...last.activities, activity] }]
+    : [...parts, { kind: "activities", activities: [activity] }];
+};
+
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -74,14 +118,10 @@ export type Turn = {
   readonly attachments: readonly Attachment[];
   /** Whether it went to another model than the turn before it, by a pick or by Carry on. */
   readonly modelChanged: boolean;
+  /** Everything the model wrote, each piece between its parts a paragraph of its own. */
   readonly answer: string;
-  /**
-   * How much of the answer was replayed from the event log (opening the session, or reconnecting)
-   * rather than streamed live. It shows at once; only the rest is revealed.
-   */
-  readonly replayed: number;
-  /** What the model did along the way, such as files it read. */
-  readonly activities: readonly Activity[];
+  /** What the model wrote and did, in order: its text between its parts, as Claude shows it (#200). */
+  readonly parts: readonly AnswerPart[];
   /** The saves it made, in order. */
   readonly notes: readonly Note[];
   /** The documents saved from it, in order. */
@@ -215,8 +255,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               before !== undefined &&
               (before.provider !== event.model.provider || before.model !== event.model.model),
             answer: "",
-            replayed: 0,
-            activities: [],
+            parts: [],
             notes: [],
             documents: [],
             things: [],
@@ -259,11 +298,12 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, {
         seq,
         change: (turn) => {
-          const answer = turn.answer + event.text;
+          // Text after an activity is a paragraph of its own in the answer too, as copied or saved.
+          const after = turn.parts.at(-1)?.kind === "activities" && !/(^|\n\n)$/.test(turn.answer);
           return {
             ...turn,
-            answer,
-            replayed: replayed ? answer.length : turn.replayed,
+            answer: `${turn.answer}${after ? "\n\n" : ""}${event.text}`,
+            parts: withText(turn.parts, event.text, replayed),
             doing: WRITING,
           };
         },
@@ -273,7 +313,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({
           ...turn,
-          activities: [...turn.activities, event.activity],
+          parts: withActivity(turn.parts, event.activity),
           doing: { kind: "activity", activity: event.activity },
         }),
       });

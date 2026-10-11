@@ -135,6 +135,26 @@ const markdownTable = (rows: readonly (readonly string[])[]) => {
 const column = (table: Locator, index: number) =>
   table.locator(`tbody tr td:nth-child(${index + 1})`).allTextContents();
 
+/** A dozen rackets' prices: rows enough that their table takes a few seconds to stream. */
+const RACKET_PRICES = [139, 95, 149, 110, 120, 99, 160, 105, 130, 115, 145, 125];
+
+/** Starts a session answered with a table of `RACKET_PRICES`: its answer, table and Price heading. */
+const askForRackets = async (page: Page) => {
+  await page.goto("/workspaces/garage-gym");
+  await page
+    .getByLabel("Message")
+    .fill(
+      `Rackets:\n\n${markdownTable([
+        ["Racket", "Price"],
+        ...RACKET_PRICES.map((price, index) => [`Racket number ${index + 1}`, `£${price}`]),
+      ])}\n\nThat's the lot.`,
+    );
+  await page.getByRole("button", { name: "Start" }).click();
+  const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
+  const table = answer.getByRole("table");
+  return { answer, table, price: table.getByRole("columnheader", { name: "Price" }) };
+};
+
 const RACKETS = [
   ["Racket", "Price", "Weight", "Feel"],
   ["Bullpadel Indiga CTR", "£139", "365 g", "Control, kind to the elbow"],
@@ -206,28 +226,30 @@ test.describe("tables", () => {
   test("a table sorted while its answer streams keeps its sort as rows arrive", async ({
     page,
   }) => {
-    const prices = [139, 95, 149, 110, 120, 99, 160, 105, 130, 115, 145, 125];
-    await page.goto("/workspaces/garage-gym");
-    await page
-      .getByLabel("Message")
-      .fill(
-        `Rackets:\n\n${markdownTable([
-          ["Racket", "Price"],
-          ...prices.map((price, index) => [`Racket number ${index + 1}`, `£${price}`]),
-        ])}\n\nThat's the lot.`,
-      );
-    await page.getByRole("button", { name: "Start" }).click();
-    const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
-    const table = answer.getByRole("table");
-    const price = table.getByRole("columnheader", { name: "Price" });
+    const { answer, table, price } = await askForRackets(page);
 
     await price.getByRole("button").click();
     await expect(answer).toHaveAttribute("aria-busy", "true");
     await expect(answer).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
     await expect(price).toHaveAttribute("aria-sort", "ascending");
     expect(await column(table, 1)).toEqual(
-      prices.toSorted((a, b) => a - b).map((value) => `£${value}`),
+      RACKET_PRICES.toSorted((a, b) => a - b).map((value) => `£${value}`),
     );
+  });
+
+  test("a tap on a heading lands while rows arrive, since the page holds still under a finger", async ({
+    page,
+  }) => {
+    const { answer, table, price } = await askForRackets(page);
+    await expect(table.locator("tbody tr").first()).toBeVisible();
+
+    // Held down a while, as a finger is, so more rows arrive under it: the page following the
+    // answer down would move the heading out from under the finger, and the tap land on a row.
+    await price.getByRole("button").click({ delay: 1_000 });
+
+    await expect(price).toHaveAttribute("aria-sort", "ascending");
+    await expect(answer).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+    await expect(price).toHaveAttribute("aria-sort", "ascending");
   });
 });
 

@@ -41,6 +41,36 @@ test("the owner sees which files the model read", async ({ page }) => {
   );
 });
 
+test("what the model writes between what it does shows apart, between its activities, live and on reopening", async ({
+  page,
+}) => {
+  await page.goto("/workspaces/garage-gym");
+  await page
+    .getByLabel("Message")
+    .fill("write: Now the contract.\nread file: docs/notes.md\nwrite: Good, it's imported.");
+  await page.getByRole("button", { name: "Start" }).click();
+  const session = page.getByRole("list", { name: "Session" });
+
+  const inOrder = async () => {
+    // Each piece of text a paragraph of its own, never run together with the next.
+    const before = session.getByText("Now the contract.", { exact: true });
+    const did = session.getByRole("list", { name: "What the model did" });
+    const after = session.getByText("Good, it's imported.", { exact: true });
+    await expect(before).toBeVisible();
+    await expect(did).toHaveText("Read docs/notes.md");
+    await expect(after).toBeVisible();
+    const [first, middle, last] = await Promise.all(
+      [before, did, after].map(async (each) => (await each.boundingBox())?.y ?? Number.NaN),
+    );
+    expect(first).toBeLessThan(middle ?? Number.NaN);
+    expect(middle).toBeLessThan(last ?? Number.NaN);
+  };
+
+  await inOrder();
+  await page.reload();
+  await inOrder();
+});
+
 test("a new session takes the model's title once its first answer is in", async ({ page }) => {
   // A message of its own, so the test can run again on the same worker.
   const stamp = Date.now();

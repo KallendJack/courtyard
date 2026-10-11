@@ -66,20 +66,6 @@ export const modelName = ({ model }: ModelChoice) =>
   model === undefined ? "No models" : model.name;
 
 /**
- * A word under a model's name in the Handheld frame's Model row (#194), to tell models apart: its
- * usage limit if it's at one, "default" for its provider's default, else whose it is ("Claude"),
- * unless that only says its name again.
- */
-export const modelWord = (model: OfferedModel) =>
-  model.limit !== undefined
-    ? limitLabel(model.limit)
-    : model.followsDefault
-      ? "default"
-      : model.providerLabel === model.name
-        ? ""
-        : model.providerLabel;
-
-/**
  * The model picker, and beside it the effort picker for a model that takes levels of effort:
  * "Default effort" first, then each level.
  */

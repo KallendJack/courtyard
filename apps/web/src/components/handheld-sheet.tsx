@@ -7,7 +7,7 @@ import { useDialog } from "./use-dialog.ts";
 const SWIPE = 64;
 
 /**
- * A sheet in the Handheld frame (#194, Paper board Handheld · 09), sized to the screen and never
+ * A sheet in the Handheld frame (#194, Paper boards Handheld · 09, 28, 29), sized to the screen and never
  * partly off it: on a tablet or the unfolded Fold it comes in from the right edge, beside the right
  * rail, over the page, which dims; on a phone or the folded Fold it rises from the bottom, up to
  * most of the screen. What's in it scrolls inside it, and `foot` stays at its foot. Tapping outside
@@ -17,21 +17,28 @@ const SWIPE = 64;
  */
 export function HandheldSheet(props: {
   title: string;
-  /** A word or two beside the title: whose skills they are. */
+  /** A word or two beside the title: the workspace whose skills or message they are. */
   aside?: string;
   open: boolean;
   onClose: () => void;
-  /** Kept at the sheet's foot, below what scrolls: the model row, in the thumb's reach. */
+  /**
+   * Kept at the sheet's foot, below what scrolls, in the thumb's reach: the model a message goes
+   * with, or its effort (#201).
+   */
   foot?: ReactNode;
   /**
-   * On a tablet, a sheet with only a little in it is only as tall as that, at the top or the foot
-   * of the screen, by the button that opened it. Without, it runs from the top to the bottom bar.
+   * On a tablet, a sheet with only a little in it is only as tall as that, at the top of the
+   * screen, by the button that opened it. Without, it runs from the top to the bottom bar.
    */
-  fits?: "top" | "bottom";
+  fits?: "top";
   children?: ReactNode;
 }) {
   const side = useLayout() === "tablet" ? "right" : "bottom";
-  const dialog = useDialog(props.open, props.onClose);
+  // Closed because another sheet opens in its place (Skills' Change, #201), it's already closing:
+  // the browser saying so a moment later mustn't close the one that opened.
+  const dialog = useDialog(props.open, () => {
+    if (props.open) props.onClose();
+  });
   const body = useRef<HTMLDivElement>(null);
   /** Where a touch on the sheet started, and whether what scrolls was at its top then. */
   const touch = useRef<{ x: number; y: number; atTop: boolean }>(undefined);

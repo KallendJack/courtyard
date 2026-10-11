@@ -141,12 +141,22 @@ const scriptedDocuments = (message: string): Record<string, string>[] => {
 
 const READ_FILE = /^read file: (\S+)$/i;
 
-/** The workspace's files a message scripts reading, one per line: "read file: docs/notes.md". */
-const scriptedReads = (message: string) =>
-  message.split("\n").flatMap((line) => {
-    const [, path] = READ_FILE.exec(line.trim()) ?? [];
-    return path === undefined ? [] : [path];
-  });
+const WRITE = /^write: (.+)$/i;
+
+/**
+ * What a message scripts the fake writing and reading on its way to its answer, one per line, in
+ * order: "write: Now the contract." writes that, as a model writes between what it does, and "read
+ * file: docs/notes.md" reads one of the workspace's files.
+ */
+const scriptedWork = (message: string) =>
+  message
+    .split("\n")
+    .flatMap((line): ({ kind: "write"; text: string } | { kind: "read"; path: string })[] => {
+      const [, text] = WRITE.exec(line.trim()) ?? [];
+      if (text !== undefined) return [{ kind: "write", text }];
+      const [, path] = READ_FILE.exec(line.trim()) ?? [];
+      return path === undefined ? [] : [{ kind: "read", path }];
+    });
 
 const THING = /^thing (\S+?): *(.*)$/i;
 const THING_FIELD =
@@ -448,7 +458,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * `scriptedSkillLoads`) when it offers the use skill tool, and "suggest replies: …" suggests
  * replies (see `scriptedReplies`) when it offers that tool, and "save document" or "update
  * document …" saves a document (see `scriptedDocuments`) when it offers the document tool, after
- * any "read file: …" it acts out reading (see `scriptedReads`), and "thing add: …" or "thing T2:
+ * any "read file: …" it acts out reading, between any "write: …" it writes (see `scriptedWork`), and "thing add: …" or "thing T2:
  * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
@@ -519,7 +529,11 @@ export const createFakeProvider = (
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
-      for (const path of scriptedReads(last)) await report({ kind: "read-file", path });
+      for (const work of scriptedWork(last)) {
+        // Each piece it writes a paragraph, as a model's message between what it does is.
+        if (work.kind === "write") await emit(`${work.text}\n\n`);
+        else await report({ kind: "read-file", path: work.path });
+      }
       const web = framing.webSearch === null ? undefined : scriptedWeb(last);
       for (const activity of web?.activities ?? []) await report(activity);
       for (const [name, scripted] of SCRIPTED_CALLS) {

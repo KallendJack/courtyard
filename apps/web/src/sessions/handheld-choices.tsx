@@ -1,62 +1,76 @@
 import { Effort, type SkillName, type SkillSummary } from "@courtyard/contract";
 import { HandheldSheet } from "@/components/handheld-sheet";
-import { SheetChoices, SheetSkills } from "@/components/sheet-choices";
-import { type ModelChoice, modelKey, modelWord } from "./model-pickers.tsx";
+import {
+  SheetChoices,
+  type SheetModel,
+  SheetModelLine,
+  SheetModels,
+  SheetSkills,
+} from "@/components/sheet-choices";
+import { limitLabel } from "./limits.ts";
+import { type ModelChoice, modelKey } from "./model-pickers.tsx";
 import type { OfferedModel } from "./models.ts";
 
 /** The effort row's value for a model's default: never a level's name, which can't be empty. */
 const DEFAULT = "";
 
-/**
- * The model a message goes with, and its effort, as rows of tiles at a Handheld sheet's foot
- * (#194): each model by name with a word under it, then "Default" (its usual level under it) and
- * each level the model takes.
- */
-function ModelRows(props: { models: readonly OfferedModel[]; choice: ModelChoice }) {
-  const { choice } = props;
-  const { model } = choice;
-  return (
-    <>
-      <SheetChoices
-        label="Model"
-        options={props.models.map((each) => ({
-          value: modelKey(each.ref),
-          label: each.name,
-          word: modelWord(each),
-        }))}
-        value={model === undefined ? "" : modelKey(model.ref)}
-        onChange={choice.pickModel}
-      />
-      {model !== undefined && model.efforts.length > 0 && (
-        <SheetChoices
-          label="Effort"
-          options={[
-            {
-              value: DEFAULT,
-              label: "Default",
-              word: model.efforts.find((level) => level.id === model.defaultEffort)?.label ?? "",
-            },
-            ...model.efforts.map((level) => ({ value: level.id, label: level.label })),
-          ]}
-          value={choice.effort ?? DEFAULT}
-          onChange={(value) => {
-            const level = Effort.safeParse(value);
-            choice.pickEffort(level.success ? level.data : undefined);
-          }}
-        />
-      )}
-    </>
-  );
-}
+/** The levels whose names don't fit a tile in the effort row, as they're shortened there. */
+const SHORT: Partial<Record<string, string>> = { medium: "Med", xhigh: "XHigh", minimal: "Min" };
 
 /**
- * What the Handheld frame's Skills and Model buttons open for a message box docked in it (#194):
- * Skills, a sheet of the workspace's skills with the model and effort at its foot; Model, the
- * model and effort alone. Loaded only in the frame.
+ * The models on offer as the Model sheet lists them (#201): by provider, each once. A provider's
+ * default isn't a row of its own: the model it resolves to says it's the default, and picking that
+ * row picks the default. `same` gives the row a model shows as, which differs only for that one.
+ */
+const listed = (models: readonly OfferedModel[]) => {
+  const providers = new Map<string, { name: string; models: SheetModel<string>[] }>();
+  const same = new Map<string, string>();
+  const twinOf = (model: OfferedModel) =>
+    models.find(
+      (other) =>
+        other.ref.provider === model.ref.provider &&
+        !other.followsDefault &&
+        other.name === model.name,
+    );
+  const twins = new Set(models.filter((m) => m.followsDefault).map(twinOf));
+  for (const model of models) {
+    if (twins.has(model)) continue;
+    const key = modelKey(model.ref);
+    const twin = model.followsDefault ? twinOf(model) : undefined;
+    if (twin !== undefined) same.set(modelKey(twin.ref), key);
+    const notes = [
+      ...(model.followsDefault ? [`${model.providerLabel}'s default`] : []),
+      ...(model.limit === undefined ? [] : [limitLabel(model.limit)]),
+    ];
+    const provider = providers.get(model.ref.provider) ?? { name: model.providerLabel, models: [] };
+    provider.models.push({
+      value: key,
+      name: model.name,
+      ...(notes.length === 0 ? {} : { note: notes.join(" · ") }),
+    });
+    providers.set(model.ref.provider, provider);
+  }
+  return { providers: [...providers.values()], same };
+};
+
+/** The model's provider and its effort, under its name at the Skills sheet's foot. */
+const detail = ({ model, effort }: ModelChoice) => {
+  if (model === undefined || model.efforts.length === 0) return model?.providerLabel ?? "";
+  const level = model.efforts.find((known) => known.id === effort)?.label;
+  return `${model.providerLabel} · ${level === undefined ? "default" : level.toLowerCase()} effort`;
+};
+
+/**
+ * What the Handheld frame's Skills and Model buttons open for a message box docked in it (#194,
+ * #201): Skills, a sheet of the workspace's skills, with the model at its foot and Change, which
+ * opens Model; Model, the models by provider, with the effort at its foot. Loaded only in the
+ * frame.
  */
 export default function HandheldChoices(props: {
   choosing: "model" | "skill" | undefined;
   close: () => void;
+  /** Opens the Model sheet in place of the Skills sheet. */
+  changeModel: () => void;
   models: readonly OfferedModel[];
   choice: ModelChoice;
   /** The workspace's name and the skills its picker lists, when it has any. */
@@ -65,27 +79,72 @@ export default function HandheldChoices(props: {
   skill: SkillName | undefined;
   pick: (name: SkillName) => void;
 }) {
-  const rows = <ModelRows models={props.models} choice={props.choice} />;
+  const { choice } = props;
+  const { model } = choice;
+  const { providers, same } = listed(props.models);
+  const chosen = model === undefined ? undefined : modelKey(model.ref);
+  const aside = props.skills === undefined ? {} : { aside: props.skills.workspaceName };
   return (
     <>
       {props.skills !== undefined && (
         <HandheldSheet
           title="Skills"
-          aside={props.skills.workspaceName}
+          {...aside}
           open={props.choosing === "skill"}
           onClose={props.close}
-          foot={rows}
+          {...(model === undefined
+            ? {}
+            : {
+                foot: (
+                  <SheetModelLine
+                    name={model.name}
+                    detail={detail(choice)}
+                    change={props.changeModel}
+                  />
+                ),
+              })}
         >
           <SheetSkills skills={props.skills.list} picked={props.skill} pick={props.pick} />
         </HandheldSheet>
       )}
       <HandheldSheet
         title="Model"
+        {...aside}
         open={props.choosing === "model"}
         onClose={props.close}
-        fits="bottom"
-        foot={rows}
-      />
+        {...(model === undefined || model.efforts.length === 0
+          ? {}
+          : {
+              foot: (
+                <SheetChoices
+                  label="Effort"
+                  options={[
+                    { value: DEFAULT, label: "Default" },
+                    ...model.efforts.map((level) => ({
+                      value: level.id,
+                      label: SHORT[level.id] ?? level.label,
+                      name: level.label,
+                    })),
+                  ]}
+                  value={choice.effort ?? DEFAULT}
+                  onChange={(value) => {
+                    const level = Effort.safeParse(value);
+                    choice.pickEffort(level.success ? level.data : undefined);
+                  }}
+                />
+              ),
+            })}
+      >
+        {providers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No models available</p>
+        ) : (
+          <SheetModels
+            providers={providers}
+            value={chosen === undefined ? undefined : (same.get(chosen) ?? chosen)}
+            onChange={choice.pickModel}
+          />
+        )}
+      </HandheldSheet>
     </>
   );
 }
