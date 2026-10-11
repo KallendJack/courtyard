@@ -24,10 +24,12 @@ import { pageRead, turnSources } from "../sources/index.ts";
 import { workspaceFiles } from "../workspace-files/index.ts";
 import {
   type CourtyardTool,
+  createStatusKeeper,
   jsonSchemaOf,
   type Provider,
   photosOf,
   type SignIn,
+  type StatusCheck,
   type ToolReply,
   type TurnInput,
 } from "./index.ts";
@@ -247,12 +249,16 @@ type ThreadListener = {
   readonly ended: () => void;
 };
 
-type StartFailure = "missing" | "not-started";
+/** Why Codex couldn't be started: not installed, failed to start, or no answer in time. */
+type StartFailure = "missing" | "not-started" | "no-answer";
 
 /** How long Codex has to answer a request before it counts as not answering. */
 const REQUEST_TIMEOUT_MS = 15_000;
-/** How long a status answer is reused, so listing providers doesn't ask Codex each time. */
-const STATUS_TTL_MS = 60_000;
+/**
+ * How long Codex has to answer as it starts: longer, since after the worker starts everything does
+ * at once (#282).
+ */
+const START_TIMEOUT_MS = 30_000;
 /** The longest a stopped turn waits for Codex to finish before moving on. */
 const WIND_DOWN_MS = 2000;
 
@@ -266,6 +272,8 @@ const connect = async (options: {
   startAppServer: StartAppServer;
   codexHome: string;
   requestTimeoutMs: number;
+  /** How long its first answer, to `initialize`, may take. */
+  startTimeoutMs: number;
 }): Promise<Result<Connection, StartFailure>> => {
   const pending = new Map<number, (answer: Result<unknown, RequestFailure>) => void>();
   const listeners = new Map<string, ThreadListener>();
@@ -344,14 +352,14 @@ const connect = async (options: {
   });
   if (!appServer.ok) return appServer;
 
-  const request = (method: string, params: unknown) =>
+  const request = (method: string, params: unknown, timeoutMs = options.requestTimeoutMs) =>
     new Promise<Result<unknown, RequestFailure>>((resolve) => {
       if (!alive) return resolve(err({ kind: "ended" }));
       const requestId = nextId++;
       const timer = setTimeout(() => {
         pending.delete(requestId);
         resolve(err({ kind: "timed-out" }));
-      }, options.requestTimeoutMs);
+      }, timeoutMs);
       pending.set(requestId, (answer) => {
         clearTimeout(timer);
         resolve(answer);
@@ -359,15 +367,19 @@ const connect = async (options: {
       send({ id: requestId, method, params });
     });
 
-  const started = await request("initialize", {
-    clientInfo: { name: "courtyard", title: "Courtyard", version: "0.0.0" },
-    // The fields Courtyard uses (a thread's base instructions, an ephemeral thread) are marked
-    // experimental.
-    capabilities: { experimentalApi: true, requestAttestation: false },
-  });
+  const started = await request(
+    "initialize",
+    {
+      clientInfo: { name: "courtyard", title: "Courtyard", version: "0.0.0" },
+      // The fields Courtyard uses (a thread's base instructions, an ephemeral thread) are marked
+      // experimental.
+      capabilities: { experimentalApi: true, requestAttestation: false },
+    },
+    options.startTimeoutMs,
+  );
   if (!started.ok) {
     appServer.value.stop();
-    return err("not-started");
+    return err(started.error.kind === "timed-out" ? "no-answer" : "not-started");
   }
   send({ method: "initialized" });
 
@@ -464,6 +476,7 @@ const NEEDS_UPDATING = "Codex needs updating.";
 const START_FAILURES: Record<StartFailure, string> = {
   missing: "Codex isn't installed on the worker machine. Run `pnpm install` in Courtyard's folder.",
   "not-started": "Codex couldn't start on the worker machine, or didn't answer.",
+  "no-answer": "Codex didn't answer in time. The worker machine may be busy.",
 };
 const NOT_UNDERSTOOD = "Codex answered in a way Courtyard doesn't understand.";
 
@@ -852,21 +865,17 @@ export const createCodexProvider = (options: {
   startAppServer?: StartAppServer;
   now?: () => number;
   requestTimeoutMs?: number;
+  /** How long Codex has to answer as it starts, when everything may be starting at once (#282). */
+  startTimeoutMs?: number;
 }): Provider => {
   const startAppServer = options.startAppServer ?? realStartAppServer;
   const codexHome = join(options.dataDir, "codex");
   const now = options.now ?? Date.now;
   const requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
+  const startTimeoutMs = options.startTimeoutMs ?? START_TIMEOUT_MS;
 
-  let cached: { at: number; status: ProviderStatus } | undefined;
-  /** A check already running, which simultaneous callers share, and when the sign-in last changed. */
-  let checking: { since: number; status: Promise<ProviderStatus> } | undefined;
-  /** Counts changes to the sign-in, so a check that started before one is never kept. */
-  let signInChanges = 0;
-  const signInChanged = () => {
-    signInChanges += 1;
-    cached = undefined;
-  };
+  /** The sign-in changed, so nothing known of Codex's status before it is kept. */
+  const signInChanged = () => keptStatus.forget();
   /** The sign-in Courtyard started, which lives in the app-server running now. */
   let login: Login = { kind: "none" };
 
@@ -886,7 +895,7 @@ export const createCodexProvider = (options: {
   let current: Promise<Result<Connection, StartFailure>> | undefined;
   const connection = () => {
     if (current === undefined) {
-      const starting = connect({ startAppServer, codexHome, requestTimeoutMs });
+      const starting = connect({ startAppServer, codexHome, requestTimeoutMs, startTimeoutMs });
       current = starting;
       void starting.then((started) => {
         const forget = () => {
@@ -1001,18 +1010,25 @@ export const createCodexProvider = (options: {
       }),
   };
 
-  const checkStatus = async (): Promise<ProviderStatus> => {
-    const unavailable = (reason: string): ProviderStatus => ({
-      id,
-      label: LABEL,
-      available: false,
-      reason,
-      ...(reason === SIGNED_OUT ? { signedOut: true } : {}),
+  const checkStatus = async (): Promise<StatusCheck> => {
+    /** Codex can't be used: for a reason that holds, or with no answer in time, for now (#282). */
+    const unavailable = (reason: string, noAnswer = false): StatusCheck => ({
+      kind: noAnswer ? "no-answer" : "answered",
+      status: {
+        id,
+        label: LABEL,
+        available: false,
+        reason,
+        ...(reason === SIGNED_OUT ? { signedOut: true } : {}),
+      },
     });
     const started = await connection();
-    if (!started.ok) return unavailable(START_FAILURES[started.error]);
+    if (!started.ok) {
+      return unavailable(START_FAILURES[started.error], started.error === "no-answer");
+    }
     const codex = started.value;
-    const failedWith = (failure: RequestFailure) => unavailable(failureForRequest(failure).message);
+    const failedWith = (failure: RequestFailure) =>
+      unavailable(failureForRequest(failure).message, failure.kind === "timed-out");
 
     const account = await codex.request("account/read", { refreshToken: false });
     if (!account.ok) return failedWith(account.error);
@@ -1035,7 +1051,7 @@ export const createCodexProvider = (options: {
     const limits = await codex.request("account/rateLimits/read", undefined);
     const resetAt = limits.ok ? resetTimeFrom(limits.value) : undefined;
 
-    return {
+    const status: ProviderStatus = {
       id,
       label: LABEL,
       available: true,
@@ -1055,27 +1071,14 @@ export const createCodexProvider = (options: {
         }),
       capabilities: CAPABILITIES,
     };
+    return { kind: "answered", status };
   };
+  const keptStatus = createStatusKeeper({ check: checkStatus, now });
 
   return {
     id,
     capabilities: CAPABILITIES,
-
-    status: async () => {
-      if (cached && now() - cached.at < STATUS_TTL_MS) return cached.status;
-      // A check that started before the sign-in last changed may have read the old account.
-      if (checking?.since !== signInChanges) {
-        const check = { since: signInChanges, status: checkStatus() };
-        checking = check;
-        void check.status.finally(() => {
-          if (checking === check) checking = undefined;
-        });
-      }
-      const { since, status: checked } = checking;
-      const status = await checked;
-      if (since === signInChanges) cached = { at: now(), status };
-      return status;
-    },
+    status: keptStatus.status,
 
     runTurn: async (input) => {
       if (input.signal.aborted) return ok(null);
@@ -1128,6 +1131,8 @@ export const createCodexProvider = (options: {
       if (lost) return err({ kind: "unknown", message: "Courtyard couldn't keep Codex's answer." });
       switch (end.value.kind) {
         case "completed": {
+          // It proves Codex answers, so its status is good for a while longer (#282).
+          keptStatus.worked();
           // Codex gives no list of results, so its sources are the links its answer gives.
           const sources = usedWeb ? turnSources({ answer, read, searches: [] }) : [];
           if (sources.length > 0) await input.cite(sources);
@@ -1182,6 +1187,7 @@ export const createCodexProvider = (options: {
         case "failed":
           return err(await failedTurn(codex, end.value.error));
         case "completed":
+          keptStatus.worked();
           try {
             return answer === undefined
               ? err({ kind: "unknown", message: NOT_UNDERSTOOD })

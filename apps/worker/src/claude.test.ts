@@ -5,12 +5,13 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { Effort, ModelId, SkillName, type Source } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
 import type {
   Activity,
   CodeTurn,
+  Provider,
   ToolCall,
   ToolConnection,
   ToolContent,
@@ -89,8 +90,11 @@ const messageStart = (parent: string | null = null) => ({
 const success = { type: "result", subtype: "success", is_error: false, result: "" };
 
 /** Runs one turn and collects what it emitted and reported. */
-const runTurn = async (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {}) => {
-  const provider = createClaudeProvider({ claudeCode });
+const runTurn = (claudeCode: ClaudeCode, overrides: Partial<TurnInput> = {}) =>
+  turnOn(createClaudeProvider({ claudeCode }), overrides);
+
+/** Runs one turn on this provider, as `runTurn` does. */
+const turnOn = async (provider: Provider, overrides: Partial<TurnInput> = {}) => {
   const emitted: string[] = [];
   const activities: Activity[] = [];
   const sources: Source[] = [];
@@ -346,6 +350,129 @@ describe("Claude's status", () => {
     });
 
     expect((await createClaudeProvider({ claudeCode }).status()).available).toBe(true);
+  });
+});
+
+describe("Claude's status, when the worker machine is busy (#282)", () => {
+  type Check = ClaudeCode["check"];
+  const good: Check = async () => ({
+    account: { subscriptionType: "Claude Pro" },
+    models: [{ value: "sonnet", displayName: "Sonnet 5.5", description: "" }],
+  });
+  const signedOut: Check = async () => ({ account: {}, models: [] });
+  const noAnswer: Check = () => new Promise(() => {});
+
+  /**
+   * A Claude Code whose checks answer in this order (the last one again after that), whose turns
+   * finish, and a clock the test moves on.
+   */
+  const busyMachine = (...answers: Check[]) => {
+    let checks = 0;
+    let clock = 0;
+    const { claudeCode } = stubClaudeCode({
+      check: (signal) => {
+        const answer = answers[Math.min(checks, answers.length - 1)];
+        checks += 1;
+        if (answer === undefined) throw new Error("no answers scripted");
+        return answer(signal);
+      },
+      messages: [success],
+    });
+    const provider = createClaudeProvider({
+      claudeCode,
+      now: () => clock,
+      checkTimeouts: { firstMs: 1000, laterMs: 20 },
+    });
+    return {
+      provider,
+      checks: () => checks,
+      later: (ms: number) => {
+        clock += ms;
+      },
+    };
+  };
+
+  it("keeps the last good answer, with its models, when a check doesn't answer in time", async () => {
+    const machine = busyMachine(good, noAnswer);
+    await machine.provider.status();
+    machine.later(61_000);
+
+    const status = await machine.provider.status();
+
+    expect(status).toMatchObject({ available: true, models: [{ id: "sonnet" }] });
+  });
+
+  it("checks again in the background after a check that didn't answer, and keeps what it hears", async () => {
+    const machine = busyMachine(good, noAnswer, signedOut);
+    await machine.provider.status();
+    machine.later(61_000);
+    await machine.provider.status();
+
+    await vi.waitFor(() => expect(machine.checks()).toBe(3));
+
+    expect(await machine.provider.status()).toMatchObject({
+      available: false,
+      reason: expect.stringMatching(/log in/i),
+    });
+  });
+
+  it("says Claude is unavailable at once when it's signed out, whatever it said before", async () => {
+    const machine = busyMachine(good, signedOut);
+    await machine.provider.status();
+    machine.later(61_000);
+
+    const status = await machine.provider.status();
+
+    expect(status).toMatchObject({ available: false, reason: expect.stringMatching(/log in/i) });
+  });
+
+  it("checks again after a few seconds when Claude Code couldn't start", async () => {
+    const cantStart: Check = async () => {
+      throw new Error("spawn claude ENOENT");
+    };
+    const machine = busyMachine(cantStart, good);
+    expect(await machine.provider.status()).toMatchObject({ available: false });
+
+    machine.later(5_000);
+    expect(await machine.provider.status()).toMatchObject({ available: false });
+    machine.later(6_000);
+    const status = await machine.provider.status();
+
+    expect(status).toMatchObject({ available: true });
+    expect(machine.checks()).toBe(2);
+  });
+
+  it("gives the first check after the worker starts longer to answer", async () => {
+    const slowStart: Check = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return good(new AbortController().signal);
+    };
+    const machine = busyMachine(slowStart);
+
+    expect(await machine.provider.status()).toMatchObject({ available: true });
+  });
+
+  it("counts a turn that finished as a good check", async () => {
+    const machine = busyMachine(good, noAnswer);
+    await machine.provider.status();
+    machine.later(61_000);
+
+    await turnOn(machine.provider);
+    const status = await machine.provider.status();
+
+    expect(status).toMatchObject({ available: true });
+    expect(machine.checks()).toBe(1);
+  });
+
+  it("checks again at once after a turn finished, when the last check said Claude couldn't be used", async () => {
+    const machine = busyMachine(signedOut, good);
+    await machine.provider.status();
+
+    await turnOn(machine.provider);
+    const status = await machine.provider.status();
+
+    expect(status).toMatchObject({ available: true });
+    expect(machine.checks()).toBe(2);
   });
 });
 
@@ -845,7 +972,10 @@ describe("after the security review", () => {
         }),
     });
 
-    const status = await createClaudeProvider({ claudeCode, checkTimeoutMs: 20 }).status();
+    const status = await createClaudeProvider({
+      claudeCode,
+      checkTimeouts: { firstMs: 20, laterMs: 20 },
+    }).status();
 
     expect(status).toMatchObject({ available: false, reason: expect.stringMatching(/answer/) });
     expect(stopped).toBe(true);

@@ -36,9 +36,11 @@ import {
   type CodePlugin,
   type CodeTurn,
   type CourtyardTool,
+  createStatusKeeper,
   jsonSchemaOf,
   type Provider,
   photosOf,
+  type StatusCheck,
   type ToolConnection,
   type ToolContent,
   type ToolReply,
@@ -243,10 +245,11 @@ const handResults =
       : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: added } };
   };
 
-/** How long a status check may take before Claude counts as unavailable. */
-const CHECK_TIMEOUT_MS = 15_000;
-/** How long a status answer is reused, so listing providers doesn't start Claude Code each time. */
-const STATUS_TTL_MS = 60_000;
+/**
+ * How long a status check may take before it counts as no answer: longer until Claude Code has
+ * answered once, since everything starts at once after the worker does (#282).
+ */
+const CHECK_TIMEOUTS = { firstMs: 30_000, laterMs: 15_000 };
 /** A planning turn's limit on Claude's round trips. A code turn has none (ADR 0025). */
 const MAX_TURNS = 30;
 /** The longest a stopped turn waits for Claude Code to finish before moving on. */
@@ -535,6 +538,8 @@ const RetryMessage = z.object({
 
 const SIGNED_OUT =
   "Claude Code isn't logged in on the worker machine. Run `claude` there and log in, or set an API key.";
+/** Said only until Claude Code has answered once: after that, a check out of time keeps its answer. */
+const NO_ANSWER = "Claude Code didn't answer in time. The worker machine may be busy.";
 
 /** Plain words for why a turn failed (#200), as the session shows them. */
 const FAILED = {
@@ -973,24 +978,31 @@ async function* untilStopped(messages: AsyncIterable<unknown>, signal: AbortSign
  * never reads, stores or logs the credentials.
  */
 export const createClaudeProvider = (
-  options: { claudeCode?: ClaudeCode; now?: () => number; checkTimeoutMs?: number } = {},
+  options: {
+    claudeCode?: ClaudeCode;
+    now?: () => number;
+    checkTimeouts?: { firstMs: number; laterMs: number };
+  } = {},
 ): Provider => {
   const claudeCode = options.claudeCode ?? realClaudeCode;
   const now = options.now ?? Date.now;
-  const checkTimeoutMs = options.checkTimeoutMs ?? CHECK_TIMEOUT_MS;
-  let cached: { at: number; status: ProviderStatus } | undefined;
-  /** A check already running, which simultaneous callers share rather than start another. */
-  let checking: Promise<ProviderStatus> | undefined;
+  const timeouts = options.checkTimeouts ?? CHECK_TIMEOUTS;
+  /** Whether Claude Code has answered a check since the worker started. */
+  let answeredYet = false;
 
-  const checkStatus = async (): Promise<ProviderStatus> => {
+  const checkStatus = async (): Promise<StatusCheck> => {
     const unavailable = (reason: string): ProviderStatus => ({
       id,
       label: LABEL,
       available: false,
       reason,
     });
+    const answered = (status: ProviderStatus): StatusCheck => {
+      answeredYet = true;
+      return { kind: "answered", status };
+    };
     const stop = new AbortController();
-    const timer = setTimeout(() => stop.abort(), checkTimeoutMs);
+    const timer = setTimeout(() => stop.abort(), answeredYet ? timeouts.laterMs : timeouts.firstMs);
     let answer: unknown;
     try {
       answer = await Promise.race([
@@ -1000,7 +1012,10 @@ export const createClaudeProvider = (
         ),
       ]);
     } catch {
-      return unavailable("Claude Code couldn't start on the worker machine, or didn't answer.");
+      // Out of time is no answer, which keeps the last good one; failing to start is an answer.
+      return stop.signal.aborted
+        ? { kind: "no-answer", status: unavailable(NO_ANSWER) }
+        : answered(unavailable("Claude Code couldn't start on the worker machine."));
     } finally {
       clearTimeout(timer);
       stop.abort();
@@ -1008,13 +1023,13 @@ export const createClaudeProvider = (
 
     const parsed = CheckAnswer.safeParse(answer);
     if (!parsed.success) {
-      return unavailable("Claude Code answered in a way Courtyard doesn't understand.");
+      return answered(unavailable("Claude Code answered in a way Courtyard doesn't understand."));
     }
     const { account, models } = parsed.data;
     const signedIn = Boolean(
       account.email || account.subscriptionType || account.tokenSource || account.apiKeySource,
     );
-    if (!signedIn) return unavailable(SIGNED_OUT);
+    if (!signedIn) return answered(unavailable(SIGNED_OUT));
     // The short names (default, opus, sonnet…) follow the newest models; pinned versions are left out.
     const offered = models.flatMap((m) => {
       const modelId = ModelId.safeParse(m.value);
@@ -1030,28 +1045,20 @@ export const createClaudeProvider = (
           ]
         : [];
     });
-    return {
+    return answered({
       id,
       label: LABEL,
       available: true,
       models: offered,
       capabilities: CAPABILITIES,
-    };
+    });
   };
+  const keptStatus = createStatusKeeper({ check: checkStatus, now });
 
   return {
     id,
     capabilities: CAPABILITIES,
-
-    status: async () => {
-      if (cached && now() - cached.at < STATUS_TTL_MS) return cached.status;
-      checking ??= checkStatus().finally(() => {
-        checking = undefined;
-      });
-      const status = await checking;
-      cached = { at: now(), status };
-      return status;
-    },
+    status: keptStatus.status,
 
     runTurn: async (input) => {
       const effort = effortFor(input.effort);
@@ -1191,6 +1198,8 @@ export const createClaudeProvider = (
         progress.failure ??
         (progress.result === undefined ? failureFor("unknown", progress) : undefined);
       if (failure) return err(failure);
+      // It proves Claude Code starts and answers, so its status is good for a while longer (#282).
+      keptStatus.worked();
       if (web !== null && (web.searched || web.read.length > 0)) {
         const sources = turnSources({ answer, read: web.read, searches: web.searches });
         if (sources.length > 0) await input.cite(sources);
@@ -1234,7 +1243,9 @@ export const createClaudeProvider = (
       if (input.signal.aborted) return err({ kind: "unknown", message: "It was stopped." });
       if (progress.failure !== undefined) return err(progress.failure);
       const answer = progress.result?.structured_output;
-      return answer === undefined ? err(failureFor("unknown", progress)) : ok(answer);
+      if (answer === undefined) return err(failureFor("unknown", progress));
+      keptStatus.worked();
+      return ok(answer);
     },
   };
 };
