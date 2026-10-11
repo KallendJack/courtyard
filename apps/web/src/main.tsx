@@ -1,6 +1,7 @@
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { PAGE_SCROLL_SELECTOR } from "@/components/page-scroll";
 import { AppError } from "./problems.tsx";
 import { routeTree } from "./routeTree.gen.ts";
 import "./styles.css";
@@ -19,6 +20,8 @@ const router = createRouter({
     drawn = location.href;
     return moved;
   },
+  // A page scrolls on its panel, not the window (#266): the panel goes to the top of a new page.
+  scrollToTopSelectors: [PAGE_SCROLL_SELECTOR],
 });
 
 // An `interface`, not a `type`: TanStack Router registers the router through declaration merging.

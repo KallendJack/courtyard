@@ -263,7 +263,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - **`main.tsx`** starts the router, which moves the scroll only for a move to another page (to the top, or back
   to where that page was), never when a page reloads its data (#168). **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
-  workspaces down the side or across the top; the rest are pages.
+  workspaces down the side or across the top; the rest are pages. Behind the login a page scrolls on its raised
+  panel, never the window (#266), so the sidebar or the Handheld frame stays put and the scroll bar sits on the
+  panel's edge: `components/page-scroll.ts` hands the panel to whatever follows the scroll (a session's turns), and
+  names it to the router, which keeps its scroll per page.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
   offline worker or a refusal comes back as a value to show. A page load waits for a slow worker (`untilAnswered`):
   it's tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without
