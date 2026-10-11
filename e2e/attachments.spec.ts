@@ -266,3 +266,73 @@ for (const screen of [
       await expect(page.getByRole("dialog", { name: "garage.jpg" })).toContainText("1 of 2");
     });
   });
+
+// A photo or PDF on its own, with no words (#164): Send goes with only attachments, the message
+// shows just them, and the fake, given no words, says what it was given.
+
+test("a photo goes with no words, from a workspace's box and a session's, picked or pasted", async ({
+  page,
+}) => {
+  await page.goto("/workspaces/garage-gym");
+  await attach(page, [photo("no-words-plan.png")]);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/sessions\//);
+  const session = page.getByRole("list", { name: "Session" });
+  await expect(session).toContainText("I see no-words-plan.jpg (a photo).");
+  await expect(session.getByRole("button", { name: "View no-words-plan.jpg" })).toBeVisible();
+  await expect(session).not.toContainText("You said:");
+  // Titled by the photo until a model titles it.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("no-words-plan.jpg");
+
+  // A pasted screenshot, with nothing typed, goes from the session's box too.
+  const png = photo("no-words-screenshot.png").buffer.toString("base64");
+  await page.getByLabel("Message").evaluate((element, base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], "no-words-screenshot.png", { type: "image/png" }));
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+  }, png);
+  await expect(tray(page).getByRole("img", { name: "no-words-screenshot.jpg" })).toBeVisible();
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(session).toContainText(
+    "I see no-words-plan.jpg (a photo) and no-words-screenshot.jpg (a photo).",
+  );
+  await expect(tray(page)).toBeHidden();
+});
+
+test("with no words and nothing attached, Start sends nothing", async ({ page }) => {
+  await page.goto("/workspaces/garage-gym");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+// The Fold opened out, with its docked Reply box (#206), and folded, on its cover screen.
+for (const screen of [
+  { name: "the unfolded Fold", viewport: { width: 950, height: 712 }, add: "Add" },
+  { name: "the Fold's cover screen", viewport: { width: 400, height: 900 }, add: "Photo" },
+])
+  test.describe(`on ${screen.name}`, () => {
+    test.use({ viewport: screen.viewport, hasTouch: true, isMobile: true });
+
+    test("a photo, then a PDF, goes with no words from the frame's button", async ({ page }) => {
+      const pick = async (files: readonly FileToAttach[]) => {
+        const chooser = page.waitForEvent("filechooser");
+        await page.getByRole("button", { name: screen.add, exact: true }).click();
+        await (await chooser).setFiles([...files]);
+        await expect(tray(page)).toBeVisible();
+      };
+      await page.goto("/workspaces/garage-gym");
+      await pick([photo("fold-floor-plan.png")]);
+      await page.getByRole("button", { name: "Start" }).click();
+      const session = page.getByRole("list", { name: "Session" });
+      await expect(session).toContainText("I see fold-floor-plan.jpg (a photo).");
+      await expect(session.getByRole("button", { name: "View fold-floor-plan.jpg" })).toBeVisible();
+
+      await pick([MANUAL]);
+      await page.getByRole("button", { name: "Send" }).click();
+      await expect(session).toContainText(
+        "I see fold-floor-plan.jpg (a photo) and rack-manual.pdf (a PDF).",
+      );
+    });
+  });

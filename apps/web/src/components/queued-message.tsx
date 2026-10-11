@@ -12,6 +12,14 @@ export type Queued = {
   readonly attachments: number;
 };
 
+/** A queued message as its bubble says it: its words, and how many files it carries, if any. */
+const queuedLine = (message: Queued) => {
+  const files = `${message.attachments} attachment${message.attachments === 1 ? "" : "s"}`;
+  // Only attachments, with no words (#164).
+  if (message.text === "") return files;
+  return message.attachments === 0 ? message.text : `${message.text} (with ${files})`;
+};
+
 /** "2nd", "3rd", "11th": where a queued message is in the queue. */
 const ordinal = (place: number) => {
   const tens = place % 100;
@@ -43,9 +51,7 @@ export function QueuedMessages(props: {
           <li key={message.seq} className="flex max-w-[85%] flex-col items-end gap-1.5">
             <div className="flex items-start gap-1.5 rounded-bubble rounded-br-sm py-1.5 pr-1.5 pl-4 ring-stroke ring-muted-foreground/40 ring-inset">
               <p className="py-1.5 text-message/5.5 whitespace-pre-wrap wrap-anywhere text-foreground/85 md:text-base/5.5">
-                {message.text}
-                {message.attachments > 0 &&
-                  ` (with ${message.attachments} attachment${message.attachments === 1 ? "" : "s"})`}
+                {queuedLine(message)}
               </p>
               <IconButton
                 label="Remove queued message"

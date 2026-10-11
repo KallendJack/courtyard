@@ -488,6 +488,44 @@ describe("a Claude turn", () => {
     }
   });
 
+  it("sends a turn of only a photo as the framing's message and the image, no empty text (#164)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    try {
+      const photo = join(root, "floor-plan.png");
+      await writeFile(photo, "the plan");
+      const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+      const message = 'The owner\'s new message (attached "floor-plan.png") has no words.';
+
+      await runTurn(claudeCode, {
+        framing: {
+          instructions: "The instructions.",
+          message,
+          newMessage: "",
+          attachments: [
+            { kind: "photo", name: "floor-plan.png", path: photo, mediaType: "image/png" },
+          ],
+          tools: [],
+          fileTools: null,
+          webSearch: null,
+        },
+      });
+
+      expect(await streamedContent(runs[0]?.prompt)).toEqual([
+        { type: "text", text: message },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: Buffer.from("the plan").toString("base64"),
+          },
+        },
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("streams the answer as it's written and uses the model asked for", async () => {
     const { claudeCode, runs } = stubClaudeCode({
       messages: [textDelta("Put it "), textDelta("on the left wall."), success],

@@ -161,6 +161,12 @@ In the conversation, an owner message that carried attachments reads `Owner (att
 "rack-manual.pdf"): …`, and the new message is introduced as `The owner's new message (attached "IMG_2041.jpg"):`, so
 a model knows which message each came with.
 
+A message can be only attachments, with no words (#164). Nothing is put in place of the words: in the conversation it
+reads `Owner (attached "floor-plan.png"; no words)`, and as the new message it's the line, with the names of what it
+attached:
+
+> The owner's new message (attached <names>) has no words, only what it attached.
+
 ## Switching model mid-session
 
 Phase 3. A session can change model between turns, by the owner's pick or by Carry on after a usage limit. The new
@@ -1049,7 +1055,8 @@ is saved only if the file is still as the model read it.
 
 ## Titling a session
 
-Built with #104. A new session starts titled by its first message, cut to 60 characters. Once its first turn
+Built with #104. A new session starts titled by its first message, cut to 60 characters (by its first attachment's
+name when the message has no words, #164). Once its first turn
 completes (not stopped, not failed), a model gives it a proper title. A first message carried on to another provider
 after a usage limit (Carry on) is still the first turn. Later turns never retitle it, even a resend after a failure.
 It's the first

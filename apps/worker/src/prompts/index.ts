@@ -1066,6 +1066,8 @@ const lineFor = (said: Said) => {
       ...(said.skill === undefined ? [] : [`started the ${said.skill} skill`]),
       ...attachedNote(said.attached),
     ];
+    // Only attachments (#164): nothing stands in for the words.
+    if (said.text === "") return `Owner (${[...notes, "no words"].join("; ")})`;
     return notes.length === 0 ? `Owner: ${said.text}` : `Owner (${notes.join("; ")}): ${said.text}`;
   }
   const saves = [
@@ -1121,11 +1123,16 @@ const messageFor = (turn: {
           `Earlier in this session:\n\n<conversation>\n${earlier.map((said) => contained(lineFor(said))).join("\n\n")}\n</conversation>`,
         ]),
   ];
+  if (newest === "") return [...parts, onlyAttached(turn.attached)].join("\n\n");
   if (parts.length === 0) return newest;
   return [...parts, `The owner's new message${note ? ` (${note})` : ""}:\n\n${newest}`].join(
     "\n\n",
   );
 };
+
+/** The new message when it's only attachments (#164), with nothing put in place of the words. */
+const onlyAttached = (names: readonly string[]) =>
+  `The owner's new message (attached ${names.map(quoted).join(", ")}) has no words, only what it attached.`;
 
 /**
  * What a model is told for the turn that the session's last owner message starts: the

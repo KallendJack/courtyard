@@ -470,8 +470,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
  * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
- * hours on, so overflow can be seen and tested. "please look" says which attachments it was given
- * (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
+ * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
+ * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
  * allows (see `scriptedCoding`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`).
  */
@@ -562,8 +562,10 @@ export const createFakeProvider = (
       const coded = code === null ? "" : await scriptedCoding(code, last, report);
       const paper = connections.find((connection) => connection.name === "paper");
       const drew = paper === undefined ? "" : await scriptedPaper(paper, last);
-      const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
-      for (const word of `${coded}${drew}${saw}You said: ${last}`.split(/(?<= )/)) {
+      const saw = /please look/i.test(last) || last === "" ? seen(framing.attachments) : "";
+      // A message of only attachments has nothing to echo (#164).
+      const said = last === "" ? "" : `You said: ${last}`;
+      for (const word of `${coded}${drew}${saw}${said}`.trimEnd().split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         await emit(word);
