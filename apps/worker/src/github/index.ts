@@ -12,9 +12,16 @@ import { exists, readJsonFile, removeFile, writeBytesIn, writeJsonFile } from ".
 import type { CommandEnv } from "../git.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { DeviceSignIn, FoundCheck, FoundPullRequest, GitHubApi, UserToken } from "./api.ts";
+import type {
+  DeviceSignIn,
+  FoundCheck,
+  FoundPullRequest,
+  FoundRepo,
+  GitHubApi,
+  UserToken,
+} from "./api.ts";
 
-export type { GitHubApi } from "./api.ts";
+export type { FoundRepo, GitHubApi } from "./api.ts";
 
 /**
  * Courtyard's own GitHub sign-in (#99), through the GitHub App the owner registered and installed
@@ -426,6 +433,17 @@ export const createGitHub = (options: {
       if (!signedIn.ok) return signedIn;
       const deleted = await signedIn.value.github.deleteBranch(signedIn.value.token, find);
       return deleted.ok ? deleted : err({ kind: "github", message: deleted.error });
+    },
+
+    /**
+     * The repos the GitHub App is installed on, with what New workspace → Code shows of each and
+     * where git clones it from (#258).
+     */
+    repos: async (): Promise<Result<readonly FoundRepo[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const found = await signedIn.value.github.repositories(signedIn.value.token);
+      return found.ok ? found : err({ kind: "github", message: found.error });
     },
 
     /** The names of `repo`'s labels (#181). */

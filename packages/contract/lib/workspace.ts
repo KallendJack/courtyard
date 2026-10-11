@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GitHubRepoName } from "./github-repo-name.ts";
 
 /** A workspace's folder name: lowercase letters and digits, words joined by single dashes. */
 export const WorkspaceId = z
@@ -118,6 +119,11 @@ export const NewWorkspace = z.object({
     )
     .refine((line) => !/[\r\n]/.test(line), "Keep what it's for to one line.")
     .optional(),
+  /**
+   * For a code workspace (#258): the GitHub repo it works on, picked from the owner's repos. The
+   * worker gets it onto the worker machine first, unless it's there already.
+   */
+  repo: GitHubRepoName.optional(),
 });
 export type NewWorkspace = z.infer<typeof NewWorkspace>;
 

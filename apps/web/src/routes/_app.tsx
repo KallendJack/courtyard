@@ -2,7 +2,13 @@ import { WorkspaceList } from "@courtyard/contract";
 import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { type Dock, DockContext, type MessageBox, useLayout } from "@/components/handheld";
+import {
+  type Dock,
+  DockContext,
+  type MessageBox,
+  type TalkTarget,
+  useLayout,
+} from "@/components/handheld";
 import { PAGE_SCROLL, PageScrollContext } from "@/components/page-scroll";
 import { WorkspaceStrip } from "@/components/workspace-strip";
 import { Problem } from "../problems.tsx";
@@ -47,14 +53,20 @@ function LoggedIn() {
     setBox(offered);
     return () => setBox((now) => (now === offered ? undefined : now));
   }, []);
+  /** A page's field to talk into, on a page without a message box (#264). */
+  const [field, setField] = useState<TalkTarget>();
+  const offerField = useCallback((offered: TalkTarget) => {
+    setField(offered);
+    return () => setField((now) => (now === offered ? undefined : now));
+  }, []);
   const open = useCallback(() => setBoxOpen(true), []);
   const close = useCallback(() => setBoxOpen(false), []);
   const dock = useMemo<Dock | undefined>(
     () =>
       layout === "desktop" || dockElement === null
         ? undefined
-        : { element: dockElement, offer, open, close },
-    [layout, dockElement, offer, open, close],
+        : { element: dockElement, offer, offerField, open, close },
+    [layout, dockElement, offer, offerField, open, close],
   );
 
   return (
@@ -72,6 +84,7 @@ function LoggedIn() {
                 onLogOut={logOut}
                 dockRef={setDockElement}
                 box={box}
+                field={field}
                 boxOpen={boxOpen}
                 setBoxOpen={setBoxOpen}
               />

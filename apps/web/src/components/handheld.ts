@@ -28,10 +28,26 @@ const layoutNow = (): Layout => {
 /** The frame the app is in now, following the screen as the Fold folds and unfolds. */
 export const useLayout = () => useSyncExternalStore(subscribe, layoutNow);
 
-/** What a page's message box offers the Handheld frame's buttons. */
-export type MessageBox = {
-  /** Puts the keyboard in the box. */
+/**
+ * Where the talk strip and the Talk key put what the owner says: the page's message box, or on a
+ * page without one, the one field a page offers for talking into (New workspace's What's it for?,
+ * #264).
+ */
+export type TalkTarget = {
+  /** Puts the keyboard there, where the browser can't listen. */
   focus: () => void;
+  /** A turn is running, so what's sent now is queued until it ends (#177). */
+  answering: boolean;
+  /**
+   * Takes what the owner says in the talk strip or to the Talk key (#79, #198, #206), which goes
+   * in after anything typed. Once it's done with it (the box sent it), it tells `listener`, so
+   * listening stops.
+   */
+  dictate: (listener: Listener) => Dictation;
+};
+
+/** What a page's message box offers the Handheld frame's buttons. */
+export type MessageBox = TalkTarget & {
   /** Opens the photo picker (the paperclip's). */
   pickPhotos: () => void;
   chooseModel: () => void;
@@ -41,17 +57,9 @@ export type MessageBox = {
   model: string;
   /** Which of its sheets is open, so the button that opened it shows lit (#194). */
   choosing?: "skill" | "model";
-  /** A turn is running, so what's sent now is queued until it ends (#177). */
-  answering: boolean;
-  /**
-   * Opens the box for what the owner says in the talk strip or to the Talk key (#79, #198, #206),
-   * which goes in after anything typed, for them to send. Once the box sends, it tells `listener`,
-   * so listening stops.
-   */
-  dictate: (listener: Listener) => Dictation;
 };
 
-/** What's listening for the message box: the talk strip, or the Talk key. */
+/** What's listening for the message box or a page's field: the talk strip, or the Talk key. */
 export type Listener = {
   /** Stops listening: keeping what was said, dropping it, or because the box sent it. */
   stop: (how: "keep" | "drop" | "sent") => void;
@@ -80,6 +88,11 @@ export type Dock = {
   element: HTMLElement;
   /** The page's message box, offered to the frame's buttons until the returned function is called. */
   offer: (box: MessageBox) => () => void;
+  /**
+   * A field to talk into, on a page without a message box (#264), offered to the talk strip and
+   * the Talk key until the returned function is called. The page's message box comes first.
+   */
+  offerField: (field: TalkTarget) => () => void;
   open: () => void;
   close: () => void;
 };
