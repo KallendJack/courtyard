@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { READING_SESSION_ID } from "./long-session.ts";
+import { fromTheEnd, pageScroll, scrollPageTo, scrollPageToMiddle } from "./page-scroll.ts";
 
 // The Handheld frame (#193): on a touch tablet or the unfolded Fold, two thumb rails and a bottom
 // bar in place of the sidebar; on a phone or the folded Fold, the cover-screen layout. Desktops
@@ -246,6 +247,47 @@ const everywhere = (screen: Screen) => {
     await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
     await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Garage gym" })).toHaveCount(0);
+  });
+
+  test("only where the owner is shows as chosen, ringed in violet, a code workspace's tile too, and on Home the mark (#237)", async ({
+    page,
+  }) => {
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    const VIOLET = "rgb(157, 107, 255)";
+    /** How a tile or the mark looks: its ring and glow, and its fill. */
+    const lookOf = (name: string) =>
+      workspaces.getByRole("link", { name, exact: true }).evaluate((link) => ({
+        ring: getComputedStyle(link).boxShadow,
+        fill: getComputedStyle(link).backgroundColor,
+      }));
+    const tiles = ["Reading list", "Side project", "Garage gym"];
+
+    // Closed, a code workspace's tile looks as any other: no ring, no tint.
+    await page.goto("/workspaces/garage-gym");
+    await expect(workspaces.getByRole("link", { name: "Garage gym" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const reading = await lookOf("Reading list");
+    expect(reading.ring).toBe("none");
+    expect(await lookOf("Side project")).toEqual(reading);
+    expect((await lookOf("Home")).ring).toBe("none");
+    expect((await lookOf("Garage gym")).ring).toContain(VIOLET);
+
+    // Open, it's ringed in violet as any other.
+    await page.goto("/workspaces/side-project");
+    await expect(workspaces.getByRole("link", { name: "Side project" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect((await lookOf("Side project")).ring).toContain(VIOLET);
+    expect(await lookOf("Garage gym")).toEqual(reading);
+
+    // On Home, the mark is.
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "Workspaces" })).toBeVisible();
+    expect((await lookOf("Home")).ring).toContain(VIOLET);
+    for (const name of tiles) expect(await lookOf(name)).toEqual(reading);
   });
 
   test("the recent sessions start a new session, with the workspace's message box open for it", async ({
@@ -684,6 +726,81 @@ test.describe("unfolded", () => {
     });
   });
 
+  test("only the centre scrolls, its scroll bar inside it, and the rails and the message box stay put", async ({
+    page,
+  }) => {
+    const talk = page.getByRole("button", { name: "Talk", exact: true });
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    const title = page.getByRole("heading", { level: 1 });
+
+    // A long page: the workspace's, with its Skills.
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    const content = await besideTheRails(page);
+    const [rail, key, box] = [
+      await boxOf(workspaces),
+      await boxOf(talk),
+      await boxOf(page.locator("form", { has: message(page) })),
+    ];
+    const titleAt = (await boxOf(title)).y;
+    await page.mouse.move(content.x + content.width / 2, UNFOLDED.height / 2);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(async () => (await boxOf(title)).y).toBeLessThan(titleAt - 100);
+
+    const scroll = await pageScroll(page);
+    expect(scroll).toMatchObject({ document: false, scrolls: true, windowScrollY: 0 });
+    // Its scroll bar sits on the centre's own edge, inside the right rail, and what scrolls stops
+    // short of the message box.
+    expect(scroll.right).toBeLessThanOrEqual(key.x + 1);
+    expect(scroll.bottom).toBeLessThanOrEqual(box.y + 1);
+    expect(await boxOf(workspaces)).toEqual(rail);
+    expect(await boxOf(talk)).toEqual(key);
+    expect(await boxOf(page.locator("form", { has: message(page) }))).toEqual(box);
+
+    // A long session: it opens at the end, reading back moves only the centre, and Jump to latest
+    // brings it back to the end.
+    await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
+    await expect(session(page)).toContainText("You said:");
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+    expect((await pageScroll(page)).windowScrollY).toBe(0);
+    await page.mouse.move(content.x + content.width / 2, UNFOLDED.height / 2);
+    await page.mouse.wheel(0, -900);
+    await expect.poll(() => fromTheEnd(page)).toBeGreaterThan(400);
+    expect(await pageScroll(page)).toMatchObject({ document: false, windowScrollY: 0 });
+    expect(await boxOf(talk)).toEqual(key);
+
+    await page.getByRole("button", { name: /Jump to latest/ }).click();
+    await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
+    expect((await pageScroll(page)).windowScrollY).toBe(0);
+  });
+
+  test("a new page starts at its top, and going back returns to where the last one was", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    // Once the frame is there: its rails narrow the page, which moves what's in it.
+    await besideTheRails(page);
+    await scrollPageTo(page, 400);
+    await expect.poll(async () => (await pageScroll(page)).scrollTop).toBe(400);
+
+    // Away and back again by the tiles: the workspace's page is new again, so at its top.
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    await workspaces.getByRole("link", { name: "Side project" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Side project");
+    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    await expect.poll(async () => (await pageScroll(page)).scrollTop).toBe(0);
+
+    // Back twice, to where it was the first time.
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Side project");
+    await page.goBack();
+    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    await expect.poll(async () => (await pageScroll(page)).scrollTop).toBe(400);
+    expect((await pageScroll(page)).windowScrollY).toBe(0);
+  });
+
   everywhere("unfolded");
 });
 
@@ -715,6 +832,26 @@ test.describe("on the cover screen", () => {
       const { before, after } = await beforeAndAfterTheFrame(page);
       expect(before.y).toBeCloseTo(after.y, 0);
     });
+  });
+
+  test("only the page scrolls, between the tiles and the bar, which stay put", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    const tiles = page.getByRole("navigation", { name: "Workspaces" });
+    // The bar's top row: Skills, Photo and Model.
+    const bar = page.getByRole("button", { name: "Skills" });
+    const [tilesAt, barAt] = [await boxOf(tiles), await boxOf(bar)];
+
+    await page.mouse.move(COVER.width / 2, COVER.height / 2);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(async () => (await pageScroll(page)).scrollTop).toBeGreaterThan(100);
+
+    const scroll = await pageScroll(page);
+    expect(scroll).toMatchObject({ document: false, windowScrollY: 0 });
+    expect(scroll.top).toBeGreaterThanOrEqual(tilesAt.y + tilesAt.height - 1);
+    expect(scroll.bottom).toBeLessThanOrEqual(barAt.y);
+    expect(await boxOf(tiles)).toEqual(tilesAt);
+    expect(await boxOf(bar)).toEqual(barAt);
   });
 
   test("Skills opens as a sheet from the bottom, up to most of the screen, scrolling inside it", async ({
@@ -793,7 +930,7 @@ test("folding and unfolding keeps the place in a session and a half-written mess
   // Reading back: the turn in the middle of the screen stays on screen as the Fold folds and opens.
   // Only the turns near the screen are drawn, a frame or so after it scrolls, so wait for the one
   // across the middle to be there.
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight / 2));
+  await scrollPageToMiddle(page);
   let index = "";
   await expect
     .poll(async () => {

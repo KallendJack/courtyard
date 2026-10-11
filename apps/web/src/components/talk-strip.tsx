@@ -11,7 +11,7 @@ import {
 } from "react";
 import { classes } from "@/lib/classes";
 import { FrameButton } from "./frame-button.tsx";
-import type { Dictation, MessageBox } from "./handheld.ts";
+import type { Dictation, TalkTarget } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
 import { useWakeLock } from "./wake-lock.ts";
 
@@ -46,7 +46,7 @@ type Says = Record<Showing, (now: Now) => { title: string; detail: string }>;
  * the button that talks.
  */
 function useTalk(props: {
-  box: MessageBox | undefined;
+  box: TalkTarget | undefined;
   type: () => void;
   says: Says;
   where: string;
@@ -288,9 +288,9 @@ const STRIP_SAYS: Says = {
 export function TalkBar(props: {
   /** Where the owner is: the workspace's name, or Home. */
   where: string;
-  /** The page's message box, when it has one. */
-  box: MessageBox | undefined;
-  /** Opens the box with the keyboard in it. */
+  /** Where talking goes: the page's message box, or a field it offers (#264). */
+  box: TalkTarget | undefined;
+  /** Opens the box, or the field, with the keyboard in it. */
   type: () => void;
 }) {
   const cancelKey = useRef<HTMLButtonElement>(null);
@@ -396,7 +396,7 @@ const KEY_SAYS: Says = {
  * While it listens it lights up and its tile shows sound bars; while an answer comes it goes
  * quiet, and what's said queues.
  */
-export function TalkKey(props: { box: MessageBox | undefined; type: () => void }) {
+export function TalkKey(props: { box: TalkTarget | undefined; type: () => void }) {
   const talk = useTalk({ ...props, says: KEY_SAYS, where: "", controlsInBox: true });
   const { listening, showing } = talk;
   const quiet = showing === "answering";

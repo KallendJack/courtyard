@@ -581,6 +581,61 @@ export const heldCoder = () => {
   return { provider, turns };
 };
 
+/** For tests: the model the held builder offers. */
+export const BUILDING_MODEL = { provider: "builder", model: "one" };
+
+/** For tests: a build the held builder started (#281): where, and how to let it end. */
+export type HeldBuild = {
+  readonly worktree: string;
+  /** Lets the build end, and then the turn, answering "Done.". */
+  readonly finish: () => void;
+};
+
+/**
+ * For tests: a provider that codes (ADR 0007) and, in each turn, asks the worker to run one heavy
+ * check, `command`, as Claude Code's hook does, keeping the worker's answer. The build starts once
+ * the worker allows it and runs until the test finishes it; then it tells the worker the command
+ * has ended, as Claude Code's PostToolUse hook does, and the turn answers "Done.". Stopped, it
+ * ends without telling the worker, as a Claude Code that was stopped mid-command may. `builds`
+ * lists every build started, in order, as it starts.
+ */
+export const heldBuilder = (command = "pnpm verify") => {
+  const builds: HeldBuild[] = [];
+  const answers: Result<null, string>[] = [];
+  const { provider: coder } = codingProvider([]);
+  const id = ProviderId.parse("builder");
+  const provider: Provider = {
+    ...coder,
+    id,
+    status: async () => ({
+      id,
+      label: "Builder",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities: coder.capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The builder only builds." });
+      const allowed = await code.run(command);
+      answers.push(allowed);
+      if (!allowed.ok) {
+        await input.emit("Refused.");
+        return ok(null);
+      }
+      await new Promise<void>((finish) => {
+        builds.push({ worktree: code.worktree, finish });
+        input.signal.addEventListener("abort", () => finish(), { once: true });
+      });
+      if (input.signal.aborted) return ok(null);
+      code.ran(command);
+      await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, builds, answers };
+};
+
 /**
  * For tests: writes a skill's folder in `skillsDir`: a SKILL.md with its name and description
  * (none when it's empty) and `body`, any other files given, and a script when it has one.

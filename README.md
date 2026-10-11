@@ -151,9 +151,16 @@ is ready (it checks every few hours), or run:
 
 ### Code workspaces
 
-Being built ([milestone 7](https://github.com/KallendJack/courtyard/milestone/7)). To make a
-workspace a code workspace, give its folder a `workspace.json` naming the repository on the worker
-machine:
+Being built ([milestone 7](https://github.com/KallendJack/courtyard/milestone/7)). **From the
+app:** New workspace → **Code** lists your GitHub repos that Courtyard's GitHub App reaches (sign
+in to [GitHub](#github) first); ones that are a workspace already are greyed and marked Added.
+Picking one fills in the name from the repo's and what it's for from its description on GitHub;
+**Create** gets the repo onto the worker machine, into the data folder's `repos/<owner>/<name>`
+(cloned with Courtyard's GitHub sign-in, so no token is kept in its git settings; a copy already
+there is used as it is), then makes the workspace on it and opens it.
+
+**By hand,** for a checkout you already have somewhere, give the workspace's folder a
+`workspace.json` naming the repository on the worker machine (the app writes the same):
 
 ```json
 { "mode": "code", "repoPath": "/path/to/repo" }
@@ -209,6 +216,12 @@ machine:
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.
+- **One heavy check at a time** across the worker, so sessions building together can't lock the
+  machine up: a session's `pnpm verify`, `test`, `e2e` or `build` (in any package), `vitest run`
+  or `playwright test` waits its turn, first come first served, its activity saying "Waiting for
+  another build · 1 ahead", and starts by itself. Stop still works while it waits, and other
+  commands never wait. A stronger machine can allow more at once: set `COURTYARD_BUILDS_AT_ONCE`
+  (see [Settings](#settings)).
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.
@@ -346,7 +359,7 @@ or open a pull request.
 **Install it on the repos sessions may use:** on the app's page, **Install App**, pick your
 account, choose **Only select repositories**, pick them, and **Install**. To change them later:
 **Settings → Applications → Installed GitHub Apps → Configure**. Connections lists the repos it
-reaches.
+reaches, and New workspace → Code offers them.
 
 **Sign in from Connections,** on any device: **Sign in to GitHub** shows a code; **Copy, open
 GitHub** copies it and opens github.com/login/device to enter it, and the page carries on by itself
@@ -357,7 +370,8 @@ side too: **Settings → Applications → Authorized GitHub Apps → Revoke**.
 **Where it's kept:** in the data folder's `github` folder: `sign-in.json` (the token, refreshed
 before it runs out every eight hours, and forgotten if GitHub stops accepting it, after six months
 unused) and `gh/`, the `gh` config folder code sessions use. A session's `git` and `gh` get
-it there, through the environment their commands run in; it never reaches the browser, a
+it there, through the environment their commands run in, and so does the clone when New workspace
+gets a repo onto the worker machine; it never reaches the browser, a
 session's events, the context folder or a model. A fresh start keeps it.
 
 ## Getting things back

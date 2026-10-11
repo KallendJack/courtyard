@@ -88,6 +88,15 @@ describe("settings", () => {
     );
   });
 
+  it("takes a whole number of builds at once, 1 or more, and nothing else (#281)", () => {
+    for (const value of ["0", "1.5", "two"]) {
+      expect(startupError({ ...settings, COURTYARD_BUILDS_AT_ONCE: value })).toContain(
+        "COURTYARD_BUILDS_AT_ONCE must be a whole number, 1 or more",
+      );
+    }
+    expect(startWorker({ ...settings, COURTYARD_BUILDS_AT_ONCE: "2" })).toBeDefined();
+  });
+
   it("refuses a web app folder that was set but doesn't exist", () => {
     const error = startupError({ ...settings, COURTYARD_WEB_DIR: join(root, "no-build") });
 

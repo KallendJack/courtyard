@@ -52,6 +52,8 @@ import {
   createFakeProvider,
   type Provider,
 } from "./providers/index.ts";
+import { createRepos } from "./repos/index.ts";
+import { repoProblem, repoRoutes } from "./repos/routes.ts";
 import { ok, type Result } from "./result.ts";
 import { type Background, createSessions } from "./sessions/index.ts";
 import { MESSAGE_ROUTES, sessionRoutes } from "./sessions/routes.ts";
@@ -65,6 +67,7 @@ import { tidyRoutes } from "./tidy/routes.ts";
 import {
   archiveWorkspace,
   changeWorkspace,
+  checkNewName,
   createWorkspace,
   getWorkspace,
   listWorkspaces,
@@ -197,6 +200,7 @@ export const createWorker = (options: {
     liveCopy,
     updateTask,
     githubClientId,
+    buildsAtOnce,
   } = settings.value;
   const now = options.now ?? Date.now;
   const background = options.background ?? (() => {});
@@ -244,6 +248,7 @@ export const createWorker = (options: {
     dataDir,
     commandEnv: github.commandEnv,
     pullRequests: github,
+    buildsAtOnce,
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
   const sessions = createSessions({
@@ -311,6 +316,8 @@ export const createWorker = (options: {
   );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
   api.route("/", gitHubRoutes(github));
+  const repos = createRepos({ dataDir, contextDir, github, code });
+  api.route("/", repoRoutes(repos));
   api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
@@ -336,8 +343,24 @@ export const createWorker = (options: {
   api.post("/workspaces", async (c) => {
     const body = await readBody(c, NewWorkspace);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const { name, intro, repo } = body.value;
+    // A code workspace (#258): its repo comes onto the worker machine first, once its name is
+    // known to be free, so a name that can't be used never waits for a clone.
+    let repoPath: string | undefined;
+    if (repo !== undefined) {
+      const free = await checkNewName(contextDir, name);
+      if (!free.ok) return contextError(c, free.error);
+      const placed = await repos.place(repo);
+      if (!placed.ok) return repoProblem(c, placed.error);
+      repoPath = placed.value;
+    }
     const workspace = await contextFolder.change(
-      () => createWorkspace(contextDir, body.value),
+      () =>
+        createWorkspace(contextDir, {
+          name,
+          intro,
+          ...(repoPath === undefined ? {} : { repoPath }),
+        }),
       (made) => workspaceChange(`New workspace: ${made.name}`, made.id),
     );
     if (!workspace.ok) return contextError(c, workspace.error);

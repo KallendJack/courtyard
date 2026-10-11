@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { READING_SESSION_ID } from "./long-session.ts";
+import { fromTheEnd } from "./page-scroll.ts";
 
 // A session's flow: whose turn it is (#179), messages queued while a turn runs (#177), and
 // scrolling that never moves the owner away from where they are (#168).
@@ -125,12 +126,6 @@ const READING_SESSION = `/workspaces/garage-gym/sessions/${READING_SESSION_ID}`;
 /** An answer many lines long, so it grows well past the bottom of the screen as it streams. */
 const manyLines = (count: number) =>
   Array.from({ length: count }, (_, i) => `line ${i + 1}`).join("\n");
-
-/** How far the bottom of the screen is from the end of the page, in pixels. */
-const fromTheEnd = (page: Page) =>
-  page.evaluate(
-    () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
-  );
 
 /** Scrolls back up to read, as the owner does with a finger or a wheel. */
 const readBack = async (page: Page) => {

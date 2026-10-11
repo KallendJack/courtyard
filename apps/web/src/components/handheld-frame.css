@@ -20,16 +20,13 @@
 
 /*
  * The page keeps clear of the frame: of its rails, and of its bottom bar and the message box open
- * above it. The frame measures them as they are. A page's own bar pinned to the bottom (Jump to
- * latest on a session's page) sits just above them.
+ * above it. The frame measures them as they are. The page scrolls inside what's left (#266), so a
+ * page's own bar pinned to its bottom (Jump to latest on a session's page) sits just above them.
  */
 [data-frame-column] {
   padding-left: var(--frame-left, 0px);
   padding-right: var(--frame-right, 0px);
   padding-bottom: var(--frame-bottom, 0px);
-}
-[data-above-frame] {
-  bottom: var(--frame-bottom, 0px);
 }
 
 /*

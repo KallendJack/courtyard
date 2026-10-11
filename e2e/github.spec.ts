@@ -1,4 +1,5 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { pageScrollsSideways } from "./page-scroll.ts";
 
 // Signing in to GitHub through Courtyard (#99), against the fake GitHub start-worker.mjs gives the
 // worker: its sign-in finishes a couple of seconds after it starts, as entering the code on
@@ -35,7 +36,9 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
 
   // The page carries on by itself once the owner has said yes on GitHub.
   const signedIn = connections.getByRole("listitem", { name: "GitHub · octo-owner" });
-  await expect(signedIn).toContainText("courtyard · stacks", { timeout: 15_000 });
+  await expect(signedIn).toContainText("courtyard · garrett-kitchens · side-project · stacks", {
+    timeout: 15_000,
+  });
   await expect(signedIn).toContainText("Connected");
 
   await page.goto("/workspaces/side-project");
@@ -160,7 +163,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
 
   // Asking for changes is a message in the session: its fix goes to the same pull request.
   const message = page.getByRole("textbox", { name: "Message" });
-  await expect(message).toHaveAttribute("placeholder", "Ask for changes…");
+  await expect(message).toHaveAttribute("placeholder", /^To: Edit File Talk Md/);
   await message.fill(makesPullRequest("Hold to talk", "Hold to talk as well [e2e passes]"));
   await page.getByRole("button", { name: "Send" }).click();
   await expect(review).toBeHidden();
@@ -344,6 +347,84 @@ test.describe("on the unfolded Fold", () => {
 
     await request.post("/api/github/sign-out", { data: {} });
   });
+
+  // #279: the review's message box went to the workspace's first session, not the PR's own.
+  test("a pull request's review sends its message to the session that opened it", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    const first = await pullRequestFrom(request, "Rail spacing [e2e running]");
+    const second = await pullRequestFrom(request, "Loading states [e2e running]");
+    // The fake titles a session with its first message's first words.
+    const firstTitle = "Edit File Talk Md Rail";
+    const secondTitle = "Edit File Talk Md Loading";
+
+    await page.goto("/workspaces/side-project");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Loading states/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Loading states/);
+
+    // The box says which session the message goes to: the one whose branch the pull request is.
+    const message = page.getByRole("textbox", { name: "Message" });
+    await expect(message).toHaveAttribute("placeholder", `To: ${secondTitle}`);
+    await message.fill("Bring it up to date with main");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/sessions/${second}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondTitle);
+    await expect(page.getByText("Bring it up to date with main").first()).toBeVisible();
+    await page.goto(`/workspaces/side-project/sessions/${first}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(firstTitle);
+    await expect(page.getByText("Bring it up to date with main")).toHaveCount(0);
+
+    // A review whose session has gone has no box, so nothing goes to another session instead.
+    const deleted = await request.delete(`/api/sessions/${first}`, { data: {} });
+    expect(deleted.ok(), await deleted.text()).toBe(true);
+    await page.goto(`/workspaces/side-project/sessions/${first}?view=review`);
+    await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  // A code workspace from the app (#258, #264; Paper, "Tablet · New workspace, Code"): Code lists
+  // the repos Courtyard's GitHub App reaches, and the one picked comes onto the worker machine.
+  test("New workspace opens with nothing focused, and Code makes a workspace on a picked repo, its name filled in", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/new-workspace");
+    await expect(page.getByRole("heading", { level: 1, name: "New workspace" })).toBeVisible();
+    // On a touch screen the keyboard waits for a tap, so nothing is focused.
+    await expect(page.getByRole("textbox", { name: "Name" })).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
+    const kind = page.getByRole("group", { name: "Kind" });
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    const repos = page.getByRole("group", { name: "Repo" });
+    // Side project's repo is a code workspace's already: greyed, and it can't be picked.
+    await expect(repos.getByRole("radio", { name: /^side-project/ })).toBeDisabled();
+    await expect(repos.locator("label", { hasText: "side-project" })).toContainText("Added");
+    await repos.locator("label", { hasText: "garrett-kitchens" }).click();
+
+    await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Garrett Kitchens");
+    await expect(page.getByRole("textbox", { name: "What's it for?" })).toHaveValue(
+      "Website for a kitchen fitter: reconnect with the client and try new designs",
+    );
+    await page.getByRole("button", { name: "Create Garrett Kitchens" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garrett-kitchens$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Garrett Kitchens" })).toBeVisible();
+    await page.goto("/new-workspace");
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    await expect(repos.getByRole("radio", { name: /^garrett-kitchens/ })).toBeDisabled();
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
 });
 
 test.describe("on the cover screen", () => {
@@ -364,10 +445,7 @@ test.describe("on the cover screen", () => {
     await review.getByRole("button", { name: "Read it all" }).click();
     await expect(review).toContainText("Two-way door, the workspace page only.");
     await expect(review.getByRole("button", { name: "Merge" })).toBeDisabled();
-    const sideways = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(sideways).toBe(0);
+    expect(await pageScrollsSideways(page)).toBe(false);
 
     await request.post("/api/github/sign-out", { data: {} });
   });

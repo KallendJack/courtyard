@@ -449,3 +449,24 @@ test.describe("the tablet's Talk key", () => {
     await expect(message(page)).toBeFocused();
   });
 });
+
+// New workspace has no message box: what's said there fills in what it's for (#264).
+test.describe("on New workspace, unfolded", () => {
+  test.use({ viewport: SCREENS.unfolded.viewport });
+  test.beforeEach(async ({ page }) => {
+    await standInSpeechRecognition(page);
+  });
+
+  test("talking fills in What's it for?, after anything typed", async ({ page }) => {
+    await page.goto("/new-workspace");
+    const whatFor = page.getByRole("textbox", { name: "What's it for?" });
+    await whatFor.fill("Pottery:");
+    await talking(page, SCREENS.unfolded.idle).click();
+
+    await hear(page, "throwing bowls on the wheel");
+    await expect(whatFor).toHaveValue("Pottery: throwing bowls on the wheel");
+    await talking(page, SCREENS.unfolded.listening).click();
+    await expect(talking(page, SCREENS.unfolded.idle)).toBeVisible();
+    await expect(whatFor).toHaveValue("Pottery: throwing bowls on the wheel");
+  });
+});

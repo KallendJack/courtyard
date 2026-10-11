@@ -143,6 +143,12 @@ export type CodeTurn = {
    * the owner's approval (#171), shown with `why`, what the model said it's for, when it said.
    */
   readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
+  /**
+   * Says a command `run` allowed has finished, however it ended, so a heavy check frees its place
+   * in the builds queue (#281). A heavy check's `run` waits for its turn there first; anything a
+   * provider doesn't say has ended is freed when the turn ends.
+   */
+  readonly ran: (command: string) => void;
 };
 
 /** A call to one of a tool connection's tools: the tool by its own name, its input as the model sent it. */
@@ -305,6 +311,97 @@ export const firstSavingModel = async (
   );
   const chosen = firstWithRoom(offered) ?? offered[0];
   return chosen && { provider: chosen.provider.id, model: chosen.model.id };
+};
+
+/** How long a provider's status is reused when it can be used, so listing them doesn't ask each time. */
+const GOOD_STATUS_KEPT_MS = 60_000;
+/** How long a status saying a provider can't be used is reused: briefly, so a page load soon asks again. */
+const FAILED_STATUS_KEPT_MS = 10_000;
+
+/**
+ * What one check of a provider's status came to: an answer (available, or not for a reason that
+ * holds, such as signed out), or no answer in time, with what to say when there's no good answer to
+ * keep.
+ */
+export type StatusCheck =
+  | { readonly kind: "answered"; readonly status: ProviderStatus }
+  | { readonly kind: "no-answer"; readonly status: ProviderStatus };
+
+/**
+ * A provider's status, checked as seldom as it can be and not lost to a busy machine (#282). A good
+ * answer is reused for a minute, one saying the provider can't be used for a few seconds. A check
+ * that gets no answer in time keeps the last good answer, models and all, and checks once more in
+ * the background; only an answer says the provider can't be used. Callers asking at the same time
+ * share one check. `worked` says a turn just finished, which counts as a good check; `forget` says
+ * the sign-in changed, so nothing heard before it is kept.
+ */
+export const createStatusKeeper = (options: {
+  check: () => Promise<StatusCheck>;
+  now: () => number;
+}) => {
+  const { check, now } = options;
+  let kept: { status: ProviderStatus; until: number } | undefined;
+  /** The last answer saying the provider can be used, until one says it can't. */
+  let lastGood: ProviderStatus | undefined;
+  /** Counts changes to the sign-in, so a check that started before one is never kept. */
+  let changes = 0;
+  /** The check running now, which callers share, and the change it started after. */
+  let checking: { since: number; status: Promise<ProviderStatus> } | undefined;
+
+  const keep = (status: ProviderStatus) => {
+    kept = {
+      status,
+      until: now() + (status.available ? GOOD_STATUS_KEPT_MS : FAILED_STATUS_KEPT_MS),
+    };
+  };
+
+  /** What a check came to, kept unless the sign-in changed meanwhile. */
+  const settle = (since: number, outcome: StatusCheck, inBackground: boolean) => {
+    if (since !== changes) return outcome.status;
+    if (outcome.kind === "answered") {
+      lastGood = outcome.status.available ? outcome.status : undefined;
+      keep(outcome.status);
+      return outcome.status;
+    }
+    if (lastGood === undefined) {
+      keep(outcome.status);
+      return outcome.status;
+    }
+    keep(lastGood);
+    // Once, so a machine that stays busy isn't asked over and over.
+    if (!inBackground) start(true);
+    return lastGood;
+  };
+
+  const start = (inBackground: boolean) => {
+    const since = changes;
+    const run = { since, status: check().then((outcome) => settle(since, outcome, inBackground)) };
+    checking = run;
+    // A check that throws is a bug its callers hear about; one in the background has none to.
+    void run.status
+      .catch(() => undefined)
+      .finally(() => {
+        if (checking === run) checking = undefined;
+      });
+    return run;
+  };
+
+  return {
+    status: async (): Promise<ProviderStatus> => {
+      if (kept !== undefined && now() < kept.until) return kept.status;
+      const run = checking?.since === changes ? checking : start(false);
+      return run.status;
+    },
+    worked: () => {
+      if (lastGood === undefined) kept = undefined;
+      else keep(lastGood);
+    },
+    forget: () => {
+      changes += 1;
+      kept = undefined;
+      lastGood = undefined;
+    },
+  };
 };
 
 /** A schema as Claude Code and Codex's app-server take it: JSON Schema without the `$schema` line. */

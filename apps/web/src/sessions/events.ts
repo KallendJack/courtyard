@@ -97,12 +97,19 @@ const withText = (
   return [...parts, { kind: "text", text: start, replayed: replayed ? start.length : 0 }];
 };
 
-/** An activity after a turn's parts so far: with the ones just before it, or after the text. */
+/**
+ * An activity after a turn's parts so far: with the ones just before it, or after the text. A
+ * build's newer place in the queue takes the older one's line (#281).
+ */
 const withActivity = (parts: readonly AnswerPart[], activity: Activity): readonly AnswerPart[] => {
   const last = parts.at(-1);
-  return last?.kind === "activities"
-    ? [...parts.slice(0, -1), { kind: "activities", activities: [...last.activities, activity] }]
-    : [...parts, { kind: "activities", activities: [activity] }];
+  if (last?.kind !== "activities") {
+    return [...parts, { kind: "activities", activities: [activity] }];
+  }
+  const moved =
+    activity.kind === "waiting-for-build" && last.activities.at(-1)?.kind === "waiting-for-build";
+  const before = moved ? last.activities.slice(0, -1) : last.activities;
+  return [...parts.slice(0, -1), { kind: "activities", activities: [...before, activity] }];
 };
 
 /** One message from the owner and everything the model did in response to it. */

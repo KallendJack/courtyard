@@ -371,11 +371,8 @@ function Session(props: {
         </div>
       )}
 
-      {/* Above the Handheld frame's bottom bar, on a touch screen (#193). */}
-      <div
-        data-above-frame=""
-        className="sticky bottom-0 mt-6 bg-card pt-2 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:pb-[calc(--spacing(6)+env(safe-area-inset-bottom))]"
-      >
+      {/* Pinned to the foot of the page's panel, which keeps clear of a phone's gesture bar (#266). */}
+      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">
         {away && !reviewing && problem === undefined && (
           <JumpToLatest answering={running} onJump={toLatest} />
         )}
@@ -387,10 +384,11 @@ function Session(props: {
           disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
           {...(running ? { stop } : {})}
           placeholder={
-            running
-              ? "Queue a message…"
-              : reviewing
-                ? "Ask for changes…"
+            // On the review, which session it goes to: the one whose branch the PR is (#279).
+            reviewing
+              ? `To: ${session.title}`
+              : running
+                ? "Queue a message…"
                 : suggesting
                   ? "Or type your own reply…"
                   : "Reply…"
