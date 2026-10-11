@@ -1,4 +1,4 @@
-import { appendFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
@@ -9,6 +9,7 @@ import {
   followSession,
   gatedProvider,
   postJson,
+  removeTestFolder,
   requesterFor,
   setUpOwner,
   startSession,
@@ -25,7 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 /**
@@ -187,6 +188,9 @@ describe("a crash mid-write", () => {
     const stuck = gatedProvider();
     const beforeRestart = await startWorker([stuck.provider]);
     const session = await startSession(beforeRestart, "Crashed mid-answer");
+    // Torn mid-answer, once the turn is being answered: a turn still starting reads its log,
+    // and on finding it torn records its own failure after the torn line (#218).
+    await stuck.held;
     await appendFile(eventsFile(session.id), '{"seq":2,"type":"text-delta","te');
 
     const afterRestart = await startWorker();

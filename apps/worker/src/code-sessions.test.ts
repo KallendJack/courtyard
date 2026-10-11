@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type ApprovalAsk, CodeSessionList, type SessionEvent } from "@courtyard/contract";
@@ -18,6 +18,7 @@ import {
   heldCoder,
   postJson,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   savingProvider,
   sendJson,
@@ -39,7 +40,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) =>

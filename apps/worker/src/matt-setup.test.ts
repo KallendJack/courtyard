@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitHubConnection, MattSetup } from "@courtyard/contract";
@@ -14,6 +14,7 @@ import {
   mattSkillsIn,
   postJson,
   type Requester,
+  removeTestFolder,
   testWorker,
   writeMattPlugin,
 } from "./testing.ts";
@@ -75,7 +76,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 /** A worker with Matt's skills, signed in to GitHub, whose repository has these labels. */

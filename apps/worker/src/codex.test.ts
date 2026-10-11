@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -18,7 +18,14 @@ import {
 } from "./providers/codex.ts";
 import type { TurnInput } from "./providers/index.ts";
 import { err, ok } from "./result.ts";
-import { asOwner, errorOf, followSession, postJson, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  errorOf,
+  followSession,
+  postJson,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 const dataDir = resolve("/path/to/data");
 const folder = resolve("/path/to/context/garage-gym");
@@ -1060,7 +1067,7 @@ describe("Codex in the worker", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await removeTestFolder(root);
   });
 
   /** A worker offering Codex, with the stand-in acting out each turn. */
@@ -1179,7 +1186,7 @@ describe("Courtyard's tools on a Codex turn", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await removeTestFolder(root);
   });
 
   type Call = {
@@ -1481,7 +1488,7 @@ describe("Courtyard's tools on a Codex turn, after the review", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await removeTestFolder(root);
   });
 
   /** A Codex turn in garage-gym making the scripted calls: the answers, events and stand-in. */

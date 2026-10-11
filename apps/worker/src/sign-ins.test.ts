@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SignInList } from "@courtyard/contract";
@@ -9,6 +9,7 @@ import {
   errorOf,
   postJson,
   type Requester,
+  removeTestFolder,
   requesterFor,
   setUpOwner,
   testWorker,
@@ -24,7 +25,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A worker offering a fake that can sign in, and one that can't. */

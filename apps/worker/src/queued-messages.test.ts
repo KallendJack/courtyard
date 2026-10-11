@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionEvent } from "@courtyard/contract";
@@ -11,6 +11,7 @@ import {
   gatedProvider,
   postJson,
   type Requester,
+  removeTestFolder,
   requesterFor,
   sendJson,
   setUpOwner,
@@ -31,7 +32,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 /** Starts a worker on this test's folders; a second call is a restart, with the owner still in. */

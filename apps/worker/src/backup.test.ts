@@ -1,9 +1,17 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContextBackup } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, changesIn, gitIn, postJson, type Requester, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  changesIn,
+  gitIn,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 /** The context folder's changes, newest first. */
 const changes = () => changesIn(contextDir);
@@ -43,7 +51,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 describe("the context folder's repository", () => {

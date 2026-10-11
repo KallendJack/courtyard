@@ -421,6 +421,13 @@ type RunningSession = {
 };
 
 /**
+ * Given work nobody waits for once it has started (titling a session, notifying the owner), which
+ * settles without throwing. The worker lets it run; tests keep hold of it, to wait for it before
+ * removing the folders it writes into.
+ */
+export type Background = (work: Promise<void>) => void;
+
+/**
  * Sessions as jobs with an append-only event log in plain files (ADR 0006): one folder per session
  * in the data folder, holding `session.json` and `events.jsonl`. A turn runs on the worker to the
  * end whether or not anyone is watching; anyone can subscribe from a position and follow live.
@@ -444,6 +451,8 @@ export const createSessions = (options: {
    * pull request as it is then, for the owner's notifications (#173).
    */
   notify?: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => void;
+  /** Given the titling of a session, which nobody waits for. */
+  background: Background;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
@@ -1098,8 +1107,10 @@ export const createSessions = (options: {
     }
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
-      titleSession(turn.id).catch((error: unknown) =>
-        console.error(`Session ${turn.id}: titling it crashed`, error),
+      options.background(
+        titleSession(turn.id).catch((error: unknown) =>
+          console.error(`Session ${turn.id}: titling it crashed`, error),
+        ),
       );
     }
   };

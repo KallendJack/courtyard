@@ -279,12 +279,13 @@ export const TurnView = memo(function TurnView(props: {
       {turn.approval !== undefined && turn.state.kind === "running" && (
         <ApprovalCard
           {...approvalWords(turn.approval.ask, turn.approval.why)}
-          onAnswer={async (answer) => {
+          onAnswer={async (answer, waiting) => {
             if (turn.approval === undefined) return undefined;
             const answered = await answerApproval({
               sessionId,
               approval: turn.approval.seq,
               answer,
+              ...waiting,
             });
             return answered.kind === "loaded" ? undefined : describeProblem(answered).body;
           }}

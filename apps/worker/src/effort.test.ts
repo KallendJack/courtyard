@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Effort, ProviderList, type SessionEvent, SessionSummary } from "@courtyard/contract";
@@ -10,6 +10,7 @@ import {
   FAKE_MODEL,
   followSession,
   postJson,
+  removeTestFolder,
   startSession,
   testWorker,
 } from "./testing.ts";
@@ -22,7 +23,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 /** A worker on the fake, and the effort each of its turns was asked for. */
