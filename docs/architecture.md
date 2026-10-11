@@ -572,6 +572,8 @@ Where the rest fits:
   remembers that until the reset, and the model pickers show it. Nothing switches model by itself, but whatever has
   no model named avoids one at its limit: a new session, Get to know, Tidy and a session's title each go to the first
   model with room (for Get to know and Tidy, the first that saves to context). The worker picks it, not the browser.
+  A session whose provider shows as unavailable keeps its model in the picker, and Send waits until the provider is
+  back or the owner picks another (#299).
 - **Carry on.** On the last turn, when it failed on a usage limit, the owner can carry on. The session records the
   model change and sends the last message again to another provider's model, with the conversation so far (spec,
   Overflow).
