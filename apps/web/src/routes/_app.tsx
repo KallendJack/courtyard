@@ -18,6 +18,15 @@ import { fromWorker, logOut as logOutOnWorker } from "../worker.ts";
 const HandheldFrame = lazy(() => import("@/components/handheld-frame"));
 
 /**
+ * Until the frame is there, the room it will take (#271), so the page doesn't jump when it
+ * arrives: on a tablet its rails' widths, either side of the page, as the frame's own are; on a
+ * phone the height of its tiles across the top. The frame then keeps clear of them as it measures them.
+ */
+const RAILS =
+  "pl-[calc(--spacing(28)+env(safe-area-inset-left))] pr-[calc(--spacing(37.5)+env(safe-area-inset-right))]";
+const TILES = <div aria-hidden className="h-20 shrink-0" />;
+
+/**
  * Every page behind the owner's login. On a desktop the workspaces are a sidebar that collapses to
  * a rail, or a strip across the top of a narrow window. On a touch screen they're the Handheld
  * frame's: thumb rails and a bottom bar on a tablet or the unfolded Fold, tiles across the top on
@@ -73,11 +82,14 @@ function LoggedIn() {
     <DockContext value={dock}>
       <div className="flex h-dvh">
         {layout === "desktop" && <AppSidebar workspaces={list} onLogOut={logOut} />}
-        <div data-frame-column="" className="flex min-w-0 flex-1 flex-col">
+        <div
+          data-frame-column=""
+          className={`flex min-w-0 flex-1 flex-col ${layout === "tablet" ? RAILS : ""}`}
+        >
           {layout === "desktop" ? (
             <WorkspaceStrip workspaces={list} onLogOut={logOut} />
           ) : (
-            <Suspense fallback={null}>
+            <Suspense fallback={layout === "cover" && TILES}>
               <HandheldFrame
                 layout={layout}
                 workspaces={list}

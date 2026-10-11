@@ -40,6 +40,31 @@ const besideTheRails = async (page: Page) => {
   return boxOf(main);
 };
 
+/**
+ * Where the page is while the frame is still loading, and where it is once the frame is there
+ * (#271): the frame's code is held back until the first is measured.
+ */
+const beforeAndAfterTheFrame = async (page: Page) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/assets/handheld-frame-*.js", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/workspaces/garage-gym");
+  const before = await boxOf(page.getByRole("main"));
+  await expect(page.getByRole("navigation", { name: "Workspaces" })).toHaveCount(0);
+  release();
+  await expect(page.getByRole("button", { name: "Skills" })).toBeVisible();
+  // Two frames, so anything the frame's arrival moves has moved.
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+  return { before, after: await boxOf(page.getByRole("main")) };
+};
+
 /** The line at the Skills sheet's foot (#201): the model a message goes with, and Change. */
 const changeModel = (sheet: ReturnType<Page["locator"]>) =>
   sheet.getByRole("button", { name: /Change$/ });
@@ -183,7 +208,7 @@ const typeIn = (page: Page, screen: Screen) =>
 
 /** What both screens offer, the same way. */
 const everywhere = (screen: Screen) => {
-  test("every workspace is a tap away, and a second tap on the open one shows its recent sessions", async ({
+  test("every workspace is a tap away, and holding the open one shows its recent sessions", async ({
     page,
   }) => {
     await page.goto("/");
@@ -196,7 +221,7 @@ const everywhere = (screen: Screen) => {
     await workspaces.getByRole("link", { name: "Garage gym" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
 
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     const recent = page.getByRole("dialog", { name: "Garage gym" });
     await recent
       .getByRole("region", { name: "Recent in Garage gym" })
@@ -209,6 +234,19 @@ const everywhere = (screen: Screen) => {
     await workspaces.getByRole("link", { name: "Home" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Workspaces" })).toBeVisible();
     await expect(workspaces.getByRole("link", { name: "New workspace" })).toBeVisible();
+  });
+
+  test("tapping the open workspace from one of its sessions goes back to its page", async ({
+    page,
+  }) => {
+    await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+
+    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Garage gym" })).toHaveCount(0);
   });
 
   test("only where the owner is shows as chosen, ringed in violet, a code workspace's tile too, and on Home the mark (#237)", async ({
@@ -257,7 +295,7 @@ const everywhere = (screen: Screen) => {
   }) => {
     await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
     const workspaces = page.getByRole("navigation", { name: "Workspaces" });
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     const recent = page.getByRole("dialog", { name: "Garage gym" });
     await recent.getByRole("button", { name: "New session" }).click();
 
@@ -269,7 +307,7 @@ const everywhere = (screen: Screen) => {
     // From the workspace's own page, too: on the cover screen, with the box closed by then.
     await page.getByRole("heading", { level: 1 }).click();
     if (screen === "cover") await expect(message(page)).toBeHidden();
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     await recent.getByRole("button", { name: "New session" }).click();
     await expect(recent).toBeHidden();
     await expect(message(page)).toBeFocused();
@@ -438,6 +476,19 @@ test.describe("unfolded", () => {
       "page",
     );
     await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
+  });
+
+  test.describe("while the frame loads", () => {
+    // The service worker would serve the frame's code itself, past the hold.
+    test.use({ serviceWorkers: "block" });
+
+    test("the page is already beside where the rails will be, so it doesn't jump when they arrive", async ({
+      page,
+    }) => {
+      const { before, after } = await beforeAndAfterTheFrame(page);
+      expect(before.x).toBeCloseTo(after.x, 0);
+      expect(before.x + before.width).toBeCloseTo(after.x + after.width, 0);
+    });
   });
 
   test("the Model button shows the model it sends with by its short name, inside the button", async ({
@@ -770,6 +821,17 @@ test.describe("on the cover screen", () => {
     expect(skills.y + skills.height).toBeLessThanOrEqual(type.y);
     expect(type.y + type.height).toBeGreaterThan(COVER.height - 40);
     for (const target of [skills, type]) expect(target.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test.describe("while the frame loads", () => {
+    test.use({ serviceWorkers: "block" });
+
+    test("the page is already below where the tiles will be, so it doesn't jump when they arrive", async ({
+      page,
+    }) => {
+      const { before, after } = await beforeAndAfterTheFrame(page);
+      expect(before.y).toBeCloseTo(after.y, 0);
+    });
   });
 
   test("only the page scrolls, between the tiles and the bar, which stay put", async ({ page }) => {
