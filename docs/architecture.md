@@ -445,6 +445,8 @@ the web app parses every answer with these schemas.
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
 - **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
+- **`.github/workflows/roadmap.yml`:** files an issue that comes in without a milestone into `Later` (with
+  `needs-triage` when it has no triage label), on filing and once a day, so the milestones stay the whole roadmap.
 - **`.github/workflows/matt-skills.yml`:** once a week, runs `scripts/matt-skills/check.ts`, which compares
   `matt.json` with Matt's newest release and, when it's behind, writes an issue with his CHANGELOG lines and the new
   pin (its checksum worked out as the worker checks it); the workflow opens it, once per release (ADR 0024).
