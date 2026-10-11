@@ -32,7 +32,7 @@ export function Chip(props: {
         props.open ? "bg-accent font-semibold text-primary-text" : PILL_QUIET,
         // The Skill pill keeps its size; a chip naming a long choice gives way and truncates.
         withIcon ? "shrink-0 pr-3 pl-2.5" : "pr-2.5 pl-3",
-        "inline-flex max-w-full min-w-0 items-center gap-1.5 self-start hover:text-foreground [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "inline-flex max-w-full min-w-0 items-center gap-1.5 hover:text-foreground [&_svg]:size-3.5 [&_svg]:shrink-0",
         props.wideOnly && "max-md:hidden",
       )}
     >
