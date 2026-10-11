@@ -1918,7 +1918,8 @@ export const createSessions = (options: {
       const file: SessionFile = {
         id,
         workspaceId: start.workspaceId,
-        title: titleFrom(start.message.text),
+        // A message with no words is titled by the first file it carried (#164).
+        title: titleFrom(start.message.text || (start.attachments?.[0]?.attachment.name ?? "")),
         ...(start.starter ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,

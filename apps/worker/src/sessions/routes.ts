@@ -201,16 +201,22 @@ export const sessionError = (c: Context, error: SessionError) => {
   }
 };
 
+/** Why a message with no words and nothing attached can't go. */
+const NOTHING_TO_SEND = "Write something or attach a photo or PDF first";
+
 /**
  * A message the owner sent and its attachments, checked (#78); or the response refusing it, with
- * the reason one of them can't go.
+ * the reason one of them can't go. It has words, attachments or both (#164).
  */
-const readMessageWithAttachments = async <T>(
+const readMessageWithAttachments = async <T extends { text: string }>(
   c: Context,
   schema: z.ZodType<T>,
 ): Promise<Result<{ message: T; attachments: PreparedAttachment[] }, Response>> => {
   const sent = await readMessage(c, schema);
   if (!sent.ok) return err(apiError(c, { status: 400, error: sent.error }));
+  if (sent.value.message.text === "" && sent.value.files.length === 0) {
+    return err(apiError(c, { status: 400, error: NOTHING_TO_SEND }));
+  }
   const attachments = await prepareAttachments(sent.value.files);
   if (!attachments.ok) return err(apiError(c, { status: 400, error: attachments.error }));
   return ok({ message: sent.value.message, attachments: attachments.value });

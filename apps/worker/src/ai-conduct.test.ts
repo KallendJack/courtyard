@@ -496,6 +496,24 @@ describe("attachments (#78)", () => {
     expect(last?.message).toMatch(/The owner's new message:\n\nWhich is sharpest\?$/);
   });
 
+  it("says a message of only attachments has no words, putting none in its place (#164)", async () => {
+    const { say, turns } = await attachingSession();
+    await say("", [photo("floor-plan.png")]);
+    await say("Where would the rack fit?", []);
+
+    const first = turns[0]?.framing;
+    expect(first?.newMessage).toBe("");
+    expect(first?.attachments.map((attachment) => attachment.name)).toEqual(["floor-plan.png"]);
+    const noWords = await quotedInGuide("The owner's new message (attached", {
+      names: '"floor-plan.png"',
+    });
+    // The attachments, then that line, and nothing after it.
+    expect(first?.message.split("</attachments>\n\n").at(-1)).toBe(noWords);
+    expect(turns[1]?.framing.message).toContain(
+      '<conversation>\nOwner (attached "floor-plan.png"; no words)\n\nYou: ',
+    );
+  });
+
   it("keeps a PDF's text inside its markers, and stops a long one with a note", async () => {
     const { say, turns } = await attachingSession();
     await say("Read this", [

@@ -96,6 +96,66 @@ describe("attaching photos and PDFs to a message", () => {
     );
   });
 
+  it("starts a session with a photo and no words, recorded as just the photo, and answered (#164)", async () => {
+    const request = await start();
+
+    const started = await startWith(request, "", [PHOTO]);
+    expect(started.status).toBe(201);
+    const session = SessionSummary.parse(await started.json());
+    const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+
+    expect(ownerMessage(events)).toMatchObject({
+      text: "",
+      attachments: [{ name: "IMG_2041.jpg" }],
+    });
+    // With no words to title it by, the session is titled by what it carried until a model titles it.
+    expect(session.title).toBe("IMG_2041.jpg");
+    const answer = events.flatMap((e) => (e.type === "text-delta" ? [e.text] : [])).join("");
+    expect(answer).toBe("I see IMG_2041.jpg (a photo).");
+  });
+
+  it("takes a PDF with no words as a later message", async () => {
+    const request = await start();
+    const session = await startSession(request, "Where should the rack go?");
+    await followSession(request, { sessionId: session.id, until: "turn-completed" });
+
+    const sent = await postWithFiles(
+      request,
+      `/api/sessions/${session.id}/messages`,
+      { text: "  ", model: FAKE_MODEL },
+      [MANUAL],
+    );
+    expect(sent.status).toBe(202);
+    const events = await followSession(request, {
+      sessionId: session.id,
+      until: (event) => event.type === "owner-message" && event.attachments !== undefined,
+    });
+
+    expect(events.at(-1)).toMatchObject({
+      text: "",
+      attachments: [{ name: "rack-manual.pdf" }],
+    });
+  });
+
+  it("refuses a message with no words and nothing attached", async () => {
+    const request = await start();
+    const session = await startSession(request, "Where should the rack go?");
+
+    const refusals = await Promise.all(
+      [
+        startWith(request, " ", []),
+        postJson(request, "/api/workspaces/garage-gym/sessions", { text: "", model: FAKE_MODEL }),
+        postJson(request, `/api/sessions/${session.id}/messages`, { text: " ", model: FAKE_MODEL }),
+      ].map(async (sent) => {
+        const response = await sent;
+        return { status: response.status, error: await errorOf(response) };
+      }),
+    );
+
+    const refused = { status: 400, error: "Write something or attach a photo or PDF first" };
+    expect(refusals).toEqual([refused, refused, refused]);
+  });
+
   it("sends a message's attachments again when Carry on sends it to another provider", async () => {
     const request = await asOwner(
       testWorker({

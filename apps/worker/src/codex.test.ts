@@ -650,6 +650,34 @@ describe("a Codex turn", () => {
     });
   });
 
+  it("gives a turn of only a photo as the framing's message and the local image (#164)", async () => {
+    const codex = standIn();
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+    const photo = resolve("/path/to/data/floor-plan.png");
+    const message = 'The owner\'s new message (attached "floor-plan.png") has no words.';
+
+    await runTurn(provider, {
+      framing: {
+        instructions: "The instructions.",
+        message,
+        newMessage: "",
+        attachments: [
+          { kind: "photo", name: "floor-plan.png", path: photo, mediaType: "image/png" },
+        ],
+        tools: [],
+        fileTools: null,
+        webSearch: null,
+      },
+    });
+
+    expect(codex.requests("turn/start")[0]?.params).toMatchObject({
+      input: [
+        { type: "text", text: message, text_elements: [] },
+        { type: "localImage", path: photo },
+      ],
+    });
+  });
+
   it("streams Codex's answer as it's written, and only this thread's", async () => {
     const codex = standIn({
       turn: (turn) => {

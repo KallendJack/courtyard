@@ -159,8 +159,15 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
       </div>
     );
   }
+  // A message of only attachments shows just them (#164).
+  const hasWords = turn.text !== "" || turn.skill !== undefined;
   return (
-    <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 pb-2.5 text-accent-foreground">
+    <div
+      className={classes(
+        "ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 text-accent-foreground",
+        hasWords ? "pb-2.5" : "pb-1.5",
+      )}
+    >
       {photos.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {photos.map((photo, index) => (
@@ -183,7 +190,7 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
           href={attachmentUrl(sessionId, pdf.id)}
         />
       ))}
-      <div className="flex flex-col gap-1.5 px-2.5">{words}</div>
+      {hasWords && <div className="flex flex-col gap-1.5 px-2.5">{words}</div>}
       <PhotoViewer
         photos={photos}
         showing={viewing}
@@ -362,7 +369,8 @@ export const TurnView = memo(function TurnView(props: {
       {turn.state.kind === "failed" && turn.state.reason.kind !== "rate-limited" && (
         <Notice
           title="This turn didn't finish"
-          {...(onRetry
+          // A retry sends the turn's words again, so one of only attachments has none (#164).
+          {...(onRetry && turn.text !== ""
             ? {
                 action: (
                   <Button variant="outline" size="sm" onClick={() => onRetry(turn)}>

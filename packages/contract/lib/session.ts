@@ -110,12 +110,16 @@ export type SessionId = z.infer<typeof SessionId>;
 /** The longest message accepted. */
 export const MAX_MESSAGE_LENGTH = 20_000;
 
+/** A message's words: none at all when it carries attachments (#164). */
+const MessageWords = z.string().trim().max(MAX_MESSAGE_LENGTH);
+
 /**
  * What the owner sends: a message, the model to answer it, its effort (none for the default), and
- * the skill they started with it, if any (ADR 0016).
+ * the skill they started with it, if any (ADR 0016). It has words, attachments or both; the worker
+ * refuses one with neither.
  */
 export const NewMessage = z.object({
-  text: z.string().trim().min(1, "Write something first").max(MAX_MESSAGE_LENGTH),
+  text: MessageWords,
   model: ModelRef,
   effort: Effort.optional(),
   skill: SkillName.optional(),
@@ -141,7 +145,9 @@ export const GetToKnowRequest = z.object({ model: ModelRef.optional() });
 export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 
 /** Grill this plan: a new session grilling one of a workspace's plans, answered as Get to know is. */
-export const GrillRequest = GetToKnowRequest.extend({ plan: NewMessage.shape.text });
+export const GrillRequest = GetToKnowRequest.extend({
+  plan: MessageWords.min(1, "Write something first"),
+});
 export type GrillRequest = z.infer<typeof GrillRequest>;
 
 export const SessionSummary = z.object({
