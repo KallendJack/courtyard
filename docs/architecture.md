@@ -75,8 +75,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 - **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
   model, and adds, changes or removes one line. Text in, text out: it never touches the disk.
-- **`workspaces/`:** the list of workspaces: reads, creates, renames, recolours and archives workspace folders. Uses
-  `context-file/` to read each `CONTEXT.md`.
+- **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
+  one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
+  a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
 - **`owner-context/`:** reads `OWNER.md` and starts a new one.
 - **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
   that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
@@ -287,9 +288,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
     just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
     (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
-    Moorland's colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
+    the theme's violet and chart colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
     out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
-    one at a time, in Moorland's colours read from the theme (and again when the device turns dark or light), at its
+    one at a time, in the colours read from the theme, at its
     own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
     changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
     script, load something or go somewhere (links keep their words) before it goes in the page, the one place
@@ -355,9 +356,13 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
   (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; both files' classes
   are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
-  (`sheet.tsx`).
+  (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
+  home page's list and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
+  lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
+  (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
+  bottom sheet on a desktop.
   **`lib/`:** small
-  helpers shared by pages. **`styles.css`:** the theme: Moorland by day, Handheld by night.
+  helpers shared by pages. **`styles.css`:** the theme: Handheld, dark whatever the device's setting (#210).
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
   session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
   and the install manifest, and **`scripts/finish-build.mjs`**
@@ -529,7 +534,7 @@ things live only in the worker's memory and go when it restarts.
 ([ADR 0009](adr/0009-the-context-folder-is-a-git-repo-with-its-main-copy-on-a-remote.md)):
 
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
-- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and colour
+- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and icon
   (and a code workspace's repo, allowlist changes and Paper connection).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.

@@ -89,13 +89,16 @@ function Workspace() {
     return undefined;
   };
   const above = (
-    <div className="flex items-center gap-2 text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+    // The chooser stays outside the words' capitals: its sheet is inside it.
+    <div className="flex items-center gap-2">
       <IconChooser
         workspaceName={workspace.name}
         icon={workspace.icon}
         choose={(icon) => change({ icon })}
       />
-      {workspace.mode === "code" ? "Code workspace" : "Workspace"}
+      <span className="text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {workspace.mode === "code" ? "Code workspace" : "Workspace"}
+      </span>
     </div>
   );
   const toggle = (what: "rename" | "archive") =>

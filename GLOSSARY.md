@@ -46,6 +46,11 @@ _Avoid_: knowledge base, vault, RAG store
 One folder in the context folder, covering one area of the owner's life or one project.
 _Avoid_: project, space, room, context (on its own)
 
+**Workspace icon**:
+The plain line icon a workspace shows on its tile and beside its name, one of a small fixed set, kept in its
+`workspace.json` (#210). Courtyard suggests one from the workspace's name; the owner picks another in the Icon sheet.
+_Avoid_: colour, emoji, logo, avatar
+
 **Context file**:
 A workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first.
 _Avoid_: system prompt, memory, notes
@@ -357,6 +362,6 @@ what they said waits in it, and gone again once it's sent or they tap away.
 _Avoid_: drawer, tray, composer area
 
 **Handheld sheet**:
-A panel in the Handheld frame for a few choices (Skills, Model, Settings, a workspace's recent sessions): from the
-right edge beside the right rail on a tablet, from the bottom on a phone.
+A panel in the Handheld frame for a few choices (Skills, Model, Settings, a workspace's recent sessions, its icon):
+from the right edge beside the right rail on a tablet, from the bottom on a phone.
 _Avoid_: modal, drawer, popup
