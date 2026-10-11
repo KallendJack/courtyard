@@ -31,7 +31,7 @@ export default function IconSheet(props: {
   };
   const body = (
     <>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-meta text-muted-foreground">
         {handheld
           ? "Shows on its tile in the rails."
           : "Shows beside its name wherever it's listed."}{" "}
@@ -65,7 +65,7 @@ export default function IconSheet(props: {
           );
         })}
       </div>
-      <p className="text-[12px]/4 font-semibold text-placeholder">
+      <p className="text-label font-semibold text-placeholder">
         A small set of plain line icons, the same style everywhere.
       </p>
       <FormError message={save.error} />

@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_app/fresh-start")({
 /** A list under its heading: what goes, or what stays. */
 function GoesOrStays(props: { heading: string; goes?: boolean; items: readonly string[] }) {
   return (
-    <section aria-label={props.heading} className="flex flex-col gap-2 text-sm/[22px]">
+    <section aria-label={props.heading} className="flex flex-col gap-2 text-sm/5.5">
       <h2 className={props.goes ? "font-semibold text-destructive-text" : "font-semibold"}>
         {props.heading}
       </h2>
@@ -96,7 +96,7 @@ function FreshStart() {
   return (
     <Page>
       <PageTitle above={<BackLink workspaceId={undefined} />}>Fresh start</PageTitle>
-      <p className="mt-2 text-[15px]/[23px] text-muted-foreground">
+      <p className="mt-2 text-body text-muted-foreground">
         Clear everything and start Courtyard as on its first run. Use it once you've finished trying
         things out, or any time you want a clean slate.
       </p>
@@ -163,9 +163,7 @@ function FreshStart() {
             Cancel
           </ButtonLink>
         </div>
-        <p className="text-xs/[18px] text-muted-foreground">
-          The button works once the words match.
-        </p>
+        <p className="text-meta text-muted-foreground">The button works once the words match.</p>
         {/* A turn that stopped it is named in its notice above, so it's said once. */}
         {running === null && <FormError message={start.error} />}
       </form>

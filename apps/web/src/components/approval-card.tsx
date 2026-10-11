@@ -101,10 +101,10 @@ export function ApprovalCard(props: {
     <div data-approval-card="">
       <section
         aria-label="Needs your OK"
-        className="flex flex-col gap-3 rounded-ask bg-surface p-4.5 ring-[1.5px] ring-warning/55 ring-inset"
+        className="flex flex-col gap-3 rounded-ask bg-surface p-4.5 ring-stroke ring-warning/55 ring-inset"
       >
         <CapsLabel tone="warning">Needs your OK</CapsLabel>
-        <h2 className="display-section text-[19px]/6 tracking-[-0.015em] text-foreground">
+        <h2 className="display-section text-card-title tracking-[-0.015em] text-foreground">
           {props.title}
         </h2>
         <div className="rounded-bubble bg-card px-3.5 py-3 ring-1 ring-border ring-inset">
@@ -112,7 +112,7 @@ export function ApprovalCard(props: {
             {props.exact}
           </code>
         </div>
-        <p className="text-xs/[19px] text-muted-foreground">{props.note}</p>
+        <p className="text-meta/4.75 text-muted-foreground">{props.note}</p>
         {waiting === "slow" ? (
           <StatusPill>Waiting for Courtyard…</StatusPill>
         ) : (

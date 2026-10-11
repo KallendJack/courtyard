@@ -93,7 +93,7 @@ function Activities(props: { activities: readonly Activity[] }) {
   return (
     <ul
       aria-label="What the model did"
-      className="space-y-0.5 text-xs wrap-anywhere text-muted-foreground"
+      className="space-y-0.5 text-meta wrap-anywhere text-muted-foreground"
     >
       {props.activities.map((activity, index) => (
         <li
@@ -147,7 +147,7 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
   const words = (
     <>
       {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
-      <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
+      <p className="text-message whitespace-pre-wrap wrap-anywhere md:text-base/6.25">
         {turn.text}
       </p>
     </>
@@ -236,7 +236,7 @@ export const TurnView = memo(function TurnView(props: {
   return (
     <div className="space-y-4">
       {turn.modelChanged && (
-        <p className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+        <p className="flex items-center gap-3 text-meta text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
           <ArrowRightLeft aria-hidden className="size-3.5 shrink-0" />
           <span className="max-w-[70%]">
             Now answering:{" "}

@@ -96,7 +96,7 @@ function Workspace() {
         icon={workspace.icon}
         choose={(icon) => change({ icon })}
       />
-      <span className="text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      <span className="text-meta/4 font-semibold tracking-label text-muted-foreground uppercase">
         {workspace.mode === "code" ? "Code workspace" : "Workspace"}
       </span>
     </div>
@@ -179,9 +179,7 @@ function Workspace() {
       )}
       {contextFile !== null && contextFile.intro !== "" && (
         // One line, as a reminder; the whole file is further down.
-        <p className="mt-2 line-clamp-1 text-[15px]/[23px] text-muted-foreground">
-          {contextFile.intro}
-        </p>
+        <p className="mt-2 line-clamp-1 text-body text-muted-foreground">{contextFile.intro}</p>
       )}
       {workspace.configProblem !== undefined && (
         <div className="mt-4">
@@ -367,7 +365,7 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
     <section aria-label="Skills" className={CARD}>
       <div className="flex flex-col gap-1">
         <SectionTitle>Skills</SectionTitle>
-        <p className="text-sm/[21px] text-muted-foreground">
+        <p className="text-sm/5.25 text-muted-foreground">
           What models here can use. Pick one with <span className="md:hidden">Skill</span>
           <span className="max-md:hidden">/</span> in the message box.
         </p>
@@ -375,7 +373,7 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
       <div className="mt-2">
         <SkillList skills={props.skills} label="Skills" />
       </div>
-      <p className="mt-4 text-sm/[21px] text-muted-foreground">
+      <p className="mt-4 text-sm/5.25 text-muted-foreground">
         Add your own: a folder with a <code>SKILL.md</code>, in an <code>.agents/skills</code>{" "}
         folder in this workspace's folder, {props.mode === "code" && "or its repo's, "}or at the top
         of your context folder for every workspace.
@@ -412,7 +410,7 @@ function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
       <div className="flex items-baseline justify-between gap-4">
         <SectionTitle>Sessions</SectionTitle>
         {props.mode === "code" && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-meta text-muted-foreground">
             {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
           </span>
         )}

@@ -66,7 +66,7 @@ function Home() {
                   <WorkspaceIcon icon={workspace.icon} size="md" />
                   {workspace.name}
                 </span>
-                <span className="flex gap-2 text-xs text-muted-foreground">
+                <span className="flex gap-2 text-meta text-muted-foreground">
                   {workspace.mode === "code" && <span>Code</span>}
                   {!workspace.hasContextFile && <span>No context file yet</span>}
                   {workspace.configProblem !== undefined && (
@@ -100,7 +100,7 @@ function Home() {
       <div className="mt-7 flex justify-end">
         <Link
           to="/fresh-start"
-          className="text-xs font-medium text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
+          className="text-meta font-medium text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
         >
           Fresh start…
         </Link>

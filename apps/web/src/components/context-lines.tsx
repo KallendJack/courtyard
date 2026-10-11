@@ -14,7 +14,7 @@ export function ContextLines(props: {
     <section aria-label={props.title}>
       <h3 className="flex items-baseline gap-2 font-semibold">
         {props.title}{" "}
-        <span className="text-xs font-normal text-muted-foreground">{props.hint}</span>
+        <span className="text-meta font-normal text-muted-foreground">{props.hint}</span>
       </h3>
       {props.lines.length === 0 ? (
         <p className="mt-1 text-sm text-muted-foreground">Nothing yet.</p>

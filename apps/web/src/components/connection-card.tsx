@@ -46,11 +46,11 @@ export function ConnectionCard(props: {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="font-semibold wrap-anywhere">{props.name}</span>
           {props.detail !== undefined && (
-            <span className="text-xs text-muted-foreground wrap-anywhere">{props.detail}</span>
+            <span className="text-meta text-muted-foreground wrap-anywhere">{props.detail}</span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className={classes("flex items-center gap-1.5 text-xs font-semibold", text)}>
+          <span className={classes("flex items-center gap-1.5 text-meta font-semibold", text)}>
             {dot !== undefined && (
               <span aria-hidden className={classes("size-2 shrink-0 rounded-full", dot)} />
             )}

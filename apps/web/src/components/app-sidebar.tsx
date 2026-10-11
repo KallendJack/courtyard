@@ -36,12 +36,12 @@ const ROW =
 /** A workspace's row (and New workspace's), marked while its page is open. */
 const WORKSPACE_ROW = classes(
   ROW,
-  "text-[15px] data-[status=active]:bg-muted data-[status=active]:font-semibold",
+  "text-interface/normal data-[status=active]:bg-muted data-[status=active]:font-semibold",
 );
 
 /** A group's heading in the sidebar (code workspaces, recent sessions), gone in the rail. */
 export const GROUP_HEADING =
-  "px-3 pb-1.5 text-xs font-medium text-muted-foreground group-data-[collapsed=true]/sidebar:hidden";
+  "px-3 pb-1.5 text-meta font-medium text-muted-foreground group-data-[collapsed=true]/sidebar:hidden";
 
 /** The sidebar only shows from tablet width up; below that the workspace strip takes over. */
 const SHOWN = "(min-width: 768px)";

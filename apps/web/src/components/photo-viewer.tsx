@@ -69,8 +69,8 @@ export function PhotoViewer(props: {
         <div className="relative flex h-full flex-col">
           <div className="flex h-14 shrink-0 items-center justify-between pt-3 pr-2 pl-5">
             <div className="flex min-w-0 flex-col gap-px">
-              <span className="truncate text-sm/[18px] font-medium">{photo.name}</span>
-              <span className="text-xs" style={{ color: "var(--viewer-muted)" }}>
+              <span className="truncate text-sm/4.5 font-medium">{photo.name}</span>
+              <span className="text-meta" style={{ color: "var(--viewer-muted)" }}>
                 {showing + 1} of {photos.length}
               </span>
             </div>

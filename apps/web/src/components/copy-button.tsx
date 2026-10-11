@@ -62,7 +62,7 @@ export function CopyButton(props: {
         icon={copied ? tick : <Copy />}
         onClick={() => void copy()}
       />
-      <span role="status" className="text-xs font-medium text-primary-text">
+      <span role="status" className="text-meta font-medium text-primary-text">
         {copied ? "Copied" : ""}
       </span>
     </div>

@@ -45,7 +45,7 @@ const ELEMENTS: Components = {
     <WebLink href={typeof src === "string" ? src : undefined}>{alt || "Image"}</WebLink>
   ),
   code: ({ node: _, className: __, ...props }) => (
-    <code className="rounded-sm bg-muted px-1 py-0.5 text-[0.9em]" {...props} />
+    <code className="rounded-sm bg-muted px-1 py-0.5 text-code" {...props} />
   ),
   pre: ({ node }) => {
     const code = node?.children.find((child) => child.type === "element");
@@ -148,7 +148,7 @@ export const Answer = memo(function Answer(props: {
   const blocks = splitBlocks(shown);
   return (
     // Spaced by gaps, not margins, so a formula (whose margins come from KaTeX) spaces like the rest.
-    <div className="flex flex-col gap-4 text-base/[26px] wrap-anywhere">
+    <div className="flex flex-col gap-4 text-answer wrap-anywhere">
       {blocks.map((block, index) => {
         const arriving = props.running && index === blocks.length - 1;
         return (

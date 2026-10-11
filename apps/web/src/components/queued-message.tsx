@@ -41,8 +41,8 @@ export function QueuedMessages(props: {
       <ol aria-label="Queued messages" className="flex flex-col items-end gap-3">
         {props.messages.map((message, index) => (
           <li key={message.seq} className="flex max-w-[85%] flex-col items-end gap-1.5">
-            <div className="flex items-start gap-1.5 rounded-bubble rounded-br-sm py-1.5 pr-1.5 pl-4 ring-[1.5px] ring-muted-foreground/40 ring-inset">
-              <p className="py-1.5 text-[15px]/[22px] whitespace-pre-wrap wrap-anywhere text-foreground/85 md:text-base/[22px]">
+            <div className="flex items-start gap-1.5 rounded-bubble rounded-br-sm py-1.5 pr-1.5 pl-4 ring-stroke ring-muted-foreground/40 ring-inset">
+              <p className="py-1.5 text-message/5.5 whitespace-pre-wrap wrap-anywhere text-foreground/85 md:text-base/5.5">
                 {message.text}
                 {message.attachments > 0 &&
                   ` (with ${message.attachments} attachment${message.attachments === 1 ? "" : "s"})`}
@@ -54,7 +54,7 @@ export function QueuedMessages(props: {
                 onClick={async () => setProblem(await props.onRemove(message.seq))}
               />
             </div>
-            <p className="text-[12px]/4 font-semibold text-muted-foreground">
+            <p className="text-label font-semibold text-muted-foreground">
               {index > 0
                 ? `Queued · ${ordinal(index + 1)}`
                 : props.running

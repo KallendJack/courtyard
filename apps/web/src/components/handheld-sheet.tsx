@@ -97,9 +97,9 @@ export function HandheldSheet(props: {
                 <span aria-hidden className="mb-3 h-1 w-9 self-center rounded-full bg-input" />
               )}
               <span className="flex items-center justify-between gap-3">
-                <h2 className="display-title text-[22px]/7">{props.title}</h2>
+                <h2 className="display-title text-sheet-title">{props.title}</h2>
                 {props.aside !== undefined && (
-                  <span className="truncate text-[12px]/4 font-semibold text-placeholder">
+                  <span className="truncate text-label font-semibold text-placeholder">
                     {props.aside}
                   </span>
                 )}

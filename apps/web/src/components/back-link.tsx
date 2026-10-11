@@ -4,7 +4,8 @@ import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 const loggedIn = getRouteApi("/_app");
 
-const BACK = "flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline";
+const BACK =
+  "flex w-fit items-center gap-2 text-meta font-medium text-primary-text hover:underline";
 
 /**
  * The way back above a page's title: to a workspace, named, with its icon, or with no

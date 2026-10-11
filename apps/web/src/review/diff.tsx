@@ -49,15 +49,15 @@ export function Diff(props: { file: ChangedFile; place: string }) {
       aria-label={`Diff of ${file.path}`}
       className="flex min-w-0 flex-col overflow-clip rounded-card bg-surface"
     >
-      <div className="flex items-baseline justify-between gap-3 px-3.5 py-3 shadow-[inset_0_-1px_0] shadow-border">
-        <p className="min-w-0 truncate font-mono text-xs/4 text-foreground" title={file.path}>
+      <div className="flex items-baseline justify-between gap-3 px-3.5 py-3 shadow-divide">
+        <p className="min-w-0 truncate font-mono text-meta/4 text-foreground" title={file.path}>
           {file.path}
           {file.status === "added" ? " · new" : file.status === "removed" ? " · deleted" : ""}
         </p>
-        <p className="shrink-0 text-xs/4 font-semibold text-placeholder">{props.place}</p>
+        <p className="shrink-0 text-meta/4 font-semibold text-placeholder">{props.place}</p>
       </div>
       {hunks.length === 0 ? (
-        <p className="px-3.5 py-3 text-xs/5 text-muted-foreground">
+        <p className="px-3.5 py-3 text-meta/5 text-muted-foreground">
           {file.status === "renamed"
             ? "Moved here, with nothing in it changed."
             : "GitHub shows no diff for this file: it's binary, or too large to show."}
@@ -66,7 +66,7 @@ export function Diff(props: { file: ChangedFile; place: string }) {
         hunks.map((hunk) => (
           // Each hunk shows different lines of the file.
           <div key={hunk.lines} className="flex flex-col py-1">
-            <p className="px-3.5 pt-1.5 pb-1 font-mono text-[11px]/4 text-placeholder">
+            <p className="px-3.5 pt-1.5 pb-1 font-mono text-caption text-placeholder">
               {hunk.lines}
             </p>
             {hunk.rows.map((row, line) => {
@@ -76,7 +76,7 @@ export function Diff(props: { file: ChangedFile; place: string }) {
                   // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines never move
                   key={line}
                   className={classes(
-                    "flex gap-2 px-3.5 py-0.5 font-mono text-xs/[18px] whitespace-pre-wrap",
+                    "flex gap-2 px-3.5 py-0.5 font-mono text-meta whitespace-pre-wrap",
                     shown.look,
                   )}
                 >

@@ -19,7 +19,8 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, in `apps/web/src/styles.css`: Handheld (the Paper boards
   "Handheld ·"), dark whatever the device's setting (#210). There is no light theme, so nothing uses `dark:`.
-  Colours, fonts and radii are used by name, never by value. Components join classes with
+  Colours, type sizes, radii and effects are used by name, never by value; `scripts/theme/check.ts` fails
+  `pnpm verify` on one by value (one-offs, with a reason, in its `allowed.json`). Components join classes with
   `lib/classes.ts`, which merges nothing, so no class-merging code reaches the first load.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and

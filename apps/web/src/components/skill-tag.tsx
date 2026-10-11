@@ -27,7 +27,7 @@ export function SkillTag(props: {
   return (
     <span
       className={classes(
-        "inline-flex w-fit max-w-full min-w-0 shrink-0 items-center self-start rounded-full text-xs/4 font-semibold text-primary-text",
+        "inline-flex w-fit max-w-full min-w-0 shrink-0 items-center self-start rounded-full text-meta/4 font-semibold text-primary-text",
         look.tag,
       )}
     >

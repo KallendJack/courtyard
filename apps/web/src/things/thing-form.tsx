@@ -134,7 +134,7 @@ export function ThingForm(props: {
       </Pair>
       <Pair>
         {props.hasParts ? (
-          <p className="self-end pb-3 text-xs text-muted-foreground">
+          <p className="self-end pb-3 text-meta text-muted-foreground">
             It has parts, so it can't be part of another Thing.
           </p>
         ) : (

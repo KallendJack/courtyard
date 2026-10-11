@@ -55,7 +55,7 @@ export function BranchStrip(props: {
   return (
     <section
       aria-label="Branch and pull request"
-      className="flex flex-wrap items-center gap-2 text-xs"
+      className="flex flex-wrap items-center gap-2 text-meta"
     >
       <span className={classes(CHIP, "font-mono text-foreground")}>
         <GitBranch aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />

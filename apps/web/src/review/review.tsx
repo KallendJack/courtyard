@@ -22,7 +22,7 @@ import css from "./review.css?inline";
 // The review's own stylesheet (review.css), added once, when a review is first opened.
 addStylesheet("review", css);
 
-const PILL = "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-mono text-xs/4";
+const PILL = "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-mono text-meta/4";
 
 /** How each check shows, as a pill: passed in moss, running in violet, failed in red. */
 const CHECK_LOOK = {
@@ -152,10 +152,10 @@ export default function Review(props: {
               ))}
             </ul>
           )}
-          <p className="px-1 font-mono text-xs/4 text-muted-foreground">
+          <p className="px-1 font-mono text-meta/4 text-muted-foreground">
             {lineCounts(pullRequest.changes)}
           </p>
-          <p className="min-w-0 truncate px-1 font-mono text-xs/4 text-placeholder max-md:basis-full">
+          <p className="min-w-0 truncate px-1 font-mono text-meta/4 text-placeholder max-md:basis-full">
             {review.data.branch} → {review.data.base}
           </p>
         </div>
@@ -200,10 +200,7 @@ export default function Review(props: {
                     </ThumbButton>
                   </div>
                   {merge.kind === "refused" && (
-                    <p
-                      id="merge-refused"
-                      className="text-right text-xs/[18px] text-muted-foreground"
-                    >
+                    <p id="merge-refused" className="text-right text-meta text-muted-foreground">
                       {merge.reason}
                     </p>
                   )}

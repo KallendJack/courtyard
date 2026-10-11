@@ -116,7 +116,7 @@ function ProposedChange(props: {
             </ins>
           )}
           {change.why !== undefined && (
-            <span className="block text-[13px]/5 text-muted-foreground italic">{change.why}</span>
+            <span className="block text-meta/5 text-muted-foreground italic">{change.why}</span>
           )}
         </span>
       </label>
@@ -174,7 +174,7 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
 
   if (asking.kind === "asking") {
     return (
-      <p role="status" className="flex items-center gap-2.5 text-[15px]/[23px]">
+      <p role="status" className="flex items-center gap-2.5 text-body">
         <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin text-primary-text" />
         Reading {props.name} for lines to merge, remove or shorten…
       </p>

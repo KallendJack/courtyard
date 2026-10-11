@@ -78,7 +78,7 @@ export function ThingsSection(props: {
         )}
         <ThingRows workspaceId={workspaceId} things={shown} all={things} label="Things" />
         {list.problems.map((problem) => (
-          <p key={problem.path} className="mt-2 text-xs text-muted-foreground wrap-anywhere">
+          <p key={problem.path} className="mt-2 text-meta text-muted-foreground wrap-anywhere">
             {problem.path} can't be read as a Thing: {problem.problem}
           </p>
         ))}

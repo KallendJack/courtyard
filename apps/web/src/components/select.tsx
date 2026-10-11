@@ -4,7 +4,7 @@ import { classes } from "@/lib/classes";
 
 /** A small pill's shape in a row of controls, without its colours or side padding. */
 export const PILL_SHAPE =
-  "rounded-full py-1.5 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  "rounded-full py-1.5 text-meta outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** A pill's quiet colours: the composer's pickers, and a chip that isn't open. */
 export const PILL_QUIET = "bg-background font-medium text-muted-foreground";
@@ -81,7 +81,7 @@ export function Select<T extends string>(props: {
         {props.label}
       </label>
       {picker}
-      {props.warning && <p className="text-xs text-destructive-text">{props.warning}</p>}
+      {props.warning && <p className="text-meta text-destructive-text">{props.warning}</p>}
     </div>
   );
 }

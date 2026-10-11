@@ -21,7 +21,7 @@ const PRESS =
   "focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40";
 
 const KEY =
-  "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-card text-[10px]/3 font-bold tracking-[0.08em] uppercase [&_svg]:text-foreground";
+  "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-card text-rail font-bold tracking-label uppercase [&_svg]:text-foreground";
 
 const LOOKS = {
   /** Settings, at the top of a tablet's right rail. */
@@ -48,7 +48,7 @@ const LOOKS = {
   row: {
     base: classes(
       PRESS,
-      "flex h-12 min-w-0 flex-1 basis-0 items-center justify-center gap-2 rounded-lg bg-secondary px-2 text-xs/4 font-bold text-foreground/85 [&_svg]:size-4.5 [&_svg]:shrink-0",
+      "flex h-12 min-w-0 flex-1 basis-0 items-center justify-center gap-2 rounded-lg bg-secondary px-2 text-meta/4 font-bold text-foreground/85 [&_svg]:size-4.5 [&_svg]:shrink-0",
     ),
     off: "",
     on: "",
@@ -85,7 +85,7 @@ const LOOKS = {
   more: {
     base: classes(
       PRESS,
-      "flex items-center gap-2 self-start rounded-bubble px-3 py-2.5 text-[12px]/4 font-bold text-foreground/70 [&_svg]:size-3 [&_svg]:shrink-0",
+      "flex items-center gap-2 self-start rounded-bubble px-3 py-2.5 text-label font-bold text-foreground/70 [&_svg]:size-3 [&_svg]:shrink-0",
     ),
     off: "",
     on: "",
@@ -93,7 +93,7 @@ const LOOKS = {
 } as const;
 
 const DISC =
-  "flex size-15 items-center justify-center rounded-full text-[15px]/[18px] font-extrabold group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5";
+  "flex size-15 items-center justify-center rounded-full text-interface/4.5 font-extrabold group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5";
 
 export function FrameButton({
   look,
@@ -123,7 +123,7 @@ export function FrameButton({
             className={classes(
               DISC,
               lit
-                ? "bg-primary text-primary-foreground shadow-[0_0_0_5px_color-mix(in_oklab,var(--color-primary)_20%,transparent),0_0_24px_color-mix(in_oklab,var(--color-primary)_50%,transparent)]"
+                ? "bg-primary text-primary-foreground shadow-lit"
                 : "bg-secondary text-foreground ring-1 ring-input ring-inset",
             )}
           >
@@ -131,7 +131,7 @@ export function FrameButton({
           </span>
           <span
             className={classes(
-              "text-[11px]/3.5 font-bold tracking-[0.06em] uppercase",
+              "text-caption/3.5 font-bold tracking-[0.06em] uppercase",
               lit ? "text-foreground" : "text-placeholder",
             )}
           >

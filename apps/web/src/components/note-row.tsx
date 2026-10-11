@@ -67,7 +67,7 @@ export function NoteRow(props: {
   return (
     <li
       className={classes(
-        "grid grid-cols-[16px_1fr] items-start gap-x-3 border-l-2 py-0.5 pl-3 text-sm/[22px] md:grid-cols-[16px_1fr_auto]",
+        "grid grid-cols-[16px_1fr] items-start gap-x-3 border-l-2 py-0.5 pl-3 text-sm/5.5 md:grid-cols-[16px_1fr_auto]",
         !tall && "md:items-center",
         muted ? "border-border" : "border-primary",
       )}

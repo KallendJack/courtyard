@@ -30,12 +30,12 @@ export function SkillMenu(props: {
     >
       <p
         id={`${props.id}-heading`}
-        className="px-3.5 pt-1.5 pb-2 text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+        className="px-3.5 pt-1.5 pb-2 text-meta/4 font-semibold tracking-label text-muted-foreground uppercase"
       >
         Skills in {props.workspaceName}
       </p>
       {props.skills.length === 0 ? (
-        <p className="px-3.5 pb-2 text-xs text-muted-foreground">No skill matches.</p>
+        <p className="px-3.5 pb-2 text-meta text-muted-foreground">No skill matches.</p>
       ) : (
         <div id={props.id} role="listbox" aria-labelledby={`${props.id}-heading`}>
           {props.skills.map((skill, index) => {

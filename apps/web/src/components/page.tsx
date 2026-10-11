@@ -34,7 +34,7 @@ export function PageTitle(props: { children: ReactNode; above?: ReactNode; actio
     <div className="flex flex-col gap-2">
       {props.above}
       <div className="flex items-start justify-between gap-3">
-        <h1 className="display-title text-[26px]/[31px] wrap-anywhere md:text-[30px]/[36px] xl:text-4xl/[42px]">
+        <h1 className="display-title text-title wrap-anywhere md:text-3xl xl:text-4xl/10.5">
           {props.children}
         </h1>
         {props.actions && <div className="flex shrink-0 gap-1 md:pt-1">{props.actions}</div>}

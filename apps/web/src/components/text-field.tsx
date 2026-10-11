@@ -48,7 +48,7 @@ export function TextField({
       {optional ? (
         <div className="flex items-baseline gap-2">
           {labelled}
-          <span className="text-xs text-muted-foreground">Optional</span>
+          <span className="text-meta text-muted-foreground">Optional</span>
         </div>
       ) : (
         labelled
@@ -64,7 +64,7 @@ export function TextField({
         {...props}
       />
       {hint && (
-        <p id={hintId} className="text-xs text-muted-foreground">
+        <p id={hintId} className="text-meta text-muted-foreground">
           {hint}
         </p>
       )}

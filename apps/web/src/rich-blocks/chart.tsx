@@ -45,9 +45,9 @@ export default function ChartBlock(props: DrawingProps) {
       <figure aria-label={name} className="rounded-md border bg-field p-4 md:p-5">
         {chart.title === undefined && chart.unit === undefined ? null : (
           <figcaption className="mb-3 flex items-baseline justify-between gap-3">
-            <span className="text-[15px]/5 font-semibold">{chart.title}</span>
+            <span className="text-interface font-semibold">{chart.title}</span>
             {chart.unit === undefined ? null : (
-              <span className="text-xs text-muted-foreground">{chart.unit}</span>
+              <span className="text-meta text-muted-foreground">{chart.unit}</span>
             )}
           </figcaption>
         )}
@@ -143,7 +143,7 @@ function Plot(props: { chart: Plotted }) {
           aria-hidden
           width={axis + plotWidth}
           height={height}
-          className="block font-sans text-[12px]"
+          className="block font-sans text-label"
         >
           <Ticks scale={scale} y={y} axis={axis} right={axis + plotWidth} />
           {chart.labels.map((label, index) => (
@@ -153,7 +153,7 @@ function Plot(props: { chart: Plotted }) {
               x={axis + slot * (index + 0.5)}
               y={ABOVE + PLOT_HEIGHT + 19}
               textAnchor="middle"
-              className="fill-muted-foreground text-xs"
+              className="fill-muted-foreground text-meta"
             >
               {label}
             </text>
@@ -293,8 +293,8 @@ function Legend(props: {
     <ul
       className={
         props.stacked
-          ? "flex flex-col gap-2 text-xs text-muted-foreground"
-          : "mb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
+          ? "flex flex-col gap-2 text-meta text-muted-foreground"
+          : "mb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-meta text-muted-foreground"
       }
     >
       {props.items.map((item, index) => (

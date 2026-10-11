@@ -40,7 +40,7 @@ function NewWorkspace() {
   return (
     <Page>
       <PageTitle>New workspace</PageTitle>
-      <p className="mt-2 text-[15px]/[23px] text-muted-foreground">
+      <p className="mt-2 text-body text-muted-foreground">
         One area of your life or one project. It starts with an empty context file for its facts,
         plans and ideas.
       </p>

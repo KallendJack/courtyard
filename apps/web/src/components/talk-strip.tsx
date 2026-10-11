@@ -270,8 +270,8 @@ export function TalkBar(props: {
           !listeningNow && answering && "bg-linear-to-r from-primary/14 to-primary/0 to-45%",
           listeningNow &&
             !held &&
-            "bg-primary/12 shadow-[0_0_30px] shadow-primary/45 ring-[1.5px] ring-primary ring-inset",
-          held && "bg-primary shadow-[0_0_40px] shadow-primary/60 ring-5 ring-primary/20",
+            "bg-primary/12 shadow-glow-talk ring-stroke ring-primary ring-inset",
+          held && "bg-primary shadow-glow-held ring-5 ring-primary/20",
         )}
       >
         {!held && (
@@ -279,9 +279,7 @@ export function TalkBar(props: {
             aria-hidden
             className={classes(
               "absolute inset-x-4.5 top-0 h-0.5 rounded-hair bg-linear-to-r from-transparent via-primary-text to-transparent",
-              listeningNow
-                ? "shadow-[0_0_14px_2px] shadow-primary"
-                : "shadow-[0_0_12px_1px] shadow-primary/70",
+              listeningNow ? "shadow-glow-hair-live" : "shadow-glow-hair",
             )}
           />
         )}
@@ -295,7 +293,7 @@ export function TalkBar(props: {
             id={titleId}
             className={classes(
               "truncate font-extrabold tracking-[-0.01em]",
-              wide ? "text-[17px]/5" : "text-base/5",
+              wide ? "text-talk" : "text-base/5",
               held ? "text-background" : "text-foreground",
             )}
           >
@@ -304,7 +302,7 @@ export function TalkBar(props: {
           <span
             id={detailId}
             className={classes(
-              "truncate text-xs/[18px]",
+              "truncate text-meta",
               held
                 ? "font-semibold text-background/75"
                 : listeningNow && talk.words !== ""
@@ -323,7 +321,7 @@ export function TalkBar(props: {
           ) : answering ? (
             <span
               aria-hidden
-              className="h-0.5 w-15 shrink-0 rounded-hair bg-primary shadow-[0_0_10px] shadow-primary"
+              className="h-0.5 w-15 shrink-0 rounded-hair bg-primary shadow-glow-answering"
             />
           ) : (
             <Bars heights={IDLE_BARS} />

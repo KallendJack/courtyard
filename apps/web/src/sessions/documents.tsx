@@ -97,7 +97,7 @@ function NameForm(props: {
         autoComplete="off"
       />
       <div className="flex flex-wrap items-center gap-3">
-        <p className="flex-1 text-xs text-muted-foreground">
+        <p className="flex-1 text-meta text-muted-foreground">
           Saves the whole answer to {props.workspaceName}'s documents.
         </p>
         <div className="flex gap-2">
