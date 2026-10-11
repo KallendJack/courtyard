@@ -18,6 +18,27 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return box;
 };
 
+/**
+ * Where the page is on a tablet, once the frame (which loads after the page) has its rails in
+ * place either side of it: between the workspace tiles and the Talk key.
+ */
+const besideTheRails = async (page: Page) => {
+  const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+  const talk = page.getByRole("button", { name: "Talk", exact: true });
+  const main = page.getByRole("main");
+  await expect
+    .poll(async () => {
+      const [left, right, content] = [
+        await boxOf(workspaces),
+        await boxOf(talk),
+        await boxOf(main),
+      ];
+      return content.x >= left.x + left.width - 1 && content.x + content.width <= right.x + 1;
+    })
+    .toBe(true);
+  return boxOf(main);
+};
+
 /** The line at the Skills sheet's foot (#201): the model a message goes with, and Change. */
 const changeModel = (sheet: ReturnType<Page["locator"]>) =>
   sheet.getByRole("button", { name: /Change$/ });
@@ -150,8 +171,17 @@ const closesEveryWay = async (
   await expect(skills).toBeHidden();
 };
 
+type Screen = "unfolded" | "cover";
+
+/**
+ * Puts the keyboard in the message box: on a tablet it's always there; on the cover screen Type
+ * opens it.
+ */
+const typeIn = (page: Page, screen: Screen) =>
+  screen === "cover" ? page.getByRole("button", { name: "Type" }).click() : message(page).click();
+
 /** What both screens offer, the same way. */
-const everywhere = () => {
+const everywhere = (screen: Screen) => {
   test("every workspace is a tap away, and a second tap on the open one shows its recent sessions", async ({
     page,
   }) => {
@@ -194,9 +224,9 @@ const everywhere = () => {
     await expect(message(page)).toBeFocused();
     await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
 
-    // From the workspace's own page, too.
+    // From the workspace's own page, too: on the cover screen, with the box closed by then.
     await page.getByRole("heading", { level: 1 }).click();
-    await expect(message(page)).toBeHidden();
+    if (screen === "cover") await expect(message(page)).toBeHidden();
     await workspaces.getByRole("link", { name: "Garage gym" }).click();
     await recent.getByRole("button", { name: "New session" }).click();
     await expect(recent).toBeHidden();
@@ -215,7 +245,7 @@ const everywhere = () => {
     await expect(settings.getByRole("button", { name: "Log out" })).toBeVisible();
   });
 
-  test("Skills, Photo and Model open their pickers", async ({ page }) => {
+  test("Skills, Photo (on a tablet, Add) and Model open their pickers", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
 
     await page.getByRole("button", { name: "Skills" }).click();
@@ -253,8 +283,11 @@ const everywhere = () => {
     ).toBeChecked();
     await page.keyboard.press("Escape");
 
+    // A photo or a file: on a tablet, Add.
     const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Photo", exact: true }).click();
+    await page
+      .getByRole("button", { name: screen === "cover" ? "Photo" : "Add", exact: true })
+      .click();
     expect((await chooser).isMultiple()).toBe(true);
   });
 
@@ -267,7 +300,7 @@ const everywhere = () => {
       [`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`, "Send"],
     ] as const) {
       await page.goto(where);
-      await page.getByRole("button", { name: "Type" }).click();
+      await typeIn(page, screen);
       await expect(message(page)).toBeFocused();
       const box = page.locator("form", { has: message(page) });
       await expect(box.getByRole("button")).toHaveText([button]);
@@ -343,33 +376,6 @@ const everywhere = () => {
     await expect(codex.getByRole("radio")).toHaveCount(4);
     await expect(codex.getByRole("button", { name: "3 more Codex models" })).toBeVisible();
     await page.keyboard.press("Escape");
-  });
-
-  // The talk strip listens (talk.spec.ts), opening the box for the words it hears.
-  test("Type opens the message box, which closes once the message is sent or the owner taps away", async ({
-    page,
-  }) => {
-    await page.goto("/workspaces/garage-gym");
-    await expect(message(page)).toBeHidden();
-
-    await page.getByRole("button", { name: "Type" }).click();
-    await expect(message(page)).toBeFocused();
-    await message(page).fill("Where should the rack go?");
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(session(page)).toContainText("You said: Where should the rack go?");
-    await expect(message(page)).toBeHidden();
-
-    await page.getByRole("button", { name: "Type" }).click();
-    await expect(message(page)).toBeFocused();
-    await message(page).fill("And the bikes?");
-    await page.getByRole("button", { name: "Send" }).click();
-    await expect(session(page)).toContainText("You said: And the bikes?");
-    await expect(message(page)).toBeHidden();
-
-    await page.getByRole("button", { name: "Type" }).click();
-    await expect(message(page)).toBeVisible();
-    await page.getByRole("heading", { level: 1 }).click();
-    await expect(message(page)).toBeHidden();
   });
 };
 
@@ -477,44 +483,97 @@ test.describe("unfolded", () => {
     }
   });
 
-  test("Settings is at the top of the right rail, and Skills, Photo and Model at its foot, beside the page", async ({
+  test("the right rail is labelled buttons, Model, Skills, Add and a quieter Settings, with the Talk key in the bottom-right corner and no Type", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
-    const settings = await boxOf(page.getByRole("button", { name: "Settings" }));
-    const content = await boxOf(page.getByRole("main"));
-    const model = await boxOf(page.getByRole("button", { name: /^Model/ }));
-    const type = await boxOf(page.getByRole("button", { name: "Type" }));
+    const content = await besideTheRails(page);
+    const model = page.getByRole("button", { name: /^Model: / });
+    const skills = page.getByRole("button", { name: "Skills" });
+    const add = page.getByRole("button", { name: "Add" });
+    const settings = page.getByRole("button", { name: "Settings" });
+    const rail = [model, skills, add, settings];
+    // Each says what it is; Model with the model's mark before it.
+    await expect(model).toContainText(/Model$/);
+    await expect(skills).toHaveText("Skills");
+    await expect(add).toHaveText("Add");
+    await expect(settings).toHaveText("Settings");
 
-    expect(settings.x).toBeGreaterThanOrEqual(content.x + content.width - 1);
-    expect(settings.y).toBeLessThan(UNFOLDED.height * 0.15);
-    expect(model.x).toBeGreaterThanOrEqual(content.x + content.width - 1);
-    expect(model.y).toBeGreaterThan(UNFOLDED.height * 0.6);
-    // Type and the talk strip run along the bottom.
-    expect(type.y + type.height).toBeGreaterThan(UNFOLDED.height - 40);
-    // Each a thumb's size.
-    for (const target of [settings, model, type]) expect(target.height).toBeGreaterThanOrEqual(44);
+    // Top down in that order, beside the page, in the top half, each a thumb's size.
+    let below = 0;
+    for (const button of rail) {
+      const box = await boxOf(button);
+      expect(box.x).toBeGreaterThanOrEqual(content.x + content.width - 1);
+      expect(box.y).toBeGreaterThanOrEqual(below);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      below = box.y + box.height;
+    }
+    expect(below).toBeLessThan(UNFOLDED.height / 2);
+
+    // The Talk key, big, in the corner under the right thumb.
+    const talk = await boxOf(page.getByRole("button", { name: "Talk", exact: true }));
+    expect(talk.x).toBeGreaterThanOrEqual(content.x + content.width - 1);
+    expect(talk.x + talk.width).toBeGreaterThan(UNFOLDED.width - 30);
+    expect(talk.y + talk.height).toBeGreaterThan(UNFOLDED.height - 30);
+    expect(talk.height).toBeGreaterThanOrEqual(200);
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toContainText(
+      "TalkHold to speak",
+    );
+    await expect(page.getByRole("button", { name: "Type" })).toHaveCount(0);
+  });
+
+  test("the message box is always there at the foot of the page, between the rails", async ({
+    page,
+  }) => {
+    for (const where of [
+      "/workspaces/garage-gym",
+      `/workspaces/garage-gym/sessions/${READING_SESSION_ID}`,
+    ]) {
+      await page.goto(where);
+      await expect(message(page)).toBeVisible();
+      const content = await besideTheRails(page);
+      const box = await boxOf(page.locator("form", { has: message(page) }));
+      expect(box.x).toBeGreaterThanOrEqual(content.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(content.x + content.width);
+      expect(box.y + box.height).toBeGreaterThan(UNFOLDED.height - 40);
+      // One line to start: the message and its button side by side.
+      expect(box.height).toBeLessThan(70);
+    }
+
+    // Sent, or tapped away from, it stays.
+    await page.goto("/workspaces/garage-gym");
+    await message(page).fill("Where should the rack go?");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(session(page)).toContainText("You said: Where should the rack go?");
+    await expect(message(page)).toBeVisible();
+    await page.getByRole("heading", { level: 1 }).click();
+    await expect(message(page)).toBeVisible();
+
+    // Not on a page without one.
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "Workspaces" })).toBeVisible();
+    await expect(message(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toBeDisabled();
   });
 
   test("Skills opens a sheet from the right edge, beside the right rail and over the page, with the model at its foot", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
+    const content = await besideTheRails(page);
     const rail = await boxOf(page.getByRole("button", { name: "Settings" }));
-    const content = await boxOf(page.getByRole("main"));
+    const reply = await boxOf(page.locator("form", { has: message(page) }));
     await page.getByRole("button", { name: "Skills" }).click();
     const sheet = page.getByRole("dialog", { name: "Skills" });
     await expect(sheet).toBeVisible();
 
     const box = await boxOf(sheet);
-    const type = await boxOf(page.getByRole("button", { name: "Type" }));
     expect(box.x + box.width).toBeLessThanOrEqual(rail.x + 1);
     expect(box.x + box.width).toBeGreaterThanOrEqual(content.x + content.width - 1);
-    // A sheet beside the page, not over all of it.
+    // A sheet beside the page, not over all of it, and clear of the Reply box under it.
     expect(box.width).toBeLessThan(content.width * 0.6);
     expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(type.y);
-    // The skills, each with what it's for, then the model and its effort at the foot.
+    expect(box.y + box.height).toBeLessThanOrEqual(reply.y);
     // The skills, each with what it's for, then at its foot one line for the model (#201).
     const skills = await boxOf(sheet.getByRole("list", { name: "Skills" }));
     const model = await boxOf(changeModel(sheet));
@@ -574,7 +633,7 @@ test.describe("unfolded", () => {
     });
   });
 
-  everywhere();
+  everywhere("unfolded");
 });
 
 test.describe("on the cover screen", () => {
@@ -631,7 +690,34 @@ test.describe("on the cover screen", () => {
     });
   });
 
-  everywhere();
+  // The talk strip listens (talk.spec.ts), opening the box for the words it hears.
+  test("Type opens the message box, which closes once the message is sent or the owner taps away", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(message(page)).toBeHidden();
+
+    await page.getByRole("button", { name: "Type" }).click();
+    await expect(message(page)).toBeFocused();
+    await message(page).fill("Where should the rack go?");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(session(page)).toContainText("You said: Where should the rack go?");
+    await expect(message(page)).toBeHidden();
+
+    await page.getByRole("button", { name: "Type" }).click();
+    await expect(message(page)).toBeFocused();
+    await message(page).fill("And the bikes?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(session(page)).toContainText("You said: And the bikes?");
+    await expect(message(page)).toBeHidden();
+
+    await page.getByRole("button", { name: "Type" }).click();
+    await expect(message(page)).toBeVisible();
+    await page.getByRole("heading", { level: 1 }).click();
+    await expect(message(page)).toBeHidden();
+  });
+
+  everywhere("cover");
 });
 
 test("folding and unfolding keeps the place in a session and a half-written message", async ({
@@ -640,10 +726,7 @@ test("folding and unfolding keeps the place in a session and a half-written mess
   await page.setViewportSize(UNFOLDED);
   await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
   await expect(session(page)).toContainText("You said:");
-  await page.getByRole("button", { name: "Type" }).click();
   await message(page).fill("Half a thought about the");
-  await page.getByRole("heading", { level: 1 }).click();
-  await expect(message(page)).toBeHidden();
 
   // Reading back: the turn in the middle of the screen stays on screen as the Fold folds and opens.
   // Only the turns near the screen are drawn, a frame or so after it scrolls, so wait for the one
@@ -668,6 +751,19 @@ test("folding and unfolding keeps the place in a session and a half-written mess
   await expect(reading).toBeInViewport();
   await page.setViewportSize(UNFOLDED);
   await expect(reading).toBeInViewport();
-  await page.getByRole("button", { name: "Type" }).click();
   await expect(message(page)).toHaveValue("Half a thought about the");
+});
+
+test.describe("on a desktop", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1440, height: 900 } });
+
+  test("the frame stays away: the sidebar, and the message box in the page, with no rails or Talk key", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
+    await expect(message(page)).toBeVisible();
+    for (const name of ["Talk", "Type", "Skills", "Add"])
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  });
 });

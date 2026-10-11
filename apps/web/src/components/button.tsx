@@ -105,6 +105,8 @@ const ICON_SIZES = {
     "size-9 md:size-7 [&_svg:not([class*='size-'])]:size-[17px] md:[&_svg:not([class*='size-'])]:size-[15px]",
   /** Inside a small pill, without making it taller (a skill's tag in the message box). */
   inline: "-my-1 size-[18px] [&_svg:not([class*='size-'])]:size-3.5",
+  /** A thumb's size: under the words in the Reply box while the Talk key listens (#206). */
+  thumb: "size-11 [&_svg:not([class*='size-'])]:size-4",
 } as const;
 
 const ICON_LOOKS = {
@@ -121,6 +123,8 @@ const ICON_LOOKS = {
   badge: "border-2 border-field bg-foreground text-background",
   /** On a charcoal wash: what it does has just been done (Copied). */
   done: "bg-accent text-primary-text",
+  /** Filled violet: the main action, as an icon (↑, sending what was said). */
+  primary: "bg-primary text-primary-foreground hover:bg-primary/80",
 } as const;
 
 /** A quiet button that's only an icon, named for screen readers (and on hover) by `label`. */

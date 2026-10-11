@@ -2,7 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
 /**
- * A model as short as it goes, as the Model disc and the model line in the Skills sheet show it:
+ * A model as short as it goes, as the Model button and the model line in the Skills sheet show it:
  * its initials and numbers, "Sonnet 5" as "S5".
  */
 export const modelMark = (model: string) =>
@@ -12,10 +12,11 @@ export const modelMark = (model: string) =>
     .join("");
 
 /**
- * The Handheld frame's buttons (#193, #194, #201, Paper boards Handheld · 00, 09, 10, 28, 29):
- * thumb-sized, each pressing in a little under a finger, with the theme's ring for the keyboard. Its classes are off
- * the first load, in handheld-frame.css, and apply only inside the frame's own pieces. Since
- * nothing merges classes, each look sets its colours either lit (`on`) or not (`off`), never both.
+ * The Handheld frame's buttons (#193, #194, #201, #206, Paper boards Handheld · 09, 10, 28, 29 and
+ * the agreed tablet boards): thumb-sized, each pressing in a little under a finger, with the
+ * theme's ring for the keyboard. Its classes are off the first load, in handheld-frame.css, and
+ * apply only inside the frame's own pieces. Since nothing merges classes, each look sets its
+ * colours either lit (`on`) or not (`off`), never both.
  */
 const PRESS =
   "focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:opacity-40";
@@ -24,11 +25,21 @@ const KEY =
   "flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-card text-rail font-bold tracking-label uppercase [&_svg]:text-foreground";
 
 const LOOKS = {
-  /** Settings, at the top of a tablet's right rail. */
-  round: {
+  /** Model, Skills or Add on a tablet's right rail: its icon, or the model's mark, and its name. */
+  rail: {
     base: classes(
       PRESS,
-      "flex size-12 shrink-0 items-center justify-center rounded-full bg-muted/60 text-foreground/70 [&_svg]:size-5",
+      "flex h-14 w-full shrink-0 items-center gap-3 rounded-lg pr-3 pl-4 text-left text-interface font-semibold [&_svg]:size-5 [&_svg]:shrink-0",
+    ),
+    off: "bg-secondary text-foreground/90 ring-1 ring-input ring-inset [&_svg]:text-foreground/85",
+    /** Its sheet is open, beside it. */
+    on: "bg-primary text-primary-foreground shadow-lit",
+  },
+  /** Settings on a tablet's right rail: quieter, under them. */
+  quiet: {
+    base: classes(
+      PRESS,
+      "flex h-12 w-full shrink-0 items-center gap-3 rounded-lg pr-3 pl-4.25 text-left text-sm font-medium text-foreground/65 [&_svg]:size-4.5 [&_svg]:shrink-0 [&_svg]:text-foreground/85",
     ),
     off: "",
     on: "",
@@ -42,8 +53,6 @@ const LOOKS = {
     off: "",
     on: "",
   },
-  /** Skills, Photo or Model on a tablet's right rail: a disc, with `caption` under it. */
-  disc: { base: "group flex flex-col items-center gap-1.5 disabled:opacity-40", off: "", on: "" },
   /** Skills, Photo or Model in the row above the cover screen's bottom bar. */
   row: {
     base: classes(
@@ -58,12 +67,6 @@ const LOOKS = {
     base: classes(PRESS, KEY, "w-16 [&_svg]:size-5.5"),
     off: "bg-secondary text-muted-foreground ring-1 ring-input ring-inset",
     /** Cancel, with a held finger slid onto it to drop what was said. */
-    on: "bg-muted text-foreground ring-2 ring-foreground ring-inset",
-  },
-  /** Type or Cancel on a tablet, where the bottom bar is taller. */
-  wideKey: {
-    base: classes(PRESS, KEY, "h-15 w-18 [&_svg]:size-6"),
-    off: "bg-secondary text-muted-foreground ring-1 ring-input ring-inset",
     on: "bg-muted text-foreground ring-2 ring-foreground ring-inset",
   },
   /** One of a few to pick in a sheet, as a row across it (a skill), lit when it's the one picked. */
@@ -92,22 +95,16 @@ const LOOKS = {
   },
 } as const;
 
-const DISC =
-  "flex size-15 items-center justify-center rounded-full text-interface/4.5 font-extrabold group-focus-visible:ring-3 group-focus-visible:ring-ring/50 group-active:translate-y-px [&_svg]:size-5.5";
-
 export function FrameButton({
   look,
   lit = false,
-  caption,
   type = "button",
   children,
   ...props
 }: Omit<ComponentProps<"button">, "className"> & {
   look: keyof typeof LOOKS;
-  /** What it opened is open (a disc), it's what's picked (a choice), or Cancel is about to drop. */
+  /** What it opened is open (a rail button), it's what's picked (a choice), or Cancel is about to drop. */
   lit?: boolean;
-  /** Under a disc: what it is. */
-  caption?: string;
   children: ReactNode;
 }) {
   const { base, off, on } = LOOKS[look];
@@ -117,30 +114,7 @@ export function FrameButton({
       className={classes("outline-none select-none", base, lit ? on : off)}
       {...props}
     >
-      {look === "disc" ? (
-        <>
-          <span
-            className={classes(
-              DISC,
-              lit
-                ? "bg-primary text-primary-foreground shadow-lit"
-                : "bg-secondary text-foreground ring-1 ring-input ring-inset",
-            )}
-          >
-            {children}
-          </span>
-          <span
-            className={classes(
-              "text-caption/3.5 font-bold tracking-[0.06em] uppercase",
-              lit ? "text-foreground" : "text-placeholder",
-            )}
-          >
-            {caption}
-          </span>
-        </>
-      ) : (
-        children
-      )}
+      {children}
     </button>
   );
 }

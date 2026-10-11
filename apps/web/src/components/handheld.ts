@@ -44,18 +44,32 @@ export type MessageBox = {
   /** A turn is running, so what's sent now is queued until it ends (#177). */
   answering: boolean;
   /**
-   * Opens the box for what the owner says in the talk strip (#79, #198), which goes in after
-   * anything typed, for them to send. Once the box sends, `sent` hears it, so listening stops.
+   * Opens the box for what the owner says in the talk strip or to the Talk key (#79, #198, #206),
+   * which goes in after anything typed, for them to send. Once the box sends, it tells `listener`,
+   * so listening stops.
    */
-  dictate: (sent: () => void) => Dictation;
+  dictate: (listener: Listener) => Dictation;
 };
 
-/** What the owner says in the talk strip, going into the message box as it's heard. */
+/** What's listening for the message box: the talk strip, or the Talk key. */
+export type Listener = {
+  /** Stops listening: keeping what was said, dropping it, or because the box sent it. */
+  stop: (how: "keep" | "drop" | "sent") => void;
+  /**
+   * The box shows ✕, ■ and ↑ under the words while it listens (#206): for the Talk key, which has
+   * no Cancel beside it as the strip has.
+   */
+  controls: boolean;
+};
+
+/** What the owner says, going into the message box as it's heard. */
 export type Dictation = {
   /** The words heard so far, put in the box after what was typed before listening. */
   hear: (words: string) => void;
   /** Drops what this listen said, leaving what was typed before it. */
   drop: () => void;
+  /** Listening has stopped, however it stopped. */
+  done: () => void;
 };
 
 /**

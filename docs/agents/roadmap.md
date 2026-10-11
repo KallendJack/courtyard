@@ -10,6 +10,13 @@ agent's memory. Inside a spec, order comes from GitHub's blocked-by links, as Ma
   on the owner.
 - **Every open issue is in exactly one milestone.**
 
+## What comes first
+
+**Friction the owner hits in real use comes first.** When the owner reports something that got in the way (a screenshot
+from the Fold, "it is annoying that…"), turn it into a small Paper draft or an issue straight away, and propose where it
+goes in the order, usually ahead of features nobody has missed yet. Invented features wait in `Later` until real use
+asks for them.
+
 ## Keeping it current
 
 Whoever files, finishes or moves work updates the roadmap in the same step:
