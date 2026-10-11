@@ -81,6 +81,10 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
 - **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
   calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
   shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
+- **Tap or talk; typing is the fallback.** Wherever Courtyard can know or guess a value (a repo's name, a photo's
+  contents, what was just said), it fills it in and the owner taps to pick or confirms; any field can also be spoken.
+  Before acting, show everything it filled in, all of it, so one tap does exactly what the owner sees. A text box is
+  for words only the owner has, and opening a page never opens the keyboard on touch.
 - The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
   `docs/architecture.md`.
