@@ -211,6 +211,47 @@ const everywhere = (screen: Screen) => {
     await expect(workspaces.getByRole("link", { name: "New workspace" })).toBeVisible();
   });
 
+  test("only where the owner is shows as chosen, ringed in violet, a code workspace's tile too, and on Home the mark (#237)", async ({
+    page,
+  }) => {
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+    const VIOLET = "rgb(157, 107, 255)";
+    /** How a tile or the mark looks: its ring and glow, and its fill. */
+    const lookOf = (name: string) =>
+      workspaces.getByRole("link", { name, exact: true }).evaluate((link) => ({
+        ring: getComputedStyle(link).boxShadow,
+        fill: getComputedStyle(link).backgroundColor,
+      }));
+    const tiles = ["Reading list", "Side project", "Garage gym"];
+
+    // Closed, a code workspace's tile looks as any other: no ring, no tint.
+    await page.goto("/workspaces/garage-gym");
+    await expect(workspaces.getByRole("link", { name: "Garage gym" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const reading = await lookOf("Reading list");
+    expect(reading.ring).toBe("none");
+    expect(await lookOf("Side project")).toEqual(reading);
+    expect((await lookOf("Home")).ring).toBe("none");
+    expect((await lookOf("Garage gym")).ring).toContain(VIOLET);
+
+    // Open, it's ringed in violet as any other.
+    await page.goto("/workspaces/side-project");
+    await expect(workspaces.getByRole("link", { name: "Side project" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect((await lookOf("Side project")).ring).toContain(VIOLET);
+    expect(await lookOf("Garage gym")).toEqual(reading);
+
+    // On Home, the mark is.
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "Workspaces" })).toBeVisible();
+    expect((await lookOf("Home")).ring).toContain(VIOLET);
+    for (const name of tiles) expect(await lookOf(name)).toEqual(reading);
+  });
+
   test("the recent sessions start a new session, with the workspace's message box open for it", async ({
     page,
   }) => {

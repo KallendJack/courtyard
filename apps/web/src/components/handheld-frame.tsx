@@ -166,12 +166,15 @@ export default function HandheldFrame(props: {
       {tablet && "New workspace"}
     </Link>
   );
+  // On Home, the mark is ringed in violet as an open tile is (#237), so the owner always sees
+  // where they are.
   const home = (
     <Link
       to="/"
       aria-label="Home"
+      activeOptions={{ exact: true }}
       className={classes(
-        "flex shrink-0 items-center justify-center",
+        "flex shrink-0 items-center justify-center data-[status=active]:bg-muted data-[status=active]:ring-2 data-[status=active]:ring-primary",
         tablet ? "size-12 rounded-row" : "size-13 rounded-lg bg-muted/60",
       )}
     >
@@ -351,8 +354,9 @@ export default function HandheldFrame(props: {
 
 /**
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
- * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). Tapping the
- * open one again, or holding it, shows its recent sessions.
+ * (Paper board Handheld · 36). Closed, every tile looks the same, a code workspace's too: it's
+ * told apart by its icon, never by colour (#237). Tapping the open one again, or holding it,
+ * shows its recent sessions.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
@@ -382,9 +386,7 @@ function Tile(props: {
           : "h-13 gap-2 rounded-lg px-4 text-sm/4.5 whitespace-nowrap",
         open
           ? "bg-muted font-bold text-foreground shadow-glow-tile ring-2 ring-primary"
-          : workspace.mode === "code"
-            ? "bg-warning/5 text-foreground/70 ring-1 ring-warning/35 ring-inset"
-            : "bg-muted/60 text-foreground/70",
+          : "bg-muted/60 text-foreground/70",
       )}
     >
       <WorkspaceIcon icon={workspace.icon} size="tile" open={open} />
