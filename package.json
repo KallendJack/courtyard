@@ -13,12 +13,12 @@
     "start": "pnpm --filter @courtyard/worker start",
     "check": "biome check --error-on-warnings . && node scripts/theme/check.ts",
     "format": "biome check --write .",
-    "typecheck": "pnpm -r typecheck && tsc -p e2e && tsc -p scripts/theme",
-    "test": "pnpm -r test && node --test scripts/theme/check.test.ts",
-    "build": "pnpm -r build",
-    "e2e": "playwright test",
+    "typecheck": "pnpm -r typecheck && tsc -p e2e && tsc -p scripts/theme && tsc -p scripts/builds",
+    "test": "node scripts/builds/run.ts \"pnpm -r test && node --test scripts/theme/check.test.ts scripts/builds/run.test.ts\"",
+    "build": "node scripts/builds/run.ts \"pnpm -r build\"",
+    "e2e": "node scripts/builds/run.ts \"playwright test\"",
     "eval:context": "pnpm --filter @courtyard/worker eval:context",
-    "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm build && pnpm e2e"
+    "verify": "node scripts/builds/run.ts \"pnpm check && pnpm typecheck && pnpm test && pnpm build && pnpm e2e\""
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

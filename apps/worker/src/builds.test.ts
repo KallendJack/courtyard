@@ -1,6 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { takePlace } from "@courtyard/builds";
 import type { SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Provider } from "./providers/index.ts";
@@ -16,6 +19,7 @@ import {
   postJson,
   type Requester,
   removeTestFolder,
+  testBuildsLock,
   testWorker,
 } from "./testing.ts";
 import type { Environment } from "./worker.ts";
@@ -183,5 +187,108 @@ describe("the builds queue (#281)", () => {
     await vi.waitFor(() => expect(builds).toHaveLength(2));
     const third = await startCoding(request, "A photo on its own");
     await waitingWith(request, third, 2);
+  });
+});
+
+describe("the machine's builds lock (#306)", () => {
+  /** Another build on the same machine, such as a helper's `pnpm verify`, taking a place. */
+  const outsideBuild = (atOnce = 1, signal?: AbortSignal) =>
+    takePlace(testBuildsLock(root, atOnce), {
+      label: "helper /path/to/repo",
+      ...(signal === undefined ? {} : { signal }),
+    });
+
+  it("waits while a build outside Courtyard holds the machine's place, and starts once it's freed", async () => {
+    const outside = await outsideBuild();
+    const { provider, builds } = heldBuilder("pnpm verify");
+    const request = await start([provider]);
+
+    const id = await startCoding(request, "Talk into the box");
+
+    await waitingWith(request, id, 1);
+    expect(builds).toHaveLength(0);
+    outside?.free();
+    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    builds[0]?.finish();
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(activitiesIn(events)).toEqual([
+      { kind: "waiting-for-build", ahead: 1 },
+      { kind: "ran-command", command: "pnpm verify" },
+    ]);
+  });
+
+  it("holds the machine's place while a session builds, so a build outside Courtyard waits, and frees it when the turn ends", async () => {
+    const { provider, builds } = heldBuilder("pnpm verify");
+    const request = await start([provider]);
+    const id = await startCoding(request, "Talk into the box");
+    await vi.waitFor(() => expect(builds).toHaveLength(1));
+
+    expect(await outsideBuild(1, AbortSignal.timeout(1000))).toBeNull();
+
+    builds[0]?.finish();
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    const after = await outsideBuild(1, AbortSignal.timeout(5000));
+    expect(after).not.toBeNull();
+    after?.free();
+  });
+
+  it("frees the machine's place when a building session is stopped", async () => {
+    const { provider, builds } = heldBuilder("pnpm verify");
+    const request = await start([provider]);
+    const id = await startCoding(request, "Talk into the box");
+    await vi.waitFor(() => expect(builds).toHaveLength(1));
+
+    await stop(request, id);
+
+    await followSession(request, { sessionId: id, until: "turn-stopped" });
+    const after = await outsideBuild(1, AbortSignal.timeout(5000));
+    expect(after).not.toBeNull();
+    after?.free();
+  });
+
+  it("tells a session's commands it holds a place, so its own pnpm verify doesn't wait again", async () => {
+    const { provider, builds } = heldBuilder("pnpm verify");
+    const request = await start([provider]);
+    await startCoding(request, "Talk into the box");
+
+    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    expect(builds[0]?.env.COURTYARD_BUILD_HELD).toBe("1");
+    builds[0]?.finish();
+  });
+
+  it("clears a place a crashed build left behind, rather than waiting on it for ever", async () => {
+    const lock = testBuildsLock(root);
+    const builds = pathToFileURL(join(import.meta.dirname, "../../../packages/builds/index.ts"));
+    // A run that takes a place and ends without freeing it.
+    execFileSync(process.execPath, [
+      "--input-type=module",
+      "-e",
+      `import { takePlace } from ${JSON.stringify(builds.href)};
+await takePlace(${JSON.stringify(lock)}, { label: "crashed" });
+process.exit(0);`,
+    ]);
+    const { provider, builds: started } = heldBuilder("pnpm verify");
+    const request = await start([provider]);
+
+    const id = await startCoding(request, "Talk into the box");
+
+    await vi.waitFor(() => expect(started).toHaveLength(1));
+    started[0]?.finish();
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(activitiesIn(events)).toEqual([{ kind: "ran-command", command: "pnpm verify" }]);
+  });
+
+  it("shares the machine's places with builds outside Courtyard when it allows more than one", async () => {
+    const outside = await outsideBuild(2);
+    const { provider, builds } = heldBuilder("pnpm verify");
+    const request = await start([provider], { COURTYARD_BUILDS_AT_ONCE: "2" });
+    await startCoding(request, "Talk into the box");
+    await vi.waitFor(() => expect(builds).toHaveLength(1));
+
+    const second = await startCoding(request, "Chat scrolling");
+
+    await waitingWith(request, second, 2);
+    outside?.free();
+    await vi.waitFor(() => expect(builds).toHaveLength(2));
   });
 });

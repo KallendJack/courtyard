@@ -193,7 +193,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
   pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
   `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, the
-  rest waiting first come first served. It lives in the worker's memory only, so a restart holds nothing. The
+  rest waiting first come first served. That order lives in the worker's memory only; the build at its front then
+  takes a place in the machine's builds lock (`packages/builds`, #306), which the repo's own scripts take too, so
+  sessions also wait behind builds started outside Courtyard, and those behind sessions. The
   module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
   clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
   (only a `courtyard/…` one).
@@ -430,6 +432,21 @@ house skills in `pnpm verify` and the worker runs on everyone's. It's a package 
 `matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
 copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`).
 
+### The machine's builds lock: `packages/builds`
+
+`@courtyard/builds` is the one lock every heavy check on the machine takes (#306), so Courtyard's code sessions and
+the builds run beside them (a helper's `pnpm verify` in another checkout) take turns rather than lock the machine up
+together. It's a folder, `<OS temp>/courtyard-builds` (`COURTYARD_BUILDS_LOCK_DIR` moves it, which only the tests
+and the browser tests' workers do), with a file for each place taken, up to `COURTYARD_BUILDS_AT_ONCE`: each made
+only if it isn't there yet, naming its holder (a session, or `helper <folder>`), its process and when it took it. A
+place whose process has gone is cleared by the next one waiting, so a crash, or a worker restarting, never blocks
+for ever; a run that cleared one checks the place it took is still its own once the dust settles, in case two cleared
+it at once. The worker's builds queue takes it (`code/builds.ts`) and so does `scripts/builds/run.ts`, which the
+root `verify`, `test`, `e2e` and `build` scripts run through: it waits for a place, saying who holds it and since
+when, runs the command with `COURTYARD_BUILD_HELD=1` (a run that sees it goes straight through, so `verify` doesn't
+wait on itself when it runs `e2e`), and frees the place however the command ends. It's a package of its own, rather
+than the worker's, because the repo's scripts need it with no worker running, and nothing else of the worker's.
+
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
@@ -449,6 +466,9 @@ the web app parses every answer with these schemas.
   the fake GitHub and a stand-in for Matt Pocock's plugin;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
+  The update builds with `pnpm -r build`, never waiting on the machine's builds lock, since Courtyard is down until
+  it's done.
+- **`scripts/builds/`:** the machine's builds lock for the repo's own heavy scripts (see `packages/builds`).
 - **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into
   jobs side by side (Checks, Unit tests, E2E in four shards) so a run takes about 3 minutes; `.github/actions/setup`
   is the setup they share.
@@ -538,7 +558,11 @@ Where the rest fits:
   for it, the latest). A stop ends the wait and leaves the queue. The provider says when each command it ran has
   ended, however it ended (`CodeTurn.ran`: Claude's `PostToolUse` and `PostToolUseFailure` hooks, the fake after
   each scripted command), freeing its place; whatever a turn still holds is freed when the turn ends, completed,
-  stopped or failed.
+  stopped or failed. The queue is between sessions; the machine's builds lock (#306) is between everything that
+  builds on the machine. The build at the queue's front waits for a place in the lock before it starts, still
+  `waiting-for-build` (with how many places others hold) while a build outside Courtyard, such as a helper's
+  `pnpm verify`, holds them all. A session's commands get `COURTYARD_BUILD_HELD=1`, since each of its builds runs only
+  once it holds a place, so the repo's own scripts it runs go straight through rather than wait on that place.
 - **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
   `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
   starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and

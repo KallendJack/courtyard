@@ -1,4 +1,5 @@
 import { isAbsolute, join } from "node:path";
+import type { BuildsLock } from "@courtyard/builds";
 import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import { isFolder, removeFolder } from "../files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
@@ -10,6 +11,7 @@ import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
 export { allowlistFor, type CommandRule, isBuild } from "./allowlist.ts";
+export { BUILD_HELD_ENV } from "./builds.ts";
 
 /**
  * Code sessions' git (ADR 0007): each session's own session branch, checked out in its own
@@ -239,8 +241,8 @@ export const createCode = (options: {
   commandEnv: () => Promise<CommandEnv>;
   /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
   pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close" | "deleteBranch">;
-  /** How many heavy checks code sessions may run at once across the worker (#281). */
-  buildsAtOnce: number;
+  /** The machine's builds lock (#306), which code sessions' heavy checks take turns in (#281). */
+  buildsLock: BuildsLock;
 }) => {
   const { pullRequests } = options;
   /** The repository a code workspace's remote is on GitHub, or why there's none to ask. */
@@ -290,7 +292,7 @@ export const createCode = (options: {
     slots: createCodeSlots(CODE_SESSIONS_AT_ONCE),
 
     /** The builds queue (#281): which heavy checks run, and which wait for one to end. */
-    builds: createBuildsQueue(options.buildsAtOnce),
+    builds: createBuildsQueue(options.buildsLock),
 
     /**
      * What a session's commands get on top of the environment they run in, so its git and gh, and
