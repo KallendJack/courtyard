@@ -199,6 +199,14 @@ describe("what every turn tells a model", () => {
     );
   });
 
+  it("tells a model in a code workspace with Paper to draw ideas on Drafts and keep one agreed board per screen on Agreed design (#233)", async () => {
+    await withPaper();
+
+    const { framing } = await firstTurn({ ...CODES, usesTools: true });
+
+    expect(framing.instructions).toContain(await quotedInGuide("The Paper file has two pages"));
+  });
+
   it("tells a model that uses no tools nothing of Paper, since it isn't given Paper", async () => {
     await withPaper();
 

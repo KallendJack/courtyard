@@ -1261,10 +1261,13 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
 
 /**
  * What a model in a code workspace with Paper is told about it (docs/ai-conduct.md, Paper; ADR
- * 0023): the one file it draws in, what asks first, and what to do when Paper isn't there.
+ * 0023): the one file it draws in, what asks first, what to do when Paper isn't there, and how
+ * the file keeps agreed boards apart from drafts (#233).
  */
 export const paperPart = (fileId: string) =>
-  `You can read and draw Paper designs with Paper's tools, in this workspace's Paper file only: pass fileId ${quoted(fileId)} to every tool that takes one. Reading, drawing and changing the file run without asking. Deleting anything you didn't make in this session waits for the owner to allow it. Each screenshot you take shows in the chat, so take one of a board when it's ready for the owner to look at. Paper's tools work only while Paper is open on the worker machine: if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine, don't try to open it, and carry on with the rest of the work.`;
+  `You can read and draw Paper designs with Paper's tools, in this workspace's Paper file only: pass fileId ${quoted(fileId)} to every tool that takes one. Reading, drawing and changing the file run without asking. Deleting anything you didn't make in this session waits for the owner to allow it. Each screenshot you take shows in the chat, so take one of a board when it's ready for the owner to look at. Paper's tools work only while Paper is open on the worker machine: if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine, don't try to open it, and carry on with the rest of the work.
+
+The Paper file has two pages; make either one if it's missing. "Agreed design" holds the board the owner agreed for each screen on each device, one each, plus the style guide. Each board's name ends with its status: "Live" once it's built, or "Agreed, not built (#12)" with its ticket's number. "Drafts" holds every idea and iteration: draw each new idea or change there. When the owner OKs a draft, it becomes that screen's board on Agreed design in one step: move the board it replaces to Drafts, adding "replaced by" and the new board's name to its name, and add any new shared piece to the style guide. When a ticket ships, set its boards' status to Live.`;
 
 /** What a model is told when a Paper tool names another file, or none (ADR 0023). */
 export const paperFileOnly = (fileId: string) =>
