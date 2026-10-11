@@ -125,13 +125,13 @@ function Waiting(props: {
         , sign in to {props.signIn.service} and enter this code:
       </p>
       <div className="flex flex-wrap items-center gap-4">
-        <span className="text-[28px]/[34px] font-semibold tracking-[0.1em] text-foreground">
+        <span className="text-sign-in-code font-semibold tracking-[0.1em] text-foreground">
           {props.code}
         </span>
         <CopyButton label="Copy code" text={() => props.code} look="outline" />
       </div>
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <p className="flex items-center gap-2 text-meta text-muted-foreground">
           <WaitingDot />
           Waiting for you to finish. The code works for 15 minutes.
         </p>
@@ -374,12 +374,12 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
     case "waiting":
       return (
         <ConnectionCard name="GitHub" state="waiting">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Open {github.link.replace(/^https:\/\//, "")} and enter this code. Code sessions can
             only reach the repos you install Courtyard's GitHub App on.
           </p>
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="rounded-md border bg-field px-4 py-1 font-mono text-[28px]/[34px] font-semibold tracking-[0.1em]">
+            <span className="rounded-md border bg-field px-4 py-1 font-mono text-sign-in-code font-semibold tracking-[0.1em]">
               {github.code}
             </span>
             <WebButton href={github.link} size="lg" onClick={() => copyCode(github.code)}>
@@ -387,7 +387,7 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
             </WebButton>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 text-meta text-muted-foreground">
               <WaitingDot />
               The code works for 15 minutes.
             </p>
@@ -451,7 +451,7 @@ function Connections(props: { beside: ReactNode }) {
         <SectionTitle>Connections</SectionTitle>
       </div>
       <div className="mt-3 flex flex-col gap-2.5 lg:flex-row lg:items-start">
-        <ul className="flex min-w-0 flex-1 flex-col gap-2.5 text-sm/[21px]">
+        <ul className="flex min-w-0 flex-1 flex-col gap-2.5 text-sm/5.25">
           {providers.map((provider) => {
             const signIn = signIns.find((s) => s.provider === provider.id);
             if (signIn !== undefined) {

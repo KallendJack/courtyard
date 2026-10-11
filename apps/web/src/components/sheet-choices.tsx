@@ -56,7 +56,7 @@ export function SheetSkills(props: {
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span
                     className={classes(
-                      "truncate text-[15px]/5 font-bold",
+                      "truncate text-interface font-bold",
                       why === undefined ? "text-foreground" : "text-placeholder",
                     )}
                   >
@@ -64,7 +64,7 @@ export function SheetSkills(props: {
                   </span>
                   <span
                     className={classes(
-                      "truncate text-[12px]/4",
+                      "truncate text-label",
                       why?.broken ? "text-destructive-text" : "text-muted-foreground",
                     )}
                   >
@@ -91,7 +91,7 @@ export function SheetModelLine(props: { name: string; detail: string; change: ()
       <FrameButton look="line" aria-haspopup="dialog" onClick={props.change}>
         <span
           aria-hidden
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-[12px]/4 font-extrabold text-foreground ring-1 ring-input ring-inset"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-label font-extrabold text-foreground ring-1 ring-input ring-inset"
         >
           {modelMark(props.name)}
         </span>
@@ -99,9 +99,9 @@ export function SheetModelLine(props: { name: string; detail: string; change: ()
           <span className="text-sm/4.5 font-extrabold wrap-anywhere text-foreground">
             {props.name}
           </span>
-          <span className="text-[12px]/4 text-muted-foreground">{props.detail}</span>
+          <span className="text-label text-muted-foreground">{props.detail}</span>
         </span>
-        <span className="text-[12px]/4 font-bold text-foreground/85">Change</span>
+        <span className="text-label font-bold text-foreground/85">Change</span>
         <ChevronRight aria-hidden strokeWidth={1.6} />
       </FrameButton>
     </div>
@@ -176,7 +176,7 @@ function ProviderModels<T extends string>(props: {
             key={model.value}
             className={classes(
               "flex cursor-pointer items-center gap-3 rounded-bubble px-3 py-2.5 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-              chosen ? "bg-muted ring-[1.5px] ring-primary ring-inset" : "active:bg-accent",
+              chosen ? "bg-muted ring-stroke ring-primary ring-inset" : "active:bg-accent",
             )}
           >
             <input
@@ -188,18 +188,18 @@ function ProviderModels<T extends string>(props: {
               className="sr-only"
             />
             <span className="flex min-w-0 flex-1 flex-col gap-px">
-              <span className="text-[15px]/4.75 font-extrabold wrap-anywhere text-foreground">
+              <span className="text-interface/4.75 font-extrabold wrap-anywhere text-foreground">
                 {model.name}
               </span>
               {model.note !== undefined && (
-                <span className="text-[12px]/4 text-muted-foreground">{model.note}</span>
+                <span className="text-label text-muted-foreground">{model.note}</span>
               )}
             </span>
             <span
               aria-hidden
               className={classes(
                 "flex size-4.5 shrink-0 items-center justify-center rounded-full",
-                chosen ? "bg-primary" : "ring-[1.5px] ring-foreground/20 ring-inset",
+                chosen ? "bg-primary" : "ring-stroke ring-foreground/20 ring-inset",
               )}
             >
               {chosen && <span className="size-1.75 rounded-full bg-primary-foreground" />}
@@ -249,7 +249,7 @@ export function SheetChoices<T extends string>(props: {
               <label
                 key={option.value}
                 className={classes(
-                  "flex h-10 min-w-0 flex-1 basis-0 cursor-pointer items-center justify-center rounded-md text-[12px]/4 whitespace-nowrap select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                  "flex h-10 min-w-0 flex-1 basis-0 cursor-pointer items-center justify-center rounded-md text-label whitespace-nowrap select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
                   chosen
                     ? "bg-foreground font-extrabold text-card"
                     : "font-bold text-foreground active:bg-accent",

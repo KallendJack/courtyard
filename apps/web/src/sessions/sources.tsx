@@ -25,7 +25,7 @@ export const sourcesAsMarkdown = (sources: readonly Source[]) =>
 export function SourceList(props: { sources: readonly Source[] }) {
   return (
     <div className="flex flex-col gap-1">
-      <p aria-hidden className="text-xs font-semibold text-muted-foreground">
+      <p aria-hidden className="text-meta font-semibold text-muted-foreground">
         Sources
       </p>
       {/* The answer's own numbered lists' look, whose classes are already in the first load. */}
@@ -34,7 +34,7 @@ export function SourceList(props: { sources: readonly Source[] }) {
         className="flex list-decimal flex-col gap-1 pl-6 marker:font-semibold marker:text-primary-text"
       >
         {props.sources.map((source) => (
-          <li key={source.url} className="text-sm/[22px]">
+          <li key={source.url} className="text-sm/5.5">
             <span className="block truncate">
               <WebLink href={source.url}>{source.site}</WebLink>
               {source.title !== "" && (

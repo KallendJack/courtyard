@@ -89,7 +89,7 @@ export const useRefreshWhileBusy = (
 };
 
 const TONES = {
-  working: { dot: "bg-primary shadow-[0_0_8px_var(--color-primary)]", text: "text-primary-text" },
+  working: { dot: "bg-primary shadow-glow", text: "text-primary-text" },
   "needs-you": { dot: "bg-warning", text: "text-warning" },
   "your-turn": { dot: "bg-foreground", text: "text-foreground" },
 } as const;
@@ -145,13 +145,13 @@ export function ListedSessionText(props: {
         <span className="flex items-center justify-between gap-2">
           <span className="truncate font-medium">{props.title}</span>
           {props.waitsForSlot ? (
-            <span className="shrink-0 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+            <span className="shrink-0 text-meta font-semibold tracking-label text-muted-foreground uppercase">
               Queued · starts when a slot frees
             </span>
           ) : (
             <span
               className={classes(
-                "flex shrink-0 items-center gap-1.5 text-[12px]/4 font-bold",
+                "flex shrink-0 items-center gap-1.5 text-label font-bold",
                 TONES[now.kind].text,
               )}
             >
@@ -164,7 +164,7 @@ export function ListedSessionText(props: {
           )}
         </span>
         {!props.waitsForSlot && (
-          <span className="truncate font-mono text-[11px]/[15px] text-muted-foreground">
+          <span className="truncate font-mono text-caption/3.75 text-muted-foreground">
             {now.kind === "your-turn" ? props.when(props.updatedAt) : <Ticking now={now} />}
           </span>
         )}

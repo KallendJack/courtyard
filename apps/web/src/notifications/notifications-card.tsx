@@ -127,7 +127,7 @@ export default function NotificationsCard() {
           <span id="notifications-here" className="font-extrabold">
             On this device
           </span>
-          <span id="notifications-when" className="text-xs text-muted-foreground">
+          <span id="notifications-when" className="text-meta text-muted-foreground">
             {here.kind === "unavailable"
               ? here.why
               : "When a session needs your OK, or a turn finishes or fails."}
@@ -143,7 +143,7 @@ export default function NotificationsCard() {
       </div>
       <FormError message={action.error} />
       <div className="h-px shrink-0 bg-border" />
-      <p className="text-xs text-muted-foreground">
+      <p className="text-meta text-muted-foreground">
         Each device turns its own on. Only the title and what it needs show on a locked screen.
       </p>
     </section>

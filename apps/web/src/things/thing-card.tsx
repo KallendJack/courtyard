@@ -163,7 +163,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
         )}
         {history.length > 0 && (
           <section aria-label="History" className="flex flex-col gap-2.5 border-t pt-5">
-            <h2 className="display-section text-[18px]/[26px]">History</h2>
+            <h2 className="display-section text-lg/6.5">History</h2>
             <ul className="flex flex-col gap-2.5">
               {history.map((entry, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: a history only changes as a whole, when the Thing does
@@ -193,7 +193,7 @@ const sameFields = (thing: ThingSummary, form: ThingFormFields) =>
 /** One of a Thing's details: its name, then its value. */
 function Detail(props: { label: string; children: ReactNode }) {
   return (
-    <div className="flex border-b py-[7px] text-sm/[22px] last:border-b-0">
+    <div className="flex border-b py-[7px] text-sm/5.5 last:border-b-0">
       <dt className="w-24 shrink-0 text-muted-foreground">{props.label}</dt>
       <dd className="min-w-0 wrap-anywhere">{props.children}</dd>
     </div>

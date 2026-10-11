@@ -55,7 +55,7 @@ export function OwnerContextPanel(props: {
         )}
       {ownerContext === null && (
         <div className="mt-4 space-y-3">
-          <p className="text-[15px]/[23px]">
+          <p className="text-body">
             Or write down yourself what's true across your life, such as where you live and how you
             like answers, so no workspace needs telling.
           </p>
@@ -82,10 +82,10 @@ export function OwnerContextPanel(props: {
             </div>
           )}
           {ownerContext.intro !== "" && (
-            <p className="mt-4 text-[15px]/[23px] whitespace-pre-line">{ownerContext.intro}</p>
+            <p className="mt-4 text-body whitespace-pre-line">{ownerContext.intro}</p>
           )}
           <div className="mt-5 space-y-6">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <p className="text-meta font-medium tracking-wide text-muted-foreground uppercase">
               About me
             </p>
             <FactsPlansIdeas {...ownerContext} />
@@ -95,7 +95,7 @@ export function OwnerContextPanel(props: {
               lines={ownerContext.answers}
             />
           </div>
-          <p className="mt-6 text-xs text-muted-foreground">
+          <p className="mt-6 text-meta text-muted-foreground">
             Edit it in <code>OWNER.md</code>, at the top of your context folder. See{" "}
             <Link to="/changes" className="text-foreground underline">
               recent changes

@@ -21,7 +21,7 @@ export function TickBox(props: {
         onChange={(event) => props.onChange(event.target.checked)}
         aria-labelledby={props.labelledBy}
         aria-describedby={props.describedBy}
-        className="peer size-4 cursor-pointer appearance-none rounded-sm border-[1.5px] border-placeholder bg-field transition-colors outline-none checked:border-primary checked:bg-primary focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="peer size-4 cursor-pointer appearance-none rounded-sm border-stroke border-placeholder bg-field transition-colors outline-none checked:border-primary checked:bg-primary focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       <Check
         aria-hidden

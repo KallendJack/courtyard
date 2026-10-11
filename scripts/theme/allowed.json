@@ -1,0 +1,7 @@
+[
+  {
+    "file": "sessions/attaching.ts",
+    "value": "#ffffff",
+    "reason": "A photo shrunk to a JPEG on a canvas has its see-through parts filled white, as paper behind it: not a colour of the page."
+  }
+]

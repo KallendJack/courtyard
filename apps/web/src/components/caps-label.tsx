@@ -14,7 +14,7 @@ export function CapsLabel(props: {
   children: ReactNode;
 }) {
   const className = classes(
-    "text-[11px]/4 font-bold tracking-[0.08em] uppercase",
+    "text-caption font-bold tracking-label uppercase",
     props.tone === "warning" ? "text-warning" : "text-muted-foreground",
     props.inList && "px-2.5 pt-1.5 pb-1",
   );

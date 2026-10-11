@@ -416,7 +416,7 @@ export const Composer = memo(function Composer(props: {
             compact &&
               (attaching.length === 0
                 ? "max-md:rounded-full max-md:px-1.5 max-md:py-1.5"
-                : "max-md:rounded-[22px] max-md:px-1.5 max-md:py-1.5"),
+                : "max-md:rounded-box max-md:px-1.5 max-md:py-1.5"),
           )}
         >
           {menuOpen && (
@@ -432,7 +432,7 @@ export const Composer = memo(function Composer(props: {
           {dragging && (
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-dashed border-primary bg-accent text-sm/[18px] font-semibold text-primary-text"
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-stroke border-dashed border-primary bg-accent text-sm/4.5 font-semibold text-primary-text"
             >
               <Paperclip className="size-5" />
               Drop photos or PDFs to attach
@@ -543,7 +543,7 @@ export const Composer = memo(function Composer(props: {
                       cameraInput={camera}
                     />
                     {full && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-meta text-muted-foreground">
                         {attaching.length} of {ATTACHMENTS.perMessage}
                       </span>
                     )}
@@ -595,7 +595,7 @@ export const Composer = memo(function Composer(props: {
         provider.available
           ? []
           : [
-              <p key={provider.id} className="text-xs text-muted-foreground">
+              <p key={provider.id} className="text-meta text-muted-foreground">
                 {provider.label} isn't available: {provider.reason}
               </p>,
             ],

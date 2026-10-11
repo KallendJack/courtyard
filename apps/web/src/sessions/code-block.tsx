@@ -64,16 +64,16 @@ export function CodeBlock(props: {
     <figure aria-label={props.problem ?? name} className="overflow-clip rounded-md border bg-field">
       {props.problem === undefined ? (
         <div className="flex items-center justify-between gap-2 border-b py-0.5 pr-1 pl-3 md:py-1 md:pr-1.5">
-          <span className="truncate text-xs text-muted-foreground">{name}</span>
+          <span className="truncate text-meta text-muted-foreground">{name}</span>
           <CopyButton look="labelled" label="Copy code" text={() => props.code} />
         </div>
       ) : (
-        <figcaption className="flex items-center gap-2 border-b bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
+        <figcaption className="flex items-center gap-2 border-b bg-background px-3 py-2 text-meta font-semibold text-muted-foreground">
           <TriangleAlert aria-hidden className="size-[15px] shrink-0" />
           {props.problem}
         </figcaption>
       )}
-      <pre className="overflow-x-auto p-3 font-mono text-xs/[21px] md:text-sm/[22px]">
+      <pre className="overflow-x-auto p-3 font-mono text-meta/5.25 md:text-sm/5.5">
         <code>{coloured ?? props.code}</code>
       </pre>
     </figure>

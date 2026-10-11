@@ -26,10 +26,10 @@ export function DocumentsSection(props: {
       <div className="flex items-baseline justify-between gap-3">
         <SectionTitle>Documents</SectionTitle>
         {documents.length > 0 && (
-          <span className="text-xs text-muted-foreground">{documents.length}</span>
+          <span className="text-meta text-muted-foreground">{documents.length}</span>
         )}
       </div>
-      <p className="mt-1 text-sm/[21px] text-muted-foreground">
+      <p className="mt-1 text-sm/5.25 text-muted-foreground">
         Longer things saved here. Every model knows they're here and reads one when it helps.
       </p>
       {deleted !== undefined && (
@@ -48,7 +48,7 @@ export function DocumentsSection(props: {
                   <FileText aria-hidden className="size-[18px] shrink-0 text-primary-text" />
                   <span className="truncate">{document.name}</span>
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
+                <span className="shrink-0 text-meta text-muted-foreground">
                   {describeWhen(document.updatedAt)}
                 </span>
               </Link>

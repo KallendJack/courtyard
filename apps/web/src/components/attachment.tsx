@@ -68,8 +68,8 @@ export function PdfChip(props: { name: string; size: number; href?: string } & W
       <span className="relative flex h-14 min-w-0 items-center gap-2.5 rounded-md bg-background pr-3.5 pl-3 max-md:h-13 max-md:gap-2 max-md:pr-3 max-md:pl-2.5">
         <FileText aria-hidden className="size-5 shrink-0 text-primary-text max-md:size-[18px]" />
         <span className="flex min-w-0 flex-col gap-px">
-          <span className="truncate text-sm/[18px] font-medium">{props.name}</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="truncate text-sm/4.5 font-medium">{props.name}</span>
+          <span className="text-meta text-muted-foreground">
             <span className="max-md:hidden">PDF · </span>
             {size}
           </span>
@@ -89,8 +89,8 @@ export function PdfChip(props: { name: string; size: number; href?: string } & W
       )}
     >
       <FileText aria-hidden className="size-4 shrink-0 text-primary-text" />
-      <span className="truncate text-sm/[18px] font-medium">{props.name}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{size}</span>
+      <span className="truncate text-sm/4.5 font-medium">{props.name}</span>
+      <span className="shrink-0 text-meta text-muted-foreground">{size}</span>
     </a>
   );
 }

@@ -27,8 +27,8 @@
 @source not "./components/frame-button.tsx";
 
 /*
- * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components
- * use the names, never the values. One theme, dark whatever the device's setting (#210): Handheld,
+ * Courtyard's theme. Every colour, font, type size, radius and effect the app uses is defined here
+ * once; components use the names, never the values (scripts/theme checks). One theme, dark whatever the device's setting (#210): Handheld,
  * from the Paper boards "Handheld ·": black, violet for what's live or chosen, gold for what needs
  * the owner, and heavy Figtree headings.
  */
@@ -72,9 +72,64 @@
   --color-code-string: var(--code-string);
   --color-code-comment: var(--code-comment);
 
-  /* The design's type sizes (Paper tokens): labels 13, interface 14, body 16, headings 20+. */
-  --text-xs: 13px;
-  --text-xs--line-height: 18px;
+  /*
+   * The type scale, by role, as the style guide names them (Paper, "Style guide · Handheld",
+   * 02 Type), at the sizes the screens use today. Where the guide says otherwise its size is
+   * noted: a design question (#232), answered by changing that line here. Below the guide's
+   * roles, the ones it doesn't have yet. Tailwind's own steps (sm 14, base 16, lg 18 up) are for
+   * what has no role yet.
+   */
+  --text-title: 26px; /* a page's title; the guide's "Workspace name" is 38/44 */
+  --text-title--line-height: 31px;
+  --text-answer: 16px; /* guide: 18/28 */
+  --text-answer--line-height: 26px;
+  --text-message: 15px; /* the owner's, on a phone; guide: 17/24 */
+  --text-message--line-height: 23px;
+  --text-interface: 15px;
+  --text-interface--line-height: 20px;
+  --text-meta: 13px; /* guide: line height 16 */
+  --text-meta--line-height: 18px;
+  --text-label: 12px; /* in capitals, with tracking-label, a section label */
+  --text-label--line-height: 16px;
+  /* Not on the guide yet. */
+  --text-body: 15px; /* a page's intro, a paragraph */
+  --text-body--line-height: 23px;
+  --text-caption: 11px; /* a card's caps label, a rail disc's caption, a branch or path in mono */
+  --text-caption--line-height: 16px;
+  --text-rail: 10px; /* a key's label on the frame's bottom bar */
+  --text-rail--line-height: 12px;
+  --text-talk: 17px; /* the talk strip's title on a tablet; the guide's Talk key is 18/22 */
+  --text-talk--line-height: 20px;
+  --text-card-title: 19px; /* an approval card's question */
+  --text-card-title--line-height: 24px;
+  --text-sheet-title: 22px;
+  --text-sheet-title--line-height: 28px;
+  --text-sign-in-code: 28px; /* the code a sign-in shows, to type elsewhere */
+  --text-sign-in-code--line-height: 34px;
+  --text-code: 0.9em; /* code inside a line of text */
+
+  /* A section label's spacing, in capitals. */
+  --tracking-label: 0.08em;
+
+  /*
+   * Effects. The violet glow is something live or lit; a glow's strength is its role's, so each
+   * is named for where it shows.
+   */
+  --shadow-glow: 0 0 8px var(--primary); /* a live dot: working, Jump to latest */
+  --shadow-glow-tile: 0 0 22px color-mix(in oklab, var(--primary) 40%, transparent); /* the open workspace's tile */
+  /* A rail disc whose sheet is open: a soft violet ring and glow. */
+  --shadow-lit:
+    0 0 0 5px color-mix(in oklab, var(--primary) 20%, transparent),
+    0 0 24px color-mix(in oklab, var(--primary) 50%, transparent);
+  /* The talk strip: its line of light, idle and listening, its answering line, and it listening and held. */
+  --shadow-glow-hair: 0 0 12px 1px color-mix(in oklab, var(--primary) 70%, transparent);
+  --shadow-glow-hair-live: 0 0 14px 2px var(--primary);
+  --shadow-glow-answering: 0 0 10px var(--primary);
+  --shadow-glow-talk: 0 0 30px color-mix(in oklab, var(--primary) 45%, transparent);
+  --shadow-glow-held: 0 0 40px color-mix(in oklab, var(--primary) 60%, transparent);
+  --shadow-raised: 0 8px 24px #00000099; /* a button floating over the page */
+  --shadow-sheet: -30px 0 60px color-mix(in oklab, var(--card) 80%, transparent); /* a sheet from the right */
+  --shadow-divide: inset 0 -1px 0 var(--border); /* a line under a header, inside its box */
 
   --radius-sm: 4px;
   --radius-md: 10px;
@@ -88,6 +143,11 @@
   --radius-hair: 2px;
   --radius-tile: 20px;
   --radius-sheet: 26px;
+  /* The message box on a phone, holding attachments. */
+  --radius-box: 22px;
+  /* A Thing's picture in a row of Things, and a part's (a card's is a row's radius). */
+  --radius-picture: 8px;
+  --radius-picture-sm: 6px;
 
   --container-reading: 680px;
 }
@@ -166,6 +226,17 @@
 }
 @utility display-section {
   font-weight: 800;
+}
+
+/* The 1.5px stroke: a card that needs the owner, a chosen row, a queued message, a tick box. */
+@utility ring-stroke {
+  @apply ring-[1.5px];
+}
+@utility border-stroke {
+  @apply border-[1.5px];
+}
+@utility border-l-stroke {
+  @apply border-l-[1.5px];
 }
 
 @layer base {

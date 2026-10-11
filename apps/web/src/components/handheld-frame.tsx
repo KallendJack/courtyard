@@ -156,7 +156,7 @@ export default function HandheldFrame(props: {
       aria-label="New workspace"
       className={
         tablet
-          ? "flex h-18 w-20 shrink-0 flex-col items-center justify-center gap-1.5 rounded-tile px-1.5 text-center text-[12px]/[15px] font-semibold text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
+          ? "flex h-18 w-20 shrink-0 flex-col items-center justify-center gap-1.5 rounded-tile px-1.5 text-center text-label/3.75 font-semibold text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
           : "flex size-13 shrink-0 items-center justify-center rounded-lg text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
       }
     >
@@ -362,10 +362,10 @@ function Tile(props: {
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
         "flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
         props.look === "rail"
-          ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-[12px]/[15px]"
-          : "h-13 gap-2 rounded-lg px-4 text-sm/[18px] whitespace-nowrap",
+          ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-label/3.75"
+          : "h-13 gap-2 rounded-lg px-4 text-sm/4.5 whitespace-nowrap",
         open
-          ? "bg-muted font-bold text-foreground shadow-[0_0_22px] shadow-primary/40 ring-2 ring-primary"
+          ? "bg-muted font-bold text-foreground shadow-glow-tile ring-2 ring-primary"
           : workspace.mode === "code"
             ? "bg-warning/5 text-foreground/70 ring-1 ring-warning/35 ring-inset"
             : "bg-muted/60 text-foreground/70",

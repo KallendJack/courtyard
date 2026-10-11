@@ -23,7 +23,7 @@ export function SegmentedChoice<T extends string>(props: {
           <label
             key={option.value}
             className={classes(
-              "cursor-pointer rounded-full px-3.5 py-1.5 text-[13px]/4 font-semibold transition-colors select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50 md:px-3 md:py-1",
+              "cursor-pointer rounded-full px-3.5 py-1.5 text-meta/4 font-semibold transition-colors select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50 md:px-3 md:py-1",
               chosen
                 ? "bg-card text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground",

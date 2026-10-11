@@ -17,7 +17,7 @@ export function StatusChip(props: { status: ThingStatus; large?: boolean }) {
     <span
       className={classes(
         "shrink-0 rounded-full bg-muted font-semibold",
-        props.large ? "px-3 py-1 text-xs/4" : "px-2.5 py-[3px] text-xs/4 md:text-[12px]/4",
+        props.large ? "px-3 py-1 text-meta/4" : "px-2.5 py-[3px] text-meta/4 md:text-label",
         STATUS_COLOURS[props.status],
       )}
     >
@@ -28,11 +28,11 @@ export function StatusChip(props: { status: ThingStatus; large?: boolean }) {
 
 const PHOTO_SIZES = {
   /** A Thing's row. */
-  row: "size-12 rounded-[8px] [&_svg]:size-[18px]",
+  row: "size-12 rounded-picture [&_svg]:size-[18px]",
   /** A part's row, under its Thing. */
-  part: "size-9 rounded-[6px] [&_svg]:size-4",
+  part: "size-9 rounded-picture-sm [&_svg]:size-4",
   /** A Thing's card: the width of a phone, a square beside the details from tablet width. */
-  card: "h-60 w-full rounded-[12px] md:size-55 [&_svg]:size-8",
+  card: "h-60 w-full rounded-row md:size-55 [&_svg]:size-8",
 } as const;
 
 /** A Thing's photo, or a plain tag where it has none. */
@@ -81,13 +81,11 @@ function ThingRow(props: {
       <ThingPhoto workspaceId={workspaceId} thing={thing} size={part ? "part" : "row"} />
       <span className={classes("flex min-w-0 grow flex-col", !part && "gap-0.5")}>
         <span
-          className={classes("truncate font-medium", part ? "text-[15px]/5" : "text-base/[22px]")}
+          className={classes("truncate font-medium", part ? "text-interface" : "text-base/5.5")}
         >
           {thing.name}
         </span>
-        {line !== "" && (
-          <span className="truncate text-xs/[18px] text-muted-foreground">{line}</span>
-        )}
+        {line !== "" && <span className="truncate text-meta text-muted-foreground">{line}</span>}
       </span>
       <span className="flex w-18 shrink-0 justify-end md:w-21">
         <StatusChip status={thing.status} />
@@ -137,7 +135,7 @@ export function ThingRows(props: {
             />
             {parts.length > 0 && (
               <div className="pb-2 pl-[23px]">
-                <ul aria-label={`Parts of ${thing.name}`} className="border-l-[1.5px] pl-6">
+                <ul aria-label={`Parts of ${thing.name}`} className="border-l-stroke pl-6">
                   {parts.map((part) => (
                     <li key={part.slug}>
                       <ThingRow workspaceId={workspaceId} thing={part} part partOf={undefined} />

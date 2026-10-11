@@ -50,7 +50,7 @@ export function MarkdownTable({ node, children }: ComponentProps<"table"> & Extr
     <RichBlock>
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
-          <table className="w-full border-collapse text-sm/[22px]">
+          <table className="w-full border-collapse text-sm/5.5">
             <SortingContext value={sorting}>{children}</SortingContext>
           </table>
         </div>

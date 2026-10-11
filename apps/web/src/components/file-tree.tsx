@@ -45,7 +45,7 @@ export function FileTree(props: {
       {byFolder(props.files).map(([folder, files]) => (
         <div key={folder} className="flex flex-col gap-0.5">
           {folder !== "" && (
-            <p className="truncate px-2.5 pt-1.5 pb-1 font-mono text-xs/4 text-placeholder">
+            <p className="truncate px-2.5 pt-1.5 pb-1 font-mono text-meta/4 text-placeholder">
               {folder}
             </p>
           )}
@@ -59,7 +59,7 @@ export function FileTree(props: {
                 title={file.path}
                 onClick={() => props.onChoose(file.path)}
                 className={classes(
-                  "flex h-11 shrink-0 items-center justify-between gap-3 rounded-row pr-3 text-left font-mono text-xs/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "flex h-11 shrink-0 items-center justify-between gap-3 rounded-row pr-3 text-left font-mono text-meta/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                   folder === "" ? "pl-2.5" : "pl-5.5",
                   chosen ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
                 )}

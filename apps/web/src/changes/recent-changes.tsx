@@ -112,7 +112,7 @@ function Meta(props: { workspace: Whose; change: RecentChange; note?: string | u
     ...(from === undefined ? [] : [from]),
   ];
   return (
-    <p className="text-[13px]/5 text-muted-foreground">
+    <p className="text-meta/5 text-muted-foreground">
       {parts.join(" · ")}
       {session !== undefined && (
         <>
@@ -130,7 +130,7 @@ function Meta(props: { workspace: Whose; change: RecentChange; note?: string | u
   );
 }
 
-const OPEN = "text-[13px]/5 text-foreground underline";
+const OPEN = "text-meta/5 text-foreground underline";
 
 /** Open, under a document's or a Thing's entry while it's still there: its page. */
 function OpenLink(props: { workspaceId: WorkspaceId; kind: "document" | "thing"; slug: string }) {

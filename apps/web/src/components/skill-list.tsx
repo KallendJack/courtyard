@@ -20,15 +20,15 @@ const SIZES = {
   menu: {
     row: "gap-3 px-3.5 py-2",
     name: "text-sm/5",
-    about: "text-xs/[18px]",
-    source: "w-33 text-xs/5",
+    about: "text-meta",
+    source: "w-33 text-meta/5",
   },
   /** A phone's sheet, and the workspace page on a phone; the page's own look from tablet width. */
   page: {
     row: "gap-3 py-2.75 md:gap-4 md:py-3",
-    name: "text-base/[22px] md:text-base/6",
+    name: "text-base/5.5 md:text-base/6",
     about: "text-sm/5",
-    source: "w-23 pt-0.5 text-xs/[18px] md:w-40 md:pt-0 md:text-xs/6",
+    source: "w-23 pt-0.5 text-meta md:w-40 md:pt-0 md:text-meta/6",
   },
 } as const;
 
