@@ -444,7 +444,9 @@ the web app parses every answer with these schemas.
   the fake GitHub and a stand-in for Matt Pocock's plugin;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
-- **`.github/workflows/ci.yml`:** runs `pnpm verify` on every pull request and every push to `main`.
+- **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into
+  jobs side by side (Checks, Unit tests, E2E in four shards) so a run takes about 3 minutes; `.github/actions/setup`
+  is the setup they share.
 - **`.github/workflows/matt-skills.yml`:** once a week, runs `scripts/matt-skills/check.ts`, which compares
   `matt.json` with Matt's newest release and, when it's behind, writes an issue with his CHANGELOG lines and the new
   pin (its checksum worked out as the worker checks it); the workflow opens it, once per release (ADR 0024).
