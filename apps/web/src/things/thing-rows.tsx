@@ -11,7 +11,7 @@ const STATUS_COLOURS: Readonly<Record<ThingStatus, string>> = {
   replace: "text-replace",
 };
 
-/** A Thing's status as a small chip: have in grey, want in heather, replace in bracken. */
+/** A Thing's status as a small chip: have in grey, want in violet, replace in bracken. */
 export function StatusChip(props: { status: ThingStatus; large?: boolean }) {
   return (
     <span

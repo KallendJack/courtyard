@@ -8,7 +8,7 @@ export type ConnectionState = "connected" | "waiting" | "off";
 const STATES = {
   connected: {
     word: "Connected",
-    dot: "bg-workspace-moss",
+    dot: "bg-success",
     text: "text-muted-foreground",
   },
   waiting: { word: "Waiting for you", dot: "bg-warning", text: "text-foreground" },

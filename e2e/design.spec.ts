@@ -37,34 +37,32 @@ test.describe("on a desktop", () => {
     await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
   });
 
-  test("gives each workspace its own colour, the same on every visit", async ({ page }) => {
+  test("shows each workspace's icon by its name, the one its name suggests until one is picked", async ({
+    page,
+  }) => {
     await page.goto("/");
-    const dotColour = (name: string) =>
+    const icon = (name: string) =>
       page
         .getByRole("navigation", { name: "Workspaces" })
         .getByRole("link", { name })
-        .locator("[data-workspace-colour]")
-        .evaluate((dot) => getComputedStyle(dot).backgroundColor);
+        .locator("svg[data-workspace-icon]");
 
-    const first = await dotColour("Garage gym");
-    expect(first).not.toBe(await dotColour("office"));
-    await page.reload();
-    expect(await dotColour("Garage gym")).toBe(first);
+    await expect(icon("Reading list")).toHaveAttribute("data-workspace-icon", "book");
+    await expect(icon("office")).toHaveAttribute("data-workspace-icon", "briefcase");
+    await expect(icon("Side project")).toHaveAttribute("data-workspace-icon", "code");
   });
 });
 
-test("follows the device's dark mode", async ({ page }) => {
+test("is dark whatever the device's setting", async ({ page }) => {
   const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
-  const light = await background();
+  // Handheld's black, by day and by night (#210), and the browser's own bars to match.
+  expect(await background()).toBe("rgb(7, 7, 7)");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#070707");
   await page.emulateMedia({ colorScheme: "dark" });
-  const dark = await background();
-
-  // Moorland's mist by day, Handheld's black by night.
-  expect(light).toBe("rgb(243, 240, 236)");
-  expect(dark).toBe("rgb(7, 7, 7)");
+  expect(await background()).toBe("rgb(7, 7, 7)");
 });
 
 test("never loads an image an answer points to, so an answer can't send data away", async ({

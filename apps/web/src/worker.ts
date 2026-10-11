@@ -110,7 +110,7 @@ export const loadSkills = (workspaceId: WorkspaceId): Promise<FromWorker<SkillLi
 /** The providers and their models, for the model picker. */
 export const loadProviders = () => fromWorker("/providers", ProviderList);
 
-/** Adds a workspace: its folder, a starter context file and a colour. */
+/** Adds a workspace: its folder, a starter context file and an icon suggested from its name. */
 export const addWorkspace = (workspace: NewWorkspace) =>
   sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
 
@@ -131,7 +131,7 @@ export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextD
 export const startOwnerContext = () =>
   sendJson({ path: "/owner-context", body: {}, schema: OwnerContextDetail });
 
-/** Renames a workspace or changes its colour. Its folder stays as it is. */
+/** Renames a workspace or changes its icon. Its folder stays as it is. */
 export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>
   sendJson({
     path: `/workspaces/${encodeURIComponent(id)}`,

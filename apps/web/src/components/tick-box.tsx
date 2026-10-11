@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 
 /**
- * A tick box (ADR 0012): heather with a white tick when ticked, an empty box when not. Put a
+ * A tick box (ADR 0012): violet with a white tick when ticked, an empty box when not. Put a
  * `<label htmlFor={id}>` around what it ticks, so tapping those words ticks it too, and name it
  * with the short part of them (`labelledBy`) when the rest describes it (`describedBy`).
  */

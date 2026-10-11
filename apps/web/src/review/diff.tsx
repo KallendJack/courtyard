@@ -32,7 +32,7 @@ const hunksOf = (patch: string) => {
 };
 
 const ROW = {
-  added: { sign: "+", look: "bg-workspace-moss/12 text-code-string", name: "Added" },
+  added: { sign: "+", look: "bg-success/12 text-code-string", name: "Added" },
   removed: { sign: "−", look: "bg-destructive/12 text-destructive", name: "Removed" },
   same: { sign: "", look: "text-muted-foreground", name: undefined },
 } as const;

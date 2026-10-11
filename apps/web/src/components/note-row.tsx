@@ -47,7 +47,7 @@ const isControl = (icon: ReactNode | { readonly control: ReactNode }) =>
   typeof icon === "object" && icon !== null && "control" in icon;
 
 /**
- * One change to context as a quiet list item with a heather rule (ADR 0013): the note under an
+ * One change to context as a quiet list item with a violet rule (ADR 0013): the note under an
  * answer, an entry in Recent changes, a change a tidy proposes. An icon (or a control, such as a
  * tick box), the words, an action slot that lines up from row to row and widens for two (Open and
  * Undo), under the words on a phone, and an error under them. A finished one is grey.

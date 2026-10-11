@@ -55,19 +55,20 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
   await expect(switcher.getByRole("link", { name })).toBeVisible();
 
-  // Its colour can change, and the change stays. A colour it hasn't got, so the test can't pass
-  // by doing nothing, chosen by clicking its dot as a person would: the radio itself is hidden.
-  await page.getByRole("button", { name: "Change colour" }).click();
-  const colours = page.getByRole("group", { name: "Colour" });
-  const other = colours.getByRole("radio", { checked: false }).first();
-  const colour = await other.getAttribute("value");
-  // Each dot's tooltip is its colour's name, the same as its radio's.
-  await colours.getByTitle((await other.getAttribute("aria-label")) ?? "", { exact: true }).click();
-  await expect(colours).toBeHidden();
+  // Its icon is the one its name suggests (#210). Picked in the Icon sheet, by tapping its tile as
+  // a person would (the radio itself is hidden), it shows on its tile at once, and stays.
+  const icon = switcher.getByRole("link", { name }).locator("svg[data-workspace-icon]");
+  await expect(icon).toHaveAttribute("data-workspace-icon", "sprout");
+  await page.getByRole("button", { name: "Change icon" }).click();
+  const sheet = page.getByRole("dialog", { name: "Icon" });
+  const icons = sheet.getByRole("radiogroup", { name: "Icon" });
+  await expect(icons.getByRole("radio")).toHaveCount(15);
+  await expect(icons.getByRole("radio", { checked: true })).toHaveAccessibleName("Plant");
+  await icons.getByTitle("Music", { exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(icon).toHaveAttribute("data-workspace-icon", "music");
   await page.reload();
-  await expect(
-    switcher.getByRole("link", { name }).locator("[data-workspace-colour]"),
-  ).toHaveAttribute("data-workspace-colour", colour ?? "");
+  await expect(icon).toHaveAttribute("data-workspace-icon", "music");
 });
 
 test("what a new workspace is for, when the owner says, shows under its name as the intro line", async ({

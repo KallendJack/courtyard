@@ -13,8 +13,7 @@ const VARIANTS = {
   /** The main action. */
   primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
   /** Any other action, such as Cancel. */
-  outline:
-    "border-border bg-background text-foreground hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+  outline: "border-input bg-input/30 text-foreground hover:bg-input/50",
   /** Archiving, deleting, logging out. */
   destructive:
     "border-transparent bg-destructive/10 text-destructive-text hover:bg-destructive/20 focus-visible:ring-destructive/20",
@@ -112,7 +111,7 @@ const ICON_LOOKS = {
   quiet: "text-muted-foreground hover:bg-muted hover:text-foreground",
   /** Shown pressed, while what it opened is open on the page (a confirm step, say). */
   pressed: "bg-muted text-foreground",
-  /** On a disc in heather: an action beside each line of a list (Grill this plan). */
+  /** On a disc in violet: an action beside each line of a list (Grill this plan). */
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */
   inPill: "text-current hover:bg-primary/10",
@@ -120,7 +119,7 @@ const ICON_LOOKS = {
   disc: "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
   /** A dark badge ringed in the box's colour, on the corner of a thumbnail (Remove). */
   badge: "border-2 border-field bg-foreground text-background",
-  /** On a heather wash: what it does has just been done (Copied). */
+  /** On a charcoal wash: what it does has just been done (Copied). */
   done: "bg-accent text-primary-text",
 } as const;
 

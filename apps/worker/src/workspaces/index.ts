@@ -304,7 +304,6 @@ const keepInConfig = async (
       });
 };
 
-
 /** Names Windows keeps for devices, which can't be folder or file names there. */
 export const RESERVED_ON_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 

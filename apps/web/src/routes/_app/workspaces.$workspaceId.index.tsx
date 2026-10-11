@@ -20,12 +20,12 @@ import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
 import { FormError } from "@/components/form-error";
+import { IconChooser } from "@/components/icon-chooser";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
 import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { ListedSessionText, useRefreshWhileBusy } from "@/components/session-state";
 import { SkillList } from "@/components/skill-list";
-import { ColourChooser } from "@/components/workspace-colour";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { DocumentsSection } from "../../documents/documents-section.tsx";
@@ -81,7 +81,7 @@ function Workspace() {
   if (detail.kind !== "loaded") return <Problem result={detail} />;
   const { workspace, contextFile, ownerContextShared } = detail.data;
 
-  const change = async (wanted: { name: string } | { colour: typeof workspace.colour }) => {
+  const change = async (wanted: { name: string } | { icon: typeof workspace.icon }) => {
     const changed = await changeWorkspace(workspace.id, wanted);
     if (changed.kind !== "loaded") return describeProblem(changed).body;
     // Every list of workspaces shows the change.
@@ -90,7 +90,11 @@ function Workspace() {
   };
   const above = (
     <div className="flex items-center gap-2 text-xs/4 font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-      <ColourChooser colour={workspace.colour} choose={(colour) => change({ colour })} />
+      <IconChooser
+        workspaceName={workspace.name}
+        icon={workspace.icon}
+        choose={(icon) => change({ icon })}
+      />
       {workspace.mode === "code" ? "Code workspace" : "Workspace"}
     </div>
   );

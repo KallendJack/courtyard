@@ -158,9 +158,8 @@ test.describe("at the end of a long session", () => {
 test("is installable, and caches the app but never session data", async ({ page, request }) => {
   const manifest = Manifest.parse(await (await request.get("/manifest.webmanifest")).json());
   expect(manifest).toMatchObject({ name: "Courtyard", display: "standalone", start_url: "/" });
-  // An installed app on Android paints the strip behind the gesture bar from these colours,
-  // whatever the page's theme, so both are the dark theme's ground: the owner uses dark mode
-  // (#157). The page's own theme-color tags still follow the colour scheme while it's open.
+  // An installed app on Android paints the strip behind the gesture bar from these colours, so
+  // both are the theme's ground (#157), as the page's own theme-color is (#210).
   expect(manifest.background_color.toLowerCase()).toBe("#070707");
   expect(manifest.theme_color.toLowerCase()).toBe("#070707");
   const sizes = manifest.icons.map((icon) => icon.sizes);

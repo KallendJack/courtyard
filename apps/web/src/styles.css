@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/figtree";
 
 /*
@@ -29,17 +28,12 @@
 
 /*
  * Courtyard's theme. Every colour, font and radius the app uses is defined here once; components
- * use the names, never the values. Dark mode follows the device's own setting:
- * - by day, Moorland, from the Paper design chosen in issue #2;
- * - by night, Handheld, from the Paper boards "Handheld ·": black, violet for what's live or
- *   chosen, gold for what needs the owner, and heavy Figtree headings. The owner uses dark mode.
+ * use the names, never the values. One theme, dark whatever the device's setting (#210): Handheld,
+ * from the Paper boards "Handheld ·": black, violet for what's live or chosen, gold for what needs
+ * the owner, and heavy Figtree headings.
  */
-@custom-variant dark (@media (prefers-color-scheme: dark));
-
 @theme inline {
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--display-face);
-  --font-heading: var(--font-display);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -67,11 +61,11 @@
   --color-field: var(--field);
   --color-ring: var(--ring);
   --color-warning: var(--warning);
-  --color-workspace-bracken: var(--workspace-bracken);
-  --color-workspace-heather: var(--workspace-heather);
-  --color-workspace-slate: var(--workspace-slate);
-  --color-workspace-moss: var(--workspace-moss);
-  --color-workspace-peat: var(--workspace-peat);
+  --color-success: var(--success);
+  --color-chart-slate: var(--chart-slate);
+  --color-chart-moss: var(--chart-moss);
+  --color-chart-bracken: var(--chart-bracken);
+  --color-chart-peat: var(--chart-peat);
   --color-code-keyword: var(--code-keyword);
   --color-code-name: var(--code-name);
   --color-code-number: var(--code-number);
@@ -101,136 +95,77 @@
 :root {
   --radius: 10px;
 
-  /* Headings: Fraunces, a page title lighter than a section's. */
-  --display-face: "Fraunces Variable", ui-serif, Georgia, serif;
-  --display-title-weight: 500;
-  --display-section-weight: 600;
-  --display-tracking: -0.02em;
-
-  --background: #f3f0ec; /* mist: the page ground */
-  --foreground: #231f22;
-  --card: #fcfaf8; /* the raised session panel */
-  --card-foreground: #231f22;
-  --surface: #f6f3ef; /* a card on the panel: a workspace page's sections */
-  --popover: #ffffff;
-  --popover-foreground: #231f22;
-  --primary: #6a3f6e; /* heather: the one accent */
+  --background: #070707; /* the frame round the page: the sidebar and the strip on top */
+  --foreground: #ffffff;
+  --card: #000000; /* the page itself */
+  --card-foreground: #ffffff;
+  --surface: #0b0b0b; /* a card on the page */
+  --popover: #0e0e0e;
+  --popover-foreground: #ffffff;
+  --primary: #9d6bff; /* violet: what's live or chosen */
   --primary-foreground: #ffffff;
-  --primary-text: #6a3f6e; /* heather as text and dots */
-  --secondary: #e9e3e3;
-  --secondary-foreground: #231f22;
-  --muted: #e9e3e3; /* the selected workspace */
-  --muted-foreground: #625a60;
-  --placeholder: #938a90;
-  --accent: #eee6ee; /* a heather wash: the owner's messages */
-  --accent-foreground: #231f22;
-  --destructive: #9b2c2c;
-  --destructive-foreground: #ffffff;
-  --destructive-soft: #f6e9e9;
-  --destructive-text: #5e2424;
-  --border: #e3dcdc;
-  --input: #e3dcdc;
-  --field: #ffffff; /* inside inputs and the message box */
-  --ring: #6a3f6e;
-  --warning: #b08a55; /* bracken: something being handled, such as reconnecting */
+  --primary-text: #b994ff;
+  --secondary: #161616;
+  --secondary-foreground: #ffffff;
+  --muted: #1c1c1c; /* the selected workspace */
+  --muted-foreground: #8c8c8c;
+  --placeholder: #6b6b6b;
+  --accent: #1a1a1a; /* charcoal: the owner's messages */
+  --accent-foreground: #ffffff;
+  /* The design has no failure colours; these keep a red readable on black. */
+  --destructive: #e88a8a;
+  --destructive-foreground: #000000;
+  --destructive-soft: #2a1414;
+  --destructive-text: #f0c4c4;
+  --border: #1f1f1f;
+  --input: #2a2a2a;
+  --field: #0e0e0e;
+  --ring: #9d6bff;
+  --warning: #ffb21e; /* gold: something being handled, or that needs the owner */
+  --success: #a9bc85; /* moss: something connected, added or passed */
 
-  /* The mark is the same in both modes, so it's always recognisable. */
-  --mark-tile: #6a3f6e;
-  --mark-walls: #f3f0ec;
-  --mark-tree: #c9a26b;
+  /* Courtyard's mark, as its app icon draws it (Paper board Handheld · 37, option A). */
+  --mark-tile: #0b0b0b;
+  --mark-edge: #2a2a2a;
+  --mark-walls: #ffffff;
+  --mark-tree: #ffb21e;
 
-  /* The full-size photo viewer is dark in both modes, so a photo stands out (#78). */
+  /* The full-size photo viewer, so a photo stands out (#78). */
   --viewer: #1b181a;
   --viewer-foreground: #eee8eb;
   --viewer-muted: #a79ea4;
   --viewer-dot: #5a5257;
 
-  --workspace-bracken: #b08a55;
-  --workspace-heather: #6a3f6e;
-  --workspace-slate: #5e6e7e;
-  --workspace-moss: #7c8f5a;
-  --workspace-peat: #7a6556;
+  /* A chart's series after the first, which is violet: each a colour of its own (#147). */
+  --chart-slate: #9fb2c6;
+  --chart-moss: #a9bc85;
+  --chart-bracken: #c9a26b;
+  --chart-peat: #a88f7e;
 
-  /* Code in answers: the workspace colours, each deepened to read at code size on white. */
-  --code-keyword: #6a3f6e; /* heather */
-  --code-name: #4f6072; /* slate */
-  --code-number: #8a6530; /* bracken */
-  --code-string: #56663a; /* moss */
-  --code-comment: #625a60;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Headings: heavy Figtree, a little tighter. */
-    --display-face: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
-    --display-title-weight: 800;
-    --display-section-weight: 800;
-    --display-tracking: -0.03em;
-
-    --background: #070707; /* the frame round the page: the sidebar and the strip on top */
-    --foreground: #ffffff;
-    --card: #000000; /* the page itself */
-    --card-foreground: #ffffff;
-    --surface: #0b0b0b; /* a card on the page */
-    --popover: #0e0e0e;
-    --popover-foreground: #ffffff;
-    --primary: #9d6bff; /* violet: what's live or chosen */
-    --primary-foreground: #ffffff;
-    --primary-text: #b994ff;
-    --secondary: #161616;
-    --secondary-foreground: #ffffff;
-    --muted: #1c1c1c; /* the selected workspace */
-    --muted-foreground: #8c8c8c;
-    --placeholder: #6b6b6b;
-    --accent: #1a1a1a; /* charcoal: the owner's messages */
-    --accent-foreground: #ffffff;
-    /* The design has no failure colours; these keep a red readable on black. */
-    --destructive: #e88a8a;
-    --destructive-foreground: #000000;
-    --destructive-soft: #2a1414;
-    --destructive-text: #f0c4c4;
-    --border: #1f1f1f;
-    --input: #2a2a2a;
-    --field: #0e0e0e;
-    --ring: #9d6bff;
-    --warning: #ffb21e; /* gold: something being handled, or that needs the owner */
-
-    --workspace-bracken: #c9a26b;
-    --workspace-heather: #b784bb;
-    --workspace-slate: #9fb2c6;
-    --workspace-moss: #a9bc85;
-    --workspace-peat: #a88f7e;
-
-    /* Code in answers: the workspace colours as they are. */
-    --code-keyword: #b784bb;
-    --code-name: #9fb2c6;
-    --code-number: #c9a26b;
-    --code-string: #a9bc85;
-    --code-comment: #8c8c8c;
-  }
+  /* Code in answers. */
+  --code-keyword: #b784bb;
+  --code-name: #9fb2c6;
+  --code-number: #c9a26b;
+  --code-string: #a9bc85;
+  --code-comment: #8c8c8c;
 }
 
 /*
- * Replace, as a Thing's status says it (#150): bracken deepened to read at chip size on muted.
- * Only Things' pages use it, so it's a utility, written into a stylesheet only where it's used,
- * rather than a variable every page would carry.
+ * Replace, as a Thing's status says it (#150): bracken, to read at chip size on muted. Only
+ * Things' pages use it, so it's a utility, written into a stylesheet only where it's used, rather
+ * than a variable every page would carry.
  */
 @utility text-replace {
-  color: #6e5025;
-  @variant dark {
-    color: #c9a26b;
-  }
+  color: #c9a26b;
 }
 
-/* Headings in the theme's display face: a page's title, and a section's (lighter by day). */
+/* Headings: heavy Figtree, a page's title a little tighter than a section's. */
 @utility display-title {
-  font-family: var(--display-face);
-  font-weight: var(--display-title-weight);
-  letter-spacing: var(--display-tracking);
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 @utility display-section {
-  font-family: var(--display-face);
-  font-weight: var(--display-section-weight);
+  font-weight: 800;
 }
 
 @layer base {
@@ -239,7 +174,7 @@
   }
   html {
     @apply font-sans;
-    color-scheme: light dark;
+    color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground antialiased;
@@ -249,7 +184,7 @@
   ::placeholder {
     color: var(--placeholder);
   }
-  /* Every control shows where the keyboard is, in heather. */
+  /* Every control shows where the keyboard is, in violet. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;

@@ -26,7 +26,7 @@ const PILL = "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-mono text-x
 
 /** How each check shows, as a pill: passed in moss, running in violet, failed in red. */
 const CHECK_LOOK = {
-  passed: { look: "bg-workspace-moss/12 text-code-string", said: "passed" },
+  passed: { look: "bg-success/12 text-code-string", said: "passed" },
   running: { look: "bg-primary/12 text-primary-text", said: "running" },
   failed: { look: "bg-destructive/12 text-destructive", said: "failed" },
   other: { look: "bg-muted text-muted-foreground", said: "skipped" },

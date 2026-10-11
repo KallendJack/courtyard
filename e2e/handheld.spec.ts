@@ -530,6 +530,35 @@ test.describe("unfolded", () => {
     await expect(page.getByText("Skill: Grilling")).toBeVisible();
   });
 
+  test("each tile shows its workspace's icon, violet while open, and the Icon sheet opens beside the right rail", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    const rail = page.getByRole("navigation", { name: "Workspaces" });
+    const icon = (name: string) =>
+      rail.getByRole("link", { name }).locator("svg[data-workspace-icon]");
+    await expect(icon("Garage gym")).toHaveAttribute("data-workspace-icon", "dumbbell");
+    await expect(icon("Side project")).toHaveAttribute("data-workspace-icon", "code");
+    // White, and violet on the open one (Paper board Handheld · 36).
+    const colourOf = (name: string) => icon(name).evaluate((svg) => getComputedStyle(svg).color);
+    expect(await colourOf("Garage gym")).toBe("rgb(185, 148, 255)");
+    expect(await colourOf("office")).not.toBe("rgb(185, 148, 255)");
+
+    const settings = await boxOf(page.getByRole("button", { name: "Settings" }));
+    await page.getByRole("button", { name: "Change icon" }).click();
+    const sheet = page.getByRole("dialog", { name: "Icon" });
+    await expect(sheet).toBeVisible();
+    const box = await boxOf(sheet);
+    expect(box.x + box.width).toBeLessThanOrEqual(settings.x + 1);
+    const icons = sheet.getByRole("radiogroup", { name: "Icon" });
+    await expect(icons.getByRole("radio", { checked: true })).toHaveAccessibleName("Dumbbell");
+    // Each a thumb's size.
+    const tile = await boxOf(choiceIn(icons, "Music"));
+    expect(tile.height).toBeGreaterThanOrEqual(44);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  });
+
   test("a sheet closes with a tap on the page or a rail, Escape, or a swipe to the right", async ({
     page,
   }) => {
