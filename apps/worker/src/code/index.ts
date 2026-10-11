@@ -123,10 +123,11 @@ export const commandAllowed = async (
 
 /**
  * Folders that decide what a repository's allowed commands run, wherever they are in it: git's own
- * (`.git`, a file in a worktree, saying where the repository is), git hooks' usual homes, and
- * Claude Code's project settings and hooks.
+ * (`.git`, a file in a worktree, saying where the repository is), git hooks' usual homes, Claude
+ * Code's project settings and hooks, and `.github` (CI workflows and actions, which run with the
+ * repository's secrets).
  */
-const SETUP_FOLDERS = new Set([".git", ".githooks", ".husky", ".lefthook", ".claude"]);
+const SETUP_FOLDERS = new Set([".git", ".githooks", ".husky", ".lefthook", ".claude", ".github"]);
 /** Files that do, by name: package scripts and the package managers' own settings. */
 const SETUP_FILES = new Set([
   "package.json",

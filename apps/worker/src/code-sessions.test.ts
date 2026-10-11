@@ -176,6 +176,9 @@ describe("a code session's edits", () => {
       ".lefthook-local.yml",
       ".claude/settings.json",
       ".claude/hooks/check.sh",
+      // CI, which runs with the repository's secrets.
+      ".github/workflows/ci.yml",
+      ".github/actions/setup/action.yml",
       // Names Windows takes for the same files.
       ".GIT",
       ".git.",
