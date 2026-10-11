@@ -333,9 +333,9 @@ or open a pull request.
 3. Tick **Enable Device Flow**.
 4. Under **Webhook**, untick **Active**: Courtyard asks GitHub, it isn't told.
 5. Under **Repository permissions**, give it: **Contents** read and write (push the session's
-   branch), **Pull requests** read and write (open, update, merge and close its PR), **Checks**,
-   **Commit statuses**, **Actions** and **Issues** read-only (follow the PR's checks, read the issue
-   a session works on); **Metadata** read-only is always on. Add **Workflows** read and write only
+   branch), **Pull requests** read and write (open, update, merge and close its PR), **Issues** read
+   and write (file, label and comment on the issues a session works from), and **Checks**, **Commit
+   statuses** and **Actions** read-only (follow the PR's checks); **Metadata** read-only is always on. Add **Workflows** read and write only
    if sessions may change the repo's `.github/workflows`. Nothing under account permissions.
 6. Choose **Only on this account**, then **Create GitHub App**.
 7. On the app's page, copy its **Client ID** (not the App ID), and set it in the worker's `.env`:
