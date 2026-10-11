@@ -189,7 +189,7 @@ startWorker({
   github: createFakeGitHub({
     finishAfterMs: 2000,
     // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
-    // isn't yet, newest pushed first.
+    // isn't yet, newest pushed first, then enough more to make 62, as many as the owner's (#286).
     repos: [
       "octo-owner/courtyard",
       {
@@ -201,6 +201,7 @@ startWorker({
       },
       { fullName: "octo-owner/side-project", private: false },
       "octo-owner/stacks",
+      ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
     ],
     opensOnPush: {
       remote: origin,

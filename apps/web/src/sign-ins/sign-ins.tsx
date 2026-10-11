@@ -309,15 +309,16 @@ const copyCode = (code: string) => {
   void navigator.clipboard?.writeText(code).catch(() => undefined);
 };
 
-/** The repos a sign-in reaches, by name, as the card's line says them. */
+/**
+ * How many repos a sign-in reaches, as the card's line says it: never their names (#286), since
+ * picking one is New workspace's.
+ */
 const reposLine = (repos: readonly string[] | null) => {
   if (repos === null) return "Couldn't ask GitHub for its repos just now.";
   if (repos.length === 0) {
     return "No repos yet: install Courtyard's GitHub App on the ones sessions may use.";
   }
-  return (
-    <span className="font-mono">{repos.map((repo) => repo.split("/").at(-1)).join(" · ")}</span>
-  );
+  return `Reaches ${repos.length} ${repos.length === 1 ? "repository" : "repositories"}`;
 };
 
 /**
