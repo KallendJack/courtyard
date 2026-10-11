@@ -54,18 +54,70 @@ export const readResponse = async <T>(read: {
     : { kind: "failed", status: response.status, message: error.data.error };
 };
 
+// Waiting on a worker that's slow to answer (#204, #228): a busy worker machine isn't a missing one.
+
+/** How long a worker that gives no answer is tried again, quietly, before it counts as unreachable. */
+const WAIT_FOR_WORKER_MS = 30_000;
+/** A try that fails faster than this found nothing there: refused, or a dropped connection. */
+const QUICK_FAILURE_MS = 1000;
+/** How many quick failures in a row mean the connection is refused, rather than one dropped. */
+const REFUSED_AFTER = 3;
+const FIRST_RETRY_MS = 250;
+const LONGEST_RETRY_MS = 4000;
+
 /**
- * Asks the worker's API and parses the answer with the contract's schema. A worker that can't be
- * reached, or answers with something unexpected, counts as offline; a worker that answers with an
- * error says what went wrong.
+ * One try: the worker's own answer, or nothing when it gave none (unreachable, or a proxy
+ * answering for it).
+ */
+export const tryOnce = async (send: () => Promise<Response>) => {
+  try {
+    const response = await send();
+    if (response.status < 500) return response;
+    // A worker's own error says what went wrong; any other is a proxy's, for no answer.
+    const said: unknown = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    return ApiError.safeParse(said).success ? response : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Tries `send` until the worker answers, or nothing once it counts as unreachable: a network
+ * that's down, or a connection refused (quick failures, several in a row), can't be reached now;
+ * anything else is a slow worker, tried again with longer waits each time, until
+ * `WAIT_FOR_WORKER_MS` has gone. Gives up after the try `signal` stops.
+ */
+export const untilAnswered = async (send: () => Promise<Response>, signal?: AbortSignal) => {
+  const first = Date.now();
+  const failed: number[] = [];
+  for (;;) {
+    const started = Date.now();
+    const response = await tryOnce(send);
+    if (response || signal?.aborted) return response;
+    failed.push(Date.now() - started);
+    const lastFew = failed.slice(-REFUSED_AFTER);
+    const refused =
+      lastFew.length === REFUSED_AFTER && lastFew.every((tookMs) => tookMs < QUICK_FAILURE_MS);
+    const left = WAIT_FOR_WORKER_MS - (Date.now() - first);
+    if (!navigator.onLine || refused || left <= 0) return;
+    const backoff = FIRST_RETRY_MS * 2 ** (failed.length - 1);
+    await new Promise((wake) => setTimeout(wake, Math.min(backoff, LONGEST_RETRY_MS, left)));
+  }
+};
+
+/**
+ * Asks the worker's API and parses the answer with the contract's schema, waiting for a worker
+ * that's slow to answer. A worker that can't be reached, or answers with something unexpected,
+ * counts as offline; a worker that answers with an error says what went wrong.
  */
 export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise<FromWorker<T>> => {
-  try {
-    const response = await fetch(`/api${path}`);
-    return await readResponse({ response, schema, unauthorised: "logged-out" });
-  } catch {
-    return { kind: "offline" };
-  }
+  const response = await untilAnswered(() => fetch(`/api${path}`));
+  return response
+    ? readResponse({ response, schema, unauthorised: "logged-out" })
+    : { kind: "offline" };
 };
 
 /** Sends JSON to the worker's API (a POST unless `method` says) and reads the answer with `schema`. */

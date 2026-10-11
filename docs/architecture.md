@@ -263,11 +263,13 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
   workspaces down the side or across the top; the rest are pages.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
-  offline worker or a refusal comes back as a value to show. **`send-form.ts`**, beside it so it's not on the first
-  load, sends a multipart form (a message's files, a Thing's photo) the same way. **`patience.ts`**, also off the
-  first load, sends what's harmless to send twice (an approval's answer) until the worker answers: a slow worker is
-  tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without an
-  answer counts as unreachable (#204). **`worker-watch.ts`** checks the worker's health while a page needs it.
+  offline worker or a refusal comes back as a value to show. A page load waits for a slow worker (`untilAnswered`):
+  it's tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without
+  an answer counts as unreachable (#204, #228). **`send-form.ts`**, beside it so it's not on the first load, sends a
+  multipart form (a message's files, a Thing's photo) the same way. **`patience.ts`**, also off the first load, sends
+  what's harmless to send twice (an approval's answer) and keeps it, tried every few seconds, even once the worker
+  counts as unreachable, until it answers (#204). **`worker-watch.ts`** checks the worker's health while a page needs
+  it, waiting for a slow worker the same way, so the "can't reach" banner means unreachable, not busy.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
     revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced
