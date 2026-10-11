@@ -39,6 +39,9 @@ const COLOURS: Record<string, string> = {
   regexp: "text-code-string",
   comment: "italic text-code-comment",
   quote: "italic text-code-comment",
+  // A diff's lines, coloured as the PR page's own diff colours them.
+  addition: "text-code-string",
+  deletion: "text-destructive",
 };
 
 type Root = ReturnType<typeof lowlight.highlight>;
