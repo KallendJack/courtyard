@@ -19,7 +19,8 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, in `apps/web/src/styles.css`: Handheld (the Paper boards
   "Handheld ·"), dark whatever the device's setting (#210). There is no light theme, so nothing uses `dark:`.
-  Colours, fonts and radii are used by name, never by value. Components join classes with
+  Colours, fonts and radii are used by name, never by value. Each colour means one thing: violet is open, live or
+  chosen; gold is something that needs the owner; moss is passed or connected; red is failed. Components join classes with
   `lib/classes.ts`, which merges nothing, so no class-merging code reaches the first load.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
@@ -73,6 +74,9 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
   stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
+- **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
+  calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
+  shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
 - The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
   `docs/architecture.md`.
