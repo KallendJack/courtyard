@@ -294,6 +294,8 @@ describe("a code workspace's command allowlist", () => {
     "gh run view 123 --log",
     "gh run view 123 --json jobs --jq '.jobs[] | select(.conclusion == \"failure\") | .name'",
     "gh run list --limit 5",
+    // Looking up the owner's other repos, read only.
+    "gh repo list octo-owner --limit 50",
     // A title, body, comment or message is text, never a path (#202).
     'gh issue comment 79 --body "Fixed: see https://courtyard.example/pull/80"',
     'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down"',

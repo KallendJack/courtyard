@@ -209,6 +209,7 @@ const GH_LOOKS = [
   ["run", "view"],
   ["run", "list"],
   ["repo", "view"],
+  ["repo", "list"],
 ];
 
 /** What `git push` may say besides the remote and the branch: nothing that forces or deletes. */
