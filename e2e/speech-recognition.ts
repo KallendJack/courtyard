@@ -4,9 +4,10 @@ import type { Page } from "@playwright/test";
  * A stand-in for the browser's speech recognition and vibration, for Chromium as Playwright runs
  * it, which has no microphone to listen with and nothing to vibrate. The test speaks for the owner
  * (`hear`), and can make it stop on its own in a pause as Chrome on Android does (`pause`), or
- * refuse the microphone (`refuse`), or send the page out of sight (`goOutOfSight`). What the page
- * asked for (the language, the microphone on or off, each vibration) is kept in the page's storage
- * for the test to read. Everything from the words on (the talk strip, the
+ * refuse the microphone (`refuse`), or send the page out of sight (`goOutOfSight`) and back
+ * (`comeBack`). It stands in for the screen's wake lock too, released out of sight as browsers do.
+ * What the page asked for (the language, the microphone on or off, each vibration, the screen
+ * kept awake) is kept in the page's storage for the test to read. Everything from the words on (the talk strip, the
  * message sent) is real.
  */
 export const standInSpeechRecognition = (page: Page) =>
@@ -97,9 +98,41 @@ export const standInSpeechRecognition = (page: Page) =>
       if (typeof words === "string") listening?.hearAnew(words, final === true);
     });
     addEventListener("stand-in-pause", () => listening?.end());
+    /** The screen's wake locks the page holds, as the browser keeps them. */
+    const locks = new Set<{ released: boolean; release: () => Promise<void> }>();
+    const keptAwake = () => localStorage.setItem("stand-in-awake", locks.size > 0 ? "yes" : "no");
+    Object.defineProperty(navigator, "wakeLock", {
+      configurable: true,
+      value: {
+        request: async (type: string) => {
+          if (type !== "screen" || document.visibilityState !== "visible") {
+            throw new DOMException("Not allowed", "NotAllowedError");
+          }
+          const lock = {
+            released: false,
+            release: async () => {
+              lock.released = true;
+              locks.delete(lock);
+              keptAwake();
+            },
+          };
+          locks.add(lock);
+          keptAwake();
+          return lock;
+        },
+      },
+    });
+
     addEventListener("stand-in-hide", () => {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
       Object.defineProperty(document, "hidden", { configurable: true, value: true });
+      // Out of sight, the browser lets the screen sleep: it releases every wake lock.
+      for (const lock of locks) void lock.release();
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    addEventListener("stand-in-show", () => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      Object.defineProperty(document, "hidden", { configurable: true, value: false });
       document.dispatchEvent(new Event("visibilitychange"));
     });
     addEventListener("stand-in-refuse", () => {
@@ -156,6 +189,14 @@ export const refuse = (page: Page) =>
 /** The owner switches away from Courtyard, or the screen goes off: the page is out of sight. */
 export const goOutOfSight = (page: Page) =>
   page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-hide")));
+
+/** Courtyard comes back into sight. */
+export const comeBack = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-show")));
+
+/** Whether the page is keeping the screen awake: it holds a screen wake lock. */
+export const screenKeptAwake = (page: Page) =>
+  page.evaluate(() => localStorage.getItem("stand-in-awake") === "yes");
 
 /** Whether the microphone is on: something is listening. */
 export const micOn = (page: Page) =>

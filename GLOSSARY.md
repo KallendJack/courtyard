@@ -346,19 +346,25 @@ desktop keeps the sidebar.
 _Avoid_: mobile view, tablet mode, shell
 
 **Thumb rail**:
-One of the Handheld frame's two columns on a tablet, in reach of a thumb: workspace tiles down the left, and Settings,
-Skills, Photo and Model down the right.
+One of the Handheld frame's two columns on a tablet, in reach of a thumb: workspace tiles down the left, and down the
+right labelled buttons (Model, Skills, Add, Settings) with the Talk key at its foot (#206).
 _Avoid_: sidebar, nav bar, toolbar
 
 **Talk strip**:
-The wide bar along the bottom of the Handheld frame, beside Type, that listens to the owner (#79): a tap listens
-hands-free and a second tap stops, or held it's push to talk. What it hears goes into the message box as it's heard,
-for the owner to send (#198).
+The wide bar along the bottom of the Handheld frame on a phone or the folded Fold, beside Type, that listens to the
+owner (#79): a tap listens hands-free and a second tap stops, or held it's push to talk. What it hears goes into the
+message box as it's heard, for the owner to send (#198).
 _Avoid_: mic button, voice bar, push-to-talk button
 
+**Talk key**:
+The talk strip's counterpart on a tablet (#206): a tall key in the bottom corner of the right thumb rail that
+listens the same way. While it listens, the message box shows ✕, ■ and ↑ under the words.
+_Avoid_: mic button, record button
+
 **Dock**:
-Where a page's message box goes in the Handheld frame: just above the bottom bar, shown when the owner taps Type or
-what they said waits in it, and gone again once it's sent or they tap away.
+Where a page's message box goes in the Handheld frame. On a tablet, the Reply box: always there at the foot of the
+page, between the thumb rails. On a phone or the folded Fold, just above the bottom bar, shown when the owner taps
+Type or what they said waits in it, and gone again once it's sent or they tap away.
 _Avoid_: drawer, tray, composer area
 
 **Handheld sheet**:

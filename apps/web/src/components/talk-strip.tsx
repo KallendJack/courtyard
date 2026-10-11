@@ -3,6 +3,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type RefObject,
   useEffect,
   useId,
   useRef,
@@ -12,12 +13,13 @@ import { classes } from "@/lib/classes";
 import { FrameButton } from "./frame-button.tsx";
 import type { Dictation, MessageBox } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
+import { useWakeLock } from "./wake-lock.ts";
 
-/** How long a finger stays on the strip before it's a hold (push to talk) rather than a tap. */
+/** How long a finger stays on the strip or the key before it's a hold (push to talk) rather than a tap. */
 const HOLD_MS = 300;
 
 /**
- * What the strip is doing: waiting (with why it last couldn't listen, if it couldn't), or
+ * What talking is doing: waiting (with why it last couldn't listen, if it couldn't), or
  * listening, hands-free after a tap or while it's held, with the words heard so far.
  */
 type Talk =
@@ -25,54 +27,40 @@ type Talk =
   | { kind: "listening"; held: boolean; words: string; overCancel: boolean };
 
 /**
- * What the strip shows: waiting, or waiting while a turn runs; listening hands-free; held, push to
- * talk; or held with the finger slid onto Cancel, to drop it.
+ * What the strip or the key shows: waiting, or waiting while a turn runs; listening hands-free;
+ * held, push to talk; or held with the finger slid onto Cancel, to drop it.
  */
 type Showing = "idle" | "answering" | "listening" | "held" | "dropping";
 
 type Now = { where: string; problem: string | undefined; words: string };
 
-/** What the strip says in each, in a line and a smaller one under it (Paper board Handheld · 02). */
-const SAYS: Record<Showing, (now: Now) => { title: string; detail: string }> = {
-  idle: (now) => ({ title: "Tap or hold to talk", detail: now.problem ?? now.where }),
-  answering: (now) => ({
-    title: "Answering · talk to add",
-    detail: now.problem ?? "What you say now queues",
-  }),
-  listening: (now) => ({
-    title: "Listening · tap to stop",
-    detail: now.words === "" ? now.where : `“${now.words}”`,
-  }),
-  held: () => ({ title: "Let go to stop", detail: "Slide onto Cancel to drop it" }),
-  dropping: () => ({ title: "Let go to drop it", detail: "Slide back to keep it" }),
-};
+type Says = Record<Showing, (now: Now) => { title: string; detail: string }>;
 
 /**
- * The Handheld frame's Type key and talk strip (#79, Paper board Handheld · 02). A tap on the
- * strip opens the message box and listens hands-free, putting the words in the box as they're
- * heard, after anything typed, and a second tap stops; the owner sends them with Send (#198). Type
- * becomes Cancel meanwhile, which drops what was said. Held, it's push to talk: it fills violet,
- * letting go stops, and sliding onto Cancel drops it. While a turn runs, what's sent is queued
- * (#177). Each step has its own vibration. Where the browser can't listen, the strip opens the
- * keyboard, as Type does.
+ * Talking to the page's message box (#79, #198), the same from the cover screen's talk strip and
+ * a tablet's Talk key (#206). A tap listens hands-free, putting the words in the box as they're
+ * heard, after anything typed, and a second tap stops; the owner sends them with Send. Held, it's
+ * push to talk: letting go stops, and sliding onto `cancelKey`, where there is one, drops it.
+ * While a turn runs, what's sent is queued (#177). Each step has its own vibration. Where the
+ * browser can't listen, it opens the keyboard (`type`). Returns what it shows, and what goes on
+ * the button that talks.
  */
-export function TalkBar(props: {
-  wide: boolean;
-  /** Where the owner is: the workspace's name, or Home. */
-  where: string;
-  /** The page's message box, when it has one. */
+function useTalk(props: {
   box: MessageBox | undefined;
-  /** Opens the box with the keyboard in it. */
   type: () => void;
+  says: Says;
+  where: string;
+  cancelKey?: RefObject<HTMLButtonElement | null>;
+  /** The box shows its own ✕, ■ and ↑ while it listens, there being no Cancel beside the button. */
+  controlsInBox?: boolean;
 }) {
-  const { box, wide } = props;
+  const { box } = props;
   const [talk, setTalk] = useState<Talk>({ kind: "idle" });
   const listening = useRef<Listening>(undefined);
   /** Where what's heard now goes: the message box, opened for it. */
   const dictation = useRef<Dictation>(undefined);
   /** The finger that started listening, until it lifts, and whether it has become a hold. */
   const press = useRef<{ pointer: number; timer: number; held: boolean }>(undefined);
-  const cancelKey = useRef<HTMLButtonElement>(null);
 
   const answering = box?.answering === true;
   const wasAnswering = useRef(answering);
@@ -92,10 +80,14 @@ export function TalkBar(props: {
     if (how === "keep") listening.current?.finish();
     else listening.current?.cancel();
     if (how === "drop") dictation.current?.drop();
+    dictation.current?.done();
     listening.current = undefined;
     dictation.current = undefined;
     setTalk({ kind: "idle" });
   };
+
+  // The screen stays awake while the owner talks, and while an answer comes.
+  useWakeLock(talk.kind === "listening" || answering);
 
   // Nowhere to put it (a page without a box, Home say), or the frame gone: listening stops.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the box going is the trigger
@@ -107,9 +99,15 @@ export function TalkBar(props: {
   const begin = () => {
     if (box === undefined) return;
     setTalk({ kind: "listening", held: false, words: "", overCancel: false });
-    // Sent from the box while it listens: listening stops, and what was said has gone with it.
-    const into: Dictation = box.dictate(() => {
-      if (dictation.current === into) stop("sent");
+    // Sent from the box while it listens, listening stops, and what was said has gone with it; or
+    // the box's own ■ or ✕ stops it, keeping what was said or dropping it.
+    const into: Dictation = box.dictate({
+      controls: props.controlsInBox === true,
+      stop: (how) => {
+        if (dictation.current !== into) return;
+        if (how === "keep") feel("doubleTick");
+        stop(how);
+      },
     });
     dictation.current = into;
     // It can fail before it returns (the browser refusing to start): then there's nothing to keep.
@@ -119,8 +117,10 @@ export function TalkBar(props: {
         setTalk((was) => (was.kind === "listening" ? { ...was, words } : was));
         into.hear(words);
       },
-      // The browser's last word on what was said, once it has settled.
+      // The browser's last word on what was said, once it has settled; unless the owner has
+      // started talking again meanwhile, when what it heard is in the box already, before the new.
       finished: (words) => {
+        if (dictation.current !== undefined) return;
         if (words === "") setTalk({ kind: "idle", problem: "Nothing heard" });
         else into.hear(words);
       },
@@ -133,6 +133,7 @@ export function TalkBar(props: {
         setTalk({ kind: "idle", problem });
         // Nothing said is lost: it waits in the box, to send or finish by keyboard.
         if (words !== "") into.hear(words);
+        into.done();
       },
     });
     if (!over) listening.current = started;
@@ -155,7 +156,7 @@ export function TalkBar(props: {
 
   const move = (event: PointerEvent<HTMLButtonElement>) => {
     if (!press.current?.held || press.current.pointer !== event.pointerId) return;
-    const key = cancelKey.current?.getBoundingClientRect();
+    const key = props.cancelKey?.current?.getBoundingClientRect();
     const overCancel =
       key !== undefined &&
       event.clientX >= key.left &&
@@ -196,7 +197,7 @@ export function TalkBar(props: {
   };
 
   const click = (event: MouseEvent<HTMLButtonElement>) => {
-    // Where the browser can't listen, the strip is the keyboard's way in, as Type is.
+    // Where the browser can't listen, talking is the keyboard's way in, as Type is.
     if (!canListen()) return props.type();
     // A finger or the mouse is handled as it goes down and up; Enter or Space toggles.
     if (event.detail !== 0) return;
@@ -218,22 +219,94 @@ export function TalkBar(props: {
       : overCancel
         ? "dropping"
         : "held";
-  const { title, detail } = SAYS[showing]({
-    where: props.where,
-    problem: talk.kind === "idle" ? talk.problem : undefined,
-    words: talk.kind === "listening" ? talk.words : "",
-  });
+  const problem = talk.kind === "idle" ? talk.problem : undefined;
+  const words = talk.kind === "listening" ? talk.words : "";
+  const { title, detail } = props.says[showing]({ where: props.where, problem, words });
+
+  return {
+    showing,
+    listening: listeningNow,
+    held,
+    overCancel,
+    problem,
+    words,
+    /** Stops listening, dropping what it heard (Cancel). */
+    drop: () => stop("drop"),
+    title: { id: titleId, text: title },
+    detail: { id: detailId, text: detail },
+    /** What goes on the button that talks: its name stays "Talk", and what it says describes it. */
+    button: {
+      type: "button" as const,
+      disabled: box === undefined,
+      "aria-label": "Talk",
+      "aria-pressed": listeningNow,
+      "aria-describedby": `${titleId} ${detailId}`,
+      "data-talk": showing,
+      onPointerDown: down,
+      onPointerMove: move,
+      onPointerUp: up,
+      onPointerCancel: lost,
+      onClick: click,
+      onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key === "Escape" && listeningNow) stop("drop");
+      },
+      // A held finger is push to talk, not the browser's menu or a text selection.
+      onContextMenu: (event: MouseEvent<HTMLButtonElement>) => event.preventDefault(),
+    },
+  };
+}
+
+/** Why it couldn't listen, said out loud for a screen reader as it happens. */
+function Problem(props: { problem: string | undefined }) {
+  return (
+    <span role="status" className="sr-only">
+      {props.problem}
+    </span>
+  );
+}
+
+/** What the strip says in each, in a line and a smaller one under it (Paper board Handheld · 02). */
+const STRIP_SAYS: Says = {
+  idle: (now) => ({ title: "Tap or hold to talk", detail: now.problem ?? now.where }),
+  answering: (now) => ({
+    title: "Answering · talk to add",
+    detail: now.problem ?? "What you say now queues",
+  }),
+  listening: (now) => ({
+    title: "Listening · tap to stop",
+    detail: now.words === "" ? now.where : `“${now.words}”`,
+  }),
+  held: () => ({ title: "Let go to stop", detail: "Slide onto Cancel to drop it" }),
+  dropping: () => ({ title: "Let go to drop it", detail: "Slide back to keep it" }),
+};
+
+/**
+ * The cover screen's Type key and talk strip (#79, Paper board Handheld · 02). Talking is
+ * `useTalk`'s; the strip fills violet while held. Type opens the message box, and becomes Cancel
+ * while it listens, which drops what was said.
+ */
+export function TalkBar(props: {
+  /** Where the owner is: the workspace's name, or Home. */
+  where: string;
+  /** The page's message box, when it has one. */
+  box: MessageBox | undefined;
+  /** Opens the box with the keyboard in it. */
+  type: () => void;
+}) {
+  const cancelKey = useRef<HTMLButtonElement>(null);
+  const talk = useTalk({ ...props, says: STRIP_SAYS, cancelKey });
+  const { listening, held } = talk;
 
   return (
     <>
       <FrameButton
         ref={cancelKey}
-        look={wide ? "wideKey" : "key"}
-        lit={overCancel}
-        disabled={box === undefined}
-        onClick={listeningNow ? () => stop("drop") : props.type}
+        look="key"
+        lit={talk.overCancel}
+        disabled={props.box === undefined}
+        onClick={listening ? talk.drop : props.type}
       >
-        {listeningNow ? (
+        {listening ? (
           <>
             <X aria-hidden strokeWidth={2} className="size-5!" />
             Cancel
@@ -246,29 +319,12 @@ export function TalkBar(props: {
         )}
       </FrameButton>
       <button
-        type="button"
-        disabled={box === undefined}
-        // Its name stays the same: what it says now, the words heard included, describes it.
-        aria-label="Talk"
-        aria-pressed={listeningNow}
-        aria-describedby={`${titleId} ${detailId}`}
-        data-talk={showing}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={lost}
-        onClick={click}
-        onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
-          if (event.key === "Escape" && listeningNow) stop("drop");
-        }}
-        // A held finger is push to talk, not the browser's menu or a text selection.
-        onContextMenu={(event) => event.preventDefault()}
+        {...talk.button}
         className={classes(
-          "relative flex min-w-0 flex-1 touch-none items-center overflow-clip rounded-card text-left outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40",
-          wide ? "h-15 gap-3.5 pr-6 pl-5" : "gap-3 px-4.5",
-          !listeningNow && "bg-primary/5 ring-1 ring-primary/30 ring-inset active:translate-y-px",
-          !listeningNow && answering && "bg-linear-to-r from-primary/14 to-primary/0 to-45%",
-          listeningNow &&
+          "relative flex min-w-0 flex-1 touch-none items-center gap-3 overflow-clip rounded-card px-4.5 text-left outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40",
+          !listening && "bg-primary/5 ring-1 ring-primary/30 ring-inset active:translate-y-px",
+          talk.showing === "answering" && "bg-linear-to-r from-primary/14 to-primary/0 to-45%",
+          listening &&
             !held &&
             "bg-primary/12 shadow-glow-talk ring-stroke ring-primary ring-inset",
           held && "bg-primary shadow-glow-held ring-5 ring-primary/20",
@@ -279,7 +335,7 @@ export function TalkBar(props: {
             aria-hidden
             className={classes(
               "absolute inset-x-4.5 top-0 h-0.5 rounded-hair bg-linear-to-r from-transparent via-primary-text to-transparent",
-              listeningNow ? "shadow-glow-hair-live" : "shadow-glow-hair",
+              listening ? "shadow-glow-hair-live" : "shadow-glow-hair",
             )}
           />
         )}
@@ -290,115 +346,152 @@ export function TalkBar(props: {
         />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span
-            id={titleId}
+            id={talk.title.id}
             className={classes(
-              "truncate font-extrabold tracking-[-0.01em]",
-              wide ? "text-talk" : "text-base/5",
+              "truncate text-base/5 font-extrabold tracking-[-0.01em]",
               held ? "text-background" : "text-foreground",
             )}
           >
-            {title}
+            {talk.title.text}
           </span>
           <span
-            id={detailId}
+            id={talk.detail.id}
             className={classes(
               "truncate text-meta",
               held
                 ? "font-semibold text-background/75"
-                : listeningNow && talk.words !== ""
+                : listening && talk.words !== ""
                   ? "text-foreground/85"
-                  : !listeningNow && talk.problem !== undefined
+                  : !listening && talk.problem !== undefined
                     ? "text-warning"
                     : "text-muted-foreground",
             )}
           >
-            {detail}
+            {talk.detail.text}
           </span>
         </span>
-        {wide &&
-          (listeningNow ? (
-            <Bars heights={held ? HELD_BARS : LISTENING_BARS} held={held} />
-          ) : answering ? (
-            <span
-              aria-hidden
-              className="h-0.5 w-15 shrink-0 rounded-hair bg-primary shadow-glow-answering"
-            />
-          ) : (
-            <Bars heights={IDLE_BARS} />
-          ))}
       </button>
-      {/* Why it couldn't listen, said out loud for a screen reader as it happens. */}
-      <span role="status" className="sr-only">
-        {talk.kind === "idle" ? talk.problem : undefined}
-      </span>
+      <Problem problem={talk.problem} />
     </>
   );
 }
 
-/** The strip's sound bars, as drawn on the boards: each bar's top and height, out of 28 or 24. */
-const IDLE_BARS = [
-  [11, 6],
-  [8, 12],
-  [4, 20],
-  [9, 10],
-  [2, 24],
-  [7, 14],
-  [10, 8],
-  [5, 18],
-  [9, 10],
-  [6, 16],
-  [10, 8],
-  [11, 6],
-] as const;
-const LISTENING_BARS = [
-  [9, 6],
-  [5, 14],
-  [1, 22],
-  [7, 10],
-  [2, 20],
-  [6, 12],
-  [3, 18],
-  [8, 8],
-  [4, 16],
-  [7, 10],
-  [9, 6],
-  [10, 4],
-] as const;
-const HELD_BARS = [
-  [8, 8],
-  [3, 18],
-  [6, 12],
-  [1, 22],
-  [5, 14],
-  [2, 20],
-  [7, 10],
-  [4, 16],
-  [8, 8],
-  [5, 14],
-  [9, 6],
-  [10, 4],
-] as const;
+/**
+ * What the Talk key says (#206, Paper board "Draft · Component · Talk key states"): what it does,
+ * under its name. The words heard go live into the Reply box beside it, so it doesn't repeat them.
+ */
+const KEY_SAYS: Says = {
+  idle: (now) => ({ title: "Talk", detail: now.problem ?? "Hold to speak" }),
+  answering: (now) => ({ title: "Talk", detail: now.problem ?? "Answering…" }),
+  listening: () => ({ title: "Listening", detail: "Tap to stop" }),
+  held: () => ({ title: "Listening", detail: "Let go to stop" }),
+  dropping: () => ({ title: "Listening", detail: "Let go to drop it" }),
+};
 
 /**
- * Sound bars: faint while it waits, and moving while it listens (handheld-frame.css), unless the
- * device asks for less motion.
+ * A tablet's Talk key, at the foot of the right rail (#206, the agreed tablet boards): a tall
+ * black key with a lilac mic tile, its name and what it does, a line of light and a soft glow.
+ * Talking is `useTalk`'s, as the cover screen's strip has it; there's no Cancel beside it, so
+ * while it listens the Reply box shows its own ✕, ■ and ↑ under the words (or Escape drops them).
+ * While it listens it lights up and its tile shows sound bars; while an answer comes it goes
+ * quiet, and what's said queues.
  */
-function Bars(props: { heights: readonly (readonly [number, number])[]; held?: boolean }) {
-  const live = props.heights !== IDLE_BARS;
+export function TalkKey(props: { box: MessageBox | undefined; type: () => void }) {
+  const talk = useTalk({ ...props, says: KEY_SAYS, where: "", controlsInBox: true });
+  const { listening, showing } = talk;
+  const quiet = showing === "answering";
+
   return (
-    <svg
-      aria-hidden
-      viewBox={live ? "0 0 120 24" : "0 0 120 28"}
-      {...(live ? { "data-talk-bars": "" } : {})}
-      className={classes(
-        "w-30 shrink-0",
-        live ? "h-6" : "h-7",
-        !live ? "fill-primary/25" : props.held ? "fill-background/85" : "fill-primary-text",
-      )}
-    >
-      {props.heights.map(([y, height], at) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the bars are fixed, a drawing's parts
-        <rect key={at} x={at * 10} y={y} width="4" height={height} rx="2" />
+    <>
+      <button
+        {...talk.button}
+        className={classes(
+          "relative flex h-60 w-full shrink-0 touch-none flex-col items-center justify-center gap-3.5 overflow-clip rounded-ask px-2 text-center outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40",
+          listening
+            ? "bg-primary/16 shadow-talk-key-live"
+            : "bg-secondary shadow-talk-key active:translate-y-px",
+        )}
+      >
+        <span
+          aria-hidden
+          className={classes(
+            "flex h-14 shrink-0 items-center justify-center rounded-lg",
+            listening
+              ? "w-18 bg-primary-text text-secondary shadow-glow-mic"
+              : quiet
+                ? "w-14 bg-muted text-foreground/95 ring-1 ring-input ring-inset"
+                : "w-14 bg-primary-text text-secondary shadow-glow-mic",
+          )}
+        >
+          {listening ? <KeyBars /> : <MicGlyph />}
+        </span>
+        <span className="flex flex-col items-center gap-1">
+          <span
+            id={talk.title.id}
+            className="text-talk font-semibold tracking-[0.01em] text-foreground/95"
+          >
+            {talk.title.text}
+          </span>
+          <span
+            id={talk.detail.id}
+            className={classes(
+              "text-meta font-medium",
+              talk.problem === undefined ? "text-muted-foreground" : "text-warning",
+            )}
+          >
+            {talk.detail.text}
+          </span>
+        </span>
+        {/* The soft glow under it, stronger while it listens, faint while an answer comes. */}
+        <span
+          aria-hidden
+          className={classes(
+            "absolute -bottom-7.5 left-1/2 h-17.5 w-25 -translate-x-1/2 rounded-full bg-primary-text blur-xl",
+            listening ? "opacity-60" : quiet ? "opacity-8" : "opacity-30",
+          )}
+        />
+        <span
+          aria-hidden
+          className="absolute bottom-3.5 left-1/2 h-1 w-15 -translate-x-1/2 rounded-full bg-primary-text shadow-glow-line"
+        />
+      </button>
+      <Problem problem={talk.problem} />
+    </>
+  );
+}
+
+/** The Talk key's mic, as drawn: a solid capsule on a stand. */
+function MicGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="size-7">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+      <path
+        d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** The sound bars in the Talk key's tile while it listens, as drawn: each bar's x, top, width and height. */
+const KEY_BARS = [
+  [1, 11, 4, 6],
+  [9, 6, 4, 16],
+  [17, 2, 4, 24],
+  [25, 8, 4, 12],
+  [33, 4, 4, 20],
+  [41, 11, 2, 6],
+] as const;
+
+/** They move (handheld-frame.css), unless the device asks for less motion. */
+function KeyBars() {
+  return (
+    <svg aria-hidden data-talk-bars="" viewBox="0 0 44 28" className="h-7 w-11 fill-current">
+      {KEY_BARS.map(([x, y, width, height]) => (
+        <rect key={x} x={x} y={y} width={width} height={height} rx={width / 2} />
       ))}
     </svg>
   );

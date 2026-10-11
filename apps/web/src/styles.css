@@ -7,7 +7,8 @@
  * of the approval card (approval-card.css), which only a session page shows, of a pull request's
  * review (review.css), of the shared pieces only those use, and of the pieces that keep a
  * session's flow (chat-flow.css), and the Handheld frame's, its talk strip's and its sheets'
- * (handheld-frame.css), which only a touch screen loads.
+ * (handheld-frame.css) with the Reply box's row while the Talk key listens, which only a touch
+ * screen loads.
  */
 @source not "./rich-blocks";
 @source not "./things";
@@ -25,6 +26,7 @@
 @source not "./components/handheld-sheet.tsx";
 @source not "./components/sheet-choices.tsx";
 @source not "./components/frame-button.tsx";
+@source not "./components/listening-row.tsx";
 
 /*
  * Courtyard's theme. Every colour, font, type size, radius and effect the app uses is defined here
@@ -98,7 +100,7 @@
   --text-caption--line-height: 16px;
   --text-rail: 10px; /* a key's label on the frame's bottom bar */
   --text-rail--line-height: 12px;
-  --text-talk: 17px; /* the talk strip's title on a tablet; the guide's Talk key is 18/22 */
+  --text-talk: 17px; /* the Talk key's title, on a tablet; the guide's is 18/22 */
   --text-talk--line-height: 20px;
   --text-card-title: 19px; /* an approval card's question */
   --text-card-title--line-height: 24px;
@@ -117,16 +119,27 @@
    */
   --shadow-glow: 0 0 8px var(--primary); /* a live dot: working, Jump to latest */
   --shadow-glow-tile: 0 0 22px color-mix(in oklab, var(--primary) 40%, transparent); /* the open workspace's tile */
-  /* A rail disc whose sheet is open: a soft violet ring and glow. */
+  /* A button on a tablet's right rail whose sheet is open: a soft violet ring and glow. */
   --shadow-lit:
     0 0 0 5px color-mix(in oklab, var(--primary) 20%, transparent),
     0 0 24px color-mix(in oklab, var(--primary) 50%, transparent);
-  /* The talk strip: its line of light, idle and listening, its answering line, and it listening and held. */
+  /* The talk strip, on a phone: its line of light, idle and listening, and it listening and held. */
   --shadow-glow-hair: 0 0 12px 1px color-mix(in oklab, var(--primary) 70%, transparent);
   --shadow-glow-hair-live: 0 0 14px 2px var(--primary);
-  --shadow-glow-answering: 0 0 10px var(--primary);
   --shadow-glow-talk: 0 0 30px color-mix(in oklab, var(--primary) 45%, transparent);
   --shadow-glow-held: 0 0 40px color-mix(in oklab, var(--primary) 60%, transparent);
+  /*
+   * The Talk key, on a tablet (#206): raised, with a lilac edge; while it listens, a stronger
+   * edge and a violet glow. Then its mic tile's faint glow, and its line of light's.
+   */
+  --shadow-talk-key:
+    inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--primary-text) 40%, transparent), 0 18px 40px #00000099;
+  --shadow-talk-key-live:
+    inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 0 0 2px var(--primary-text), 0 0 28px color-mix(in oklab, var(--primary) 25%, transparent);
+  --shadow-glow-mic: 0 0 8px color-mix(in oklab, var(--primary-text) 15%, transparent);
+  --shadow-glow-line: 0 0 4px color-mix(in oklab, var(--primary-text) 25%, transparent);
   --shadow-raised: 0 8px 24px #00000099; /* a button floating over the page */
   --shadow-sheet: -30px 0 60px color-mix(in oklab, var(--card) 80%, transparent); /* a sheet from the right */
   --shadow-divide: inset 0 -1px 0 var(--border); /* a line under a header, inside its box */
@@ -145,6 +158,8 @@
   --radius-sheet: 26px;
   /* The message box on a phone, holding attachments. */
   --radius-box: 22px;
+  /* The Reply box docked on a tablet (#206): a pill at one line, round-cornered as it grows. */
+  --radius-reply: 30px;
   /* A Thing's picture in a row of Things, and a part's (a card's is a row's radius). */
   --radius-picture: 8px;
   --radius-picture-sm: 6px;

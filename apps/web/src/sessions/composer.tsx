@@ -27,7 +27,7 @@ import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
-import { useDock } from "@/components/handheld";
+import { type Listener, useDock } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -40,6 +40,8 @@ import { availableModels } from "./models.ts";
 
 /** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
 const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
+/** ✕, ■ and ↑ under the words while the Talk key listens (#206), loaded the same way. */
+const ListeningRow = lazy(() => import("@/components/listening-row.tsx"));
 
 /** The tallest the skill list grows, and the least room above the box it opens into. */
 const LIST_HEIGHT = 448;
@@ -168,8 +170,10 @@ export const Composer = memo(function Composer(props: {
   // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
-  /** Told once the box sends while the talk strip listens, so it stops. */
-  const dictating = useRef<() => void>(undefined);
+  /** What's listening for the box, told once it sends so it stops, or stopped from the box. */
+  const dictating = useRef<Listener>(undefined);
+  /** The Talk key listens: the box shows its ✕, ■ and ↑ under the words (#206). */
+  const [listening, setListening] = useState(false);
 
   // The tray's thumbnails go with the box.
   const attachingNow = useRef(attaching);
@@ -264,7 +268,7 @@ export const Composer = memo(function Composer(props: {
       releasePreviews(attaching);
       setAttaching([]);
       dock?.close();
-      dictating.current?.();
+      dictating.current?.stop("sent");
       dictating.current = undefined;
     }
     return sent;
@@ -289,15 +293,23 @@ export const Composer = memo(function Composer(props: {
         model,
         ...(choosing === undefined ? {} : { choosing }),
         answering,
-        dictate: (sent) => {
+        dictate: (listener) => {
           const typed = textNow.current;
-          dictating.current = sent;
+          dictating.current = listener;
           dock?.open();
+          setListening(listener.controls);
           const put = (words: string) =>
             setText(
               words === "" ? typed : typed.trim() === "" ? words : `${typed.trimEnd()} ${words}`,
             );
-          return { hear: put, drop: () => put("") };
+          return {
+            hear: put,
+            drop: () => put(""),
+            done: () => {
+              if (dictating.current === listener) dictating.current = undefined;
+              setListening(false);
+            },
+          };
         },
       }),
     [dock, model, hasSkills, choosing, answering],
@@ -390,6 +402,7 @@ export const Composer = memo(function Composer(props: {
         <form
           ref={form}
           onSubmit={submit}
+          {...(listening ? { "data-listening": "" } : {})}
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) closeList();
           }}
@@ -530,64 +543,77 @@ export const Composer = memo(function Composer(props: {
               // One line to start, growing with what's typed, so the keyboard keeps its room.
               className="block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
             />
-            <div className="flex items-center gap-2">
-              {/* Docked in the Handheld frame, its Photo, Model and Skills buttons do these (#201). */}
-              {!docked && (
-                <>
-                  <span className={classes("contents", compact && "max-md:hidden")}>
-                    <AttachButtons
-                      look="disc"
-                      camera={!compact}
-                      full={full}
-                      picker={picker}
-                      cameraInput={camera}
-                    />
-                    {full && (
-                      <span className="text-meta text-muted-foreground">
-                        {attaching.length} of {ATTACHMENTS.perMessage}
-                      </span>
+            {listening ? (
+              <Suspense fallback={null}>
+                <ListeningRow
+                  drop={() => dictating.current?.stop("drop")}
+                  keep={() => dictating.current?.stop("keep")}
+                  send={label}
+                  sendDisabled={
+                    send.busy || preparing > 0 || props.disabled === true || models.length === 0
+                  }
+                />
+              </Suspense>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* Docked in the Handheld frame, its Photo, Model and Skills buttons do these (#201). */}
+                {!docked && (
+                  <>
+                    <span className={classes("contents", compact && "max-md:hidden")}>
+                      <AttachButtons
+                        look="disc"
+                        camera={!compact}
+                        full={full}
+                        picker={picker}
+                        cameraInput={camera}
+                      />
+                      {full && (
+                        <span className="text-meta text-muted-foreground">
+                          {attaching.length} of {ATTACHMENTS.perMessage}
+                        </span>
+                      )}
+                    </span>
+                    <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
+                    {skills !== undefined && (
+                      <Chip
+                        icon={<Book />}
+                        opens="listbox"
+                        open={menuOpen}
+                        wideOnly={compact}
+                        onClick={() => {
+                          if (menuOpen) closeList();
+                          else setListOpen(true);
+                          box.current?.focus();
+                        }}
+                      >
+                        Skill
+                      </Chip>
                     )}
-                  </span>
-                  <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
-                  {skills !== undefined && (
-                    <Chip
-                      icon={<Book />}
-                      opens="listbox"
-                      open={menuOpen}
-                      wideOnly={compact}
-                      onClick={() => {
-                        if (menuOpen) closeList();
-                        else setListOpen(true);
-                        box.current?.focus();
-                      }}
-                    >
-                      Skill
-                    </Chip>
-                  )}
-                </>
-              )}
-              <span className={classes("flex-1", compact && "max-md:hidden")} />
-              {props.stop && (
-                <Button
-                  variant="outline"
-                  onClick={props.stop}
-                  {...(compact ? { narrowIcon: <Square className="fill-current" /> } : {})}
-                >
-                  <Square className="fill-current" />
-                  Stop
-                </Button>
-              )}
-              {/* While a turn runs, Send shows once there's something to queue (#177). */}
-              {(!props.stop || text.trim() !== "" || attaching.length > 0) && (
-                <Button
-                  type="submit"
-                  disabled={send.busy || preparing > 0 || props.disabled || models.length === 0}
-                  {...(compact ? { narrowIcon: <ArrowUp /> } : {})}
-                >
-                  {label}
-                </Button>
-              )}
-            </div>
+                  </>
+                )}
+                <span className={classes("flex-1", compact && "max-md:hidden")} />
+                {props.stop && (
+                  <Button
+                    variant="outline"
+                    onClick={props.stop}
+                    {...(compact ? { narrowIcon: <Square className="fill-current" /> } : {})}
+                  >
+                    <Square className="fill-current" />
+                    Stop
+                  </Button>
+                )}
+                {/* While a turn runs, Send shows once there's something to queue (#177). */}
+                {(!props.stop || text.trim() !== "" || attaching.length > 0) && (
+                  <Button
+                    type="submit"
+                    disabled={send.busy || preparing > 0 || props.disabled || models.length === 0}
+                    {...(compact ? { narrowIcon: <ArrowUp /> } : {})}
+                  >
+                    {label}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </form>
       </div>
