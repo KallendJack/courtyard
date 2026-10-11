@@ -209,6 +209,30 @@ describe("answering an approval", () => {
     ]);
   });
 
+  it("takes the same answer sent again, as the app's retry does, without acting on it twice (#204)", async () => {
+    const { provider, answers } = codingProvider([{ run: "pnpm add left-pad" }]);
+    const request = await start([provider]);
+    const { id, asked } = await untilApproval(request);
+
+    const first = await answer(request, id, asked.seq, "allow");
+    // The app didn't hear back in time, so it sends the owner's tap again, after the turn ended.
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    const again = await answer(request, id, asked.seq, "allow");
+
+    expect([first.status, again.status]).toEqual([200, 200]);
+    expect(await again.json()).toEqual({ answer: "allow" });
+    const since = await followSession(request, {
+      sessionId: id,
+      after: asked.seq,
+      until: "turn-completed",
+    });
+    expect(since.filter((event) => event.type === "approval-answered")).toHaveLength(1);
+    expect(activitiesIn(since)).toEqual([
+      expect.objectContaining({ kind: "ran-command", command: "pnpm add left-pad" }),
+    ]);
+    expect(answers).toEqual([{ ok: true, value: null }]);
+  });
+
   it("is refused for an approval the session hasn't got, or whose turn has ended", async () => {
     const { provider } = codingProvider([{ run: "pnpm add left-pad" }]);
     const request = await start([provider]);

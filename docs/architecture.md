@@ -61,6 +61,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 **Starting up**
 
 - **`main.ts`, `start.ts`:** start the worker: build it, then serve it on its port, or say which setting is wrong.
+  Idle connections stay open longer than the owner's proxy keeps them, so the proxy never reuses one the worker
+  has closed (#204).
 - **`settings.ts`:** reads and checks the worker's settings from the environment.
 - **`worker.ts`:** builds every module and wires them together. Every API request passes its checks (body size,
   same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the
@@ -261,8 +263,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   workspaces down the side or across the top; the rest are pages.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
   offline worker or a refusal comes back as a value to show. **`send-form.ts`**, beside it so it's not on the first
-  load, sends a multipart form (a message's files, a Thing's photo) the same way. **`worker-watch.ts`** checks the
-  worker's health while a page needs it.
+  load, sends a multipart form (a message's files, a Thing's photo) the same way. **`patience.ts`**, also off the
+  first load, sends what's harmless to send twice (an approval's answer) until the worker answers: a slow worker is
+  tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without an
+  answer counts as unreachable (#204). **`worker-watch.ts`** checks the worker's health while a page needs it.
 - **Feature folders**, each one feature's parts:
   - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
     revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced

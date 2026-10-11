@@ -1,9 +1,12 @@
 import type { ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addStylesheet } from "@/lib/stylesheet";
+import type { Waiting } from "../patience.ts";
+import { describeProblem } from "../problems.tsx";
 import css from "./approval-card.css?inline";
 import { CapsLabel } from "./caps-label.tsx";
 import { FormError } from "./form-error.tsx";
+import { StatusPill } from "./notice.tsx";
 import { ThumbButton } from "./thumb-button.tsx";
 
 // The card's own stylesheet (approval-card.css), added once, when a page first shows one.
@@ -63,14 +66,32 @@ export function ApprovalCard(props: {
   note: string;
   /** What Deny is called here: "Deny" unless it says. */
   denyLabel?: string;
-  /** Sends the owner's answer: what went wrong, or nothing once it's sent. */
-  onAnswer: (answer: ApprovalAnswer) => Promise<string | undefined>;
+  /**
+   * Sends the owner's answer: what went wrong, or nothing once it's sent. One that waits for a
+   * slow worker says so through `onWaiting`, and stops when `signal` says the card has gone (#204).
+   */
+  onAnswer: (
+    answer: ApprovalAnswer,
+    waiting: { onWaiting: (waiting: Waiting) => void; signal: AbortSignal },
+  ) => Promise<string | undefined>;
 }) {
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const [waiting, setWaiting] = useState<Waiting>();
+  // Stops a kept answer's tries once the card has gone (answered on another device, say).
+  const gone = useRef<AbortController>(undefined);
+  useEffect(() => {
+    const card = new AbortController();
+    gone.current = card;
+    return () => card.abort();
+  }, []);
   const answer = async (given: ApprovalAnswer) => {
     setSending(true);
-    const failed = await props.onAnswer(given);
+    setProblem(undefined);
+    const { signal } = gone.current ?? new AbortController();
+    const failed = await props.onAnswer(given, { onWaiting: setWaiting, signal });
+    if (signal.aborted) return;
+    setWaiting(undefined);
     setProblem(failed);
     // Once answered, the card goes with the answer's event; until then it can be answered again.
     if (failed !== undefined) setSending(false);
@@ -92,7 +113,17 @@ export function ApprovalCard(props: {
           </code>
         </div>
         <p className="text-xs/[19px] text-muted-foreground">{props.note}</p>
-        <FormError message={problem} />
+        {waiting === "slow" ? (
+          <StatusPill>Waiting for Courtyard…</StatusPill>
+        ) : (
+          <FormError
+            message={
+              waiting === "unreachable"
+                ? `${describeProblem({ kind: "offline" }).body} Your answer goes once it's back.`
+                : problem
+            }
+          />
+        )}
         <div className="mt-3 flex gap-2.5">
           <ThumbButton look="quiet" tall disabled={sending} onClick={() => void answer("deny")}>
             {props.denyLabel ?? "Deny"}

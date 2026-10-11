@@ -1,3 +1,4 @@
+import { setTimeout as wait } from "node:timers/promises";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 
 // Code sessions (#170, ADR 0007), in the Side project code workspace start-worker.mjs sets up. The
@@ -9,7 +10,8 @@ import { type APIRequestContext, expect, type Page, test } from "@playwright/tes
 const startOnPage = async (page: Page, lines: readonly string[]) => {
   await page.goto("/workspaces/side-project");
   await page.getByLabel("Model").selectOption("fake/echo");
-  await page.getByLabel("Message").fill(lines.join("\n"));
+  // Exactly: a session another test left here can have "message" in its Rename button's name.
+  await page.getByLabel("Message", { exact: true }).fill(lines.join("\n"));
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/side-project\/sessions\//);
 };
@@ -73,6 +75,114 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
       "Ran git --version: git version",
     );
   }
+});
+
+/** Where an approval's answer goes. */
+const APPROVAL_ANSWERS = "**/api/sessions/*/approvals/*";
+const UNREACHABLE = "Courtyard can't reach its worker";
+
+/** Marks the page's body if it ever says the worker can't be reached, however briefly. */
+const noteUnreachable = (page: Page) =>
+  page.evaluate((words) => {
+    new MutationObserver(() => {
+      if (document.body.textContent?.includes(words)) document.body.dataset.sawUnreachable = "yes";
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  }, UNREACHABLE);
+
+test("an answer the worker is slow to take waits for it quietly, never saying it can't be reached (#204)", async ({
+  page,
+}) => {
+  await startOnPage(page, ["run command: git --version"]);
+  const card = approvalOn(page);
+  await expect(card).toBeVisible();
+  await noteUnreachable(page);
+  // The first try: the worker too busy to answer in time, so the proxy in front gives up on it.
+  let tries = 0;
+  await page.route(APPROVAL_ANSWERS, async (route) => {
+    tries += 1;
+    if (tries > 1) return route.continue();
+    await wait(3000);
+    return route.fulfill({ status: 502, body: "Bad Gateway" });
+  });
+
+  await card.getByRole("button", { name: "Allow" }).click();
+
+  await expect(card.getByRole("status")).toHaveText("Waiting for Courtyard…");
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "Ran git --version: git version",
+  );
+  expect(tries).toBe(2);
+  await expect(page.locator("body")).not.toHaveAttribute("data-saw-unreachable", "yes");
+});
+
+test("an answer given while the worker can't be reached is kept, and goes once it's back (#204)", async ({
+  page,
+}) => {
+  await startOnPage(page, ["run command: git --version"]);
+  const card = approvalOn(page);
+  await expect(card).toBeVisible();
+  await page.route(APPROVAL_ANSWERS, (route) =>
+    route.fulfill({ status: 502, body: "Bad Gateway" }),
+  );
+
+  await card.getByRole("button", { name: "Allow" }).click();
+
+  await expect(card.getByRole("alert")).toContainText(UNREACHABLE);
+  await page.unroute(APPROVAL_ANSWERS);
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "Ran git --version: git version",
+  );
+});
+
+test("an answer whose connection is refused says so within moments, and goes once the worker's back (#204)", async ({
+  page,
+}) => {
+  await startOnPage(page, ["run command: git --version"]);
+  const card = approvalOn(page);
+  await expect(card).toBeVisible();
+  let tries = 0;
+  await page.route(APPROVAL_ANSWERS, (route) => {
+    tries += 1;
+    return route.abort("connectionrefused");
+  });
+
+  await card.getByRole("button", { name: "Allow" }).click();
+
+  // Three quick failures in a row, not the 30 seconds a slow worker gets.
+  await expect(card.getByRole("alert")).toContainText(UNREACHABLE, { timeout: 5000 });
+  expect(tries).toBeGreaterThanOrEqual(3);
+  await page.unroute(APPROVAL_ANSWERS);
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "Ran git --version: git version",
+  );
+});
+
+test("an answer given with the device's network down says so at once, and goes once it's back (#204)", async ({
+  page,
+  context,
+}) => {
+  await startOnPage(page, ["run command: git --version"]);
+  const card = approvalOn(page);
+  await expect(card).toBeVisible();
+  let tries = 0;
+  page.on("requestfailed", (request) => {
+    if (request.url().includes("/approvals/")) tries += 1;
+  });
+  await context.setOffline(true);
+
+  await card.getByRole("button", { name: "Allow" }).click();
+
+  // After the first try: no retries first, as there would be for a refused connection.
+  await expect(card.getByRole("alert")).toContainText(UNREACHABLE, { timeout: 2000 });
+  expect(tries).toBe(1);
+  await context.setOffline(false);
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "Ran git --version: git version",
+  );
 });
 
 test("stopping a turn that waits on an approval ends it, and the card goes", async ({ page }) => {
