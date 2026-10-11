@@ -89,7 +89,9 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
   `docs/architecture.md`.
 - A PR that changes how Courtyard is installed, set up, run or recovered updates `README.md`.
-- The order of work is the GitHub milestones: `docs/agents/roadmap.md`.
+- The order of work is the GitHub milestones: `docs/agents/roadmap.md`. **Every issue you file goes in a milestone**
+  (`gh issue create --milestone "<title>"`, `Later` when unsure) with a category and a triage label. Courtyard's own
+  screens read the roadmap from them.
 - **Claim an issue before building it.** Several builders work at once (Courtyard sessions and Claude Code
   helpers). Before starting, check the issue's comments and open PRs for a claim; if there is none, comment
   "Building this: <session or helper>" first. "The next task" means the first `ready-for-agent` issue, in milestone

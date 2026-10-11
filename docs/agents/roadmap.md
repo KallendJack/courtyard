@@ -23,6 +23,10 @@ Whoever files, finishes or moves work updates the roadmap in the same step:
 
 - **Filing an issue** (including when a skill publishes to the issue tracker): put it in a milestone (`Later` when
   unsure) and add it to that milestone's build order. Say which milestone and why, so the owner can move it.
+  The `Roadmap` workflow (`.github/workflows/roadmap.yml`) is the safety net: an issue that comes in without a
+  milestone goes into `Later` (with `needs-triage` when it has no triage label), on filing and once a day.
+- **Titles sort as text** in some GitHub views, so keep every number to one digit: fold or renumber rather than add
+  a `10 ·`.
 - **Finishing a milestone:** close it once its issues are closed.
 - **Moving work:** `gh issue edit N --milestone "<title>"`, and fix both milestones' build orders.
 - **A new group:** create it in the right place and renumber the titles after it. Milestones are matched by title, so
