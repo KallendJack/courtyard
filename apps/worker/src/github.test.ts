@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { GitHubConnection } from "@courtyard/contract";
@@ -13,6 +13,7 @@ import {
   postJson,
   type Requester,
   RUNNING_MODEL,
+  removeTestFolder,
   requesterFor,
   runningProvider,
   setUpOwner,
@@ -30,7 +31,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 const connection = async (request: Requester) =>

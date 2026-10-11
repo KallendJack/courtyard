@@ -11,6 +11,7 @@ import {
   FAKE_MODEL,
   followSession,
   postJson,
+  removeTestFolder,
   startSession,
   testWorker,
 } from "./testing.ts";
@@ -25,7 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProviderList, type SessionEvent, SessionSummary } from "@courtyard/contract";
@@ -14,6 +14,7 @@ import {
   followSession,
   postJson,
   type Requester,
+  removeTestFolder,
   signedOutProvider,
   startSession,
   testWorker,
@@ -32,7 +33,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const now = () => clock;

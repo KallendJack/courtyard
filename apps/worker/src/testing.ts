@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ApiError,
@@ -26,6 +26,7 @@ import {
   type ToolContent,
 } from "./providers/index.ts";
 import { err, ok, type Result } from "./result.ts";
+import type { Background } from "./sessions/index.ts";
 import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -33,9 +34,33 @@ export { createFakeGitHub, type FakeGitHub } from "./github/fake.ts";
 export { createFakePush, type FakePush } from "./notifications/fake.ts";
 export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
+/** The work test workers started that nobody waits for (titling a session, say), until it settles. */
+const background = new Set<Promise<void>>();
+
+const keepHold: Background = (work) => {
+  background.add(work);
+  void work.finally(() => background.delete(work));
+};
+
+/**
+ * For tests: removes a test's folder once the work its workers started in the background has
+ * settled, since that work writes into it (#226). `leftRunning` is for a file whose tests can end
+ * with a turn still running (one waiting on an approval, say, in a code session's repository):
+ * removing it is then tried again a few times, until that file's tests stop what they start.
+ */
+export const removeTestFolder = async (root: string, options: { leftRunning?: boolean } = {}) => {
+  while (background.size > 0) await Promise.all(background);
+  await rm(root, {
+    recursive: true,
+    force: true,
+    ...(options.leftRunning ? { maxRetries: 5 } : {}),
+  });
+};
+
 /**
  * For tests and the context eval: a worker on the `context` and `data` folders in `root`, with any other options and
- * settings given. Throws if it won't start, since every test that uses it needs one that does.
+ * settings given. Throws if it won't start, since every test that uses it needs one that does. Remove `root` with
+ * `removeTestFolder`.
  */
 export const testWorker = (
   options: { root: string; env?: Environment } & Omit<Parameters<typeof createWorker>[0], "env">,
@@ -44,6 +69,7 @@ export const testWorker = (
   const worker = createWorker({
     // Nothing runs in the background unless a test asks for the job.
     repeat: () => {},
+    background: keepHold,
     // No Matt Pocock's skills, and never the network, unless a test gives them (mattSkillsIn).
     mattSkills: null,
     ...rest,
@@ -212,21 +238,34 @@ export const renameSession = (request: Requester, id: string, title: unknown) =>
     body: JSON.stringify({ title }),
   });
 
-/** For tests: a fake provider that holds each turn open until the test lets it go, if ever. */
+/**
+ * For tests: a fake provider that holds each turn open until the test lets it go, if ever. `held`
+ * resolves once a turn is being held, so the worker has done all it does before the answer.
+ */
 export const gatedProvider = () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  let holding: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    holding = resolve;
+  });
   // Held until released, or until the turn is stopped.
-  const heldUntilReleased = (signal: AbortSignal) =>
-    Promise.race([
+  const heldUntilReleased = (signal: AbortSignal) => {
+    holding();
+    return Promise.race([
       gate,
       new Promise<void>((resolve) =>
         signal.addEventListener("abort", () => resolve(), { once: true }),
       ),
     ]);
-  return { provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }), release };
+  };
+  return {
+    provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }),
+    release,
+    held,
+  };
 };
 
 /**

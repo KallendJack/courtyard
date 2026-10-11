@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, AuthState } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorOf, loginCookie, testWorker } from "./testing.ts";
+import { errorOf, loginCookie, removeTestFolder, testWorker } from "./testing.ts";
 
 const PASSWORD = "correct horse battery";
 
@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A worker on the same folders as every other in this test, like one restarted. */

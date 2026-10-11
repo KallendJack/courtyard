@@ -1,9 +1,16 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OwnerContextDetail, WorkspaceDetail } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, errorOf, postJson, type Requester, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  errorOf,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 let root: string;
 let contextDir: string;
@@ -17,7 +24,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 const OWNER_FILE = () => join(contextDir, "OWNER.md");
