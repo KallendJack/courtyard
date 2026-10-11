@@ -591,7 +591,9 @@ Each one is written down once, where the link goes.
 - **Errors are values:** module interfaces return `Result` (`result.ts`); throwing is for bugs (AGENTS.md,
   TypeScript).
 - **Dependencies passed in:** the clock, the providers, GitHub, the notification sender, the update command, fetching
-  Matt's skills and the repeating jobs are options to `createWorker`, so tests control them (AGENTS.md, Where code goes).
+  Matt's skills, the repeating jobs and the work nobody waits for (titling a session, notifying the owner) are options
+  to `createWorker`, so tests control them (AGENTS.md, Where code goes). Tests wait for that work before removing their
+  folders (`removeTestFolder` in `testing.ts`).
 - **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
 - **The first-load budget:** the build fails if what the home page needs first grows past its budget

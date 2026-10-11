@@ -25,6 +25,7 @@ import {
   postJson,
   quotedInGuide,
   type Requester,
+  removeTestFolder,
   testWorker,
 } from "./testing.ts";
 
@@ -74,7 +75,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 /** Every event in a session so far. */

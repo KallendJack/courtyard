@@ -12,6 +12,7 @@ import {
   followSession,
   postJson,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
@@ -52,7 +53,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A session whose first turn makes the scripted saves; returns its events once the turn ends. */

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type SessionEvent, SessionSummary } from "@courtyard/contract";
@@ -8,6 +8,7 @@ import {
   followSession,
   postJson,
   quotedInGuide,
+  removeTestFolder,
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
@@ -24,7 +25,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 /** One turn in garage-gym in which the model makes the scripted calls: the replies and events. */

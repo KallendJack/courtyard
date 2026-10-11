@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,6 +20,7 @@ import {
   followSession,
   postJson,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
@@ -49,7 +50,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A session in padel whose turns follow the scripted steps; returns once the first turn ends. */

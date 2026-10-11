@@ -23,6 +23,7 @@ import {
   gitIn,
   postJson,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   savingProvider,
   startSession,
@@ -61,7 +62,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const now = () => clock;
