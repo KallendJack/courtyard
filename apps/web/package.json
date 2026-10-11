@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/finish-build.mjs",
-    "typecheck": "tsc",
-    "test": "vitest run"
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@courtyard/contract": "workspace:*",
@@ -34,7 +33,6 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.2",
-    "vitest": "5.0.2"
+    "vite": "^8.3.2"
   }
 }

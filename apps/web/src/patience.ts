@@ -20,7 +20,7 @@ const SLOW_ANSWER_MS = 1500;
 const UNREACHABLE_RETRY_MS = 3000;
 
 /** What to do after a try the worker gave no answer to: try again, or say it can't be reached. */
-export type Verdict =
+type Verdict =
   | { readonly kind: "retry"; readonly afterMs: number }
   | { readonly kind: "unreachable" };
 
@@ -30,7 +30,7 @@ export type Verdict =
  * can't be reached now; anything else is a slow worker, tried again with longer waits each time,
  * until `WAIT_FOR_WORKER_MS` has gone.
  */
-export const afterNoAnswer = (tries: {
+const afterNoAnswer = (tries: {
   failed: readonly number[];
   sinceFirstMs: number;
   online: boolean;
