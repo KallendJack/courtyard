@@ -350,18 +350,22 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
   The frame round every page is picked by `handheld.ts` (#193): a desktop keeps the sidebar (`app-sidebar.tsx`) and,
   in a narrow window, the strip (`workspace-strip.tsx`); a touch screen gets the Handheld frame
-  (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`): thumb rails and a bottom
-  bar with Type and the talk strip on a tablet or the unfolded Fold, tiles across the top on the folded one. The
-  page's message box (`sessions/composer.tsx`) offers itself to the frame through `handheld.ts`'s dock, moves into
-  it above the bar, and opens its pickers from the frame's Skills, Photo and Model buttons. The talk strip
-  (`talk-strip.tsx`, #79, loaded with the frame) listens through the browser's own speech recognition
-  (`speech.ts`, which also vibrates for it) and puts the words in the box as they are heard (#198), for the owner to
-  send, or to queue while a turn runs;
+  (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`). On a tablet or the
+  unfolded Fold (#206): workspace tiles down the left, and down the right labelled buttons (Model, Skills, Add,
+  Settings) with the Talk key in the bottom corner; on the folded one, tiles across the top and a bottom bar with
+  Type and the talk strip. The page's message box (`sessions/composer.tsx`) offers itself to the frame through
+  `handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
+  the folded Fold. It opens its pickers from the frame's Skills, Photo (Add) and Model buttons. The talk strip and
+  the Talk key (`talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
+  browser's own speech recognition (`speech.ts`, which also vibrates for it) and put the words in the box as they are
+  heard (#198), for the owner to send, or to queue while a turn runs. For the Talk key, the box shows ✕, ■ and ↑
+  under the words while it listens (`listening-row.tsx`, loaded once it's docked). While the owner talks or an answer
+  comes, the screen is kept awake (`wake-lock.ts`) where the browser can;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
   round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
-  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; both files' classes
-  are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
+  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes, and
+  the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
   (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
   home page's list and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
