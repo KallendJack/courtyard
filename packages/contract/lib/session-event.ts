@@ -39,6 +39,8 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("edited-file"), path: z.string() }),
   /** A command it ran in a code session's worktree, exactly as it ran it (ADR 0007). */
   z.object({ kind: z.literal("ran-command"), command: z.string() }),
+  /** It updated its task list for the work, in a code session (ADR 0025). */
+  z.object({ kind: z.literal("updated-tasks") }),
   /** A check that failed on the session's pull request, which the turn is fixing (#172). */
   z.object({ kind: z.literal("check-failed"), name: z.string() }),
   /** An action of a tool connection it took (ADR 0008), by the connection's name and the action's. */

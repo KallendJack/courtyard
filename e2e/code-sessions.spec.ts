@@ -4,7 +4,7 @@ import { type APIRequestContext, expect, type Page, test } from "@playwright/tes
 // Code sessions (#170, ADR 0007), in the Side project code workspace start-worker.mjs sets up. The
 // fake edits a file with "edit file <path>: <line>" and runs a command with "run command: …"
 // (saying what it's for with a closing "(for: …)"), each only as the worker, or the owner's
-// approval (#171), allows.
+// approval (#171), allows, and "update the task list" updates its task list (ADR 0025).
 
 /** Starts a session in Side project, on the fake, with `lines` as its message. */
 const startOnPage = async (page: Page, lines: readonly string[]) => {
@@ -23,6 +23,7 @@ test("a code session's edits and commands show as it works, and anything off the
   page,
 }) => {
   await startOnPage(page, [
+    "update the task list",
     "edit file notes.md: The rack goes on the back wall",
     "run command: git add notes.md",
     "run command: git diff --cached --name-only",
@@ -34,6 +35,7 @@ test("a code session's edits and commands show as it works, and anything off the
     if (reloaded) await page.reload();
     const activities = page.getByRole("list", { name: "What the model did" });
     await expect(activities.getByRole("listitem")).toHaveText([
+      "Updated the task list",
       "Edited notes.md",
       "Ran git add notes.md",
       "Ran git diff --cached --name-only",

@@ -904,7 +904,16 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
 
     const options = runs[0]?.options;
     expect(options?.cwd).toBe(worktree);
-    expect(options?.tools).toEqual(["Read", "Glob", "Grep", "Edit", "Write", "Bash"]);
+    expect(options?.tools).toEqual([
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "Bash",
+      "TodoWrite",
+      "Skill",
+    ]);
     expect(options?.permissionMode).toBe("dontAsk");
     // Its AGENTS.md or CLAUDE.md and its skills, never the machine's own setup.
     expect(options?.settingSources).toEqual(["project"]);
@@ -921,6 +930,64 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       COURTYARD_SESSION_SLOT: "2",
     });
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("codes on Claude Code's own instructions with Courtyard's framing appended, and no turn limit (ADR 0025)", async () => {
+    const { worktree, code } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+
+    await runTurn(claudeCode, { folder: worktree, code });
+    await runTurn(claudeCode);
+
+    const [coding, planning] = runs.map((run) => run.options);
+    expect(coding?.systemPrompt).toEqual({
+      type: "preset",
+      preset: "claude_code",
+      append: "The turn's instructions.",
+    });
+    // A long piece of work runs until Claude finishes, the owner stops it, or a usage limit.
+    expect(coding).not.toHaveProperty("maxTurns");
+    // A planning turn is as it was: Courtyard's instructions alone, and a limit.
+    expect(planning?.systemPrompt).toBe("The turn's instructions.");
+    expect(planning?.maxTurns).toBe(30);
+    expect(planning?.tools).toEqual(["Read", "Glob", "Grep"]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("lets Claude keep a task list in a code session, reporting each update, and only there", async () => {
+    const { worktree, code } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const coding = await runTurn(claudeCode, { folder: worktree, code });
+    const planning = await runTurn(claudeCode);
+    const [codeOptions, planningOptions] = runs.map((run) => run.options);
+    if (!codeOptions || !planningOptions) throw new Error("no turn ran");
+    const todos = {
+      todos: [{ content: "Write the test", status: "in_progress", activeForm: "Writing the test" }],
+    };
+
+    const decisions = [
+      await preToolUse(codeOptions, { name: "TodoWrite", input: todos }),
+      // A field Courtyard doesn't know is refused rather than let through unchecked.
+      await preToolUse(codeOptions, { name: "TodoWrite", input: { ...todos, merge: true } }),
+      await preToolUse(planningOptions, { name: "TodoWrite", input: todos }),
+    ];
+
+    expect(decisions).toEqual([
+      { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } },
+      {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: await quotedInGuide("That request couldn't be checked"),
+        },
+      },
+      expect.objectContaining({
+        hookSpecificOutput: expect.objectContaining({ permissionDecision: "deny" }),
+      }),
+    ]);
+    expect(coding.activities).toEqual([{ kind: "updated-tasks" }]);
+    expect(planning.activities).toEqual([]);
     await rm(worktree, { recursive: true, force: true });
   });
 

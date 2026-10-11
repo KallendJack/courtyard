@@ -639,8 +639,11 @@ Everything Courtyard's models read is built in one place, from written rules, an
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
     machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
     message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
-    and `WebFetch`, confined as ADR 0019 says. In a code session it works in the session branch's worktree with
-    `Edit`, `Write` and `Bash` as well, and loads the repository's own project settings (its `CLAUDE.md` or
+    and `WebFetch`, confined as ADR 0019 says. In a code session the framing is appended to Claude Code's own system
+    prompt (its `claude_code` preset) instead, with no turn limit
+    ([ADR 0025](adr/0025-a-code-session-runs-on-the-providers-own-coding-instructions-with-courtyards-appended.md)),
+    and it works in the session branch's worktree with `Edit`, `Write`, `Bash`, `TodoWrite` and `Skill` as well, and
+    loads the repository's own project settings (its `CLAUDE.md` or
     `AGENTS.md`) and only the repository's own skills, still none of the machine's setup
     ([ADR 0022](adr/0022-code-sessions-follow-the-repositorys-own-claude-code-setup.md)), and Matt Pocock's skills as
     a local plugin from Courtyard's pinned copy, those the workspace can use turned on by name, which its Skill tool
@@ -653,7 +656,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
     says which attachments it was given ("please look"). In a code session it edits a file ("edit file …") and runs
-    a command ("run command: …") when the worker allows, and says why when it doesn't; Fake two doesn't code. With
+    a command ("run command: …") when the worker allows, and says why when it doesn't, and updates its task list
+    ("update the task list"); Fake two doesn't code. With
     Paper, it plays Paper ("paper <tool> {…}"), so the browser tests never start the real app.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,

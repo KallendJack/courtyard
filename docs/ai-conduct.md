@@ -2,7 +2,9 @@
 
 The rules for everything Courtyard tells a model, in every scenario. The worker's prompts module
 (`apps/worker/src/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
-and the fake are told the same things. The exceptions are the starter files, templates the worker writes (see below).
+and the fake are told the same things. The exceptions are the starter files, templates the worker writes (see below),
+and a code session's provider's own coding instructions, which come first, with Courtyard's appended (Coding, below;
+ADR 0025).
 
 ## Changing what a model is told
 
@@ -91,7 +93,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 1. The workspace, by name, as one area of the owner's life.
 2. Access. With `readsFiles`: read and search the workspace's folder (images included) and read files when they help;
    no changes, no commands. Without it: no files, no changes, no commands; the workspace is known from its context
-   file and the owner. In a code session, its own (Coding, below).
+   file and the owner. In a code session, its own, then how to work (Coding, below).
 3. Today's date.
 4. Say so and ask rather than guess, and answer in Markdown, with maths in the forms the web app draws as formulas
    (#140). A single `$` is never maths, so prices stay text:
@@ -243,6 +245,27 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > to finish: nothing runs in the background here. A command may go over several lines. Give a pull request's or
 > issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $
 > stay as written (--body '...', each ' in it written '\''), never through $(...) or a heredoc, which never run.
+
+Then how to work, the house process (#205), right after the access line. It's written for any repository, never
+only Courtyard's, so every code workspace gets it whatever it's on:
+
+> Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than
+> this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue
+> create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull
+> request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know
+> yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and the
+> full checks once, just before you push for a pull request. When a check fails in CI, read its results first (gh run
+> view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Base a pull
+> request on the default branch, never on another pull request's branch. Before you open or update one, load the pr
+> skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you
+> can fix it on your branch.
+
+Claude gets a code session's framing after Claude Code's own instructions, its system prompt for coding (the
+`claude_code` preset), with Courtyard's framing appended unchanged, so it codes the way Claude Code does with
+Courtyard's rules on top (ADR 0025). A planning turn and a one-off question get Courtyard's instructions alone, as
+the system prompt. A code turn has no turn limit: it ends when Claude finishes, when the owner stops it, or at a usage
+limit (a planning turn stops after 30 of Claude's round trips). Claude keeps a task list on long work with its
+`TodoWrite` tool, which touches no file; each update shows as "Updated the task list". Sub-agents stay off (#117).
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. In a code session Claude has Matt Pocock's skills too, from
