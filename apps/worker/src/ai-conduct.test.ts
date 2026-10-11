@@ -25,6 +25,7 @@ import {
   postWithFiles,
   quotedInGuide,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   savingProvider,
   type TestFile,
@@ -43,7 +44,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const contextFile = (markdown: string) =>

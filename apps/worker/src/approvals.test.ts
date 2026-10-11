@@ -30,7 +30,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[]) => asOwner(testWorker({ root, providers }));
@@ -95,7 +95,7 @@ describe("a command off the command allowlist", () => {
     ]);
     const request = await start([provider]);
 
-    const { asked } = await untilApproval(request);
+    const { id, asked } = await untilApproval(request);
 
     expect(asked.ask).toEqual({
       kind: "command",
@@ -103,6 +103,8 @@ describe("a command off the command allowlist", () => {
       reason: "reaches-out",
     });
     expect(asked.why).toBe("To compare with the old notes");
+    await answer(request, id, asked.seq, "deny");
+    await followSession(request, { sessionId: id, after: asked.seq, until: "turn-completed" });
   });
 });
 
@@ -283,5 +285,13 @@ describe("stopping a turn that waits on an approval", () => {
       model: CODING_MODEL,
     });
     expect(next.status).toBe(202);
+    const turn = events.length + 1;
+    await followSession(request, {
+      sessionId: id,
+      after: events.length,
+      until: "approval-requested",
+    });
+    await postJson(request, `/api/sessions/${id}/stop`, { turn });
+    await followSession(request, { sessionId: id, after: turn, until: "turn-stopped" });
   });
 });

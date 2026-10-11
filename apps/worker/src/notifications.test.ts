@@ -35,7 +35,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 /** The worker's public key, which a browser subscribes with. */
@@ -84,6 +84,12 @@ const untilApproval = async (request: Requester, text: string) => {
   return id;
 };
 
+/** Stops a session's first turn and waits until it has. */
+const stopFirstTurn = async (request: Requester, id: string) => {
+  await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
+  await followSession(request, { sessionId: id, until: "turn-stopped" });
+};
+
 /** The endpoints each notification went to. */
 const sentTo = (push: FakePush) => push.sent.map(({ endpoint }) => endpoint);
 
@@ -122,6 +128,7 @@ describe("a session needing an approval", () => {
         },
       },
     ]);
+    await stopFirstTurn(request, id);
   });
 
   it("says when it's a file it wants to change, and sends nothing more once the owner stops the turn", async () => {
@@ -130,8 +137,7 @@ describe("a session needing an approval", () => {
     await turnOn(request, "fold");
 
     const id = await untilApproval(request, "Tidy the notes");
-    await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
-    await followSession(request, { sessionId: id, until: "turn-stopped" });
+    await stopFirstTurn(request, id);
 
     await expect.poll(() => push.sent).toHaveLength(1);
     expect(push.sent[0]?.payload).toMatchObject({ body: "Needs your OK to change a file" });
@@ -175,13 +181,14 @@ describe("turning notifications on and off per device", () => {
     await turnOn(desk, "desk");
     expect((await turnOff(phone, "phone")).status).toBe(204);
 
-    await untilApproval(request, "Talk into the message box");
+    const id = await untilApproval(request, "Talk into the message box");
 
     await expect.poll(() => push.sent).toHaveLength(2);
     expect(sentTo(push).toSorted()).toEqual([
       "https://push.example/desk",
       "https://push.example/fold",
     ]);
+    await stopFirstTurn(request, id);
   });
 
   it("keeps one subscription per device: turning on again replaces its last", async () => {
@@ -190,10 +197,11 @@ describe("turning notifications on and off per device", () => {
     await turnOn(request, "fold-before");
     await turnOn(request, "fold");
 
-    await untilApproval(request, "Talk into the message box");
+    const id = await untilApproval(request, "Talk into the message box");
 
     await expect.poll(() => push.sent).toHaveLength(1);
     expect(sentTo(push)).toEqual(["https://push.example/fold"]);
+    await stopFirstTurn(request, id);
   });
 
   it("sends nothing to a device once it logs out", async () => {
@@ -207,10 +215,11 @@ describe("turning notifications on and off per device", () => {
     await turnOn(lost, "lost-phone");
     await postJson(request, "/api/logout-others", {});
 
-    await untilApproval(request, "Talk into the message box");
+    const id = await untilApproval(request, "Talk into the message box");
 
     await expect.poll(() => push.sent).toHaveLength(1);
     expect(sentTo(push)).toEqual(["https://push.example/fold"]);
+    await stopFirstTurn(request, id);
   });
 
   it("forgets a device whose subscription has gone, so it isn't tried again", async () => {

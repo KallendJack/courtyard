@@ -133,6 +133,8 @@ describe("a session outlives the worker", () => {
     });
     expect(again.status).toBe(202);
     await followSession(afterRestart, { sessionId: session.id, until: "turn-completed", after: 2 });
+    // A restart ends the worker before it; in a test it's still there, so its turn is let go.
+    stuck.release();
   });
 
   it("records the interruption once, however many devices open the session", async () => {
@@ -148,6 +150,7 @@ describe("a session outlives the worker", () => {
 
     expect(one).toEqual(two);
     expect(one.filter((e) => e.type === "turn-failed")).toHaveLength(1);
+    stuck.release();
   });
 });
 
@@ -203,6 +206,7 @@ describe("a crash mid-write", () => {
       [1, "owner-message"],
       [2, "turn-failed"],
     ]);
+    stuck.release();
   });
 });
 
@@ -217,5 +221,6 @@ describe("loading a session after a restart", () => {
 
     const log = await readFile(join(root, "data", "sessions", session.id, "events.jsonl"), "utf8");
     expect(log).toContain('"interrupted"');
+    stuck.release();
   });
 });

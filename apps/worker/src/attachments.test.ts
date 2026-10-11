@@ -31,7 +31,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = () => asOwner(testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }));

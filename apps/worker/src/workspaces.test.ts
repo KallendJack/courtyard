@@ -1,9 +1,16 @@
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiError, WorkspaceDetail, WorkspaceList, WorkspaceSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, errorOf, postJson, type Requester, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  errorOf,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 let root: string;
 let contextDir: string;
@@ -17,7 +24,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** Creates a workspace folder in the temporary context folder, with the files given. */
