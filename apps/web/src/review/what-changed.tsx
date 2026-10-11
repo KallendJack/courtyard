@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/button";
 import { CapsLabel } from "@/components/caps-label";
+import { classes } from "@/lib/classes";
 import { Answer } from "../sessions/answer.tsx";
 import { readDescription } from "./description.ts";
 
@@ -36,7 +37,12 @@ export function WhatChanged(props: {
   return (
     <section
       aria-label="What changed"
-      className="flex flex-col gap-3 rounded-card border bg-surface py-3 pr-3.5 pl-4"
+      className={classes(
+        "flex shrink-0 flex-col gap-3 rounded-card border bg-surface py-3 pr-3.5 pl-4",
+        // Open, from a tablet up, it takes the height the page has left and scrolls inside it,
+        // so Merge stays in view (#278).
+        props.open && "md:min-h-0 md:shrink md:flex-1",
+      )}
     >
       {props.open ? (
         <>
@@ -44,7 +50,7 @@ export function WhatChanged(props: {
             <CapsLabel tone="muted">What changed</CapsLabel>
             {toggle}
           </div>
-          <div className="flex flex-col gap-4 pb-1">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pb-1">
             <Written text={description.summary} />
             {description.others.map((part) => (
               <div key={part.heading} className="flex flex-col gap-1">

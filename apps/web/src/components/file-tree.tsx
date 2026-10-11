@@ -37,7 +37,7 @@ export function FileTree(props: {
   return (
     <nav
       aria-label="Changed files"
-      className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card bg-surface p-2 md:max-h-none"
+      className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card border bg-surface p-2 md:h-full md:max-h-none"
     >
       <CapsLabel tone="muted" inList>
         {count === 1 ? "1 file" : `${count} files`}

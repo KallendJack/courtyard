@@ -115,6 +115,8 @@ export const OpenPullRequest = z.object({
   pullRequest: PullRequest,
   /** The branch it merges from. */
   branch: z.string(),
+  /** The branch it merges into, once GitHub has said. */
+  base: z.string().optional(),
   from: PullRequestFrom,
 });
 export type OpenPullRequest = z.infer<typeof OpenPullRequest>;

@@ -1,5 +1,5 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
-import { pageScrollsSideways } from "./page-scroll.ts";
+import { pageScroll, pageScrollsSideways } from "./page-scroll.ts";
 
 // Signing in to GitHub through Courtyard (#99), against the fake GitHub start-worker.mjs gives the
 // worker: its sign-in finishes a couple of seconds after it starts, as entering the code on
@@ -160,16 +160,18 @@ test("the owner reviews a session's pull request file by file, asks for a change
   await expect(files.getByRole("button", { name: /talk\.md/ })).toContainText("+1");
   const diff = review.getByRole("region", { name: "Diff of talk.md" });
   await expect(diff).toContainText("Talk into the message box");
-  const merge = review.getByRole("button", { name: "Merge" });
+  const merge = review.getByRole("button", { name: "Merge", exact: true });
   await expect(merge).toBeDisabled();
   await expect(review).toContainText("Merge waits for e2e to finish.");
 
-  // Asking for changes is a message in the session: its fix goes to the same pull request.
-  const message = page.getByRole("textbox", { name: "Message" });
-  await expect(message).toHaveAttribute("placeholder", /^To: Edit File Talk Md/);
-  await message.fill(makesPullRequest("Hold to talk", "Hold to talk as well [e2e passes]"));
+  // Asking for changes is a message in the session, from its conversation: its fix goes to the
+  // same pull request.
+  const conversation = page.url().replace(/\?view=review$/, "");
+  await page.goto(conversation);
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill(makesPullRequest("Hold to talk", "Hold to talk as well [e2e passes]"));
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(review).toBeHidden();
   await expect(strip).toContainText("checks passed");
 
   await strip.getByRole("link", { name: /^PR #\d+/ }).click();
@@ -178,8 +180,22 @@ test("the owner reviews a session's pull request file by file, asks for a change
   await expect(merge).toBeEnabled();
   await merge.click();
 
+  // Merged, the page folds to one card with what's next, and nothing left to act on (#278).
+  const merged = page.getByRole("region", { name: "Merged" });
+  await expect(merged).toContainText("Merged into main");
+  await expect(merged).toContainText("1 file · +1 · its session has ended");
+  await expect(merged.getByRole("link", { name: "Start a new session" })).toBeVisible();
+  await expect(merge).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Ask about this PR" })).toHaveCount(0);
+  await expect(diff).toHaveCount(0);
+  await merged.getByRole("button", { name: "Show the changes" }).click();
+  await expect(diff).toContainText("Hold to talk");
+
+  // The conversation says, in one quiet line, that the session takes no more messages.
+  await page.goto(conversation);
   await expect(strip).toContainText("merged");
   await expect(page.getByText("Its pull request was merged")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
 
   await request.post("/api/github/sign-out", { data: {} });
@@ -203,6 +219,10 @@ test("the owner closes a session's pull request without merging it, once they've
   await review.getByRole("button", { name: "Close PR" }).click();
   await confirm.getByRole("button", { name: "Close PR" }).click();
 
+  await expect(page.getByRole("region", { name: "Closed" })).toContainText(
+    "Closed without merging",
+  );
+  await page.goto(page.url().replace(/\?view=review$/, ""));
   await expect(strip).toContainText("closed");
   await expect(page.getByText("Its pull request was closed")).toBeVisible();
 
@@ -284,6 +304,127 @@ const SLOTS_DESCRIPTION = [
   "Closes #222",
 ];
 
+/**
+ * Opens the PR page of start-worker.mjs's wide review, which no session opened (#278), from the
+ * PRs list: over 300 lines, one of them long, and a long description.
+ */
+const opensWideReview = async (page: Page) => {
+  await page.goto("/workspaces/side-project");
+  const row = page
+    .getByRole("region", { name: /^Pull requests/ })
+    .getByRole("listitem", { name: /A wide review/ });
+  await expect(row).toContainText("wide-review");
+  await expect(row).toContainText("from octo-owner on GitHub");
+  await row.getByRole("link", { name: /^Review/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    /^#\d+ A wide review \[e2e passes\]$/,
+  );
+};
+
+/**
+ * The PR page fits one screen (#278): the page never scrolls as a whole, Merge and the ask line
+ * stay in view, the diff scrolls inside its panel, a long line doesn't wrap, the file tree stays
+ * in view while the diff scrolls, and the whole description reads inside a panel of its own.
+ */
+const fitsOneScreen = async (page: Page) => {
+  const review = page.getByRole("region", { name: "Review" });
+  const merge = review.getByRole("button", { name: "Merge", exact: true });
+  const ask = review.getByRole("textbox", { name: "Ask about this PR" });
+  const files = review.getByRole("navigation", { name: "Changed files" });
+  const lines = review.locator("[data-diff-lines]");
+  await expect(merge).toBeEnabled();
+  await expect(merge).toBeInViewport({ ratio: 1 });
+  await expect(ask).toBeInViewport({ ratio: 1 });
+  expect((await pageScroll(page)).scrolls).toBe(false);
+
+  const scrolls = () =>
+    lines.evaluate((box) => ({
+      down: box.scrollHeight > box.clientHeight,
+      sideways: box.scrollWidth > box.clientWidth,
+    }));
+  expect(await scrolls()).toEqual({ down: true, sideways: true });
+  const long = lines.getByText(/a long line that never wraps/);
+  expect((await long.boundingBox())?.height).toBeLessThan(30);
+
+  await lines.evaluate((box) => box.scrollTo({ top: box.scrollHeight }));
+  await expect(review.getByText("export const line320 = 320;")).toBeInViewport();
+  await expect(files).toBeInViewport({ ratio: 1 });
+  await expect(merge).toBeInViewport({ ratio: 1 });
+  expect((await pageScroll(page)).scrolls).toBe(false);
+
+  const whatChanged = review.getByRole("region", { name: "What changed" });
+  await whatChanged.getByRole("button", { name: "Read it all" }).click();
+  await expect(whatChanged).toContainText("Paragraph 40 of a long description");
+  await expect(merge).toBeInViewport({ ratio: 1 });
+  await expect(ask).toBeInViewport({ ratio: 1 });
+  expect((await pageScroll(page)).scrolls).toBe(false);
+  await whatChanged.getByRole("button", { name: "Show less" }).click();
+};
+
+// The PR page on a desktop (#278; Paper, "Desktop · PR page" and "Desktop · PRs: every open PR"):
+// the whole width, Close PR and the main action beside the title.
+test.describe("on a desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("the PR page fits the screen with a long diff and description, and the diff scrolls inside it", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await opensWideReview(page);
+    const review = page.getByRole("region", { name: "Review" });
+    const title = page.getByRole("heading", { level: 1 });
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    // Beside the title, not under the diff.
+    const [titleBox, mergeBox] = [await title.boundingBox(), await merge.boundingBox()];
+    expect(mergeBox?.y ?? 0).toBeLessThan((titleBox?.y ?? 0) + (titleBox?.height ?? 0) + 40);
+    await fitsOneScreen(page);
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  test("the PRs list shows every open pull request, and the ask line on one no session opened starts a session on its branch", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project");
+    const row = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Builds queue across the whole PC/ });
+    await expect(row).toContainText("306-machine-lock");
+    await expect(row).toContainText("from a Claude Code helper");
+    await expect(row).toContainText("Checks running");
+    await row.getByRole("link", { name: /^Review/ }).click();
+    await expect(page).toHaveURL(/\/workspaces\/side-project#pr-\d+$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      /^#\d+ Builds queue across the whole PC/,
+    );
+    const review = page.getByRole("region", { name: "Review" });
+    await expect(review.getByRole("region", { name: "What changed" })).toContainText(
+      "Builds take turns across the whole PC",
+    );
+
+    // What starts is shown before it starts: on its branch, with the model it'll use.
+    await review.getByRole("button", { name: "Can this be merged?" }).click();
+    const start = review.getByRole("region", { name: "Start a session" });
+    await expect(start).toContainText("306-machine-lock");
+    await expect(start).toContainText("asking “Can this be merged?”");
+    await start.getByRole("button", { name: "Start the session" }).click();
+
+    await expect(page).toHaveURL(/\/sessions\/[\w-]+\?view=review$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      /^#\d+ Builds queue across the whole PC/,
+    );
+    await expect(review.getByRole("region", { name: "Answer" })).toContainText(
+      "You said: Can this be merged?",
+    );
+    await page.goto("/workspaces/side-project");
+    await expect(row).toContainText("from the session");
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+});
+
 // The PRs tab and the review on the unfolded Fold (#240; Paper, "Tablet · PRs tab", "Tablet · PR
 // review and Merge" and "description open"). Until the workspace page has tabs (#222), the PRs
 // tab's list is a section of a code workspace's page.
@@ -295,7 +436,11 @@ test.describe("on the unfolded Fold", () => {
     request,
   }) => {
     await signIn(request);
-    await pullRequestFrom(request, "Three session slots [e2e passes]", SLOTS_DESCRIPTION);
+    const id = await pullRequestFrom(
+      request,
+      "Three session slots [e2e passes]",
+      SLOTS_DESCRIPTION,
+    );
     await pullRequestFrom(request, "Fix the model chip [e2e running]");
     await pullRequestFrom(request, "Workspace icon picker");
 
@@ -337,15 +482,60 @@ test.describe("on the unfolded Fold", () => {
     await whatChanged.getByRole("button", { name: "Show less" }).click();
     await expect(files).toBeVisible();
 
-    await review.getByRole("button", { name: "Merge" }).click();
-    await expect(page.getByText("Its pull request was merged")).toBeVisible();
+    await review.getByRole("button", { name: "Merge", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Merged" })).toContainText("Merged into main");
 
+    // The merged session leaves the workspace's sessions for History (#278).
     await page.goto("/workspaces/side-project");
+    const link = `a[href$="/sessions/${id}"]`;
+    await expect(page.getByRole("region", { name: "History" }).locator(link)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Sessions" }).locator(link)).toHaveCount(0);
     await expect(row("Three session slots")).toHaveCount(0);
     await pullRequests.locator("label", { hasText: /^Merged$/ }).click();
     const merged = page.getByRole("region", { name: /^Pull requests · \d+ merged$/ });
     await expect(merged.getByRole("listitem", { name: /Three session slots/ })).toContainText(
       "Merged",
+    );
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  test("the PR page fits the screen with a long diff and description, and the diff scrolls inside it", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await opensWideReview(page);
+    await fitsOneScreen(page);
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  test("a conflicting pull request says so, and one tap has its session bring it up to date", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    const id = await pullRequestFrom(request, "Rails room [e2e running] [conflicts]");
+
+    await page.goto("/workspaces/side-project");
+    const row = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Rails room/ });
+    // Not "No checks": a conflict is what holds it up.
+    await expect(row).toContainText("Conflicts with main");
+    await expect(row.getByRole("button", { name: /^Bring up to date/ })).toBeVisible();
+
+    await page.goto(`/workspaces/side-project/sessions/${id}?view=review`);
+    const review = page.getByRole("region", { name: "Review" });
+    await expect(review).toContainText("Conflicts with main");
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toHaveCount(0);
+    await expect(review.getByRole("button", { name: "Why does it conflict?" })).toBeVisible();
+    await review.getByRole("button", { name: "Bring up to date" }).click();
+
+    // It shows the session, which has the message to merge main in.
+    await expect(page).toHaveURL(new RegExp(`/sessions/${id}$`));
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(
+      /Your pull request #\d+ conflicts with main/,
     );
 
     await request.post("/api/github/sign-out", { data: {} });
@@ -371,24 +561,35 @@ test.describe("on the unfolded Fold", () => {
       .click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Loading states/);
 
-    // The box says which session the message goes to: the one whose branch the pull request is.
-    const message = page.getByRole("textbox", { name: "Message" });
-    await expect(message).toHaveAttribute("placeholder", `To: ${secondTitle}`);
-    await message.fill("Bring it up to date with main");
-    await page.getByRole("button", { name: "Send" }).click();
+    // The ask line goes to the session whose branch the pull request is, with no pickers, and its
+    // answer shows on the page, in place of What changed (#278).
+    const review = page.getByRole("region", { name: "Review" });
+    const ask = page.getByRole("textbox", { name: "Ask about this PR" });
+    await expect(page.getByRole("combobox")).toHaveCount(0);
+    await ask.fill("Bring it up to date with main");
+    await review.getByRole("button", { name: "Ask", exact: true }).click();
+    const answer = review.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText("You said: Bring it up to date with main");
+    await expect(review.getByRole("region", { name: "What changed" })).toHaveCount(0);
+    await expect(ask).toHaveValue("");
+    // A quick ask sends with one tap; the answer shown is the latest.
+    await review.getByRole("button", { name: "Explain this change" }).click();
+    await expect(answer).toContainText("You said: Explain this change");
+    await answer.getByRole("button", { name: "Close the answer" }).click();
+    await expect(review.getByRole("region", { name: "What changed" })).toBeVisible();
 
-    await expect(page).toHaveURL(new RegExp(`/sessions/${second}$`));
+    await page.goto(`/workspaces/side-project/sessions/${second}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondTitle);
     await expect(page.getByText("Bring it up to date with main").first()).toBeVisible();
     await page.goto(`/workspaces/side-project/sessions/${first}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(firstTitle);
     await expect(page.getByText("Bring it up to date with main")).toHaveCount(0);
 
-    // A review whose session has gone has no box, so nothing goes to another session instead.
+    // A review whose session has gone has no ask line, so nothing goes to another session.
     const deleted = await request.delete(`/api/sessions/${first}`, { data: {} });
     expect(deleted.ok(), await deleted.text()).toBe(true);
     await page.goto(`/workspaces/side-project/sessions/${first}?view=review`);
-    await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+    await expect(ask).toHaveCount(0);
 
     await request.post("/api/github/sign-out", { data: {} });
   });
@@ -447,7 +648,7 @@ test.describe("on the cover screen", () => {
     const review = page.getByRole("region", { name: "Review" });
     await review.getByRole("button", { name: "Read it all" }).click();
     await expect(review).toContainText("Two-way door, the workspace page only.");
-    await expect(review.getByRole("button", { name: "Merge" })).toBeDisabled();
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeDisabled();
     expect(await pageScrollsSideways(page)).toBe(false);
 
     await request.post("/api/github/sign-out", { data: {} });

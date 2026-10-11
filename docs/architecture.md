@@ -212,7 +212,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
-  added and removed, files changed, #160), which the strip shows too, and its title (#240). A code workspace's list
+  added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
+  with its base (#278). A code workspace's list
   of sessions gives each one's branch and its PR as last recorded (kept in memory once read, so the list doesn't
   read every event log), which the workspace page's pull requests list shows (#240).
 - **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
@@ -221,7 +222,18 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
   ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
   commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or
-  closed on GitHub does.
+  closed on GitHub does. `pull-request/bring-up-to-date` (#278) fetches the PR's base through `code/` and sends
+  the session the worker's message to merge it in (`bringUpToDateMessage`, worded by `prompts/`), on the model the
+  owner last used there, or queues it while a turn runs.
+- **`pull-requests/`:** a code workspace's pull requests, whoever opened them (#278). Lists every open one on its
+  repository through `code/` and `github/`, latest first, each with who it's from: the session on its branch
+  (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
+  author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
+  is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
+  usual), and the ask line or Bring up to date on it starts a session on its own branch (`code/`'s
+  `startOnBranch`, refused when the repository has a branch of that name already, so clearing the session away
+  never takes one of the owner's, and leaving the branch on GitHub, since it isn't a `courtyard/…` one). Its
+  routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -236,7 +248,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
   stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
   latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
-  merges and closes it (#160); lists and makes a repository's labels and opens a pull request (the setup
+  merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
+  one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
   check, #181); and lists the repos the GitHub App reaches, with each one's description and where git
   clones it from (#258). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
@@ -344,17 +357,25 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
-  - **`review/`:** a code workspace's pull requests and their review (#160, #240). The list (`pull-requests.tsx`,
-    the PRs tab's list, a section of a code workspace's page until it has tabs, #222): each session's PR with its
-    title, branch and where its checks stand (`checks.tsx`: moss passed, violet running, red failed), Open or Merged,
-    and Review. The review, on the session's page in place of the conversation (`?view=review`): All PRs, its
-    title and checks, What changed (`what-changed.tsx`): the first line of its description's Summary, and Read it
-    all for the whole description (`description.ts` reads its parts, drawn by the answer renderer, Evidence and
-    Merge Danger side by side) with the files folded into one bar; otherwise the changed files as a tree
-    (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`, long lines wrapping so it reads on a
-    phone); then Merge (greyed out with its reason) and Close PR (confirmed) as thumb buttons
-    (`components/thumb-button.tsx`, shared with the approval card). Its own lazy load, the list's with a code
-    workspace's page, with its calls (`api.ts`) and a stylesheet of its own (`review.css`), like `things/`.
+  - **`review/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
+    (`pull-requests.tsx`, the PRs tab's list, a section of a code workspace's page until it has tabs): every open
+    PR on the repository from `pull-requests/`, whoever opened it, with its title, branch, who it's from and where
+    it stands (`checks.tsx`: moss passed, violet running, red failed, gold conflicting with its base), and Review,
+    or Bring up to date when it conflicts; or its sessions' merged ones. The PR page (`review.tsx`): a session's PR
+    on the session's page in place of the conversation (`?view=review`), and one no session opened on its
+    workspace's page, named by the address's hash (`#pr-306`; a search value would add to the first load). From a
+    tablet up it fits one screen: All PRs, its title and where it stands, What changed (`what-changed.tsx`, its
+    Summary's first line, and Read it all for the whole description, `description.ts`, in a panel that scrolls),
+    the changed files as a tree (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`), each
+    scrolling inside, the diff's lines never wrapping there (on a phone they wrap and the page scrolls as one).
+    Then the latest answer to what was asked from the page, the ask line (`components/ask-line.tsx`: quick asks for
+    where it stands and one line, sent to the PR's session on the model it last used, or, with no session, starting
+    one on its branch once the owner has seen what starts), and Merge, or Bring up to date when it conflicts, and
+    Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
+    reach on a tablet, where the answer takes What changed's place. Merged or closed, it folds to one card with
+    what's next: Update Courtyard (when the worker is a live copy main has moved on from), Start a new session and
+    Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
+    stylesheet of its own (`review.css`, holding the ask line's classes too), like `things/`.
   - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.
@@ -446,7 +467,7 @@ the web app parses every answer with these schemas.
 ### Outside the apps
 
 - **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers,
-  the fake GitHub and a stand-in for Matt Pocock's plugin;
+  the fake GitHub (with two pull requests no session opened, #278) and a stand-in for Matt Pocock's plugin;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
 - **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into

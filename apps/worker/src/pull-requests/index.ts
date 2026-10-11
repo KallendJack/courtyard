@@ -128,6 +128,7 @@ export const createPullRequests = (options: {
           open.value.map(({ found, pullRequest }) => ({
             pullRequest,
             branch: found.branch,
+            base: found.base,
             from: fromOf(listed, found),
           })),
         );

@@ -319,8 +319,24 @@ _Avoid_: whitelist, safe commands
 **Session branch**:
 The git branch, checked out in its own folder (a worktree), that holds everything a session changed in a code
 workspace. The session pushes it and opens its pull request; once that is merged or closed, the session ends and its
-branch is cleared away.
+branch is cleared away. A session started on a pull request no session opened works on that pull request's branch
+instead.
 _Avoid_: feature branch, working branch, task branch
+
+**PR page**:
+One pull request's page in a code workspace, for any open one on its repository, whoever opened it: what it
+changes, the ask line, and Merge or Bring up to date. Once merged or closed, it folds to one card with what's next.
+_Avoid_: review screen, PR view
+
+**Ask line**:
+The one-line box on a PR page, with quick asks beside it, that sends a question to the pull request's session on the
+model it already uses; its answer shows on the page.
+_Avoid_: composer, chat box (that's the message box)
+
+**Bring up to date**:
+The one tap that has a pull request's session merge its base in and fix the conflict, when the pull request conflicts
+with it.
+_Avoid_: rebase, sync, update branch
 
 **Notification**:
 A push message to the owner's devices saying a session needs them or has finished.
