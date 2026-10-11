@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   CodeSessionList,
   GitHubConnection,
+  OpenPullRequestList,
   PullRequestReview,
   PushNotice,
   type SessionEvent,
@@ -144,7 +145,15 @@ describe("a code session's pull request", () => {
 
     const url = `https://github.com/${onGitHub}/pull/${number}`;
     const changes = { additions: 0, deletions: 0, files: 0 };
-    const pullRequest = { number, title: "Talk", url, state: "open", head: "c0ffee1", changes };
+    const pullRequest = {
+      number,
+      title: "Talk",
+      url,
+      state: "open",
+      head: "c0ffee1",
+      changes,
+      conflicts: false,
+    };
     expect(pullRequestsIn(await eventsOf(id))).toEqual([
       { ...pullRequest, checks: { kind: "none" } },
       { ...pullRequest, checks: { kind: "running" } },
@@ -408,7 +417,7 @@ describe("reviewing a pull request", () => {
       what: "it conflicts",
       checks: [{ name: "e2e", outcome: "passed" }],
       conflicts: true,
-      reason: "It conflicts with main. Ask the session to bring its branch up to date.",
+      reason: "It conflicts with main: Bring it up to date.",
     },
   ] as const)("refuses Merge with the reason while $what", async (when) => {
     const { id, branch } = await codeSession();
@@ -566,5 +575,296 @@ describe("a merged or closed pull request", () => {
     expect(existsSync(worktree)).toBe(false);
     expect(await gitIn(repo, "branch", "--list", branch)).toBe("");
     expect(github.branchesDeleted()).toEqual([{ repo: onGitHub, branch }]);
+  });
+});
+
+// The PR page (#278): every open pull request on the repository, whoever opened it; a conflict
+// said as one; one tap to bring a pull request up to date; and a session started on a pull
+// request that has none.
+
+/** Every open pull request on Side project's repository, as the PRs list asks for them. */
+const openPullRequests = async () => {
+  const response = await request("/api/workspaces/side-project/pull-requests");
+  expect(response.status).toBe(200);
+  return OpenPullRequestList.parse(await response.json()).pullRequests;
+};
+
+/** A branch pushed to GitHub's copy by someone other than a session: its latest commit. */
+const pushedBranch = async (branch: string) => {
+  await gitIn(repo, "switch", "--quiet", "-c", branch);
+  await writeFile(join(repo, "builds.md"), "Builds take turns\n");
+  await gitIn(repo, "add", ".");
+  await gitIn(repo, "commit", "--quiet", "-m", "Builds take turns");
+  await gitIn(repo, "push", "--quiet", "origin", branch);
+  const head = (await gitIn(repo, "rev-parse", "HEAD")).trim();
+  await gitIn(repo, "switch", "--quiet", "main");
+  await gitIn(repo, "branch", "--quiet", "-D", branch);
+  return head;
+};
+
+/** A description a Claude Code helper wrote: signed as its PR skill signs them. */
+const SIGNED =
+  "## Summary\n\nBuilds take turns.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)";
+
+describe("the PRs list (#278)", () => {
+  it("lists every open pull request on the repository, whoever opened it, a session's with its link", async () => {
+    const { id, branch } = await codeSession();
+    const fromSession = github.openPullRequest({
+      repo: onGitHub,
+      branch,
+      head: "c0ffee1",
+      title: "Talk",
+    });
+    const fromHelper = github.openPullRequest({
+      repo: onGitHub,
+      branch: "306-machine-lock",
+      head: "c0ffee2",
+      title: "Builds queue across the whole PC",
+      body: SIGNED,
+    });
+    const fromSomeone = github.openPullRequest({
+      repo: onGitHub,
+      branch: "readme",
+      head: "c0ffee3",
+      title: "README",
+      author: "someone-else",
+    });
+    const merged = github.openPullRequest({ repo: onGitHub, branch: "old", head: "c0ffee4" });
+    github.merge(merged);
+    github.openPullRequest({ repo: "octo-owner/stacks", branch: "elsewhere", head: "c0ffee5" });
+
+    const listed = await openPullRequests();
+
+    expect(listed.map((open) => open.pullRequest.number)).toEqual([
+      fromSomeone,
+      fromHelper,
+      fromSession,
+    ]);
+    expect(listed).toEqual([
+      expect.objectContaining({
+        branch: "readme",
+        from: { kind: "github", login: "someone-else" },
+      }),
+      expect.objectContaining({ branch: "306-machine-lock", from: { kind: "claude-code" } }),
+      expect.objectContaining({
+        branch,
+        from: { kind: "session", sessionId: id, title: expect.any(String) },
+        pullRequest: expect.objectContaining({ title: "Talk", state: "open" }),
+      }),
+    ]);
+  });
+
+  it("says a pull request conflicts with its base, in the list and in its session", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+
+    await runJobs();
+
+    expect((await openPullRequests())[0]?.pullRequest.conflicts).toBe(true);
+    expect(pullRequestsIn(await eventsOf(id)).at(-1)?.conflicts).toBe(true);
+    const { sessions } = CodeSessionList.parse(
+      await (await request("/api/workspaces/side-project/sessions")).json(),
+    );
+    expect(sessions.find((session) => session.id === id)?.pullRequest?.conflicts).toBe(true);
+  });
+
+  it("still lists its sessions' open pull requests, as last seen, while GitHub isn't connected", async () => {
+    const { branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    await runJobs();
+    await postJson(request, "/api/github/sign-out", {});
+
+    const listed = await openPullRequests();
+
+    expect(listed.map((open) => open.pullRequest.number)).toEqual([number]);
+  });
+});
+
+describe("bringing a pull request up to date (#278)", () => {
+  it("sends its session the message to merge main in and fix the conflict, on the model it last used", async () => {
+    const { id, branch, lastSeq } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+
+    const brought = await postJson(
+      request,
+      `/api/sessions/${id}/pull-request/bring-up-to-date`,
+      {},
+    );
+
+    expect(brought.status).toBe(202);
+    const events = await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: lastSeq,
+    });
+    expect(events.find((event) => event.type === "owner-message")).toMatchObject({
+      text: await quotedInGuide("Your pull request #<number> conflicts", {
+        number: String(number),
+        base: "main",
+      }),
+      model: FAKE_MODEL,
+    });
+  });
+
+  it("queues the message while a turn runs", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+    let answer: () => void = () => {};
+    holding = new Promise((resolve) => {
+      answer = resolve;
+    });
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Busy", model: FAKE_MODEL });
+
+    const brought = await postJson(
+      request,
+      `/api/sessions/${id}/pull-request/bring-up-to-date`,
+      {},
+    );
+
+    expect(brought.status).toBe(202);
+    const queued = await followSession(request, { sessionId: id, until: "message-queued" });
+    expect(queued.at(-1)).toMatchObject({
+      type: "message-queued",
+      text: expect.stringContaining(`Your pull request #${number} conflicts with main`),
+    });
+    holding = undefined;
+    answer();
+  });
+
+  it("says when the session has no pull request yet", async () => {
+    const { id } = await codeSession();
+
+    const brought = await postJson(
+      request,
+      `/api/sessions/${id}/pull-request/bring-up-to-date`,
+      {},
+    );
+
+    expect(brought.status).toBe(404);
+    expect(await errorOf(brought)).toBe("This session has no pull request yet.");
+  });
+});
+
+describe("a pull request no session opened (#278)", () => {
+  it("is reviewed, merged and closed by its number", async () => {
+    const head = await pushedBranch("306-machine-lock");
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: "306-machine-lock",
+      head,
+      title: "Builds queue",
+      body: SIGNED,
+    });
+    github.setChecks(number, [{ name: "e2e", outcome: "passed" }]);
+    const other = github.openPullRequest({ repo: onGitHub, branch: "readme", head: "c0ffee3" });
+
+    const reviewed = await request(`/api/workspaces/side-project/pull-requests/${number}`);
+    expect(reviewed.status).toBe(200);
+    expect(PullRequestReview.parse(await reviewed.json())).toMatchObject({
+      pullRequest: { number, title: "Builds queue" },
+      branch: "306-machine-lock",
+      merge: { kind: "ready" },
+    });
+
+    const merging = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/merge`,
+      { head },
+    );
+    expect(merging.status).toBe(204);
+    expect(github.stateOf(number)).toBe("merged");
+    const after = PullRequestReview.parse(
+      await (await request(`/api/workspaces/side-project/pull-requests/${number}`)).json(),
+    );
+    expect(after.pullRequest.state).toBe("merged");
+    expect(after.mergedAt).toEqual(expect.any(String));
+
+    const closing = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${other}/close`,
+      {},
+    );
+    expect(closing.status).toBe(204);
+    expect(github.stateOf(other)).toBe("closed");
+    const missing = await request("/api/workspaces/side-project/pull-requests/99");
+    expect(missing.status).toBe(404);
+  });
+
+  it("gets a session on its branch, started with the owner's question, which then opens it", async () => {
+    const head = await pushedBranch("306-machine-lock");
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: "306-machine-lock",
+      head,
+      body: SIGNED,
+    });
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "ask", text: "Can this be merged?", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(201);
+    const { id } = (await started.json()) as { id: string };
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(events[0]).toMatchObject({ type: "owner-message", text: "Can this be merged?" });
+    const worktree = join(root, "data", "worktrees", id);
+    expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe("306-machine-lock");
+    expect((await gitIn(worktree, "rev-parse", "HEAD")).trim()).toBe(head);
+    expect((await openPullRequests())[0]?.from).toEqual({
+      kind: "session",
+      sessionId: id,
+      title: expect.any(String),
+    });
+    // Once it's merged, the branch on GitHub stays: it isn't one of Courtyard's.
+    github.merge(number);
+    await runJobs();
+    await runJobs();
+    expect(github.branchesDeleted()).toEqual([]);
+    expect(existsSync(worktree)).toBe(false);
+  });
+
+  it("gets a session on its branch to bring it up to date", async () => {
+    const head = await pushedBranch("306-machine-lock");
+    const number = github.openPullRequest({ repo: onGitHub, branch: "306-machine-lock", head });
+    github.setConflicts(number, true);
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(201);
+    const { id, title } = (await started.json()) as { id: string; title: string };
+    expect(title).toBe(`Bring #${number} up to date`);
+    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(events[0]).toMatchObject({
+      type: "owner-message",
+      text: await quotedInGuide("Your pull request #<number> conflicts", {
+        number: String(number),
+        base: "main",
+      }),
+    });
+  });
+
+  it("can't get a second session while one is on it", async () => {
+    const { branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "ask", text: "Can this be merged?", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(409);
+    expect(await errorOf(started)).toBe(
+      "A session is on this pull request already: ask it from its page.",
+    );
   });
 });

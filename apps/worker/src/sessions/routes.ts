@@ -494,6 +494,13 @@ export const sessionRoutes = (options: {
     return c.body(null, 204);
   });
 
+  // Bring up to date (#278): the session is sent the message to merge its base in.
+  routes.post("/sessions/:id/pull-request/bring-up-to-date", async (c) => {
+    const brought = await sessions.bringUpToDate(c.req.param("id"));
+    if (!brought.ok) return sessionError(c, brought.error);
+    return c.body(null, 202);
+  });
+
   // Save as document (ADR 0020): an answer, as a new document in the session's workspace.
   routes.post("/sessions/:id/documents", async (c) => {
     const body = await readBody(c, SaveAsDocument);

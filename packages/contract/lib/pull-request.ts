@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Effort, MAX_MESSAGE_LENGTH, ModelRef, SessionId } from "./session.ts";
 
 // A code session's pull request (#172): the session opens it with gh, and the worker follows its
 // state and checks on GitHub, recording each change in the session's events. The owner reviews it
@@ -35,6 +36,11 @@ export const PullRequest = z.object({
   head: z.string(),
   checks: PullRequestChecks,
   changes: PullRequestChanges,
+  /**
+   * It conflicts with its base (#278), so its checks may not run until it's brought up to date;
+   * left out in ones recorded before.
+   */
+  conflicts: z.boolean().optional(),
 });
 export type PullRequest = z.infer<typeof PullRequest>;
 
@@ -88,8 +94,49 @@ export const PullRequestReview = z.object({
   body: z.string(),
   files: z.array(ChangedFile),
   merge: MergeReadiness,
+  /** When it was merged (#278), once it has been. */
+  mergedAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type PullRequestReview = z.infer<typeof PullRequestReview>;
+
+/**
+ * Who opened a pull request (#278): one of the workspace's sessions, which keeps its link to it; a
+ * Claude Code helper, which signs its descriptions; or someone on GitHub, by their login.
+ */
+export const PullRequestFrom = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("session"), sessionId: SessionId, title: z.string() }),
+  z.object({ kind: z.literal("claude-code") }),
+  z.object({ kind: z.literal("github"), login: z.string() }),
+]);
+export type PullRequestFrom = z.infer<typeof PullRequestFrom>;
+
+/** One of a repository's open pull requests, whoever opened it (#278). */
+export const OpenPullRequest = z.object({
+  pullRequest: PullRequest,
+  /** The branch it merges from. */
+  branch: z.string(),
+  from: PullRequestFrom,
+});
+export type OpenPullRequest = z.infer<typeof OpenPullRequest>;
+
+/** Every open pull request on a code workspace's repository, latest first (#278). */
+export const OpenPullRequestList = z.object({ pullRequests: z.array(OpenPullRequest) });
+export type OpenPullRequestList = z.infer<typeof OpenPullRequestList>;
+
+/**
+ * Starting a session on a pull request that has none (#278), on its branch: with the owner's
+ * question, or to bring it up to date with its base.
+ */
+export const PullRequestSessionStart = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("ask"),
+    text: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH),
+    model: ModelRef,
+    effort: Effort.optional(),
+  }),
+  z.object({ kind: z.literal("bring-up-to-date"), model: ModelRef, effort: Effort.optional() }),
+]);
+export type PullRequestSessionStart = z.infer<typeof PullRequestSessionStart>;
 
 /**
  * Merging a session's pull request: the latest commit the owner reviewed, so a pull request that
