@@ -111,7 +111,8 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
    (Documents, below), then its Things between `<things>` markers, one labelled line each, or a line saying it
    has none yet (Things, below).
 9. When the turn offers the save tool: the saving rules (Saving context lines, below).
-10. In a code workspace with Paper, on a provider that uses tools: its Paper file and how to use it (Paper, below).
+10. In a code workspace with Paper, on a provider that uses tools: its Paper file, how to use it, and how its
+    agreed boards and drafts are kept apart (Paper, below).
 11. When the turn offers the document and Things tools: when to save a document (Documents, below), then how to keep
     Things current (Things, below).
 12. When the workspace has skills a model may load: how to use them, then each one's name and description between
@@ -332,6 +333,16 @@ Courtyard tells a model about them comes after the saving rules (Every turn, ite
 > board when it's ready for the owner to look at. Paper's tools work only while Paper is open on the worker machine:
 > if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine,
 > don't try to open it, and carry on with the rest of the work.
+>
+> The Paper file has two pages; make either one if it's missing. "Agreed design" holds the board the owner agreed for
+> each screen on each device, one each, plus the style guide. Each board's name ends with its status: "Live" once
+> it's built, or "Agreed, not built (#12)" with its ticket's number. "Drafts" holds every idea and iteration: draw
+> each new idea or change there. When the owner OKs a draft, it becomes that screen's board on Agreed design in one
+> step: move the board it replaces to Drafts, adding "replaced by" and the new board's name to its name, and add any
+> new shared piece to the style guide. When a ticket ships, set its boards' status to Live.
+
+The two pages (#233) keep what the owner agreed apart from what's still being tried, so Agreed design always shows
+each screen as it is or as agreed, and iterations never mix into it.
 
 The worker decides each call before it happens. A call naming another Paper file, or none when the tool takes one, is
 refused:
