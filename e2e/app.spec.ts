@@ -63,7 +63,7 @@ test.describe("on the cover screen", () => {
 
   test("keeps the message box compact, leaving room for the keyboard", async ({ page }) => {
     await page.goto(LONG_SESSION);
-    const form = page.getByLabel("Message").locator("xpath=ancestor::form");
+    const form = page.getByLabel("Message", { exact: true }).locator("xpath=ancestor::form");
 
     const box = await boxOf(form);
     expect(box.height).toBeLessThan(COVER_SCREEN.height * 0.25);
@@ -71,17 +71,19 @@ test.describe("on the cover screen", () => {
 
   test("keeps the message box in view with the keyboard open", async ({ page }) => {
     await page.goto(LONG_SESSION);
-    await page.getByLabel("Message").focus();
+    await page.getByLabel("Message", { exact: true }).focus();
     // The page shrinks to what's left above the keyboard (interactive-widget=resizes-content).
     await page.setViewportSize({ width: COVER_SCREEN.width, height: 300 });
 
-    await expect(page.getByLabel("Message")).toBeInViewport({ ratio: 1 });
+    await expect(page.getByLabel("Message", { exact: true })).toBeInViewport({ ratio: 1 });
     await expect(page.getByRole("button", { name: "Send" })).toBeInViewport({ ratio: 1 });
   });
 
   test("never pushes the page sideways with a long word", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message").fill(`https://example.com/${"a".repeat(300)}`);
+    await page
+      .getByLabel("Message", { exact: true })
+      .fill(`https://example.com/${"a".repeat(300)}`);
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
@@ -142,7 +144,7 @@ test.describe("at the end of a long session", () => {
     await page.goto(LONG_SESSION);
     // An answer many lines long, so it grows well past the bottom of the screen as it streams.
     const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
-    await page.getByLabel("Message").fill(lines);
+    await page.getByLabel("Message", { exact: true }).fill(lines);
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 
@@ -154,7 +156,7 @@ test.describe("at the end of a long session", () => {
 
   test("scrolls a failed turn's reason into view", async ({ page }) => {
     await page.goto(LONG_SESSION);
-    await page.getByLabel("Message").fill("please fail");
+    await page.getByLabel("Message", { exact: true }).fill("please fail");
     await page.getByRole("button", { name: "Send" }).click();
 
     await expect(page.getByRole("button", { name: "Retry" })).toBeInViewport();
@@ -199,7 +201,7 @@ test("keeps every file the app is made of once installed, but Mermaid's only onc
   });
   await page.goto("/workspaces/garage-gym");
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill("A diagram:\n\n```mermaid\nflowchart TD\n  a[Measure] --> b[Keep riding]\n```");
   await page.getByRole("button", { name: "Start" }).click();
   await expect(

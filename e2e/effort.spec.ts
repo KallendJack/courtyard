@@ -7,7 +7,7 @@ test("the owner picks an effort beside the model, and the session keeps it", asy
   // A new session starts at the model's default.
   await expect(effort.locator("option:checked")).toHaveText("Default effort (Medium)");
   await effort.selectOption({ label: "High effort" });
-  await page.getByLabel("Message").fill("Plan the whole garage");
+  await page.getByLabel("Message", { exact: true }).fill("Plan the whole garage");
   await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
@@ -25,7 +25,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message").fill("Where should the rack go?");
+    await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       "You said: Where should the rack go?",
@@ -41,7 +41,7 @@ test.describe("on a phone", () => {
       page.getByRole("button", { name: "Fake (echoes you) · Low effort" }),
     ).toBeVisible();
 
-    await page.getByLabel("Message").fill("Quickly, the bench?");
+    await page.getByLabel("Message", { exact: true }).fill("Quickly, the bench?");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       "You said: Quickly, the bench?",

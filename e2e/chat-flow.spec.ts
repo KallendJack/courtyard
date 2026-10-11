@@ -11,7 +11,7 @@ const words = (count: number) => Array.from({ length: count }, (_, i) => `word${
 /** Starts a session in Garage gym with `text` as its first message, and waits for its page. */
 const startSession = async (page: Page, text: string) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(text);
+  await page.getByLabel("Message", { exact: true }).fill(text);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
 };

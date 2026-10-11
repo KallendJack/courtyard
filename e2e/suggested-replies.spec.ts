@@ -8,7 +8,7 @@ const startSuggesting = async (page: Page, replies: readonly string[], effort?: 
   await page.goto("/workspaces/garage-gym");
   if (effort !== undefined) await page.getByLabel("Effort").selectOption({ label: effort });
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill(`Where should the rack go?\nsuggest replies: ${replies.join(" | ")}`);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
@@ -37,7 +37,7 @@ test("typing a reply of one's own takes the suggested ones away", async ({ page 
   const suggested = await startSuggesting(page, ["Back wall", "By the door"]);
   await expect(suggested.getByRole("button")).toHaveCount(2);
   // The message box says a reply of one's own is welcome too (#154).
-  const message = page.getByLabel("Message");
+  const message = page.getByLabel("Message", { exact: true });
   await expect(message).toHaveAttribute("placeholder", "Or type your own reply…");
 
   await message.fill("Neither, the side wall.");

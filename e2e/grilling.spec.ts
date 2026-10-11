@@ -22,7 +22,9 @@ test("Grill this plan starts a session on the plan with the Grilling tag, and an
   await expect(session).toContainText("You said: Dig the new beds in March.");
 
   // The owner agrees a decision that sharpens the plan: its line changes, with the usual note.
-  await page.getByLabel("Message").fill("change P1 to plan: Dig the new beds in late March.");
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("change P1 to plan: Dig the new beds in late March.");
   await page.getByRole("button", { name: "Send" }).click();
   const notes = page.getByRole("list", { name: "Saved to context" });
   await expect(notes).toContainText("Dig the new beds in late March.");

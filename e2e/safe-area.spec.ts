@@ -42,7 +42,7 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       `You said: Message ${LONG_SESSION_TURNS}`,
     );
-    await expect(page.getByLabel("Message")).toBeEnabled();
+    await expect(page.getByLabel("Message", { exact: true })).toBeEnabled();
 
     const attach = page.getByRole("button", { name: "Attach photos or PDFs" });
     expect(await liftFromGestureBar(page, attach)).toBe(GESTURE_BAR);

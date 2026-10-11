@@ -16,7 +16,7 @@ test("a code workspace lists Matt Pocock's skills, and the picker only those the
     "Matt Pocock's",
   );
 
-  await page.getByLabel("Message").fill("/");
+  await page.getByLabel("Message", { exact: true }).fill("/");
   const picker = page.getByRole("listbox");
   await expect(picker.getByRole("option", { name: /Implement/ })).toBeVisible();
   await expect(picker.getByRole("option", { name: /Tdd/ })).toHaveCount(0);

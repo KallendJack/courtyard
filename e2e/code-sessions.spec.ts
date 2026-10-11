@@ -250,7 +250,7 @@ test("a model that can't code is refused in a code workspace, with the reason", 
 }) => {
   await page.goto("/workspaces/side-project");
   await page.getByLabel("Model").selectOption("fake-two/echo");
-  await page.getByLabel("Message").fill("Fix the build");
+  await page.getByLabel("Message", { exact: true }).fill("Fix the build");
   await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
@@ -293,7 +293,7 @@ test.describe("several code sessions at once (#174)", () => {
 
     await page.goto("/workspaces/side-project");
     await page.getByLabel("Model").selectOption("fake/echo");
-    await page.getByLabel("Message").fill("Fix the build");
+    await page.getByLabel("Message", { exact: true }).fill("Fix the build");
     await page.getByRole("button", { name: "Start" }).click();
 
     const session = page.getByRole("list", { name: "Session" });

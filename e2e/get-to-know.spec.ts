@@ -15,7 +15,7 @@ test("an empty workspace offers Get to know, which opens a session with the skil
   await expect(page.getByRole("heading", { name: "Get to know this workspace." })).toBeVisible();
 
   // The owner answers; once a line is saved, the workspace no longer offers it.
-  await page.getByLabel("Message").fill("save fact: The garden faces south.");
+  await page.getByLabel("Message", { exact: true }).fill("save fact: The garden faces south.");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("list", { name: "Saved to context" })).toContainText(
     "The garden faces south.",

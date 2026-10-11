@@ -85,7 +85,7 @@ test("a model's update shows what changed in its note", async ({ page }) => {
   await expect(page.getByRole("list", { name: "Documents saved" })).toContainText("Saved document");
 
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill(
       "read file: docs/packing-list.md\nupdate document docs/packing-list.md: added grips\n# Packing list\n\n- Two rackets\n- Grips",
     );

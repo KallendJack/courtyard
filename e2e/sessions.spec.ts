@@ -5,7 +5,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
 }) => {
   await page.goto("/workspaces/garage-gym");
 
-  await page.getByLabel("Message").fill("Where should the rack go?");
+  await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
   await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
@@ -18,7 +18,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await expect(session).toContainText("You said: Where should the rack go?");
 
   // A failed turn says why, with a retry.
-  await page.getByLabel("Message").fill("please fail");
+  await page.getByLabel("Message", { exact: true }).fill("please fail");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("alert")).toContainText("failed on purpose");
   await page.getByRole("button", { name: "Retry" }).click();
@@ -33,7 +33,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
 
 test("the owner sees which files the model read", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill("please read the context file first");
+  await page.getByLabel("Message", { exact: true }).fill("please read the context file first");
   await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page.getByRole("list", { name: "What the model did" })).toHaveText(
@@ -46,7 +46,7 @@ test("what the model writes between what it does shows apart, between its activi
 }) => {
   await page.goto("/workspaces/garage-gym");
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill("write: Now the contract.\nread file: docs/notes.md\nwrite: Good, it's imported.");
   await page.getByRole("button", { name: "Start" }).click();
   const session = page.getByRole("list", { name: "Session" });
@@ -77,7 +77,7 @@ test("a new session takes the model's title once its first answer is in", async 
   const message = `plan the garage lighting ${stamp} please`;
   const titled = `Plan The Garage Lighting ${stamp}`;
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(message);
+  await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);
 

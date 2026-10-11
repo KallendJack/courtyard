@@ -12,7 +12,7 @@ const workerBack = (page: Page) => page.unroute("**/api/**");
 
 test("reloading mid-answer carries on with nothing missing or repeated", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(LONG_MESSAGE);
+  await page.getByLabel("Message", { exact: true }).fill(LONG_MESSAGE);
   await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
@@ -43,7 +43,7 @@ test("a session page opened while the worker is down recovers with its whole ses
   page,
 }) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill("Survive the outage");
+  await page.getByLabel("Message", { exact: true }).fill("Survive the outage");
   await page.getByRole("button", { name: "Start" }).click();
   const session = page.getByRole("list", { name: "Session" });
   await expect(session).toContainText("You said: Survive the outage");

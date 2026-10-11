@@ -15,7 +15,7 @@ test("what the model searched and read shows above the answer, and its numbered 
   page,
 }) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(SEARCHING);
+  await page.getByLabel("Message", { exact: true }).fill(SEARCHING);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
 
@@ -46,7 +46,7 @@ test.describe("copying", () => {
 
   test("Copy answer copies the sources too, as Markdown links", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message").fill(SEARCHING);
+    await page.getByLabel("Message", { exact: true }).fill(SEARCHING);
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Sources" })).toBeVisible();
 
@@ -70,7 +70,7 @@ test.describe("copying", () => {
 
 test("an answer that didn't use the web lists no sources", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill("Where should the rack go?");
+  await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
   await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page.getByRole("list", { name: "Session" })).toContainText(

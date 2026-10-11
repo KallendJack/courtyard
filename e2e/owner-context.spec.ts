@@ -79,7 +79,7 @@ test("an empty owner context offers Get to know me, which opens a session with t
   const session = page.getByRole("list", { name: "Session" });
   await expect(session.getByText("Skill: Get to know me")).toBeVisible();
   await expect(session).toContainText("You said: Get to know me.");
-  await page.getByLabel("Message").fill("save owner fact: Lives in Leeds.");
+  await page.getByLabel("Message", { exact: true }).fill("save owner fact: Lives in Leeds.");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("list", { name: "Saved to context" })).toContainText(
     "Lives in Leeds.",

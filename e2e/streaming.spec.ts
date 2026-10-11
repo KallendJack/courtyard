@@ -36,7 +36,7 @@ const midWord = (seen: readonly string[]) => {
 
 const start = async (page: Page, message: string) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(message);
+  await page.getByLabel("Message", { exact: true }).fill(message);
   const watching = watchAnswer(page);
   await page.getByRole("button", { name: "Start" }).click();
   return { watching };

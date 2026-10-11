@@ -41,7 +41,7 @@ test("the owner renames a session from its page and the sidebar, then deletes it
 }) => {
   const first = `Where should the bench go? ${Date.now()}`;
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(first);
+  await page.getByLabel("Message", { exact: true }).fill(first);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${first}`);
   const recent = page.getByRole("region", { name: "Recent in Garage gym" });
