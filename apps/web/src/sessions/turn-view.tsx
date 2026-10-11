@@ -48,6 +48,8 @@ const describeActivity = (activity: Activity) => {
       return `Edited ${activity.path}`;
     case "ran-command":
       return `Ran ${activity.command}`;
+    case "waiting-for-build":
+      return `Waiting for another build · ${activity.ahead} ahead`;
     case "updated-tasks":
       return "Updated the task list";
     case "check-failed":

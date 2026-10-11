@@ -1026,6 +1026,8 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     // A folder that isn't a skill, without its SKILL.md.
     await mkdir(join(worktree, ".claude", "skills", "notes"), { recursive: true });
     const asked: string[] = [];
+    /** The commands the adapter said ended, in order. */
+    const ended: string[] = [];
     const code: CodeTurn = {
       worktree,
       env: {
@@ -1042,8 +1044,11 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         asked.push(`run ${command}`);
         return command === "pnpm test" ? ok(null) : err("Not that one.");
       },
+      ran: (command) => {
+        ended.push(command);
+      },
     };
-    return { worktree, code, asked };
+    return { worktree, code, asked, ended };
   };
 
   it("runs its commands with the worker's GitHub sign-in, never the machine's", async () => {
@@ -1368,6 +1373,37 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("tells the worker each command has ended, however it ended, so a build frees its place in the queue (#281)", async () => {
+    const { worktree, code, ended } = await codeSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const planning = await runTurn(claudeCode);
+    const [options, planningOptions] = runs.map((run) => run.options);
+    if (!options || !planningOptions) throw new Error("no turn ran");
+
+    await postToolUse(options, {
+      name: "Bash",
+      input: { command: "pnpm verify", description: "Check everything" },
+      response: { stdout: "", stderr: "", interrupted: false },
+    });
+    await postToolUseFailure(options, {
+      name: "Bash",
+      input: { command: "pnpm test" },
+      error: "Exit code 1",
+    });
+    await postToolUse(options, {
+      name: "Read",
+      input: { file_path: join(worktree, "notes.md") },
+      response: "",
+    });
+
+    expect(ended).toEqual(["pnpm verify", "pnpm test"]);
+    // A planning turn runs no commands, so it has nothing to say.
+    expect(planningOptions.hooks?.PostToolUse ?? []).toEqual([]);
+    expect(planning.result).toEqual(ok(null));
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("runs nothing in the background, refusing a background command with what to do instead (#178)", async () => {
     const { worktree, code, asked } = await codeSession();
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
@@ -1411,6 +1447,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         heard.push(why);
         return ok(null);
       },
+      ran: () => {},
     };
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     await runTurn(claudeCode, { folder: worktree, code });

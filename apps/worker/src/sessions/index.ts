@@ -53,6 +53,7 @@ import {
   type CommandRule,
   commandAllowed,
   editPlaceIn,
+  isBuild,
   type PullRequestProblem,
   slotEnv,
 } from "../code/index.ts";
@@ -887,7 +888,11 @@ export const createSessions = (options: {
         };
         const branch = file.value?.branch;
         const worktree = branch === undefined ? undefined : options.code.worktreeOf(turn.id);
-        /** Says whether something may happen in a code session, telling the owner when it does. */
+        /**
+         * Says whether something may happen in a code session, telling the owner when it does. A
+         * heavy check waits its turn in the builds queue first (#281), saying how many builds are
+         * ahead of it, and a stop ends the wait.
+         */
         const decide = async (
           decided: Result<Activity, CodeRefusal>,
         ): Promise<Result<null, string>> => {
@@ -895,7 +900,17 @@ export const createSessions = (options: {
             return err(codeRefusalReason({ kind: "stopped" }));
           }
           if (!decided.ok) return err(codeRefusalReason(decided.error));
-          await report(decided.value);
+          const activity = decided.value;
+          if (activity.kind === "ran-command" && isBuild(activity.command)) {
+            const started = await options.code.builds.start({
+              id: turn.id,
+              command: activity.command,
+              signal: stopper.signal,
+              ahead: (ahead) => void report({ kind: "waiting-for-build", ahead }),
+            });
+            if (!started) return err(codeRefusalReason({ kind: "stopped" }));
+          }
+          await report(activity);
           return ok(null);
         };
         /**
@@ -1034,6 +1049,7 @@ export const createSessions = (options: {
               allowed: { kind: "ran-command", command },
             });
           },
+          ran: (command) => options.code.builds.ended(turn.id, command),
         });
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
@@ -1075,6 +1091,8 @@ export const createSessions = (options: {
       console.error(`Session ${turn.id}: the provider threw`, error);
       failure = { kind: "unknown", message: "The model connection stopped unexpectedly." };
     }
+    // No build outlives its turn, whether its provider said it ended or not (#281).
+    options.code.builds.leave(turn.id);
     // A save already being written stays, whatever happens to the turn (ADR 0013), and a tool
     // call under way finishes, recording what it did.
     await Promise.allSettled(callsUnderway);

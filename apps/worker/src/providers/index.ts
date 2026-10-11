@@ -143,6 +143,12 @@ export type CodeTurn = {
    * the owner's approval (#171), shown with `why`, what the model said it's for, when it said.
    */
   readonly run: (command: string, why?: string) => Promise<Result<null, string>>;
+  /**
+   * Says a command `run` allowed has finished, however it ended, so a heavy check frees its place
+   * in the builds queue (#281). A heavy check's `run` waits for its turn there first; anything a
+   * provider doesn't say has ended is freed when the turn ends.
+   */
+  readonly ran: (command: string) => void;
 };
 
 /** A call to one of a tool connection's tools: the tool by its own name, its input as the model sent it. */

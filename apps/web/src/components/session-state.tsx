@@ -26,6 +26,8 @@ export const doingWords = (doing: Doing) => {
       return `editing ${activity.path}`;
     case "ran-command":
       return `running ${activity.command}`;
+    case "waiting-for-build":
+      return `waiting for another build · ${activity.ahead} ahead`;
     case "updated-tasks":
       return "updating the task list";
     case "check-failed":

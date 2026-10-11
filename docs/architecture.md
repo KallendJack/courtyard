@@ -189,9 +189,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   module's own fetch from the remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
   turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
   this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
-  three waits, first come first served, until one ends. It also finds a session branch's pull request on GitHub
-  (the repository named by its remote's address) and clears a session's worktree and branch away, and, once its PR
-  is merged or closed, the branch it pushed to GitHub (only a `courtyard/…` one).
+  three waits, first come first served, until one ends. `builds.ts` is the builds queue (#281): the heavy checks
+  `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
+  pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
+  `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, the
+  rest waiting first come first served. It lives in the worker's memory only, so a restart holds nothing. The
+  module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
+  clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
+  (only a `courtyard/…` one).
 - **`paper/`:** Paper in code workspaces, the first tool connection
   ([ADR 0023](adr/0023-paper-is-the-first-tool-connection-in-code-workspaces.md)). Builds the turn's
   `ToolConnection` (`providers/`) from the workspace's Paper settings (`connections.paper` in `workspace.json`,
@@ -523,6 +528,13 @@ Where the rest fits:
   denial tells the model why. With three code sessions' turns running, a fourth records `turn-queued` and waits, `turn-dequeued`
   once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
   before it starts clears its branch and worktree away.
+- **The builds queue** (#281). A heavy check the `CodeTurn` allows (or the owner does) waits inside the provider's
+  call for its place in `code/`'s builds queue before it's recorded as `ran-command`, recording a
+  `waiting-for-build` activity with how many builds are ahead each time that changes (the browser keeps one line
+  for it, the latest). A stop ends the wait and leaves the queue. The provider says when each command it ran has
+  ended, however it ended (`CodeTurn.ran`: Claude's `PostToolUse` and `PostToolUseFailure` hooks, the fake after
+  each scripted command), freeing its place; whatever a turn still holds is freed when the turn ends, completed,
+  stopped or failed.
 - **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
   `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
   starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and

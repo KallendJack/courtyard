@@ -216,6 +216,12 @@ there is used as it is), then makes the workspace on it and opens it.
 - **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
   the same, for the repository's checks to pick their test servers' ports from.
+- **One heavy check at a time** across the worker, so sessions building together can't lock the
+  machine up: a session's `pnpm verify`, `test`, `e2e` or `build` (in any package), `vitest run`
+  or `playwright test` waits its turn, first come first served, its activity saying "Waiting for
+  another build · 1 ahead", and starts by itself. Stop still works while it waits, and other
+  commands never wait. A stronger machine can allow more at once: set `COURTYARD_BUILDS_AT_ONCE`
+  (see [Settings](#settings)).
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.

@@ -39,6 +39,11 @@ export const Activity = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("edited-file"), path: z.string() }),
   /** A command it ran in a code session's worktree, exactly as it ran it (ADR 0007). */
   z.object({ kind: z.literal("ran-command"), command: z.string() }),
+  /**
+   * A heavy check it's about to run (`pnpm verify`, say) waits in the worker's builds queue
+   * (#281), with this many builds ahead of it: those running, and those waiting before it.
+   */
+  z.object({ kind: z.literal("waiting-for-build"), ahead: z.number().int().positive() }),
   /** It updated its task list for the work, in a code session (ADR 0025). */
   z.object({ kind: z.literal("updated-tasks") }),
   /** A check that failed on the session's pull request, which the turn is fixing (#172). */
