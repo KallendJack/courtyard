@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CodeSessionList,
   GitHubConnection,
   PullRequestReview,
   PushNotice,
@@ -125,7 +126,12 @@ describe("a code session's pull request", () => {
     const { id, branch } = await codeSession();
 
     await runJobs();
-    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch,
+      head: "c0ffee1",
+      title: "Talk",
+    });
     await runJobs();
     github.setChecks(number, [{ name: "e2e", outcome: "running" }]);
     await runJobs();
@@ -138,10 +144,11 @@ describe("a code session's pull request", () => {
 
     const url = `https://github.com/${onGitHub}/pull/${number}`;
     const changes = { additions: 0, deletions: 0, files: 0 };
+    const pullRequest = { number, title: "Talk", url, state: "open", head: "c0ffee1", changes };
     expect(pullRequestsIn(await eventsOf(id))).toEqual([
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "none" }, changes },
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "running" }, changes },
-      { number, url, state: "open", head: "c0ffee1", checks: { kind: "passed" }, changes },
+      { ...pullRequest, checks: { kind: "none" } },
+      { ...pullRequest, checks: { kind: "running" } },
+      { ...pullRequest, checks: { kind: "passed" } },
     ]);
   });
 
@@ -160,6 +167,35 @@ describe("a code session's pull request", () => {
       after: lastSeq,
     });
     expect(events.at(-1)).toMatchObject({ pullRequest: { state: "open", head: "c0ffee1" } });
+  });
+
+  it("is in its workspace's list of sessions, with its title and the session's branch, for the PRs tab (#240)", async () => {
+    const { id, branch } = await codeSession();
+    const waiting = await codeSession("Not opened yet");
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch,
+      head: "c0ffee1",
+      title: "Talk into the message box",
+    });
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
+    await runJobs();
+
+    const response = await request("/api/workspaces/side-project/sessions");
+    const { sessions } = CodeSessionList.parse(await response.json());
+
+    expect(sessions.find((session) => session.id === id)).toMatchObject({
+      branch,
+      pullRequest: {
+        number,
+        title: "Talk into the message box",
+        state: "open",
+        checks: { kind: "failed", failed: ["e2e"] },
+      },
+    });
+    const notOpened = sessions.find((session) => session.id === waiting.id);
+    expect(notOpened?.branch).toMatch(/^courtyard\//);
+    expect(notOpened?.pullRequest).toBeUndefined();
   });
 
   it("isn't followed while GitHub isn't connected", async () => {
@@ -335,6 +371,17 @@ describe("reviewing a pull request", () => {
         { path: "e2e/talk.spec.ts", status: "added", patch: null },
       ],
     });
+  });
+
+  it("shows its title and the description the session wrote (#240)", async () => {
+    const { id, branch } = await codeSession();
+    const body = "## Summary\n\nTalk into the message box.\n\n## Evidence\n\nA new e2e test.";
+    github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1", title: "Talk", body });
+
+    const review = await reviewOf(id);
+
+    expect(review.pullRequest.title).toBe("Talk");
+    expect(review.body).toBe(body);
   });
 
   it.each([

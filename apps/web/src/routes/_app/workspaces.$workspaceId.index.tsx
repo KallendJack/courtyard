@@ -42,6 +42,8 @@ import { archiveWorkspace, changeWorkspace, deleteSession, fromWorker } from "..
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
 // Loaded only for a code workspace: the setup check's offer (#181).
 const MattSetupOffer = lazy(() => import("../../matt-setup/matt-setup-offer.tsx"));
+// Loaded only for a code workspace: its pull requests, with the review's stylesheet (#240).
+const PullRequests = lazy(() => import("../../review/pull-requests.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
@@ -67,6 +69,7 @@ function Workspace() {
   const router = useRouter();
   /** What the owner is doing to the workspace itself, if anything. */
   const [tidying, setTidying] = useState<"rename" | "archive">();
+  const sessionList = useSessionList(sessions.kind === "loaded" ? sessions.data : undefined);
 
   if (detail.kind === "not-found") {
     return (
@@ -217,6 +220,14 @@ function Workspace() {
           <p className="text-sm text-muted-foreground">{describeProblem(providers).body}</p>
         )}
       </div>
+      {workspace.mode === "code" && (
+        // The PRs tab's list (#240), until the page has tabs (#222): what waits on the owner.
+        <Suspense fallback={null}>
+          <div className="mt-6 empty:hidden">
+            <PullRequests sessions={sessionList.sessions} />
+          </div>
+        </Suspense>
+      )}
 
       {/*
         The workspace's cards: what's been said and known, and its skills, on the left; what it has
@@ -230,9 +241,7 @@ function Workspace() {
         )}
       >
         <div className="flex min-w-0 flex-col gap-4">
-          {sessions.kind === "loaded" && (
-            <SessionLinks list={sessions.data} mode={workspace.mode} />
-          )}
+          {sessions.kind === "loaded" && <SessionLinks list={sessionList} mode={workspace.mode} />}
           <section aria-label="Context file" className={CARD}>
             <ContextFileCard
               workspaceId={workspace.id}
@@ -382,28 +391,38 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
   );
 }
 
+const NO_SESSIONS: CodeSessionList = { sessions: [], running: 0 };
+
 /**
- * The workspace's sessions, latest first, each saying whose turn it is (#179), asked again every
- * few seconds while one is working or needs the owner. In a code workspace, how many code sessions
- * are running across the worker, and any session waiting for one of them to end, which can be
- * removed (#174).
+ * The workspace's sessions as the page loaded them, asked for again every few seconds while one is
+ * working or needs the owner, so its lists keep saying whose turn it is (#179) and where each pull
+ * request stands (#240).
  */
-function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
+const useSessionList = (loaded: CodeSessionList | undefined) => {
   const [asked, setAsked] = useState<{ from: CodeSessionList; now: CodeSessionList }>();
+  const fromPage = loaded ?? NO_SESSIONS;
   // The page's own list until a newer one is asked for, and again whenever the page reloads it.
-  const list = asked?.from === props.list ? asked.now : props.list;
+  const list = asked?.from === fromPage ? asked.now : fromPage;
   const workspaceId = list.sessions[0]?.workspaceId;
   useRefreshWhileBusy(list.sessions, () => {
     if (workspaceId === undefined) return;
-    const from = props.list;
     void fromWorker(
       `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
       CodeSessionList,
     ).then((result) => {
-      if (result.kind === "loaded") setAsked({ from, now: result.data });
+      if (result.kind === "loaded") setAsked({ from: fromPage, now: result.data });
     });
   });
-  const { sessions, running } = list;
+  return list;
+};
+
+/**
+ * The workspace's sessions, latest first, each saying whose turn it is (#179). In a code
+ * workspace, how many code sessions are running across the worker, and any session waiting for one
+ * of them to end, which can be removed (#174).
+ */
+function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
+  const { sessions, running } = props.list;
   if (sessions.length === 0) return null;
   return (
     <section aria-label="Sessions" className={CARD}>

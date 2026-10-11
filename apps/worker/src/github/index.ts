@@ -391,6 +391,7 @@ export const createGitHub = (options: {
         branch: find.branch,
         base: pull.base,
         checks: pull.checks,
+        body: pull.body,
         files: files.value,
         merge: mergeReadiness(pull),
       });

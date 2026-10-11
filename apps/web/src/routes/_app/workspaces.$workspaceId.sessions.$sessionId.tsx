@@ -229,17 +229,24 @@ function Session(props: {
     void router.invalidate();
   }, [modelTitle, session.title, router]);
 
-  const above = reviewing ? (
-    <BackLink workspaceId={session.workspaceId} within="Session" session={session.id} />
-  ) : (
-    <BackLink workspaceId={session.workspaceId} />
-  );
+  const above = <BackLink workspaceId={session.workspaceId} />;
   const toggle = (what: "rename" | "delete") =>
     setTidying((was) => (was === what ? undefined : what));
 
   return (
     <Page flushBottom>
-      {tidying === "rename" ? (
+      {reviewing ? (
+        // The review has its own heading: All PRs, and the pull request's title (#240).
+        <Suspense>
+          <Review
+            sessionId={session.id}
+            workspaceId={session.workspaceId}
+            sessionTitle={session.title}
+            pullRequest={pullRequest}
+            onEnded={toConversation}
+          />
+        </Suspense>
+      ) : tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
           <RenameForm
@@ -261,27 +268,23 @@ function Session(props: {
         <PageTitle
           above={above}
           actions={
-            !reviewing && (
-              <>
-                <IconButton
-                  label="Rename session"
-                  icon={<Pencil />}
-                  onClick={() => toggle("rename")}
-                />
-                <IconButton
-                  label="Delete session"
-                  icon={<Trash2 />}
-                  expanded={tidying === "delete"}
-                  look={tidying === "delete" ? "pressed" : "quiet"}
-                  onClick={() => toggle("delete")}
-                />
-              </>
-            )
+            <>
+              <IconButton
+                label="Rename session"
+                icon={<Pencil />}
+                onClick={() => toggle("rename")}
+              />
+              <IconButton
+                label="Delete session"
+                icon={<Trash2 />}
+                expanded={tidying === "delete"}
+                look={tidying === "delete" ? "pressed" : "quiet"}
+                onClick={() => toggle("delete")}
+              />
+            </>
           }
         >
-          {reviewing && pullRequest !== undefined
-            ? `PR #${pullRequest.number} · ${session.title}`
-            : session.title}
+          {session.title}
         </PageTitle>
       )}
       {session.branch !== undefined && !reviewing && (
@@ -342,11 +345,7 @@ function Session(props: {
         </div>
       )}
 
-      {reviewing ? (
-        <Suspense>
-          <Review sessionId={session.id} pullRequest={pullRequest} onEnded={toConversation} />
-        </Suspense>
-      ) : problem ? (
+      {reviewing ? null : problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
         </div>

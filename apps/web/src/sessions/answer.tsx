@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { WebLink } from "@/components/web-link";
+import { classes } from "@/lib/classes";
 import { Arriving, FencedBlock, fencedKind } from "../rich-blocks/fenced.tsx";
 import { textOf } from "../rich-blocks/hast.ts";
 import {
@@ -143,12 +144,19 @@ export const Answer = memo(function Answer(props: {
   running: boolean;
   /** How much of the text was replayed from the event log, which shows at once. */
   replayed: number;
+  /** At body size, in a box beside other things (a pull request's description, #240). */
+  compact?: boolean;
 }) {
   const shown = useReveal(props.text, { running: props.running, replayed: props.replayed });
   const blocks = splitBlocks(shown);
   return (
     // Spaced by gaps, not margins, so a formula (whose margins come from KaTeX) spaces like the rest.
-    <div className="flex flex-col gap-4 text-answer wrap-anywhere">
+    <div
+      className={classes(
+        "flex flex-col wrap-anywhere",
+        props.compact ? "gap-3 text-body" : "gap-4 text-answer",
+      )}
+    >
       {blocks.map((block, index) => {
         const arriving = props.running && index === blocks.length - 1;
         return (

@@ -3,7 +3,7 @@ import { classes } from "@/lib/classes";
 
 /**
  * The Paper boards' thumb-sized buttons (Handheld · 16, 17, 18), side by side at the bottom of a
- * card, in thumb reach: Deny and Allow on an approval, Close PR and Merge on a review. Its classes
+ * card, in thumb reach: Deny and Allow on an approval, Merge and Close PR on a review. Its classes
  * are off the first load: they're in the stylesheets of the pieces that use it (approval-card.css,
  * review.css), and apply only inside those pieces.
  */
@@ -15,10 +15,13 @@ const LOOKS = {
   quiet: "bg-muted font-bold text-foreground hover:bg-muted/70 disabled:opacity-50",
   /** What the owner most likely wants: Allow, Merge. Greyed out, with a ring, until it can. */
   main: "bg-foreground font-extrabold text-card hover:bg-foreground/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset",
+  /** The one big action of a screen, in violet: Merge (#240). Greyed out the same way. */
+  primary:
+    "bg-primary font-bold text-primary-foreground hover:bg-primary/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset",
 } as const;
 
 /** How much of the row it takes, beside the other. */
-const GROW = { 1: "grow", 1.4: "grow-[1.4]", 1.6: "grow-[1.6]" } as const;
+const GROW = { 1: "grow", 1.4: "grow-[1.4]", 1.6: "grow-[1.6]", 3: "grow-[3]" } as const;
 
 export function ThumbButton({
   look,

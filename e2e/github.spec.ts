@@ -146,9 +146,10 @@ test("the owner reviews a session's pull request file by file, asks for a change
 
   await strip.getByRole("link", { name: /^PR #\d+/ }).click();
   const review = page.getByRole("region", { name: "Review" });
-  const checks = review.getByRole("list", { name: "Checks" });
-  await expect(checks).toContainText("verify passed");
-  await expect(checks).toContainText("e2e running");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    /^#\d+ Talk into the message box \[e2e running\]$/,
+  );
+  await expect(page.getByText("Checks running", { exact: true })).toBeVisible();
   const files = review.getByRole("navigation", { name: "Changed files" });
   await expect(files.getByRole("button", { name: /talk\.md/ })).toContainText("+1");
   const diff = review.getByRole("region", { name: "Diff of talk.md" });
@@ -166,6 +167,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
   await expect(strip).toContainText("checks passed");
 
   await strip.getByRole("link", { name: /^PR #\d+/ }).click();
+  await expect(page.getByText("Checks passed", { exact: true })).toBeVisible();
   await expect(diff).toContainText("Hold to talk");
   await expect(merge).toBeEnabled();
   await merge.click();
@@ -224,4 +226,149 @@ test("the setup check offers what the repository is missing of Matt's setup, and
   await expect(card).toHaveCount(0);
 
   await request.post("/api/github/sign-out", { data: {} });
+});
+
+/**
+ * Starts a code session through the API whose fake model commits with `subject` (its checks as the
+ * subject says) and a description of these paragraphs, and pushes, which opens its pull request:
+ * the session's id, once the workspace's list has the pull request.
+ */
+const pullRequestFrom = async (
+  request: APIRequestContext,
+  subject: string,
+  description: readonly string[] = [],
+) => {
+  const messages = [subject, ...description].map((part) => `-m "${part}"`).join(" ");
+  const started = await request.post("/api/workspaces/side-project/sessions", {
+    data: {
+      text: [
+        `edit file talk.md: ${subject}`,
+        "run command: git add talk.md",
+        `run command: git commit ${messages}`,
+        "run command: git push -u origin HEAD",
+      ].join("\n"),
+      model: { provider: "fake", model: "echo" },
+    },
+  });
+  expect(started.status()).toBe(201);
+  const { id } = (await started.json()) as { id: string };
+  await expect
+    .poll(
+      async () => {
+        const listed = await request.get("/api/workspaces/side-project/sessions");
+        const { sessions } = (await listed.json()) as {
+          sessions: { id: string; pullRequest?: unknown }[];
+        };
+        return sessions.find((session) => session.id === id)?.pullRequest !== undefined;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  return id;
+};
+
+/** A description as the house's PR skill writes one: Summary, Evidence and Merge Danger. */
+const SLOTS_DESCRIPTION = [
+  "## Summary",
+  "Three session slots replace the recent list. The cross moves a session to History without deleting it.",
+  "## Evidence",
+  "A new e2e test failed before and passes now.",
+  "## Merge Danger",
+  "Two-way door, the workspace page only.",
+  "Closes #222",
+];
+
+// The PRs tab and the review on the unfolded Fold (#240; Paper, "Tablet · PRs tab", "Tablet · PR
+// review and Merge" and "description open"). Until the workspace page has tabs (#222), the PRs
+// tab's list is a section of a code workspace's page.
+test.describe("on the unfolded Fold", () => {
+  test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
+
+  test("the PRs list shows each pull request's checks, and its review reads the description and merges", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await pullRequestFrom(request, "Three session slots [e2e passes]", SLOTS_DESCRIPTION);
+    await pullRequestFrom(request, "Fix the model chip [e2e running]");
+    await pullRequestFrom(request, "Workspace icon picker");
+
+    await page.goto("/workspaces/side-project");
+    const pullRequests = page.getByRole("region", { name: /^Pull requests · \d+ open$/ });
+    const row = (title: string) => pullRequests.getByRole("listitem", { name: new RegExp(title) });
+    await expect(row("Three session slots")).toContainText("Checks passed");
+    await expect(row("Fix the model chip")).toContainText("Checks running");
+    await expect(row("Workspace icon picker")).toContainText("1 check failed");
+    await expect(row("Three session slots")).toContainText(/courtyard\/\w+/);
+
+    await row("Three session slots")
+      .getByRole("link", { name: /^Review/ })
+      .click();
+    await expect(page).toHaveURL(/view=review/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      /^#\d+ Three session slots \[e2e passes\]$/,
+    );
+    const review = page.getByRole("region", { name: "Review" });
+    const whatChanged = review.getByRole("region", { name: "What changed" });
+    const files = review.getByRole("navigation", { name: "Changed files" });
+    await expect(whatChanged).toContainText("Three session slots replace the recent list.");
+    await expect(whatChanged).not.toContainText("A new e2e test");
+    await expect(files).toBeVisible();
+
+    await whatChanged.getByRole("button", { name: "Read it all" }).click();
+    await expect(whatChanged).toContainText("without deleting it");
+    await expect(whatChanged).toContainText("A new e2e test failed before and passes now.");
+    await expect(whatChanged).toContainText("Two-way door, the workspace page only.");
+    // What's for GitHub stays on GitHub.
+    await expect(whatChanged).not.toContainText("Closes #222");
+    await expect(files).toBeHidden();
+    await expect(review).toContainText("1 file changed · +1");
+    await review.getByRole("button", { name: "View the diff" }).click();
+    await expect(files).toBeVisible();
+    await expect(whatChanged).not.toContainText("A new e2e test");
+
+    await whatChanged.getByRole("button", { name: "Read it all" }).click();
+    await whatChanged.getByRole("button", { name: "Show less" }).click();
+    await expect(files).toBeVisible();
+
+    await review.getByRole("button", { name: "Merge" }).click();
+    await expect(page.getByText("Its pull request was merged")).toBeVisible();
+
+    await page.goto("/workspaces/side-project");
+    await expect(row("Three session slots")).toHaveCount(0);
+    await pullRequests.locator("label", { hasText: /^Merged$/ }).click();
+    const merged = page.getByRole("region", { name: /^Pull requests · \d+ merged$/ });
+    await expect(merged.getByRole("listitem", { name: /Three session slots/ })).toContainText(
+      "Merged",
+    );
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+});
+
+test.describe("on the cover screen", () => {
+  test.use({ viewport: { width: 400, height: 900 }, hasTouch: true, isMobile: true });
+
+  test("the PRs list and the review fit the narrow screen", async ({ page, request }) => {
+    await signIn(request);
+    await pullRequestFrom(request, "A narrow look [e2e running]", SLOTS_DESCRIPTION);
+
+    await page.goto("/workspaces/side-project");
+    const row = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /A narrow look/ });
+    await expect(row).toContainText("Checks running");
+    await row.getByRole("link", { name: /^Review/ }).click();
+
+    const review = page.getByRole("region", { name: "Review" });
+    await review.getByRole("button", { name: "Read it all" }).click();
+    await expect(review).toContainText("Two-way door, the workspace page only.");
+    await expect(review.getByRole("button", { name: "Merge" })).toBeDisabled();
+    const sideways = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(sideways).toBe(0);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
 });
