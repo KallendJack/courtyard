@@ -1,10 +1,10 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { LogOut, Plus } from "lucide-react";
 import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
-import { WorkspaceDot } from "./workspace-colour.tsx";
+import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 /** A link in the strip: a pill, marked while its page is open. */
 const STRIP_LINK = "flex shrink-0 items-center rounded-full data-[status=active]:bg-muted";
@@ -17,6 +17,7 @@ export function WorkspaceStrip(props: {
   workspaces: readonly WorkspaceSummary[];
   onLogOut: () => void;
 }) {
+  const { workspaceId } = useParams({ strict: false });
   const link = (workspace: WorkspaceSummary) => (
     <Link
       key={workspace.id}
@@ -27,7 +28,7 @@ export function WorkspaceStrip(props: {
         "gap-2 px-3 py-1.5 text-sm data-[status=active]:font-semibold",
       )}
     >
-      <WorkspaceDot colour={workspace.colour} small />
+      <WorkspaceIcon icon={workspace.icon} size="md" open={workspace.id === workspaceId} />
       {workspace.name}
     </Link>
   );

@@ -131,7 +131,7 @@ test("nothing in a diagram can run script or load anything", async ({ page, base
   await expect(answer.getByRole("figure", { name: /^Couldn't draw this diagram/ })).toHaveCount(
     UNDRAWABLE.length,
   );
-  // Its own settings changed nothing: Moorland's colours, not the diagram's.
+  // Its own settings changed nothing: the theme's colours, not the diagram's.
   await expect(diagrams.first().locator(".node rect").first()).toHaveCSS(
     "fill",
     await themeColour(page, "accent"),
@@ -173,23 +173,14 @@ test("nothing in a diagram can run script or load anything", async ({ page, base
   expect(leaks).toEqual([]);
 });
 
-test("a diagram is drawn in Moorland's colours, and again in dark ones when the device changes", async ({
-  page,
-}) => {
+test("a diagram is drawn in the theme's colours", async ({ page }) => {
   const answer = await ask(page, withDiagram(CHAIN));
   const step = answer
     .getByRole("figure", { name: "Diagram", exact: true })
     .locator(".node rect")
     .first();
-  // Heather outline on a heather wash.
-  const wash = await themeColour(page, "accent");
-  await expect(step).toHaveCSS("fill", wash);
-  await expect(step).toHaveCSS("stroke", await themeColour(page, "primary"));
-
-  await page.emulateMedia({ colorScheme: "dark" });
-  const darkWash = await themeColour(page, "accent");
-  expect(darkWash).not.toBe(wash);
-  await expect(step).toHaveCSS("fill", darkWash);
+  // A violet outline on charcoal.
+  await expect(step).toHaveCSS("fill", await themeColour(page, "accent"));
   await expect(step).toHaveCSS("stroke", await themeColour(page, "primary"));
 });
 

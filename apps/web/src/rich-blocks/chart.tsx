@@ -4,17 +4,17 @@ import { formatValue, type Scale, scaleFor } from "./chart-scale.ts";
 import type { DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";
 
-/** Each series' colour (or each slice's), in order: Moorland's heather, then the workspace colours. */
+/** Each series' colour (or each slice's), in order: the theme's violet, then the chart colours. */
 const COLOURS = [
   { fill: "fill-primary", stroke: "stroke-primary", swatch: "bg-primary" },
-  { fill: "fill-workspace-slate", stroke: "stroke-workspace-slate", swatch: "bg-workspace-slate" },
-  { fill: "fill-workspace-moss", stroke: "stroke-workspace-moss", swatch: "bg-workspace-moss" },
+  { fill: "fill-chart-slate", stroke: "stroke-chart-slate", swatch: "bg-chart-slate" },
+  { fill: "fill-chart-moss", stroke: "stroke-chart-moss", swatch: "bg-chart-moss" },
   {
-    fill: "fill-workspace-bracken",
-    stroke: "stroke-workspace-bracken",
-    swatch: "bg-workspace-bracken",
+    fill: "fill-chart-bracken",
+    stroke: "stroke-chart-bracken",
+    swatch: "bg-chart-bracken",
   },
-  { fill: "fill-workspace-peat", stroke: "stroke-workspace-peat", swatch: "bg-workspace-peat" },
+  { fill: "fill-chart-peat", stroke: "stroke-chart-peat", swatch: "bg-chart-peat" },
 ] as const;
 
 const colour = (index: number) => COLOURS[index % COLOURS.length] ?? COLOURS[0];

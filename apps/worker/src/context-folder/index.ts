@@ -16,7 +16,7 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
 
 /**
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's
- * start, the owner's own edits, a workspace made, renamed, recoloured or archived in the app, the
+ * start, the owner's own edits, a workspace made, renamed, given an icon or archived in the app, the
  * owner context started from the app, a model's save and the owner undoing or editing one, a
  * tidy the owner ticked, a document saved, updated, renamed or deleted or a Thing added, changed
  * or removed (ADR 0020), or a fresh start clearing the whole folder.
@@ -58,7 +58,7 @@ export type ChangeNote = {
   readonly files?: readonly string[];
 };
 
-/** A workspace made, renamed, recoloured or archived in the app. */
+/** A workspace made, renamed, given an icon or archived in the app. */
 export const workspaceChange = (title: string, id: WorkspaceId): ChangeNote => ({
   kind: "workspace",
   title,

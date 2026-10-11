@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { EmptyState } from "@/components/notice";
 import { LIST_ROW, Page, PageTitle } from "@/components/page";
-import { WorkspaceDot } from "@/components/workspace-colour";
+import { WorkspaceIcon } from "@/components/workspace-icon";
 import { classes } from "@/lib/classes";
 import { BackupStatus } from "../../backup-status.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
@@ -63,7 +63,7 @@ function Home() {
                 className={LIST_ROW}
               >
                 <span className="flex items-center gap-3 font-medium">
-                  <WorkspaceDot colour={workspace.colour} />
+                  <WorkspaceIcon icon={workspace.icon} size="md" />
                   {workspace.name}
                 </span>
                 <span className="flex gap-2 text-xs text-muted-foreground">

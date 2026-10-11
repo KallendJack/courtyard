@@ -10,15 +10,34 @@ export type WorkspaceId = z.infer<typeof WorkspaceId>;
 export const WorkspaceMode = z.enum(["planning", "code"]);
 export type WorkspaceMode = z.infer<typeof WorkspaceMode>;
 
-/** The five workspace colours, in the order new workspaces take them (the theme defines each). */
-export const WorkspaceColour = z.enum(["bracken", "heather", "slate", "moss", "peat"]);
-export type WorkspaceColour = z.infer<typeof WorkspaceColour>;
+/**
+ * The plain line icons a workspace can show on its tile (#210), in the order the Icon sheet
+ * offers them. `book` is the plain one a name that says nothing gets.
+ */
+export const WorkspaceIcon = z.enum([
+  "bicycle",
+  "garage",
+  "house",
+  "dumbbell",
+  "server",
+  "code",
+  "book",
+  "sprout",
+  "mountain",
+  "camera",
+  "wallet",
+  "heart",
+  "briefcase",
+  "wrench",
+  "music",
+]);
+export type WorkspaceIcon = z.infer<typeof WorkspaceIcon>;
 
 export const WorkspaceSummary = z.object({
   id: WorkspaceId,
   name: z.string(),
   mode: WorkspaceMode,
-  colour: WorkspaceColour,
+  icon: WorkspaceIcon,
   hasContextFile: z.boolean(),
   /** Why the workspace's config was ignored, when it was. */
   configProblem: z.string().optional(),
@@ -38,10 +57,10 @@ const WorkspaceName = z
   .min(1, "Give the workspace a name.")
   .max(WORKSPACE_NAME_MAX_LENGTH, `Keep the name to ${WORKSPACE_NAME_MAX_LENGTH} characters.`);
 
-/** Changing a workspace from the app: its name, its colour, or both. Its folder stays as it is. */
+/** Changing a workspace from the app: its name, its icon, or both. Its folder stays as it is. */
 export const WorkspaceChange = z
-  .object({ name: WorkspaceName.optional(), colour: WorkspaceColour.optional() })
-  .refine((change) => change.name !== undefined || change.colour !== undefined, {
+  .object({ name: WorkspaceName.optional(), icon: WorkspaceIcon.optional() })
+  .refine((change) => change.name !== undefined || change.icon !== undefined, {
     message: "Say what to change.",
   });
 export type WorkspaceChange = z.infer<typeof WorkspaceChange>;

@@ -1,13 +1,13 @@
 import type { SessionId, WorkspaceId } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { WorkspaceDot } from "./workspace-colour";
+import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 const loggedIn = getRouteApi("/_app");
 
 const BACK = "flex w-fit items-center gap-2 text-xs font-medium text-primary-text hover:underline";
 
 /**
- * The way back above a page's title: to a workspace, named and in its colour, or with no
+ * The way back above a page's title: to a workspace, named, with its icon, or with no
  * workspace, to the home page's list of them; from a pull request's review, to its session.
  */
 export function BackLink(props: {
@@ -40,7 +40,7 @@ export function BackLink(props: {
       aria-label={session === undefined ? `Back to ${name}` : "Back to the session"}
       className={BACK}
     >
-      {workspace && <WorkspaceDot colour={workspace.colour} small />}
+      {workspace && <WorkspaceIcon icon={workspace.icon} size="sm" />}
       {within === undefined ? name : `${name} · ${within}`}
     </Link>
   );

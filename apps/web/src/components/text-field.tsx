@@ -12,7 +12,7 @@ const SIZES = {
 } as const;
 
 /**
- * A labelled text box in the Moorland theme, with its error underneath (ADR 0012). Safe on the
+ * A labelled text box in the theme, with its error underneath (ADR 0012). Safe on the
  * first load. Everything else an input takes (type, value, autoComplete, a ref) passes through.
  */
 export function TextField({

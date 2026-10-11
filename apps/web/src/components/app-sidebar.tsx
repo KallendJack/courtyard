@@ -5,7 +5,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
-import { WorkspaceDot } from "./workspace-colour.tsx";
+import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 /**
  * Loaded once a workspace is open, so it stays off the first load: the home page lists no
@@ -56,7 +56,7 @@ const remember = (collapsed: boolean) => {
 
 /**
  * The workspace switcher on an unfolded phone or a desktop. It collapses to a rail of workspace
- * dots with its toggle or Ctrl+B, and each device remembers which way it was left.
+ * icons with its toggle or Ctrl+B, and each device remembers which way it was left.
  */
 export function AppSidebar(props: {
   workspaces: readonly WorkspaceSummary[];
@@ -68,7 +68,7 @@ export function AppSidebar(props: {
 
   useEffect(() => remember(collapsed), [collapsed]);
 
-  /** A workspace's row: its dot, and its name until the sidebar is a rail. */
+  /** A workspace's row: its icon, violet while it's open, and its name until the sidebar is a rail. */
   const row = (workspace: WorkspaceSummary) => (
     <li key={workspace.id}>
       <Link
@@ -78,7 +78,7 @@ export function AppSidebar(props: {
         title={collapsed ? workspace.name : undefined}
         className={WORKSPACE_ROW}
       >
-        <WorkspaceDot colour={workspace.colour} />
+        <WorkspaceIcon icon={workspace.icon} size="md" open={workspace.id === workspaceId} />
         <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
           {workspace.name}
         </span>
@@ -136,8 +136,7 @@ export function AppSidebar(props: {
                 "text-muted-foreground data-[status=active]:text-foreground",
               )}
             >
-              {/* As wide as a dot's slot, so the names line up. */}
-              <Plus className="-mx-[3px] size-4 shrink-0" aria-hidden />
+              <Plus className="size-4 shrink-0" aria-hidden />
               <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
                 New workspace
               </span>

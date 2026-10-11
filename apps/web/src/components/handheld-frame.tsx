@@ -22,7 +22,7 @@ import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
 import { RecentSessions } from "./recent-sessions.tsx";
 import { TalkBar } from "./talk-strip.tsx";
-import { WorkspaceDot } from "./workspace-colour.tsx";
+import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
 addStylesheet("handheld-frame", css);
@@ -334,9 +334,9 @@ export default function HandheldFrame(props: {
 }
 
 /**
- * A workspace's tile: its dot and name, ringed in violet while it's open. A code workspace's has
- * a gold edge (Paper board 03). Tapping the open one again, or holding it, shows its recent
- * sessions.
+ * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
+ * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). Tapping the
+ * open one again, or holding it, shows its recent sessions.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
@@ -362,7 +362,7 @@ function Tile(props: {
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
         "flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
         props.look === "rail"
-          ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-[12px]/[15px] [&>span:first-child]:size-3.5"
+          ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-[12px]/[15px]"
           : "h-13 gap-2 rounded-lg px-4 text-sm/[18px] whitespace-nowrap",
         open
           ? "bg-muted font-bold text-foreground shadow-[0_0_22px] shadow-primary/40 ring-2 ring-primary"
@@ -371,7 +371,7 @@ function Tile(props: {
             : "bg-muted/60 text-foreground/70",
       )}
     >
-      <WorkspaceDot colour={workspace.colour} />
+      <WorkspaceIcon icon={workspace.icon} size="tile" open={open} />
       {workspace.name}
     </Link>
   );

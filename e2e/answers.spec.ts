@@ -61,7 +61,7 @@ const looksOf = (element: Locator) =>
     return { colour: style.color, italic: style.fontStyle === "italic" };
   });
 
-test("code is coloured by language from the theme, light and dark", async ({ page }) => {
+test("code is coloured by language from the theme", async ({ page }) => {
   const scripts = watchScripts(page);
   const highlighter = () => scripts.filter((file) => /highlight|lowlight/.test(file));
   await ask(page, "No code here, just words.");
@@ -72,22 +72,10 @@ test("code is coloured by language from the theme, light and dark", async ({ pag
   const block = session.getByRole("figure", { name: "Python" });
   const token = (text: string) => block.locator("span", { hasText: new RegExp(`^${text}$`) });
 
-  // Moorland's colours, deepened to read on white.
+  // The code colours, each its own token in the theme.
   await expect
     .poll(() => looksOf(token("def")))
-    .toEqual({ colour: "rgb(106, 63, 110)", italic: false });
-  expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(79, 96, 114)", italic: false });
-  expect(await looksOf(token("30"))).toEqual({ colour: "rgb(138, 101, 48)", italic: false });
-  expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(86, 102, 58)", italic: false });
-  expect(await looksOf(token("# sets, reps and kg"))).toEqual({
-    colour: "rgb(98, 90, 96)",
-    italic: true,
-  });
-  expect(highlighter().length).toBeGreaterThan(0);
-
-  // The workspace colours as they are.
-  await page.emulateMedia({ colorScheme: "dark" });
-  expect(await looksOf(token("def"))).toEqual({ colour: "rgb(183, 132, 187)", italic: false });
+    .toEqual({ colour: "rgb(183, 132, 187)", italic: false });
   expect(await looksOf(token("volume"))).toEqual({ colour: "rgb(159, 178, 198)", italic: false });
   expect(await looksOf(token("30"))).toEqual({ colour: "rgb(201, 162, 107)", italic: false });
   expect(await looksOf(token('"kg"'))).toEqual({ colour: "rgb(169, 188, 133)", italic: false });
@@ -95,6 +83,7 @@ test("code is coloured by language from the theme, light and dark", async ({ pag
     colour: "rgb(140, 140, 140)",
     italic: true,
   });
+  expect(highlighter().length).toBeGreaterThan(0);
 });
 
 test("maths is drawn as formulas, in all three forms, and prices stay text", async ({ page }) => {
@@ -296,15 +285,10 @@ test.describe("charts", () => {
       await expect(chart.locator("svg text", { hasText: new RegExp(`^${text}$`) })).not.toHaveCount(
         0,
       );
-    const heather = await themeColour(page, "primary");
-    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill(heather));
+    const violet = await themeColour(page, "primary");
+    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill(violet));
     await expect(session.locator("[aria-live]").last()).toContainText("That's the lot.");
     expect(chartCode().length).toBe(1);
-
-    await page.emulateMedia({ colorScheme: "dark" });
-    const darkHeather = await themeColour(page, "primary");
-    expect(darkHeather).not.toBe(heather);
-    expect(await coloursOf(bars, "fill")).toEqual(Array(5).fill(darkHeather));
   });
 
   test("a line chart draws each series in its own colour, named in a legend", async ({ page }) => {
@@ -324,10 +308,10 @@ test.describe("charts", () => {
     const chart = session.getByRole("figure", { name: "Top sets" });
     await expect(chart.getByRole("listitem")).toHaveText(["Squat", "Deadlift"]);
     await expect(chart.locator("svg polyline")).toHaveCount(2);
-    // Heather, then slate.
+    // Violet, then slate.
     expect(await coloursOf(chart.locator("svg polyline"), "stroke")).toEqual([
       await themeColour(page, "primary"),
-      await themeColour(page, "workspace-slate"),
+      await themeColour(page, "chart-slate"),
     ]);
     // A dot on every value, and each line's latest value written at its end.
     await expect(chart.locator("svg circle")).toHaveCount(8);
@@ -346,11 +330,11 @@ test.describe("charts", () => {
     );
     const chart = session.getByRole("figure", { name: "Pie chart" });
     await expect(chart.locator("svg [data-series]")).toHaveCount(3);
-    // Heather, slate, then moss.
+    // Violet, slate, then moss.
     expect(await coloursOf(chart.locator("svg [data-series]"), "fill")).toEqual([
       await themeColour(page, "primary"),
-      await themeColour(page, "workspace-slate"),
-      await themeColour(page, "workspace-moss"),
+      await themeColour(page, "chart-slate"),
+      await themeColour(page, "chart-moss"),
     ]);
     await expect(chart.getByRole("listitem")).toHaveText([
       "Drivetrain18562%",
