@@ -1,8 +1,8 @@
-import { Effort, type ModelRef, takesEffort } from "@courtyard/contract";
+import { Effort, type ModelRef, type ProviderList, takesEffort } from "@courtyard/contract";
 import { useState } from "react";
 import { Select } from "@/components/select";
 import { limitLabel } from "./limits.ts";
-import { effortLabel, type OfferedModel } from "./models.ts";
+import { effortLabel, type OfferedModel, unavailableModel } from "./models.ts";
 
 /** A model's key, as the pickers' values name it. */
 export const modelKey = (model: ModelRef) => `${model.provider}/${model.model}`;
@@ -13,10 +13,12 @@ const DEFAULT = "";
 /**
  * The model and effort a message goes with. Until the owner picks, they follow the session's last
  * message (once its events have replayed), else the first model that isn't at its usage limit, at
- * its default effort. A model change
- * keeps the effort if the new model takes it, and goes back to Default if not.
+ * its default effort. A session's model whose provider is listed but unavailable stays chosen, and
+ * `unavailable` says nothing can be sent to it: only the owner switches model (#299). A model
+ * change keeps the effort if the new model takes it, and goes back to Default if not.
  */
 export const useModelChoice = (choice: {
+  providers: ProviderList["providers"];
   models: readonly OfferedModel[];
   followModel: ModelRef | undefined;
   followEffort: Effort | undefined;
@@ -28,8 +30,13 @@ export const useModelChoice = (choice: {
 
   const followedKey = choice.followModel ? modelKey(choice.followModel) : undefined;
   const following = chosenKey === undefined && models.some((m) => modelKey(m.ref) === followedKey);
+  const kept =
+    chosenKey === undefined && !following && choice.followModel
+      ? unavailableModel(choice.providers, choice.followModel)
+      : undefined;
   const wantedKey = chosenKey ?? (following ? followedKey : undefined);
   const model =
+    kept ??
     models.find((m) => modelKey(m.ref) === wantedKey) ??
     models.find((m) => m.limit === undefined) ??
     models[0];
@@ -39,6 +46,7 @@ export const useModelChoice = (choice: {
   return {
     model,
     effort,
+    unavailable: kept !== undefined,
     pickModel: (key: string) => {
       const picked = models.find((m) => modelKey(m.ref) === key);
       setChosenKey(key);
@@ -76,9 +84,11 @@ export function ModelPickers(props: {
   /** Only from tablet width up, where there's room beside the message box. */
   wideOnly?: boolean;
 }) {
-  const { models, choice, look } = props;
+  const { choice, look } = props;
   const { model } = choice;
   const wideOnly = props.wideOnly === true;
+  // A kept model whose provider is unavailable is listed too, so the picker still shows it.
+  const models = choice.unavailable && model ? [model, ...props.models] : props.models;
   return (
     <>
       <Select

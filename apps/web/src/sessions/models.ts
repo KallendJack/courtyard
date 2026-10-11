@@ -27,6 +27,28 @@ export const availableModels = (providers: ProviderList["providers"]) =>
 export type OfferedModel = ReturnType<typeof availableModels>[number];
 
 /**
+ * A model whose provider is listed but can't be used now, named by its id: a session's last model,
+ * kept chosen so nothing switches model by itself (#299). `undefined` for any other model.
+ */
+export const unavailableModel = (
+  providers: ProviderList["providers"],
+  ref: ModelRef,
+): OfferedModel | undefined => {
+  const provider = providers.find((each) => each.id === ref.provider);
+  if (provider === undefined || provider.available) return undefined;
+  return {
+    ref,
+    label: `${provider.label} · ${ref.model}`,
+    name: ref.model,
+    providerLabel: provider.label,
+    followsDefault: false,
+    efforts: [],
+    defaultEffort: undefined,
+    limit: undefined,
+  };
+};
+
+/**
  * The model a message went to and its effort, as the line where the model changes says them:
  * "Codex · GPT-5.5, default effort". A model no longer on offer is named by its id.
  */

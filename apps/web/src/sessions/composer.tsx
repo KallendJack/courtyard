@@ -137,6 +137,7 @@ export const Composer = memo(function Composer(props: {
 }) {
   const models = availableModels(props.providers);
   const choice = useModelChoice({
+    providers: props.providers,
     models,
     followModel: props.initialModel,
     followEffort: props.initialEffort,
@@ -251,6 +252,8 @@ export const Composer = memo(function Composer(props: {
       send.setError("No model is available. Check the providers' settings.");
       return false;
     }
+    // Its provider is unavailable, and the line under the box says why (#299).
+    if (choice.unavailable) return false;
     // Words, attachments or both: a photo or PDF can go on its own (#164).
     if (message.trim() === "" && attaching.length === 0) return false;
     const sent = await send.run(
@@ -341,6 +344,12 @@ export const Composer = memo(function Composer(props: {
   };
 
   const label = props.submitLabel ?? "Send";
+  const cantSend =
+    send.busy ||
+    preparing > 0 ||
+    props.disabled === true ||
+    models.length === 0 ||
+    choice.unavailable;
   // On a narrow screen a session's box is one line with a round button, and the chip above it
   // opens the pickers in a sheet; beside the box they're there from tablet width up.
   const compact = props.compactOnNarrow === true;
@@ -550,9 +559,7 @@ export const Composer = memo(function Composer(props: {
                   drop={() => dictating.current?.stop("drop")}
                   keep={() => dictating.current?.stop("keep")}
                   send={label}
-                  sendDisabled={
-                    send.busy || preparing > 0 || props.disabled === true || models.length === 0
-                  }
+                  sendDisabled={cantSend}
                 />
               </Suspense>
             ) : (
@@ -607,7 +614,7 @@ export const Composer = memo(function Composer(props: {
                 {(!props.stop || text.trim() !== "" || attaching.length > 0) && (
                   <Button
                     type="submit"
-                    disabled={send.busy || preparing > 0 || props.disabled || models.length === 0}
+                    disabled={cantSend}
                     {...(compact ? { narrowIcon: <ArrowUp /> } : {})}
                   >
                     {label}
