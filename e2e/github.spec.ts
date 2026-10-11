@@ -1,4 +1,5 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { pageScrollsSideways } from "./page-scroll.ts";
 
 // Signing in to GitHub through Courtyard (#99), against the fake GitHub start-worker.mjs gives the
 // worker: its sign-in finishes a couple of seconds after it starts, as entering the code on
@@ -364,10 +365,7 @@ test.describe("on the cover screen", () => {
     await review.getByRole("button", { name: "Read it all" }).click();
     await expect(review).toContainText("Two-way door, the workspace page only.");
     await expect(review.getByRole("button", { name: "Merge" })).toBeDisabled();
-    const sideways = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(sideways).toBe(0);
+    expect(await pageScrollsSideways(page)).toBe(false);
 
     await request.post("/api/github/sign-out", { data: {} });
   });

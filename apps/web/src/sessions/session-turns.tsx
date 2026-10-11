@@ -1,5 +1,5 @@
 import type { ProviderList, SessionId, WorkspaceId } from "@courtyard/contract";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Ref,
   useEffect,
@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePageScroll } from "@/components/page-scroll";
 import type { DocumentsHere } from "./documents.tsx";
 import type { QueuedMessage, Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
@@ -20,8 +21,11 @@ const OVERSCAN = 6;
 /** How close to the bottom still counts as "at the end", in pixels. */
 const NEAR_THE_END = 150;
 
-const atTheEnd = () =>
-  window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - NEAR_THE_END;
+const atTheEnd = (scroller: HTMLElement) =>
+  scroller.clientHeight + scroller.scrollTop >= scroller.scrollHeight - NEAR_THE_END;
+
+/** Scrolls the page to its end. */
+const toTheEnd = (scroller: HTMLElement) => scroller.scrollTo({ top: scroller.scrollHeight });
 
 /**
  * A session's turns, drawing only those near the screen, so a session hundreds of turns long
@@ -67,17 +71,27 @@ export function SessionTurns(props: {
   // page above it changes height (the "reconnecting" banner appearing, say).
   const [scrollMargin, setScrollMargin] = useState(0);
 
+  // The page scrolls on its panel, not the window (#266).
+  const scroller = usePageScroll();
+
   useLayoutEffect(() => {
     const element = list.current;
-    if (!element) return;
-    const measure = () => setScrollMargin(element.getBoundingClientRect().top + window.scrollY);
+    if (!element || !scroller) return;
+    const measure = () =>
+      setScrollMargin(
+        element.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          scroller.clientTop +
+          scroller.scrollTop,
+      );
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(document.body);
+    for (const child of scroller.children) observer.observe(child);
     return () => observer.disconnect();
-  }, []);
+  }, [scroller]);
 
-  const virtualizer = useWindowVirtualizer({
+  const virtualizer = useVirtualizer({
+    getScrollElement: () => scroller,
     count: turns.length,
     estimateSize: () => ESTIMATED_TURN_HEIGHT,
     overscan: OVERSCAN,
@@ -98,9 +112,9 @@ export function SessionTurns(props: {
     props.follow,
     () => () => {
       setFollowing(true);
-      window.scrollTo({ top: document.documentElement.scrollHeight });
+      if (scroller) toTheEnd(scroller);
     },
-    [setFollowing],
+    [setFollowing, scroller],
   );
 
   // Only scrolling up stops following: the page grows between scrolling to the end and the
@@ -108,39 +122,39 @@ export function SessionTurns(props: {
   // reading back. Only scrolling down to the end follows again: the browser moving the page up
   // because it got shorter for a moment (a new turn not measured yet) isn't the owner coming back.
   useEffect(() => {
-    let lastScrollY = window.scrollY;
+    if (!scroller) return;
+    let lastScrollTop = scroller.scrollTop;
     const onScroll = () => {
-      const down = window.scrollY > lastScrollY;
+      const now = scroller.scrollTop;
+      const down = now > lastScrollTop;
       setFollowing(
-        following.current ? atTheEnd() || window.scrollY >= lastScrollY : atTheEnd() && down,
+        following.current ? atTheEnd(scroller) || now >= lastScrollTop : atTheEnd(scroller) && down,
       );
-      lastScrollY = window.scrollY;
+      lastScrollTop = now;
     };
-    // The keyboard opening or closing changes the screen's height (#168): at the end, the end
-    // stays in view above the message box; reading back, the page stays where it is, which the
-    // browser does by itself.
-    const onResize = () => {
-      if (opened.current && following.current) {
-        window.scrollTo({ top: document.documentElement.scrollHeight });
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize);
+    // The keyboard opening or closing, or the message box growing, changes the page's height
+    // (#168): at the end, the end stays in view above the message box; reading back, the page
+    // stays where it is, which the browser does by itself.
+    const resized = new ResizeObserver(() => {
+      if (opened.current && following.current) toTheEnd(scroller);
+    });
+    resized.observe(scroller);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
+      resized.disconnect();
+      scroller.removeEventListener("scroll", onScroll);
     };
-  }, [setFollowing]);
+  }, [setFollowing, scroller]);
 
   // A new turn (or the session opening) goes to the end, which may not be drawn yet.
   useLayoutEffect(() => {
-    if (turns.length === 0) return;
+    if (turns.length === 0 || !scroller) return;
     if (!opened.current || following.current) {
       opened.current = true;
       virtualizer.scrollToIndex(turns.length - 1, { align: "end" });
-      requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
+      requestAnimationFrame(() => toTheEnd(scroller));
     }
-  }, [turns.length, virtualizer]);
+  }, [turns.length, virtualizer, scroller]);
 
   // While following, the end stays in view as the turns grow: an answer being revealed, a turn
   // failing, or every turn redrawn. The browser reports a change of size at most once a frame, so
@@ -150,12 +164,10 @@ export function SessionTurns(props: {
   // press that becomes a scroll leaves the page to the owner.
   useEffect(() => {
     const element = list.current;
-    if (!element) return;
+    if (!element || !scroller) return;
     let pressed = false;
-    const toTheEnd = () => {
-      if (opened.current && following.current && !pressed) {
-        window.scrollTo({ top: document.documentElement.scrollHeight });
-      }
+    const follow = () => {
+      if (opened.current && following.current && !pressed) toTheEnd(scroller);
     };
     const press = () => {
       pressed = true;
@@ -163,12 +175,12 @@ export function SessionTurns(props: {
     const letGo = () => {
       if (!pressed) return;
       pressed = false;
-      requestAnimationFrame(toTheEnd);
+      requestAnimationFrame(follow);
     };
     const cancel = () => {
       pressed = false;
     };
-    const observer = new ResizeObserver(toTheEnd);
+    const observer = new ResizeObserver(follow);
     observer.observe(element);
     element.addEventListener("pointerdown", press);
     window.addEventListener("pointerup", letGo);
@@ -179,7 +191,7 @@ export function SessionTurns(props: {
       window.removeEventListener("pointerup", letGo);
       window.removeEventListener("pointercancel", cancel);
     };
-  }, []);
+  }, [scroller]);
 
   const last = turns.at(-1);
 

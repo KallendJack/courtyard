@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { pageScrollsSideways } from "./page-scroll.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 import { themeColour } from "./theme.ts";
 
@@ -209,11 +210,11 @@ test.describe("on a phone", () => {
       return {
         scrolls: figure.scrollWidth > figure.clientWidth,
         overflow: getComputedStyle(figure).overflowX,
-        page: document.documentElement.scrollWidth <= window.innerWidth,
         ownSize: svg?.getBoundingClientRect().width === svg?.viewBox.baseVal.width,
       };
     });
-    expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true, ownSize: true });
+    expect(sizes).toEqual({ scrolls: true, overflow: "auto", ownSize: true });
+    expect(await pageScrollsSideways(page)).toBe(false);
   });
 });
 

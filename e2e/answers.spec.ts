@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { pageScrollsSideways } from "./page-scroll.ts";
 import { themeColour } from "./theme.ts";
 
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
@@ -408,9 +409,9 @@ test.describe("on a phone", () => {
     const sizes = await formula.evaluate((element) => ({
       scrolls: element.scrollWidth > element.clientWidth,
       overflow: getComputedStyle(element).overflowX,
-      page: document.documentElement.scrollWidth <= window.innerWidth,
     }));
-    expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+    expect(sizes).toEqual({ scrolls: true, overflow: "auto" });
+    expect(await pageScrollsSideways(page)).toBe(false);
   });
 
   test("a chart fits the screen, and a crowded one scrolls sideways, not the page", async ({
@@ -435,19 +436,17 @@ test.describe("on a phone", () => {
       scroller.evaluate((element) => ({
         scrolls: element.scrollWidth > element.clientWidth,
         overflow: getComputedStyle(element).overflowX,
-        page: document.documentElement.scrollWidth <= window.innerWidth,
       }));
 
     expect(await sizes(scrollerOf("Spent on the bike, by month"))).toEqual({
       scrolls: false,
       overflow: "auto",
-      page: true,
     });
     expect(await sizes(scrollerOf("Spent this year"))).toEqual({
       scrolls: true,
       overflow: "auto",
-      page: true,
     });
+    expect(await pageScrollsSideways(page)).toBe(false);
   });
 
   test("a wide table scrolls sideways, not the page, and still sorts", async ({ page }) => {
@@ -458,9 +457,9 @@ test.describe("on a phone", () => {
     const sizes = await scroller.evaluate((element) => ({
       scrolls: element.scrollWidth > element.clientWidth,
       overflow: getComputedStyle(element).overflowX,
-      page: document.documentElement.scrollWidth <= window.innerWidth,
     }));
-    expect(sizes).toEqual({ scrolls: true, overflow: "auto", page: true });
+    expect(sizes).toEqual({ scrolls: true, overflow: "auto" });
+    expect(await pageScrollsSideways(page)).toBe(false);
 
     await table.getByRole("columnheader", { name: "Weight" }).getByRole("button").click();
     expect(await column(table, 2)).toEqual(["355 g", "360 g", "360 g", "365 g"]);

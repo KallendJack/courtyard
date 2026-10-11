@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { z } from "zod";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
+import { fromTheEnd, pageScroll, pageScrollsSideways, scrollPageTo } from "./page-scroll.ts";
 
 /** The Galaxy Z Fold 8's screens, and a desktop, in CSS pixels. */
 const COVER_SCREEN = { width: 400, height: 640 }; // 10:16, folded
@@ -85,10 +86,7 @@ test.describe("on the cover screen", () => {
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
+    expect(await pageScrollsSideways(page)).toBe(false);
   });
 });
 
@@ -108,6 +106,20 @@ for (const [name, viewport] of [
       expect(nav.x + nav.width).toBeLessThanOrEqual(content.x + 1);
       expect(nav.height).toBeGreaterThan(viewport.height * 0.5);
     });
+
+    test("only the page scrolls, on its panel, and the workspaces stay put (#266)", async ({
+      page,
+    }) => {
+      await page.goto(LONG_SESSION);
+      const session = page.getByRole("list", { name: "Session" });
+      await expect(session).toContainText(`You said: Message ${LONG_SESSION_TURNS}`);
+      const workspaces = await boxOf(page.getByRole("navigation", { name: "Workspaces" }));
+
+      await scrollPageTo(page, 0);
+      await expect(session.getByText("You said: Message 1", { exact: true })).toBeVisible();
+      expect(await pageScroll(page)).toMatchObject({ document: false, windowScrollY: 0 });
+      expect(await boxOf(page.getByRole("navigation", { name: "Workspaces" }))).toEqual(workspaces);
+    });
   });
 }
 
@@ -119,15 +131,9 @@ test("draws only the turns near the screen in a long session", async ({ page }) 
   const drawn = await session.locator(":scope > li").count();
   expect(drawn).toBeLessThan(40);
 
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollPageTo(page, 0);
   await expect(session.getByText("You said: Message 1", { exact: true })).toBeVisible();
 });
-
-/** How far the bottom of the screen is from the end of the page, in pixels. */
-const fromTheEnd = (page: Page) =>
-  page.evaluate(
-    () => document.documentElement.scrollHeight - (window.innerHeight + window.scrollY),
-  );
 
 test.describe("at the end of a long session", () => {
   test.use({ viewport: COVER_SCREEN });
