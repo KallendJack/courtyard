@@ -73,6 +73,9 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
   stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
+- **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
+  calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
+  shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
 - The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
   `docs/architecture.md`.
