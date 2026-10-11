@@ -324,7 +324,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
   - **`review/`:** a code workspace's pull requests and their review (#160, #240). The list (`pull-requests.tsx`,
     the PRs tab's list, a section of a code workspace's page until it has tabs, #222): each session's PR with its
-    title, branch and where its checks stand (`checks.tsx`: moss passed, gold running, red failed), Open or Merged,
+    title, branch and where its checks stand (`checks.tsx`: moss passed, violet running, red failed), Open or Merged,
     and Review. The review, on the session's page in place of the conversation (`?view=review`): All PRs, its
     title and checks, What changed (`what-changed.tsx`): the first line of its description's Summary, and Read it
     all for the whole description (`description.ts` reads its parts, drawn by the answer renderer, Evidence and

@@ -3,7 +3,7 @@ import { classes } from "@/lib/classes";
 
 /**
  * Where a pull request stands, in a few words and its colour (AGENTS.md): checks passed in moss,
- * running in gold (it waits on them before the owner can merge), failed in red, and quiet when it
+ * running in violet (live, as the branch strip has it), failed in red, and quiet when it
  * has none or has ended.
  */
 const standing = (pullRequest: PullRequest) => {
@@ -29,7 +29,7 @@ const standing = (pullRequest: PullRequest) => {
 
 const TONES = {
   passed: { dot: "bg-success", text: "text-success", chip: "border-success/25 bg-success/8" },
-  running: { dot: "bg-warning", text: "text-warning", chip: "border-warning/25 bg-warning/8" },
+  running: { dot: "bg-primary", text: "text-primary-text", chip: "border-primary/25 bg-primary/8" },
   failed: {
     dot: "bg-destructive",
     text: "text-destructive",
