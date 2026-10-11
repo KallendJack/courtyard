@@ -1,0 +1,45 @@
+# Every open issue is in a milestone (docs/agents/roadmap.md), whoever files it: a Courtyard session,
+# a Claude Code helper, or the owner on the phone. One that comes in without is filed into Later, with
+# needs-triage when it has no triage label, so the roadmap (and Courtyard's view of it) never misses it.
+# Once a day, and on demand, the same check runs over every open issue.
+name: Roadmap
+
+on:
+  issues:
+    types: [opened, reopened, demilestoned]
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  file:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ -n "$NUMBER" ]; then
+            numbers="$NUMBER"
+          else
+            numbers=$(gh issue list --state open --limit 1000 --json number --jq '.[].number')
+          fi
+          for n in $numbers; do
+            # Read it now, not from the event: a move between milestones also sends demilestoned.
+            gh issue view "$n" --json state,milestone,labels --jq \
+              '[.state, (.milestone.title // ""), ([.labels[].name] | join(","))] | join("|")' |
+            while IFS="|" read -r state milestone labels; do
+              # One someone placed is theirs; only one that came in unfiled is filed here.
+              [ "$state" = "OPEN" ] && [ -z "$milestone" ] || continue
+              gh issue edit "$n" --milestone Later
+              echo "#$n: no milestone, filed into Later"
+              case ",$labels," in
+                *,needs-triage,*|*,needs-info,*|*,ready-for-agent,*|*,ready-for-human,*|*,wontfix,*) ;;
+                *) gh issue edit "$n" --add-label needs-triage ;;
+              esac
+            done
+          done

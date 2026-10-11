@@ -452,6 +452,8 @@ the web app parses every answer with these schemas.
 - **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into
   jobs side by side (Checks, Unit tests, E2E in four shards) so a run takes about 3 minutes; `.github/actions/setup`
   is the setup they share.
+- **`.github/workflows/roadmap.yml`:** files an issue that comes in without a milestone into `Later` (with
+  `needs-triage` when it has no triage label), on filing and once a day, so the milestones stay the whole roadmap.
 - **`.github/workflows/matt-skills.yml`:** once a week, runs `scripts/matt-skills/check.ts`, which compares
   `matt.json` with Matt's newest release and, when it's behind, writes an issue with his CHANGELOG lines and the new
   pin (its checksum worked out as the worker checks it); the workflow opens it, once per release (ADR 0024).
