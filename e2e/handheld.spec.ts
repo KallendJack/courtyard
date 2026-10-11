@@ -207,7 +207,7 @@ const typeIn = (page: Page, screen: Screen) =>
 
 /** What both screens offer, the same way. */
 const everywhere = (screen: Screen) => {
-  test("every workspace is a tap away, and a second tap on the open one shows its recent sessions", async ({
+  test("every workspace is a tap away, and holding the open one shows its recent sessions", async ({
     page,
   }) => {
     await page.goto("/");
@@ -220,7 +220,7 @@ const everywhere = (screen: Screen) => {
     await workspaces.getByRole("link", { name: "Garage gym" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
 
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     const recent = page.getByRole("dialog", { name: "Garage gym" });
     await recent
       .getByRole("region", { name: "Recent in Garage gym" })
@@ -235,12 +235,25 @@ const everywhere = (screen: Screen) => {
     await expect(workspaces.getByRole("link", { name: "New workspace" })).toBeVisible();
   });
 
+  test("tapping the open workspace from one of its sessions goes back to its page", async ({
+    page,
+  }) => {
+    await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
+    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+
+    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Garage gym" })).toHaveCount(0);
+  });
+
   test("the recent sessions start a new session, with the workspace's message box open for it", async ({
     page,
   }) => {
     await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
     const workspaces = page.getByRole("navigation", { name: "Workspaces" });
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     const recent = page.getByRole("dialog", { name: "Garage gym" });
     await recent.getByRole("button", { name: "New session" }).click();
 
@@ -252,7 +265,7 @@ const everywhere = (screen: Screen) => {
     // From the workspace's own page, too: on the cover screen, with the box closed by then.
     await page.getByRole("heading", { level: 1 }).click();
     if (screen === "cover") await expect(message(page)).toBeHidden();
-    await workspaces.getByRole("link", { name: "Garage gym" }).click();
+    await workspaces.getByRole("link", { name: "Garage gym" }).dispatchEvent("contextmenu");
     await recent.getByRole("button", { name: "New session" }).click();
     await expect(recent).toBeHidden();
     await expect(message(page)).toBeFocused();

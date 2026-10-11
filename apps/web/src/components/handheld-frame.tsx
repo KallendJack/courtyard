@@ -351,8 +351,9 @@ export default function HandheldFrame(props: {
 
 /**
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
- * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). Tapping the
- * open one again, or holding it, shows its recent sessions.
+ * (Paper board Handheld · 36). A code workspace's has a gold edge (Paper board 03). A tap always
+ * goes to the workspace's page, even from one of its sessions (#276); holding the open one shows
+ * its recent sessions.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
@@ -361,7 +362,7 @@ function Tile(props: {
   showRecent: () => void;
 }) {
   const { workspace, open } = props;
-  const again = (event: { preventDefault: () => void }) => {
+  const held = (event: { preventDefault: () => void }) => {
     if (!open) return;
     event.preventDefault();
     props.showRecent();
@@ -371,9 +372,7 @@ function Tile(props: {
       to="/workspaces/$workspaceId"
       params={{ workspaceId: workspace.id }}
       aria-label={workspace.name}
-      {...(open ? { "aria-haspopup": "dialog" as const } : {})}
-      onClick={again}
-      onContextMenu={again}
+      onContextMenu={held}
       className={classes(
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
         "flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
