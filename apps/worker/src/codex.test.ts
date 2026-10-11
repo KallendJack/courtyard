@@ -127,6 +127,8 @@ const standIn = (
     skills?: readonly string[];
     /** An error for `skills/list` only. */
     refuseSkills?: string;
+    /** Whether Codex is too busy right now to answer who's signed in, as on a busy machine (#282). */
+    busy?: () => boolean;
     turn?: TurnScript;
   } = {},
 ) => {
@@ -191,6 +193,7 @@ const standIn = (
       }
       if (id === undefined) return;
       if (script.refuse && method !== "initialize") return fail(id, script.refuse);
+      if (method === "account/read" && script.busy?.()) return;
       switch (method) {
         case "initialize":
           return reply(id, { userAgent: "codex/0.161.0", codexHome: join(dataDir, "codex") });
@@ -485,6 +488,73 @@ describe("Codex's status, when it can't be used", () => {
       available: false,
       reason: "Codex couldn't start on the worker machine, or didn't answer.",
     });
+  });
+});
+
+describe("Codex's status, when the worker machine is busy (#282)", () => {
+  /** A provider on this stand-in, with a clock the test moves on. */
+  const onClock = (startAppServer: StartAppServer) => {
+    let clock = 0;
+    const provider = createCodexProvider({
+      dataDir,
+      startAppServer,
+      now: () => clock,
+      requestTimeoutMs: 20,
+    });
+    return {
+      provider,
+      later: (ms: number) => {
+        clock += ms;
+      },
+    };
+  };
+
+  it("keeps the last good answer, with its models, when Codex doesn't answer in time", async () => {
+    let busy = false;
+    const codex = standIn({ busy: () => busy });
+    const { provider, later } = onClock(codex.startAppServer);
+    await provider.status();
+    busy = true;
+    later(61_000);
+
+    const status = await provider.status();
+
+    expect(status).toMatchObject({ available: true, models: [{ id: "gpt-6.1-sol" }, {}] });
+  });
+
+  it("checks again after a few seconds when Codex couldn't start", async () => {
+    const codex = standIn();
+    let starts = 0;
+    const { provider, later } = onClock((launch) => {
+      starts += 1;
+      if (starts > 1) return codex.startAppServer(launch);
+      setImmediate(launch.onExit);
+      return ok({ send: () => {}, stop: () => {} });
+    });
+    expect(await provider.status()).toMatchObject({ available: false });
+
+    later(5_000);
+    expect(await provider.status()).toMatchObject({ available: false });
+    later(6_000);
+    const status = await provider.status();
+
+    expect(status).toMatchObject({ available: true });
+    expect(starts).toBe(2);
+  });
+
+  it("counts a turn that finished as a good check", async () => {
+    let busy = false;
+    const codex = standIn({ busy: () => busy });
+    const { provider, later } = onClock(codex.startAppServer);
+    await provider.status();
+    busy = true;
+    later(61_000);
+
+    await runTurn(provider);
+    const status = await provider.status();
+
+    expect(status).toMatchObject({ available: true });
+    expect(codex.requests("account/read")).toHaveLength(1);
   });
 });
 

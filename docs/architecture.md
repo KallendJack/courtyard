@@ -114,6 +114,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 - **`providers/`:** the provider seam. `index.ts` says what every provider does (its status, its models, one turn,
   one-off questions, a sign-in when it has one). Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`.
+  Claude and Codex keep their status with `createStatusKeeper` (#282): a good answer for a minute, one saying they
+  can't be used for a few seconds, the last good one through a check that gets no answer in time, and a finished
+  turn counts as a good check.
 - **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
   provider's models.
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
