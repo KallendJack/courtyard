@@ -36,7 +36,9 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
 
   // The page carries on by itself once the owner has said yes on GitHub.
   const signedIn = connections.getByRole("listitem", { name: "GitHub · octo-owner" });
-  await expect(signedIn).toContainText("courtyard · stacks", { timeout: 15_000 });
+  await expect(signedIn).toContainText("courtyard · garrett-kitchens · side-project · stacks", {
+    timeout: 15_000,
+  });
   await expect(signedIn).toContainText("Connected");
 
   await page.goto("/workspaces/side-project");
@@ -384,6 +386,42 @@ test.describe("on the unfolded Fold", () => {
     expect(deleted.ok(), await deleted.text()).toBe(true);
     await page.goto(`/workspaces/side-project/sessions/${first}?view=review`);
     await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  // A code workspace from the app (#258, #264; Paper, "Tablet · New workspace, Code"): Code lists
+  // the repos Courtyard's GitHub App reaches, and the one picked comes onto the worker machine.
+  test("New workspace opens with nothing focused, and Code makes a workspace on a picked repo, its name filled in", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/new-workspace");
+    await expect(page.getByRole("heading", { level: 1, name: "New workspace" })).toBeVisible();
+    // On a touch screen the keyboard waits for a tap, so nothing is focused.
+    await expect(page.getByRole("textbox", { name: "Name" })).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
+    const kind = page.getByRole("group", { name: "Kind" });
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    const repos = page.getByRole("group", { name: "Repo" });
+    // Side project's repo is a code workspace's already: greyed, and it can't be picked.
+    await expect(repos.getByRole("radio", { name: /^side-project/ })).toBeDisabled();
+    await expect(repos.locator("label", { hasText: "side-project" })).toContainText("Added");
+    await repos.locator("label", { hasText: "garrett-kitchens" }).click();
+
+    await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Garrett Kitchens");
+    await expect(page.getByRole("textbox", { name: "What's it for?" })).toHaveValue(
+      "Website for a kitchen fitter: reconnect with the client and try new designs",
+    );
+    await page.getByRole("button", { name: "Create Garrett Kitchens" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garrett-kitchens$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Garrett Kitchens" })).toBeVisible();
+    await page.goto("/new-workspace");
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    await expect(repos.getByRole("radio", { name: /^garrett-kitchens/ })).toBeDisabled();
 
     await request.post("/api/github/sign-out", { data: {} });
   });

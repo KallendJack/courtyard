@@ -228,9 +228,20 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
   stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
   latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
-  merges and closes it (#160); and lists and makes a repository's labels and opens a pull request (the setup
-  check, #181). Its routes are
+  merges and closes it (#160); lists and makes a repository's labels and opens a pull request (the setup
+  check, #181); and lists the repos the GitHub App reaches, with each one's description and where git
+  clones it from (#258). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
+- **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
+  newest pushed first, each marked added when a code workspace works on it already (its repository is
+  that repo's folder here, or its `origin` is that repo on GitHub, read through `code/`), the added ones
+  last. For New workspace → Code, gets a picked repo onto the worker machine, one at a time: a clone
+  into the data folder's `repos/<owner>/<name>` with the environment `github/` gives code sessions, so
+  git asks Courtyard's sign-in through `gh` and no token is kept in the address or git's settings; a
+  copy already there is used as it is. It refuses a repo the GitHub App doesn't reach or that a code
+  workspace works on already. Its route is `/api/github/repos`; `POST /api/workspaces` with a `repo`
+  checks the name is free, places the repo, then makes the workspace on it (`workspaces/` writes
+  `{ mode: "code", repoPath }`).
 - **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
   (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
   out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
@@ -346,6 +357,14 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`notifications/`:** the home page's notifications toggle for this device, beside Connections (#173): it
     subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
     opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
+  - **`new-workspace/`:** New workspace's form (#258, #264), loaded with its page, with its calls
+    (`api.ts`) and a stylesheet of its own (`new-workspace.css`, holding the repo picker's classes too,
+    `components/repo-picker.tsx`), like `review/`. A switch picks Planning (the form as it was) or Code,
+    which lists the owner's repos to pick one from; picking one fills in the name (title-cased from the
+    repo's) and What's it for? (its description on GitHub), shown in full (`WrappingTextField`) before
+    Create. Name is focused on a desktop only, so a touch screen's keyboard waits for a tap. The page
+    offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
+    put what's said there as they would in a message box.
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
   notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
@@ -369,7 +388,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   the folded Fold. It opens its pickers from the frame's Skills, Photo (Add) and Model buttons. The talk strip and
   the Talk key (`talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
   browser's own speech recognition (`speech.ts`, which also vibrates for it) and put the words in the box as they are
-  heard (#198), for the owner to send, or to queue while a turn runs. For the Talk key, the box shows ✕, ■ and ↑
+  heard (#198), for the owner to send, or to queue while a turn runs; on a page without a message box,
+into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). For the Talk key, the box shows ✕, ■ and ↑
   under the words while it listens (`listening-row.tsx`, loaded once it's docked). While the owner talks or an answer
   comes, the screen is kept awake (`wake-lock.ts`) where the browser can;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
@@ -409,7 +429,8 @@ topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for 
 `session-event.ts` for the events, which only the session page parses, and `session-state.ts` for whose turn it
 is in each session a list shows, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, sign-ins, backup, live updates, fresh start, health and errors, and a `chart`
+tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
+which only that page parses), backup, live updates, fresh start, health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.
@@ -579,6 +600,9 @@ things live only in the worker's memory and go when it restarts.
 - `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
   (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
   a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172).
+- `repos/<owner>/<name>/`: a GitHub repo New workspace → Code got onto the worker machine for a code
+  workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
+  names it. It stays when the workspace is archived, and is used again if the repo is picked again.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

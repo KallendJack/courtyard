@@ -136,6 +136,17 @@ writeFileSync(
   }),
 );
 
+// A repo on GitHub that's no workspace's yet (#258), standing in as a bare repository on disk, for
+// New workspace → Code to get onto the worker machine.
+const kitchens = join(codeDir, "garrett-kitchens.git");
+git(codeDir, "init", "-q", "--bare", "-b", "main", "garrett-kitchens.git");
+git(codeDir, "clone", "-q", "garrett-kitchens.git", "kitchens-pusher");
+const kitchensPusher = join(codeDir, "kitchens-pusher");
+writeFileSync(join(kitchensPusher, "README.md"), "# Garrett Kitchens\n");
+git(kitchensPusher, "add", ".");
+git(kitchensPusher, "commit", "-qm", "Start");
+git(kitchensPusher, "push", "-q", "origin", "main");
+
 const { startWorker } = await import("../apps/worker/src/start.ts");
 // GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
 // pushed to origin.git gets a pull request (#172), changing the files the branch changes (#160).
@@ -177,6 +188,20 @@ startWorker({
   startUpdate: standInUpdate,
   github: createFakeGitHub({
     finishAfterMs: 2000,
+    // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
+    // isn't yet, newest pushed first.
+    repos: [
+      "octo-owner/courtyard",
+      {
+        fullName: "octo-owner/garrett-kitchens",
+        description: "Website for a kitchen fitter: reconnect with the client and try new designs",
+        private: true,
+        cloneUrl: kitchens,
+        pushedAt: "2026-10-11T09:00:00Z",
+      },
+      { fullName: "octo-owner/side-project", private: false },
+      "octo-owner/stacks",
+    ],
     opensOnPush: {
       remote: origin,
       checks: (subject) => [
