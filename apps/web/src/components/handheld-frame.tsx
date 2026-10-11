@@ -17,7 +17,7 @@ import { LiveUpdate } from "../live-update.tsx";
 import { Button } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import { FrameButton, modelMark } from "./frame-button.tsx";
-import type { Layout, MessageBox } from "./handheld.ts";
+import type { Layout, MessageBox, TalkTarget } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
 import { RecentSessions } from "./recent-sessions.tsx";
@@ -48,6 +48,8 @@ export default function HandheldFrame(props: {
   dockRef: Ref<HTMLDivElement>;
   /** The page's message box, when it has one. */
   box: MessageBox | undefined;
+  /** A field to talk into, on a page without a message box (#264). */
+  field: TalkTarget | undefined;
   boxOpen: boolean;
   setBoxOpen: (open: boolean) => void;
 }) {
@@ -103,9 +105,14 @@ export default function HandheldFrame(props: {
     setSheet(undefined);
   }, [pathname, setBoxOpen]);
 
-  /** Opens the box with the keyboard in it, while the tap is still the browser's to act on. */
+  /** Where talking goes: the page's message box, or else the field it offers (#264). */
+  const talkTo = box ?? props.field;
+  /**
+   * Opens the box with the keyboard in it, while the tap is still the browser's to act on; or puts
+   * the keyboard in the page's field.
+   */
   const type = () => {
-    if (box === undefined) return;
+    if (box === undefined) return props.field?.focus();
     flushSync(() => setBoxOpen(true));
     box.focus();
   };
@@ -261,7 +268,7 @@ export default function HandheldFrame(props: {
               {add}
               {settings}
               <div className="flex-1" />
-              <TalkKey box={box} type={type} />
+              <TalkKey box={talkTo} type={type} />
             </div>
           </>
         ) : (
@@ -303,7 +310,7 @@ export default function HandheldFrame(props: {
               <div className="flex h-16 gap-2">
                 <TalkBar
                   where={here?.name ?? (pathname === "/" ? "Home" : "Courtyard")}
-                  box={box}
+                  box={talkTo}
                   type={type}
                 />
               </div>

@@ -250,6 +250,19 @@ export const listWorkspaces = async (
   return ok(every.value.map((workspace) => workspace.summary).sort(byName));
 };
 
+/** Every code workspace in the context folder, with the repository it works on (#258). */
+export const listCodeWorkspaces = async (
+  contextDir: string,
+): Promise<Result<{ summary: WorkspaceSummary; repoPath: string }[], WorkspaceError>> => {
+  const every = await readEveryWorkspace(contextDir);
+  if (!every.ok) return every;
+  return ok(
+    every.value.flatMap(({ summary, repoPath }) =>
+      repoPath === null ? [] : [{ summary, repoPath }],
+    ),
+  );
+};
+
 /** How many workspaces there are, archived ones too. */
 export const countWorkspaces = async (
   contextDir: string,
@@ -416,10 +429,18 @@ export const starterContextFile = (name: string, intro?: string) =>
     "",
   ].join("\n");
 
-/** Writes a new workspace's context file and config into its empty folder. */
+/**
+ * Writes a new workspace's context file and config into its empty folder: a code workspace's
+ * config names its repository (README, Code workspaces).
+ */
 const writeStarterFiles = async (
   folder: string,
-  starter: { name: string; intro: string | undefined; icon: WorkspaceIcon },
+  starter: {
+    name: string;
+    intro: string | undefined;
+    icon: WorkspaceIcon;
+    repoPath: string | undefined;
+  },
 ): Promise<Result<null, WorkspaceError>> => {
   const problem: WorkspaceError = {
     kind: "storage",
@@ -432,20 +453,22 @@ const writeStarterFiles = async (
   } catch {
     return err(problem);
   }
-  const config = { icon: starter.icon };
+  const config =
+    starter.repoPath === undefined
+      ? { icon: starter.icon }
+      : { mode: "code", repoPath: starter.repoPath, icon: starter.icon };
   const written = await writeJsonFile(join(folder, CONFIG_FILE), config, { exclusive: true });
   return written.ok ? ok(null) : err(problem);
 };
 
 /**
- * Adds a workspace called `name`: its folder, a starter context file starting with `intro` when
- * there is one, and the icon its name suggests, kept in its config. Refuses a name that can't be
- * a folder name or that another workspace has.
+ * Whether a workspace called `name` can be added: the folder name it would have, or why not (a
+ * name that can't be a folder name, or that another workspace, archived or not, has).
  */
-export const createWorkspace = async (
+export const checkNewName = async (
   contextDir: string,
-  { name, intro }: NewWorkspace,
-): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
+  name: string,
+): Promise<Result<WorkspaceId, WorkspaceError>> => {
   const id = folderNameFor(name);
   if (!id.ok) return id;
   const every = await readEveryWorkspace(contextDir);
@@ -453,7 +476,21 @@ export const createWorkspace = async (
   const clash = nameClash(every.value, { name, id: id.value });
   if (clash) return err(clash);
   const archived = await archivedClash(contextDir, id.value);
-  if (archived) return err(archived);
+  return archived ? err(archived) : id;
+};
+
+/**
+ * Adds a workspace called `name`: its folder, a starter context file starting with `intro` when
+ * there is one, and the icon its name suggests, kept in its config. With `repoPath`, it's a code
+ * workspace on that repository (#258). Refuses a name that can't be a folder name or that another
+ * workspace has.
+ */
+export const createWorkspace = async (
+  contextDir: string,
+  { name, intro, repoPath }: Pick<NewWorkspace, "name" | "intro"> & { readonly repoPath?: string },
+): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
+  const id = await checkNewName(contextDir, name);
+  if (!id.ok) return id;
 
   const folder = join(contextDir, id.value);
   try {
@@ -471,7 +508,8 @@ export const createWorkspace = async (
   const saved = await writeStarterFiles(folder, {
     name,
     intro,
-    icon: suggestIcon(name, "planning"),
+    icon: suggestIcon(name, repoPath === undefined ? "planning" : "code"),
+    repoPath,
   });
   if (!saved.ok) {
     // Half a workspace would just confuse things later.

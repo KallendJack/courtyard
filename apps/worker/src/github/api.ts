@@ -24,6 +24,11 @@ export type GitHubApi = {
   /** The account a token signs in as, and the repos the GitHub App is installed on there. */
   readonly account: (accessToken: string) => Promise<Result<GitHubAccount, string>>;
   /**
+   * The repos the GitHub App is installed on, with what New workspace → Code shows of each and
+   * where git clones it from (#258).
+   */
+  readonly repositories: (accessToken: string) => Promise<Result<readonly FoundRepo[], string>>;
+  /**
    * The latest pull request from `branch` in `repo` (`owner/name`), whatever its state, with the
    * checks on its latest commit (#172); `null` when there's none.
    */
@@ -150,6 +155,21 @@ export type UserToken = {
 
 export type GitHubAccount = { readonly login: string; readonly repos: readonly string[] };
 
+/** A repository as GitHub has it (#258). */
+export type FoundRepo = {
+  /** `owner/name`. */
+  readonly fullName: string;
+  readonly description: string | null;
+  readonly private: boolean;
+  /**
+   * Where git clones it from: its HTTPS address on GitHub, never with a token in it (git asks
+   * Courtyard's sign-in for that, through `gh`).
+   */
+  readonly cloneUrl: string;
+  /** When it was last pushed to, or `null` when it never has been. */
+  readonly pushedAt: string | null;
+};
+
 // GitHub's tokens and names are plain letters, digits, `_` and `-`; anything else is refused, so
 // nothing GitHub sends can break the files they're written into.
 const Token = z.string().regex(/^[A-Za-z0-9_]+$/);
@@ -174,7 +194,16 @@ const User = z.object({ login: Login });
 const Installations = z.object({ installations: z.array(z.object({ id: z.number() })) });
 const Repositories = z.object({
   total_count: z.number(),
-  repositories: z.array(z.object({ full_name: z.string() })),
+  repositories: z.array(
+    z.object({
+      full_name: z.string(),
+      description: z.string().nullable(),
+      private: z.boolean(),
+      // Only GitHub's own address: anything else would send Courtyard's sign-in elsewhere.
+      clone_url: z.string().regex(/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/),
+      pushed_at: z.string().nullable(),
+    }),
+  ),
 });
 
 const Pulls = z.array(z.object({ number: z.number().int().positive() }));
@@ -318,6 +347,36 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     }
   };
 
+  /** Every repo the GitHub App is installed on, across its installations; throws when GitHub fails. */
+  const installedRepos = async (accessToken: string) => {
+    const { installations } = await apiGet(
+      accessToken,
+      `/user/installations?per_page=${PAGE}`,
+      Installations,
+    );
+    const repos: FoundRepo[] = [];
+    for (const { id } of installations) {
+      for (let page = 1; ; page += 1) {
+        const listed = await apiGet(
+          accessToken,
+          `/user/installations/${id}/repositories?per_page=${PAGE}&page=${page}`,
+          Repositories,
+        );
+        repos.push(
+          ...listed.repositories.map((repo) => ({
+            fullName: repo.full_name,
+            description: repo.description,
+            private: repo.private,
+            cloneUrl: repo.clone_url,
+            pushedAt: repo.pushed_at,
+          })),
+        );
+        if (listed.repositories.length < PAGE) break;
+      }
+    }
+    return repos;
+  };
+
   return {
     startSignIn: async () => {
       try {
@@ -396,26 +455,18 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     account: async (accessToken) => {
       try {
         const user = await apiGet(accessToken, "/user", User);
-        const { installations } = await apiGet(
-          accessToken,
-          `/user/installations?per_page=${PAGE}`,
-          Installations,
-        );
-        const repos: string[] = [];
-        for (const { id } of installations) {
-          for (let page = 1; ; page += 1) {
-            const listed = await apiGet(
-              accessToken,
-              `/user/installations/${id}/repositories?per_page=${PAGE}&page=${page}`,
-              Repositories,
-            );
-            repos.push(...listed.repositories.map((repo) => repo.full_name));
-            if (listed.repositories.length < PAGE) break;
-          }
-        }
-        return ok({ login: user.login, repos: repos.sort() });
+        const repos = await installedRepos(accessToken);
+        return ok({ login: user.login, repos: repos.map((repo) => repo.fullName).sort() });
       } catch {
         return err("GitHub couldn't be asked who's signed in.");
+      }
+    },
+
+    repositories: async (accessToken) => {
+      try {
+        return ok(await installedRepos(accessToken));
+      } catch {
+        return err("GitHub couldn't be asked for your repos.");
       }
     },
 

@@ -1,0 +1,16 @@
+/*
+ * New workspace's own classes (#258, #264), with those of the repo picker, the shared piece only
+ * it uses. Tailwind puts every class it finds into the first load's stylesheet, even one only
+ * lazily loaded code uses, so styles.css leaves them out and this stylesheet, loaded with the
+ * page, has their classes instead. The theme is by reference: its names, nothing of its own. They
+ * apply only inside the page's form: coming after the theme's, they'd otherwise outrank its
+ * classes everywhere.
+ */
+@reference "../styles.css";
+@source "./**/*.tsx";
+@source "../components/repo-picker.tsx";
+
+:where([data-new-workspace]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}

@@ -5,10 +5,20 @@ import type {
   FoundCheck,
   FoundFile,
   FoundPullRequest,
+  FoundRepo,
   GitHubApi,
   SignInEnd,
   UserToken,
 } from "./api.ts";
+
+/** A repo the fake GitHub's app is installed on, and what it says of it (#258). */
+export type FakeRepo = {
+  readonly fullName: string;
+  readonly description?: string;
+  readonly private?: boolean;
+  readonly cloneUrl?: string;
+  readonly pushedAt?: string;
+};
 
 /** How long the fake's tokens last, as GitHub's do: 8 hours. */
 const TOKEN_SECONDS = 8 * 60 * 60;
@@ -60,7 +70,12 @@ const filesPushed = async (remote: string, head: string): Promise<FoundFile[]> =
 export const createFakeGitHub = (
   options: {
     account?: string;
-    repos?: readonly string[];
+    /**
+     * The repos the GitHub App is installed on: by `owner/name`, or with what GitHub says of it
+     * (#258). A repo's `cloneUrl` is its address on GitHub unless a test points it at a bare
+     * repository on disk, standing in for GitHub's copy.
+     */
+    repos?: readonly (string | FakeRepo)[];
     finishAfterMs?: number;
     /** Each repository's labels to start with (#181). */
     labels?: Readonly<Record<string, readonly string[]>>;
@@ -72,7 +87,18 @@ export const createFakeGitHub = (
   } = {},
 ) => {
   const account = options.account ?? "octo-owner";
-  const repos = options.repos ?? [`${account}/courtyard`, `${account}/stacks`];
+  const repos: readonly FoundRepo[] = (
+    options.repos ?? [`${account}/courtyard`, `${account}/stacks`]
+  ).map((repo) => {
+    const given = typeof repo === "string" ? { fullName: repo } : repo;
+    return {
+      fullName: given.fullName,
+      description: given.description ?? null,
+      private: given.private ?? true,
+      cloneUrl: given.cloneUrl ?? `https://github.com/${given.fullName}.git`,
+      pushedAt: given.pushedAt ?? null,
+    };
+  });
   let issued = 0;
   let codes = 0;
   /** The access token that works now, and its refresh token. */
@@ -211,8 +237,9 @@ export const createFakeGitHub = (
     },
     account: async (accessToken) =>
       accessToken === current?.accessToken
-        ? ok({ login: account, repos })
+        ? ok({ login: account, repos: repos.map((repo) => repo.fullName) })
         : err("That token doesn't work."),
+    repositories: async (accessToken) => refusedToken(accessToken) ?? ok(repos),
     pullRequest: async (accessToken, find) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
