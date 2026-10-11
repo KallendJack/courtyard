@@ -34,11 +34,12 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   expect((await opened).url()).toBe("https://github.com/login/device");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("FAKE-0001");
 
-  // The page carries on by itself once the owner has said yes on GitHub.
+  // The page carries on by itself once the owner has said yes on GitHub. It says how many repos
+  // the GitHub App reaches, never their names (#286): picking one is New workspace's.
   const signedIn = connections.getByRole("listitem", { name: "GitHub · octo-owner" });
-  await expect(signedIn).toContainText("courtyard · garrett-kitchens · side-project · stacks", {
-    timeout: 15_000,
-  });
+  await expect(signedIn).toContainText("Reaches 62 repositories", { timeout: 15_000 });
+  await expect(signedIn).not.toContainText("garrett-kitchens");
+  await expect(signedIn).not.toContainText("archive-");
   await expect(signedIn).toContainText("Connected");
 
   await page.goto("/workspaces/side-project");
