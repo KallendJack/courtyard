@@ -1,3 +1,5 @@
+# What `pnpm verify` runs locally, split into jobs that run side by side (#249), so a PR is green in
+# about 3 minutes rather than 7: the checks, the unit tests, and the browser tests in four shards.
 name: CI
 
 on:
@@ -8,24 +10,48 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request replaces its run; main's runs always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  verify:
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
+      - run: pnpm check
+      - run: pnpm typecheck
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: pnpm test
+
+  e2e:
+    name: E2E ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm verify
+      # Each shard builds its own copy: about 5 seconds, less than handing one between jobs.
+      - run: pnpm build
+      - run: pnpm e2e --shard=${{ matrix.shard }}/4
       # A failed browser test's trace and page snapshot, so a flake on CI can be diagnosed (#163).
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.shard }}
           # Only the tests' own folders, never the throwaway worker folders beside them.
           path: |
             test-results/
