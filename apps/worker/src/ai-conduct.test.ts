@@ -151,6 +151,36 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).not.toMatch(/can't change anything or run commands/i);
   });
 
+  it("tells a model in a code session how to work in any repository: an issue, tdd, the narrowest check first, the pr skill (#205)", async () => {
+    await asCode();
+    const houseProcess = await quotedInGuide("Work the way this repository does");
+
+    const coding = await firstTurn(CODES);
+
+    expect(coding.framing.instructions).toContain(
+      `${await quotedInGuide("You're working on your own session branch")}\n\n${houseProcess}`,
+    );
+    for (const line of [
+      "gh issue create",
+      "the tdd skill",
+      "diagnosing-bugs",
+      "the narrowest check",
+      "load the pr skill",
+      "AGENTS.md or CLAUDE.md) win",
+    ]) {
+      expect(houseProcess).toContain(line);
+    }
+    // Nothing in it is Courtyard's own repository's.
+    expect(houseProcess).not.toMatch(/courtyard|pnpm|milestone \d/i);
+  });
+
+  it("tells a planning turn nothing of the house process", async () => {
+    const { framing } = await firstTurn(CODES);
+
+    expect(framing.instructions).not.toContain("Work the way this repository does");
+    expect(framing.instructions).not.toContain("pr skill");
+  });
+
   /** Makes garage-gym a code workspace whose sessions draw in Paper's file-1 (ADR 0023). */
   const withPaper = async () => {
     const { repo } = await codeRepo(root);

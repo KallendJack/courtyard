@@ -290,7 +290,7 @@ _Avoid_: artifact, canvas, widget, embed
 
 **Activity**:
 An event saying what a model is doing: a file it read, a skill it loaded (or one of the skill's files), a web search
-or a page it read, a command it ran, a tool connection it used.
+or a page it read, a command it ran, an update to its task list, a tool connection it used.
 _Avoid_: tool call, step, trace
 
 **Web search**:

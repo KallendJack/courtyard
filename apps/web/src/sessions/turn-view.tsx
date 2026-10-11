@@ -48,6 +48,8 @@ const describeActivity = (activity: Activity) => {
       return `Edited ${activity.path}`;
     case "ran-command":
       return `Ran ${activity.command}`;
+    case "updated-tasks":
+      return "Updated the task list";
     case "check-failed":
       return `Check ${activity.name} failed`;
     case "used-tool":

@@ -110,9 +110,10 @@ async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUser
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
 /**
  * The tools a code session gets as well: editing files and running commands, each asked of the
- * worker first (ADR 0007).
+ * worker first (ADR 0007), its task list, and loading the skills it was given (ADRs 0024, 0025).
+ * No sub-agents (#117).
  */
-const CODING_TOOLS = ["Edit", "Write", "Bash"];
+const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill"];
 /**
  * How long Claude Code waits on the worker's say in a code session, which may be an approval the
  * owner answers in the morning (#171): the longest a timer can wait (about 24 days), so in practice
@@ -246,6 +247,7 @@ const handResults =
 const CHECK_TIMEOUT_MS = 15_000;
 /** How long a status answer is reused, so listing providers doesn't start Claude Code each time. */
 const STATUS_TTL_MS = 60_000;
+/** A planning turn's limit on Claude's round trips. A code turn has none (ADR 0025). */
 const MAX_TURNS = 30;
 /** The longest a stopped turn waits for Claude Code to finish before moving on. */
 const WIND_DOWN_MS = 2000;
@@ -724,6 +726,8 @@ const BashInput = z.strictObject({
   run_in_background: z.boolean().optional(),
   dangerouslyDisableSandbox: z.boolean().optional(),
 });
+/** A task list: it touches nothing outside Claude Code, so only its shape is checked. */
+const TodoWriteInput = z.strictObject({ todos: z.array(z.unknown()) });
 
 /**
  * The worker's say on a code session's edit or command (ADR 0007): what it answers, or
@@ -861,6 +865,13 @@ const confineTo =
         const loaded = skillLoaded(skills, input.tool_input);
         if (loaded === undefined) return decision(false, SKILL_NOT_HERE);
         await report({ kind: "skill-loaded", ...loaded });
+        return decision(true);
+      }
+      if (code !== null && input.tool_name === "TodoWrite") {
+        if (!TodoWriteInput.safeParse(input.tool_input).success) {
+          return decision(false, UNCHECKED_REQUEST);
+        }
+        await report({ kind: "updated-tasks" });
         return decision(true);
       }
       if (web !== null && input.tool_name === "WebSearch") {
@@ -1082,7 +1093,11 @@ export const createClaudeProvider = (
             ...(input.model === "default" ? {} : { model: input.model }),
             ...(effort.value === undefined ? {} : { effort: effort.value }),
             cwd: folder,
-            systemPrompt: input.framing.instructions,
+            // A code session codes on Claude Code's own instructions, Courtyard's on top (ADR 0025).
+            systemPrompt:
+              code === null
+                ? input.framing.instructions
+                : { type: "preset", preset: "claude_code", append: input.framing.instructions },
             tools: [
               ...PLANNING_TOOLS,
               ...(code === null ? [] : CODING_TOOLS),
@@ -1135,7 +1150,8 @@ export const createClaudeProvider = (
                 : { PostToolUseFailure: [{ hooks: [handResults(connections)] }] }),
             },
             includePartialMessages: true,
-            maxTurns: MAX_TURNS,
+            // A code turn runs until Claude finishes, the owner stops it, or a usage limit.
+            ...(code === null ? { maxTurns: MAX_TURNS } : {}),
             abortController: stop,
           },
         });

@@ -122,12 +122,22 @@ const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim()
 const CODING_ACCESS =
   "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and biome check (with pnpm exec, never npx), git and gh commands that only look, gh run download with -D naming a folder in your working directory that git ignores, adding and committing on your branch, pushing it, opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the background here. A command may go over several lines. Give a pull request's or issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $ stay as written (--body '...', each ' in it written '\\''), never through $(...) or a heredoc, which never run.";
 
+/**
+ * How a model in a code session works, the house process (docs/ai-conduct.md, Coding; #205),
+ * written for any repository, never only Courtyard's.
+ */
+const HOUSE_PROCESS =
+  "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and the full checks once, just before you push for a pull request. When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch.";
+
+/** What a model may do with the workspace, and in a code session how it works there too. */
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
   // Only a provider that codes works in a code workspace (ADR 0007).
-  if (mode === "code" && capabilities.codes) return CODING_ACCESS;
-  return capabilities.readsFiles
-    ? "You can read and search the files in this workspace's folder, your working directory, images included. You can't change anything or run commands. Read files when they help you answer."
-    : "You can't open the workspace's files, change anything or run commands: you know the workspace from its context file and what the owner tells you.";
+  if (mode === "code" && capabilities.codes) return [CODING_ACCESS, HOUSE_PROCESS];
+  return [
+    capabilities.readsFiles
+      ? "You can read and search the files in this workspace's folder, your working directory, images included. You can't change anything or run commands. Read files when they help you answer."
+      : "You can't open the workspace's files, change anything or run commands: you know the workspace from its context file and what the owner tells you.",
+  ];
 };
 
 /** Today's date in words, so a model can tell a stale line and date the lines that need one. */
@@ -825,7 +835,7 @@ const instructionsFor = (turn: {
   const hasSections = workspace.contextFile !== null || fromOwner.shared === "all";
   return [
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
-    accessFor(capabilities, workspace.mode),
+    ...accessFor(capabilities, workspace.mode),
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,

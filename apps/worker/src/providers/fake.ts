@@ -28,6 +28,7 @@ import type {
   SignIn,
   ToolConnection,
   ToolContent,
+  TurnInput,
   TurnToolName,
 } from "./index.ts";
 
@@ -331,6 +332,7 @@ const seen = (attachments: readonly FramedAttachment[]) => {
 
 const EDIT_FILE = /^edit file (\S+): (.*)$/i;
 const RUN_COMMAND = /^run command: (.+?)(?: \(for: (.+)\))?$/i;
+const UPDATE_TASKS = /^update the task list$/i;
 
 /** The first line a command printed, or nothing. */
 const firstLine = (output: string) =>
@@ -366,11 +368,16 @@ const runIn = (code: CodeTurn, command: string) =>
  * "edit file notes.md: The rack goes on the back wall" writes that line as the file, and "run
  * command: git status" runs the command in the worktree, each only once the worker allows it (or
  * the owner does, #171). A command can say what it's for at the end: "run command: git --version
- * (for: To check which git runs here)". Says how each went, or why it was refused.
+ * (for: To check which git runs here)". Says how each went, or why it was refused. "update the
+ * task list" updates its task list, as Claude's does (ADR 0025).
  */
-const scriptedCoding = async (code: CodeTurn, message: string) => {
+const scriptedCoding = async (code: CodeTurn, message: string, report: TurnInput["report"]) => {
   let said = "";
   for (const line of message.split("\n").map((each) => each.trim())) {
+    if (UPDATE_TASKS.test(line)) {
+      await report({ kind: "updated-tasks" });
+      continue;
+    }
     const [, path, text] = EDIT_FILE.exec(line) ?? [];
     const [, command, why] = RUN_COMMAND.exec(line) ?? [];
     if (path !== undefined && text !== undefined) {
@@ -552,7 +559,7 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
-      const coded = code === null ? "" : await scriptedCoding(code, last);
+      const coded = code === null ? "" : await scriptedCoding(code, last, report);
       const paper = connections.find((connection) => connection.name === "paper");
       const drew = paper === undefined ? "" : await scriptedPaper(paper, last);
       const saw = /please look/i.test(last) ? seen(framing.attachments) : "";
