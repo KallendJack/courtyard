@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionSummary } from "@courtyard/contract";
@@ -9,6 +9,7 @@ import {
   followSession,
   postJson,
   quotedInGuide,
+  removeTestFolder,
   SAVING_MODEL,
   savingProvider,
   testWorker,
@@ -28,7 +29,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const PLAN = "Move the squat rack to the back wall before the rubber mats go down in November";

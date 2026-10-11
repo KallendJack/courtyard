@@ -10,6 +10,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { sendPatiently, type Waiting } from "../patience.ts";
 import { sendForm } from "../send-form.ts";
 import { type FromWorker, sendJson } from "../worker.ts";
 
@@ -62,17 +63,22 @@ export const sendMessage = (send: {
 
 /**
  * Allow or Deny on the approval numbered `approval`, which a code session's turn waits on (#171).
- * The worker answers with the answer that stands: the first given, from whichever device.
+ * The worker answers with the answer that stands: the first given, from whichever device. So it's
+ * harmless to send twice, and the owner's tap is kept until the worker answers (#204).
  */
 export const answerApproval = (answering: {
   sessionId: SessionId;
   approval: number;
   answer: ApprovalAnswer;
+  onWaiting: (waiting: Waiting) => void;
+  signal: AbortSignal;
 }) =>
-  sendJson({
+  sendPatiently({
     path: `/sessions/${encodeURIComponent(answering.sessionId)}/approvals/${answering.approval}`,
     body: { answer: answering.answer } satisfies ApprovalAnswering,
     schema: ApprovalAnswering,
+    onWaiting: answering.onWaiting,
+    signal: answering.signal,
   });
 
 /** Removes the owner's queued message numbered `queued` before it goes (#177). */

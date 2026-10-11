@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { ApiError, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, errorOf, type Requester, testWorker } from "./testing.ts";
+import { asOwner, errorOf, type Requester, removeTestFolder, testWorker } from "./testing.ts";
 import type { UpdateCommand } from "./worker.ts";
 
 // Updating the live copy from the app (ADR 0011, #35), against real git in temporary folders: a
@@ -53,7 +53,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A worker running from the live copy, or from nowhere in particular with `live: false`. */

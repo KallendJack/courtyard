@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillList, type SkillSummary } from "@courtyard/contract";
@@ -13,6 +13,7 @@ import {
   postJson,
   type Requester,
   RUNNING_MODEL,
+  removeTestFolder,
   requesterFor,
   runningProvider,
   testWorker,
@@ -40,7 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 const skillsOf = async (request: Requester, workspace: string) => {

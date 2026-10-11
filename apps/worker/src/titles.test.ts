@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type FailureReason, SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
@@ -13,6 +13,7 @@ import {
   gatedProvider,
   postJson,
   type Requester,
+  removeTestFolder,
   renameSession,
   startSession,
   testWorker,
@@ -28,7 +29,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 /**

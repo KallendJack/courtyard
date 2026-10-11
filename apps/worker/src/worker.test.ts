@@ -1,9 +1,13 @@
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { Agent, get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 import { Health } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { serveWorker } from "./start.ts";
 import { asOwner, errorOf } from "./testing.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
@@ -152,4 +156,40 @@ describe("the web app", () => {
       expect(await response.text()).not.toContain("outside the web folder");
     }
   });
+});
+
+describe("served behind a proxy", () => {
+  /** Asks for the health check over `agent`, saying whether it went on a connection already open. */
+  const askHealth = (port: number, agent: Agent) =>
+    new Promise<{ status: number | undefined; reused: boolean }>((resolve, reject) => {
+      const asking = get({ port, path: "/api/health", agent }, (response) => {
+        response.resume();
+        response.on("end", () =>
+          resolve({ status: response.statusCode, reused: asking.reusedSocket }),
+        );
+      });
+      asking.on("error", reject);
+    });
+
+  // A proxy keeps an idle connection to the worker open to use again (Caddy, for 2 minutes). Had
+  // the worker closed it first, the proxy's next request on it could fail, as a 502 (#204).
+  it("keeps an idle connection open longer than a proxy does", async () => {
+    const server = serveWorker({ app: startWorker().app, port: 0 });
+    await once(server, "listening");
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no port");
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    try {
+      const first = await askHealth(address.port, agent);
+      // Longer than Node's own 5 seconds.
+      await wait(6000);
+      const later = await askHealth(address.port, agent);
+
+      expect(first).toEqual({ status: 200, reused: false });
+      expect(later).toEqual({ status: 200, reused: true });
+    } finally {
+      agent.destroy();
+      server.close();
+    }
+  }, 20_000);
 });

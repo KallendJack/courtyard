@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillList, type SkillSummary } from "@courtyard/contract";
@@ -7,6 +7,7 @@ import {
   asOwner,
   postJson,
   type Requester,
+  removeTestFolder,
   testWorker,
   writeHouseSkills,
   writeSkill,
@@ -31,7 +32,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root);
 });
 
 const skill = writeSkill;

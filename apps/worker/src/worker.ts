@@ -53,7 +53,7 @@ import {
   type Provider,
 } from "./providers/index.ts";
 import { ok, type Result } from "./result.ts";
-import { createSessions } from "./sessions/index.ts";
+import { type Background, createSessions } from "./sessions/index.ts";
 import { MESSAGE_ROUTES, sessionRoutes } from "./sessions/routes.ts";
 import { type Environment, readSettings } from "./settings.ts";
 import { createSignIns } from "./sign-ins/index.ts";
@@ -178,6 +178,8 @@ export const createWorker = (options: {
    * from GitHub, unless a test gives its own; `null` for none at all.
    */
   mattSkills?: { readonly pin?: MattPin; readonly fetch?: FetchMattSkills } | null;
+  /** Given the work nobody waits for (see `Background`). Tests keep hold of it; otherwise it just runs. */
+  background?: Background;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -197,6 +199,7 @@ export const createWorker = (options: {
     githubClientId,
   } = settings.value;
   const now = options.now ?? Date.now;
+  const background = options.background ?? (() => {});
   const owner = createOwner({ dataDir, now });
   // Claude first, so it's the default model wherever it's available.
   const providers = rememberingLimits(
@@ -253,10 +256,13 @@ export const createWorker = (options: {
     code,
     now,
     notify: (session, event, pullRequest) => {
-      notifications
-        .sessionEvent(session, event, pullRequest)
-        .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error));
+      background(
+        notifications
+          .sessionEvent(session, event, pullRequest)
+          .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
+      );
     },
+    background,
   });
   const live = createLive({
     liveCopy,

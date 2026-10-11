@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NotificationsStatus } from "@courtyard/contract";
@@ -15,6 +15,7 @@ import {
   loginCookie,
   postJson,
   type Requester,
+  removeTestFolder,
   requesterFor,
   setUpOwner,
   startSession,
@@ -34,7 +35,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  await removeTestFolder(root, { leftRunning: true });
 });
 
 /** The worker's public key, which a browser subscribes with. */

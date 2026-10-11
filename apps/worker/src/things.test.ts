@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -25,6 +25,7 @@ import {
   postJson,
   postWithFiles,
   type Requester,
+  removeTestFolder,
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
@@ -51,7 +52,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 const owner = () => asOwner(testWorker({ root }));

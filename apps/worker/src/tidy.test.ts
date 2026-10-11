@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,6 +21,7 @@ import {
   followSession,
   postJson,
   type Requester,
+  removeTestFolder,
   startSession,
   testWorker,
 } from "./testing.ts";
@@ -35,7 +36,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 /** A messy file, marked for the fake: each marker says what it proposes for the line. */
