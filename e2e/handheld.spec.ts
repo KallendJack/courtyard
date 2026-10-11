@@ -39,6 +39,31 @@ const besideTheRails = async (page: Page) => {
   return boxOf(main);
 };
 
+/**
+ * Where the page is while the frame is still loading, and where it is once the frame is there
+ * (#271): the frame's code is held back until the first is measured.
+ */
+const beforeAndAfterTheFrame = async (page: Page) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/assets/handheld-frame-*.js", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/workspaces/garage-gym");
+  const before = await boxOf(page.getByRole("main"));
+  await expect(page.getByRole("navigation", { name: "Workspaces" })).toHaveCount(0);
+  release();
+  await expect(page.getByRole("button", { name: "Skills" })).toBeVisible();
+  // Two frames, so anything the frame's arrival moves has moved.
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+  return { before, after: await boxOf(page.getByRole("main")) };
+};
+
 /** The line at the Skills sheet's foot (#201): the model a message goes with, and Change. */
 const changeModel = (sheet: ReturnType<Page["locator"]>) =>
   sheet.getByRole("button", { name: /Change$/ });
@@ -398,6 +423,19 @@ test.describe("unfolded", () => {
     await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
   });
 
+  test.describe("while the frame loads", () => {
+    // The service worker would serve the frame's code itself, past the hold.
+    test.use({ serviceWorkers: "block" });
+
+    test("the page is already beside where the rails will be, so it doesn't jump when they arrive", async ({
+      page,
+    }) => {
+      const { before, after } = await beforeAndAfterTheFrame(page);
+      expect(before.x).toBeCloseTo(after.x, 0);
+      expect(before.x + before.width).toBeCloseTo(after.x + after.width, 0);
+    });
+  });
+
   test("the Model button shows the model it sends with by its short name, inside the button", async ({
     page,
   }) => {
@@ -653,6 +691,17 @@ test.describe("on the cover screen", () => {
     expect(skills.y + skills.height).toBeLessThanOrEqual(type.y);
     expect(type.y + type.height).toBeGreaterThan(COVER.height - 40);
     for (const target of [skills, type]) expect(target.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test.describe("while the frame loads", () => {
+    test.use({ serviceWorkers: "block" });
+
+    test("the page is already below where the tiles will be, so it doesn't jump when they arrive", async ({
+      page,
+    }) => {
+      const { before, after } = await beforeAndAfterTheFrame(page);
+      expect(before.y).toBeCloseTo(after.y, 0);
+    });
   });
 
   test("Skills opens as a sheet from the bottom, up to most of the screen, scrolling inside it", async ({
