@@ -34,7 +34,8 @@ is asked, telling Claude to run it in the foreground.
 Inside the worktree, the files that decide what an allowed command runs need an approval too: a `package.json` (and
 the package manager's settings: `pnpm-workspace.yaml`, `.npmrc`, `.pnpmfile.cjs`), git hooks (`.husky`, `.githooks`,
 lefthook's files, the folder `core.hooksPath` names), Claude Code's `.claude` folder (its settings, hooks and skills,
-which the next turn loads) and git's own `.git`. Without that, a model could add a package script or a hook in one
+which the next turn loads), git's own `.git`, and `.github` (CI workflows run on GitHub with the repository's
+secrets, #261). Without that, a model could add a package script or a hook in one
 turn and run it through `pnpm test` or `git commit` in the next. For the same reason `gh run download`, which
 unpacks a run's artifacts, runs without asking only with `-D` naming a folder git ignores in the worktree that is
 neither the worktree itself nor one of those files; anywhere else it asks, since an artifact could carry one (#202).
