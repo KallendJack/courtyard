@@ -191,5 +191,7 @@ describe("a message sent while a turn runs", () => {
       "turn-completed",
     ]);
     expect(sentIn(events).at(-1)?.text).toBe("Still wanted");
+    // A restart ends the worker before it; in a test it's still there, so its turn is let go.
+    stuck.release();
   });
 });

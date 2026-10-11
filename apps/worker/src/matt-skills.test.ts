@@ -41,7 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const skillsOf = async (request: Requester, workspace: string) => {

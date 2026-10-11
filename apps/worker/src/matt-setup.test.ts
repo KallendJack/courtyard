@@ -76,7 +76,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 /** A worker with Matt's skills, signed in to GitHub, whose repository has these labels. */
