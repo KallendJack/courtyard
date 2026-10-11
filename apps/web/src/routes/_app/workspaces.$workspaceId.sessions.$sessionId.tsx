@@ -384,10 +384,11 @@ function Session(props: {
           disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
           {...(running ? { stop } : {})}
           placeholder={
-            running
-              ? "Queue a message…"
-              : reviewing
-                ? "Ask for changes…"
+            // On the review, which session it goes to: the one whose branch the PR is (#279).
+            reviewing
+              ? `To: ${session.title}`
+              : running
+                ? "Queue a message…"
                 : suggesting
                   ? "Or type your own reply…"
                   : "Reply…"
