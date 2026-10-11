@@ -110,7 +110,7 @@ test("a Thing save's Open goes to its card: its details, history, the Thing it's
   await addKit(page);
   // Listed by name, each part after its Thing, the chain is T4.
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill(
       "thing T4: condition New | size 11-speed, 118 links | where On the bike | history Fitted, replacing the last X11",
     );

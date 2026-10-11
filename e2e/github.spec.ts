@@ -69,7 +69,7 @@ test("a code session shows its branch and pull request, and a failing check star
   await page.goto("/workspaces/side-project");
   await page.getByLabel("Model").selectOption("fake/echo");
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill(
       [
         "edit file talk.md: Talk into the message box",
@@ -129,7 +129,9 @@ const makesPullRequest = (line: string, subject: string) =>
 const sessionWithPullRequest = async (page: Page, subject: string) => {
   await page.goto("/workspaces/side-project");
   await page.getByLabel("Model").selectOption("fake/echo");
-  await page.getByLabel("Message").fill(makesPullRequest("Talk into the message box", subject));
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill(makesPullRequest("Talk into the message box", subject));
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/side-project\/sessions\//);
   const strip = page.getByRole("region", { name: "Branch and pull request" });

@@ -5,7 +5,7 @@ import { themeColour } from "./theme.ts";
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(message);
+  await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   const session = page.getByRole("list", { name: "Session" });
   await expect(session.locator("[aria-live]").last()).toHaveAttribute("aria-busy", "false");
@@ -132,7 +132,7 @@ const RACKET_PRICES = [139, 95, 149, 110, 120, 99, 160, 105, 130, 115, 145, 125]
 const askForRackets = async (page: Page) => {
   await page.goto("/workspaces/garage-gym");
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill(
       `Rackets:\n\n${markdownTable([
         ["Racket", "Price"],
@@ -376,7 +376,7 @@ test.describe("charts", () => {
       labels,
       series: [{ name: "kg", values: labels.map((_, index) => 80 + index / 4) }],
     };
-    await page.getByLabel("Message").fill(`Here:\n\n${chartBlock(chart)}`);
+    await page.getByLabel("Message", { exact: true }).fill(`Here:\n\n${chartBlock(chart)}`);
     await page.getByRole("button", { name: "Start" }).click();
     const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
     await expect(answer).toHaveAttribute("aria-busy", "true");

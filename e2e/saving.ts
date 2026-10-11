@@ -14,7 +14,7 @@ export const newWorkspace = async (page: Page, name: string) => {
 
 /** Starts a session whose message scripts the fake provider's saves, and waits for its answer. */
 export const startSaving = async (page: Page, message: string) => {
-  await page.getByLabel("Message").fill(message);
+  await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
 };

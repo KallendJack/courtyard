@@ -41,7 +41,7 @@ test("photos and PDFs go with a message, show in it after a reload, and open ful
   await tray(page).getByRole("button", { name: "Remove hooks.jpg" }).click();
   await expect(tray(page).getByRole("img")).toHaveCount(1);
 
-  await page.getByLabel("Message").fill("please look");
+  await page.getByLabel("Message", { exact: true }).fill("please look");
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
 
@@ -62,7 +62,7 @@ test("photos and PDFs go with a message, show in it after a reload, and open ful
   await expect(viewer).toBeHidden();
 
   // A later turn still has them.
-  await page.getByLabel("Message").fill("please look again");
+  await page.getByLabel("Message", { exact: true }).fill("please look again");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(session).toContainText(
     "I see garage.jpg (a photo) and rack-manual.pdf (a PDF). You said: please look again",
@@ -107,20 +107,20 @@ test("a PDF with no text is refused by the worker, and the attachments stay to f
   await attach(page, [
     { name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdfOf([])) },
   ]);
-  await page.getByLabel("Message").fill("What does this say?");
+  await page.getByLabel("Message", { exact: true }).fill("What does this say?");
   await page.getByRole("button", { name: "Start" }).click();
 
   await expect(page.getByRole("alert")).toHaveText(
     "scan.pdf has no text a model can read: it's probably a scan. Send a photo of the page instead.",
   );
   await expect(tray(page)).toContainText("scan.pdf");
-  await expect(page.getByLabel("Message")).toHaveValue("What does this say?");
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("What does this say?");
 });
 
 test("pasting or dropping a photo attaches it", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   const png = photo("screenshot.png").buffer.toString("base64");
-  const box = page.getByLabel("Message");
+  const box = page.getByLabel("Message", { exact: true });
 
   await box.evaluate((element, base64) => {
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
@@ -149,7 +149,7 @@ test("a picture copied from a web page attaches, but text copied from a document
 }) => {
   await page.goto("/workspaces/garage-gym");
   const png = photo("image.png").buffer.toString("base64");
-  const box = page.getByLabel("Message");
+  const box = page.getByLabel("Message", { exact: true });
   /** Pastes a picture with what else a clipboard holds; whether the box was left to paste text. */
   const paste = (also: { html: string; text: string }) =>
     box.evaluate(
@@ -196,7 +196,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message").fill("Where should the rack go?");
+    await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page).toHaveURL(/\/sessions\//);
     // The session page is showing, with its first answer done, so the box is its own.
@@ -209,7 +209,7 @@ test.describe("on a phone", () => {
     await camera.setFiles([photo("IMG_2041.png")]);
     await expect(tray(page).getByRole("img", { name: "IMG_2041.jpg" })).toBeVisible();
 
-    await page.getByLabel("Message").fill("please look");
+    await page.getByLabel("Message", { exact: true }).fill("please look");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       "I see IMG_2041.jpg (a photo). You said: please look",
@@ -235,7 +235,7 @@ for (const screen of [
         .click();
       await (await chooser).setFiles([photo("garage.png"), photo("hooks.png")]);
       if (!screen.tablet) await page.getByRole("button", { name: "Type" }).click();
-      await page.getByLabel("Message").fill("please look");
+      await page.getByLabel("Message", { exact: true }).fill("please look");
       await page.getByRole("button", { name: "Start" }).click();
       const session = page.getByRole("list", { name: "Session" });
       await session.getByRole("button", { name: "View garage.jpg" }).click();
@@ -286,7 +286,7 @@ test("a photo goes with no words, from a workspace's box and a session's, picked
 
   // A pasted screenshot, with nothing typed, goes from the session's box too.
   const png = photo("no-words-screenshot.png").buffer.toString("base64");
-  await page.getByLabel("Message").evaluate((element, base64) => {
+  await page.getByLabel("Message", { exact: true }).evaluate((element, base64) => {
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
     const data = new DataTransfer();
     data.items.add(new File([bytes], "no-words-screenshot.png", { type: "image/png" }));

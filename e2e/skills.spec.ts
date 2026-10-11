@@ -8,7 +8,7 @@ test("the owner picks a skill with / and starts a session with it, shown as a ta
   page,
 }) => {
   await page.goto("/workspaces/garage-gym");
-  const box = page.getByLabel("Message");
+  const box = page.getByLabel("Message", { exact: true });
 
   await box.fill("/");
   const list = page.getByRole("listbox", { name: "Skills in Garage gym" });
@@ -63,7 +63,7 @@ test("the chat says which skill the model used, and which of its files it read, 
 }) => {
   await page.goto("/workspaces/garage-gym");
   await page
-    .getByLabel("Message")
+    .getByLabel("Message", { exact: true })
     .fill("use skill programme-check\nuse skill programme-check references/deload-weeks.md");
   await page.getByRole("button", { name: "Start" }).click();
 
@@ -101,7 +101,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message").fill("Where should the rack go?");
+    await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
 
@@ -111,7 +111,7 @@ test.describe("on a phone", () => {
     await expect(sheet).toBeHidden();
     await expect(page.getByText("Skill: Grilling")).toBeVisible();
 
-    await page.getByLabel("Message").fill("The rack plan.");
+    await page.getByLabel("Message", { exact: true }).fill("The rack plan.");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       "You said: The rack plan.",

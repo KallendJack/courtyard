@@ -5,7 +5,9 @@ const DESKTOP = { width: 1440, height: 900 };
 test("shows an answer's Markdown formatted, not as raw marks", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   // The fake model echoes the message back, Markdown and all.
-  await page.getByLabel("Message").fill("**bold** and\n\n## A heading\n\n1. first\n2. second");
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("**bold** and\n\n## A heading\n\n1. first\n2. second");
   await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
@@ -73,7 +75,9 @@ test("never loads an image an answer points to, so an answer can't send data awa
     if (request.url().includes("courtyard.example")) requested.push(request.url());
   });
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill("![the plan](https://courtyard.example/plan.png?secret=1)");
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("![the plan](https://courtyard.example/plan.png?secret=1)");
   await page.getByRole("button", { name: "Start" }).click();
 
   const session = page.getByRole("list", { name: "Session" });
@@ -89,7 +93,7 @@ test.describe("while typing on a desktop", () => {
   test("leaves Ctrl+B to the message box", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
     const workspaces = page.getByRole("navigation", { name: "Workspaces" });
-    await page.getByLabel("Message").press("Control+b");
+    await page.getByLabel("Message", { exact: true }).press("Control+b");
 
     await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
   });

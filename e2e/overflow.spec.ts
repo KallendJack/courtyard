@@ -10,7 +10,7 @@ test("after a usage limit, Carry on answers with the other provider and a line m
   await page.goto("/workspaces/garage-gym");
   // By its value: once Fake two is at its limit (on a retry, say), its label says so.
   await page.getByLabel("Model").selectOption("fake-two/echo");
-  await page.getByLabel("Message").fill("please hit Fake two's limit");
+  await page.getByLabel("Message", { exact: true }).fill("please hit Fake two's limit");
   await page.getByRole("button", { name: "Start" }).click();
 
   const notice = page.getByRole("alert").filter({ hasText: "Fake two's usage limit is reached" });

@@ -9,7 +9,7 @@ import { themeColour } from "./theme.ts";
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByLabel("Message").fill(message);
+  await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   const answer = page.getByRole("list", { name: "Session" }).locator("[aria-live]").last();
   await expect(answer).toHaveAttribute("aria-busy", "false");
