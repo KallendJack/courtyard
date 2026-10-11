@@ -235,6 +235,7 @@ type NewEvent = WithoutNumbering<SessionEvent>;
 const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
   was !== undefined &&
   now.number === was.number &&
+  now.title === was.title &&
   now.url === was.url &&
   now.state === was.state &&
   now.head === was.head &&
@@ -456,6 +457,11 @@ export const createSessions = (options: {
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
+  /**
+   * Each code session's pull request as last recorded (`null` for none yet), once read from its
+   * events or written there, so listing a workspace's sessions doesn't read every event log.
+   */
+  const pullRequests = new Map<SessionId, PullRequest | null>();
   /** Set while a fresh start sets every session aside: no turn starts meanwhile. */
   let settingAside = false;
   /**
@@ -542,6 +548,7 @@ export const createSessions = (options: {
       return err(STORAGE_ERROR);
     }
     session.nextSeq += 1;
+    if (numbered.data.type === "pull-request") pullRequests.set(id, numbered.data.pullRequest);
     for (const listener of session.listeners) listener(numbered.data);
     return ok(numbered.data);
   };
@@ -1457,6 +1464,19 @@ export const createSessions = (options: {
     return ok(turnNowIn(events.value));
   };
 
+  /** A code session's pull request as last recorded, if it has one yet (#240). */
+  const lastPullRequestOf = async (file: SessionFile) => {
+    if (file.branch === undefined) return undefined;
+    let known = pullRequests.get(file.id);
+    if (known === undefined) {
+      const events = await readEvents(file.id);
+      if (!events.ok) return undefined;
+      known = pullRequestIn(events.value) ?? null;
+      pullRequests.set(file.id, known);
+    }
+    return known ?? undefined;
+  };
+
   /**
    * A workspace's sessions, most recently active first, each with whose turn it is and whether
    * it's waiting for a code session to end.
@@ -1476,10 +1496,12 @@ export const createSessions = (options: {
       await settled(file.value.id);
       const now = await turnNowOf(file.value.id);
       if (!now.ok) return now;
+      const pullRequest = await lastPullRequestOf(file.value);
       summaries.push({
         ...summaryOf(file.value),
         now: now.value,
         queued: options.code.slots.waits(file.value.id),
+        ...(pullRequest === undefined ? {} : { pullRequest }),
       });
     }
     return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));

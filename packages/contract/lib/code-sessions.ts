@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PullRequest } from "./pull-request.ts";
 import { ListedSession } from "./session-state.ts";
 
 /**
@@ -9,11 +10,18 @@ export const CODE_SESSIONS_AT_ONCE = 3;
 
 /**
  * A workspace's sessions as a code workspace's page lists them: as `SessionList`, with whether
- * each is waiting for a code session to finish, and how many code sessions are running across
- * the worker, of `CODE_SESSIONS_AT_ONCE`.
+ * each is waiting for a code session to finish, each code session's branch and its pull request
+ * as last seen (the PRs tab, #240), and how many code sessions are running across the worker, of
+ * `CODE_SESSIONS_AT_ONCE`.
  */
 export const CodeSessionList = z.object({
-  sessions: z.array(ListedSession.extend({ queued: z.boolean() })),
+  sessions: z.array(
+    ListedSession.extend({
+      queued: z.boolean(),
+      branch: z.string().optional(),
+      pullRequest: PullRequest.optional(),
+    }),
+  ),
   running: z.number().int().nonnegative(),
 });
 export type CodeSessionList = z.infer<typeof CodeSessionList>;

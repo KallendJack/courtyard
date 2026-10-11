@@ -26,6 +26,8 @@ export type PullRequestChanges = z.infer<typeof PullRequestChanges>;
 /** A session's pull request, as GitHub has it. */
 export const PullRequest = z.object({
   number: z.number().int().positive(),
+  /** Its title on GitHub (#240); left out in ones recorded before. */
+  title: z.string().optional(),
   url: z.url({ protocol: /^https$/ }),
   /** Open; or merged or closed, anywhere, so the session takes no more messages. */
   state: z.enum(["open", "merged", "closed"]),
@@ -79,6 +81,11 @@ export const PullRequestReview = z.object({
   branch: z.string(),
   base: z.string(),
   checks: z.array(PullRequestCheck),
+  /**
+   * Its description as the session wrote it, in Markdown (#240): with the house's PR skill, a
+   * Summary, Evidence and Merge Danger. Empty when it has none.
+   */
+  body: z.string(),
   files: z.array(ChangedFile),
   merge: MergeReadiness,
 });

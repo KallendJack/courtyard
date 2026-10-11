@@ -204,10 +204,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
-  added and removed, files changed, #160), which the strip shows too.
+  added and removed, files changed, #160), which the strip shows too, and its title (#240). A code workspace's list
+  of sessions gives each one's branch and its PR as last recorded (kept in memory once read, so the list doesn't
+  read every event log), which the workspace page's pull requests list shows (#240).
 - **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
-  asked of GitHub through `code/` and `github/` each time: its checks by name, the files it changes with their
-  diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
+  asked of GitHub through `code/` and `github/` each time: its checks by name, its description as the session wrote
+  it (#240), the files it changes with their diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
   base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
   ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
   commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or
@@ -320,11 +322,17 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
-  - **`review/`:** a code session's pull request, reviewed on its page in place of the conversation (`?view=review`,
-    #160): check pills, the changed files as a tree (`components/file-tree.tsx`), the chosen file's diff
-    (`diff.tsx`, long lines wrapping so it reads on a phone), and Close PR (confirmed) and Merge (greyed out with
-    its reason) as thumb buttons (`components/thumb-button.tsx`, shared with the approval card). Its own lazy load,
-    with its calls (`api.ts`) and a stylesheet of its own (`review.css`), like `things/`.
+  - **`review/`:** a code workspace's pull requests and their review (#160, #240). The list (`pull-requests.tsx`,
+    the PRs tab's list, a section of a code workspace's page until it has tabs, #222): each session's PR with its
+    title, branch and where its checks stand (`checks.tsx`: moss passed, gold running, red failed), Open or Merged,
+    and Review. The review, on the session's page in place of the conversation (`?view=review`): All PRs, its
+    title and checks, What changed (`what-changed.tsx`): the first line of its description's Summary, and Read it
+    all for the whole description (`description.ts` reads its parts, drawn by the answer renderer, Evidence and
+    Merge Danger side by side) with the files folded into one bar; otherwise the changed files as a tree
+    (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`, long lines wrapping so it reads on a
+    phone); then Merge (greyed out with its reason) and Close PR (confirmed) as thumb buttons
+    (`components/thumb-button.tsx`, shared with the approval card). Its own lazy load, the list's with a code
+    workspace's page, with its calls (`api.ts`) and a stylesheet of its own (`review.css`), like `things/`.
   - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.

@@ -1,53 +1,25 @@
-import type {
-  PullRequest,
-  PullRequestCheck,
-  PullRequestReview,
-  SessionId,
-} from "@courtyard/contract";
-import { Check, GitMerge, X } from "lucide-react";
+import type { PullRequest, PullRequestReview, SessionId, WorkspaceId } from "@courtyard/contract";
+import { GitMerge } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { BackLink } from "@/components/back-link";
+import { Button } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FileTree, lineCounts } from "@/components/file-tree";
 import { FormError } from "@/components/form-error";
 import { Notice } from "@/components/notice";
+import { PageTitle } from "@/components/page";
 import { ThumbButton } from "@/components/thumb-button";
-import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { describeProblem } from "../problems.tsx";
 import type { FromWorker } from "../worker.ts";
 import { endPullRequest, loadReview } from "./api.ts";
+import { ChecksState } from "./checks.tsx";
 import { Diff } from "./diff.tsx";
 import css from "./review.css?inline";
+import { WhatChanged } from "./what-changed.tsx";
 
 // The review's own stylesheet (review.css), added once, when a review is first opened.
 addStylesheet("review", css);
-
-const PILL = "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-mono text-meta/4";
-
-/** How each check shows, as a pill: passed in moss, running in violet, failed in red. */
-const CHECK_LOOK = {
-  passed: { look: "bg-success/12 text-code-string", said: "passed" },
-  running: { look: "bg-primary/12 text-primary-text", said: "running" },
-  failed: { look: "bg-destructive/12 text-destructive", said: "failed" },
-  other: { look: "bg-muted text-muted-foreground", said: "skipped" },
-} as const;
-
-function CheckPill({ check }: { check: PullRequestCheck }) {
-  const { look, said } = CHECK_LOOK[check.outcome];
-  return (
-    <li className={classes(PILL, look)}>
-      {check.outcome === "passed" && <Check aria-hidden className="size-3.5" />}
-      {check.outcome === "failed" && <X aria-hidden className="size-3.5" />}
-      {check.outcome === "running" && (
-        <span aria-hidden className="size-1.75 animate-pulse rounded-full bg-primary" />
-      )}
-      {check.name}
-      <span className={check.outcome === "running" || check.outcome === "failed" ? "" : "sr-only"}>
-        {` ${said}`}
-      </span>
-    </li>
-  );
-}
 
 /** What the session page shows of a pull request: its review asked for again when it changes. */
 const versionOf = (pullRequest: PullRequest | undefined) =>
@@ -60,16 +32,22 @@ const versionOf = (pullRequest: PullRequest | undefined) =>
         pullRequest.changes,
       ]);
 
+const filesSaid = (count: number) => (count === 1 ? "1 file" : `${count} files`);
+
 /**
- * A code session's pull request, reviewed on the phone (#160; Paper, Handheld · 18 and 04): its
- * checks, the files it changes as a small tree, the chosen file's diff, and Close PR and Merge in
- * thumb reach, Merge greyed out with its reason until it can merge. On a narrow screen the tree,
- * diff and buttons stack; from tablet width up, the tree sits beside the diff. Asking for changes
- * is a message in the session, from the message box below. Loaded only when it's opened, with its
- * own stylesheet.
+ * A code session's pull request, reviewed (#160, #240; Paper, "Tablet · PR review and Merge" and
+ * "description open"): the way back to All PRs, its title, where its checks stand, its branch and
+ * size; what changed in one line, which opens the whole description; the files it changes as a
+ * small tree beside the chosen file's diff (folded into one bar while the description is open);
+ * then a big Merge and Close PR in thumb reach, Merge greyed out with its reason until it can
+ * merge. On a narrow screen the tree, diff and buttons stack. Asking for changes is a message in
+ * the session, from the message box below. Loaded only when it's opened, with its own stylesheet.
  */
 export default function Review(props: {
   sessionId: SessionId;
+  workspaceId: WorkspaceId;
+  /** The session's title, the pull request's until GitHub has given it. */
+  sessionTitle: string;
   /**
    * The pull request as the session's events have it now, once they've arrived: the review is
    * asked for again as it changes.
@@ -81,11 +59,6 @@ export default function Review(props: {
   const { sessionId, onEnded } = props;
   const version = versionOf(props.pullRequest);
   const [review, setReview] = useState<FromWorker<PullRequestReview>>();
-  const [chosen, setChosen] = useState<string>();
-  const [closing, setClosing] = useState(false);
-  const [merging, setMerging] = useState(false);
-  const [problem, setProblem] = useState<string>();
-  const diff = useRef<HTMLDivElement>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: asked again each time the pull request changes
   useEffect(() => {
@@ -98,23 +71,62 @@ export default function Review(props: {
     };
   }, [sessionId, version]);
 
-  if (review === undefined) {
-    return (
-      <div data-review="">
-        <p className="mt-4 text-sm text-muted-foreground">Asking GitHub for the pull request…</p>
-      </div>
-    );
-  }
-  if (review.kind !== "loaded") {
-    return (
-      <div data-review="">
-        <div className="mt-4">
+  const loaded = review?.kind === "loaded" ? review.data : undefined;
+  const pullRequest = loaded?.pullRequest ?? props.pullRequest;
+  const title =
+    pullRequest === undefined
+      ? props.sessionTitle
+      : `#${pullRequest.number} ${pullRequest.title ?? props.sessionTitle}`;
+
+  return (
+    // Where the review's own classes apply (review.css).
+    <div data-review="" className="flex flex-col gap-2">
+      <PageTitle above={<BackLink workspaceId={props.workspaceId} pullRequests />}>
+        {title}
+      </PageTitle>
+      {pullRequest !== undefined && (
+        <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-meta/4">
+          <ChecksState pullRequest={pullRequest} chip />
+          {loaded !== undefined && (
+            <span className="min-w-0 truncate font-mono text-primary-text">{loaded.branch}</span>
+          )}
+          <span className="font-medium text-muted-foreground">
+            · {filesSaid(pullRequest.changes.files)} · {lineCounts(pullRequest.changes)}
+          </span>
+        </p>
+      )}
+      {review === undefined ? (
+        <p className="mt-2 text-sm text-muted-foreground">Asking GitHub for the pull request…</p>
+      ) : review.kind !== "loaded" ? (
+        <div className="mt-2">
           <Notice title="The pull request couldn't be shown">{describeProblem(review).body}</Notice>
         </div>
-      </div>
-    );
-  }
-  const { pullRequest, files, checks, merge } = review.data;
+      ) : (
+        <Reviewing
+          key={review.data.pullRequest.number}
+          sessionId={sessionId}
+          review={review.data}
+          onEnded={onEnded}
+        />
+      )}
+    </div>
+  );
+}
+
+function Reviewing(props: {
+  sessionId: SessionId;
+  review: PullRequestReview;
+  onEnded: () => void;
+}) {
+  const { sessionId, review, onEnded } = props;
+  const { pullRequest, files, merge } = review;
+  /** The whole description is open, with the files folded into one bar. */
+  const [reading, setReading] = useState(false);
+  const [chosen, setChosen] = useState<string>();
+  const [closing, setClosing] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const diff = useRef<HTMLDivElement>(null);
   const file = files.find((one) => one.path === chosen) ?? files[0];
   const place = file === undefined ? 0 : files.indexOf(file) + 1;
 
@@ -141,26 +153,20 @@ export default function Review(props: {
   };
 
   return (
-    // Where the review's own classes apply (review.css).
-    <div data-review="">
-      <section aria-label="Review" className="mt-4 flex flex-col gap-3.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {checks.length > 0 && (
-            <ul aria-label="Checks" className="contents">
-              {checks.map((check) => (
-                <CheckPill key={check.name} check={check} />
-              ))}
-            </ul>
-          )}
-          <p className="px-1 font-mono text-meta/4 text-muted-foreground">
-            {lineCounts(pullRequest.changes)}
-          </p>
-          <p className="min-w-0 truncate px-1 font-mono text-meta/4 text-placeholder max-md:basis-full">
-            {review.data.branch} → {review.data.base}
-          </p>
-        </div>
+    <section aria-label="Review" className="mt-2 flex flex-col gap-3">
+      <WhatChanged body={review.body} open={reading} onOpen={setReading} />
 
-        <div className="grid gap-3.5 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] md:items-start">
+      {reading ? (
+        <div className="flex min-h-13 items-center justify-between gap-3 rounded-card border bg-surface py-2 pr-3 pl-4">
+          <p className="text-interface font-semibold">
+            {filesSaid(files.length)} changed · {lineCounts(pullRequest.changes)}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setReading(false)}>
+            View the diff
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] md:items-start">
           {files.length > 0 ? (
             <FileTree files={files} chosen={file?.path} onChoose={choose} />
           ) : (
@@ -168,48 +174,48 @@ export default function Review(props: {
               It changes no files.
             </p>
           )}
-          <div ref={diff} className="flex min-w-0 scroll-mt-4 flex-col gap-3.5">
+          <div ref={diff} className="flex min-w-0 scroll-mt-4 flex-col">
             {file !== undefined && <Diff file={file} place={`${place} of ${files.length}`} />}
-
-            {pullRequest.state === "open" &&
-              (closing ? (
-                <ConfirmStep
-                  question={`Close PR #${pullRequest.number}?`}
-                  confirmLabel="Close PR"
-                  onCancel={() => setClosing(false)}
-                  confirm={() => end({ kind: "close" })}
-                >
-                  It closes on GitHub without merging, and this session ends: its branch and
-                  worktree are cleared away once no turn is running.
-                </ConfirmStep>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2.5">
-                    <ThumbButton look="quiet" onClick={() => setClosing(true)}>
-                      Close PR
-                    </ThumbButton>
-                    <ThumbButton
-                      look="main"
-                      grow={1.6}
-                      disabled={merge.kind === "refused" || merging}
-                      aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
-                      onClick={() => void mergeNow()}
-                    >
-                      <GitMerge aria-hidden />
-                      Merge
-                    </ThumbButton>
-                  </div>
-                  {merge.kind === "refused" && (
-                    <p id="merge-refused" className="text-right text-meta text-muted-foreground">
-                      {merge.reason}
-                    </p>
-                  )}
-                  <FormError message={problem} />
-                </div>
-              ))}
           </div>
         </div>
-      </section>
-    </div>
+      )}
+
+      {pullRequest.state === "open" &&
+        (closing ? (
+          <ConfirmStep
+            question={`Close PR #${pullRequest.number}?`}
+            confirmLabel="Close PR"
+            onCancel={() => setClosing(false)}
+            confirm={() => end({ kind: "close" })}
+          >
+            It closes on GitHub without merging, and this session ends: its branch and worktree are
+            cleared away once no turn is running.
+          </ConfirmStep>
+        ) : (
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex gap-3">
+              <ThumbButton
+                look="primary"
+                grow={3}
+                disabled={merge.kind === "refused" || merging}
+                aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
+                onClick={() => void mergeNow()}
+              >
+                <GitMerge aria-hidden />
+                Merge
+              </ThumbButton>
+              <ThumbButton look="quiet" onClick={() => setClosing(true)}>
+                Close PR
+              </ThumbButton>
+            </div>
+            {merge.kind === "refused" && (
+              <p id="merge-refused" className="text-meta text-muted-foreground">
+                {merge.reason}
+              </p>
+            )}
+            <FormError message={problem} />
+          </div>
+        ))}
+    </section>
   );
 }

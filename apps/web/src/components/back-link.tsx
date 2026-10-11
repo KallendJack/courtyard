@@ -1,29 +1,43 @@
-import type { SessionId, WorkspaceId } from "@courtyard/contract";
+import type { WorkspaceId } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
+import { ChevronLeft } from "lucide-react";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 const loggedIn = getRouteApi("/_app");
 
-const BACK =
-  "flex w-fit items-center gap-2 text-meta font-medium text-primary-text hover:underline";
+const BACK = "flex w-fit items-center text-meta text-primary-text hover:underline";
+const NAMED = `${BACK} gap-2 font-medium`;
 
 /**
  * The way back above a page's title: to a workspace, named, with its icon, or with no
- * workspace, to the home page's list of them; from a pull request's review, to its session.
+ * workspace, to the home page's list of them; from a pull request's review, to the workspace's
+ * pull requests, as "All PRs" (#240).
  */
 export function BackLink(props: {
   workspaceId: WorkspaceId | undefined;
   /** Where the page sits in the workspace, after its name: "Documents". */
   within?: string;
-  /** Back to this session's conversation, from its pull request's review (#160). */
-  session?: SessionId;
+  /** Back to the workspace's pull requests, from one's review (#240). */
+  pullRequests?: boolean;
 }) {
   const workspaces = loggedIn.useLoaderData();
-  const { workspaceId, within, session } = props;
+  const { workspaceId, within } = props;
   if (workspaceId === undefined) {
     return (
-      <Link to="/" aria-label="Back to Workspaces" className={BACK}>
+      <Link to="/" aria-label="Back to Workspaces" className={NAMED}>
         Workspaces
+      </Link>
+    );
+  }
+  if (props.pullRequests) {
+    return (
+      <Link
+        to="/workspaces/$workspaceId"
+        params={{ workspaceId }}
+        className={`${BACK} gap-1.5 font-semibold`}
+      >
+        <ChevronLeft aria-hidden className="size-3.5" />
+        All PRs
       </Link>
     );
   }
@@ -32,14 +46,10 @@ export function BackLink(props: {
   const name = workspace?.name ?? workspaceId;
   return (
     <Link
-      {...(session === undefined
-        ? { to: "/workspaces/$workspaceId", params: { workspaceId } }
-        : {
-            to: "/workspaces/$workspaceId/sessions/$sessionId",
-            params: { workspaceId, sessionId: session },
-          })}
-      aria-label={session === undefined ? `Back to ${name}` : "Back to the session"}
-      className={BACK}
+      to="/workspaces/$workspaceId"
+      params={{ workspaceId }}
+      aria-label={`Back to ${name}`}
+      className={NAMED}
     >
       {workspace && <WorkspaceIcon icon={workspace.icon} size="sm" />}
       {within === undefined ? name : `${name} · ${within}`}

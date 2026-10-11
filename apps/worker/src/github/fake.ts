@@ -125,12 +125,17 @@ export const createFakeGitHub = (
     head: string;
     /** The files it changes, with their diffs: none unless a test says. */
     files?: readonly FoundFile[];
+    /** Its title and description, as the model wrote them with gh. */
+    title?: string;
+    body?: string;
   }) => {
     const number = pulls.length + 1;
     const files = open.files ?? [];
     pulls.push({
       repo: open.repo,
       branch: open.branch,
+      title: open.title ?? `Pull request ${number}`,
+      body: open.body ?? "",
       head: open.head,
       base: "main",
       number,
@@ -161,7 +166,11 @@ export const createFakeGitHub = (
     const subject = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%s", head])) ?? "";
     const checks = onPush.checks(subject);
     if (pull === undefined) {
-      change(openPullRequest({ ...find, head, files }), { checks });
+      // Titled and described by its first commit, as gh pr create --fill would.
+      const body = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%b", head])) ?? "";
+      change(openPullRequest({ ...find, head, files, title: subject, body: body.trim() }), {
+        checks,
+      });
     } else {
       change(pull.number, { head, checks, files, changes: changesOf(files) });
     }
@@ -259,7 +268,13 @@ export const createFakeGitHub = (
         onPush === undefined
           ? undefined
           : await gitOrNothing(onPush.remote, ["rev-parse", `refs/heads/${pull.branch}`]);
-      const number = openPullRequest({ repo: pull.repo, branch: pull.branch, head: head ?? "" });
+      const number = openPullRequest({
+        repo: pull.repo,
+        branch: pull.branch,
+        head: head ?? "",
+        title: pull.title,
+        body: pull.body,
+      });
       return ok({ number, url: `https://github.com/${pull.repo}/pull/${number}` });
     },
   };

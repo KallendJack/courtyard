@@ -85,6 +85,9 @@ export type GitHubApi = {
 /** A pull request as GitHub has it. */
 export type FoundPullRequest = {
   readonly number: number;
+  readonly title: string;
+  /** Its description, in Markdown: empty when it has none. */
+  readonly body: string;
   readonly url: string;
   readonly state: "open" | "merged" | "closed";
   /** Its latest commit. */
@@ -178,6 +181,8 @@ const Pulls = z.array(z.object({ number: z.number().int().positive() }));
 /** One pull request, with what only asking for it alone gives: its size and whether it merges. */
 const Pull = z.object({
   number: z.number().int().positive(),
+  title: z.string(),
+  body: z.string().nullable(),
   html_url: z.url({ protocol: /^https$/ }),
   state: z.enum(["open", "closed"]),
   merged_at: z.string().nullable(),
@@ -434,6 +439,8 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         );
         return ok({
           number: pull.number,
+          title: pull.title,
+          body: pull.body ?? "",
           url: pull.html_url,
           state: pull.merged_at !== null ? "merged" : pull.state,
           head: pull.head.sha,
