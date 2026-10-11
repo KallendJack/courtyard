@@ -175,7 +175,7 @@ export {
   OwnerSection,
   WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceChange,
-  WorkspaceColour,
+  WorkspaceIcon,
   WorkspaceDetail,
   WorkspaceId,
   WorkspaceList,

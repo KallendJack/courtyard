@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   type ContextFile,
   type NewWorkspace,
-  WorkspaceColour,
+  WorkspaceIcon,
   WorkspaceId,
   WorkspaceMode,
   type WorkspaceSummary,
@@ -20,6 +20,7 @@ import {
   writeJsonFile,
 } from "../files.ts";
 import { err, ok, type Result } from "../result.ts";
+import { suggestIcon } from "./icons.ts";
 
 export const CONTEXT_FILE = "CONTEXT.md";
 const CONFIG_FILE = "workspace.json";
@@ -28,7 +29,6 @@ const CONFIG_FILE = "workspace.json";
  * it's kept out of the list by name, and no workspace can be called that.
  */
 export const ARCHIVED_FOLDER = "archived";
-const COLOURS = WorkspaceColour.options;
 
 /**
  * A command named by its first words, one space apart, with ` ...` at the end when more arguments
@@ -72,7 +72,8 @@ const WorkspaceConfig = z
     allowlist: AllowlistSettings.optional(),
     /** A code workspace's tool connections (ADR 0008): for now only Paper (ADR 0023). */
     connections: z.object({ paper: PaperSettings.optional() }).optional(),
-    colour: WorkspaceColour.optional(),
+    /** The icon the owner chose, or the one suggested when it was added (#210). */
+    icon: WorkspaceIcon.optional(),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
     message: "is required for a code workspace",
@@ -85,7 +86,7 @@ type Config =
       readonly kind: "read";
       readonly name?: string;
       readonly mode: WorkspaceMode;
-      readonly colour?: WorkspaceColour;
+      readonly icon?: WorkspaceIcon;
       readonly repoPath?: string;
       readonly allowlist?: AllowlistSettings;
       readonly paper?: PaperSettings;
@@ -106,16 +107,6 @@ export type Workspace = {
   /** A code workspace's Paper connection (ADR 0023), or `null` when its config names none. */
   readonly paper: PaperSettings | null;
 };
-
-/** A workspace as read from its folder, before its colour is settled. */
-type Uncoloured = Omit<Workspace, "summary"> & {
-  readonly summary: Omit<WorkspaceSummary, "colour">;
-  /** The colour its config keeps, if any. */
-  readonly keptColour: WorkspaceColour | undefined;
-};
-
-/** A workspace in the list, and whether its config keeps its colour. */
-type Listed = { readonly workspace: Workspace; readonly colourKept: boolean };
 
 /** Why a workspace couldn't be read, added or changed. */
 export type WorkspaceError =
@@ -151,12 +142,12 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, colour, repoPath, allowlist, connections } = parsed.data;
+  const { name, mode, icon, repoPath, allowlist, connections } = parsed.data;
   return {
     kind: "read",
     mode,
     ...(name === undefined ? {} : { name }),
-    ...(colour === undefined ? {} : { colour }),
+    ...(icon === undefined ? {} : { icon }),
     ...(repoPath === undefined ? {} : { repoPath }),
     ...(allowlist === undefined ? {} : { allowlist }),
     ...(connections?.paper === undefined ? {} : { paper: connections.paper }),
@@ -166,7 +157,7 @@ const readConfig = async (folder: string): Promise<Config> => {
 const readWorkspace = async (
   contextDir: string,
   id: WorkspaceId,
-): Promise<Result<Uncoloured, WorkspaceError>> => {
+): Promise<Result<Workspace, WorkspaceError>> => {
   const folder = join(contextDir, id);
   const [config, markdown] = await Promise.all([
     readConfig(folder),
@@ -180,16 +171,19 @@ const readWorkspace = async (
   }
   const contextFile = markdown.value === undefined ? null : parseContextFile(markdown.value);
   const valid = config.kind === "read" ? config : undefined;
+  const name = valid?.name ?? contextFile?.title ?? id;
+  const mode = valid?.mode ?? "planning";
 
   return ok({
     summary: {
       id,
-      name: valid?.name ?? contextFile?.title ?? id,
-      mode: valid?.mode ?? "planning",
+      name,
+      mode,
+      // One made by hand, or before icons, shows the one its name suggests until the owner picks.
+      icon: valid?.icon ?? suggestIcon(name, mode),
       hasContextFile: contextFile !== null,
       ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
-    keptColour: valid?.colour,
     contextFile,
     folder,
     contextMarkdown: markdown.value ?? null,
@@ -227,35 +221,18 @@ const isWorkspaceFolder = async (path: string): Promise<Result<boolean, Workspac
 const archivedFolderOf = (contextDir: string, id: WorkspaceId) =>
   join(contextDir, ARCHIVED_FOLDER, id);
 
-/**
- * Settles each workspace's colour. A workspace has the colour its config keeps. One without (made
- * by hand, or before colours were kept) takes the colours in turn, in folder-name order among the
- * others without one, until adding or changing a workspace keeps it (see `keepColours`).
- */
-const withColours = (workspaces: readonly Uncoloured[]): Listed[] => {
-  const uncoloured = workspaces.flatMap((w) => (w.keptColour === undefined ? [w.summary.id] : []));
-  uncoloured.sort();
-  return workspaces.map(({ keptColour, summary, ...rest }) => {
-    const turn = COLOURS[uncoloured.indexOf(summary.id) % COLOURS.length];
-    return {
-      workspace: { ...rest, summary: { ...summary, colour: keptColour ?? turn ?? "bracken" } },
-      colourKept: keptColour !== undefined,
-    };
-  });
-};
-
 /** Every workspace in the context folder, in folder order. */
 const readEveryWorkspace = async (
   contextDir: string,
-): Promise<Result<Listed[], WorkspaceError>> => {
+): Promise<Result<Workspace[], WorkspaceError>> => {
   const ids = await workspaceIds(contextDir);
   if (!ids.ok) return ids;
-  const workspaces: Uncoloured[] = [];
+  const workspaces: Workspace[] = [];
   for (const workspace of await Promise.all(ids.value.map((id) => readWorkspace(contextDir, id)))) {
     if (!workspace.ok) return workspace;
     workspaces.push(workspace.value);
   }
-  return ok(withColours(workspaces));
+  return ok(workspaces);
 };
 
 /** Compares names the way the owner reads them: "Garage gym" and "garage Gym" are the same. */
@@ -270,7 +247,7 @@ export const listWorkspaces = async (
 ): Promise<Result<WorkspaceSummary[], WorkspaceError>> => {
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
-  return ok(every.value.map((listed) => listed.workspace.summary).sort(byName));
+  return ok(every.value.map((workspace) => workspace.summary).sort(byName));
 };
 
 /** How many workspaces there are, archived ones too. */
@@ -301,16 +278,7 @@ export const getWorkspace = async (
     if (!archived.ok) return archived;
     return err({ kind: archived.value ? "archived" : "not-found" });
   }
-  const read = await readWorkspace(contextDir, parsed);
-  if (!read.ok) return read;
-  const [own] = withColours([read.value]);
-  if (own?.colourKept) return ok(own.workspace);
-
-  // Without a kept colour, a workspace's colour depends on which others have one.
-  const every = await readEveryWorkspace(contextDir);
-  if (!every.ok) return every;
-  const listed = every.value.find((w) => w.workspace.summary.id === parsed);
-  return listed ? ok(listed.workspace) : err({ kind: "not-found" });
+  return readWorkspace(contextDir, parsed);
 };
 
 /** Whether a workspace is archived: its folder is in the archived folder, not the context folder. */
@@ -319,10 +287,10 @@ export const isArchived = async (contextDir: string, id: WorkspaceId) => {
   return !workspace.ok && workspace.error.kind === "archived";
 };
 
-/** Keeps a name or colour in a workspace's config, alongside whatever else is there. */
+/** Keeps a name or icon in a workspace's config, alongside whatever else is there. */
 const keepInConfig = async (
   workspace: Workspace,
-  fields: { name?: string; colour?: WorkspaceColour },
+  fields: { name?: string; icon?: WorkspaceIcon },
 ): Promise<Result<null, WorkspaceError>> => {
   // Read as it is on disk, so fields the worker doesn't know about are kept too.
   const path = join(workspace.folder, CONFIG_FILE);
@@ -336,18 +304,6 @@ const keepInConfig = async (
       });
 };
 
-/**
- * Keeps the colour each workspace has now, for those whose config doesn't yet, so adding or
- * changing a workspace never moves another's. A config that was ignored is left for the owner.
- */
-const keepColours = async (every: readonly Listed[]): Promise<Result<null, WorkspaceError>> => {
-  for (const { workspace, colourKept } of every) {
-    if (colourKept || workspace.summary.configProblem !== undefined) continue;
-    const kept = await keepInConfig(workspace, { colour: workspace.summary.colour });
-    if (!kept.ok) return kept;
-  }
-  return ok(null);
-};
 
 /** Names Windows keeps for devices, which can't be folder or file names there. */
 export const RESERVED_ON_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
@@ -407,17 +363,17 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
  * folder name `id`). Names that differ only in case or accents count as the same.
  */
 const nameClash = (
-  every: readonly Listed[],
+  every: readonly Workspace[],
   wanted: { name: string; id?: WorkspaceId; except?: WorkspaceId },
 ): WorkspaceError | undefined => {
-  const clash = every.find(({ workspace: { summary } }) => {
+  const clash = every.find(({ summary }) => {
     if (summary.id === wanted.except) return false;
     return summary.id === wanted.id || compareNames(summary.name, wanted.name) === 0;
   });
   return clash
     ? {
         kind: "conflict",
-        message: `There's already a workspace called ${clash.workspace.summary.name}.`,
+        message: `There's already a workspace called ${clash.summary.name}.`,
       }
     : undefined;
 };
@@ -439,13 +395,6 @@ const archivedClash = async (
     kind: "conflict",
     message: `There's an archived workspace called ${name}. Move its folder out of the ${ARCHIVED_FOLDER} folder to bring it back, or choose another name.`,
   };
-};
-
-/** The colour the fewest workspaces have, earliest in the list on a tie. */
-const nextColour = (every: readonly Listed[]) => {
-  const uses = (colour: WorkspaceColour) =>
-    every.filter((w) => w.workspace.summary.colour === colour).length;
-  return COLOURS.reduce((fewest, colour) => (uses(colour) < uses(fewest) ? colour : fewest));
 };
 
 /**
@@ -471,7 +420,7 @@ export const starterContextFile = (name: string, intro?: string) =>
 /** Writes a new workspace's context file and config into its empty folder. */
 const writeStarterFiles = async (
   folder: string,
-  starter: { name: string; intro: string | undefined; colour: WorkspaceColour },
+  starter: { name: string; intro: string | undefined; icon: WorkspaceIcon },
 ): Promise<Result<null, WorkspaceError>> => {
   const problem: WorkspaceError = {
     kind: "storage",
@@ -484,15 +433,15 @@ const writeStarterFiles = async (
   } catch {
     return err(problem);
   }
-  const config = { colour: starter.colour };
+  const config = { icon: starter.icon };
   const written = await writeJsonFile(join(folder, CONFIG_FILE), config, { exclusive: true });
   return written.ok ? ok(null) : err(problem);
 };
 
 /**
  * Adds a workspace called `name`: its folder, a starter context file starting with `intro` when
- * there is one, and the next colour, kept in its config. Refuses a name that can't be a folder
- * name or that another workspace has.
+ * there is one, and the icon its name suggests, kept in its config. Refuses a name that can't be
+ * a folder name or that another workspace has.
  */
 export const createWorkspace = async (
   contextDir: string,
@@ -523,54 +472,49 @@ export const createWorkspace = async (
   const saved = await writeStarterFiles(folder, {
     name,
     intro,
-    colour: nextColour(every.value),
+    icon: suggestIcon(name, "planning"),
   });
   if (!saved.ok) {
     // Half a workspace would just confuse things later.
     await rm(folder, { recursive: true, force: true }).catch(() => undefined);
     return saved;
   }
-  const kept = await keepColours(every.value);
-  if (!kept.ok) return kept;
 
   const created = await getWorkspace(contextDir, id.value);
   return created.ok ? ok(created.value.summary) : created;
 };
 
 /**
- * Gives a workspace a new name or colour, kept in its config. Its folder stays as it is, so its
+ * Gives a workspace a new name or icon, kept in its config. Its folder stays as it is, so its
  * sessions stay with it. Refuses a name another workspace has. A config that was ignored is left
  * for the owner to fix rather than overwritten.
  */
 export const changeWorkspace = async (
   contextDir: string,
-  change: { id: string; name?: string | undefined; colour?: WorkspaceColour | undefined },
+  change: { id: string; name?: string | undefined; icon?: WorkspaceIcon | undefined },
 ): Promise<Result<WorkspaceSummary, WorkspaceError>> => {
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
-  const listed = every.value.find((w) => w.workspace.summary.id === change.id);
+  const listed = every.value.find((w) => w.summary.id === change.id);
   if (!listed) return err({ kind: "not-found" });
-  const { summary } = listed.workspace;
+  const { summary } = listed;
   if (summary.configProblem !== undefined) {
     return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
   }
-  const { name, colour } = change;
+  const { name, icon } = change;
   if (name !== undefined) {
     const clash = nameClash(every.value, { name, except: summary.id });
     if (clash) return err(clash);
   }
 
-  if (colour !== undefined) {
-    // Choosing a colour may change which others take turns, so theirs are kept first.
-    const others = await keepColours(every.value.filter((w) => w !== listed));
-    if (!others.ok) return others;
-  }
-  const fields = {
+  const kept = await keepInConfig(listed, {
     ...(name === undefined ? {} : { name }),
-    ...(colour === undefined ? {} : { colour }),
-  };
-  const kept = await keepInConfig(listed.workspace, fields);
-  return kept.ok ? ok({ ...summary, ...fields }) : kept;
+    ...(icon === undefined ? {} : { icon }),
+  });
+  if (!kept.ok) return kept;
+  // Read again: a new name can suggest another icon, when the owner hasn't picked one.
+  const changed = await readWorkspace(contextDir, summary.id);
+  return changed.ok ? ok(changed.value.summary) : changed;
 };
 
 /**

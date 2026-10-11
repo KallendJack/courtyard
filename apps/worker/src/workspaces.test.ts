@@ -273,7 +273,7 @@ const changeWorkspace = (id: string, change: unknown) =>
     body: JSON.stringify(change),
   });
 
-const changeColour = (id: string, colour: unknown) => changeWorkspace(id, { colour });
+const changeIcon = (id: string, icon: unknown) => changeWorkspace(id, { icon });
 const renameWorkspace = (id: string, name: unknown) => changeWorkspace(id, { name });
 const archive = (id: string) => postJson(request, `/api/workspaces/${id}/archive`, {});
 
@@ -365,90 +365,86 @@ describe("adding a workspace", () => {
     expect(await listWorkspaces()).toEqual([]);
   });
 
-  it("gives each new workspace the colour the fewest workspaces have, in turn", async () => {
-    const colours = [];
-    for (const name of ["One", "Two", "Three", "Four", "Five", "Six"]) {
-      colours.push((await added(name)).colour);
+  it("suggests an icon from the new workspace's name, and keeps it in its config", async () => {
+    const icons = [];
+    for (const name of ["Mountain Biking", "Garage", "Homelab", "Garage gym", "Pottery"]) {
+      icons.push([name, (await added(name)).icon]);
     }
 
-    expect(colours).toEqual(["bracken", "heather", "slate", "moss", "peat", "bracken"]);
-  });
-
-  it("never changes another workspace's colour", async () => {
-    await workspace("office");
-    await workspace("studio");
-    const before = (await listWorkspaces()).map((w) => [w.id, w.colour]);
-
-    const allotment = await added("Allotment");
-
-    expect(before).toEqual([
-      ["office", "bracken"],
-      ["studio", "heather"],
+    expect(icons).toEqual([
+      ["Mountain Biking", "bicycle"],
+      ["Garage", "garage"],
+      ["Homelab", "server"],
+      // What it's for wins over where it is.
+      ["Garage gym", "dumbbell"],
+      // A name that says nothing gets the plain one.
+      ["Pottery", "book"],
     ]);
-    expect(allotment.colour).toBe("slate");
-    expect((await listWorkspaces()).map((w) => [w.id, w.colour])).toEqual([
-      ["allotment", "slate"],
-      ...before,
-    ]);
+    const config = JSON.parse(
+      await readFile(join(contextDir, "mountain-biking", "workspace.json"), "utf8"),
+    );
+    expect(config).toEqual({ icon: "bicycle" });
   });
 });
 
-describe("changing a workspace's colour", () => {
-  it("keeps the new colour, and the rest of the workspace's config", async () => {
-    await workspace("side-project", {
-      "workspace.json": '{ "mode": "code", "repoPath": "/path/to/repo" }',
+describe("a workspace's icon", () => {
+  it("is suggested from its name when its config keeps none, and code for a code workspace", async () => {
+    await workspace("courtyard", {
+      "workspace.json": '{ "name": "Courtyard", "mode": "code", "repoPath": "/path/to/repo" }',
     });
+    await workspace("homelab", { "CONTEXT.md": "# Homelab\n" });
+    // A colour kept from before workspaces had icons is left alone.
+    await workspace("office", { "workspace.json": '{ "colour": "moss" }' });
 
-    const response = await changeColour("side-project", "moss");
+    expect((await listWorkspaces()).map((w) => [w.name, w.icon])).toEqual([
+      ["Courtyard", "code"],
+      ["Homelab", "server"],
+      ["office", "briefcase"],
+    ]);
+    expect((await openWorkspace("courtyard")).workspace.icon).toBe("code");
+  });
+
+  it("can be changed, keeping the rest of the workspace's config", async () => {
+    await workspace("side-project", {
+      "workspace.json": '{ "mode": "code", "repoPath": "/path/to/repo", "colour": "moss" }',
+    });
+    await workspace("office");
+
+    const response = await changeIcon("side-project", "music");
 
     expect(response.status).toBe(200);
     expect(WorkspaceSummary.parse(await response.json())).toMatchObject({
-      colour: "moss",
+      icon: "music",
       mode: "code",
     });
-    const { workspace: reopened } = await openWorkspace("side-project");
-    expect(reopened).toMatchObject({ colour: "moss", mode: "code" });
+    expect((await openWorkspace("side-project")).workspace).toMatchObject({
+      icon: "music",
+      mode: "code",
+    });
+    const config = JSON.parse(
+      await readFile(join(contextDir, "side-project", "workspace.json"), "utf8"),
+    );
+    expect(config).toEqual({
+      mode: "code",
+      repoPath: "/path/to/repo",
+      colour: "moss",
+      icon: "music",
+    });
+    // No other workspace's config is written.
+    expect(await readdir(join(contextDir, "office"))).toEqual([]);
   });
 
-  it("never changes another workspace's colour, even one that wasn't kept yet", async () => {
-    await workspace("office");
-    await workspace("studio");
-    await workspace("workshop");
-    const before = (await listWorkspaces()).map((w) => [w.id, w.colour]);
-
-    expect((await changeColour("office", "moss")).status).toBe(200);
-
-    expect(before).toEqual([
-      ["office", "bracken"],
-      ["studio", "heather"],
-      ["workshop", "slate"],
-    ]);
-    expect((await listWorkspaces()).map((w) => [w.id, w.colour])).toEqual([
-      ["office", "moss"],
-      ["studio", "heather"],
-      ["workshop", "slate"],
-    ]);
-    // Kept now, so a folder added by hand later can't move them either.
-    await workspace("attic");
-    expect((await listWorkspaces()).map((w) => w.colour)).toEqual([
-      "bracken",
-      "moss",
-      "heather",
-      "slate",
-    ]);
-  });
-
-  it("refuses a colour that isn't one of the five, or a workspace that doesn't exist", async () => {
+  it("refuses an icon that isn't one of the set, or a workspace that doesn't exist", async () => {
     await workspace("office");
 
-    expect((await changeColour("office", "teal")).status).toBe(400);
-    expect((await changeColour("nope", "moss")).status).toBe(404);
+    expect((await changeIcon("office", "teal")).status).toBe(400);
+    expect((await changeIcon("nope", "music")).status).toBe(404);
   });
 
   it("won't overwrite a config it had to ignore", async () => {
     await workspace("office", { "workspace.json": "{ not json" });
 
-    const response = await changeColour("office", "moss");
+    const response = await changeIcon("office", "music");
 
     expect(response.status).toBe(409);
     expect(await errorOf(response)).toContain("workspace.json");
@@ -479,8 +475,8 @@ describe("renaming a workspace", () => {
       colour: "moss",
       name: "Courtyard",
     });
-    expect((await listWorkspaces()).map((w) => [w.id, w.name, w.colour])).toEqual([
-      ["side-project", "Courtyard", "moss"],
+    expect((await listWorkspaces()).map((w) => [w.id, w.name, w.icon])).toEqual([
+      ["side-project", "Courtyard", "code"],
     ]);
   });
 
