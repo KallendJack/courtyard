@@ -6,11 +6,19 @@ import { Activity } from "./session-event.ts";
 // Whose turn it is in a session (#179), as its workspace's lists show it. Apart from `session.ts`,
 // whose summaries the first load needs, so only the pages that list sessions load these.
 
-/** What a running turn's model is doing now: its latest activity, writing its answer, or neither yet. */
+/**
+ * What a running turn's model is doing now: its latest activity, writing its answer, or neither
+ * yet; or, in a code session, nothing yet, as the turn waits for a place among the code sessions
+ * running (#362), with how many turns wait ahead of it (none known before #362).
+ */
 export const Doing = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("thinking") }),
   z.object({ kind: z.literal("writing") }),
   z.object({ kind: z.literal("activity"), activity: Activity }),
+  z.object({
+    kind: z.literal("waiting-for-place"),
+    ahead: z.number().int().nonnegative().optional(),
+  }),
 ]);
 export type Doing = z.infer<typeof Doing>;
 

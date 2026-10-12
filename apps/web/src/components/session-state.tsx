@@ -10,6 +10,11 @@ import { ChatFlowScope } from "./chat-flow-scope.tsx";
 export const doingWords = (doing: Doing) => {
   if (doing.kind === "thinking") return "thinking";
   if (doing.kind === "writing") return "writing the answer";
+  if (doing.kind === "waiting-for-place") {
+    return doing.ahead === undefined
+      ? "waiting for a place"
+      : `waiting for a place · ${doing.ahead} ahead`;
+  }
   const { activity } = doing;
   switch (activity.kind) {
     case "read-file":
@@ -129,14 +134,12 @@ function Ticking(props: { now: Exclude<TurnNow, { kind: "your-turn" }> }) {
 /**
  * A session in its workspace's list: its title and its state (a dot and a word), and under them
  * what it's doing or asks and for how long, or when it was last active. A session waiting for a
- * code session to end says that instead (#174).
+ * place among the code sessions running says so there, with how many are ahead (#362).
  */
 export function ListedSessionText(props: {
   title: string;
   now: TurnNow;
   updatedAt: string;
-  /** Waiting for one of the code sessions running to end before its turn starts. */
-  waitsForSlot: boolean;
   /** When something happened, as the page says it. */
   when: (iso: string) => string;
 }) {
@@ -146,30 +149,22 @@ export function ListedSessionText(props: {
       <span className="flex min-w-0 flex-col gap-1">
         <span className="flex items-center justify-between gap-2">
           <span className="truncate font-medium">{props.title}</span>
-          {props.waitsForSlot ? (
-            <span className="shrink-0 text-meta font-semibold tracking-label text-muted-foreground uppercase">
-              Queued · starts when a slot frees
-            </span>
-          ) : (
+          <span
+            className={classes(
+              "flex shrink-0 items-center gap-1.5 text-label font-bold",
+              TONES[now.kind].text,
+            )}
+          >
             <span
-              className={classes(
-                "flex shrink-0 items-center gap-1.5 text-label font-bold",
-                TONES[now.kind].text,
-              )}
-            >
-              <span
-                aria-hidden
-                className={classes("size-1.75 shrink-0 rounded-full", TONES[now.kind].dot)}
-              />
-              {NAMES[now.kind]}
-            </span>
-          )}
-        </span>
-        {!props.waitsForSlot && (
-          <span className="truncate font-mono text-caption/3.75 text-muted-foreground">
-            {now.kind === "your-turn" ? props.when(props.updatedAt) : <Ticking now={now} />}
+              aria-hidden
+              className={classes("size-1.75 shrink-0 rounded-full", TONES[now.kind].dot)}
+            />
+            {NAMES[now.kind]}
           </span>
-        )}
+        </span>
+        <span className="truncate font-mono text-caption/3.75 text-muted-foreground">
+          {now.kind === "your-turn" ? props.when(props.updatedAt) : <Ticking now={now} />}
+        </span>
       </span>
     </ChatFlowScope>
   );

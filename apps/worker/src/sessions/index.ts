@@ -9,6 +9,7 @@ import {
   type CarryOnRequest,
   type ChangeId,
   type CodeSessionList,
+  type Doing,
   type Effort,
   endsTurn,
   type FailureReason,
@@ -386,7 +387,8 @@ const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
 /**
  * Whose turn it is in a session whose turn is running (#179), from its events: the owner's while
  * the turn waits on an approval they haven't answered; otherwise the model's, since the turn's
- * message, doing what its latest activity or text says.
+ * message, doing what its latest activity or text says, or waiting for a place among the code
+ * sessions running (#362).
  */
 const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
   const start = events.findLastIndex((event) => event.type === "owner-message");
@@ -400,17 +402,28 @@ const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
   if (waiting?.type === "approval-requested") {
     return { kind: "needs-you", since: waiting.at, ask: waiting.ask, approval: waiting.seq };
   }
-  const latest = turn.findLast((event) => event.type === "activity" || event.type === "text-delta");
-  return {
-    kind: "working",
-    since: turn[0]?.at ?? new Date(0).toISOString(),
-    doing:
-      latest?.type === "activity"
-        ? { kind: "activity", activity: latest.activity }
-        : latest?.type === "text-delta"
-          ? { kind: "writing" }
-          : { kind: "thinking" },
+  const latest = turn.findLast(
+    (event) =>
+      event.type === "activity" ||
+      event.type === "text-delta" ||
+      event.type === "turn-queued" ||
+      event.type === "turn-dequeued",
+  );
+  const doing = (): Doing => {
+    switch (latest?.type) {
+      case "activity":
+        return { kind: "activity", activity: latest.activity };
+      case "text-delta":
+        return { kind: "writing" };
+      case "turn-queued":
+        return latest.ahead === undefined
+          ? { kind: "waiting-for-place" }
+          : { kind: "waiting-for-place", ahead: latest.ahead };
+      default:
+        return { kind: "thinking" };
+    }
   };
+  return { kind: "working", since: turn[0]?.at ?? new Date(0).toISOString(), doing: doing() };
 };
 
 /**
@@ -789,9 +802,19 @@ export const createSessions = (options: {
     let recordingLost = false;
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
     const callsUnderway = new Set<Promise<unknown>>();
-    const taken = turn.coding ? options.code.slots.take(turn.id, stopper.signal) : undefined;
-    // Every device sees the turn wait, and start (ADR 0006).
-    if (taken?.queued && !(await append(turn.id, { type: "turn-queued" })).ok) recordingLost = true;
+    /** Records that the turn waits for a slot, with how many turns wait ahead of it (#362). */
+    const waits = async (ahead: number) => {
+      if (!(await append(turn.id, { type: "turn-queued", ahead })).ok) recordingLost = true;
+    };
+    const taken = turn.coding
+      ? options.code.slots.take({
+          id: turn.id,
+          signal: stopper.signal,
+          moved: (ahead) => void waits(ahead),
+        })
+      : undefined;
+    // Every device sees the turn wait, move up, and start (ADR 0006).
+    if (taken?.queued) await waits(taken.ahead);
     const slot = await taken?.slot;
     if (taken?.queued && slot !== undefined) {
       if (!(await append(turn.id, { type: "turn-dequeued" })).ok) recordingLost = true;

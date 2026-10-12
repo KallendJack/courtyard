@@ -16,9 +16,21 @@ const forWords = (since: string, now = Date.now()) => {
 const capitalised = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
 
 /**
- * Running (#301; Paper, "Code workspace Home"): the workspace's sessions working now, every one
- * (at most the code sessions that run at once), each with what it's doing and for how long, and
- * how many of the worker's slots are taken. Hidden when none is working.
+ * How many turns wait ahead of a session's for a place among the code sessions running (#362);
+ * `undefined` when it isn't waiting for one (none when the worker didn't say, before #362).
+ */
+const placesAhead = (session: Listed) => {
+  if (session.now.kind !== "working" || session.now.doing.kind !== "waiting-for-place") {
+    return undefined;
+  }
+  return session.now.doing.ahead ?? 0;
+};
+
+/**
+ * Running (#301; Paper, "Code workspace Home"): the workspace's sessions working now, every one,
+ * each with what it's doing and for how long, and how many of the worker's slots are taken. Those
+ * running come first, then those waiting for a place, the next to start first (#362). Hidden when
+ * none is working.
  */
 export function Running(props: {
   workspaceId: WorkspaceId;
@@ -26,7 +38,15 @@ export function Running(props: {
   /** How many code sessions are running across the worker. */
   running: number;
 }) {
-  const working = props.sessions.filter((session) => session.now.kind === "working");
+  const busy = props.sessions.filter((session) => session.now.kind === "working");
+  const waiting = busy
+    .flatMap((session) => {
+      const ahead = placesAhead(session);
+      return ahead === undefined ? [] : [{ session, ahead }];
+    })
+    .sort((a, b) => a.ahead - b.ahead)
+    .map(({ session }) => session);
+  const working = [...busy.filter((session) => !waiting.includes(session)), ...waiting];
   if (working.length === 0) return null;
   return (
     <Block label="Running" aside={`${props.running} of ${CODE_SESSIONS_AT_ONCE}`}>

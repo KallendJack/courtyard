@@ -82,7 +82,6 @@ function SessionList(props: { sessions: readonly Listed[] }) {
               title={session.title}
               now={session.now}
               updatedAt={session.updatedAt}
-              waitsForSlot={session.queued}
               when={describeWhen}
             />
             {session.waiting !== "nothing" && <WaitingMark on={session.waiting} />}

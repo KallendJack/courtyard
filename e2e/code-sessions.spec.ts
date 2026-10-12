@@ -381,16 +381,39 @@ test.describe("several code sessions at once (#174)", () => {
     await page.getByRole("button", { name: "Start" }).click();
 
     const session = page.getByRole("list", { name: "Session" });
-    await expect(session).toContainText(
-      `Waiting: ${AT_ONCE} code sessions are running already. This starts as soon as one of them ends.`,
-    );
+    await expect(session).toContainText("waiting for a place · 0 ahead");
     await expect(session).not.toContainText("You said:");
 
     const [first] = busy.splice(0, 1);
     if (first !== undefined) await stopFirstTurn(request, first);
 
     await expect(session).toContainText("You said: Fix the build");
-    await expect(session).not.toContainText("Waiting:");
+    await expect(session).not.toContainText("waiting for a place");
+  });
+
+  test("Running lists those waiting for a place after those running, with how many are ahead (#362)", async ({
+    page,
+    request,
+  }) => {
+    for (let started = 0; started < AT_ONCE; started += 1) {
+      busy.push(await startCoding(request, LONG_TASK));
+    }
+    busy.push(await startCoding(request, "Tidy the README"));
+    busy.push(await startCoding(request, "Rename the settings page"));
+
+    await page.goto("/workspaces/side-project");
+
+    const running = page.getByRole("region", { name: "Running" });
+    await expect(running).toContainText(`${AT_ONCE} of ${AT_ONCE}`);
+    const rows = running.getByRole("listitem");
+    await expect(rows).toHaveCount(AT_ONCE + 2);
+    await expect(rows.nth(AT_ONCE)).toHaveAccessibleName("Tidy the README");
+    await expect(rows.nth(AT_ONCE)).toContainText("Waiting for a place · 0 ahead");
+    await expect(rows.nth(AT_ONCE + 1)).toHaveAccessibleName("Rename the settings page");
+    await expect(rows.nth(AT_ONCE + 1)).toContainText("Waiting for a place · 1 ahead");
+    for (let at = 0; at < AT_ONCE; at += 1) {
+      await expect(rows.nth(at)).not.toContainText("Waiting for a place");
+    }
   });
 
   test("the sessions list shows one waiting, which the owner can remove", async ({
@@ -408,7 +431,7 @@ test.describe("several code sessions at once (#174)", () => {
     const waiting = sessions
       .getByRole("listitem")
       .filter({ hasText: "From session to pull request" });
-    await expect(waiting).toContainText("Queued · starts when a slot frees");
+    await expect(waiting).toContainText("waiting for a place · 0 ahead");
 
     await waiting.getByRole("button", { name: "Remove" }).click();
 

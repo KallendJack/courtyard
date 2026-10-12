@@ -152,10 +152,15 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("turn-stopped") }),
   z.object({ ...eventBase, type: z.literal("turn-failed"), reason: FailureReason }),
   /**
-   * The turn, in a code session, waits: as many code sessions as run at once are running
-   * (`CODE_SESSIONS_AT_ONCE`), and it starts when one of theirs ends.
+   * The turn, in a code session, waits for a place: as many code sessions as run at once are
+   * running (`CODE_SESSIONS_AT_ONCE`), and it starts when one of theirs ends. Recorded again each
+   * time it moves up (#362), with how many turns wait ahead of it (absent before #362).
    */
-  z.object({ ...eventBase, type: z.literal("turn-queued") }),
+  z.object({
+    ...eventBase,
+    type: z.literal("turn-queued"),
+    ahead: z.number().int().nonnegative().optional(),
+  }),
   /** The turn that waited has started. */
   z.object({ ...eventBase, type: z.literal("turn-dequeued") }),
   /** A save the model made during the turn, already in the context file. */
