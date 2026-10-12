@@ -56,6 +56,7 @@ export function Button({
   variant = "primary",
   size = "md",
   fullWidth = false,
+  grow = false,
   narrowIcon,
   type = "button",
   children,
@@ -64,6 +65,8 @@ export function Button({
   variant?: keyof typeof VARIANTS;
   size?: keyof typeof SIZES;
   fullWidth?: boolean;
+  /** Fills what's left of its row beside other buttons (Start building beside Cancel). */
+  grow?: boolean;
   /** On a narrow screen, only this icon shows, in a round button; the label stays for screen readers. */
   narrowIcon?: ReactNode;
 }) {
@@ -76,6 +79,7 @@ export function Button({
         VARIANTS[variant],
         SIZES[size],
         fullWidth && "w-full",
+        grow && "grow",
         collapses && "max-md:size-9 max-md:px-0",
       )}
       {...props}
