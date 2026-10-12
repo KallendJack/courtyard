@@ -111,6 +111,34 @@ describe("Matt Pocock's skills", () => {
     ]);
   });
 
+  it("are fetched as work the worker keeps track of, even when no code workspace asks for them (#360)", async () => {
+    const matt = await mattSkillsIn(pluginDir());
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch: typeof matt.fetch = async (asked) => {
+      await held;
+      return matt.fetch(asked);
+    };
+    const request = await asOwner(
+      testWorker({ root, houseSkills: houseDir(), mattSkills: { pin: matt.pin, fetch } }),
+    );
+    await skillsOf(request, "garage-gym");
+
+    // Removing the test's folder waits for the fetch writing into it.
+    const removing = removeTestFolder(root);
+    const early = await Promise.race([
+      removing.then(() => "removed"),
+      new Promise((resolve) => setTimeout(() => resolve("waiting"), 100)),
+    ]);
+    release();
+    await removing;
+
+    expect(early).toBe("waiting");
+    await expect(readdir(root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("aren't loaded when the copy fetched doesn't match matt.json's checksum, saying why", async () => {
     const matt = await mattSkillsIn(pluginDir(), { checksum: `sha256-${"0".repeat(64)}` });
     const request = await asOwner(testWorker({ root, houseSkills: houseDir(), mattSkills: matt }));
