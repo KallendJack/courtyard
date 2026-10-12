@@ -169,6 +169,9 @@ describe("what every turn tells a model", () => {
       "the full browser suite runs in CI",
       "load the pr skill",
       "AGENTS.md or CLAUDE.md) win",
+      // Numbers are hard to know (#361).
+      "name each by what it is in a few words",
+      "never a bare list of numbers",
     ]) {
       expect(houseProcess).toContain(line);
     }
