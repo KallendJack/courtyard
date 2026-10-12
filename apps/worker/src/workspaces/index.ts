@@ -257,15 +257,71 @@ const readEveryWorkspace = async (
 const compareNames = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
-const byName = (a: WorkspaceSummary, b: WorkspaceSummary) => compareNames(a.name, b.name);
+/**
+ * The file at the context folder's top that keeps the owner's order for the workspaces (#321):
+ * one list of ids for every device, so a workspace group (#105) can keep its own order by
+ * following it too.
+ */
+export const ORDER_FILE = "workspace-order.json";
 
-/** Every workspace in the context folder, by name. */
+const OrderOnDisk = z.object({ order: z.array(z.string()) });
+
+/** The saved order, by id: none when there is no order file, or it can't be read. */
+const readOrder = async (contextDir: string): Promise<readonly string[]> => {
+  const saved = await readJsonFile(join(contextDir, ORDER_FILE), OrderOnDisk);
+  return saved.ok ? (saved.value?.order ?? []) : [];
+};
+
+/**
+ * Planning workspaces first, then code ones, each group in the owner's order (`order`), and any
+ * the order doesn't name at the end of their group, by name.
+ */
+const arranged = (summaries: WorkspaceSummary[], order: readonly string[]) => {
+  const place = new Map(order.map((id, index) => [id, index]));
+  const placeOf = (summary: WorkspaceSummary) => place.get(summary.id) ?? order.length;
+  const group = (summary: WorkspaceSummary) => (summary.mode === "code" ? 1 : 0);
+  return summaries.sort(
+    (a, b) => group(a) - group(b) || placeOf(a) - placeOf(b) || compareNames(a.name, b.name),
+  );
+};
+
+/** Every workspace in the context folder, planning ones then code ones, in the owner's order. */
 export const listWorkspaces = async (
   contextDir: string,
 ): Promise<Result<WorkspaceSummary[], WorkspaceError>> => {
+  const [every, order] = await Promise.all([readEveryWorkspace(contextDir), readOrder(contextDir)]);
+  if (!every.ok) return every;
+  return ok(
+    arranged(
+      every.value.map((workspace) => workspace.summary),
+      order,
+    ),
+  );
+};
+
+/**
+ * Keeps the owner's order for the workspaces (#321), as the rail or the sidebar left it, and
+ * returns them in it. Refuses an order that names a workspace that isn't there, or puts a code
+ * workspace among the planning ones (or the other way), so no device can mix the groups.
+ */
+export const arrangeWorkspaces = async (
+  contextDir: string,
+  order: readonly WorkspaceId[],
+): Promise<Result<WorkspaceSummary[], WorkspaceError>> => {
   const every = await readEveryWorkspace(contextDir);
   if (!every.ok) return every;
-  return ok(every.value.map((workspace) => workspace.summary).sort(byName));
+  const modes = new Map(every.value.map(({ summary }) => [summary.id, summary.mode]));
+  const named = order.map((id) => modes.get(id));
+  if (named.includes(undefined)) return err({ kind: "not-found" });
+  if (named.indexOf("code") !== -1 && named.lastIndexOf("planning") > named.indexOf("code")) {
+    return err({
+      kind: "invalid",
+      message: "Planning and code workspaces each keep their own group: put the code ones last.",
+    });
+  }
+  const written = await writeJsonFile(join(contextDir, ORDER_FILE), { order });
+  if (!written.ok) return err({ kind: "storage", message: "The order can't be saved." });
+  return listWorkspaces(contextDir);
 };
 
 /** Every code workspace in the context folder, with the repository it works on (#258). */
