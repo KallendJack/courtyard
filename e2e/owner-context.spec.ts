@@ -2,6 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 /** The browser tests' context folder (see playwright.config.ts). */
 const OWNER_FILE = join(import.meta.dirname, "..", "test-results", "e2e", "context", "OWNER.md");
@@ -20,7 +21,8 @@ test("the owner starts their owner context, fills it in, and each workspace says
   );
   await expect(panel.getByRole("button", { name: "Start your owner context" })).toHaveCount(0);
   // The untouched starter has no lines, so no workspace reads it yet.
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#knows");
+  await expect(page.getByRole("region", { name: "What Courtyard knows" })).toBeVisible();
   await expect(page.getByText("Also reads")).toHaveCount(0);
 
   // Filled in by hand, as the owner does until phase 2, and long enough to warn about.
@@ -62,6 +64,7 @@ test("a save to the owner context names its place, shows in Settings, and Edit m
   await notes.getByRole("button", { name: "Save" }).click();
   await expect(notes).toContainText("Saved to Facts · edited");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("Has a bad left knee.");
   await page.goto("/settings");
   await expect(panel.getByRole("region", { name: "Facts" })).not.toContainText("left knee");
