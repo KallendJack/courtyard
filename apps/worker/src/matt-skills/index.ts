@@ -7,6 +7,7 @@ import { z } from "zod";
 import { exists, listSubfolders, move, removeFolder } from "../files.ts";
 import { git, gitFailureReason } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
+import type { Background } from "../sessions/index.ts";
 
 /**
  * Matt Pocock's skills for code workspaces (ADR 0024): Courtyard's pinned copy of his plugin,
@@ -243,13 +244,15 @@ const RETRY_AFTER_MS = 5 * 60 * 1000;
 /**
  * Matt's skills as the worker uses them: `copy()` gives the kept copy, or why there's none in the
  * owner's words ("the copy fetched doesn't match the checksumâ€¦"). Started once, with the worker;
- * a failure is tried again after a while. `pin` is `matt.json` as read.
+ * a failure is tried again after a while. `pin` is `matt.json` as read. Each load is handed to
+ * `background`, since it writes into the data folder whether or not anything waits for it.
  */
 export const createMattSkills = (options: {
   readonly dataDir: string;
   readonly pin?: MattPin;
   readonly fetch: FetchMattSkills;
   readonly now: () => number;
+  readonly background: Background;
 }) => {
   const load = async (): Promise<Result<MattCopy, string>> => {
     const pin = options.pin === undefined ? await readMattPin() : ok(options.pin);
@@ -258,12 +261,22 @@ export const createMattSkills = (options: {
     if (!kept.ok) console.error(`Matt Pocock's skills aren't loaded: ${kept.error}.`);
     return kept;
   };
-  let loading = { at: options.now(), copy: load() };
+  const started = () => {
+    const copy = load();
+    options.background(
+      copy.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return { at: options.now(), copy };
+  };
+  let loading = started();
   return {
     copy: async (): Promise<Result<MattCopy, string>> => {
       const copy = await loading.copy;
       if (!copy.ok && options.now() - loading.at >= RETRY_AFTER_MS) {
-        loading = { at: options.now(), copy: load() };
+        loading = started();
         return loading.copy;
       }
       return copy;

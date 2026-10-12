@@ -256,6 +256,7 @@ export const createWorker = (options: {
           ...(options.mattSkills?.pin === undefined ? {} : { pin: options.mattSkills.pin }),
           fetch: options.mattSkills?.fetch ?? fetchFromGitHub,
           now,
+          background,
         });
   const notifications = createNotifications({
     dataDir,
