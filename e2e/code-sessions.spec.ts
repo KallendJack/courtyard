@@ -104,15 +104,27 @@ const LONG = "The activity line keeps to one line however much the model wrote. 
 test.describe("activity lines on the unfolded Fold", () => {
   test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
 
-  /** Opens a new session that runs `commands`, and returns its first activities. */
+  /**
+   * The sessions a test started: the fake is still writing back their long messages after the
+   * test, holding code session slots, so they're stopped at the end.
+   */
+  const started: string[] = [];
+
+  test.afterEach(async ({ request }) => {
+    for (const id of started.splice(0)) {
+      await request.post(`/api/sessions/${id}/stop`, { data: { turn: 1 } });
+    }
+  });
+
+  /** Opens a new session that runs `commands`, and returns its activities. */
   const activitiesFor = async (page: Page, request: APIRequestContext, commands: string[]) => {
     const id = await startCoding(
       request,
       commands.map((each) => `run command: ${each}`).join("\n"),
     );
+    started.push(id);
     await page.goto(`/workspaces/side-project/sessions/${id}`);
-    // The first turn's: a pull request's failed check can start another.
-    return page.getByRole("list", { name: "What the model did" }).first().getByRole("listitem");
+    return page.getByRole("list", { name: "What the model did" }).getByRole("listitem");
   };
 
   test("commits, pushes, pull requests and issues show in plain words, and any other command as it is, each on one line", async ({
@@ -120,8 +132,10 @@ test.describe("activity lines on the unfolded Fold", () => {
     request,
   }) => {
     const unknown = `git log --oneline --grep "${LONG}"`;
+    // "[e2e passes]": a failed check on the pull request the push opens would start another turn,
+    // holding a code session slot after the test.
     const lines = await activitiesFor(page, request, [
-      `git commit --allow-empty -m "Activity lines stay one line" -m "${LONG}" -m "${LONG}"`,
+      `git commit --allow-empty -m "Activity lines stay one line [e2e passes]" -m "${LONG}" -m "${LONG}"`,
       "git push -u origin HEAD",
       `gh pr create --title "Activity lines stay one line" --body "${LONG}"`,
       `gh issue create --title "Activity lines are too long" --body "${LONG}"`,
@@ -130,7 +144,7 @@ test.describe("activity lines on the unfolded Fold", () => {
     ]);
 
     await expect(lines).toHaveText([
-      "Committed “Activity lines stay one line”",
+      "Committed “Activity lines stay one line [e2e passes]”",
       "Pushed the branch",
       "Opened PR “Activity lines stay one line”",
       "Filed “Activity lines are too long”",
