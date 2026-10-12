@@ -327,6 +327,17 @@ What a session shows at a glance: **Working** (the model, on what and for how lo
 waits), or **Your turn** (no turn is running).
 _Avoid_: status, busy, idle (in the app's words)
 
+**Seen**:
+How far the owner has read a session: the last event its page showed them, once no turn ran, on any device (#334).
+The worker keeps it; opening the session on one device sees it on all of them.
+_Avoid_: read, opened, visited
+
+**New reply**:
+A session's latest answer the owner hasn't seen yet, from the last day, in a session with no pull request: one of
+the things that wait on the owner (Needs you, a Home tile's line). Not Your turn, which only says no turn is
+running. The worker decides it, with everything else that waits on the owner, and every screen shows what it says.
+_Avoid_: unread, notification, new message
+
 **Event log**:
 The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript

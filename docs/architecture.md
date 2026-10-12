@@ -259,6 +259,15 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `startOnBranch`, refused when the repository has a branch of that name already, so clearing the session away
   never takes one of the owner's, and leaving the branch on GitHub, since it isn't a `courtyard/…` one). Its
   routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
+- **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
+  I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
+  answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
+  pull request, and the owner hasn't **seen** it: the session page tells the worker the last event it showed once
+  no turn runs and it's in view (`POST /api/sessions/:id/seen`), kept as `seen.json` in the session's folder, never
+  going back. An open pull request waits for its conflict, its failing checks (unless its session is working on
+  them, #172), or a merge once its checks pass. `sessions/` puts a session's on each listed session (`waiting`),
+  keeping its latest answer in memory (from its event log once recovered, then as each is written), and
+  `pull-requests/` puts a pull request's on each open one; the web app reads only those.
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
@@ -406,7 +415,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
     for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a
     first visit shows faint placeholder rows in its place; the PRs list does the same. What waits on the owner is
-    worked out in `needs.ts`, with no React or styles, so the home page's tiles use the same rules.
+    the worker's say (`waiting/`, on each listed session and open pull request), read in one place, `needs.ts`,
+    with no React or styles, so the home page's tiles read it the same way; nothing in the web app works it out.
   - **`review/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
     (`pull-requests.tsx`, the PRs tab's list, which shares its open pull requests with Home's Needs you): every open
     PR on the repository from `pull-requests/`, whoever opened it, with its title, branch, who it's from and where
@@ -458,8 +468,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; from a tablet up the page is one
     screen, its title and foot rows in view and only the tiles scrolling, until #339 makes that the app's), with a stylesheet of its own
     (`home.css`, holding `components/kept.tsx`'s classes too), like `code-home/`. Each tile's line
-    (`tile-line.tsx`): what waits on the owner, by Needs you's rules (`code-home/needs.ts`) from the workspace's
-    sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home
+    (`tile-line.tsx`): what waits on the owner, as the worker says and Needs you reads it (`code-home/needs.ts`),
+    from the workspace's sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home
     and PRs list share), else when it was last used; kept for the tab's lifetime, a faint line in its place until
     then, so nothing jumps. And the foot rows (`foot.tsx`), shown only when needed: main's build with Update
     (`live/`), and one gold problem line, the worst of what's wrong (context changes not kept, the backup
@@ -540,7 +550,8 @@ than the worker's, because the repo's scripts need it with no worker running, an
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
 topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for what the home page needs,
 `session-event.ts` for the events, which only the session page parses, and `session-state.ts` for whose turn it
-is in each session a list shows, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
+is in each session a list shows and what it waits on the owner for, with what the session page has shown the
+owner, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, health and errors, and a `chart`
@@ -685,7 +696,9 @@ Where the rest fits:
 - **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,
   on the latest activity or the answer), an approval waiting, or the turn's end, marked Your turn. A workspace's
   list of sessions has the worker's say for each (`now`: working, needs-you or your-turn), which the workspace page
-  and the sidebar ask for again every few seconds while one is working or needs the owner.
+  and the sidebar ask for again every few seconds while one is working or needs the owner. Your turn isn't a new
+  reply: whether one waits on the owner is `waiting` on the same list (`waiting/`, #334), cleared once the session
+  page has shown the owner its answer, on any device.
 - **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`
   remembers that until the reset, and the model pickers show it. Nothing switches model by itself, but whatever has
   no model named avoids one at its limit: a new session, Get to know, Tidy and a session's title each go to the first
@@ -733,7 +746,7 @@ things live only in the worker's memory and go when it restarts.
 **The data folder** (`COURTYARD_DATA_DIR`):
 
 - `sessions/<session>/`: `session.json` (title and times, and a code session's branch), `events.jsonl` (the event
-  log) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
+  log), `seen.json` (the last event the owner has seen, on any device, #334) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
 - `matt-skills/<version>/`: Courtyard's copy of Matt Pocock's plugin at the pinned release (ADR 0024): his
   `plugin.json`, licence and skills, checked against `matt.json`'s checksum. `matt-setup.json`: each code workspace's
   answer to the setup check (#181).
