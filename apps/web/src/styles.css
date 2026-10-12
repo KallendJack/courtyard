@@ -8,7 +8,8 @@
  * review (review.css), of the shared pieces only those use, and of the pieces that keep a
  * session's flow (chat-flow.css), and the Handheld frame's, its talk strip's and its sheets'
  * (handheld-frame.css) with the Reply box's row while the Talk key listens, which only a touch
- * screen loads, and New workspace's form with the repo picker (new-workspace.css).
+ * screen loads, and New workspace's form with the repo picker (new-workspace.css), and a code
+ * workspace's Home with its tabs, connections line and radio rows (code-home.css).
  */
 @source not "./rich-blocks";
 @source not "./things";
@@ -30,6 +31,10 @@
 @source not "./components/listening-row.tsx";
 @source not "./components/repo-picker.tsx";
 @source not "./new-workspace";
+@source not "./code-home";
+@source not "./components/workspace-tabs.tsx";
+@source not "./components/connections-line.tsx";
+@source not "./components/radio-row.tsx";
 
 /*
  * Courtyard's theme. Every colour, font, type size, radius and effect the app uses is defined here

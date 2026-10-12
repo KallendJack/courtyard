@@ -185,6 +185,32 @@ writeFileSync(
   }),
 );
 
+// A second code workspace, Home project (#301), for its Home's blocks, on a repository of its own
+// standing in for octo-owner/home-project: its one line in workspace.json, no Paper file yet, and
+// on the fake GitHub (below) its ready issues and a helper's pull request whose checks passed.
+const homeOrigin = join(codeDir, "home-origin.git");
+const homeOnGitHub = "https://github.com/octo-owner/home-project.git";
+git(codeDir, "init", "-q", "--bare", "-b", "main", "home-origin.git");
+git(codeDir, "clone", "-q", "home-origin.git", "home-repo");
+const homeRepo = join(codeDir, "home-repo");
+git(homeRepo, "remote", "set-url", "origin", homeOnGitHub);
+git(homeRepo, "config", `url.${homeOrigin.replaceAll("\\", "/")}.insteadOf`, homeOnGitHub);
+writeFileSync(join(homeRepo, "README.md"), "# Home project\n");
+git(homeRepo, "add", ".");
+git(homeRepo, "commit", "-qm", "Start");
+git(homeRepo, "push", "-q", "origin", "main");
+const homeHead = git(homeRepo, "rev-parse", "HEAD");
+mkdirSync(join(contextDir, "home-project"), { recursive: true });
+writeFileSync(
+  join(contextDir, "home-project", "workspace.json"),
+  JSON.stringify({
+    name: "Home project",
+    mode: "code",
+    repoPath: homeRepo,
+    description: "Plan and code with AI models, one workspace per area of life",
+  }),
+);
+
 // A repo on GitHub that's no workspace's yet (#258), standing in as a bare repository on disk, for
 // New workspace → Code to get onto the worker machine.
 const kitchens = join(codeDir, "garrett-kitchens.git");
@@ -232,43 +258,87 @@ await writeMattPlugin(mattPlugin, {
 });
 const { pin, fetch } = await mattSkillsIn(mattPlugin);
 
+// The owner's Paper files in memory (#308), so connecting Paper never starts Paper.
+const { createFakePaperFiles } = await import("../apps/worker/src/paper/fake.ts");
+const paper = createFakePaperFiles({
+  files: [
+    { id: "file-courtyard", name: "Courtyard" },
+    { id: "file-home", name: "Home project" },
+    { id: "file-kitchens", name: "Garrett Kitchens" },
+  ],
+});
+
+const github = createFakeGitHub({
+  finishAfterMs: 2000,
+  // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
+  // isn't yet, newest pushed first, then enough more to make 62, as many as the owner's (#286).
+  repos: [
+    "octo-owner/courtyard",
+    {
+      fullName: "octo-owner/garrett-kitchens",
+      description: "Website for a kitchen fitter: reconnect with the client and try new designs",
+      private: true,
+      cloneUrl: kitchens,
+      pushedAt: "2026-10-11T09:00:00Z",
+    },
+    { fullName: "octo-owner/side-project", private: false },
+    "octo-owner/stacks",
+    ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
+  ],
+  // Home project's ready issues (#301): in milestones, one claimed by a comment, and more than
+  // Next up shows before More.
+  issues: {
+    "octo-owner/home-project": [
+      { number: 251, title: "One Reply box everywhere", milestone: "4 · Code workspaces" },
+      { number: 197, title: "The rail on desktop", milestone: "4 · Code workspaces" },
+      {
+        number: 199,
+        title: "Claimed by a helper",
+        milestone: "4 · Code workspaces",
+        comments: ["Building this: Claude Code helper (branch 199-claimed)."],
+      },
+      { number: 255, title: "Paste images on the Fold", milestone: "5 · Tablet hub and voice" },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        number: 270 + i,
+        title: `A later idea ${i + 1}`,
+        milestone: "Later",
+      })),
+    ],
+  },
+  opensOnPush: {
+    remote: origin,
+    repo: "octo-owner/side-project",
+    checks: (subject) => [
+      { name: "verify", outcome: "passed" },
+      {
+        name: "e2e",
+        outcome: subject.includes("[e2e running]")
+          ? "running"
+          : subject.includes("[e2e passes]")
+            ? "passed"
+            : "failed",
+      },
+    ],
+    // A commit whose subject says "[conflicts]" conflicts with main (#278).
+    conflicts: (subject) => subject.includes("[conflicts]"),
+  },
+});
+// A Claude Code helper's pull request on Home project whose checks passed: ready to merge (#301).
+const helperPull = github.openPullRequest({
+  repo: "octo-owner/home-project",
+  branch: "313-builds",
+  head: homeHead,
+  title: "Builds take turns",
+  body: "## Summary\n\nBuilds take turns.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+  author: "octo-owner",
+});
+github.setChecks(helperPull, [{ name: "verify", outcome: "passed" }]);
+
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },
   mattSkills: { pin, fetch },
   startUpdate: standInUpdate,
-  github: createFakeGitHub({
-    finishAfterMs: 2000,
-    // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
-    // isn't yet, newest pushed first, then enough more to make 62, as many as the owner's (#286).
-    repos: [
-      "octo-owner/courtyard",
-      {
-        fullName: "octo-owner/garrett-kitchens",
-        description: "Website for a kitchen fitter: reconnect with the client and try new designs",
-        private: true,
-        cloneUrl: kitchens,
-        pushedAt: "2026-10-11T09:00:00Z",
-      },
-      { fullName: "octo-owner/side-project", private: false },
-      "octo-owner/stacks",
-      ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
-    ],
-    opensOnPush: {
-      remote: origin,
-      checks: (subject) => [
-        { name: "verify", outcome: "passed" },
-        {
-          name: "e2e",
-          outcome: subject.includes("[e2e running]")
-            ? "running"
-            : subject.includes("[e2e passes]")
-              ? "passed"
-              : "failed",
-        },
-      ],
-      // A commit whose subject says "[conflicts]" conflicts with main (#278).
-      conflicts: (subject) => subject.includes("[conflicts]"),
-    },
-  }).api,
+  github: github.api,
+  paperFiles: paper.paper,
   sendPush: createFakePush().send,
 });

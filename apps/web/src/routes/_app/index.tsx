@@ -67,8 +67,11 @@ function Home() {
                   {workspace.name}
                 </span>
                 <span className="flex gap-2 text-meta text-muted-foreground">
-                  {workspace.mode === "code" && <span>Code</span>}
-                  {!workspace.hasContextFile && <span>No context file yet</span>}
+                  {workspace.mode === "code" ? (
+                    <span>Code</span>
+                  ) : (
+                    !workspace.hasContextFile && <span>No context file yet</span>
+                  )}
                   {workspace.configProblem !== undefined && (
                     <span className="text-destructive-text">Config ignored</span>
                   )}

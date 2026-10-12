@@ -70,6 +70,33 @@ const versionOf = (sessions: readonly Listed[]) =>
   JSON.stringify(sessions.map((session) => [session.id, session.pullRequest]));
 
 /**
+ * Every open pull request on a code workspace's repository, asked for again as its sessions' pull
+ * requests change (and when `again` changes, after the page merged one, say); none while `asking`
+ * is false.
+ */
+export const useOpenPullRequests = (
+  workspaceId: WorkspaceId,
+  sessions: readonly Listed[],
+  asking = true,
+  again = 0,
+) => {
+  const [open, setOpen] = useState<OpenPullRequestList>();
+  const version = versionOf(sessions);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again as the sessions' pull requests change
+  useEffect(() => {
+    if (!asking) return;
+    let current = true;
+    void loadOpenPullRequests(workspaceId).then((loaded) => {
+      if (current && loaded.kind === "loaded") setOpen(loaded.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [workspaceId, version, asking, again]);
+  return open;
+};
+
+/**
  * A code workspace's pull requests (#240, #278; Paper, "PRs: every open PR"): every open one on
  * its repository, whoever opened it (a session, a Claude Code helper, the owner on GitHub), latest
  * first, each with its branch, who it's from, where it stands, and its main action: Review, or
@@ -80,22 +107,13 @@ const versionOf = (sessions: readonly Listed[]) =>
 export default function PullRequests(props: {
   workspaceId: WorkspaceId;
   sessions: CodeSessionList["sessions"];
+  /** The open ones as the page has them already (a code workspace's Home, #301), if it does. */
+  open?: OpenPullRequestList | undefined;
 }) {
   const { workspaceId, sessions } = props;
   const [showing, setShowing] = useState<"open" | "merged">("open");
-  const [open, setOpen] = useState<OpenPullRequestList>();
-  const version = versionOf(sessions);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again as the sessions' pull requests change
-  useEffect(() => {
-    let current = true;
-    void loadOpenPullRequests(workspaceId).then((loaded) => {
-      if (current && loaded.kind === "loaded") setOpen(loaded.data);
-    });
-    return () => {
-      current = false;
-    };
-  }, [workspaceId, version]);
+  const asked = useOpenPullRequests(workspaceId, sessions, props.open === undefined);
+  const open = props.open ?? asked;
 
   const rows: Row[] =
     showing === "merged" || open === undefined

@@ -104,6 +104,8 @@ export function NewWorkspaceForm() {
     await router.navigate({
       to: "/workspaces/$workspaceId",
       params: { workspaceId: workspace.data.id },
+      // A code workspace opens with its Connections sheet, offering Paper, which Close skips (#308).
+      ...(code ? { hash: "connections" } : {}),
     });
     return undefined;
   });

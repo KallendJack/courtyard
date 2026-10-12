@@ -11,7 +11,7 @@ const NAMED = `${BACK} gap-2 font-medium`;
 /**
  * The way back above a page's title: to a workspace, named, with its icon, or with no
  * workspace, to the home page's list of them; from a pull request's review, to the workspace's
- * pull requests, as "All PRs" (#240).
+ * pull requests, as "All PRs" (#240): its PRs tab (#301).
  */
 export function BackLink(props: {
   workspaceId: WorkspaceId | undefined;
@@ -34,6 +34,7 @@ export function BackLink(props: {
       <Link
         to="/workspaces/$workspaceId"
         params={{ workspaceId }}
+        hash="prs"
         className={`${BACK} gap-1.5 font-semibold`}
       >
         <ChevronLeft aria-hidden className="size-3.5" />

@@ -30,6 +30,7 @@ import type { Turn } from "../sessions/events.ts";
 import { type FromWorker, loadLive, loadProviders, startLiveUpdate } from "../worker.ts";
 import {
   bringUpToDate,
+  codingModelIn,
   endPullRequest,
   loadReview,
   type ReviewOf,
@@ -176,12 +177,7 @@ const quickAsks = (review: PullRequestReview) => {
  */
 const codingModel = async () => {
   const providers = await loadProviders();
-  if (providers.kind !== "loaded") return undefined;
-  for (const provider of providers.data.providers) {
-    const model = provider.available && provider.capabilities.codes && provider.models[0];
-    if (model) return { ref: { provider: provider.id, model: model.id }, label: model.label };
-  }
-  return undefined;
+  return providers.kind === "loaded" ? codingModelIn(providers.data.providers) : undefined;
 };
 
 /** A session about to start on a pull request no session opened, shown before it starts. */
