@@ -81,7 +81,8 @@ export const createWorkspaceMain = (options: {
       const main: WorkspaceMain = {
         newest,
         // No checks at all says nothing about main: the row shows none.
-        build: build.ok && build.value !== undefined && build.value.jobs.length > 0 ? build.value : null,
+        build:
+          build.ok && build.value !== undefined && build.value.jobs.length > 0 ? build.value : null,
         liveCopy: (await liveRepoOf()) === repo.value,
       };
       kept.set(repo.value, { at: now(), main });

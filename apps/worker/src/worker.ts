@@ -44,7 +44,6 @@ import {
 } from "./matt-skills/index.ts";
 import { createNextUp } from "./next-up/index.ts";
 import { nextUpRoutes } from "./next-up/routes.ts";
-import { createWorkspaceMain } from "./workspace-main/index.ts";
 import { createNotifications, type SendPush } from "./notifications/index.ts";
 import { notificationRoutes } from "./notifications/routes.ts";
 import { sendWebPush } from "./notifications/web-push.ts";
@@ -73,6 +72,7 @@ import { skillList, workspaceSkills } from "./skills/index.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./things/routes.ts";
 import { createTidying } from "./tidy/index.ts";
 import { tidyRoutes } from "./tidy/routes.ts";
+import { createWorkspaceMain } from "./workspace-main/index.ts";
 import {
   archiveWorkspace,
   changeWorkspace,
