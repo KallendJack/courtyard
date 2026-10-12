@@ -122,10 +122,14 @@ describe("Next up (#301)", () => {
       { number: 20, title: "Claimed by a comment", milestone: "4 · Code workspaces" },
       { number: 21, title: "Claimed by a pull request", milestone: "4 · Code workspaces" },
       { number: 22, title: "Next", milestone: "4 · Code workspaces" },
+      { number: 25, title: "Claimed, then stopped", milestone: "4 · Code workspaces" },
       { number: 23, title: "Not ready", milestone: "4 · Code workspaces", labels: ["enhancement"] },
       { number: 24, title: "Closed", milestone: "4 · Code workspaces", state: "closed" },
     ]);
     github.comment(onGitHub, 20, "Building this: Claude Code helper (branch 20-thing)");
+    // A claim released is free again (AGENTS.md, claim rule).
+    github.comment(onGitHub, 25, "Building this: Claude Code helper (25-thing), next in order");
+    github.comment(onGitHub, 25, "Stopped: the board isn't agreed yet.");
     github.openPullRequest({
       repo: onGitHub,
       branch: "21-thing",
@@ -135,6 +139,7 @@ describe("Next up (#301)", () => {
 
     expect(await nextUpOf(request)).toEqual([
       [22, "4 · Code workspaces"],
+      [25, "4 · Code workspaces"],
       [12, "5 · Tablet hub"],
       [31, "7 · Polish"],
       [40, "Later"],
@@ -203,7 +208,9 @@ describe("Build (#298)", () => {
       first?.type === "owner-message" ? first.text : "",
     );
     expect(github.commentsOn(onGitHub, 22)).toEqual([
-      expect.stringMatching(/^Building this: Courtyard session courtyard\/[0-9a-f]{8}$/),
+      expect.stringMatching(
+        /^Building this: Courtyard session \(courtyard\/[0-9a-f]{8}\), next in order$/,
+      ),
     ]);
     // It leaves Next up at once, for every page.
     expect(await nextUpOf(request)).toEqual([[23, "4 · Code workspaces"]]);

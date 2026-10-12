@@ -219,7 +219,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   else the `COURTYARD_PAPER_COMMAND` setting, else the one another code workspace names. Its routes are a
   workspace's `connections`, `connections/paper/files` and `connections/paper`.
 - **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
-  `github/`, less those claimed (a comment starting "Building this", or an open pull request that closes it), in
+  `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
+  pull request that closes it), in
   milestone order (the number a milestone's title leads with, then Later, then none), asked of GitHub only when a
   page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
   message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the

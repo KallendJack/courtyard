@@ -345,7 +345,7 @@ is the owner's question from the PR page, as they asked it.
 
 Build (#298), on the first row of a code workspace's Next up (#301), starts a new session whose first message is the
 worker's, naming the issue, once the owner has seen the issue and the model it'll use. The worker claims the issue on
-GitHub as it starts ("Building this: Courtyard session <branch>", AGENTS.md's claim rule), so the session is told
+GitHub as it starts ("Building this: Courtyard session (<branch>), next in order", AGENTS.md's claim rule), so the session is told
 not to:
 
 > Build issue #<number>, "<title>". Read it first with gh issue view <number> --comments: its description and comments

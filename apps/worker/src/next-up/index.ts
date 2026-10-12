@@ -40,9 +40,21 @@ export type NextUpProblem =
 
 /** A claim on an issue, as AGENTS.md's claim rule words it: a comment starting "Building this". */
 const CLAIM = /^\s*building this\b/im;
+/** A claim released: a comment starting "Stopped" (AGENTS.md, claim rule). */
+const RELEASED = /^\s*stopped\b/im;
 
-/** The claim Build posts on the issue (AGENTS.md, claim rule), naming the session's branch. */
-const claimComment = (branch: string) => `Building this: Courtyard session ${branch}`;
+/** Whether an issue's comments, oldest first, leave it claimed: a claim not released since. */
+const claimedIn = (comments: readonly string[]) => {
+  const claim = comments.findLastIndex((comment) => CLAIM.test(comment));
+  return claim !== -1 && !comments.slice(claim + 1).some((comment) => RELEASED.test(comment));
+};
+
+/**
+ * The claim Build posts on the issue (AGENTS.md, claim rule): who, the session's branch, and why,
+ * which is always that it's next in order, as Build is on Next up's first issue.
+ */
+const claimComment = (branch: string) =>
+  `Building this: Courtyard session (${branch}), next in order`;
 
 /** Whether a pull request's title or description closes issue `number` when it merges. */
 const closes = (number: number, text: string) =>
@@ -114,9 +126,7 @@ export const createNextUp = (options: {
     const texts = pulls.value.map((pull) => `${pull.title}\n${pull.body}`);
     const unclaimed = issues.value
       .filter(
-        (issue) =>
-          !issue.comments.some((comment) => CLAIM.test(comment)) &&
-          !texts.some((text) => closes(issue.number, text)),
+        (issue) => !claimedIn(issue.comments) && !texts.some((text) => closes(issue.number, text)),
       )
       .sort(inOrder)
       .map(({ number, title, url, milestone }) => ({ number, title, url, milestone }));
