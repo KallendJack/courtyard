@@ -51,7 +51,7 @@ const SHOWING = [
 ] as const;
 
 /** A row of the list: a pull request, and the session it's from, when one is. */
-type Row = OpenPullRequest & { readonly session: Listed | undefined };
+type Row = Omit<OpenPullRequest, "waiting"> & { readonly session: Listed | undefined };
 
 /** The workspace's sessions' pull requests as last seen, open or merged, latest first. */
 const fromSessions = (sessions: readonly Listed[], state: "open" | "merged"): Row[] =>

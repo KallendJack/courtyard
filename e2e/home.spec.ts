@@ -21,7 +21,7 @@ const newWorkspace = async (request: APIRequestContext, name: string) => {
   return ((await made.json()) as { id: string }).id;
 };
 
-/** Starts a session there and waits for its answer, so it's the owner's turn: a new reply. */
+/** Starts a session there and waits for its answer, which the owner hasn't seen: a new reply. */
 const answered = async (request: APIRequestContext, id: string, text: string) => {
   const started = await request.post(`/api/workspaces/${id}/sessions`, {
     data: { text, model: FAKE },
@@ -30,10 +30,10 @@ const answered = async (request: APIRequestContext, id: string, text: string) =>
   await expect
     .poll(async () => {
       const list = await request.get(`/api/workspaces/${id}/sessions`);
-      const { sessions } = (await list.json()) as { sessions: { now: { kind: string } }[] };
-      return sessions.map((session) => session.now.kind);
+      const { sessions } = (await list.json()) as { sessions: { waiting: string }[] };
+      return sessions.map((session) => session.waiting);
     })
-    .toEqual(["your-turn"]);
+    .toEqual(["reply"]);
 };
 
 /** An open pull request on Workbench whose checks passed: ready to merge. */
@@ -51,6 +51,7 @@ const readyPull = (number: number) => ({
   branch: `ready-${number}`,
   base: "main",
   from: { kind: "claude-code" },
+  waiting: "merge",
 });
 
 /** Workbench's open pull requests, two ready to merge, whoever is signed in to GitHub. */

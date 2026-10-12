@@ -19,7 +19,7 @@ import { answerApproval } from "../sessions/messages.ts";
 import { Block, BlockRow } from "./block.tsx";
 import { agoWords, type Need } from "./needs.ts";
 
-// Home works out what waits on the owner from the same rules (#102).
+// Home reads what waits on the owner the same way (#102, #334).
 export { needsOf } from "./needs.ts";
 
 type Listed = CodeSessionList["sessions"][number];
