@@ -67,9 +67,15 @@ export const removeTestFolder = async (root: string) => {
 };
 
 /**
+ * For tests: the builds lock a test worker on `root` takes (#306), in `root` rather than the
+ * machine's own, so tests never wait on a real build on the same machine, nor hold one up.
+ */
+export const testBuildsLock = (root: string, atOnce = 1) => ({ dir: join(root, "builds"), atOnce });
+
+/**
  * For tests and the context eval: a worker on the `context` and `data` folders in `root`, with any other options and
- * settings given. Throws if it won't start, since every test that uses it needs one that does. Remove `root` with
- * `removeTestFolder`.
+ * settings given, and its builds lock there too. Throws if it won't start, since every test that uses it needs one
+ * that does. Remove `root` with `removeTestFolder`.
  */
 export const testWorker = (
   options: { root: string; env?: Environment } & Omit<Parameters<typeof createWorker>[0], "env">,
@@ -85,6 +91,7 @@ export const testWorker = (
     env: {
       COURTYARD_CONTEXT_DIR: join(root, "context"),
       COURTYARD_DATA_DIR: join(root, "data"),
+      COURTYARD_BUILDS_LOCK_DIR: testBuildsLock(root).dir,
       ...env,
     },
   });
@@ -596,6 +603,8 @@ export const BUILDING_MODEL = { provider: "builder", model: "one" };
 /** For tests: a build the held builder started (#281): where, and how to let it end. */
 export type HeldBuild = {
   readonly worktree: string;
+  /** What the turn's commands run with on top of the worker's environment. */
+  readonly env: CodeTurn["env"];
   /** Lets the build end, and then the turn, answering "Done.". */
   readonly finish: () => void;
 };
@@ -633,7 +642,7 @@ export const heldBuilder = (command = "pnpm verify") => {
         return ok(null);
       }
       await new Promise<void>((finish) => {
-        builds.push({ worktree: code.worktree, finish });
+        builds.push({ worktree: code.worktree, env: code.env, finish });
         input.signal.addEventListener("abort", () => finish(), { once: true });
       });
       if (input.signal.aborted) return ok(null);

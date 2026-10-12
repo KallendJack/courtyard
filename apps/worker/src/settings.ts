@@ -1,5 +1,6 @@
 import { mkdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { type BuildsLock, BuildsSettings, buildsLockOf } from "@courtyard/builds";
 import { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
 
@@ -20,7 +21,6 @@ const ensureFolder = (path: string) => {
 };
 
 const NOT_A_PORT = "must be a port number from 1 to 65535";
-const NOT_A_COUNT = "must be a whole number, 1 or more";
 const unsetIfEmpty = (value: unknown) => (value === "" ? undefined : value);
 const required = z.string({ error: "is required" }).min(1, "is required");
 /** A setting that's on (1) or off (0), and `whenUnset` when it isn't set. */
@@ -61,10 +61,8 @@ const Env = z.object({
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
   COURTYARD_UPDATE_TASK: z.preprocess(unsetIfEmpty, z.string().default("Courtyard update")),
-  COURTYARD_BUILDS_AT_ONCE: z.preprocess(
-    unsetIfEmpty,
-    z.coerce.number({ error: NOT_A_COUNT }).int(NOT_A_COUNT).min(1, NOT_A_COUNT).default(1),
-  ),
+  // COURTYARD_BUILDS_AT_ONCE and COURTYARD_BUILDS_LOCK_DIR, which the repo's own scripts read too.
+  ...BuildsSettings.shape,
   COURTYARD_GITHUB_CLIENT_ID: z.preprocess(
     unsetIfEmpty,
     z
@@ -118,10 +116,12 @@ export type Settings = {
    */
   readonly githubClientId: string | null;
   /**
-   * How many heavy checks (`pnpm verify`, `vitest run`) code sessions may run at once across the
-   * worker (#281), the rest waiting their turn: 1 unless a stronger machine allows more.
+   * The machine's builds lock (#306): how many heavy checks (`pnpm verify`, `vitest run`) may run
+   * at once on the machine (#281), code sessions' and the repo's own scripts' alike, the rest
+   * waiting their turn (1 unless a stronger machine allows more), and the folder they take turns
+   * in, the same for everyone on the machine unless a test moves it.
    */
-  readonly buildsAtOnce: number;
+  readonly buildsLock: BuildsLock;
   /**
    * Paper's command on the worker machine (ADR 0023), for connecting Paper from a code workspace's
    * page (#308); `null` to use the one a code workspace names already, if any.
@@ -158,7 +158,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
         : resolve(parsed.data.COURTYARD_LIVE_COPY),
     updateTask: parsed.data.COURTYARD_UPDATE_TASK,
     githubClientId: parsed.data.COURTYARD_GITHUB_CLIENT_ID ?? null,
-    buildsAtOnce: parsed.data.COURTYARD_BUILDS_AT_ONCE,
+    buildsLock: buildsLockOf(parsed.data),
     paperCommand: parsed.data.COURTYARD_PAPER_COMMAND ?? null,
   });
 };

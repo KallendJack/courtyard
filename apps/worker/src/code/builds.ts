@@ -1,10 +1,28 @@
+import { type BuildsLock, HELD_ENV, type Place, takePlace } from "@courtyard/builds";
 import type { SessionId } from "@courtyard/contract";
 
-/** A build running: the session it's in, and its command. */
-type Build = { readonly id: SessionId; readonly command: string };
+/**
+ * What a code session's commands run with: its builds only run once the queue has given them a
+ * place in the machine's builds lock (#306), so the repo's own scripts they run (`pnpm verify`)
+ * don't wait for one again.
+ */
+export const BUILD_HELD_ENV = HELD_ENV;
+
+/** A build with its turn in the queue: the session it's in, and its command. */
+type Build = {
+  readonly id: SessionId;
+  readonly command: string;
+  /** Its place in the machine's lock, once taken. */
+  place: Place | null;
+  /** Ends its wait for a place, when it leaves the queue before it has one. */
+  readonly cancel: AbortController;
+};
 
 /** A build waiting its turn, told how many are ahead of it as that changes. */
-type Waiting = Build & {
+type Waiting = {
+  readonly id: SessionId;
+  readonly command: string;
+  readonly signal: AbortSignal;
   readonly start: (started: boolean) => void;
   readonly ahead: (ahead: number) => void;
   told: number;
@@ -12,21 +30,54 @@ type Waiting = Build & {
 
 /**
  * The builds queue (#281): the heavy checks code sessions run (`isBuild`), up to `atOnce` at a
- * time across the worker, so several sessions building together can't lock the machine up. A
- * build beyond that waits, first come first served, until one ends. It lives only in the worker's
- * memory, so a worker that restarts holds nothing.
+ * time, so several sessions building together can't lock the machine up. A build beyond that
+ * waits, first come first served between sessions, until one ends. The build at the front then
+ * takes a place in the machine's builds lock (#306), which the repo's own scripts take too, so it
+ * also waits while builds started outside Courtyard (a helper's `pnpm verify`) hold every place.
+ * The order lives only in the worker's memory; a place a worker that stopped left behind is
+ * cleared by the next build that waits for it.
  */
-export const createBuildsQueue = (atOnce: number) => {
+export const createBuildsQueue = (lock: BuildsLock) => {
   const running: Build[] = [];
   const waiting: Waiting[] = [];
 
+  /** Takes a place in the machine's lock for a build at the front, then starts it. */
+  const claim = async (next: Waiting, build: Build) => {
+    const signal = AbortSignal.any([next.signal, build.cancel.signal]);
+    const place = await takePlace(lock, {
+      label: `Courtyard session ${next.id}`,
+      signal,
+      waiting: (holders) => {
+        if (holders.length === next.told) return;
+        next.told = holders.length;
+        next.ahead(holders.length);
+      },
+    });
+    if (place === null || !running.includes(build)) {
+      place?.free();
+      const at = running.indexOf(build);
+      if (at !== -1) running.splice(at, 1);
+      next.start(false);
+      moveOn();
+      return;
+    }
+    build.place = place;
+    next.start(true);
+  };
+
   /** Starts the builds waiting while there's room, and tells the rest how many are ahead. */
   const moveOn = () => {
-    while (running.length < atOnce) {
+    while (running.length < lock.atOnce) {
       const next = waiting.shift();
       if (next === undefined) break;
-      running.push({ id: next.id, command: next.command });
-      next.start(true);
+      const build: Build = {
+        id: next.id,
+        command: next.command,
+        place: null,
+        cancel: new AbortController(),
+      };
+      running.push(build);
+      void claim(next, build);
     }
     waiting.forEach((build, at) => {
       const ahead = running.length + at;
@@ -36,11 +87,19 @@ export const createBuildsQueue = (atOnce: number) => {
     });
   };
 
+  /** Takes a build out of the queue, freeing its place or ending its wait for one. */
+  const free = (build: Build) => {
+    const at = running.indexOf(build);
+    if (at !== -1) running.splice(at, 1);
+    build.place?.free();
+    build.cancel.abort();
+  };
+
   return {
     /**
-     * Starts a session's build: at once when there's room and nobody is waiting, or once the
-     * builds ahead of it end, telling `ahead` how many there are whenever that changes. `true`
-     * once it has started, `false` when it was stopped while waiting, leaving the queue.
+     * Starts a session's build once nobody is ahead of it and it has a place in the machine's
+     * lock, telling `ahead` how many builds are ahead whenever that changes while it waits.
+     * `true` once it has started, `false` when it was stopped while waiting, leaving the queue.
      */
     start: (build: {
       id: SessionId;
@@ -49,14 +108,11 @@ export const createBuildsQueue = (atOnce: number) => {
       ahead: (ahead: number) => void;
     }): Promise<boolean> => {
       if (build.signal.aborted) return Promise.resolve(false);
-      if (running.length < atOnce && waiting.length === 0) {
-        running.push({ id: build.id, command: build.command });
-        return Promise.resolve(true);
-      }
       return new Promise<boolean>((resolve) => {
         const entry: Waiting = {
           id: build.id,
           command: build.command,
+          signal: build.signal,
           start: resolve,
           ahead: build.ahead,
           told: 0,
@@ -79,9 +135,9 @@ export const createBuildsQueue = (atOnce: number) => {
 
     /** Frees a build of a session's that has ended, by its command, starting the next waiting. */
     ended: (id: SessionId, command: string) => {
-      const at = running.findIndex((build) => build.id === id && build.command === command);
-      if (at === -1) return;
-      running.splice(at, 1);
+      const build = running.find((build) => build.id === id && build.command === command);
+      if (build === undefined) return;
+      free(build);
       moveOn();
     },
 
@@ -90,9 +146,7 @@ export const createBuildsQueue = (atOnce: number) => {
      * (completed, stopped or failed), so no build outlives its turn.
      */
     leave: (id: SessionId) => {
-      for (let at = running.length - 1; at >= 0; at -= 1) {
-        if (running[at]?.id === id) running.splice(at, 1);
-      }
+      for (const build of running.filter((build) => build.id === id)) free(build);
       for (let at = waiting.length - 1; at >= 0; at -= 1) {
         const build = waiting[at];
         if (build?.id !== id) continue;

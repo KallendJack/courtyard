@@ -196,7 +196,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
   pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
   `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, the
-  rest waiting first come first served. It lives in the worker's memory only, so a restart holds nothing. The
+  rest waiting first come first served. That order lives in the worker's memory only; the build at its front then
+  takes a place in the machine's builds lock (`packages/builds`, #306), which the repo's own scripts take too, so
+  sessions also wait behind builds started outside Courtyard, and those behind sessions. The
   module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
   clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
   (only a `courtyard/…` one).
@@ -268,8 +270,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
   one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
   check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
-  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); and lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258). Its routes are
+  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
+  clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
+  job in the order the workflow started them, the failed one's page, and when a running one should end
+  from how long the build before it took. Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
   newest pushed first, each marked added when a code workspace works on it already (its repository is
@@ -293,7 +297,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 - **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
-  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)).
+  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). While main has moved on, it
+  also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
+  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 10
+  seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
 
@@ -402,9 +409,18 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     one on its branch once the owner has seen what starts), and Merge, or Bring up to date when it conflicts, and
     Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
     reach on a tablet, where the answer takes What changed's place. Merged or closed, it folds to one card with
-    what's next: Update Courtyard (when the worker is a live copy main has moved on from), Start a new session and
+    what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
+    build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
     stylesheet of its own (`review.css`, holding the ask line's classes too), like `things/`.
+  - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, on the
+    home page and in the Handheld frame's Settings (`live-update.tsx`), and main's build beside Update
+    (`main-build.tsx`, #249): the newest main's title, one bar per CI job (violet running, moss passed,
+    red failed), and Update, offered only once it has passed; quiet while it runs; Details, the failed
+    job's page on GitHub, once it has failed. Its hook asks again every 15 seconds while the build runs
+    and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
+    follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
+    first load.
   - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.
@@ -424,8 +440,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
     put what's said there as they would in a message box. A code workspace just made opens with its
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).
-- **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the live update
-  notice (`live-update.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
+- **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
@@ -481,6 +496,21 @@ house skills in `pnpm verify` and the worker runs on everyone's. It's a package 
 `matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
 copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`).
 
+### The machine's builds lock: `packages/builds`
+
+`@courtyard/builds` is the one lock every heavy check on the machine takes (#306), so Courtyard's code sessions and
+the builds run beside them (a helper's `pnpm verify` in another checkout) take turns rather than lock the machine up
+together. It's a folder, `<OS temp>/courtyard-builds` (`COURTYARD_BUILDS_LOCK_DIR` moves it, which only the tests
+and the browser tests' workers do), with a file for each place taken, up to `COURTYARD_BUILDS_AT_ONCE`: each made
+only if it isn't there yet, naming its holder (a session, or `helper <folder>`), its process and when it took it. A
+place whose process has gone is cleared by the next one waiting, so a crash, or a worker restarting, never blocks
+for ever; a run that cleared one checks the place it took is still its own once the dust settles, in case two cleared
+it at once. The worker's builds queue takes it (`code/builds.ts`) and so does `scripts/builds/run.ts`, which the
+root `verify`, `test`, `e2e` and `build` scripts run through: it waits for a place, saying who holds it and since
+when, runs the command with `COURTYARD_BUILD_HELD=1` (a run that sees it goes straight through, so `verify` doesn't
+wait on itself when it runs `e2e`), and frees the place however the command ends. It's a package of its own, rather
+than the worker's, because the repo's scripts need it with no worker running, and nothing else of the worker's.
+
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per
@@ -489,7 +519,7 @@ topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for 
 is in each session a list shows, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
-which only that page parses), backup, live updates, fresh start, health and errors, and a `chart`
+which only that page parses), backup, live updates with main's build, fresh start, health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.
@@ -502,6 +532,9 @@ the web app parses every answer with these schemas.
   stand-in for Matt Pocock's plugin;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
+  The update builds with `pnpm -r build`, never waiting on the machine's builds lock, since Courtyard is down until
+  it's done.
+- **`scripts/builds/`:** the machine's builds lock for the repo's own heavy scripts (see `packages/builds`).
 - **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into
   jobs side by side (Checks, Unit tests, E2E in four shards) so a run takes about 3 minutes; `.github/actions/setup`
   is the setup they share.
@@ -591,7 +624,11 @@ Where the rest fits:
   for it, the latest). A stop ends the wait and leaves the queue. The provider says when each command it ran has
   ended, however it ended (`CodeTurn.ran`: Claude's `PostToolUse` and `PostToolUseFailure` hooks, the fake after
   each scripted command), freeing its place; whatever a turn still holds is freed when the turn ends, completed,
-  stopped or failed.
+  stopped or failed. The queue is between sessions; the machine's builds lock (#306) is between everything that
+  builds on the machine. The build at the queue's front waits for a place in the lock before it starts, still
+  `waiting-for-build` (with how many places others hold) while a build outside Courtyard, such as a helper's
+  `pnpm verify`, holds them all. A session's commands get `COURTYARD_BUILD_HELD=1`, since each of its builds runs only
+  once it holds a place, so the repo's own scripts it runs go straight through rather than wait on that place.
 - **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
   `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
   starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and

@@ -49,6 +49,7 @@ import {
 import {
   allowlistFor,
   type BranchRefusal,
+  BUILD_HELD_ENV,
   type Code,
   type CodeRefusal,
   type CommandRule,
@@ -1023,8 +1024,10 @@ export const createSessions = (options: {
         ): CodeTurn => ({
           worktree,
           plugin,
-          // Its slot, and Courtyard's GitHub sign-in for its git and gh (#99).
-          env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)) },
+          // Its slot, Courtyard's GitHub sign-in for its git and gh (#99), and word that its
+          // builds hold a place in the machine's builds lock (#306): each runs only once the
+          // builds queue has given it one, so the repo's scripts don't wait for another.
+          env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)), ...BUILD_HELD_ENV },
           edit: async (path) => {
             const place = await editPlaceIn(worktree, path);
             if (place.kind === "inside") {

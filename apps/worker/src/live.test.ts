@@ -3,9 +3,19 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ApiError, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
+import { ApiError, GitHubConnection, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, errorOf, type Requester, removeTestFolder, testWorker } from "./testing.ts";
+import type { FoundCheckRun } from "./github/api.ts";
+import {
+  asOwner,
+  createFakeGitHub,
+  errorOf,
+  type FakeGitHub,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 import type { UpdateCommand } from "./worker.ts";
 
 // Updating the live copy from the app (ADR 0011, #35), against real git in temporary folders: a
@@ -227,6 +237,169 @@ describe("a result file that can't be read", () => {
 
     expect(await statusOf(request)).toMatchObject({ kind: "live", lastUpdate: null });
     expect((await startUpdate(request)).status).toBe(202);
+  });
+});
+
+describe("main's build (#249)", () => {
+  /** The live copy's repository on GitHub, as its remote names it. */
+  const ON_GITHUB = "https://github.com/octo-owner/courtyard.git";
+  let github: FakeGitHub;
+  let request: Requester;
+
+  /** A job of CI on a commit, as GitHub's check runs give it. */
+  const job = (
+    id: number,
+    name: string,
+    outcome: FoundCheckRun["outcome"],
+    times: { started?: string; completed?: string } = {},
+  ): FoundCheckRun => ({
+    id,
+    name,
+    outcome,
+    url: `https://github.com/octo-owner/courtyard/actions/runs/1/job/${id}`,
+    startedAt: times.started ?? "2026-10-06T11:58:00Z",
+    completedAt: outcome === "running" ? null : (times.completed ?? "2026-10-06T12:01:00Z"),
+  });
+  const jobsOf = (outcomes: readonly FoundCheckRun["outcome"][]) =>
+    ["Checks", "Unit tests", "E2E 1/4", "E2E 2/4", "E2E 3/4", "E2E 4/4"].map((name, i) =>
+      job(10 + i, name, outcomes[i] ?? "passed"),
+    );
+
+  beforeEach(async () => {
+    // Its remote is named by its address on GitHub, as the real live copy's is, while git
+    // reaches the remote on disk in its place.
+    await git(liveCopy, "remote", "set-url", "origin", ON_GITHUB);
+    await git(liveCopy, "config", `url.${remote.replaceAll("\\", "/")}.insteadOf`, ON_GITHUB);
+    github = createFakeGitHub();
+    request = await asOwner(
+      testWorker({
+        root,
+        env: { COURTYARD_LIVE_COPY: liveCopy },
+        now: () => now,
+        startUpdate: (command) => {
+          started.push(command);
+        },
+        github: github.api,
+      }),
+    );
+    await postJson(request, "/api/github/sign-in", {});
+    github.approve();
+    await expect
+      .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+      .toBe("signed-in");
+  });
+
+  it("shows main's newest build running, each job in the order the workflow starts them", async () => {
+    const before = await merge("The build before");
+    github.setCommitChecks(before, [
+      job(1, "Checks", "passed", {
+        started: "2026-10-06T11:00:00Z",
+        completed: "2026-10-06T11:01:00Z",
+      }),
+      job(2, "E2E 1/4", "passed", {
+        started: "2026-10-06T11:00:00Z",
+        completed: "2026-10-06T11:03:00Z",
+      }),
+    ]);
+    const newest = await merge("Rail and Talk key");
+    // GitHub lists them in any order: the bar keeps the workflow's.
+    github.setCommitChecks(newest, [
+      job(13, "E2E 2/4", "running", { started: "2026-10-06T11:59:00Z" }),
+      job(11, "Unit tests", "running", { started: "2026-10-06T11:59:00Z" }),
+      job(10, "Checks", "passed", { started: "2026-10-06T11:59:00Z" }),
+      job(12, "E2E 1/4", "running", { started: "2026-10-06T11:59:00Z" }),
+    ]);
+
+    expect(await statusOf(request)).toMatchObject({
+      newerOnMain: true,
+      build: {
+        kind: "running",
+        jobs: [
+          { name: "Checks", outcome: "passed" },
+          { name: "Unit tests", outcome: "running" },
+          { name: "E2E 1/4", outcome: "running" },
+          { name: "E2E 2/4", outcome: "running" },
+        ],
+        // Started at 11:59, and the build before took 3 minutes.
+        endsAround: "2026-10-06T12:02:00.000Z",
+      },
+    });
+  });
+
+  it("says it passed, so Update can be offered", async () => {
+    const newest = await merge("Rail and Talk key");
+    github.setCommitChecks(newest, jobsOf([]));
+
+    const status = await statusOf(request);
+
+    expect(status).toMatchObject({ newerOnMain: true, build: { kind: "passed" } });
+    if (status.kind === "live") expect(status.build?.jobs).toHaveLength(6);
+  });
+
+  it("says which job failed, and where its log is", async () => {
+    const newest = await merge("Rail and Talk key");
+    github.setCommitChecks(newest, jobsOf(["passed", "failed", "passed", "failed"]));
+
+    expect(await statusOf(request)).toMatchObject({
+      build: {
+        kind: "failed",
+        details: "https://github.com/octo-owner/courtyard/actions/runs/1/job/11",
+        jobs: expect.arrayContaining([{ name: "Unit tests", outcome: "failed" }]),
+      },
+    });
+  });
+
+  it("shows only the latest try of a job that was run again", async () => {
+    const newest = await merge("Rail and Talk key");
+    github.setCommitChecks(newest, [
+      ...jobsOf(["passed", "failed"]),
+      job(20, "Unit tests", "passed"),
+    ]);
+
+    const status = await statusOf(request);
+
+    expect(status).toMatchObject({ build: { kind: "passed" } });
+    if (status.kind === "live") {
+      expect(status.build?.jobs.map((each) => each.name)).toEqual([
+        "Checks",
+        "Unit tests",
+        "E2E 1/4",
+        "E2E 2/4",
+        "E2E 3/4",
+        "E2E 4/4",
+      ]);
+    }
+  });
+
+  it("asks GitHub nothing about builds while the live copy is on main's newest", async () => {
+    const status = await statusOf(request);
+
+    expect(status).toMatchObject({ newerOnMain: false, build: null });
+    expect(github.commitChecksAsked()).toBe(0);
+  });
+
+  it("asks again every few seconds while it runs, and less once it has finished", async () => {
+    const newest = await merge("Rail and Talk key");
+    github.setCommitChecks(newest, jobsOf(["running"]));
+    expect(await statusOf(request)).toMatchObject({ build: { kind: "running" } });
+
+    github.setCommitChecks(newest, jobsOf([]));
+    now += 5 * SECONDS;
+    expect(await statusOf(request)).toMatchObject({ build: { kind: "running" } });
+    now += 10 * SECONDS;
+    expect(await statusOf(request)).toMatchObject({ build: { kind: "passed" } });
+
+    const asked = github.commitChecksAsked();
+    now += 30 * SECONDS;
+    await statusOf(request);
+    expect(github.commitChecksAsked()).toBe(asked);
+  });
+
+  it("has no build when no one is signed in to GitHub, so Update is offered as before", async () => {
+    await merge("Rail and Talk key");
+    await postJson(request, "/api/github/sign-out", {});
+
+    expect(await statusOf(request)).toMatchObject({ newerOnMain: true, build: null });
   });
 });
 

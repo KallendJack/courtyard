@@ -74,6 +74,8 @@ export default defineConfig({
         // A copy of e2e/fixtures/context, made fresh by start-worker.mjs.
         COURTYARD_CONTEXT_DIR: "test-results/e2e/context",
         COURTYARD_DATA_DIR: "test-results/e2e/data",
+        // A builds lock of its own (#306), never the machine's, which `pnpm e2e` itself holds.
+        COURTYARD_BUILDS_LOCK_DIR: "test-results/e2e/builds",
         ...providers,
       },
     },
@@ -85,6 +87,7 @@ export default defineConfig({
         COURTYARD_PORT: String(freshStartPort),
         COURTYARD_CONTEXT_DIR: "test-results/e2e-fresh-start/context",
         COURTYARD_DATA_DIR: "test-results/e2e-fresh-start/data",
+        COURTYARD_BUILDS_LOCK_DIR: "test-results/e2e-fresh-start/builds",
         ...providers,
       },
     },
