@@ -328,8 +328,17 @@ say (#172). The worker follows the PR's checks, and when one fails on a commit i
 session this message (on the model the owner last used), with the failed checks in the turn's activity:
 
 > The checks on your pull request #<number> failed: <checks>. Find out why (gh pr checks and gh run view --log-failed
-> show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
-> it, say why, so the owner can decide what to do.
+> show what failed). First, check whether a failing test is yours: if it also failed lately on the default branch (gh
+> run list --branch), has an open issue saying it's flaky (gh issue list --search), or tests nothing your changes
+> touch, it isn't. Then change no code: comment "Flaky, not this PR's: <test>" on the pull request with gh pr
+> comment, re-run its failed jobs once with gh run rerun <run> --failed, and say so. Otherwise, fix it on your
+> session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide
+> what to do.
+
+A re-run is once per commit: the worker starts one fixing turn per commit, so when the re-run fails too, no second
+fixing turn starts. The owner is asked instead, by a notification (#356):
+
+> Failed again after a re-run: <checks>. Flaky, or does it need fixing?
 
 When a pull request conflicts with its base, the owner's one tap on Bring up to date (#278) has the worker fetch the
 base branch and send the PR's session this message, on the model the owner last used there (queued while a turn

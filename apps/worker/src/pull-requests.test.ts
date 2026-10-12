@@ -297,6 +297,39 @@ describe("a failing check", () => {
     expect(PushNotice.parse(push.sent.at(-1)?.payload).session).toBe(id);
   });
 
+  it("that fails again after its fixing turn re-ran it asks the owner, with no second fixing turn (#356)", async () => {
+    await postJson(request, "/api/notifications/on", {
+      endpoint: "https://push.example/fold",
+      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+    });
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
+    const bodies = () => push.sent.map(({ payload }) => PushNotice.parse(payload).body);
+    await runJobs();
+    await expect.poll(bodies).toEqual(["Turn finished", "Checks still failing: e2e"]);
+
+    // The fixing turn re-ran its failed jobs, on the same commit, and they fail again.
+    github.setChecks(number, [{ name: "e2e", outcome: "running" }]);
+    await runJobs();
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
+    await runJobs();
+    await runJobs();
+
+    await expect
+      .poll(bodies)
+      .toEqual([
+        "Turn finished",
+        "Checks still failing: e2e",
+        "Failed again after a re-run: e2e. Flaky, or does it need fixing?",
+      ]);
+    expect(PushNotice.parse(push.sent.at(-1)?.payload).session).toBe(id);
+    const fixingTurns = (await eventsOf(id)).filter(
+      (event) => event.type === "owner-message" && event.checksFailed !== undefined,
+    );
+    expect(fixingTurns).toHaveLength(1);
+  });
+
   it("waits for a turn already running to end", async () => {
     const { id, branch, lastSeq } = await codeSession();
     // The owner's own message is still being answered.

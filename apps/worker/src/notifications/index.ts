@@ -58,10 +58,15 @@ const approvalNeed = (ask: ApprovalAsk) => {
 
 /**
  * What a session needs, as a notification says it, for the events that send one: a turn that
- * ends with its code session's pull request still failing checks says which (story 31).
+ * ends with its code session's pull request still failing checks says which (story 31), and a
+ * pull request whose checks failed again after a re-run asks the owner what to do (#356).
  */
 const needOf = (event: SessionEvent, pullRequest: PullRequest | undefined) => {
   switch (event.type) {
+    case "pull-request":
+      return event.pullRequest.checks.kind === "failed"
+        ? `Failed again after a re-run: ${event.pullRequest.checks.failed.join(", ")}. Flaky, or does it need fixing?`
+        : undefined;
     case "approval-requested":
       return approvalNeed(event.ask);
     case "turn-completed":

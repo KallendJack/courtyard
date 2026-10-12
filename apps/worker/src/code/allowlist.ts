@@ -257,15 +257,40 @@ const opensOwn = (rest: readonly string[], { branch }: OwnWork) => {
   );
 };
 
+/** What `gh pr comment` says: its body, never an edit or a deletion of one already there. */
+const PR_COMMENT: GhFlags = {
+  withValue: new Set(["--body", "-b", "--body-file", "-F"]),
+  alone: new Set(),
+};
+
 /**
- * Whether `gh pr edit` changes the session's own pull request: the current branch's, or one named
- * by the session branch or its number.
+ * Whether `gh pr edit` or `gh pr comment` acts on the session's own pull request: the current
+ * branch's, or one named by the session branch or its number.
  */
-const editsOwn = (rest: readonly string[], { branch, pullRequest }: OwnWork) => {
-  const parts = ghParts(rest, PR_EDIT);
-  if (parts === undefined || parts.positionals.length > 1) return false;
-  const [named] = parts.positionals;
-  return named === undefined || named === branch || named === String(pullRequest ?? "");
+const actsOnOwn =
+  (flags: GhFlags) =>
+  (rest: readonly string[], { branch, pullRequest }: OwnWork) => {
+    const parts = ghParts(rest, flags);
+    if (parts === undefined || parts.positionals.length > 1) return false;
+    const [named] = parts.positionals;
+    return named === undefined || named === branch || named === String(pullRequest ?? "");
+  };
+
+/** What `gh run rerun` takes: only re-running a run's failed jobs. */
+const RUN_RERUN: GhFlags = { withValue: new Set(), alone: new Set(["--failed"]) };
+
+/**
+ * Whether `gh run rerun` re-runs one run's failed jobs, in this repository (#356): what a fixing
+ * turn does for a flake that isn't its pull request's.
+ */
+const rerunsFailed = (rest: readonly string[]) => {
+  const parts = ghParts(rest, RUN_RERUN);
+  return (
+    parts !== undefined &&
+    parts.positionals.length === 1 &&
+    /^\d+$/.test(parts.positionals[0] ?? "") &&
+    rest.includes("--failed")
+  );
 };
 
 /**
@@ -323,7 +348,8 @@ const readsOnly = (rest: readonly string[]) => {
  * check, typecheck, test, build, e2e and verify), in the packages pnpm's workspace options pick
  * too, and the tools they run, run directly (#202), git and gh commands that only look, adding and
  * committing on the session branch, pushing it, and opening and updating its own pull request
- * (#172), and filing, labelling, commenting on and closing the repository's issues, as Matt
+ * (#172), commenting on it and re-running a run's failed jobs, for a flake that isn't its own
+ * (#356), and filing, labelling, commenting on and closing the repository's issues, as Matt
  * Pocock's skills do (#181).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
@@ -382,9 +408,17 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     words: ["gh", "pr", "edit"],
     more: true,
     onSessionBranch: true,
-    own: editsOwn,
+    own: actsOnOwn(PR_EDIT),
     texts: GH_TEXTS,
   },
+  // Saying a failing check is a flake that isn't the PR's, and re-running its failed jobs (#356).
+  {
+    words: ["gh", "pr", "comment"],
+    more: true,
+    own: actsOnOwn(PR_COMMENT),
+    texts: GH_TEXTS,
+  },
+  { words: ["gh", "run", "rerun"], more: true, own: rerunsFailed },
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */

@@ -191,7 +191,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
   another repository, and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
-  download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202). A backslash at a line's end joins the next
+  download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202).
+  For a flake that isn't its PR's, it comments on its own PR with `gh pr comment` and re-runs one run's failed jobs
+  with `gh run rerun <run> --failed`, and nothing more of a run (#356). A backslash at a line's end joins the next
   line on, and a title, body, message or jq filter is checked as a path only as a whole, so a link in it doesn't ask
   (#202).
   A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
@@ -244,7 +246,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
   strip shows. Checks failing on a commit not yet asked about start a turn on the model the owner last used, once
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
-  checks open its activity. A PR merged or closed, anywhere, ends the session: it takes no more messages, and once
+  checks open its activity. That turn first checks whether a failing test is its PR's; a flake that isn't is said on
+  the PR and its failed jobs re-run once, with no code changed. Checks failing again on the same commit, after they
+  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR merged or closed,
+  anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
   added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
   with its base (#278). A code workspace's list
@@ -314,7 +319,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
   (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
   out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
-  for and each turn's end (its `notify` option); an approval, a finished turn and a failed one each send one
+  for, each turn's end, and a PR's checks failing again after a re-run (#356; its `notify` option); an approval, a
+  finished turn, a failed one and checks failing again each send one
   notification, carrying only the session's title, what it needs and the session's id. The sender is a dependency
   passed in (`web-push.ts`, the one real one, through the `web-push` package; `fake.ts` keeps what was sent for the
   tests and the browser tests). Its routes are `/api/notifications` (the public key) and its `on` and `off`.
