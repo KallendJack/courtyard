@@ -77,7 +77,8 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
   device, plus the style guide; page "Drafts" holds every idea. How a draft becomes final: `docs/ai-conduct.md`, Paper.
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
-  stops for a design first. A change with nothing new to see (a title updating in place, say) needs none.
+  stops for a design first. A change with nothing new to see (a title updating in place, say) needs none; a ticket
+  that says it needs no new design names the agreed board that already covers it.
 - **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
   calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
   shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
@@ -94,8 +95,13 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
   screens read the roadmap from them.
 - **Claim an issue before building it.** Several builders work at once (Courtyard sessions and Claude Code
   helpers). Before starting, check the issue's comments and open PRs for a claim; if there is none, comment
-  "Building this: <session or helper>" first. "The next task" means the first `ready-for-agent` issue, in milestone
-  order, that nobody has claimed and that doesn't touch the same files as a claimed one.
+  "Building this: <session or helper> (<branch>), <why>" first, where why is "next in order" or "the owner asked".
+  "The next task" means the first `ready-for-agent` issue, in milestone order, that nobody has claimed and that
+  doesn't touch the same files as a claimed one. Stopping without a PR, say so on the issue ("Stopped: <why>"); a
+  claim with no pushed branch or PR after 12 hours is free.
+- **Build only `ready-for-agent` issues, one per PR.** Work without an issue gets one first (milestone and labels),
+  unless it's docs or CI only. Bundle issues in one PR only when the owner says so, and never add new work to an
+  open PR.
 
 ## Agent skills
 
