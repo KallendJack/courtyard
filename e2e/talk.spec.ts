@@ -230,9 +230,13 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       await hear(page, "Pegs for the bands");
       await talking(page, says.listening).click();
       await expect.poll(() => screenKeptAwake(page)).toBe(false);
+      // The browser settles the last words a moment after the tap; filled before then, they'd
+      // replace the long message, and a short answer ends before it's seen kept awake.
+      await page.waitForTimeout(500);
 
       await typeIn(page);
       await message(page).fill(words(150));
+      await expect(message(page)).toHaveValue(words(150));
       await page.getByRole("button", { name: "Start" }).click();
       await expect(talking(page, says.answering)).toBeVisible();
       await expect.poll(() => screenKeptAwake(page)).toBe(true);

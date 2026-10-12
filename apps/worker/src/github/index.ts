@@ -24,7 +24,14 @@ import type {
   UserToken,
 } from "./api.ts";
 
-export type { FoundIssue, FoundPullRequest, FoundRepo, GitHubApi } from "./api.ts";
+export type {
+  FoundCheckRun,
+  FoundIssue,
+  FoundMilestone,
+  FoundPullRequest,
+  FoundRepo,
+  GitHubApi,
+} from "./api.ts";
 
 /**
  * Courtyard's own GitHub sign-in (#99), through the GitHub App the owner registered and installed
@@ -316,6 +323,16 @@ export const createGitHub = (options: {
     if (!stored.ok) return err({ kind: "storage" });
     if (stored.value === undefined) return err({ kind: "signed-out" });
     return ok({ github, token: stored.value.accessToken });
+  };
+
+  /** Asks GitHub with the sign-in now, its refusal in Courtyard's terms. */
+  const asked = async <T>(
+    ask: (github: GitHubApi, token: string) => Promise<Result<T, string>>,
+  ): Promise<Result<T, GitHubProblem>> => {
+    const signedIn = await tokenFor(api);
+    if (!signedIn.ok) return signedIn;
+    const answer = await ask(signedIn.value.github, signedIn.value.token);
+    return answer.ok ? answer : err({ kind: "github", message: answer.error });
   };
 
   /**
@@ -635,6 +652,45 @@ export const createGitHub = (options: {
             : new Date(started + took).toISOString(),
       });
     },
+
+    /**
+     * The jobs on `commit` in `repo` (#355): the latest try of each, in the workflow's order.
+     * `undefined` when no one is signed in to ask.
+     */
+    commitJobs: async (find: {
+      repo: string;
+      commit: string;
+    }): Promise<Result<readonly FoundCheckRun[] | undefined, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn.error.kind === "signed-out" ? ok(undefined) : signedIn;
+      const found = await signedIn.value.github.commitChecks(signedIn.value.token, find);
+      return found.ok ? ok(jobsOf(found.value)) : err({ kind: "github", message: found.error });
+    },
+
+    /** Re-runs the failed jobs on `commit` in `repo` (#355). */
+    rerunFailedJobs: (find: { repo: string; commit: string }) =>
+      asked((github, token) => github.rerunFailedJobs(token, find)),
+
+    /** The failing test check run `id` names, or `null` when it names none (#355). */
+    checkRunFailure: (find: { repo: string; id: number }) =>
+      asked((github, token) => github.checkRunFailure(token, find)),
+
+    /** `repo`'s open milestones (#355). */
+    openMilestones: (find: { repo: string }) =>
+      asked((github, token) => github.openMilestones(token, find)),
+
+    /** Changes milestone `number`'s description in `repo` (#355). */
+    describeMilestone: (change: { repo: string; number: number; description: string }) =>
+      asked((github, token) => github.describeMilestone(token, change)),
+
+    /** Files an issue in `repo` (#355): its number and address. */
+    createIssue: (issue: {
+      repo: string;
+      title: string;
+      body: string;
+      labels: readonly string[];
+      milestone: number | null;
+    }) => asked((github, token) => github.createIssue(token, issue)),
 
     /** The names of `repo`'s labels (#181). */
     labels: async (find: { repo: string }): Promise<Result<readonly string[], GitHubProblem>> => {

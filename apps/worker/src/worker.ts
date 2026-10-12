@@ -66,6 +66,7 @@ import {
 } from "./providers/index.ts";
 import { createPullRequests } from "./pull-requests/index.ts";
 import { pullRequestRoutes } from "./pull-requests/routes.ts";
+import { createRedMain } from "./red-main/index.ts";
 import { createRepos } from "./repos/index.ts";
 import { repoProblem, repoRoutes } from "./repos/routes.ts";
 import { ok, type Result } from "./result.ts";
@@ -144,6 +145,12 @@ const FAKE_SIGN_IN_MS = 5000;
  * turn in one ends: often enough to see checks run, well inside GitHub's limits.
  */
 const FOLLOW_PULL_REQUESTS_EVERY_MS = 30_000;
+
+/**
+ * How often each code workspace's main is looked at for a red build (#355): a build takes about 3
+ * minutes, so a failure is re-run within one of it ending.
+ */
+const WATCH_MAIN_EVERY_MS = 60_000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
@@ -323,6 +330,8 @@ export const createWorker = (options: {
   repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
   repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
   repeat(FOLLOW_PULL_REQUESTS_EVERY_MS, sessions.followPullRequests);
+  // A red main is re-run once, then filed first in the order (#355).
+  repeat(WATCH_MAIN_EVERY_MS, createRedMain({ contextDir, dataDir, code, github }).watch);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });

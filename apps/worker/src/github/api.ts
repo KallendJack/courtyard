@@ -5,8 +5,8 @@ import { err, ok, type Result } from "../result.ts";
 /**
  * GitHub itself, as the worker asks it (#99): signing in through Courtyard's GitHub App with a
  * device code, refreshing the sign-in, who is signed in with which repos, and a session branch's
- * pull request: its state and checks (#172), its files, Merge and Close (#160); and main's build
- * (#249). Passed in to the
+ * pull request: its state and checks (#172), its files, Merge and Close (#160); main's build
+ * (#249), and re-running it and filing what fails again (#355). Passed in to the
  * worker like the clock, so tests use an in-memory fake; this file is the one real one.
  */
 export type GitHubApi = {
@@ -111,6 +111,40 @@ export type GitHubApi = {
       readonly description: string;
     },
   ) => Promise<Result<null, string>>;
+  /** Re-runs the failed jobs of each workflow run on `commit` in `repo` (#355). */
+  readonly rerunFailedJobs: (
+    accessToken: string,
+    find: { readonly repo: string; readonly commit: string },
+  ) => Promise<Result<null, string>>;
+  /**
+   * The failing test a check run names in its annotations (#355), such as a browser test's
+   * title; `null` when it names none.
+   */
+  readonly checkRunFailure: (
+    accessToken: string,
+    find: { readonly repo: string; readonly id: number },
+  ) => Promise<Result<string | null, string>>;
+  /** `repo`'s open milestones (#355). */
+  readonly openMilestones: (
+    accessToken: string,
+    find: { readonly repo: string },
+  ) => Promise<Result<readonly FoundMilestone[], string>>;
+  /** Changes milestone `number`'s description in `repo` (#355). */
+  readonly describeMilestone: (
+    accessToken: string,
+    change: { readonly repo: string; readonly number: number; readonly description: string },
+  ) => Promise<Result<null, string>>;
+  /** Files an issue in `repo` with `labels`, in milestone `milestone` if any (#355). */
+  readonly createIssue: (
+    accessToken: string,
+    issue: {
+      readonly repo: string;
+      readonly title: string;
+      readonly body: string;
+      readonly labels: readonly string[];
+      readonly milestone: number | null;
+    },
+  ) => Promise<Result<{ readonly number: number; readonly url: string }, string>>;
   /** Opens a pull request in `repo` from `branch` into `base` (#181): its number and address. */
   readonly openPullRequest: (
     accessToken: string,
@@ -175,6 +209,14 @@ export type FoundIssue = {
   readonly milestoneDescription: string | null;
   /** The text of each comment on it, oldest first. */
   readonly comments: readonly string[];
+};
+
+/** An open milestone as GitHub has it (#355). */
+export type FoundMilestone = {
+  readonly number: number;
+  readonly title: string;
+  /** Its description, which may hold its `Build order:` line; empty when it has none. */
+  readonly description: string;
 };
 
 /** One check on a pull request's latest commit, and how it's going. */
@@ -325,7 +367,7 @@ const Comments = z.array(z.object({ body: z.string().nullable().optional() }));
 const PullTexts = z.array(z.object({ title: z.string(), body: z.string().nullable() }));
 /** How many issues' comments are asked for at once. */
 const COMMENTS_AT_ONCE = 8;
-/** A pull request just opened. */
+/** A pull request just opened, or an issue just filed. */
 const Opened = z.object({
   number: z.number().int().positive(),
   html_url: z.url({ protocol: /^https$/ }),
@@ -363,6 +405,31 @@ const CommitCheckRuns = z.object({
     }),
   ),
 });
+/** The workflow runs on a commit (#355). */
+const WorkflowRuns = z.object({
+  workflow_runs: z.array(
+    z.object({
+      id: z.number().int(),
+      status: z.string().nullable(),
+      conclusion: z.string().nullable(),
+    }),
+  ),
+});
+/** A check run's annotations, where a test reporter names what failed (#355). */
+const Annotations = z.array(
+  z.object({
+    annotation_level: z.string().nullable(),
+    title: z.string().nullable(),
+    message: z.string().nullable(),
+  }),
+);
+const Milestones = z.array(
+  z.object({
+    number: z.number().int().positive(),
+    title: z.string(),
+    description: z.string().nullable(),
+  }),
+);
 /** A commit, as GitHub's addresses take it. */
 const Commit = z.string().regex(/^[0-9a-f]{40}$/);
 
@@ -870,6 +937,110 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         const opened = Opened.safeParse(answer);
         return opened.success
           ? ok({ number: opened.data.number, url: opened.data.html_url })
+          : err(fallback);
+      } catch {
+        return err(fallback);
+      }
+    },
+
+    rerunFailedJobs: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      const commit = Commit.safeParse(find.commit);
+      if (!repo.success || !commit.success) return err("That isn't a commit on GitHub.");
+      try {
+        const { workflow_runs } = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/actions/runs?head_sha=${commit.data}&per_page=${PAGE}`,
+          WorkflowRuns,
+        );
+        for (const run of workflow_runs) {
+          if (run.status !== "completed" || run.conclusion === null) continue;
+          if (!FAILED.has(run.conclusion)) continue;
+          const rerun = await apiChange(
+            accessToken,
+            `/repos/${repo.data}/actions/runs/${run.id}/rerun-failed-jobs`,
+            { method: "POST", body: {}, fallback: "GitHub couldn't re-run main's failed jobs." },
+          );
+          if (!rerun.ok) return rerun;
+        }
+        return ok(null);
+      } catch {
+        return err("GitHub couldn't be asked about main's build.");
+      }
+    },
+
+    checkRunFailure: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        const annotations = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/check-runs/${find.id}/annotations?per_page=${PAGE}`,
+          Annotations,
+        );
+        // GitHub's own "Process completed with exit code 1." has no title: a reporter's names the test.
+        const named = annotations.find(
+          (each) => each.annotation_level === "failure" && (each.title ?? "").trim() !== "",
+        );
+        return ok(named?.title?.split("\n")[0]?.trim() ?? null);
+      } catch {
+        return err("GitHub couldn't be asked what failed.");
+      }
+    },
+
+    openMilestones: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        const milestones = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/milestones?state=open&per_page=${PAGE}`,
+          Milestones,
+        );
+        return ok(
+          milestones.map(({ number, title, description }) => ({
+            number,
+            title,
+            description: description ?? "",
+          })),
+        );
+      } catch {
+        return err("GitHub couldn't be asked for the repository's milestones.");
+      }
+    },
+
+    describeMilestone: async (accessToken, change) => {
+      const repo = RepoName.safeParse(change.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      return apiChange(accessToken, `/repos/${repo.data}/milestones/${change.number}`, {
+        method: "PATCH",
+        body: { description: change.description },
+        fallback: "GitHub couldn't change the milestone.",
+      });
+    },
+
+    createIssue: async (accessToken, issue) => {
+      const repo = RepoName.safeParse(issue.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const fallback = "GitHub couldn't file the issue.";
+      try {
+        const response = await apiRequest(accessToken, `/repos/${repo.data}/issues`, {
+          method: "POST",
+          body: {
+            title: issue.title,
+            body: issue.body,
+            labels: issue.labels,
+            ...(issue.milestone === null ? {} : { milestone: issue.milestone }),
+          },
+        });
+        const answer: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          const refused = Refusal.safeParse(answer);
+          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
+        }
+        const filed = Opened.safeParse(answer);
+        return filed.success
+          ? ok({ number: filed.data.number, url: filed.data.html_url })
           : err(fallback);
       } catch {
         return err(fallback);
