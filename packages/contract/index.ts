@@ -66,12 +66,16 @@ export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
   ChangedFile,
   MergeReadiness,
+  OpenPullRequest,
+  OpenPullRequestList,
   PullRequest,
   PullRequestChanges,
   PullRequestCheck,
   PullRequestChecks,
+  PullRequestFrom,
   PullRequestMerging,
   PullRequestReview,
+  PullRequestSessionStart,
   pullRequestEnded,
 } from "./lib/pull-request.ts";
 export {

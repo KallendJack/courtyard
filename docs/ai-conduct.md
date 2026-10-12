@@ -326,6 +326,20 @@ session this message (on the model the owner last used), with the failed checks 
 > show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
 > it, say why, so the owner can decide what to do.
 
+When a pull request conflicts with its base, the owner's one tap on Bring up to date (#278) has the worker fetch the
+base branch and send the PR's session this message, on the model the owner last used there (queued while a turn
+runs). A pull request no session opened gets a new session on its branch, which this message starts. Merging is the
+model's own git command, so it waits for the owner's approval like any command off the allowlist:
+
+> Your pull request #<number> conflicts with <base>, so it can't merge and its checks may not run. Bring it up to
+> date: <base> is freshly fetched as origin/<base>, so merge origin/<base> into your session branch, fix each conflict
+> so the changes on both sides are kept, run the checks, then commit and push to the same pull request. If a conflict
+> needs the owner to decide, say which and why.
+
+A session started on a pull request no session opened (#278) works on that pull request's branch in place of a
+session branch of its own, so everything above about the session branch is about that branch, and its first message
+is the owner's question from the PR page, as they asked it.
+
 ## Paper
 
 Built with #180 (ADR 0023). Paper is the first tool connection: a code workspace whose `workspace.json` names Paper

@@ -36,6 +36,16 @@ export type GitHubApi = {
     accessToken: string,
     find: { readonly repo: string; readonly branch: string },
   ) => Promise<Result<FoundPullRequest | null, string>>;
+  /** Pull request `number` in `repo`, whatever its state (#278); `null` when there's none. */
+  readonly pullRequestNumbered: (
+    accessToken: string,
+    pull: { readonly repo: string; readonly number: number },
+  ) => Promise<Result<FoundPullRequest | null, string>>;
+  /** Every open pull request in `repo`, latest first, whoever opened it (#278). */
+  readonly openPullRequests: (
+    accessToken: string,
+    find: { readonly repo: string },
+  ) => Promise<Result<readonly FoundPullRequest[], string>>;
   /** The files pull request `number` in `repo` changes, each with its diff (#160). */
   readonly pullRequestFiles: (
     accessToken: string,
@@ -108,6 +118,14 @@ export type FoundPullRequest = {
   };
   /** It conflicts with its base, so GitHub can't merge it. */
   readonly conflicts: boolean;
+  /** The branch it merges from (#278). */
+  readonly branch: string;
+  /** It comes from a fork, so its branch isn't in the repository itself. */
+  readonly fork: boolean;
+  /** Who opened it, by their GitHub login. */
+  readonly author: string;
+  /** When it was merged, or `null` while it hasn't been. */
+  readonly mergedAt: string | null;
 };
 
 /** A file a pull request changes, and its diff: `null` when GitHub shows none (binary, too large). */
@@ -215,7 +233,13 @@ const Pull = z.object({
   html_url: z.url({ protocol: /^https$/ }),
   state: z.enum(["open", "closed"]),
   merged_at: z.string().nullable(),
-  head: z.object({ sha: z.string().regex(/^[0-9a-f]+$/) }),
+  head: z.object({
+    sha: z.string().regex(/^[0-9a-f]+$/),
+    ref: z.string(),
+    /** `null` once a fork it came from is deleted. */
+    repo: z.object({ full_name: z.string() }).nullable(),
+  }),
+  user: z.object({ login: z.string() }),
   base: z.object({ ref: z.string() }),
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
@@ -283,6 +307,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const SLOW_DOWN_SECONDS = 5;
 /** The most repos read from one installation: a page of GitHub's at a time. */
 const PAGE = 100;
+/** The most open pull requests listed (#278): a repository's page of them, newest first. */
+const OPEN_PAGE = 30;
 /** The most pages of a pull request's files read: GitHub lists up to 3,000, a review shows 300. */
 const FILE_PAGES = 3;
 
@@ -375,6 +401,46 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       }
     }
     return repos;
+  };
+
+  /**
+   * Pull request `number` in `repo` (checked), with the checks on its latest commit, or `null`
+   * when there's none by that number; throws when GitHub fails.
+   */
+  const numbered = async (
+    accessToken: string,
+    repo: string,
+    number: number,
+  ): Promise<FoundPullRequest | null> => {
+    const response = await apiRequest(accessToken, `/repos/${repo}/pulls/${number}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+    const pull = Pull.parse(await response.json());
+    const { check_runs } = await apiGet(
+      accessToken,
+      `/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=${PAGE}`,
+      CheckRuns,
+    );
+    return {
+      number: pull.number,
+      title: pull.title,
+      body: pull.body ?? "",
+      url: pull.html_url,
+      state: pull.merged_at !== null ? "merged" : pull.state,
+      head: pull.head.sha,
+      base: pull.base.ref,
+      checks: check_runs.map((run) => ({ name: run.name, outcome: outcomeOf(run) })),
+      changes: {
+        additions: pull.additions,
+        deletions: pull.deletions,
+        files: pull.changed_files,
+      },
+      conflicts: pull.mergeable === false,
+      branch: pull.head.ref,
+      fork: pull.head.repo?.full_name !== repo,
+      author: pull.user.login,
+      mergedAt: pull.merged_at,
+    };
   };
 
   return {
@@ -482,30 +548,40 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           Pulls,
         );
         if (latest === undefined) return ok(null);
-        const pull = await apiGet(accessToken, `/repos/${repo.data}/pulls/${latest.number}`, Pull);
-        const { check_runs } = await apiGet(
-          accessToken,
-          `/repos/${repo.data}/commits/${pull.head.sha}/check-runs?per_page=${PAGE}`,
-          CheckRuns,
-        );
-        return ok({
-          number: pull.number,
-          title: pull.title,
-          body: pull.body ?? "",
-          url: pull.html_url,
-          state: pull.merged_at !== null ? "merged" : pull.state,
-          head: pull.head.sha,
-          base: pull.base.ref,
-          checks: check_runs.map((run) => ({ name: run.name, outcome: outcomeOf(run) })),
-          changes: {
-            additions: pull.additions,
-            deletions: pull.deletions,
-            files: pull.changed_files,
-          },
-          conflicts: pull.mergeable === false,
-        });
+        return ok(await numbered(accessToken, repo.data, latest.number));
       } catch {
         return err("GitHub couldn't be asked about the pull request.");
+      }
+    },
+
+    pullRequestNumbered: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        return ok(await numbered(accessToken, repo.data, find.number));
+      } catch {
+        return err("GitHub couldn't be asked about the pull request.");
+      }
+    },
+
+    openPullRequests: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        // GitHub lists the newest first; each is asked for alone for its size and conflicts.
+        const listed = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/pulls?state=open&per_page=${OPEN_PAGE}`,
+          Pulls,
+        );
+        const found: FoundPullRequest[] = [];
+        for (const { number } of listed) {
+          const pull = await numbered(accessToken, repo.data, number);
+          if (pull !== null) found.push(pull);
+        }
+        return ok(found);
+      } catch {
+        return err("GitHub couldn't be asked for the pull requests.");
       }
     },
 

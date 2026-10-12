@@ -17,6 +17,7 @@
 @source not "./components/approval-card.tsx";
 @source not "./components/thumb-button.tsx";
 @source not "./components/file-tree.tsx";
+@source not "./components/ask-line.tsx";
 @source not "./components/session-state.tsx";
 @source not "./components/working-line.tsx";
 @source not "./components/queued-message.tsx";

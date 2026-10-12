@@ -14,7 +14,7 @@ import {
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { Button, IconButton } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
@@ -44,6 +44,20 @@ const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
 const MattSetupOffer = lazy(() => import("../../matt-setup/matt-setup-offer.tsx"));
 // Loaded only for a code workspace: its pull requests, with the review's stylesheet (#240).
 const PullRequests = lazy(() => import("../../review/pull-requests.tsx"));
+// A pull request no session opened (#278): loaded only when one is opened.
+const Review = lazy(() =>
+  import("../../review/pull-requests.tsx").then((module) => ({ default: module.PullRequestPage })),
+);
+
+/**
+ * The pull request no session opened that the page shows in its place (#278), named by the
+ * address's hash (`#pr-306`): a hash, not a search value, since the router validates searches on
+ * the first load, which has no room for one more.
+ */
+const pullRequestIn = (hash: string) => {
+  const number = /^pr-([1-9]\d*)$/.exec(hash)?.[1];
+  return number === undefined ? undefined : Number(number);
+};
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   // A document or a Thing just deleted from its page, which this page offers to undo (ADR 0020).
@@ -67,10 +81,30 @@ function Workspace() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
+  // Followed from the router itself: its hooks for the address would add to the first load.
+  const hash = useSyncExternalStore(
+    (changed) => router.subscribe("onResolved", changed),
+    () => router.state.location.hash,
+  );
   /** What the owner is doing to the workspace itself, if anything. */
   const [tidying, setTidying] = useState<"rename" | "archive">();
   const sessionList = useSessionList(sessions.kind === "loaded" ? sessions.data : undefined);
 
+  const pr = pullRequestIn(hash);
+  if (pr !== undefined && detail.kind === "loaded") {
+    // A pull request no session opened, on a page of its own (#278).
+    const workspaceId = detail.data.workspace.id;
+    return (
+      <Suspense>
+        <Review
+          key={pr}
+          workspaceId={workspaceId}
+          of={{ kind: "number", workspaceId, number: pr }}
+          fallbackTitle={`#${pr}`}
+        />
+      </Suspense>
+    );
+  }
   if (detail.kind === "not-found") {
     return (
       <Page>
@@ -224,7 +258,7 @@ function Workspace() {
         // The PRs tab's list (#240), until the page has tabs (#222): what waits on the owner.
         <Suspense fallback={null}>
           <div className="mt-6 empty:hidden">
-            <PullRequests sessions={sessionList.sessions} />
+            <PullRequests workspaceId={workspace.id} sessions={sessionList.sessions} />
           </div>
         </Suspense>
       )}
@@ -424,37 +458,60 @@ const useSessionList = (loaded: CodeSessionList | undefined) => {
 function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
   const { sessions, running } = props.list;
   if (sessions.length === 0) return null;
+  // A session whose pull request was merged or closed has ended: it leaves the sessions for
+  // History, so its place is free for a new one (#278).
+  const ended = (session: CodeSessionList["sessions"][number]) =>
+    session.pullRequest !== undefined && session.pullRequest.state !== "open";
+  const current = sessions.filter((session) => !ended(session));
+  const history = sessions.filter(ended);
   return (
-    <section aria-label="Sessions" className={CARD}>
-      <div className="flex items-baseline justify-between gap-4">
-        <SectionTitle>Sessions</SectionTitle>
-        {props.mode === "code" && (
-          <span className="text-meta text-muted-foreground">
-            {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
-          </span>
-        )}
-      </div>
-      <ul className="mt-2 divide-y">
-        {sessions.map((session) => (
-          <li key={session.id} className="flex items-center gap-2">
-            <Link
-              to="/workspaces/$workspaceId/sessions/$sessionId"
-              params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-              className={classes(LIST_ROW, "min-w-0 flex-1")}
-            >
-              <ListedSessionText
-                title={session.title}
-                now={session.now}
-                updatedAt={session.updatedAt}
-                waitsForSlot={session.queued}
-                when={describeWhen}
-              />
-            </Link>
-            {session.queued && <RemoveQueued session={session} />}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <>
+      {current.length > 0 && (
+        <section aria-label="Sessions" className={CARD}>
+          <div className="flex items-baseline justify-between gap-4">
+            <SectionTitle>Sessions</SectionTitle>
+            {props.mode === "code" && (
+              <span className="text-meta text-muted-foreground">
+                {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
+              </span>
+            )}
+          </div>
+          <SessionList sessions={current} />
+        </section>
+      )}
+      {history.length > 0 && (
+        <section aria-label="History" className={CARD}>
+          <SectionTitle>History</SectionTitle>
+          <SessionList sessions={history} />
+        </section>
+      )}
+    </>
+  );
+}
+
+/** Sessions, each a link with whose turn it is, and Remove for one waiting to start. */
+function SessionList(props: { sessions: CodeSessionList["sessions"] }) {
+  return (
+    <ul className="mt-2 divide-y">
+      {props.sessions.map((session) => (
+        <li key={session.id} className="flex items-center gap-2">
+          <Link
+            to="/workspaces/$workspaceId/sessions/$sessionId"
+            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
+            className={classes(LIST_ROW, "min-w-0 flex-1")}
+          >
+            <ListedSessionText
+              title={session.title}
+              now={session.now}
+              updatedAt={session.updatedAt}
+              waitsForSlot={session.queued}
+              when={describeWhen}
+            />
+          </Link>
+          {session.queued && <RemoveQueued session={session} />}
+        </li>
+      ))}
+    </ul>
   );
 }
 

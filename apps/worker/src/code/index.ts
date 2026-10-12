@@ -2,7 +2,7 @@ import { isAbsolute, join } from "node:path";
 import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import { isFolder, removeFolder } from "../files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
-import type { GitHub, GitHubProblem } from "../github/index.ts";
+import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
@@ -237,8 +237,21 @@ export const createCode = (options: {
   dataDir: string;
   /** The environment a session's commands get: Courtyard's GitHub sign-in (#99). */
   commandEnv: () => Promise<CommandEnv>;
-  /** A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160). */
-  pullRequests: Pick<GitHub, "pullRequest" | "review" | "merge" | "close" | "deleteBranch">;
+  /**
+   * A session branch's pull request on GitHub: followed (#172), reviewed, merged, closed (#160);
+   * and every open one on the repository, each by its number (#278).
+   */
+  pullRequests: Pick<
+    GitHub,
+    | "pullRequest"
+    | "review"
+    | "merge"
+    | "close"
+    | "deleteBranch"
+    | "openPullRequests"
+    | "reviewNumbered"
+    | "pullRequestNumbered"
+  >;
   /** How many heavy checks code sessions may run at once across the worker (#281). */
   buildsAtOnce: number;
 }) => {
@@ -327,6 +340,90 @@ export const createCode = (options: {
         return err({ kind: "git", reason: gitFailureReason(error) });
       }
       return ok({ branch, worktree });
+    },
+
+    /**
+     * Starts a session on a pull request's branch that no session opened (#278): the branch as
+     * it is on the remote, freshly fetched, checked out in the session's own worktree as a branch
+     * of that name tracking it, so the session pushes to the same pull request. Refused when the
+     * repository has a branch of that name already, so clearing the session away never takes one
+     * of the owner's.
+     */
+    startOnBranch: async (start: {
+      repoPath: string;
+      sessionId: SessionId;
+      branch: string;
+    }): Promise<Result<SessionBranch, BranchRefusal>> => {
+      const { repoPath, sessionId, branch } = start;
+      const there = await isFolder(repoPath);
+      if (!there.ok || !there.value) return err({ kind: "repo-missing", repoPath });
+      const named = await gitOrNothing(repoPath, ["check-ref-format", "--branch", branch]);
+      if (named === undefined || branch.startsWith("-")) {
+        return err({ kind: "git", reason: `${branch} isn't a branch name git takes` });
+      }
+      if ((await gitOrNothing(repoPath, ["branch", "--list", branch])) !== "") {
+        return err({
+          kind: "git",
+          reason: `this repository has a branch called ${branch} already`,
+        });
+      }
+      const tracking = `refs/remotes/${REMOTE}/${branch}`;
+      try {
+        await git(repoPath, ["fetch", "--quiet", REMOTE, `+refs/heads/${branch}:${tracking}`], {
+          timeoutMs: REMOTE_TIMEOUT_MS,
+          env: await options.commandEnv(),
+        });
+      } catch (error) {
+        return err({ kind: "remote", reason: gitFailureReason(error) });
+      }
+      const worktree = worktreeOf(sessionId);
+      try {
+        await git(repoPath, [
+          "worktree",
+          "add",
+          "--quiet",
+          "--track",
+          "-b",
+          branch,
+          worktree,
+          tracking,
+        ]);
+      } catch (error) {
+        return err({ kind: "git", reason: gitFailureReason(error) });
+      }
+      return ok({ branch, worktree });
+    },
+
+    /**
+     * Every open pull request on the code workspace's repository (#278), latest first, or why
+     * GitHub can't be asked.
+     */
+    openPullRequests: async (find: {
+      repoPath: string;
+    }): Promise<Result<readonly OpenFound[], PullRequestProblem>> => {
+      const repo = await onGitHub(find.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.openPullRequests({ repo: repo.value });
+    },
+
+    /** Pull request `number` as the owner reviews it (#278): `undefined` when there's none. */
+    reviewNumbered: async (find: {
+      repoPath: string;
+      number: number;
+    }): Promise<Result<PullRequestReview | undefined, PullRequestProblem>> => {
+      const repo = await onGitHub(find.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.reviewNumbered({ repo: repo.value, number: find.number });
+    },
+
+    /** Pull request `number` as GitHub has it (#278): `undefined` when there's none. */
+    pullRequestNumbered: async (find: {
+      repoPath: string;
+      number: number;
+    }): Promise<Result<FoundPullRequest | undefined, PullRequestProblem>> => {
+      const repo = await onGitHub(find.repoPath);
+      if (!repo.ok) return repo;
+      return pullRequests.pullRequestNumbered({ repo: repo.value, number: find.number });
     },
 
     /**
