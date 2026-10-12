@@ -318,3 +318,62 @@ test.describe("on the cover screen", () => {
     await shot(page, "cover-home-foot-rows");
   });
 });
+
+// One screen from a tablet up (owner, 2026-10-12; #339): the title stays in view and the foot rows
+// stay at the foot, and only the tiles scroll when there are more than fit. These come last, as
+// the workspaces they add would crowd the screenshots above.
+
+/** More workspaces than fit on one screen. */
+const manyWorkspaces = async (request: APIRequestContext) => {
+  for (const n of [1, 2, 3, 4, 5, 6]) await newWorkspace(request, `Shed ${n} ${Date.now()}`);
+};
+
+/** The title, the tiles' area and the foot rows all on one screen, and only the tiles scroll. */
+const keepsOneScreen = async (page: Page, height: number) => {
+  await newVersion(page);
+  await backupBehind(page);
+  await page.goto("/");
+  const title = page.getByRole("heading", { level: 1, name: "Workspaces" });
+  const problem = page.getByRole("region", { name: "Problem" });
+  await expect(problem).toBeVisible();
+  await expect(page.getByRole("region", { name: "New version" })).toBeVisible();
+  await settled(page);
+
+  const area = tiles(page).locator("..");
+  const scrolls = await area.evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(scrolls).toBe(true);
+  const panel = page.locator('[data-scroll-restoration-id="page"]');
+  expect(await panel.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+
+  const titleBefore = await title.boundingBox();
+  const footBefore = await problem.boundingBox();
+  expect((footBefore?.y ?? height) + (footBefore?.height ?? 0)).toBeLessThanOrEqual(height);
+  await area.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await expect(tiles(page).getByRole("link", { name: "New workspace" })).toBeInViewport();
+  expect(await title.boundingBox()).toEqual(titleBefore);
+  expect(await problem.boundingBox()).toEqual(footBefore);
+};
+
+test.describe("with more workspaces than fit", () => {
+  test("on a desktop the title and foot rows stay in view, and only the tiles scroll", async ({
+    page,
+    request,
+  }) => {
+    await manyWorkspaces(request);
+    await keepsOneScreen(page, 900);
+    await shot(page, "desktop-home-many");
+  });
+
+  test.describe("on a tablet", () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
+
+    test("the title and foot rows stay in view, and only the tiles scroll", async ({
+      page,
+      request,
+    }) => {
+      await manyWorkspaces(request);
+      await keepsOneScreen(page, 712);
+      await shot(page, "tablet-home-many");
+    });
+  });
+});

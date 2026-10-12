@@ -455,7 +455,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
     put what's said there as they would in a message box. A code workspace just made opens with its
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).
-  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"), with a stylesheet of its own
+  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; from a tablet up the page is one
+    screen, its title and foot rows in view and only the tiles scrolling, until #339 makes that the app's), with a stylesheet of its own
     (`home.css`, holding `components/kept.tsx`'s classes too), like `code-home/`. Each tile's line
     (`tile-line.tsx`): what waits on the owner, by Needs you's rules (`code-home/needs.ts`) from the workspace's
     sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home

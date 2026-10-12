@@ -73,30 +73,34 @@ function Home() {
             for one area of your life.
           </EmptyState>
         ) : (
-          <ul
-            aria-label="Workspaces"
-            className="mt-4 grid grid-cols-2 gap-2.5 md:mt-5 md:grid-cols-3 md:gap-3"
-          >
-            {list.map((workspace) => (
-              <Tile key={workspace.id} workspace={workspace} />
-            ))}
-            <li>
-              <Link
-                to="/new-workspace"
-                className={classes(
-                  TILE,
-                  "items-center justify-center gap-2.5 border-stroke border-dashed border-input text-interface font-semibold text-foreground/85 hover:bg-muted/60",
-                )}
-              >
-                <span className="flex size-10 items-center justify-center rounded-row bg-muted">
-                  <Plus aria-hidden className="size-4.5" />
-                </span>
-                New workspace
-              </Link>
-            </li>
-          </ul>
+          // From a tablet up only the tiles scroll, under the title and above the foot rows (#339).
+          // The space round them keeps a focused tile's ring in view.
+          <div className="-mx-1 mt-3 p-1 md:mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+            <ul
+              aria-label="Workspaces"
+              className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3"
+            >
+              {list.map((workspace) => (
+                <Tile key={workspace.id} workspace={workspace} />
+              ))}
+              <li>
+                <Link
+                  to="/new-workspace"
+                  className={classes(
+                    TILE,
+                    "items-center justify-center gap-2.5 border-stroke border-dashed border-input text-interface font-semibold text-foreground/85 hover:bg-muted/60",
+                  )}
+                >
+                  <span className="flex size-10 items-center justify-center rounded-row bg-muted">
+                    <Plus aria-hidden className="size-4.5" />
+                  </span>
+                  New workspace
+                </Link>
+              </li>
+            </ul>
+          </div>
         )}
-        <div className="mt-auto pt-6">
+        <div className="mt-auto shrink-0 pt-6">
           <Suspense>
             <HomeFoot workspaces={list} short={short} />
           </Suspense>
