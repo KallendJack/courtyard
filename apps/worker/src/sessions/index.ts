@@ -259,6 +259,27 @@ const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
   JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
   JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
+/**
+ * Whether an open pull request's checks failed again on a commit its session already had a fixing
+ * turn for, having run again since (a re-run, #356): no second fixing turn starts for it.
+ */
+const failedAgain = (seen: {
+  events: readonly SessionEvent[];
+  was: PullRequest | undefined;
+  now: PullRequest;
+}) => {
+  const { was, now } = seen;
+  return (
+    now.state === "open" &&
+    now.checks.kind === "failed" &&
+    was?.head === now.head &&
+    was.checks.kind !== "failed" &&
+    seen.events.some(
+      (event) => event.type === "owner-message" && event.checksFailed?.head === now.head,
+    )
+  );
+};
+
 /** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
 const titleFrom = (text: string) => {
   const firstLine = text.split("\n")[0]?.trim() ?? "";
@@ -471,8 +492,9 @@ export const createSessions = (options: {
   connectionsOf: (workspace: Workspace) => Promise<WorkspaceConnections>;
   now: () => number;
   /**
-   * Told of an approval asked for and of each turn's end, once recorded, with a code session's
-   * pull request as it is then, for the owner's notifications (#173).
+   * Told of an approval asked for, of each turn's end, and of a pull request's checks failing again
+   * after a re-run (#356), once recorded, with a code session's pull request as it is then, for the
+   * owner's notifications (#173).
    */
   notify?: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => void;
   /** Given the titling of a session, which nobody waits for. */
@@ -1751,6 +1773,11 @@ export const createSessions = (options: {
         if (!samePullRequest(found, pullRequest)) {
           const recorded = await append(id, { type: "pull-request", pullRequest: found });
           if (!recorded.ok) return;
+          // Failing again on a commit that had its fixing turn, after a re-run: the owner is
+          // asked, and no second fixing turn starts (#356).
+          if (failedAgain({ events: events.value, was: pullRequest, now: found })) {
+            options.notify?.(id, recorded.value, found);
+          }
         }
         pullRequest = found;
       }

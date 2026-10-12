@@ -1283,14 +1283,14 @@ export const NOT_IN_BACKGROUND =
 
 /**
  * The message the worker sends a code session when its pull request's checks fail (#172;
- * docs/ai-conduct.md, Coding), naming the checks that failed.
+ * docs/ai-conduct.md, Coding), naming the checks that failed. A flake that isn't the pull
+ * request's is said on it and re-run once, with no code changed (#356).
  */
 export const checksFailedMessage = (failed: {
   number: number;
   checks: readonly [string, ...string[]];
 }) =>
-  `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
-
+  `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed). First, check whether a failing test is yours: if it also failed lately on the default branch (gh run list --branch), has an open issue saying it's flaky (gh issue list --search), or tests nothing your changes touch, it isn't. Then change no code: comment "Flaky, not this PR's: <test>" on the pull request with gh pr comment, re-run its failed jobs once with gh run rerun <run> --failed, and say so. Otherwise, fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
 /**
  * What the worker sends a code session when the owner taps Bring up to date on its pull request
  * (#278), once it has fetched the base branch: merge it in and fix the conflict.

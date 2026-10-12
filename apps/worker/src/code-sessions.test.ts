@@ -443,6 +443,10 @@ describe("a code workspace's command allowlist", () => {
     "gh pr create --title 'Add the notes' --body '## Summary\n\nWhy: https://courtyard.example/docs\n\nCloses #79'",
     'gh pr edit --title "Add the notes, tidied"',
     "gh pr edit <branch> --add-label bug",
+    // A flake that isn't the PR's, said on it and its failed jobs re-run (#356).
+    'gh pr comment --body "Flaky, not this PR\'s: e2e"',
+    "gh pr comment <branch> -b 'Flaky, not this PR'\\''s: e2e'",
+    "gh run rerun 123 --failed",
   ])(
     "pushes the session branch and opens or updates its own PR without asking: %s (#172)",
     async (command) => {
@@ -474,6 +478,13 @@ describe("a code workspace's command allowlist", () => {
     "gh pr edit main --title Mine",
     "gh pr close 12",
     "gh pr merge 12",
+    "gh pr comment 12 --body Mine",
+    "gh pr comment main --body Mine",
+    "gh pr comment --body Mine --repo someone/else",
+    "gh pr comment --edit-last --body Mine",
+    // Only a run's failed jobs, in this repository (#356).
+    "gh run rerun 123 --failed --repo someone/else",
+    "gh run rerun 123 --job 456",
   ])("asks the owner before any other push or PR: %s (#172)", async (command) => {
     const { asked, ran } = await askAbout([command]);
     const { branch } = await sessionWorktree();
