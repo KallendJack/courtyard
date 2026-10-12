@@ -80,10 +80,12 @@ function Complete-Update([string]$Outcome, [string]$Message) {
   exit 1
 }
 
-# Installs the locked package versions and builds the version that's checked out.
+# Installs the locked package versions and builds the version that's checked out. The build is
+# pnpm build without the machine's builds lock (#306): Courtyard is down until it's done, so it
+# never waits behind someone's tests.
 function Install-AndBuild {
   $problem = Invoke-Step "Installing packages" "pnpm install --frozen-lockfile"
-  if (-not $problem) { $problem = Invoke-Step "Building" "pnpm build" }
+  if (-not $problem) { $problem = Invoke-Step "Building" "pnpm -r build" }
   return $problem
 }
 

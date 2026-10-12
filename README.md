@@ -220,8 +220,11 @@ there is used as it is), then makes the workspace on it and opens it.
   machine up: a session's `pnpm verify`, `test`, `e2e` or `build` (in any package), `vitest run`
   or `playwright test` waits its turn, first come first served, its activity saying "Waiting for
   another build · 1 ahead", and starts by itself. Stop still works while it waits, and other
-  commands never wait. A stronger machine can allow more at once: set `COURTYARD_BUILDS_AT_ONCE`
-  (see [Settings](#settings)).
+  commands never wait. It's one lock for the whole machine: this repo's own `pnpm verify`, `test`,
+  `e2e` and `build`, run anywhere on it (a helper's checkout, say), take turns with sessions too,
+  saying who has the machine and since when while they wait. A stronger machine can allow more
+  at once: set `COURTYARD_BUILDS_AT_ONCE` (see [Settings](#settings)), for the worker and in the
+  environment the repo's scripts run in alike.
 - **Its `git` and `gh` use Courtyard's own GitHub sign-in** (see [GitHub](#github)), never the
   worker machine's, even for a repo cloned over SSH. Until you've signed in, the workspace's page
   says its sessions can't push or open a pull request.
@@ -433,7 +436,8 @@ data folder as it is, and sign in to Claude Code on the new machine.
 - **Start with [AGENTS.md](AGENTS.md).** The process is [Matt Pocock's skills](https://github.com/mattpocock/skills),
   set up as `docs/agents/` says. How the parts connect is in [`docs/architecture.md`](docs/architecture.md).
 - **`pnpm verify`** runs every check: lint and format, types, tests, the build (with the first-load budget) and the
-  browser tests. Each git worktree's browser tests use their own ports, so copies can test side by side.
+  browser tests. Each git worktree's browser tests use their own ports, so copies can test side by side. It, `pnpm
+  test`, `e2e` and `build` wait their turn in the machine's builds lock, behind Courtyard's sessions and each other.
 - **`pnpm dev`** runs the worker and the web app with reloading. It needs a `.env` in the clone with its own context
   and data folders, never the live ones, and its own `COURTYARD_PORT` if the live worker runs on the same machine.
 - **On Windows,** some worker tests can time out while the PC is busy: [#130](https://github.com/KallendJack/courtyard/issues/130).
