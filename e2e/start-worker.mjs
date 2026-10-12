@@ -142,6 +142,12 @@ pushBranch("306-machine-lock", { "builds.md": "Builds take turns across the whol
   "Builds queue across the whole PC [e2e running]",
   "## Summary\n\nBuilds take turns across the whole PC, not just the worker.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
 ]);
+// One with a branch too long for its row, as Dependabot's are (#319).
+pushBranch(
+  "dependabot/docker_compose/home-assistant/home-assistant-60f18c2e9d",
+  { "compose.md": "Home Assistant, a version on\n" },
+  ["Bump home-assistant in the compose file [e2e passes]"],
+);
 const LONG_LINE = `export const wide = "${"a long line that never wraps ".repeat(12).trim()}";`;
 pushBranch(
   "wide-review",
