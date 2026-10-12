@@ -4,6 +4,7 @@ import { Zap } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { PlaceholderRows } from "@/components/kept";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
@@ -22,18 +23,30 @@ const SHOWN = 3;
  */
 export function NextUp(props: {
   workspaceId: WorkspaceId;
-  issues: readonly NextUpIssue[];
+  /** `undefined` while nothing is known yet (a first visit): the block keeps its place. */
+  issues: readonly NextUpIssue[] | undefined;
   providers: ProviderList["providers"];
   /** A narrow column beside the others, or the whole width. */
   beside: boolean;
 }) {
   const [more, setMore] = useState(false);
+  const column = classes("min-w-0", props.beside && "w-62.5 shrink-0 xl:w-80");
+  if (props.issues === undefined) {
+    return (
+      <div className={column}>
+        <Block label="Next up">
+          <PlaceholderRows count={1} size="tall" />
+          <PlaceholderRows count={2} size="line" />
+        </Block>
+      </div>
+    );
+  }
   const [first, ...rest] = props.issues;
   if (first === undefined) return null;
   const shown = more ? rest : rest.slice(0, SHOWN - 1);
   const hidden = rest.length - shown.length;
   return (
-    <div className={classes("min-w-0", props.beside && "w-62.5 shrink-0 xl:w-80")}>
+    <div className={column}>
       <Block label="Next up" aside={first.milestone ?? undefined}>
         <BuildFirst workspaceId={props.workspaceId} issue={first} providers={props.providers} />
         {shown.length > 0 && (

@@ -11,6 +11,7 @@
 @source "../components/workspace-tabs.tsx";
 @source "../components/connections-line.tsx";
 @source "../components/radio-row.tsx";
+@source "../components/kept.tsx";
 @source "../components/thumb-button.tsx";
 
 :where([data-code-home]) {

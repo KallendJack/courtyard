@@ -39,6 +39,7 @@ export {
   PaperFileList,
   PaperLink,
   WorkspaceConnections,
+  WorkspaceMain,
 } from "./lib/code-home.ts";
 export { CODE_SESSIONS_AT_ONCE, CodeSessionList } from "./lib/code-sessions.ts";
 export {

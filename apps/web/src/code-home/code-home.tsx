@@ -11,7 +11,9 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
+import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
+import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { loadMattSetup } from "../matt-setup/api.ts";
 import { describeProblem } from "../problems.tsx";
@@ -23,6 +25,7 @@ import type { FromWorker } from "../worker.ts";
 import { loadConnections, loadNextUp } from "./api.ts";
 import css from "./code-home.css?inline";
 import { ConnectionsSheet } from "./connections.tsx";
+import { MainRow } from "./main-row.tsx";
 import { NeedsYou, needsOf } from "./needs-you.tsx";
 import { NextUp } from "./next-up.tsx";
 import { Running } from "./running.tsx";
@@ -38,6 +41,16 @@ const TABS = { sessions: "Sessions", prs: "PRs" } as const;
 type Tab = keyof typeof TABS | "";
 
 const tabIn = (hash: string): Tab => (hash === "sessions" || hash === "prs" ? hash : "");
+
+/** Each workspace's connections, setup check and Next up as last known, for the tab's lifetime. */
+const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
+const KEPT_SETUP = createKept<MattSetup>();
+const KEPT_NEXT_UP = createKept<readonly NextUpIssue[]>();
+
+const NO_SETUP: MattSetup = { state: "none" };
+
+/** What the worker answered, or nothing to keep when it didn't. */
+const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.data : undefined);
 
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
@@ -62,37 +75,34 @@ export default function CodeHome(props: {
   const tab = tabIn(props.hash);
   /** Asked again when the page has changed something (merged, approved). */
   const [again, setAgain] = useState(0);
+  // What loads after the page shows the last answer known at once, and is asked for again
+  // quietly (owner, 2026-10-12: nothing jumps in late); unknown, its block keeps its place.
   const open = useOpenPullRequests(workspace.id, list.sessions, true, again);
-  const [connections, setConnections] = useState<WorkspaceConnections>();
-  const [nextUp, setNextUp] = useState<readonly NextUpIssue[]>([]);
-  const [setup, setSetup] = useState<MattSetup>({ state: "none" });
+  const connections = useKept(KEPT_CONNECTIONS, {
+    key: workspace.id,
+    load: async () => known(await loadConnections(workspace.id)),
+  });
+  const setup =
+    useKept(KEPT_SETUP, {
+      key: workspace.id,
+      load: async () => known(await loadMattSetup(workspace.id)),
+    }) ?? NO_SETUP;
+  // Asked for again once a session there changes, so a Build that started shows.
+  const nextUp = useKept(KEPT_NEXT_UP, {
+    key: workspace.id,
+    load: async () => {
+      const loaded = await loadNextUp(workspace.id);
+      // Not signed in, say: there's no Next up, so its block goes.
+      return loaded.kind === "offline"
+        ? undefined
+        : loaded.kind === "loaded"
+          ? loaded.data.issues
+          : [];
+    },
+    again: list.sessions.length,
+  });
   const [connecting, setConnecting] = useState(false);
   const line = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    let current = true;
-    void loadConnections(workspace.id).then((loaded) => {
-      if (current && loaded.kind === "loaded") setConnections(loaded.data);
-    });
-    void loadMattSetup(workspace.id).then((loaded) => {
-      if (current && loaded.kind === "loaded") setSetup(loaded.data);
-    });
-    return () => {
-      current = false;
-    };
-  }, [workspace.id]);
-
-  // Next up is asked for again once a session there changes, so a Build that started shows.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again as its sessions change
-  useEffect(() => {
-    let current = true;
-    void loadNextUp(workspace.id).then((loaded) => {
-      if (current) setNextUp(loaded.kind === "loaded" ? loaded.data.issues : []);
-    });
-    return () => {
-      current = false;
-    };
-  }, [workspace.id, list.sessions.length]);
 
   // Right after New workspace → Code (#308), the Connections sheet offers Paper; skippable.
   useEffect(() => {
@@ -118,6 +128,8 @@ export default function CodeHome(props: {
 
   const pulls = open?.pullRequests ?? [];
   const needs = needsOf({ sessions: list.sessions, pulls, setup });
+  /** Whether what Needs you shows is still to come, on a first visit. */
+  const needsPending = open === undefined;
   const tabs: WorkspaceTab[] = [
     { hash: "", label: "Home" },
     ...(list.sessions.length > 0
@@ -127,12 +139,15 @@ export default function CodeHome(props: {
       ? [{ hash: "prs", label: TABS.prs, count: pulls.length }]
       : []),
   ];
+  // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
+  const showsTabs = tabs.length > 1 || open === undefined;
   const chosen = tabs.some((each) => each.hash === tab) ? tab : "";
   const anyLeft =
+    needsPending ||
     needs.length > 0 ||
     setup.state === "opened" ||
     list.sessions.some((session) => session.now.kind === "working");
-  const beside = layout !== "cover" && anyLeft && nextUp.length > 0;
+  const beside = layout !== "cover" && anyLeft && (nextUp === undefined || nextUp.length > 0);
 
   return (
     <div data-code-home="">
@@ -142,7 +157,9 @@ export default function CodeHome(props: {
             {props.description}
           </p>
         )}
-        {connections !== undefined && (
+        {connections === undefined ? (
+          <PlaceholderRows count={1} size="text" />
+        ) : (
           <>
             <ConnectionsLine
               connections={connections}
@@ -156,7 +173,7 @@ export default function CodeHome(props: {
               workspaceId={workspace.id}
               workspaceName={workspace.name}
               connections={connections}
-              onConnected={setConnections}
+              onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
               anchor={line}
             />
           </>
@@ -166,7 +183,7 @@ export default function CodeHome(props: {
         <SignIns part="github-notice" />
       </Suspense>
 
-      {tabs.length > 1 && (
+      {showsTabs && (
         <div className="mt-3.5">
           <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
         </div>
@@ -188,8 +205,9 @@ export default function CodeHome(props: {
                 <NeedsYou
                   workspaceId={workspace.id}
                   needs={needs}
+                  pending={needsPending}
                   setup={setup}
-                  onSetup={setSetup}
+                  onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
                   onChanged={changed}
                 />
                 <Running
@@ -208,10 +226,14 @@ export default function CodeHome(props: {
               />
             )}
           </div>
+          <MainRow workspaceId={workspace.id} />
         </div>
       )}
 
-      <div className="sticky bottom-0 mt-auto bg-card pt-6 pb-3 md:pb-6">
+      {/* On a touch screen the message box docks in the frame, so this keeps no room of its own. */}
+      <div
+        className={classes("sticky bottom-0 mt-auto bg-card", layout === "desktop" && "pt-6 pb-6")}
+      >
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}

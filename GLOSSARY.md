@@ -163,8 +163,9 @@ _Avoid_: dev workspace, repo workspace
 
 **Home**:
 A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
-Things, Docs). A code workspace's Home shows, in a fixed order, **Needs you**, **Running** and **Next up**, each
-block hidden when it's empty, then the message box.
+Things, Docs). A code workspace's Home shows, in a fixed order, **Needs you**, **Running**, **Next up** and
+**Main** (its repository's newest main commit with its build), each block hidden when it's empty, then the
+message box.
 _Avoid_: dashboard, overview, landing page
 
 **Needs you**:

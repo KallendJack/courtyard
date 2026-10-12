@@ -6,6 +6,7 @@ import {
   SessionSummary,
   WorkspaceConnections,
   type WorkspaceId,
+  WorkspaceMain,
 } from "@courtyard/contract";
 import { fromWorker, sendJson } from "../worker.ts";
 
@@ -25,6 +26,10 @@ export const buildIssue = (workspaceId: WorkspaceId, number: number, build: Buil
     body: build,
     schema: SessionSummary,
   });
+
+/** The workspace's main: its newest commit and that commit's build (#301's Main row). */
+export const loadMain = (workspaceId: WorkspaceId) =>
+  fromWorker(`${workspacePath(workspaceId)}/main`, WorkspaceMain);
 
 /** The workspace's connections: GitHub and its Paper file (#308). */
 export const loadConnections = (workspaceId: WorkspaceId) =>

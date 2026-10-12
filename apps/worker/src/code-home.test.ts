@@ -8,6 +8,7 @@ import {
   SessionSummary,
   WorkspaceConnections,
   WorkspaceDetail,
+  WorkspaceMain,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakePaperFiles, type FakePaperFiles } from "./paper/fake.ts";
@@ -23,6 +24,7 @@ import {
   FAKE_MODEL,
   type FakeIssue,
   followSession,
+  gitIn,
   postJson,
   quotedInGuide,
   type Requester,
@@ -220,6 +222,41 @@ describe("Build (#298)", () => {
     expect(await errorOf(response)).toMatch(/claimed/);
     const listed = await request("/api/workspaces/side-project/sessions");
     expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+  });
+});
+
+describe("main (#301's Main row)", () => {
+  it("gives the default branch's newest commit and its build, and says when it's the live copy's repository", async () => {
+    await codeWorkspace(root, "side-project", repo);
+    const github = createFakeGitHub();
+    const head = await gitIn(repo, "rev-parse", "HEAD");
+    github.setCommitChecks(head, [
+      {
+        id: 1,
+        name: "Checks",
+        outcome: "passed",
+        url: "https://github.com/octo-owner/side-project/actions/runs/1",
+        startedAt: "2026-10-12T09:00:00Z",
+        completedAt: "2026-10-12T09:01:00Z",
+      },
+    ]);
+    const request = await asOwner(
+      testWorker({ root, github: github.api, env: { COURTYARD_LIVE_COPY: repo } }),
+    );
+    await postJson(request, "/api/github/sign-in", {});
+    github.approve();
+    await expect
+      .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+      .toBe("signed-in");
+
+    const response = await request("/api/workspaces/side-project/main");
+
+    expect(response.status).toBe(200);
+    expect(WorkspaceMain.parse(await response.json())).toEqual({
+      newest: { commit: head, title: `${head.slice(0, 7)} Start` },
+      build: { kind: "passed", jobs: [{ name: "Checks", outcome: "passed" }] },
+      liveCopy: true,
+    });
   });
 });
 

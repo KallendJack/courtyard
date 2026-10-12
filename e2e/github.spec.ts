@@ -765,6 +765,15 @@ const showsHome = async (page: Page) => {
   await expect(nextUp).not.toContainText("Claimed by a helper");
   await expect(nextUp.getByRole("button", { name: "More · 9" })).toBeVisible();
 
+  // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
+  const main = page.getByRole("region", { name: "Main" });
+  await expect(main).toContainText(/Start [0-9a-f]{7}/);
+  await expect(main.getByRole("status")).toHaveText("Passed");
+  await expect(main.getByRole("list", { name: "Main's build" }).getByRole("listitem")).toHaveCount(
+    4,
+  );
+  await expect(main.getByRole("button", { name: "Update" })).toHaveCount(0);
+
   // Tabs show once they have something: no sessions yet, one pull request.
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
   await expect(tabs.getByRole("link")).toHaveText(["Home", "PRs1"]);
@@ -799,6 +808,38 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       ];
       expect(nextBox?.x ?? 0).toBeGreaterThan((needsBox?.x ?? 0) + (needsBox?.width ?? 0));
       await shot(page, "desktop-home");
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    // Owner rule (2026-10-12): nothing jumps in late. What loads after the page shows the last
+    // answer known at once on a revisit, asked for again quietly.
+    test("coming back to a code workspace shows its pull requests at once, while they're asked for again", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(`${HOME}#prs`);
+      const row = page
+        .getByRole("region", { name: /^Pull requests/ })
+        .getByRole("listitem", { name: /Builds take turns/ });
+      await expect(row).toBeVisible();
+
+      // GitHub answers slowly from now on: the way back mustn't wait for it.
+      await page.route("**/api/workspaces/home-project/pull-requests", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 8000));
+        await route.continue();
+      });
+      const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+      await workspaces.getByRole("link", { name: "Side project" }).click();
+      await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+      await workspaces.getByRole("link", { name: "Home project" }).click();
+      await expect(page.getByRole("heading", { level: 1, name: "Home project" })).toBeVisible();
+      await page
+        .getByRole("navigation", { name: "Workspace tabs" })
+        .getByRole("link", { name: /^PRs/ })
+        .click();
+      await expect(row).toBeVisible({ timeout: 2000 });
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
   });

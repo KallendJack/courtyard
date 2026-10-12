@@ -14,6 +14,7 @@ import {
   type WorkspaceDetail,
   WorkspaceId,
   type WorkspaceList,
+  type WorkspaceMain,
   type WorkspaceSummary,
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
@@ -43,6 +44,7 @@ import {
 } from "./matt-skills/index.ts";
 import { createNextUp } from "./next-up/index.ts";
 import { nextUpRoutes } from "./next-up/routes.ts";
+import { createWorkspaceMain } from "./workspace-main/index.ts";
 import { createNotifications, type SendPush } from "./notifications/index.ts";
 import { notificationRoutes } from "./notifications/routes.ts";
 import { sendWebPush } from "./notifications/web-push.ts";
@@ -350,6 +352,20 @@ export const createWorker = (options: {
   api.route("/", pullRequestRoutes(createPullRequests({ contextDir, code, sessions })));
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(createNextUp({ contextDir, code, github, sessions, now })));
+  // A code workspace's main and its build, for its Home's Main row (#301, #249).
+  const workspaceMain = createWorkspaceMain({ contextDir, code, github, liveCopy, now });
+  api.get("/workspaces/:id/main", async (c) => {
+    const main = await workspaceMain.of(c.req.param("id"));
+    if (main.ok) return c.json(main.value satisfies WorkspaceMain);
+    switch (main.error.kind) {
+      case "workspace":
+        return contextError(c, main.error.error);
+      case "not-code":
+        return apiError(c, { status: 409, error: "Only a code workspace has a main branch." });
+      case "unknown":
+        return apiError(c, { status: 404, error: "This workspace's main can't be read now." });
+    }
+  });
   api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));

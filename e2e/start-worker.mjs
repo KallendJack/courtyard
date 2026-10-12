@@ -339,6 +339,18 @@ const helperPull = github.openPullRequest({
   author: "octo-owner",
 });
 github.setChecks(helperPull, [{ name: "verify", outcome: "passed" }]);
+// Home project's main has passed its build (#301's Main row).
+github.setCommitChecks(
+  homeHead,
+  ["Checks", "Unit tests", "E2E 1/2", "E2E 2/2"].map((name, i) => ({
+    id: i + 1,
+    name,
+    outcome: "passed",
+    url: `https://github.com/octo-owner/home-project/actions/runs/1/job/${i + 1}`,
+    startedAt: "2026-10-12T09:00:00Z",
+    completedAt: "2026-10-12T09:03:00Z",
+  })),
+);
 
 startWorker({
   env: { ...process.env, COURTYARD_LIVE_COPY: liveCopy, COURTYARD_CONTEXT_REMOTE: missingBackup },

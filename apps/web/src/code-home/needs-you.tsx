@@ -9,6 +9,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
+import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
 import { useAction } from "@/lib/use-action";
 import { MattSetupOffer } from "../matt-setup/matt-setup-offer.tsx";
@@ -120,6 +121,8 @@ const pullTitle = (pull: OpenPullRequest) =>
 export function NeedsYou(props: {
   workspaceId: WorkspaceId;
   needs: readonly Need[];
+  /** What it shows is still to come (a first visit): it keeps its place with faint rows. */
+  pending: boolean;
   setup: MattSetup;
   onSetup: (setup: MattSetup) => void;
   /** Something here changed (merged, approved): the page asks for its lists again. */
@@ -127,7 +130,14 @@ export function NeedsYou(props: {
 }) {
   const [settingUp, setSettingUp] = useState(false);
   const opened = props.setup.state === "opened";
-  if (props.needs.length === 0 && !opened) return null;
+  if (props.needs.length === 0 && !opened && !props.pending) return null;
+  if (props.needs.length === 0 && props.pending) {
+    return (
+      <Block label="Needs you" needs>
+        <PlaceholderRows count={2} />
+      </Block>
+    );
+  }
   return (
     <Block label="Needs you" count={props.needs.length} needs>
       <ul className="flex flex-col gap-1.5">

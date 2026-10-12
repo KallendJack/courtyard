@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LiveVersion, MainBuild } from "./live.ts";
 import { Effort, ModelRef } from "./session.ts";
 
 // A code workspace's Home (#301) and its connections (#308): what its page asks for besides its
@@ -69,6 +70,19 @@ export type NextUpIssue = z.infer<typeof NextUpIssue>;
 /** A code workspace's Next up (#301): its unclaimed ready issues, in milestone order. */
 export const NextUp = z.object({ issues: z.array(NextUpIssue) });
 export type NextUp = z.infer<typeof NextUp>;
+
+/**
+ * A code workspace's main (#301's Main row): its newest commit on the default branch, and that
+ * commit's build as #249's bar shows it (`null` when GitHub can't be asked or it has no checks).
+ * `liveCopy` says the repository is the one this Courtyard's live copy runs from, the only one
+ * Home offers Update on.
+ */
+export const WorkspaceMain = z.object({
+  newest: LiveVersion,
+  build: MainBuild.nullable(),
+  liveCopy: z.boolean(),
+});
+export type WorkspaceMain = z.infer<typeof WorkspaceMain>;
 
 /** Build (#298): a new code session on this model builds the issue, and claims it on GitHub. */
 export const BuildIssue = z.object({ model: ModelRef, effort: Effort.optional() });
