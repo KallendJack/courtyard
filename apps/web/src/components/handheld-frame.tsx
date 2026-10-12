@@ -13,7 +13,7 @@ import {
 import { flushSync } from "react-dom";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
-import { LiveUpdate } from "../live-update.tsx";
+import { LiveUpdate } from "../live/live-update.tsx";
 import { Button } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import { FrameButton, modelMark } from "./frame-button.tsx";
