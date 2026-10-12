@@ -518,6 +518,24 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // #319: a long branch ran under its checks and the Review button.
+  test("a pull request's long branch is cut short, clear of its checks", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project");
+    const row = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Bump home-assistant/ });
+    const branch = row.getByText(/^dependabot\/docker_compose\//);
+    const checks = row.getByText("Checks passed", { exact: true }).locator("visible=true");
+    await expect(checks).toBeVisible();
+    const [branchBox, checksBox] = [await branch.boundingBox(), await checks.boundingBox()];
+    expect((branchBox?.x ?? 0) + (branchBox?.width ?? 0)).toBeLessThanOrEqual(checksBox?.x ?? 0);
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   test("the PR page fits the screen with a long diff and description, and the diff scrolls inside it", async ({
     page,
     request,

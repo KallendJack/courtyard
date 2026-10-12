@@ -193,8 +193,9 @@ function PullRequestRow(props: { workspaceId: WorkspaceId; row: Row }) {
           {title}
         </p>
         <p className="flex min-w-0 items-center gap-2 text-meta/4 text-muted-foreground">
-          <span className="shrink-0 truncate font-mono text-primary-text">{row.branch}</span>
-          <span className="truncate">
+          {/* Its branch is cut short only once who it's from has given way (#319). */}
+          <span className="min-w-0 truncate font-mono text-primary-text">{row.branch}</span>
+          <span className="min-w-0 flex-1 truncate">
             · {fixing ? "the session is fixing it" : fromSaid(row.from)}
           </span>
         </p>
