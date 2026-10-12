@@ -93,6 +93,13 @@ test("a tile names the newest session waiting, and the list marks them and puts 
   // Opened, it's seen: one waits, and its tile opens it.
   await sessionRows(page).nth(0).getByRole("link").click();
   await expect(page.getByRole("heading", { level: 1, name: "Saturday Shops" })).toBeVisible();
+  // The page says it's seen once its turns have loaded: leaving before then, it never would (#354).
+  await expect
+    .poll(
+      async () =>
+        (await listOf(request, workspace.id)).find((s) => s.title === "Saturday Shops")?.waiting,
+    )
+    .toBe("nothing");
   await page.goto("/");
   await expect(tile(page, workspace.name)).toContainText("New reply · Brake Pads");
   await expect(tile(page, workspace.name)).not.toContainText("more");
