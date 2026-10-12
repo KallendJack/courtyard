@@ -488,9 +488,10 @@ describe("a save to the owner context", () => {
 
     expect(replies().map((reply) => reply.ok)).toEqual([false, false, false, false, true]);
     expect(replies()[0]?.reply).toMatch(/only to How to answer me/);
-    // It isn't shown About me, so it has no labels for it; it is shown the context file.
+    // It isn't shown About me, nor a context file, which a code workspace has none of (#301), so
+    // it has no labels for either.
     expect(replies()[2]?.reply).toMatch(/no line labelled MF1/);
-    expect(replies()[3]?.reply).toMatch(/only to How to answer me/);
+    expect(replies()[3]?.reply).toMatch(/no line labelled F1/);
     const file = await ownerFile();
     expect(file).toContain("- Metric units.\n- Examples in TypeScript.\n");
     expect(file).not.toContain("knee");

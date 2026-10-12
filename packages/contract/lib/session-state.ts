@@ -21,7 +21,13 @@ export type Doing = z.infer<typeof Doing>;
  */
 export const TurnNow = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("working"), since: z.iso.datetime(), doing: Doing }),
-  z.object({ kind: z.literal("needs-you"), since: z.iso.datetime(), ask: ApprovalAsk }),
+  z.object({
+    kind: z.literal("needs-you"),
+    since: z.iso.datetime(),
+    ask: ApprovalAsk,
+    /** The approval's event number, which answers it from a list (#301's Needs you). */
+    approval: z.number().int().positive(),
+  }),
   z.object({ kind: z.literal("your-turn") }),
 ]);
 export type TurnNow = z.infer<typeof TurnNow>;

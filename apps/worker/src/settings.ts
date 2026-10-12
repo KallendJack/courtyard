@@ -72,6 +72,7 @@ const Env = z.object({
       .regex(/^[A-Za-z0-9.]+$/, "must be the GitHub App's client ID, from its settings page")
       .optional(),
   ),
+  COURTYARD_PAPER_COMMAND: z.preprocess(unsetIfEmpty, z.string().optional()),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -121,6 +122,11 @@ export type Settings = {
    * worker (#281), the rest waiting their turn: 1 unless a stronger machine allows more.
    */
   readonly buildsAtOnce: number;
+  /**
+   * Paper's command on the worker machine (ADR 0023), for connecting Paper from a code workspace's
+   * page (#308); `null` to use the one a code workspace names already, if any.
+   */
+  readonly paperCommand: string | null;
 };
 
 /**
@@ -153,5 +159,6 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     updateTask: parsed.data.COURTYARD_UPDATE_TASK,
     githubClientId: parsed.data.COURTYARD_GITHUB_CLIENT_ID ?? null,
     buildsAtOnce: parsed.data.COURTYARD_BUILDS_AT_ONCE,
+    paperCommand: parsed.data.COURTYARD_PAPER_COMMAND ?? null,
   });
 };

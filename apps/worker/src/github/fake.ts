@@ -20,6 +20,17 @@ export type FakeRepo = {
   readonly pushedAt?: string;
 };
 
+/** An issue on the fake GitHub (#301): `ready-for-agent` unless a test gives its labels. */
+export type FakeIssue = {
+  readonly number: number;
+  readonly title: string;
+  readonly milestone?: string;
+  readonly labels?: readonly string[];
+  /** Its comments' text, oldest first. */
+  readonly comments?: readonly string[];
+  readonly state?: "open" | "closed";
+};
+
 /** How long the fake's tokens last, as GitHub's do: 8 hours. */
 const TOKEN_SECONDS = 8 * 60 * 60;
 
@@ -79,8 +90,12 @@ export const createFakeGitHub = (
     finishAfterMs?: number;
     /** Each repository's labels to start with (#181). */
     labels?: Readonly<Record<string, readonly string[]>>;
+    /** Each repository's issues to start with (#301). */
+    issues?: Readonly<Record<string, readonly FakeIssue[]>>;
     opensOnPush?: {
       readonly remote: string;
+      /** The repository it is GitHub's copy of, as `owner/name`; every one unless it says. */
+      readonly repo?: string;
       /** The checks on a commit pushed, from its subject. */
       readonly checks: (subject: string) => readonly FoundCheck[];
       /** Whether a commit pushed conflicts with `main`, from its subject (#278). */
@@ -123,6 +138,17 @@ export const createFakeGitHub = (
   const labels = new Map(
     Object.entries(options.labels ?? {}).map(([repo, names]) => [repo, [...names]]),
   );
+  /** Each repository's issues, each with its comments as they're added (#301). */
+  const issues = new Map(
+    Object.entries(options.issues ?? {}).map(([repo, list]) => [
+      repo,
+      list.map((issue) => ({ ...issue, comments: [...(issue.comments ?? [])] })),
+    ]),
+  );
+  /** How many times the repositories' issues were asked for, as a test checks they're kept. */
+  let issuesAsked = 0;
+  const issueIn = (repo: string, number: number) =>
+    issues.get(repo)?.find((issue) => issue.number === number);
   /** Each branch deleted on GitHub, in order. */
   const deleted: { readonly repo: string; readonly branch: string }[] = [];
   /** Every pull request opened, numbered from 1, with the files it changes (#160). */
@@ -195,9 +221,17 @@ export const createFakeGitHub = (
   const merged = (number: number) =>
     change(number, { state: "merged", mergedAt: new Date().toISOString() });
 
+  /** GitHub's copy on disk of `repo`, when the browser tests have one. */
+  const onPushFor = (repo: string) => {
+    const onPush = options.opensOnPush;
+    return onPush !== undefined && (onPush.repo === undefined || onPush.repo === repo)
+      ? onPush
+      : undefined;
+  };
+
   /** For the browser tests: the pull request for a branch pushed to GitHub's copy on disk. */
   const pushed = async (find: { repo: string; branch: string }) => {
-    const onPush = options.opensOnPush;
+    const onPush = onPushFor(find.repo);
     if (onPush === undefined) return;
     const head = await gitOrNothing(onPush.remote, ["rev-parse", `refs/heads/${find.branch}`]);
     if (head === undefined) return;
@@ -275,7 +309,7 @@ export const createFakeGitHub = (
       if (refused !== undefined) return refused;
       // For the browser tests: every branch pushed to GitHub's copy has its pull request, whoever
       // pushed it.
-      const onPush = options.opensOnPush;
+      const onPush = onPushFor(find.repo);
       if (onPush !== undefined) {
         const listed = await gitOrNothing(onPush.remote, [
           "for-each-ref",
@@ -295,6 +329,41 @@ export const createFakeGitHub = (
     },
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
+    openIssues: async (accessToken, { repo, label }) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      issuesAsked += 1;
+      return ok(
+        (issues.get(repo) ?? [])
+          .filter(
+            (issue) =>
+              (issue.state ?? "open") === "open" &&
+              (issue.labels ?? ["ready-for-agent"]).includes(label),
+          )
+          .map((issue) => ({
+            number: issue.number,
+            title: issue.title,
+            url: `https://github.com/${repo}/issues/${issue.number}`,
+            milestone: issue.milestone ?? null,
+            comments: [...issue.comments],
+          })),
+      );
+    },
+    openPullRequestTexts: async (accessToken, { repo }) =>
+      refusedToken(accessToken) ??
+      ok(
+        pulls
+          .filter((pull) => pull.repo === repo && pull.state === "open")
+          .map((pull) => ({ title: pull.title, body: pull.body })),
+      ),
+    commentOnIssue: async (accessToken, { repo, number, body }) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const issue = issueIn(repo, number);
+      if (issue === undefined) return err("GitHub said: Not Found");
+      issue.comments.push(body);
+      return ok(null);
+    },
     merge: async (accessToken, { number, head }) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
@@ -315,7 +384,7 @@ export const createFakeGitHub = (
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       deleted.push({ repo: find.repo, branch: find.branch });
-      const onPush = options.opensOnPush;
+      const onPush = onPushFor(find.repo);
       if (onPush !== undefined) {
         await gitOrNothing(onPush.remote, ["update-ref", "-d", `refs/heads/${find.branch}`]);
       }
@@ -334,7 +403,7 @@ export const createFakeGitHub = (
     openPullRequest: async (accessToken, pull) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
-      const onPush = options.opensOnPush;
+      const onPush = onPushFor(pull.repo);
       const head =
         onPush === undefined
           ? undefined
@@ -381,6 +450,14 @@ export const createFakeGitHub = (
     branchesDeleted: () => [...deleted],
     /** A repository's labels now, in the order they were made (#181). */
     labelsOf: (repo: string) => [...(labels.get(repo) ?? [])],
+    /** The comments on issue `number` in `repo` now, oldest first (#301). */
+    commentsOn: (repo: string, number: number) => [...(issueIn(repo, number)?.comments ?? [])],
+    /** Someone comments on issue `number` in `repo` (a claim, say). */
+    comment: (repo: string, number: number, body: string) => {
+      issueIn(repo, number)?.comments.push(body);
+    },
+    /** How many times the repositories' issues were asked for. */
+    issuesAsked: () => issuesAsked,
     /** The number of the latest pull request from `branch`, if any. */
     pullRequestFrom: (branch: string) => pulls.findLast((pull) => pull.branch === branch)?.number,
   };

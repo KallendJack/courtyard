@@ -15,13 +15,14 @@ import { err, ok, type Result } from "../result.ts";
 import type {
   DeviceSignIn,
   FoundCheck,
+  FoundIssue,
   FoundPullRequest,
   FoundRepo,
   GitHubApi,
   UserToken,
 } from "./api.ts";
 
-export type { FoundPullRequest, FoundRepo, GitHubApi } from "./api.ts";
+export type { FoundIssue, FoundPullRequest, FoundRepo, GitHubApi } from "./api.ts";
 
 /**
  * Courtyard's own GitHub sign-in (#99), through the GitHub App the owner registered and installed
@@ -370,6 +371,12 @@ export const createGitHub = (options: {
     },
 
     /**
+     * Whether Courtyard is signed in to GitHub now, read from the data folder alone, never asking
+     * GitHub: cheap enough for every code turn's connections line (#308).
+     */
+    signedIn: async () => (await tokenFor(api)).ok,
+
+    /**
      * Starts a sign-in with a device code. Signed in already, it's Switch: the account signed in
      * stays until the new sign-in finishes.
      */
@@ -514,6 +521,39 @@ export const createGitHub = (options: {
       if (!signedIn.ok) return signedIn;
       const found = await signedIn.value.github.repositories(signedIn.value.token);
       return found.ok ? found : err({ kind: "github", message: found.error });
+    },
+
+    /** The open issues in `repo` with `label`, with their milestones and comments (#301). */
+    openIssues: async (find: {
+      repo: string;
+      label: string;
+    }): Promise<Result<readonly FoundIssue[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const found = await signedIn.value.github.openIssues(signedIn.value.token, find);
+      return found.ok ? found : err({ kind: "github", message: found.error });
+    },
+
+    /** The title and description of each open pull request in `repo` (#301). */
+    openPullRequestTexts: async (find: {
+      repo: string;
+    }): Promise<Result<readonly { title: string; body: string }[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const found = await signedIn.value.github.openPullRequestTexts(signedIn.value.token, find);
+      return found.ok ? found : err({ kind: "github", message: found.error });
+    },
+
+    /** Comments on issue `number` in `repo` (#298). */
+    commentOnIssue: async (comment: {
+      repo: string;
+      number: number;
+      body: string;
+    }): Promise<Result<null, GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const made = await signedIn.value.github.commentOnIssue(signedIn.value.token, comment);
+      return made.ok ? made : err({ kind: "github", message: made.error });
     },
 
     /** The names of `repo`'s labels (#181). */

@@ -22,6 +22,8 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { createCode } from "./code/index.ts";
+import { createConnections } from "./connections/index.ts";
+import { connectionRoutes } from "./connections/routes.ts";
 import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
 import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
@@ -39,12 +41,15 @@ import {
   fetchFromGitHub,
   type MattPin,
 } from "./matt-skills/index.ts";
+import { createNextUp } from "./next-up/index.ts";
+import { nextUpRoutes } from "./next-up/routes.ts";
 import { createNotifications, type SendPush } from "./notifications/index.ts";
 import { notificationRoutes } from "./notifications/routes.ts";
 import { sendWebPush } from "./notifications/web-push.ts";
 import { createOwner } from "./owner/index.ts";
 import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./owner/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./owner-context/index.ts";
+import { createPaperFiles, type PaperFiles } from "./paper/files.ts";
 import { sharedOwnerContext } from "./prompts/index.ts";
 import {
   createClaudeProvider,
@@ -185,6 +190,11 @@ export const createWorker = (options: {
   mattSkills?: { readonly pin?: MattPin; readonly fetch?: FetchMattSkills } | null;
   /** Given the work nobody waits for (see `Background`). Tests keep hold of it; otherwise it just runs. */
   background?: Background;
+  /**
+   * The owner's Paper files (#308), listed and made for connecting Paper from a code workspace's
+   * page. Tests pass a fake; otherwise Paper's own MCP server is asked.
+   */
+  paperFiles?: PaperFiles;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -203,6 +213,7 @@ export const createWorker = (options: {
     updateTask,
     githubClientId,
     buildsAtOnce,
+    paperCommand,
   } = settings.value;
   const now = options.now ?? Date.now;
   const background = options.background ?? (() => {});
@@ -253,6 +264,14 @@ export const createWorker = (options: {
     buildsAtOnce,
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
+  const connections = createConnections({
+    contextDir,
+    contextFolder,
+    github,
+    code,
+    paperFiles: options.paperFiles ?? createPaperFiles(),
+    paperCommand,
+  });
   const sessions = createSessions({
     dataDir,
     providers,
@@ -261,6 +280,7 @@ export const createWorker = (options: {
     houseSkills,
     matt,
     code,
+    connectionsOf: connections.of,
     now,
     notify: (session, event, pullRequest) => {
       background(
@@ -321,6 +341,8 @@ export const createWorker = (options: {
   const repos = createRepos({ dataDir, contextDir, github, code });
   api.route("/", repoRoutes(repos));
   api.route("/", pullRequestRoutes(createPullRequests({ contextDir, code, sessions })));
+  api.route("/", connectionRoutes(connections));
+  api.route("/", nextUpRoutes(createNextUp({ contextDir, code, github, sessions, now })));
   api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
@@ -410,9 +432,11 @@ export const createWorker = (options: {
       mode: workspace.value.summary.mode,
       ownerContext: ownerContext.value,
     });
+    const { description } = workspace.value;
     return c.json({
       workspace: workspace.value.summary,
       contextFile: workspace.value.contextFile,
+      ...(description === null ? {} : { description }),
       ownerContextShared: shared,
     } satisfies WorkspaceDetail);
   });

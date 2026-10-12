@@ -33,6 +33,7 @@ import {
   type StopRequest,
   type TurnNow,
   takesEffort,
+  type WorkspaceConnections,
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -138,7 +139,12 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
-import { getWorkspace, isArchived, type PaperSettings } from "../workspaces/index.ts";
+import {
+  getWorkspace,
+  isArchived,
+  type PaperSettings,
+  type Workspace,
+} from "../workspaces/index.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
 const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
@@ -364,7 +370,7 @@ const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
     (event) => event.type === "approval-requested" && !answered.has(event.seq),
   );
   if (waiting?.type === "approval-requested") {
-    return { kind: "needs-you", since: waiting.at, ask: waiting.ask };
+    return { kind: "needs-you", since: waiting.at, ask: waiting.ask, approval: waiting.seq };
   }
   const latest = turn.findLast((event) => event.type === "activity" || event.type === "text-delta");
   return {
@@ -450,6 +456,8 @@ export const createSessions = (options: {
   matt: MattSkills | undefined;
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
+  /** A code workspace's connections (#308), which each of its turns is told. */
+  connectionsOf: (workspace: Workspace) => Promise<WorkspaceConnections>;
   now: () => number;
   /**
    * Told of an approval asked for and of each turn's end, once recorded, with a code session's
@@ -694,6 +702,9 @@ export const createSessions = (options: {
       allowlist: allowlistFor(workspace.value.allowlist),
       paper: workspace.value.paper,
       ...(workspace.value.paper === null ? {} : { paperFile: workspace.value.paper.fileId }),
+      ...(summary.mode === "code"
+        ? { connections: await options.connectionsOf(workspace.value) }
+        : {}),
     });
   };
 
