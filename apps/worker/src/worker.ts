@@ -26,6 +26,7 @@ import { changeRoutes } from "./changes/routes.ts";
 import { createCode } from "./code/index.ts";
 import { createConnections } from "./connections/index.ts";
 import { connectionRoutes } from "./connections/routes.ts";
+import { plansDue } from "./context-file/index.ts";
 import {
   createContextFolder,
   WORKSPACES_ARRANGED,
@@ -472,12 +473,23 @@ export const createWorker = (options: {
       mode: workspace.value.summary.mode,
       ownerContext: ownerContext.value,
     });
-    const { description } = workspace.value;
+    const { description, contextFile, summary } = workspace.value;
+    // Today on the worker machine's calendar, which is the owner's.
+    const today = new Date(now());
     return c.json({
-      workspace: workspace.value.summary,
-      contextFile: workspace.value.contextFile,
+      workspace: summary,
+      contextFile,
       ...(description === null ? {} : { description }),
       ownerContextShared: shared,
+      ...(summary.mode === "planning"
+        ? {
+            duePlans: plansDue(contextFile?.plans ?? [], {
+              year: today.getFullYear(),
+              month: today.getMonth(),
+              day: today.getDate(),
+            }),
+          }
+        : {}),
     } satisfies WorkspaceDetail);
   });
   api.get("/workspaces/:id/skills", async (c) => {

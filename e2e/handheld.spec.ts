@@ -733,8 +733,8 @@ test.describe("unfolded", () => {
     const workspaces = page.getByRole("navigation", { name: "Workspaces" });
     const title = page.getByRole("heading", { level: 1 });
 
-    // A long page: the workspace's, with its Skills.
-    await page.goto("/workspaces/garage-gym");
+    // A long page: what the workspace knows, with its Skills.
+    await page.goto("/workspaces/garage-gym#knows");
     await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
     const content = await besideTheRails(page);
     const [rail, key, box] = [
@@ -777,7 +777,7 @@ test.describe("unfolded", () => {
   test("a new page starts at its top, and going back returns to where the last one was", async ({
     page,
   }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#knows");
     await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
     // Once the frame is there: its rails narrow the page, which moves what's in it.
     await besideTheRails(page);
@@ -789,7 +789,7 @@ test.describe("unfolded", () => {
     await workspaces.getByRole("link", { name: "Side project" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Side project");
     await workspaces.getByRole("link", { name: "Garage gym" }).click();
-    await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Garage gym");
     await expect.poll(async () => (await pageScroll(page)).scrollTop).toBe(0);
 
     // Back twice, to where it was the first time.
@@ -835,7 +835,7 @@ test.describe("on the cover screen", () => {
   });
 
   test("only the page scrolls, between the tiles and the bar, which stay put", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#knows");
     await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
     const tiles = page.getByRole("navigation", { name: "Workspaces" });
     // The bar's top row: Skills, Photo and Model.

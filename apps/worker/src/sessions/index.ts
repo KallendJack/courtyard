@@ -147,6 +147,7 @@ import {
   isArchived,
   type PaperSettings,
   type Workspace,
+  withoutStarterHint,
 } from "../workspaces/index.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
@@ -718,7 +719,7 @@ export const createSessions = (options: {
       name: summary.name,
       mode: summary.mode,
       folder,
-      contextFile: contextMarkdown,
+      contextFile: contextMarkdown === null ? null : withoutStarterHint(contextMarkdown),
       ownerContext: ownerContext.value,
       documents: documents.value,
       things: things.value,

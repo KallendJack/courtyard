@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // Documents (ADR 0020): Save as document under an answer, the workspace's list, a document's page
 // with Rename and Delete, and Undo from each.
@@ -41,6 +42,9 @@ test("Save as document keeps an answer as a document, listed on the workspace pa
   await expect(notes).toContainText("Undone");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   await expect(page.getByRole("region", { name: "Documents" })).toHaveCount(0);
+  await expect(
+    page.getByRole("navigation", { name: "Workspace tabs" }).getByRole("link", { name: /^Docs/ }),
+  ).toHaveCount(0);
 });
 
 test("a document's page renames it, and Delete goes at once with Undo on the workspace page", async ({
@@ -71,6 +75,8 @@ test("a document's page renames it, and Delete goes at once with Undo on the wor
   await expect(documents).not.toContainText("Deleted");
 
   // Each change is in Recent changes too, the delete marked undone.
+  await openTab(page, "Home");
+  await openWhatCourtyardKnows(page);
   await page.getByRole("link", { name: "Recent changes" }).click();
   const changes = page.getByRole("list", { name: "Recent changes" });
   await expect(changes).toContainText("Renamed documentBilbao kit (was Packing list)");

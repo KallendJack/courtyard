@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
-// The blocks a code workspace's Home is built from (#301; Paper, "Tablet · Code workspace Home"):
-// a card with its label in capitals, and rows inside it. Needs you's card is ringed in gold.
+// The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
+// style guide "Workspace Home blocks"): a card with its label in capitals, and rows inside it.
+// Needs you's card is ringed in gold. Its classes are in the stylesheet of each Home that shows it
+// (code-home.css, planning-home.css), off the first load.
 
 /** What a row's second line says by its colour (AGENTS.md): passed, needs the owner, running, failed. */
 const TONES = {

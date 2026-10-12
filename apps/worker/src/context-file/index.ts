@@ -416,6 +416,87 @@ export const replaceContextLine = (
   return joined(markdown, lines);
 };
 
+const MONTHS: readonly string[] = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
+];
+const MONTH = String.raw`(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
+const ORDINAL = String.raw`(\d{1,2})(?:st|nd|rd|th)?`;
+/** `2026-10-18`. */
+const ISO_DAY = /\b(\d{4})-(\d{2})-(\d{2})\b/;
+/** `18 October`, `18th Oct 2026`. */
+const DAY_MONTH = new RegExp(String.raw`\b${ORDINAL}\s+${MONTH}(?:\s+(\d{4}))?\b`, "i");
+/** `October 18`, `Oct 18th, 2026`. */
+const MONTH_DAY = new RegExp(String.raw`\b${MONTH}\s+${ORDINAL}(?:,?\s+(\d{4}))?\b`, "i");
+
+/** A day of the calendar, with no time or time zone: `month` counts from 0, as `Date` does. */
+export type Day = { readonly year: number; readonly month: number; readonly day: number };
+
+const dayNumber = (day: Day) => Date.UTC(day.year, day.month, day.day) / 86_400_000;
+const isoOf = (day: Day) => new Date(dayNumber(day) * 86_400_000).toISOString().slice(0, 10);
+
+/** The day a date written without its year means: the next one from `today` on. */
+const nextOccurrence = (today: Day, month: number, day: number): Day => {
+  const thisYear = { year: today.year, month, day };
+  return dayNumber(thisYear) >= dayNumber(today) ? thisYear : { ...thisYear, year: today.year + 1 };
+};
+
+/** A real day of the calendar, or `undefined` for one such as 31 June. */
+const realDay = (day: Day): Day | undefined => {
+  const date = new Date(Date.UTC(day.year, day.month, day.day));
+  return date.getUTCMonth() === day.month && date.getUTCDate() === day.day ? day : undefined;
+};
+
+/** The day a plan names, when it names one: written as `2026-10-18`, `18 Oct` or `Oct 18th`. */
+const dayIn = (plan: string, today: Day): Day | undefined => {
+  const iso = ISO_DAY.exec(plan);
+  if (iso) return realDay({ year: Number(iso[1]), month: Number(iso[2]) - 1, day: Number(iso[3]) });
+  const dayMonth = DAY_MONTH.exec(plan);
+  const monthDay = MONTH_DAY.exec(plan);
+  const [day, monthName, year] = dayMonth
+    ? [dayMonth[1], dayMonth[2], dayMonth[3]]
+    : monthDay
+      ? [monthDay[2], monthDay[1], monthDay[3]]
+      : [];
+  if (day === undefined || monthName === undefined) return undefined;
+  const month = MONTHS.indexOf(monthName.toLowerCase().slice(0, 3));
+  if (month === -1) return undefined;
+  const named =
+    year === undefined
+      ? nextOccurrence(today, month, Number(day))
+      : { year: Number(year), month, day: Number(day) };
+  return realDay(named);
+};
+
+/** How many days on from today a plan's day can be and still be Next up (#300). */
+const DUE_WITHIN_DAYS = 7;
+
+/**
+ * The plans that name a day from `today` to `DUE_WITHIN_DAYS` on, soonest first, each with its
+ * day as `2026-10-18`, for a planning workspace's Next up (#300). A day written without its year
+ * is the next one to come, so a plan whose day has gone isn't listed.
+ */
+export const plansDue = (plans: readonly string[], today: Day) =>
+  plans
+    .flatMap((plan) => {
+      const day = dayIn(plan, today);
+      if (day === undefined) return [];
+      const away = dayNumber(day) - dayNumber(today);
+      return away >= 0 && away <= DUE_WITHIN_DAYS ? [{ plan, day }] : [];
+    })
+    .sort((a, b) => dayNumber(a.day) - dayNumber(b.day))
+    .map(({ plan, day }) => ({ plan, due: isoOf(day) }));
+
 /** The owner context as read (ADR 0010). */
 export type ReadOwnerContext = {
   readonly ownerContext: OwnerContext;

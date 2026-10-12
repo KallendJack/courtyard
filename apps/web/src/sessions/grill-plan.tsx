@@ -1,6 +1,7 @@
 import { type GrillRequest, SessionSummary, type WorkspaceId } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { Flame } from "lucide-react";
+import type { ReactNode } from "react";
 import { IconButton } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { useAction } from "@/lib/use-action";
@@ -21,9 +22,14 @@ const grillPlan = (workspaceId: WorkspaceId, grill: GrillRequest) =>
 /**
  * One of a workspace's plans with Grill this plan beside it (docs/ai-conduct.md, Grilling): a new
  * session whose first message is the plan with the Grilling tag, answered by the model the worker
- * picks. Why it didn't start shows under the line.
+ * picks. Why it didn't start shows under the line. `children` are the line's other actions, after
+ * Grill this plan (Fix, in What Courtyard knows).
  */
-export function GrillablePlan(props: { workspaceId: WorkspaceId; plan: string }) {
+export function GrillablePlan(props: {
+  workspaceId: WorkspaceId;
+  plan: string;
+  children?: ReactNode;
+}) {
   const navigate = useNavigate();
   const grill = useAction(async () => {
     const session = await grillPlan(props.workspaceId, { plan: props.plan });
@@ -46,6 +52,7 @@ export function GrillablePlan(props: { workspaceId: WorkspaceId; plan: string })
         disabled={grill.busy}
         onClick={() => void grill.run()}
       />
+      {props.children}
       {grill.error !== undefined && (
         <div className="basis-full">
           <FormError message={grill.error} />

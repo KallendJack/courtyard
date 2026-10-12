@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // Skills (ADR 0016), with the fixtures' skills: Programme check and a broken warm-up in Garage
 // gym, Shopping list and Ride log chart (which has a script) for every workspace, and the house
@@ -78,6 +79,7 @@ test("the workspace page lists its skills, where each comes from, and why any ca
   page,
 }) => {
   await page.goto("/workspaces/garage-gym");
+  await openWhatCourtyardKnows(page);
 
   const section = page.getByRole("region", { name: "Skills" });
   await expect(section.getByRole("listitem")).toHaveText([

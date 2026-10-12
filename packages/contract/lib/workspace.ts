@@ -196,6 +196,13 @@ export type OwnerContextDetail = z.infer<typeof OwnerContextDetail>;
 export const OwnerContextShared = z.enum(["all", "answers", "none"]);
 export type OwnerContextShared = z.infer<typeof OwnerContextShared>;
 
+/** A plan that names the day it's due (#300), and that day, as `2026-10-18`. */
+export const DuePlan = z.object({
+  plan: z.string(),
+  due: z.iso.date(),
+});
+export type DuePlan = z.infer<typeof DuePlan>;
+
 export const WorkspaceDetail = z.object({
   workspace: WorkspaceSummary,
   /**
@@ -209,5 +216,10 @@ export const WorkspaceDetail = z.object({
    */
   description: z.string().optional(),
   ownerContextShared: OwnerContextShared,
+  /**
+   * A planning workspace's plans that name a day from today to 7 days on, soonest first, for its
+   * Home's Next up (#300). Absent in a code workspace.
+   */
+  duePlans: z.array(DuePlan).optional(),
 });
 export type WorkspaceDetail = z.infer<typeof WorkspaceDetail>;

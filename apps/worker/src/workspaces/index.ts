@@ -181,7 +181,8 @@ const readWorkspace = async (
       message: `The ${id} workspace's ${CONTEXT_FILE} can't be read.`,
     });
   }
-  const read = markdown.value === undefined ? null : parseContextFile(markdown.value);
+  const read =
+    markdown.value === undefined ? null : parseContextFile(withoutStarterHint(markdown.value));
   const valid = config.kind === "read" ? config : undefined;
   const name = valid?.name ?? read?.title ?? id;
   const mode = valid?.mode ?? "planning";
@@ -189,7 +190,7 @@ const readWorkspace = async (
   // and the one line it held, until its workspace.json has them.
   const code = mode === "code";
   const contextFile = code ? null : read;
-  const migrated = read !== null && read.intro !== STARTER_INTRO ? read.intro : "";
+  const migrated = read?.intro ?? "";
 
   return ok({
     summary: {
@@ -504,21 +505,34 @@ const archivedClash = async (
   };
 };
 
-/** A starter context file's intro line, when the owner didn't say what the workspace is for. */
-const STARTER_INTRO =
+/**
+ * The hint the starter once wrote where the intro line goes when the owner didn't say what the
+ * workspace is for. It's never written now, and a file still holding it reads as having no intro
+ * line, so no model takes it for what the workspace is for (#300).
+ */
+const OLD_STARTER_HINT =
   "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.";
 
+/** A context file as models read it: without the old starter hint (#300). */
+export const withoutStarterHint = (markdown: string) => {
+  const lines = markdown.split("\n");
+  const at = lines.findIndex((line) => line.trim() === OLD_STARTER_HINT);
+  if (at === -1) return markdown;
+  // The blank line after it goes too, so the title keeps one blank line below it.
+  const blankAfter = lines[at + 1]?.trim() === "" ? 1 : 0;
+  lines.splice(at, 1 + blankAfter);
+  return lines.join("\n");
+};
+
 /**
- * A new workspace's context file: its title, its intro line (what it's for, when the owner said,
- * or else a line on how to fill it in), then empty Facts, Plans and Ideas (docs/ai-conduct.md,
- * "Starter context file").
+ * A new workspace's context file: its title, its intro line (what it's for, when the owner said;
+ * none otherwise), then empty Facts, Plans and Ideas (docs/ai-conduct.md, "Starter context file").
  */
 export const starterContextFile = (name: string, intro?: string) =>
   [
     `# ${name}`,
     "",
-    intro || STARTER_INTRO,
-    "",
+    ...(intro ? [intro, ""] : []),
     "## Facts",
     "",
     "## Plans",

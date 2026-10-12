@@ -18,6 +18,8 @@ export function BackLink(props: {
   workspaceId: WorkspaceId | undefined;
   /** Where the page sits in the workspace, after its name: "Documents". */
   within?: string;
+  /** The workspace page's tab it goes back to, by its hash (#300): `docs`, `things`. */
+  tab?: string;
   /** Back to the workspace's pull requests, from one's review (#240). */
   pullRequests?: boolean;
 }) {
@@ -50,6 +52,7 @@ export function BackLink(props: {
     <Link
       to="/workspaces/$workspaceId"
       params={{ workspaceId }}
+      {...(props.tab === undefined ? {} : { hash: props.tab })}
       aria-label={`Back to ${name}`}
       className={NAMED}
     >

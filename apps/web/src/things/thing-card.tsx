@@ -77,6 +77,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
           <BackLink
             workspaceId={workspaceId}
             within={parent === undefined ? "Things" : `Things · ${parent.name}`}
+            tab="things"
           />
         }
         actions={<StatusChip status={thing.status} large />}

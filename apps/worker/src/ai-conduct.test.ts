@@ -877,6 +877,36 @@ describe("getting to know a workspace (#127)", () => {
     expect(turns[0]?.framing.instructions).toContain('<skill name="get-to-know">');
   });
 
+  it("never gives a model the old starter hint as what a workspace is for (#300)", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    await mkdir(join(root, "context", "pottery"), { recursive: true });
+    await writeFile(
+      join(root, "context", "pottery", "CONTEXT.md"),
+      [
+        "# Pottery",
+        "",
+        "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+        "",
+        "## Facts",
+        "",
+        "- The wheel is second-hand.",
+        "",
+      ].join("\n"),
+    );
+
+    const started = await postJson(request, "/api/workspaces/pottery/get-to-know", {
+      model: MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    await followSession(request, { sessionId, until: "turn-completed" });
+
+    expect(turns[0]?.framing.instructions).toContain(
+      "<context_file>\n# Pottery\n\n## Facts\n\n- [F1] The wheel is second-hand.",
+    );
+    expect(turns[0]?.framing.instructions).not.toContain("Write one line for each");
+  });
+
   it("gets to know the owner with the Get to know me skill, in the first planning workspace", async () => {
     await mkdir(join(root, "context", "attic"), { recursive: true });
     await writeFile(

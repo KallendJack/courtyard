@@ -1,8 +1,8 @@
 import { CODE_SESSIONS_AT_ONCE, type CodeSessionList, type WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
+import { Block } from "@/components/home-block";
 import { doingWords } from "@/components/session-state";
-import { Block } from "./block.tsx";
 
 type Listed = CodeSessionList["sessions"][number];
 

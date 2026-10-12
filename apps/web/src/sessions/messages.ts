@@ -3,6 +3,7 @@ import {
   ApprovalAnswering,
   ATTACHMENTS_FIELD,
   type AttachmentId,
+  type FirstMessage,
   MESSAGE_FIELD,
   type NewMessage,
   type SessionId,
@@ -23,7 +24,7 @@ import { type FromWorker, sendJson } from "../worker.ts";
  */
 const sendMessageWithFiles = async <T>(request: {
   path: string;
-  message: NewMessage;
+  message: NewMessage | FirstMessage;
   files: readonly File[];
   schema: z.ZodType<T>;
 }): Promise<FromWorker<T>> => {
@@ -35,10 +36,13 @@ const sendMessageWithFiles = async <T>(request: {
   return sendForm({ path, form, schema });
 };
 
-/** Starts a session in a workspace with the owner's first message and any files attached. */
+/**
+ * Starts a session in a workspace with the owner's first message and any files attached; with no
+ * model named, on the one the worker picks.
+ */
 export const startSession = (start: {
   workspaceId: WorkspaceId;
-  message: NewMessage;
+  message: FirstMessage;
   files: readonly File[];
 }) =>
   sendMessageWithFiles({

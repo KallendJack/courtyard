@@ -193,6 +193,7 @@ export {
   ContextFile,
   ContextLine,
   ContextSection,
+  DuePlan,
   hasLines,
   NewWorkspace,
   OWNER_CONTEXT_LONG_CHARACTERS,

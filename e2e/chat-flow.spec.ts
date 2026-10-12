@@ -50,7 +50,7 @@ test.describe("whose turn it is", () => {
     await startSession(page, `The working one ${words(300)}`);
     await expect(sessionOn(page)).toContainText("writing the answer");
 
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#sessions");
     const sessions = page.getByRole("region", { name: "Sessions" });
     const working = sessions.getByRole("link", { name: /The working one/i });
     await expect(working).toContainText("Working");

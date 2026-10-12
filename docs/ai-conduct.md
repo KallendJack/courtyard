@@ -910,9 +910,10 @@ Built with #24. A workspace added from the app starts with a context file from a
 
 1. The workspace's name as the title.
 2. The **intro line**: what the owner wrote in **What's it for?** when adding the workspace (#127), one line, which
-   Get to know plans its topics from. Left empty, one line on how to write lines instead, following the
-   context-line rules below: one line each, facts true now, plans decided but not done, ideas being considered. It
-   sits where the intro goes, so the owner replaces it with what the workspace covers.
+   Get to know plans its topics from. Left empty, there's no intro line (#300): no how-to hint goes where it
+   would, since every model would read it as what the workspace is for. A file still holding the hint older
+   starters wrote reads as having no intro line, and models get it without the hint. Nothing shows the intro line
+   on the workspace's page, and nothing keeps it up to date.
 3. Empty Facts, Plans and Ideas sections.
 
 A save that meets a workspace with no context file writes the starter without an intro line of the owner's.
