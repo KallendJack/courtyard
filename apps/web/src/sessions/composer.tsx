@@ -27,7 +27,7 @@ import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
 import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
-import { type Listener, useDock } from "@/components/handheld";
+import { type Listener, useDock, useLayout } from "@/components/handheld";
 import { Sheet } from "@/components/sheet";
 import { inPicker, SkillChoices, usable } from "@/components/skill-list";
 import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
@@ -168,6 +168,11 @@ export const Composer = memo(function Composer(props: {
   /** On a touch screen, the Handheld frame's place for the box above its bottom bar (#193). */
   const dock = useDock();
   const docked = dock !== undefined;
+  /**
+   * On a touch screen the box waits for the frame's dock (#359): shown in the page first, it would
+   * move into the dock as the frame arrives, and the keyboard would lose it mid-word.
+   */
+  const awaitingDock = useLayout() !== "desktop" && !docked;
   // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
@@ -639,6 +644,7 @@ export const Composer = memo(function Composer(props: {
   );
 
   // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page.
+  if (awaitingDock) return null;
   return docked ? (
     <>
       <Suspense fallback={null}>
