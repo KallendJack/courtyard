@@ -1579,6 +1579,27 @@ export const createSessions = (options: {
   };
 
   /**
+   * The owner has seen the session up to event `upTo` (#334), on whichever device: kept in its
+   * folder, never going back nor past its last event, so only an answer after it is a new reply.
+   */
+  const markSeen = async (rawId: string, upTo: number): Promise<Result<null, SessionError>> => {
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const { id } = found.value;
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const was = await seenOf(id, session);
+      if (!was.ok) return was;
+      const seen = Math.min(upTo, (session.nextSeq ?? 1) - 1);
+      if (seen <= was.value) return ok(null);
+      const written = await writeJsonFile(seenPath(id), { upTo: seen } satisfies SessionSeen);
+      if (!written.ok) return err(STORAGE_ERROR);
+      session.seen = seen;
+      return ok(null);
+    });
+  };
+
+  /**
    * Acts on one of a session's saves, by its event number, and records what was done. In the
    * session's queue, so two acts on the same save happen one after the other, each seeing the
    * other's result.
@@ -2365,25 +2386,22 @@ export const createSessions = (options: {
     /** A workspace's sessions, most recently active first, each with whether it's waiting. */
     list: sessionsOf,
 
+    markSeen,
+
     /**
-     * The owner has seen the session up to event `upTo` (#334), on whichever device: kept in its
-     * folder, never going back nor past its last event, so only an answer after it is a new reply.
+     * Mark all read (#345): every session in the workspace is seen up to its latest answer, so no
+     * new reply waits there; an approval still does, as it waits on more than seeing.
      */
-    markSeen: async (rawId: string, upTo: number): Promise<Result<null, SessionError>> => {
-      const found = await findSession(rawId);
-      if (!found.ok) return found;
-      const { id } = found.value;
-      const session = runningSession(id);
-      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        const was = await seenOf(id, session);
-        if (!was.ok) return was;
-        const seen = Math.min(upTo, (session.nextSeq ?? 1) - 1);
-        if (seen <= was.value) return ok(null);
-        const written = await writeJsonFile(seenPath(id), { upTo: seen } satisfies SessionSeen);
-        if (!written.ok) return err(STORAGE_ERROR);
-        session.seen = seen;
-        return ok(null);
-      });
+    markAllSeen: async (workspaceId: WorkspaceId): Promise<Result<null, SessionError>> => {
+      const list = await sessionsOf(workspaceId);
+      if (!list.ok) return list;
+      for (const listed of list.value) {
+        const answer = runningSession(listed.id).answer;
+        if (answer === undefined) continue;
+        const marked = await markSeen(listed.id, answer.seq);
+        if (!marked.ok) return marked;
+      }
+      return ok(null);
     },
 
     /** How many code sessions are running, across the worker. */

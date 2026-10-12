@@ -14,6 +14,7 @@ import { flushSync } from "react-dom";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../live/live-update.tsx";
+import { useKeptSessions } from "../sessions/kept-sessions.ts";
 import { Button } from "./button.tsx";
 import { ButtonLink } from "./button-link.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
@@ -368,7 +369,9 @@ export default function HandheldFrame(props: {
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
  * (Paper board Handheld · 36). Closed, every tile looks the same, a code workspace's too: it's
  * told apart by its icon, never by colour (#237). A tap always goes to the workspace's page, even
- * from one of its sessions (#276); holding the open one shows its recent sessions.
+ * from one of its sessions (#276); holding the open one shows its recent sessions. In its corner,
+ * how many of its sessions wait on the owner, as the worker says (#345): violet for new replies,
+ * gold once one needs an approval. Asked again on every move to another page.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
@@ -377,6 +380,10 @@ function Tile(props: {
   showRecent: () => void;
 }) {
   const { workspace, open } = props;
+  const { pathname } = useLocation();
+  const sessions = useKeptSessions(workspace.id, pathname)?.sessions ?? [];
+  const waiting = sessions.filter((session) => session.waiting !== "nothing");
+  const approval = waiting.some((session) => session.waiting === "approval");
   const held = (event: { preventDefault: () => void }) => {
     if (!open) return;
     event.preventDefault();
@@ -390,7 +397,7 @@ function Tile(props: {
       onContextMenu={held}
       className={classes(
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
-        "flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
+        "relative flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
         props.look === "rail"
           ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-label/3.75"
           : "h-13 gap-2 rounded-lg px-4 text-sm/4.5 whitespace-nowrap",
@@ -401,6 +408,17 @@ function Tile(props: {
     >
       <WorkspaceIcon icon={workspace.icon} size="tile" open={open} />
       {workspace.name}
+      {waiting.length > 0 && (
+        <span
+          aria-hidden
+          className={classes(
+            "absolute top-1.5 right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-label/3 font-bold text-card",
+            approval ? "bg-warning" : "bg-primary-text",
+          )}
+        >
+          {waiting.length}
+        </span>
+      )}
     </Link>
   );
 }

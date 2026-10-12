@@ -62,3 +62,25 @@ export const needsOf = (given: {
     given.setup.state === "offered" ? [{ kind: "setup", missing: given.setup.missing.length }] : [];
   return [...approvals, ...failed, ...replies, ...merges, ...conflicts, ...setup];
 };
+
+/** A session waiting on the owner: an approval or a new reply. */
+export type SessionNeed = Extract<Need, { kind: "approval" | "reply" }>;
+
+/** The newest session waiting on the owner, which a workspace's tile names (#345). */
+export const newestSessionNeed = (needs: readonly Need[]) =>
+  needs.reduce<SessionNeed | undefined>(
+    (newest, need) =>
+      (need.kind === "approval" || need.kind === "reply") &&
+      (newest === undefined || need.session.updatedAt > newest.session.updatedAt)
+        ? need
+        : newest,
+    undefined,
+  );
+
+/** Sessions waiting on the owner first, as the worker says (#345), each part in its own order. */
+export const waitingFirst = <T extends { readonly waiting: Listed["waiting"] }>(
+  sessions: readonly T[],
+) => [
+  ...sessions.filter((session) => session.waiting !== "nothing"),
+  ...sessions.filter((session) => session.waiting === "nothing"),
+];

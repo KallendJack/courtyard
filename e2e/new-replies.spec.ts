@@ -72,7 +72,7 @@ test("a new reply waits on its tile and in Needs you until the owner opens it, o
   const coding = await answered(request, "side-project", "Tidy the README");
 
   await page.goto("/");
-  await expect(tile(page, name)).toContainText("1 new reply");
+  await expect(tile(page, name)).toContainText("New reply · ");
   await page.goto("/workspaces/side-project");
   await expect(replyRow(page, coding)).toBeVisible();
 
@@ -97,11 +97,11 @@ test("a new reply waits on its tile and in Needs you until the owner opens it, o
   for (const each of [page, there]) {
     await each.goto("/");
     await expect(tile(each, name)).toContainText(/just now|min ago/);
-    await expect(tile(each, name)).not.toContainText("new reply");
+    await expect(tile(each, name)).not.toContainText("New reply");
   }
   await page.reload();
   await expect(tile(page, name)).toContainText(/just now|min ago/);
-  await expect(tile(page, name)).not.toContainText("new reply");
+  await expect(tile(page, name)).not.toContainText("New reply");
   await sideProjectHome(page, () => page.goto("/workspaces/side-project"), true);
   await expect(replyRow(page, coding)).toHaveCount(0);
   await fold.close();
@@ -113,5 +113,5 @@ test("a new reply waits on its tile and in Needs you until the owner opens it, o
   expect(sent.status()).toBe(202);
   await expect.poll(() => waitingOf(request, workspace, planning)).toBe("reply");
   await page.goto("/");
-  await expect(tile(page, name)).toContainText("1 new reply");
+  await expect(tile(page, name)).toContainText("New reply · ");
 });

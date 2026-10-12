@@ -265,10 +265,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
   pull request, and the owner hasn't **seen** it: the session page tells the worker the last event it showed once
   no turn runs and it's in view (`POST /api/sessions/:id/seen`), kept as `seen.json` in the session's folder, never
-  going back. An open pull request waits for its conflict, its failing checks (unless its session is working on
+  going back; Mark all read sees every session in a workspace up to its latest answer
+  (`POST /api/workspaces/:id/seen`, #345). An open pull request waits for its conflict, its failing checks (unless its session is working on
   them, #172), or a merge once its checks pass. `sessions/` puts a session's on each listed session (`waiting`),
   keeping its latest answer in memory (from its event log once recovered, then as each is written), and
-  `pull-requests/` puts a pull request's on each open one; the web app reads only those.
+  `pull-requests/` puts a pull request's on each open one; the web app reads only those (a Home tile names the
+  newest session waiting, and every session list marks those waiting and puts them first, #345).
 - **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
   its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
   refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
