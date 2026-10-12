@@ -265,8 +265,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
   is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
   usual), and the ask line or Bring up to date on it starts a session on its own branch (`code/`'s
-  `startOnBranch`, refused when the repository has a branch of that name already, so clearing the session away
-  never takes one of the owner's, and leaving the branch on GitHub, since it isn't a `courtyard/…` one). Its
+  `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
+  repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
+  the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
+  the start is refused, saying which. Its
   routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
 - **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
   I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
@@ -774,7 +776,8 @@ things live only in the worker's memory and go when it restarts.
 
 **The data folder** (`COURTYARD_DATA_DIR`):
 
-- `sessions/<session>/`: `session.json` (title and times, and a code session's branch), `events.jsonl` (the event
+- `sessions/<session>/`: `session.json` (title and times, and a code session's branch, with `keepsBranch` when the
+  branch was in the repository before it, #326), `events.jsonl` (the event
   log), `seen.json` (the last event the owner has seen, on any device, #334) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
 - `matt-skills/<version>/`: Courtyard's copy of Matt Pocock's plugin at the pinned release (ADR 0024): his
   `plugin.json`, licence and skills, checked against `matt.json`'s checksum. `matt-setup.json`: each code workspace's

@@ -58,6 +58,7 @@ import {
   editPlaceIn,
   isBuild,
   type PullRequestProblem,
+  type SessionBranch,
   slotEnv,
 } from "../code/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
@@ -236,6 +237,8 @@ const SessionFile = z.object({
   updatedAt: z.iso.datetime(),
   /** A code session's session branch (ADR 0007); left out in a planning workspace. */
   branch: z.string().optional(),
+  /** Its branch was in the repository before it (#326), so clearing it away leaves the branch. */
+  keepsBranch: z.literal(true).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -1696,6 +1699,13 @@ export const createSessions = (options: {
     return { branch: file.branch, repoPath: workspace.value.repoPath };
   };
 
+  /** A code session's branch and worktree, as clearing it away needs them. */
+  const sessionBranchOf = (file: SessionFile & { branch: string }): SessionBranch => ({
+    branch: file.branch,
+    worktree: options.code.worktreeOf(file.id),
+    ...(file.keepsBranch === true ? { kept: true } : {}),
+  });
+
   /**
    * A code session's pull request as the owner reviews it (#160), with the session and its
    * repository, or why it can't be reviewed.
@@ -1747,14 +1757,10 @@ export const createSessions = (options: {
       const session = running.get(id);
       if (session !== undefined && session.turn.kind !== "idle") return;
       if (pullRequest.state !== "open") {
-        const worktree = options.code.worktreeOf(id);
-        const there = await exists(worktree);
+        const sessionBranch = sessionBranchOf({ ...file.value, branch });
+        const there = await exists(sessionBranch.worktree);
         if (there.ok && there.value) {
-          await options.code.clearBranch({
-            repoPath,
-            sessionBranch: { branch, worktree },
-            pushed: true,
-          });
+          await options.code.clearBranch({ repoPath, sessionBranch, pushed: true });
         }
         return;
       }
@@ -2072,6 +2078,7 @@ export const createSessions = (options: {
         createdAt: at,
         updatedAt: at,
         ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),
+        ...(sessionBranch?.kept === true ? { keepsBranch: true } : {}),
       };
       const unstarted = async () => {
         if (repoPath !== undefined && sessionBranch !== undefined) {
@@ -2370,7 +2377,7 @@ export const createSessions = (options: {
         if (neverRan && branch !== undefined && typeof repoPath === "string") {
           await options.code.clearBranch({
             repoPath,
-            sessionBranch: { branch, worktree: options.code.worktreeOf(id) },
+            sessionBranch: sessionBranchOf({ ...found.value, branch }),
             pushed: false,
           });
         }

@@ -96,6 +96,10 @@ const branchRefused = (refusal: BranchRefusal) => {
       return `This code workspace's repository, ${refusal.repoPath}, isn't a git repository. Fix repoPath in its workspace.json.`;
     case "remote":
       return `The session branch starts from the repository's default branch on its remote (origin), which couldn't be reached: ${refusal.reason}.`;
+    case "branch-in-use":
+      return `The session branch couldn't be started: ${refusal.branch} is checked out in ${refusal.worktree} already. Switch that checkout to another branch, then start the session again.`;
+    case "branch-ahead":
+      return `The session branch couldn't be started: this repository's ${refusal.branch} has commits that aren't on its remote (origin). Push them or delete the branch, then start the session again.`;
     case "git":
       return `The session branch couldn't be started: ${refusal.reason}.`;
   }
