@@ -335,8 +335,9 @@ _Avoid_: status, busy, idle (in the app's words)
 
 **Seen**:
 How far the owner has read a session: the last event its page showed them, once no turn ran, on any device (#334).
-The worker keeps it; opening the session on one device sees it on all of them.
-_Avoid_: read, opened, visited
+The worker keeps it; opening the session on one device sees it on all of them. **Mark all read** (#345), the
+button's own words, sees every session in a workspace up to its latest answer at once.
+_Avoid_: read, opened, visited (except in the button's name)
 
 **New reply**:
 A session's latest answer the owner hasn't seen yet, from the last day, in a session with no pull request: one of

@@ -28,6 +28,8 @@ const VARIANTS = {
   /** The way out of what a `Notice` says, such as Get a new code. */
   notice:
     "border-destructive-text bg-transparent text-destructive-text hover:bg-destructive/10 focus-visible:ring-destructive/20",
+  /** An action on what's new, beside its list's heading, such as Mark all read (#345). */
+  soft: "border-primary/30 bg-primary/10 text-primary-text hover:bg-primary/20",
   /** A suggested reply under an answer, sent with a tap. */
   reply: "border-border bg-field text-primary-text hover:bg-accent",
 } as const;

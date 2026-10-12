@@ -142,6 +142,38 @@ describe("a new reply", () => {
   });
 });
 
+describe("Mark all read", () => {
+  /** Mark all read on a workspace's sessions (#345). */
+  const allRead = (request: Requester, workspace = "garage-gym") =>
+    postJson(request, `/api/workspaces/${workspace}/seen`, {});
+
+  it("sees every new reply in the workspace, on every device, and a newer answer waits again", async () => {
+    const { request, another } = await start();
+    const first = await answered(request);
+    const second = await answered(request, "And the plates?");
+    const fold = await another();
+
+    const marked = await allRead(fold);
+
+    expect(marked.status).toBe(204);
+    expect(await waitingOf(request, first.id)).toBe("nothing");
+    expect(await waitingOf(request, second.id)).toBe("nothing");
+    await answeredAgain(request, first.id, first.seq);
+    expect(await waitingOf(request, first.id)).toBe("reply");
+  });
+
+  it("leaves another workspace's new replies, and is only for a workspace there is", async () => {
+    await mkdir(join(root, "context", "porch"), { recursive: true });
+    const { request } = await start();
+    const { id } = await answered(request);
+
+    await allRead(request, "porch");
+
+    expect(await waitingOf(request, id)).toBe("reply");
+    expect((await allRead(request, "no-such-workspace")).status).toBe(404);
+  });
+});
+
 describe("an approval", () => {
   it("waits on the owner whatever they've seen", async () => {
     const { repo } = await codeRepo(root);
@@ -155,6 +187,7 @@ describe("an approval", () => {
     const events = await followSession(request, { sessionId: id, until: "approval-requested" });
 
     await seen(request, id, lastSeq(events));
+    await postJson(request, "/api/workspaces/side-project/seen", {});
 
     expect(await waitingOf(request, id, "side-project")).toBe("approval");
     await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
