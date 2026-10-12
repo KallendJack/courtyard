@@ -1,12 +1,17 @@
 import { isAbsolute, join } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
-import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
+import {
+  CODE_SESSIONS_AT_ONCE,
+  type PullRequestReview,
+  type SessionId,
+  wordsOf,
+} from "@courtyard/contract";
 import { isFolder, removeFolder } from "../files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import { type CommandRule, reachesOut, ruleFor, wordsOf } from "./allowlist.ts";
+import { type CommandRule, reachesOut, ruleFor } from "./allowlist.ts";
 import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
