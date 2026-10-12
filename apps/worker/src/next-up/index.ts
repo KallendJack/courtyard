@@ -70,14 +70,35 @@ const milestoneRank = (milestone: string | null): readonly [number, number] => {
   return leading === undefined ? [1, 0] : [0, Number(leading)];
 };
 
-/** Issues in the order Next up offers them: by milestone, then by number. */
+/**
+ * The issue numbers a milestone's description lists on its `Build order: #A → #B → #C` line
+ * (docs/agents/roadmap.md), in that order: the line ends at a full stop or the line's end.
+ */
+const buildOrderOf = (description: string | null): readonly number[] => {
+  const line = /build order:(.*?)(?:\.(?=\s|$)|$)/im.exec(description ?? "")?.[1] ?? "";
+  return [...line.matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
+};
+
+/** Where an issue comes in its milestone: its place on the Build order line, else after them all. */
+const placeInMilestone = (issue: FoundIssue) => {
+  const place = buildOrderOf(issue.milestoneDescription).indexOf(issue.number);
+  return place === -1 ? Number.POSITIVE_INFINITY : place;
+};
+
+/**
+ * Issues in the order Next up offers them: by milestone, then as its Build order line lists them
+ * (#336), then by number.
+ */
 const inOrder = (a: FoundIssue, b: FoundIssue) => {
   const [rankA, numberA] = milestoneRank(a.milestone);
   const [rankB, numberB] = milestoneRank(b.milestone);
+  const placeA = placeInMilestone(a);
+  const placeB = placeInMilestone(b);
   return (
     rankA - rankB ||
     numberA - numberB ||
     (a.milestone ?? "").localeCompare(b.milestone ?? "") ||
+    (placeA === placeB ? 0 : placeA < placeB ? -1 : 1) ||
     a.number - b.number
   );
 };

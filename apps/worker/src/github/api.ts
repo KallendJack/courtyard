@@ -171,6 +171,8 @@ export type FoundIssue = {
   readonly url: string;
   /** Its milestone's title, or `null` when it's in none. */
   readonly milestone: string | null;
+  /** Its milestone's description, which may hold its `Build order:` line (#336); `null` if none. */
+  readonly milestoneDescription: string | null;
   /** The text of each comment on it, oldest first. */
   readonly comments: readonly string[];
 };
@@ -312,7 +314,9 @@ const Issues = z.array(
     number: z.number().int().positive(),
     title: z.string(),
     html_url: z.url({ protocol: /^https$/ }),
-    milestone: z.object({ title: z.string() }).nullable(),
+    milestone: z
+      .object({ title: z.string(), description: z.string().nullable().optional() })
+      .nullable(),
     comments: z.number().int().nonnegative(),
     pull_request: z.unknown().optional(),
   }),
@@ -741,6 +745,7 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
               title: issue.title,
               url: issue.html_url,
               milestone: issue.milestone?.title ?? null,
+              milestoneDescription: issue.milestone?.description ?? null,
               comments:
                 issue.comments === 0
                   ? []

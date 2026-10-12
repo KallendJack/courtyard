@@ -95,6 +95,8 @@ export const createFakeGitHub = (
     labels?: Readonly<Record<string, readonly string[]>>;
     /** Each repository's issues to start with (#301). */
     issues?: Readonly<Record<string, readonly FakeIssue[]>>;
+    /** Each repository's milestones' descriptions, by title (#336). */
+    milestones?: Readonly<Record<string, Readonly<Record<string, string>>>>;
     opensOnPush?: {
       readonly remote: string;
       /** The repository it is GitHub's copy of, as `owner/name`; every one unless it says. */
@@ -362,6 +364,10 @@ export const createFakeGitHub = (
             title: issue.title,
             url: `https://github.com/${repo}/issues/${issue.number}`,
             milestone: issue.milestone ?? null,
+            milestoneDescription:
+              issue.milestone === undefined
+                ? null
+                : (options.milestones?.[repo]?.[issue.milestone] ?? null),
             comments: [...issue.comments],
           })),
       );
