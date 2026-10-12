@@ -200,12 +200,13 @@ describe("what every turn tells a model", () => {
     );
   });
 
-  it("tells a model in a code workspace with Paper to draw ideas on Drafts and keep one agreed board per screen on Agreed design (#233)", async () => {
+  it("tells a model in a code workspace with Paper the four pages, how boards are named and laid out, and how they move at OK and at merge (#340)", async () => {
     await withPaper();
 
     const { framing } = await firstTurn({ ...CODES, usesTools: true });
 
-    expect(framing.instructions).toContain(await quotedInGuide("The Paper file has two pages"));
+    expect(framing.instructions).toContain(await quotedInGuide("The Paper file has four pages"));
+    expect(framing.instructions).not.toContain("Agreed design");
   });
 
   it("tells a model that uses no tools nothing of how to use Paper, since it isn't given Paper, only that it can't", async () => {

@@ -73,8 +73,10 @@ This repo is public, and the app runs models that can change files on a real mac
 
 The process is Matt Pocock's skills (below), as they are. On top of them:
 
-- **Paper keeps agreed boards apart from drafts** (#233): page "Agreed design" holds one agreed board per screen per
-  device, plus the style guide; page "Drafts" holds every idea. How a draft becomes final: `docs/ai-conduct.md`, Paper.
+- **Every project's Paper file has four pages** (#340): `1 · Live` (one board per screen per device, as built, plus
+  the style guide and components), `2 · Agreed` (OK'd, not built), `3 · Drafts`, `4 · Archive`. Names, layout and
+  how boards move: `docs/ai-conduct.md`, Paper. A PR that changes what the owner sees lists its boards in its
+  description ("Boards: Tablet · Home → Live, replaces …"), and whoever merges it moves them.
 - **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
   agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
   stops for a design first. A change with nothing new to see (a title updating in place, say) needs none; a ticket

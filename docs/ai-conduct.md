@@ -367,15 +367,26 @@ Courtyard tells a model about them comes after the saving rules (Every turn, ite
 > if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine,
 > don't try to open it, and carry on with the rest of the work.
 >
-> The Paper file has two pages; make either one if it's missing. "Agreed design" holds the board the owner agreed for
-> each screen on each device, one each, plus the style guide. Each board's name ends with its status: "Live" once
-> it's built, or "Agreed, not built (#12)" with its ticket's number. "Drafts" holds every idea and iteration: draw
-> each new idea or change there. When the owner OKs a draft, it becomes that screen's board on Agreed design in one
-> step: move the board it replaces to Drafts, adding "replaced by" and the new board's name to its name, and add any
-> new shared piece to the style guide. When a ticket ships, set its boards' status to Live.
+> The Paper file has four pages, in this order: "1 · Live" holds exactly one board per screen per device, as built
+> today, plus the style guide and shared components; "2 · Agreed" holds boards the owner OK'd that aren't built yet;
+> "3 · Drafts" holds every idea and iteration; "4 · Archive" holds replaced boards, which are never deleted. Paper
+> lists pages in the order they were made, so make any missing page in that order, and if the pages are out of
+> order, swap the boards between the misplaced pages and rename them so the list reads 1, 2, 3, 4. The page is a
+> board's status, so name each board "<Device> · <Screen>", such as "Tablet · Home", and on Agreed add its ticket:
+> "Tablet · Home (#12)". On Live and Agreed each screen area is one row, labelled by a "Section · <area>" board on its
+> left, with Desktop, Tablet and Cover left to right; rows run foundations first (Style guide & brand, then
+> Components), then the screens in the order you meet them. Drafts sit in a grid by topic, and Archive in labelled
+> groups (Replaced designs, Old photos, boards open tickets still point to).
+>
+> Draw each new idea or change on Drafts, never a screenshot of the app as a design. When the owner OKs a draft,
+> move it to Agreed with its ticket in its name, and move any Agreed board it replaces to Archive. A pull request
+> that changes what the owner sees lists its boards in its description, such as "Boards: Tablet · Home → Live,
+> replaces Tablet · Home", and when it merges, whoever merges it moves those boards from Agreed to Live, moves the
+> Live boards they replace to Archive, and adds any new shared piece to the style guide or components.
 
-The two pages (#233) keep what the owner agreed apart from what's still being tried, so Agreed design always shows
-each screen as it is or as agreed, and iterations never mix into it.
+The four pages (#340, replacing #233's two) give every project's file the same shape: the page says whether a board
+is built, agreed, an idea or gone, so names carry no status and nothing tangles. Boards move only at the owner's OK
+and at merge, so Live never drifts from what's built and is never a screenshot that stops being retaken.
 
 The worker decides each call before it happens. A call naming another Paper file, or none when the tool takes one, is
 refused:
