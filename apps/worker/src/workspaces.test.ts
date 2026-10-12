@@ -5,10 +5,12 @@ import { ApiError, WorkspaceDetail, WorkspaceList, WorkspaceSummary } from "@cou
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   asOwner,
+  changesIn,
   errorOf,
   postJson,
   type Requester,
   removeTestFolder,
+  sendJson,
   testWorker,
 } from "./testing.ts";
 
@@ -404,9 +406,9 @@ describe("a workspace's icon", () => {
     await workspace("office", { "workspace.json": '{ "colour": "moss" }' });
 
     expect((await listWorkspaces()).map((w) => [w.name, w.icon])).toEqual([
-      ["Courtyard", "code"],
       ["Homelab", "server"],
       ["office", "briefcase"],
+      ["Courtyard", "code"],
     ]);
     expect((await openWorkspace("courtyard")).workspace.icon).toBe("code");
   });
@@ -567,5 +569,113 @@ describe("archiving a workspace", () => {
 
   it("answers 404 for a workspace that doesn't exist", async () => {
     expect((await archive("nope")).status).toBe(404);
+  });
+});
+
+/** Arranges the workspaces as the rail or the sidebar does once a tile is let go (#321). */
+const arrange = (order: unknown) => sendJson(request, "/api/workspaces/order", "PUT", { order });
+
+const ids = async () => (await listWorkspaces()).map((w) => w.id);
+
+describe("arranging the workspaces", () => {
+  const planningAndCode = async () => {
+    await workspace("bike", { "CONTEXT.md": "# Bike\n" });
+    await workspace("garage-gym", { "CONTEXT.md": "# Garage gym\n" });
+    await workspace("office", { "CONTEXT.md": "# Office\n" });
+    await workspace("courtyard", {
+      "workspace.json": '{ "name": "Courtyard", "mode": "code", "repoPath": "/path/to/repo" }',
+    });
+    await workspace("homelab-mcp", {
+      "workspace.json": '{ "name": "Homelab MCP", "mode": "code", "repoPath": "/path/to/other" }',
+    });
+  };
+
+  it("lists them in the order saved, kept in the context folder as one change", async () => {
+    await planningAndCode();
+    const order = ["office", "bike", "garage-gym", "homelab-mcp", "courtyard"];
+
+    const response = await arrange(order);
+
+    expect(response.status).toBe(200);
+    expect(WorkspaceList.parse(await response.json()).workspaces.map((w) => w.id)).toEqual(order);
+    expect(await ids()).toEqual(order);
+    expect(JSON.parse(await readFile(join(contextDir, "workspace-order.json"), "utf8"))).toEqual({
+      order,
+    });
+    expect((await changesIn(contextDir))[0]).toEqual({
+      title: "Arrange the workspaces",
+      trailers: ["Courtyard-Change: workspace"],
+    });
+  });
+
+  it("keeps the order when the worker starts again, as on any other device", async () => {
+    await planningAndCode();
+    const order = ["garage-gym", "office", "bike", "homelab-mcp", "courtyard"];
+    await arrange(order);
+
+    // A worker started again on the same context folder (with its own data folder, so its owner
+    // is set up afresh).
+    request = await asOwner(
+      testWorker({ root, env: { COURTYARD_DATA_DIR: join(root, "data-again") } }),
+    );
+
+    expect(await ids()).toEqual(order);
+  });
+
+  it("puts a workspace the order doesn't name at the end of its own group, by name", async () => {
+    await planningAndCode();
+    await arrange(["office", "bike", "garage-gym", "homelab-mcp", "courtyard"]);
+
+    await added("Allotment");
+    await workspace("side-project", {
+      "workspace.json": '{ "name": "Abacus", "mode": "code", "repoPath": "/path/to/third" }',
+    });
+
+    expect(await ids()).toEqual([
+      "office",
+      "bike",
+      "garage-gym",
+      "allotment",
+      "homelab-mcp",
+      "courtyard",
+      "side-project",
+    ]);
+  });
+
+  it("keeps planning and code workspaces in their own groups, refusing an order that mixes them", async () => {
+    await planningAndCode();
+    await arrange(["office", "bike", "garage-gym", "homelab-mcp", "courtyard"]);
+
+    const mixed = await arrange(["office", "courtyard", "bike", "garage-gym", "homelab-mcp"]);
+
+    expect(mixed.status).toBe(400);
+    expect(await errorOf(mixed)).toContain("code");
+    expect(await ids()).toEqual(["office", "bike", "garage-gym", "homelab-mcp", "courtyard"]);
+  });
+
+  it("lists planning workspaces first whatever order the file was left in by hand", async () => {
+    await planningAndCode();
+    await writeFile(
+      join(contextDir, "workspace-order.json"),
+      JSON.stringify({ order: ["courtyard", "office", "homelab-mcp", "bike"] }),
+    );
+
+    expect(await ids()).toEqual(["office", "bike", "garage-gym", "courtyard", "homelab-mcp"]);
+  });
+
+  it("falls back to names when the order file can't be read", async () => {
+    await planningAndCode();
+    await writeFile(join(contextDir, "workspace-order.json"), "{ not json");
+
+    expect(await ids()).toEqual(["bike", "garage-gym", "office", "courtyard", "homelab-mcp"]);
+  });
+
+  it("refuses a workspace named twice, or one that doesn't exist", async () => {
+    await planningAndCode();
+
+    expect((await arrange(["office", "office", "bike"])).status).toBe(400);
+    expect((await arrange(["office", "nope"])).status).toBe(404);
+    expect((await arrange("office")).status).toBe(400);
+    expect(await ids()).toEqual(["bike", "garage-gym", "office", "courtyard", "homelab-mcp"]);
   });
 });

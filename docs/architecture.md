@@ -82,7 +82,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
   A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
   `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
-  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308).
+  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308). It lists
+  the workspaces planning ones first, then code ones, each group in the owner's order (#321): one list of ids in
+  `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces` (`PUT /api/workspaces/order`), which
+  refuses an order that mixes the groups. A workspace the order doesn't name goes at the end of its group, by name.
 - **`owner-context/`:** reads `OWNER.md` and starts a new one.
 - **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
   that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
@@ -510,7 +513,11 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
   (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
-  bottom sheet on a desktop.
+  bottom sheet on a desktop. Arrange workspaces (#321): holding a workspace on a tablet's rail or in the sidebar and
+  dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
+  (the strip, the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
+  first load (`arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one
+  (`arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it.
   **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Handheld, dark whatever the device's setting (#210).
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
@@ -729,6 +736,8 @@ things live only in the worker's memory and go when it restarts.
 ([ADR 0009](adr/0009-the-context-folder-is-a-git-repo-with-its-main-copy-on-a-remote.md)):
 
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
+- `workspace-order.json`: the owner's order for the workspaces (#321), one list of ids for every device; planning
+  ones and code ones each keep their own group.
 - `<workspace>/CONTEXT.md`: a planning workspace's context file; a code workspace has none (ADR 0026).
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
   `description`, allowlist changes and Paper connection, with the file's name once connected from its page).

@@ -15,6 +15,8 @@ import {
   type StopRequest,
   type WorkspaceChange,
   type WorkspaceId,
+  WorkspaceList,
+  type WorkspaceOrder,
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -182,6 +184,15 @@ export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>
     method: "PATCH",
     body: change,
     schema: WorkspaceSummary,
+  });
+
+/** Keeps the owner's order for the workspaces (#321) and answers with them in it. */
+export const arrangeWorkspaces = (order: readonly WorkspaceId[]) =>
+  sendJson({
+    path: "/workspaces/order",
+    method: "PUT",
+    body: { order: [...order] } satisfies WorkspaceOrder,
+    schema: WorkspaceList,
   });
 
 /** Archives a workspace: it leaves every list, and its folder moves to the archived folder. */

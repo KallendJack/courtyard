@@ -48,6 +48,17 @@ export type WorkspaceSummary = z.infer<typeof WorkspaceSummary>;
 export const WorkspaceList = z.object({ workspaces: z.array(WorkspaceSummary) });
 export type WorkspaceList = z.infer<typeof WorkspaceList>;
 
+/**
+ * The owner's order for the workspaces (#321), as the rail or the sidebar left it once a tile was
+ * dragged: every workspace by its id, planning ones first, then code ones, never mixed.
+ */
+export const WorkspaceOrder = z.object({
+  order: z
+    .array(WorkspaceId)
+    .refine((ids) => new Set(ids).size === ids.length, "Name each workspace once."),
+});
+export type WorkspaceOrder = z.infer<typeof WorkspaceOrder>;
+
 /** The longest name a new workspace can have. */
 export const WORKSPACE_NAME_MAX_LENGTH = 60;
 

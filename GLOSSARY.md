@@ -55,6 +55,12 @@ The plain line icon a workspace shows on its tile and beside its name, one of a 
 `workspace.json` (#210). Courtyard suggests one from the workspace's name; the owner picks another in the Icon sheet.
 _Avoid_: colour, emoji, logo, avatar
 
+**Workspace order**:
+The owner's order for the workspaces, the same on every device: one list in `workspace-order.json` at the context
+folder's top (#321). Planning workspaces come first, then code ones, each group in that order; a new one goes at the
+end of its group. The owner arranges it by holding a workspace on a tablet's rail or in the sidebar and dragging it.
+_Avoid_: sort order, ranking, position, pinning
+
 **Context file**:
 A planning workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first. A code
 workspace has none (#301): what it knows lives in its repository.
