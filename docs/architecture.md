@@ -171,7 +171,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   says why it can't (the repository missing, not git, or its remote unreachable). Decides each edit (inside the
   worktree once symlinks are followed; a file that decides what allowed commands run, such as a `package.json`, git
   hooks, `.claude` or git's own `.git`, needs an approval) and each command: `allowlist.ts` is the
-  command allowlist, matched on the command's words once its quotes are read, never on the start of its text, so a
+  command allowlist, matched on the command's words once its quotes are read (the contract's `wordsOf`), never on
+  the start of its text, so a
   command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
   refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
   allowlist is the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the like; #178), the
@@ -529,7 +530,9 @@ is in each session a list shows, which only the pages listing sessions parse), a
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, health and errors, and a `chart`
-block's JSON (`chart.ts`, which a model writes and the web app and the eval check). The worker's
+block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
+`command-words.ts` reads a shell command's words as a POSIX shell does, which the worker matches against the
+allowlist and the web app summarises a command's activity line from (#285). The worker's
 answers are checked against these types;
 the web app parses every answer with these schemas.
 
@@ -537,8 +540,8 @@ the web app parses every answer with these schemas.
 
 - **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers,
   the fake GitHub (with two pull requests no session opened, #278, and for a second code workspace, Workbench,
-  ready issues in milestones and a helper's pull request, #301), the owner's Paper files in memory (#308) and a
-  stand-in for Matt Pocock's plugin;
+  ready issues in milestones and a helper's pull request, #301), the owner's Paper files in memory (#308), a
+  stand-in for Matt Pocock's plugin and a stand-in `gh` that never reaches GitHub;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
   The update builds with `pnpm -r build`, never waiting on the machine's builds lock, since Courtyard is down until

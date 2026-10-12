@@ -1,5 +1,5 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Locator, type Page, test } from "@playwright/test";
 
 // Code sessions (#170, ADR 0007), in the Side project code workspace start-worker.mjs sets up. The
 // fake edits a file with "edit file <path>: <line>" and runs a command with "run command: …"
@@ -14,6 +14,15 @@ const startOnPage = async (page: Page, lines: readonly string[]) => {
   await page.getByLabel("Message", { exact: true }).fill(lines.join("\n"));
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/side-project\/sessions\//);
+};
+
+/** Starts a session in Side project on the fake, as the owner, and returns its id. */
+const startCoding = async (request: APIRequestContext, text: string) => {
+  const response = await request.post("/api/workspaces/side-project/sessions", {
+    data: { text, model: { provider: "fake", model: "echo" } },
+  });
+  expect(response.status()).toBe(201);
+  return ((await response.json()) as { id: string }).id;
 };
 
 /** The approval card a waiting turn shows (#171). */
@@ -77,6 +86,87 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
       "Ran git --version: git version",
     );
   }
+});
+
+/** Whether an element's text takes one line: no taller than its line height. */
+const takesOneLine = (each: Locator) =>
+  each.evaluate(
+    (element) =>
+      element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element).lineHeight),
+  );
+
+/** Text far too long for one line on any screen. */
+const LONG = "The activity line keeps to one line however much the model wrote. ".repeat(12);
+
+// Activity lines stay one line (#285): commands people recognise get a plain summary instead of
+// their arguments, and anything else is cut to one line, on the unfolded Fold. The e2e worker's
+// `gh` is a stand-in that never reaches GitHub (start-worker.mjs).
+test.describe("activity lines on the unfolded Fold", () => {
+  test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
+
+  /**
+   * The sessions a test started: the fake is still writing back their long messages after the
+   * test, holding code session slots, so they're stopped at the end.
+   */
+  const started: string[] = [];
+
+  test.afterEach(async ({ request }) => {
+    for (const id of started.splice(0)) {
+      await request.post(`/api/sessions/${id}/stop`, { data: { turn: 1 } });
+    }
+  });
+
+  /** Opens a new session that runs `commands`, and returns its activities. */
+  const activitiesFor = async (page: Page, request: APIRequestContext, commands: string[]) => {
+    const id = await startCoding(
+      request,
+      commands.map((each) => `run command: ${each}`).join("\n"),
+    );
+    started.push(id);
+    await page.goto(`/workspaces/side-project/sessions/${id}`);
+    return page.getByRole("list", { name: "What the model did" }).getByRole("listitem");
+  };
+
+  test("commits, pushes, pull requests and issues show in plain words, and any other command as it is, each on one line", async ({
+    page,
+    request,
+  }) => {
+    const unknown = `git log --oneline --grep "${LONG}"`;
+    // "[e2e passes]": a failed check on the pull request the push opens would start another turn,
+    // holding a code session slot after the test.
+    const lines = await activitiesFor(page, request, [
+      `git commit --allow-empty -m "Activity lines stay one line [e2e passes]" -m "${LONG}" -m "${LONG}"`,
+      "git push -u origin HEAD",
+      `gh pr create --title "Activity lines stay one line" --body "${LONG}"`,
+      `gh issue create --title "Activity lines are too long" --body "${LONG}"`,
+      `gh issue comment 79 --body "${LONG}"`,
+      unknown,
+    ]);
+
+    await expect(lines).toHaveText([
+      "Committed “Activity lines stay one line [e2e passes]”",
+      "Pushed the branch",
+      "Opened PR “Activity lines stay one line”",
+      "Filed “Activity lines are too long”",
+      "Commented on #79",
+      `Ran ${unknown}`,
+    ]);
+    for (const line of await lines.all()) expect(await takesOneLine(line)).toBe(true);
+  });
+
+  test("editing a pull request with a long body shows as Updated PR and its number, on one line", async ({
+    page,
+    request,
+  }) => {
+    const line = await activitiesFor(page, request, [
+      `gh pr edit 275 --title "One line" --body "${LONG}"`,
+    ]);
+    // Not the session's own pull request, so it waits for the owner.
+    await approvalOn(page).getByRole("button", { name: "Allow" }).click();
+
+    await expect(line).toHaveText("Updated PR #275");
+    expect(await takesOneLine(line)).toBe(true);
+  });
 });
 
 /** Where an approval's answer goes. */
@@ -265,15 +355,6 @@ const LONG_TASK = `Refactor ${"the sessions module, the code module and the side
 test.describe("several code sessions at once (#174)", () => {
   /** Sessions the test keeps busy, so three code sessions are running; stopped at the end. */
   const busy: string[] = [];
-
-  /** Starts a session in Side project on the fake, as the owner, and returns its id. */
-  const startCoding = async (request: APIRequestContext, text: string) => {
-    const response = await request.post("/api/workspaces/side-project/sessions", {
-      data: { text, model: { provider: "fake", model: "echo" } },
-    });
-    expect(response.status()).toBe(201);
-    return ((await response.json()) as { id: string }).id;
-  };
 
   /** Stops a session's first turn. */
   const stopFirstTurn = (request: APIRequestContext, id: string) =>
