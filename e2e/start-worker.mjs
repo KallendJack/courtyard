@@ -4,7 +4,7 @@
 // The worker runs as a live copy whose main has moved on, with a stand-in for the update script.
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS, READING_SESSION_ID } from "./long-session.ts";
 
@@ -201,6 +201,17 @@ writeFileSync(join(kitchensPusher, "README.md"), "# Garrett Kitchens\n");
 git(kitchensPusher, "add", ".");
 git(kitchensPusher, "commit", "-qm", "Start");
 git(kitchensPusher, "push", "-q", "origin", "main");
+
+// A stand-in for `gh`, first on the worker's PATH, so a session's `gh pr create`, `gh issue
+// comment` and the like run (#285) without ever reaching GitHub: it does nothing, and says so.
+const standIns = resolve(dataDir, "..", "stand-ins");
+rmSync(standIns, { recursive: true, force: true });
+mkdirSync(standIns, { recursive: true });
+writeFileSync(join(standIns, "gh"), "#!/bin/sh\necho 'gh stand-in: nothing sent'\n", {
+  mode: 0o755,
+});
+writeFileSync(join(standIns, "gh.cmd"), "@echo gh stand-in: nothing sent\r\n");
+process.env.PATH = `${standIns}${delimiter}${process.env.PATH ?? ""}`;
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
 // GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch

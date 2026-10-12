@@ -6,6 +6,7 @@ import {
   type SessionId,
   skillTitle,
   type WorkspaceId,
+  wordsOf,
 } from "@courtyard/contract";
 import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useState } from "react";
@@ -31,6 +32,57 @@ import { SaveNote } from "./save-note.tsx";
 import { SourceList, sourcesAsMarkdown } from "./sources.tsx";
 import { ThingNoteRow } from "./things.tsx";
 
+/**
+ * The value a command gives one of `options` (`-m "…"`, `--title=…`), the first time, or nothing.
+ * Short options written onto others (`-am "…"`) count.
+ */
+const optionValue = (words: readonly string[], options: readonly string[]) => {
+  for (const [at, word] of words.entries()) {
+    const equals = word.indexOf("=");
+    if (word.startsWith("--") && equals !== -1 && options.includes(word.slice(0, equals))) {
+      return word.slice(equals + 1);
+    }
+    const short = /^-[A-Za-z]+$/.test(word) ? `-${word.at(-1)}` : word;
+    if (options.includes(word) || options.includes(short)) return words[at + 1];
+  }
+  return undefined;
+};
+
+/** A message's first line, in quotes. */
+const quoted = (text: string) => `“${text.split("\n")[0]?.trim()}”`;
+
+/**
+ * A command people recognise in plain words instead of its arguments (#285): committing, pushing,
+ * opening or updating a pull request, filing or commenting on an issue. Anything else, or anything
+ * that can't be read as one command, is the command itself.
+ */
+const describeCommand = (command: string) => {
+  const read = wordsOf(command);
+  const words = read.ok ? read.value : [];
+  const [tool, first] = words;
+  const rest = words.slice(2);
+  if (tool === "git" && first === "commit") {
+    const message = optionValue(rest, ["-m", "--message"]);
+    return message === undefined ? "Committed" : `Committed ${quoted(message)}`;
+  }
+  if (tool === "git" && first === "push") return "Pushed the branch";
+  if (tool !== "gh") return `Ran ${command}`;
+  const [action, named] = rest;
+  const title = optionValue(rest.slice(1), ["--title", "-t"]);
+  const number = named !== undefined && /^#?\d+$/.test(named) ? `#${named.replace("#", "")}` : "";
+  switch (`${first} ${action}`) {
+    case "pr create":
+      return title === undefined ? "Opened a PR" : `Opened PR ${quoted(title)}`;
+    case "pr edit":
+      return number === "" ? "Updated the PR" : `Updated PR ${number}`;
+    case "issue create":
+      return title === undefined ? "Filed an issue" : `Filed ${quoted(title)}`;
+    case "issue comment":
+      return number === "" ? "Commented on an issue" : `Commented on ${number}`;
+  }
+  return `Ran ${command}`;
+};
+
 /** What a model did, in a few words. */
 const describeActivity = (activity: Activity) => {
   switch (activity.kind) {
@@ -47,7 +99,7 @@ const describeActivity = (activity: Activity) => {
     case "edited-file":
       return `Edited ${activity.path}`;
     case "ran-command":
-      return `Ran ${activity.command}`;
+      return describeCommand(activity.command);
     case "waiting-for-build":
       return `Waiting for another build · ${activity.ahead} ahead`;
     case "updated-tasks":
@@ -90,23 +142,24 @@ function ShownImages(props: { sessionId: SessionId; images: readonly ShownImage[
   );
 }
 
-/** What a model did between two pieces of what it wrote, a line each. */
+/**
+ * What a model did between two pieces of what it wrote, one line each, however long (#285): a line
+ * too long for the screen ends in "…".
+ */
 function Activities(props: { activities: readonly Activity[] }) {
   return (
-    <ul
-      aria-label="What the model did"
-      className="space-y-0.5 text-meta wrap-anywhere text-muted-foreground"
-    >
+    <ul aria-label="What the model did" className="space-y-0.5 text-meta text-muted-foreground">
       {props.activities.map((activity, index) => (
         <li
           // biome-ignore lint/suspicious/noArrayIndexKey: activities only ever grow, in order
           key={index}
           className={classes(
-            activity.kind === "check-failed" && "flex items-center gap-1 text-destructive-text",
+            "flex items-center gap-1",
+            activity.kind === "check-failed" && "text-destructive-text",
           )}
         >
           {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
-          {describeActivity(activity)}
+          <span className="truncate">{describeActivity(activity)}</span>
         </li>
       ))}
     </ul>
