@@ -1,7 +1,12 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { type ApprovalAsk, CodeSessionList, type SessionEvent } from "@courtyard/contract";
+import {
+  type ApprovalAsk,
+  CODE_SESSIONS_AT_ONCE,
+  CodeSessionList,
+  type SessionEvent,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeProvider } from "./providers/fake.ts";
 import type { Provider } from "./providers/index.ts";
@@ -657,27 +662,32 @@ const startCoding = async (request: Requester, text: string) => {
 };
 
 describe("several code sessions at once (#174)", () => {
-  it("runs three at once, each in its own worktree, with a port slot no other running one has", async () => {
+  /** Starts code sessions enough to take every place (`CODE_SESSIONS_AT_ONCE`, #364). */
+  const takeEveryPlace = async (request: Requester) => {
+    for (let place = 1; place <= CODE_SESSIONS_AT_ONCE; place += 1) {
+      await startCoding(request, `Task ${place}`);
+    }
+  };
+
+  it("runs as many as there are places at once, each in its own worktree, with a port slot no other running one has", async () => {
     const { provider, turns } = heldCoder();
     const request = await start([provider]);
 
-    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
-      await startCoding(request, text);
-    }
+    await takeEveryPlace(request);
 
-    await vi.waitFor(() => expect(turns).toHaveLength(3));
-    expect(new Set(turns.map((turn) => turn.worktree)).size).toBe(3);
-    expect(turns.map((turn) => turn.env.COURTYARD_SESSION_SLOT).sort()).toEqual(["1", "2", "3"]);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
+    expect(new Set(turns.map((turn) => turn.worktree)).size).toBe(CODE_SESSIONS_AT_ONCE);
+    expect(turns.map((turn) => turn.env.COURTYARD_SESSION_SLOT).sort()).toEqual(
+      Array.from({ length: CODE_SESSIONS_AT_ONCE }, (_, at) => String(at + 1)).sort(),
+    );
     for (const turn of turns) turn.finish();
   });
 
-  it("has a fourth wait, saying so, and start in the first slot that frees", async () => {
+  it("has one more wait, saying so, and start in the first slot that frees", async () => {
     const { provider, turns } = heldCoder();
     const request = await start([provider]);
-    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
-      await startCoding(request, text);
-    }
-    await vi.waitFor(() => expect(turns).toHaveLength(3));
+    await takeEveryPlace(request);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
 
     const fourth = await startCoding(request, "From session to pull request");
 
@@ -686,22 +696,22 @@ describe("several code sessions at once (#174)", () => {
     const listed = CodeSessionList.parse(
       await (await request("/api/workspaces/side-project/sessions")).json(),
     );
-    expect(listed.running).toBe(3);
+    expect(listed.running).toBe(CODE_SESSIONS_AT_ONCE);
     expect(listed.sessions.find((session) => session.id === fourth)).toMatchObject({
       title: "From session to pull request",
       busy: true,
       queued: true,
     });
     expect(listed.sessions.filter((session) => session.queued)).toHaveLength(1);
-    expect(turns).toHaveLength(3);
+    expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE);
 
     const [first] = turns;
     first?.finish();
 
     await followSession(request, { sessionId: fourth, until: "turn-dequeued", after: 2 });
-    await vi.waitFor(() => expect(turns).toHaveLength(4));
-    expect(turns[3]?.env).toEqual(first?.env);
-    turns[3]?.finish();
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE + 1));
+    expect(turns[CODE_SESSIONS_AT_ONCE]?.env).toEqual(first?.env);
+    turns[CODE_SESSIONS_AT_ONCE]?.finish();
     await followSession(request, { sessionId: fourth, until: "turn-completed", after: 3 });
     for (const turn of turns) turn.finish();
   });
@@ -709,18 +719,16 @@ describe("several code sessions at once (#174)", () => {
   it("lets a waiting session be removed before it starts, clearing its branch and worktree away", async () => {
     const { provider, turns } = heldCoder();
     const request = await start([provider]);
-    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
-      await startCoding(request, text);
-    }
-    await vi.waitFor(() => expect(turns).toHaveLength(3));
+    await takeEveryPlace(request);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
     const fourth = await startCoding(request, "From session to pull request");
     await followSession(request, { sessionId: fourth, until: "turn-queued" });
 
     const removed = await sendJson(request, `/api/sessions/${fourth}`, "DELETE", {});
 
     expect(removed.status).toBe(204);
-    // The owner's checkout and the three running sessions' worktrees.
-    expect(await worktreesOf(repo)).toHaveLength(4);
+    // The owner's checkout and the running sessions' worktrees.
+    expect(await worktreesOf(repo)).toHaveLength(CODE_SESSIONS_AT_ONCE + 1);
     const listed = CodeSessionList.parse(
       await (await request("/api/workspaces/side-project/sessions")).json(),
     );
@@ -730,7 +738,7 @@ describe("several code sessions at once (#174)", () => {
     await followSession(request, { sessionId: fifth, until: "turn-queued" });
     turns[0]?.finish();
     await followSession(request, { sessionId: fifth, until: "turn-dequeued", after: 2 });
-    await vi.waitFor(() => expect(turns).toHaveLength(4));
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE + 1));
     for (const turn of turns) turn.finish();
   });
 
@@ -738,10 +746,8 @@ describe("several code sessions at once (#174)", () => {
     const { provider, turns } = heldCoder();
     await mkdir(join(root, "context", "garage-gym"), { recursive: true });
     const request = await start([provider, createFakeProvider({ delayMs: 0 })]);
-    for (const text of ["Talk into the box", "A photo on its own", "Chat scrolling"]) {
-      await startCoding(request, text);
-    }
-    await vi.waitFor(() => expect(turns).toHaveLength(3));
+    await takeEveryPlace(request);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
 
     const { id } = await startSession(request, "Where does the rack go?");
 

@@ -219,8 +219,8 @@ there is used as it is), then makes the workspace on it and opens it.
     "connections": { "paper": { "command": "/path/to/paper", "fileId": "<file id>" } }
   }
   ```
-- **Up to three sessions run at once** across the worker; a fourth waits, saying so, and starts
-  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 3), no two
+- **Up to six sessions run at once** across the worker; a seventh waits, saying so, and starts
+  when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 6), no two
   the same, for the repository's checks to pick their test servers' ports from.
 - **One heavy check at a time** across the worker, so sessions building together can't lock the
   machine up: a session's `pnpm verify`, `test`, `e2e` or `build` (in any package), `vitest run`
