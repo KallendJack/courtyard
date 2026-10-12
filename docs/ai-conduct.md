@@ -68,7 +68,9 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
 ## Rules for every scenario
 
 - **One workspace, plus the owner context.** A model sees only the workspace it's in: its name, the access its
-  provider has, and its context file. It also sees the owner context, what the owner shares with every workspace
+  provider has, and its context file. A code workspace has no context file (#301): what it knows lives in its
+  repository (AGENTS.md, issues, ADRs), where Claude Code on the PC and helpers read it too, so its turns get its
+  connections instead (Connections, below). It also sees the owner context, what the owner shares with every workspace
   (ADR 0010): all of it in a planning workspace, only How to answer me in a code workspace. Only lines count: an
   owner context with no facts, plans, ideas or preferences yet (the untouched starter) is sent nowhere.
 - **The workspace is more specific.** Where the context file differs from the owner context, the context file wins,
@@ -106,7 +108,8 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 6. The owner context between its markers, each line with its label, when there is one and the workspace gets some of
    it: answer the way it asks; otherwise it's information.
 7. The context file between its markers, each line with its label, saying it wins where it differs from the owner
-   context, or a line saying there isn't one yet.
+   context, or a line saying there isn't one yet. A code workspace has none (#301): in its place, one line naming its
+   connections and what's missing (Connections, below).
 8. In a planning workspace: its documents between `<documents>` markers, or a line saying it has none yet
    (Documents, below), then its Things between `<things>` markers, one labelled line each, or a line saying it
    has none yet (Things, below).
@@ -340,6 +343,16 @@ A session started on a pull request no session opened (#278) works on that pull 
 session branch of its own, so everything above about the session branch is about that branch, and its first message
 is the owner's question from the PR page, as they asked it.
 
+Build (#298), on the first row of a code workspace's Next up (#301), starts a new session whose first message is the
+worker's, naming the issue, once the owner has seen the issue and the model it'll use. The worker claims the issue on
+GitHub as it starts ("Building this: Courtyard session (<branch>), next in order", AGENTS.md's claim rule), so the session is told
+not to:
+
+> Build issue #<number>, "<title>". Read it first with gh issue view <number> --comments: its description and comments
+> are what to build, and where a later comment settles something the description left open, the comment wins. It's
+> claimed for you on GitHub already, so don't claim it again. Build it the way this repository does, and open a pull
+> request that closes it.
+
 ## Paper
 
 Built with #180 (ADR 0023). Paper is the first tool connection: a code workspace whose `workspace.json` names Paper
@@ -383,6 +396,41 @@ Courtyard can't tell why a Paper tool failed (Paper doesn't say in a way it can 
 > try to open it, and carry on with the rest of the work.
 
 Paper changes no context, so a change here doesn't run the eval set.
+
+## Connections
+
+Built with #308. Every turn in a code workspace gets one line about its connections (Every turn, item 7), so a
+model asked "why can't you use Paper?" answers from it rather than guessing. It names what the workspace has, then
+says what's missing and where the owner adds it, and nothing else. It starts with what it has:
+
+> This workspace's connections: <connections>.
+
+where each connection it has is one of these, joined by semicolons: `GitHub, on <owner/repo>` while Courtyard is
+signed in to GitHub, and `Paper, in its Paper file "<name>"` (the file's id when its name isn't known) on a provider
+that uses tools. With none of them, it starts instead:
+
+> This workspace has no connections yet.
+
+Then, for each that's missing, its sentence. Courtyard not signed in to GitHub:
+
+> Courtyard isn't signed in to GitHub, so pushing and pull requests won't work: the owner signs in from Connections
+> on Courtyard's home page.
+
+A repository whose remote isn't on GitHub:
+
+> Its repository isn't on GitHub, so it has no pull requests or issues there.
+
+No Paper file connected:
+
+> It has no Paper file connected, so you can't read or draw designs: the owner connects one from this workspace's
+> page in Courtyard.
+
+A Paper file connected, on a provider that uses no tools (Paper's own instructions, above, never go to it):
+
+> Its Paper file is connected, but this model can't use tool connections: the owner can switch this session to one
+> that can.
+
+Connections change no context, so a change here doesn't run the eval set.
 
 ## Skills
 

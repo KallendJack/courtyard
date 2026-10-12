@@ -399,7 +399,7 @@ test.describe("several code sessions at once (#174)", () => {
     }
     await startCoding(request, "From session to pull request");
 
-    await page.goto("/workspaces/side-project");
+    await page.goto("/workspaces/side-project#sessions");
     const sessions = page.getByRole("region", { name: "Sessions" });
     await expect(sessions).toContainText("3 of 3 code sessions running");
     const waiting = sessions
@@ -419,7 +419,7 @@ test("the sidebar lists code workspaces apart from planning ones", async ({ page
   const workspaces = page.getByRole("navigation", { name: "Workspaces" });
   await expect(
     workspaces.getByRole("list", { name: "Code workspaces" }).getByRole("link"),
-  ).toHaveText(["Side project"]);
+  ).toHaveText(["Side project", "Workbench"]);
   await expect(workspaces.getByRole("list", { name: "Planning workspaces" })).not.toContainText(
     "Side project",
   );

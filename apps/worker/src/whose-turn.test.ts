@@ -115,6 +115,8 @@ describe("a code session waiting on an approval", () => {
       kind: "needs-you",
       since: "2026-10-11T09:00:00.000Z",
       ask: { kind: "command", command: "curl https://example.com", reason: "off-allowlist" },
+      // Its event number, which answers it from the workspace's Needs you (#301).
+      approval: expect.any(Number),
     });
     await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
     await followSession(request, { sessionId: id, until: "turn-stopped" });

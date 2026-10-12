@@ -48,3 +48,10 @@ it sits in the workspace's config; Paper's sign-in stays in Paper.
   `docs/ai-conduct.md`.
 - `write_html` in its `replace` mode removes the node it replaces without asking: it's drawing, as the owner decided,
   and Paper keeps its own undo.
+
+## Connecting it from the page (#308)
+
+The owner connects the workspace's one file from its Connections sheet: the worker asks Paper's own MCP server (the
+workspace's command, else `COURTYARD_PAPER_COMMAND`, else the one another code workspace names) for the owner's files,
+or to make one named after the workspace, and keeps the file's id and name in `workspace.json`. Making a file is
+refused to sessions, as above, but this is the owner's own tap, so the worker does it. Still one file per workspace.

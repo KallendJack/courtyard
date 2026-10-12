@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -144,7 +145,14 @@ describe("a code workspace made from a picked repo", () => {
     const config: unknown = JSON.parse(
       await readFile(join(root, "context", "garrett-kitchens", "workspace.json"), "utf8"),
     );
-    expect(config).toMatchObject({ mode: "code", repoPath: clone });
+    // Its name and one line live in its workspace.json: a code workspace has no context file (#301).
+    expect(config).toMatchObject({
+      name: "Garrett Kitchens",
+      mode: "code",
+      repoPath: clone,
+      description: "Website for a kitchen fitter",
+    });
+    expect(existsSync(join(root, "context", "garrett-kitchens", "CONTEXT.md"))).toBe(false);
     // No token is kept in the clone's git settings: git asks Courtyard's sign-in each time.
     const gitConfig = await readFile(join(clone, ".git", "config"), "utf8");
     expect(gitConfig).not.toContain(github.token() ?? "no token");
@@ -153,7 +161,11 @@ describe("a code workspace made from a picked repo", () => {
     const detail = WorkspaceDetail.parse(
       await (await request("/api/workspaces/garrett-kitchens")).json(),
     );
-    expect(detail.contextFile?.intro).toContain("Website for a kitchen fitter");
+    expect(detail).toMatchObject({
+      workspace: { name: "Garrett Kitchens" },
+      contextFile: null,
+      description: "Website for a kitchen fitter",
+    });
     expect(await reposOf(request)).toEqual([expect.objectContaining({ added: true })]);
   });
 

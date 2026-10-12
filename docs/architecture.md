@@ -80,6 +80,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
   one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
   a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
+  A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
+  `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
+  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308).
 - **`owner-context/`:** reads `OWNER.md` and starts a new one.
 - **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
   that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
@@ -207,7 +210,26 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the workspace's one Paper file run, each an activity (`used-tool`); another file, or making a file, is refused;
   deleting a node the session didn't make is an approval. It notes the nodes each call says it made (kept on the
   running session), hands each screenshot to `sessions/` to keep and show, and words a failed call through
-  `prompts/`.
+  `prompts/`. `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's
+  page (#308), by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real
+  one; `fake.ts` holds files in memory for the tests and the browser tests).
+- **`connections/`:** a code workspace's connections (#308): GitHub (its repository on GitHub and whether
+  Courtyard is signed in) and its Paper file, as its page's connections line and Connections sheet show them and as
+  each of its turns is told them (`sessions/` gets `of`). Lists the owner's Paper files and connects one, or makes
+  one named after the workspace, as one change through `context-folder/`. Paper's command is the workspace's own,
+  else the `COURTYARD_PAPER_COMMAND` setting, else the one another code workspace names. Its routes are a
+  workspace's `connections`, `connections/paper/files` and `connections/paper`.
+- **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
+  `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
+  pull request that closes it), in
+  milestone order (the number a milestone's title leads with, then Later, then none), asked of GitHub only when a
+  page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
+  message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the
+  session's branch. Its routes are a workspace's `next-up` and `next-up/:number/build`.
+- **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
+  commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
+  (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
+  workspace's `main`.
 - **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
   every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
@@ -253,7 +275,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
   merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
   one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
-  check, #181); lists the repos the GitHub App reaches, with each one's description and where git
+  check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
+  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
   clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
   job in the order the workflow started them, the failed one's page, and when a running one should end
   from how long the build before it took. Its routes are
@@ -365,8 +388,23 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
+  - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
+    only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
+    shared pieces only it shows yet: `components/workspace-tabs.tsx`, `connections-line.tsx`, `radio-row.tsx` and the
+    thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
+    (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
+    make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
+    PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
+    `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
+    empty (`block.tsx`): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
+    requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
+    (`running.tsx`), Next up with Build (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
+    commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
+    box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
+    for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a
+    first visit shows faint placeholder rows in its place; the PRs list does the same.
   - **`review/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
-    (`pull-requests.tsx`, the PRs tab's list, a section of a code workspace's page until it has tabs): every open
+    (`pull-requests.tsx`, the PRs tab's list, which shares its open pull requests with Home's Needs you): every open
     PR on the repository from `pull-requests/`, whoever opened it, with its title, branch, who it's from and where
     it stands (`checks.tsx`: moss passed, violet running, red failed, gold conflicting with its base), and Review,
     or Bring up to date when it conflicts; or its sessions' merged ones. The PR page (`review.tsx`): a session's PR
@@ -397,9 +435,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
-  - **`matt-setup/`:** the setup check's offer on a code workspace's page (#181), an approval card
-    (`components/approval-card.tsx`, which a session's approvals use too) saying what's missing, then where its
-    pull request is; its own lazy load, with its calls (`api.ts`).
+  - **`matt-setup/`:** the setup check's offer (#181), opened from its row in a code workspace's Needs you (#301):
+    an approval card (`components/approval-card.tsx`, which a session's approvals use too) saying what's missing,
+    then where its pull request is, with its calls (`api.ts`).
   - **`notifications/`:** the home page's notifications toggle for this device, beside Connections (#173): it
     subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
     opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
@@ -410,7 +448,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     repo's) and What's it for? (its description on GitHub), shown in full (`WrappingTextField`) before
     Create. Name is focused on a desktop only, so a touch screen's keyboard waits for a tap. The page
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
-    put what's said there as they would in a message box.
+    put what's said there as they would in a message box. A code workspace just made opens with its
+    Connections sheet (`#connections`), offering Paper, which Close skips (#308).
 - **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
@@ -500,8 +539,9 @@ the web app parses every answer with these schemas.
 ### Outside the apps
 
 - **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers,
-  the fake GitHub (with two pull requests no session opened, #278), a stand-in for Matt Pocock's plugin and a
-  stand-in `gh` that never reaches GitHub;
+  the fake GitHub (with two pull requests no session opened, #278, and for a second code workspace, Workbench,
+  ready issues in milestones and a helper's pull request, #301), the owner's Paper files in memory (#308), a
+  stand-in for Matt Pocock's plugin and a stand-in `gh` that never reaches GitHub;
   `fixtures/context/` is the context folder they start from.
 - **`scripts/live/`:** the live copy's scripts, for Windows: start the worker at log on, and update it (ADR 0011).
   The update builds with `pnpm -r build`, never waiting on the machine's builds lock, since Courtyard is down until
@@ -538,7 +578,7 @@ sequenceDiagram
   S-->>B: 202, at once
   B->>S: GET /api/sessions/:id/events?after=N
   Note over B,S: server-sent events, kept open
-  S->>F: owner context, context file, conversation so far
+  S->>F: owner context, context file or connections, conversation so far
   F-->>S: the turn's framing, with the save tool
   S->>P: run the turn
   P->>M: Agent SDK, Codex app-server or the fake
@@ -607,7 +647,9 @@ Where the rest fits:
   `PostToolUseFailure` hooks hand each result back, adding what the worker says to a failure. A delete that asks is
   an approval of its own kind (`tool`), on the same card. Each screenshot is kept in the session's folder beside its
   attachments and recorded as an `image-shown` event, which the browser shows under the answer as a thumbnail, the
-  newest of each board, from the attachment route.
+  newest of each board, from the attachment route. Every code turn, Paper or not, is told its workspace's
+  connections in one line from `connections/`, in place of a context file (#308, ADR 0026): what it has, and what's
+  missing and where the owner adds it.
 - **Attachments.** A message with photos or PDFs goes as a multipart form: the message's JSON in one field, the
   files in another (with a Thing's photo, the only requests that aren't JSON, and the only ones allowed past the
   small body limit).
@@ -659,8 +701,9 @@ things live only in the worker's memory and go when it restarts.
 ([ADR 0009](adr/0009-the-context-folder-is-a-git-repo-with-its-main-copy-on-a-remote.md)):
 
 - `OWNER.md`: the owner context ([ADR 0010](adr/0010-every-workspace-also-gets-the-owner-context.md)).
-- `<workspace>/CONTEXT.md`: a workspace's context file. `<workspace>/workspace.json`: its name, mode and icon
-  (and a code workspace's repo, allowlist changes and Paper connection).
+- `<workspace>/CONTEXT.md`: a planning workspace's context file; a code workspace has none (ADR 0026).
+  `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
+  `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated

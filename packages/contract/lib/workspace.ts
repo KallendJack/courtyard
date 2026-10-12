@@ -106,7 +106,8 @@ export const ContextLine = z
 
 /**
  * Adding a workspace from the app. Its folder name comes from its name; what it's for (What's it
- * for?), when the owner says, is its context file's intro line (docs/ai-conduct.md).
+ * for?), when the owner says, is its context file's intro line (docs/ai-conduct.md), or in a code
+ * workspace, which has no context file, its `workspace.json`'s description (#301).
  */
 export const NewWorkspace = z.object({
   name: WorkspaceName,
@@ -186,8 +187,16 @@ export type OwnerContextShared = z.infer<typeof OwnerContextShared>;
 
 export const WorkspaceDetail = z.object({
   workspace: WorkspaceSummary,
-  /** Absent when the workspace has no context file yet. */
+  /**
+   * Absent when the workspace has no context file yet; always absent in a code workspace, which
+   * has none (#301): its knowledge lives in its repository.
+   */
   contextFile: ContextFile.nullable(),
+  /**
+   * A code workspace's one line, What it's for (#301), kept in its `workspace.json`; a planning
+   * workspace's is its context file's intro.
+   */
+  description: z.string().optional(),
   ownerContextShared: OwnerContextShared,
 });
 export type WorkspaceDetail = z.infer<typeof WorkspaceDetail>;

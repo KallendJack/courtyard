@@ -3,7 +3,8 @@
 A self-hosted place to plan projects and write code with AI models, where every area of your life keeps its own
 context, so you never re-explain your space, your constraints or your stack.
 
-- **Workspaces are folders.** One per project or area, each with a short `CONTEXT.md` split into facts, plans and ideas.
+- **Workspaces are folders.** One per project or area, each with a short `CONTEXT.md` split into facts, plans and ideas
+  (a code workspace has none: what it knows lives in its repository).
 - **Context stays true.** Models save context as you chat; you see every change and can undo it, and each is a git
   commit, backed up wherever you choose.
 - **Documents and Things.** A planning workspace's page also lists its Things, the kit it's about (a card each, with a
@@ -201,9 +202,12 @@ there is used as it is), then makes the workspace on it and opens it.
     "allowlist": { "add": ["cargo test ...", "pnpm lint"], "remove": ["npm ci"] }
   }
   ```
-- **To let its sessions read and draw Paper boards** (Claude only), add Paper to its
-  `workspace.json`: Paper's command on the worker machine and the one Paper file its sessions
-  use, by the id at the end of the file's link in Paper. Sessions read and draw there without
+- **To let its sessions read and draw Paper boards** (Claude only), tap the line under the
+  workspace's name and connect a Paper file in its Connections sheet: one of yours, or a new one
+  named after the workspace. Courtyard asks Paper for them, so Paper has to be open, and it needs
+  Paper's command on the worker machine: set `COURTYARD_PAPER_COMMAND`, or it uses the one another
+  code workspace names. Or add Paper to its `workspace.json` by hand: Paper's command and the one
+  Paper file its sessions use, by the id at the end of the file's link in Paper. Sessions read and draw there without
   asking, ask before deleting anything they didn't make, and show each screenshot they take in
   the chat. Paper has to be open on the worker machine; when it isn't, the session says so and
   carries on.
