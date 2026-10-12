@@ -9,9 +9,10 @@ const BACK = "flex w-fit items-center text-meta text-primary-text hover:underlin
 const NAMED = `${BACK} gap-2 font-medium`;
 
 /**
- * The way back above a page's title: to a workspace, named, with its icon, or with no
- * workspace, to the home page's list of them; from a pull request's review, to the workspace's
- * pull requests, as "All PRs" (#240): its PRs tab (#301).
+ * The way back above a page's title: to a workspace, named, with its icon, or with no workspace
+ * (the owner context's Recent changes and Tidy, Fresh start), to Settings, where they're opened
+ * from (#102); from a pull request's review, to the workspace's pull requests, as "All PRs"
+ * (#240): its PRs tab (#301).
  */
 export function BackLink(props: {
   workspaceId: WorkspaceId | undefined;
@@ -24,8 +25,8 @@ export function BackLink(props: {
   const { workspaceId, within } = props;
   if (workspaceId === undefined) {
     return (
-      <Link to="/" aria-label="Back to Workspaces" className={NAMED}>
-        Workspaces
+      <Link to="/settings" aria-label="Back to Settings" className={NAMED}>
+        Settings
       </Link>
     );
   }

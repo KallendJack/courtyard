@@ -21,7 +21,7 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(notConnected).toContainText("can't push its branch or open a pull request");
 
   await notConnected.getByRole("link", { name: "Sign in to GitHub" }).click();
-  await expect(page).toHaveURL(/\/#connections$/);
+  await expect(page).toHaveURL(/\/settings#connections$/);
   const connections = page.getByRole("region", { name: "Connections" });
   const github = connections.getByRole("listitem", { name: /^GitHub/ });
   await expect(github).toContainText("Not connected");
@@ -47,7 +47,7 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
   await expect(notConnected).toBeHidden();
 
-  await page.goto("/");
+  await page.goto("/settings");
   await signedIn.getByRole("button", { name: "Sign out" }).click();
   await expect(github).toContainText("Not connected");
 });

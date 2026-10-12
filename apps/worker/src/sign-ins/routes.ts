@@ -17,7 +17,7 @@ const problem = (c: Context, why: SignInProblem) => {
   }
 };
 
-/** Signing in to providers from the home page (ADR 0015). */
+/** Signing in to providers from Settings (ADR 0015). */
 export const signInRoutes = (signIns: SignIns) => {
   const routes = new Hono();
 

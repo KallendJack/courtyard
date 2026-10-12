@@ -144,7 +144,7 @@ export const ContextFile = z.object({
 export type ContextFile = z.infer<typeof ContextFile>;
 
 /**
- * Past this many characters (about 400 words) the home page warns that the owner context is long,
+ * Past this many characters (about 400 words) Settings warns that the owner context is long,
  * since it goes with every message in every workspace (ADR 0010).
  */
 export const OWNER_CONTEXT_LONG_CHARACTERS = 2000;

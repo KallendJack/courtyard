@@ -510,7 +510,7 @@ describe("reviewing a pull request", () => {
 
     expect(response.status).toBe(409);
     expect(await errorOf(response)).toBe(
-      "GitHub isn't connected. Sign in to GitHub from Connections on the home page.",
+      "GitHub isn't connected. Sign in to GitHub from Connections in Settings.",
     );
   });
 

@@ -4,7 +4,7 @@ import { OWNER_PASSWORD } from "./owner.ts";
 // Runs against a worker and folders of its own (playwright.config.ts): a fresh start clears every
 // workspace, which would take the other tests' fixtures with it.
 
-test("a fresh start from the home page clears every workspace, once the words are typed", async ({
+test("a fresh start from Settings clears every workspace, once the words are typed", async ({
   page,
 }) => {
   await page.goto("/");
@@ -15,6 +15,7 @@ test("a fresh start from the home page clears every workspace, once the words ar
   const main = page.getByRole("main");
   await expect(main.getByRole("link", { name: "Garage gym" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Fresh start…" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Fresh start" })).toBeVisible();

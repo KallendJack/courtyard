@@ -159,7 +159,7 @@ function FreshStart() {
           >
             Start fresh
           </Button>
-          <ButtonLink variant="quiet" size="lg" to="/">
+          <ButtonLink variant="quiet" size="lg" to="/settings">
             Cancel
           </ButtonLink>
         </div>

@@ -34,7 +34,7 @@ type Snapshot = {
 };
 
 /**
- * One copy for the home page's sign-in box and its Connections, which change together: either
+ * One copy for Settings' sign-in box and its Connections, which change together: either
  * acting on a sign-in shows in both.
  */
 let snapshot: Snapshot = { providers: [], signIns: [], github: undefined };
@@ -64,7 +64,7 @@ const reload = async () => {
   for (const listener of listeners) listener();
 };
 
-/** Where the providers and sign-ins stand, asked for when the home page shows. */
+/** Where the providers and sign-ins stand, asked for when Settings shows. */
 const useModels = () => {
   const now = useSyncExternalStore(subscribe, () => snapshot);
   return { ...now, reload };
@@ -226,7 +226,7 @@ function SignInBox(props: { models: Models; signIn: ProviderSignIn }) {
   }
 }
 
-/** Each sign-in that needs the owner, near the top of the home page. */
+/** Each sign-in that needs the owner, in Settings above Connections (never on Home, #102). */
 function SignInBoxes() {
   const models = useModels();
   useFollowing(models);
@@ -438,7 +438,7 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
 }
 
 /**
- * Connections, at the foot of the home page: every provider and whether it can be used (story
+ * Connections, in Settings (#102): every provider and whether it can be used (story
  * 29), signed in on the worker machine or why not, with Sign in and Sign out for the ones
  * Courtyard signs in to; and GitHub, which Courtyard signs in to itself (#99).
  */
@@ -493,7 +493,7 @@ function GitHubNotice() {
         A session here can work, but can't push its branch or open a pull request until Courtyard is
         signed in to GitHub.
       </span>
-      <ButtonLink size="sm" to="/" hash="connections">
+      <ButtonLink size="sm" to="/settings" hash="connections">
         Sign in to GitHub
       </ButtonLink>
     </InfoBox>
@@ -501,9 +501,8 @@ function GitHubNotice() {
 }
 
 /**
- * The home page's sign-in boxes, near its top, or its Connections, at its foot; or, on a code
- * workspace's page, whether GitHub is connected: one lazy load. Beside Connections goes
- * `beside` (the notifications toggle).
+ * Settings' sign-in boxes, or its Connections; or, on a code workspace's page, whether GitHub is
+ * connected: one lazy load. Beside Connections goes `beside` (the notifications toggle).
  */
 export default function SignIns(props: {
   part: "boxes" | "list" | "github-notice";

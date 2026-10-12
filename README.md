@@ -130,8 +130,8 @@ A step-by-step setup checklist, on any machine, is [#100](https://github.com/Kal
 
 The worker starts when you log on and again if it stops (the live copy's task, above).
 
-**To update** to the newest `main`, press **Update** on the home page (or in Settings on a tablet
-or phone) when it says a new version is ready (it checks every few hours), or run:
+**To update** to the newest `main`, press **Update** at the foot of the home page (or in the Settings sheet on a
+tablet or phone) when it says a new version is ready (it checks every few hours), or run:
 
 ```powershell
 & <live copy>\scripts\live\update.ps1
@@ -149,7 +149,7 @@ or phone) when it says a new version is ready (it checks every few hours), or ru
 - **If any step fails,** it puts the previous version back and starts that instead.
 - **Only one update runs at a time.** If something other than the worker answers on its port,
   the update stops without changing anything.
-- **The result** is written to `live-update.json` in the data folder, and the home page shows it.
+- **The result** is written to `live-update.json` in the data folder, and the home page shows it for an hour.
   From the button, the update's output goes to `live-update.log` there too.
 
 ### Code workspaces
@@ -259,7 +259,7 @@ there is used as it is), then makes the workspace on it and opens it.
 A device can buzz when a session needs your OK, and when a turn finishes or fails; tapping the
 notification opens the session. It shows only the session's title and what it needs.
 
-**To turn them on,** on each device you want them on, open the home page and switch on
+**To turn them on,** on each device you want them on, open **Settings** and switch on
 **Notifications → On this device**, beside Connections, then let the browser show notifications
 when it asks. Each device turns its own on and off.
 
@@ -270,7 +270,7 @@ when it asks. Each device turns its own on and off.
   for Courtyard in the browser's site settings, then turn them on again.
 - **Nothing buzzes for a session you have open** in front of you on that device, nor for a turn
   that ends with a message you queued going next: it isn't your turn yet.
-- **Logging a device out stops its notifications.** After logging in again, opening the home page
+- **Logging a device out stops its notifications.** After logging in again, opening Settings
   picks them up again.
 - **The worker sends them through each browser's own push service** (Google's, Apple's or
   Mozilla's), so the worker machine needs to reach the internet. Its keys are made on its first run
@@ -316,9 +316,9 @@ version, never a Codex you've installed elsewhere.
   folder (`COURTYARD_DATA_DIR`), separate from `~/.codex`, so none of your own Codex settings,
   skills, memories, plugins or connectors reach a workspace, and signing in or out of one doesn't
   touch the other.
-- **Sign in from the home page,** on any device, with a ChatGPT plan. While Codex is signed out,
-  the home page offers Sign in to Codex: it shows a link and a one-time code to finish in any
-  browser, and carries on by itself once you have. Connections, at the foot of the home page,
+- **Sign in from Settings,** on any device, with a ChatGPT plan. While Codex is signed out,
+  Settings offers Sign in to Codex: it shows a link and a one-time code to finish in any
+  browser, and carries on by itself once you have. Connections, in Settings,
   shows who Codex is signed in as, with Sign out. If ChatGPT refuses the code, switch on device
   code sign-in at chatgpt.com (Settings, Security) first. To sign in on the worker machine
   instead, in PowerShell from Courtyard's folder:
@@ -330,7 +330,7 @@ version, never a Codex you've installed elsewhere.
   ```
 
 - **Codex is on unless switched off.** Without a ChatGPT plan, set `COURTYARD_CODEX_PROVIDER=0`
-  to leave Codex out, or say Not now to the home page's sign-in, which it remembers.
+  to leave Codex out, or say Not now to Settings' sign-in, which it remembers.
 
 Codex has no shell in Courtyard: it reads a workspace's files and saves to context only through
 Courtyard's own tools, which the worker keeps to the workspace's folder, as it does Claude's reads.
@@ -340,7 +340,7 @@ Courtyard never reads, stores or logs its sign-in.
 
 Code sessions reach GitHub through Courtyard's own sign-in, never the worker machine's `git` or
 `gh` login: a **GitHub App** you register once and install on only the repos sessions may use, so
-they can't reach any other. You sign in to it from Connections, on the home page, with a device
+they can't reach any other. You sign in to it from Connections, in Settings, with a device
 code. It needs [`gh`](https://cli.github.com) installed on the worker machine (git gets its
 GitHub credentials through it). Until it's set up, a code workspace says its sessions can't push
 or open a pull request.
@@ -395,9 +395,9 @@ Courtyard's own, not your git identity.
 **To back it up,** set `COURTYARD_CONTEXT_REMOTE` to any git remote. Nothing needs to run there:
 a bare repository in a shared folder on a NAS works (`git init --bare` in the folder, then
 `//nas.example/courtyard/context.git`, signed in to once from the worker machine). The worker
-pushes after every change. When a push fails, the change is still kept, the home page says how
-long the backup has been behind and why, and the worker tries again after the next change and
-every ten minutes. Without a remote, the home page says the context isn't backed up.
+pushes after every change. When a push fails, the change is still kept, the home page shows a gold
+line saying since when the backup has been behind (its Fix it opens Settings, which says why), and
+the worker tries again after the next change and every ten minutes. Without a remote, the home page and Settings say the context isn't backed up.
 
 
 ### Archived workspaces
@@ -411,7 +411,7 @@ new one can't take an archived one's folder name.
 
 ### Bringing back what a fresh start cleared
 
-**Fresh start** (a quiet link at the foot of the home page) clears every workspace, your owner
+**Fresh start** (a quiet link in Settings) clears every workspace, your owner
 context and every session, so Courtyard starts as on its first run. Your password, your devices'
 logins and the Claude, Codex and GitHub sign-ins stay. There's no Undo button, but nothing is lost:
 

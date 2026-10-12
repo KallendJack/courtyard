@@ -11,7 +11,7 @@ import { MainBuildCard, useLive } from "./main-build.tsx";
 const FOLLOW_EVERY_MS = 3000;
 /** Past this, the page stops waiting and says so. An update takes a minute or two. */
 const FOLLOW_FOR_MS = 10 * 60 * 1000;
-/** How long the last update's result stays on the home page. */
+/** How long the last update's result stays on Home. */
 const SHOW_RESULT_FOR_MS = 60 * 60 * 1000;
 
 type Following =
@@ -43,9 +43,10 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
  * Updating the live app from the app (ADR 0011): when main has moved on, main's build beside
  * Update (#249), which waits for it to pass; then how the update went once the worker is back.
  * Nothing at all on a worker that isn't a live copy. Asked for once the page is showing, since the
- * worker may be asking GitHub whether main has moved on: the page never waits for that.
+ * worker may be asking GitHub whether main has moved on: the page never waits for that. On Home
+ * (#102), main's build is a row, labelled `label` ("New version"), `short` on a narrow screen.
  */
-export function LiveUpdate() {
+export function LiveUpdate(props: { label?: string; short?: boolean }) {
   const [status, setStatus] = useLive();
   const [following, setFollowing] = useState<Following>({ kind: "idle" });
   const loaded = status?.kind === "loaded" ? status.data : undefined;
@@ -110,7 +111,15 @@ export function LiveUpdate() {
   } else if (following.kind === "problem") {
     content = <FormError message={following.message} />;
   } else if (live.newerOnMain && live.newest && live.build) {
-    return <MainBuildCard newest={live.newest} build={live.build} onUpdate={update} />;
+    return (
+      <MainBuildCard
+        newest={live.newest}
+        build={live.build}
+        onUpdate={update}
+        {...(props.label === undefined ? {} : { label: props.label })}
+        {...(props.short === undefined ? {} : { short: props.short })}
+      />
+    );
   } else if (live.newerOnMain && live.newest) {
     // No build to go by (GitHub can't be asked): Update as it was before main's build showed.
     content = (

@@ -15,7 +15,7 @@ import {
   testWorker,
 } from "./testing.ts";
 
-// Signing in to a provider whose sign-in Courtyard handles, from the home page (ADR 0015).
+// Signing in to a provider whose sign-in Courtyard handles, from Settings (ADR 0015).
 
 let root: string;
 
@@ -40,7 +40,7 @@ const workerWith = (finishAfterMs?: number) =>
 const signIns = async (request: Requester) =>
   SignInList.parse(await (await request("/api/sign-ins")).json()).signIns;
 
-describe("signing in from the home page", () => {
+describe("signing in from Settings", () => {
   it("lists each provider Courtyard signs in to, and where its sign-in stands", async () => {
     const request = await asOwner(workerWith());
 

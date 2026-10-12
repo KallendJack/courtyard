@@ -176,7 +176,7 @@ describe("Carry on", () => {
     const response = await carryOn(request, session.id, turn);
 
     expect(response.status).toBe(409);
-    expect(await errorOf(response)).toMatch(/Away isn't signed in.*home page/);
+    expect(await errorOf(response)).toMatch(/Away isn't signed in.*Settings/);
   });
 
   it("is refused for a turn that didn't hit a usage limit", async () => {

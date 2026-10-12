@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("the home page says when the context backup is behind, and why", async ({ page }) => {
-  await page.goto("/");
+test("Settings says when the context backup is behind, and why", async ({ page }) => {
+  await page.goto("/settings");
   const backup = page.getByRole("region", { name: "Backup" });
 
   // The page asks once the worker has tried its first push, which on a fresh worker can take

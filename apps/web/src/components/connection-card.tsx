@@ -17,7 +17,7 @@ const STATES = {
 } as const;
 
 /**
- * One of the home page's Connections (#99): a provider, or GitHub. Its name, a line about it,
+ * One of Settings' Connections (#99): a provider, or GitHub. Its name, a line about it,
  * where it stands, and what the owner can do; one waiting for the owner is ringed in gold, with
  * what to do inside it.
  */

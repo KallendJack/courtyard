@@ -16,7 +16,7 @@ export const gitHubProblem = (c: Context, why: GitHubProblem) => {
     case "signed-out":
       return apiError(c, {
         status: 409,
-        error: "GitHub isn't connected. Sign in to GitHub from Connections on the home page.",
+        error: "GitHub isn't connected. Sign in to GitHub from Connections in Settings.",
       });
     case "github":
       return apiError(c, { status: 502, error: why.message });
@@ -25,11 +25,11 @@ export const gitHubProblem = (c: Context, why: GitHubProblem) => {
   }
 };
 
-/** Courtyard's GitHub sign-in, from Connections on the home page (#99). */
+/** Courtyard's GitHub sign-in, from Connections in Settings (#99). */
 export const gitHubRoutes = (github: GitHub) => {
   const routes = new Hono();
 
-  /** Where the sign-in stands, as the home page shows it. */
+  /** Where the sign-in stands, as Settings shows it. */
   const answer = async (c: Context) => {
     const status = await github.status();
     if (!status.ok) return apiError(c, { status: 500, error: STORAGE });

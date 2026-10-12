@@ -379,7 +379,7 @@ function ContextFileCard(props: {
       {ownerContextShared !== "none" && (
         <p className="mt-6 text-sm text-muted-foreground">
           Also reads{" "}
-          <Link to="/" className="text-foreground underline">
+          <Link to="/settings" className="text-foreground underline">
             {ownerContextShared === "all"
               ? "your owner context"
               : "how you like answers (from your owner context)"}

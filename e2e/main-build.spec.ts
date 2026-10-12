@@ -77,7 +77,7 @@ test("while main's build runs, each job shows its bar, and Update waits for it",
 }) => {
   await withMainBuild(page, "running");
   await page.goto("/");
-  const card = page.getByRole("region", { name: "Updates" });
+  const card = page.getByRole("region", { name: "New version" });
 
   await expect(card).toContainText("Rail and Talk key 7d518cd");
   await expect(card.getByRole("status")).toHaveText("Unit tests · about 2 min");
@@ -89,9 +89,9 @@ test("while main's build runs, each job shows its bar, and Update waits for it",
 test("once main's build has passed, Update is offered", async ({ page }) => {
   await withMainBuild(page, "passed");
   await page.goto("/");
-  const card = page.getByRole("region", { name: "Updates" });
+  const card = page.getByRole("region", { name: "New version" });
 
-  await expect(card.getByRole("status")).toHaveText("Passed · ready to update");
+  await expect(card.getByRole("status")).toHaveText("Passed");
   await expect(card.getByRole("listitem")).toHaveText(jobsSaid([]));
   expect(await barColours(card)).toEqual(await coloursOf(page, []));
   await expect(card.getByRole("button", { name: "Update" })).toBeEnabled();
@@ -102,9 +102,9 @@ test("when main's build has failed, Update waits, and Details opens the failed j
 }) => {
   await withMainBuild(page, "failed");
   await page.goto("/");
-  const card = page.getByRole("region", { name: "Updates" });
+  const card = page.getByRole("region", { name: "New version" });
 
-  await expect(card.getByRole("status")).toHaveText("Unit tests failed · Update waits");
+  await expect(card.getByRole("status")).toHaveText("Unit tests failed");
   await expect(card.getByRole("listitem")).toHaveText(jobsSaid(FAILED));
   expect(await barColours(card)).toEqual(await coloursOf(page, FAILED));
   await expect(card.getByRole("button", { name: "Update" })).toHaveCount(0);
@@ -120,13 +120,13 @@ test("the page asks again while main's build runs, and offers Update once it pas
   let state: State = "running";
   await withMainBuild(page, () => state);
   await page.goto("/");
-  const card = page.getByRole("region", { name: "Updates" });
+  const card = page.getByRole("region", { name: "New version" });
   await expect(card.getByRole("button", { name: "Update" })).toBeDisabled();
 
   state = "passed";
   await page.clock.runFor(16_000);
 
-  await expect(card.getByRole("status")).toHaveText("Passed · ready to update");
+  await expect(card.getByRole("status")).toHaveText("Passed");
   await expect(card.getByRole("button", { name: "Update" })).toBeEnabled();
 });
 

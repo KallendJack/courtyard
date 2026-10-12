@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppChangesRouteImport } from './routes/_app/changes'
 import { Route as AppFreshStartRouteImport } from './routes/_app/fresh-start'
 import { Route as AppNewWorkspaceRouteImport } from './routes/_app/new-workspace'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTidyRouteImport } from './routes/_app/tidy'
 import { Route as AppWorkspacesWorkspaceIdIndexRouteImport } from './routes/_app/workspaces.$workspaceId.index'
 import { Route as AppWorkspacesWorkspaceIdDocumentsSlugRouteImport } from './routes/_app/workspaces.$workspaceId.documents.$slug'
@@ -56,6 +57,11 @@ const AppNewWorkspaceRoute = AppNewWorkspaceRouteImport.update({
   path: '/new-workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTidyRoute = AppTidyRouteImport.update({
   id: '/tidy',
   path: '/tidy',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/changes': typeof AppChangesRoute
   '/fresh-start': typeof AppFreshStartRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/settings': typeof AppSettingsRoute
   '/tidy': typeof AppTidyRoute
   '/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/documents/$slug': typeof AppWorkspacesWorkspaceIdDocumentsSlugRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/changes': typeof AppChangesRoute
   '/fresh-start': typeof AppFreshStartRoute
   '/new-workspace': typeof AppNewWorkspaceRoute
+  '/settings': typeof AppSettingsRoute
   '/tidy': typeof AppTidyRoute
   '/': typeof AppIndexRoute
   '/workspaces/$workspaceId': typeof AppWorkspacesWorkspaceIdIndexRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/_app/changes': typeof AppChangesRoute
   '/_app/fresh-start': typeof AppFreshStartRoute
   '/_app/new-workspace': typeof AppNewWorkspaceRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/_app/tidy': typeof AppTidyRoute
   '/_app/': typeof AppIndexRoute
   '/_app/workspaces/$workspaceId/': typeof AppWorkspacesWorkspaceIdIndexRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/changes'
     | '/fresh-start'
     | '/new-workspace'
+    | '/settings'
     | '/tidy'
     | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/documents/$slug'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/changes'
     | '/fresh-start'
     | '/new-workspace'
+    | '/settings'
     | '/tidy'
     | '/'
     | '/workspaces/$workspaceId'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/_app/changes'
     | '/_app/fresh-start'
     | '/_app/new-workspace'
+    | '/_app/settings'
     | '/_app/tidy'
     | '/_app/'
     | '/_app/workspaces/$workspaceId/'
@@ -227,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNewWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/tidy': {
       id: '/_app/tidy'
       path: '/tidy'
@@ -269,6 +288,7 @@ interface AppRouteChildren {
   AppChangesRoute: typeof AppChangesRoute
   AppFreshStartRoute: typeof AppFreshStartRoute
   AppNewWorkspaceRoute: typeof AppNewWorkspaceRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppTidyRoute: typeof AppTidyRoute
   AppIndexRoute: typeof AppIndexRoute
   AppWorkspacesWorkspaceIdIndexRoute: typeof AppWorkspacesWorkspaceIdIndexRoute
@@ -281,6 +301,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppChangesRoute: AppChangesRoute,
   AppFreshStartRoute: AppFreshStartRoute,
   AppNewWorkspaceRoute: AppNewWorkspaceRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppTidyRoute: AppTidyRoute,
   AppIndexRoute: AppIndexRoute,
   AppWorkspacesWorkspaceIdIndexRoute: AppWorkspacesWorkspaceIdIndexRoute,

@@ -95,7 +95,7 @@ const turnOff = async (here: Extract<Here, { kind: "ready" }>) => {
 };
 
 /**
- * Notifications, beside Connections on the home page (#173): turned on per device, for when a
+ * Notifications, beside Connections in Settings (#173): turned on per device, for when a
  * session needs the owner's OK and when a turn finishes or fails.
  */
 export default function NotificationsCard() {

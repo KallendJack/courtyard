@@ -470,7 +470,7 @@ const effortsOf = (model: z.infer<typeof CodexModel>): EffortInfo[] => {
     .map((level) => ({ id: Effort.parse(level), label: EFFORT_LABELS[level] }));
 };
 
-const SIGNED_OUT = "Codex isn't signed in. Sign in to Codex on the home page.";
+const SIGNED_OUT = "Codex isn't signed in. Sign in to Codex in Settings.";
 const NEEDS_UPDATING = "Codex needs updating.";
 /** Why Codex can't be reached, in plain words. */
 const START_FAILURES: Record<StartFailure, string> = {
@@ -961,7 +961,7 @@ export const createCodexProvider = (options: {
   });
 
   /**
-   * Signing in from the home page with a device code (ADR 0015): Codex gives a link and a
+   * Signing in from Settings with a device code (ADR 0015): Codex gives a link and a
    * one-time code to finish on any device, and keeps the sign-in in its own home. Only the link and
    * code leave this file.
    */

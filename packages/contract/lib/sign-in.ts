@@ -29,14 +29,14 @@ export const SignInState = z.discriminatedUnion("kind", [
 ]);
 export type SignInState = z.infer<typeof SignInState>;
 
-/** One provider's sign-in, as the home page shows it. */
+/** One provider's sign-in, as Settings shows it. */
 export const ProviderSignIn = z.object({
   provider: ProviderId,
   label: z.string(),
   /** What the owner signs in to, by name: "ChatGPT". */
   service: z.string(),
   state: SignInState,
-  /** Whether the owner said Not now to signing in, so the home page doesn't ask again. */
+  /** Whether the owner said Not now to signing in, so Settings doesn't ask again. */
   notNow: z.boolean(),
 });
 export type ProviderSignIn = z.infer<typeof ProviderSignIn>;

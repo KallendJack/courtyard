@@ -11,6 +11,8 @@ export function Page(props: {
    * which lays them out by its own width: a column on a phone, two once there's room.
    */
   wide?: boolean;
+  /** At least the panel's height, so what ends the page sits at its foot (Home's foot rows, #102). */
+  fill?: boolean;
 }) {
   return (
     <main
@@ -18,6 +20,7 @@ export function Page(props: {
         "mx-auto flex w-full flex-col px-4 pt-6 md:px-8 md:pt-12",
         props.wide ? "@container max-w-5xl" : "max-w-reading",
         !props.flushBottom && "pb-10",
+        props.fill && "min-h-full",
       )}
     >
       {props.children}

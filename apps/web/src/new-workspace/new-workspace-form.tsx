@@ -223,7 +223,7 @@ function Repos(props: {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-body text-muted-foreground">{repos.message}</p>
-        <ButtonLink size="sm" to="/" hash="connections">
+        <ButtonLink size="sm" to="/settings" hash="connections">
           Sign in to GitHub
         </ButtonLink>
       </div>

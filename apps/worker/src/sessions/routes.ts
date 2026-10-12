@@ -74,7 +74,7 @@ const noteRefused = (refusal: NoteRefusal, act: NoteAct) => {
 const noOverflow = (overflow: Exclude<Overflow, { kind: "carry-on" }>) => {
   switch (overflow.kind) {
     case "sign-in":
-      return `${overflow.label} isn't signed in. Sign in to ${overflow.label} on the home page to carry on there.`;
+      return `${overflow.label} isn't signed in. Sign in to ${overflow.label} in Settings to carry on there.`;
     case "at-limit": {
       const names = overflow.others.map((other) => other.label);
       return names.length === 1

@@ -9,7 +9,7 @@ const OWNER_FILE = join(import.meta.dirname, "..", "test-results", "e2e", "conte
 test("the owner starts their owner context, fills it in, and each workspace says it reads it", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/settings");
   const panel = page.getByRole("region", { name: "Owner context" });
 
   await panel.getByRole("button", { name: "Start your owner context" }).click();
@@ -39,7 +39,7 @@ test("the owner starts their owner context, fills it in, and each workspace says
 });
 
 // In this file, so it never runs alongside the test above, which needs no OWNER.md at first.
-test("a save to the owner context names its place, shows on the home page, and Edit moves it", async ({
+test("a save to the owner context names its place, shows in Settings, and Edit moves it", async ({
   page,
 }) => {
   writeFileSync(OWNER_FILE, "## About me\n### Facts\n- Lives in Leeds.\n");
@@ -51,7 +51,7 @@ test("a save to the owner context names its place, shows on the home page, and E
   await expect(notes).toContainText("Saved to Owner context → About me → Facts");
   await expect(notes).toContainText("Has a bad left knee.");
   const session = page.url();
-  await page.goto("/");
+  await page.goto("/settings");
   const panel = page.getByRole("region", { name: "Owner context" });
   await expect(panel.getByRole("region", { name: "Facts" })).toContainText("Has a bad left knee.");
 
@@ -63,7 +63,7 @@ test("a save to the owner context names its place, shows on the home page, and E
   await expect(notes).toContainText("Saved to Facts · edited");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("Has a bad left knee.");
-  await page.goto("/");
+  await page.goto("/settings");
   await expect(panel.getByRole("region", { name: "Facts" })).not.toContainText("left knee");
 });
 
@@ -71,7 +71,7 @@ test("an empty owner context offers Get to know me, which opens a session with t
   page,
 }) => {
   rmSync(OWNER_FILE, { force: true });
-  await page.goto("/");
+  await page.goto("/settings");
   const panel = page.getByRole("region", { name: "Owner context" });
 
   await panel.getByRole("button", { name: "Get to know me", exact: true }).click();
@@ -84,7 +84,7 @@ test("an empty owner context offers Get to know me, which opens a session with t
   await expect(page.getByRole("list", { name: "Saved to context" })).toContainText(
     "Lives in Leeds.",
   );
-  await page.goto("/");
+  await page.goto("/settings");
   await expect(panel.getByRole("region", { name: "Facts" })).toContainText("Lives in Leeds.");
   await expect(panel.getByRole("button", { name: "Get to know me", exact: true })).toHaveCount(0);
 });

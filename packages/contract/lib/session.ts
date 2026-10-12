@@ -88,7 +88,7 @@ export const ProviderStatus = z.discriminatedUnion("available", [
     label: z.string(),
     available: z.literal(false),
     reason: z.string(),
-    /** Unavailable only because it isn't signed in, which the owner can do from the home page. */
+    /** Unavailable only because it isn't signed in, which the owner can do from Settings. */
     signedOut: z.boolean().optional(),
   }),
 ]);

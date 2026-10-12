@@ -325,7 +325,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
 - **`main.tsx`** starts the router, which moves the scroll only for a move to another page (to the top, or back
   to where that page was), never when a page reloads its data (#168). **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
   generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
-  workspaces down the side or across the top; the rest are pages. Behind the login a page scrolls on its raised
+  workspaces down the side or across the top; the rest are pages. `_app/index.tsx` is the home page (#102), the
+  workspaces as tiles; `_app/settings.tsx` is Settings, with everything that used to be on the home page besides
+  them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
+  devices), in the sidebar on a desktop and behind the frame's Settings sheet on a touch screen. Behind the login a page scrolls on its raised
   panel, never the window (#266), so the sidebar or the Handheld frame stays put and the scroll bar sits on the
   panel's edge: `components/page-scroll.ts` hands the panel to whatever follows the scroll (a session's turns), and
   names it to the router, which keeps its scroll per page.
@@ -401,7 +404,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
     box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
     for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a
-    first visit shows faint placeholder rows in its place; the PRs list does the same.
+    first visit shows faint placeholder rows in its place; the PRs list does the same. What waits on the owner is
+    worked out in `needs.ts`, with no React or styles, so the home page's tiles use the same rules.
   - **`review/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
     (`pull-requests.tsx`, the PRs tab's list, which shares its open pull requests with Home's Needs you): every open
     PR on the repository from `pull-requests/`, whoever opened it, with its title, branch, who it's from and where
@@ -422,22 +426,23 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
     stylesheet of its own (`review.css`, holding the ask line's classes too), like `things/`.
-  - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, on the
-    home page and in the Handheld frame's Settings (`live-update.tsx`), and main's build beside Update
+  - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
+    of the home page (main's build as a row labelled New version, #102) and in the Handheld frame's Settings
+    (`live-update.tsx`), and main's build beside Update
     (`main-build.tsx`, #249): the newest main's title, one bar per CI job (violet running, moss passed,
     red failed), and Update, offered only once it has passed; quiet while it runs; Details, the failed
     job's page on GitHub, once it has failed. Its hook asks again every 15 seconds while the build runs
     and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
     follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
     first load.
-  - **`sign-ins/`:** the home page's sign-in box and Connections (each provider, and GitHub with its device code,
+  - **`sign-ins/`:** Settings' sign-in box and Connections (each provider, and GitHub with its device code,
     account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
     load wherever they show.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
   - **`matt-setup/`:** the setup check's offer (#181), opened from its row in a code workspace's Needs you (#301):
     an approval card (`components/approval-card.tsx`, which a session's approvals use too) saying what's missing,
     then where its pull request is, with its calls (`api.ts`).
-  - **`notifications/`:** the home page's notifications toggle for this device, beside Connections (#173): it
+  - **`notifications/`:** Settings' notifications toggle for this device, beside Connections (#173): it
     subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
     opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
   - **`new-workspace/`:** New workspace's form (#258, #264), loaded with its page, with its calls
@@ -449,7 +454,15 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
     put what's said there as they would in a message box. A code workspace just made opens with its
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).
-- **Home page and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
+  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"), with a stylesheet of its own
+    (`home.css`, holding `components/kept.tsx`'s classes too), like `code-home/`. Each tile's line
+    (`tile-line.tsx`): what waits on the owner, by Needs you's rules (`code-home/needs.ts`) from the workspace's
+    sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home
+    and PRs list share), else when it was last used; kept for the tab's lifetime, a faint line in its place until
+    then, so nothing jumps. And the foot rows (`foot.tsx`), shown only when needed: main's build with Update
+    (`live/`), and one gold problem line, the worst of what's wrong (context changes not kept, the backup
+    behind, a workspace's config ignored, no backup set up), with Fix it to where it's fixed.
+- **Settings and login pieces** sit at the top of `src/`: the backup notice (`backup-status.tsx`), the owner context panel (`owner-context-panel.tsx`), the setup and login form
   (`password-page.tsx`), logging out other devices (`log-out-others.tsx`), what to show when the worker gives no data
   (`problems.tsx`), and how dates read (`when.ts`). Beside them, `workspace-page.ts` asks for everything a
   workspace's page shows; its route's loader imports it, so that code and its schemas aren't on the first load.
@@ -481,7 +494,7 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes, and
   the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
   (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
-  home page's list and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
+  home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
   (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
   bottom sheet on a desktop.

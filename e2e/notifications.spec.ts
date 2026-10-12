@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { standInPushService } from "./push-service.ts";
 
-// Notifications (#173): each device turns its own on, beside Connections on the home page. The
+// Notifications (#173): each device turns its own on, beside Connections in Settings. The
 // browser's push service is a stand-in (push-service.ts); the worker is real.
 
 /** The worker's answer to the next time the page sends it this device's subscription, or turns it off. */
@@ -14,7 +14,7 @@ const workerHears = (page: Page, change: "on" | "off") =>
 
 test("the owner turns notifications on for this device, and off again", async ({ page }) => {
   await standInPushService(page);
-  await page.goto("/");
+  await page.goto("/settings");
   const card = page.getByRole("region", { name: "Notifications" });
   const here = card.getByRole("switch", { name: "On this device" });
   await expect(card).toContainText("When a session needs your OK, or a turn finishes or fails.");

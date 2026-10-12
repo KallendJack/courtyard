@@ -5,8 +5,8 @@ import { expect, test } from "@playwright/test";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
-test("the owner signs in from the home page, then out, then says Not now", async ({ page }) => {
-  await page.goto("/");
+test("the owner signs in from Settings, then out, then says Not now", async ({ page }) => {
+  await page.goto("/settings");
   const box = page.getByRole("region", { name: "Sign in to Fake" });
   const fake = page
     .getByRole("region", { name: "Connections" })

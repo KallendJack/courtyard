@@ -27,7 +27,7 @@ const freshStartPort = 8798 + portShift;
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
   COURTYARD_FAKE_PROVIDER: "1",
-  // The fake acts signed out, so signing in from the home page can be tested.
+  // The fake acts signed out, so signing in from Settings can be tested.
   COURTYARD_FAKE_SIGN_IN: "1",
   // A second fake, which acts out a usage limit, so overflow can be tested.
   COURTYARD_SECOND_FAKE_PROVIDER: "1",

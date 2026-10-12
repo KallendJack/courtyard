@@ -410,7 +410,7 @@ const ownerFile = () => readFile(ownerPath(), "utf8");
 describe("a save to the owner context", () => {
   beforeEach(() => writeFile(ownerPath(), OWNER));
 
-  it("adds to About me, as a change to the owner context alone, which the home page shows", async () => {
+  it("adds to About me, as a change to the owner context alone, which Settings shows", async () => {
     const { request, session, events } = await sessionSaving([
       { action: "add", place: "owner", section: "facts", text: "Has a bad left knee." },
     ]);

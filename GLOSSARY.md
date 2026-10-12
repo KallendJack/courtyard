@@ -109,7 +109,7 @@ _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:
 The list of changes to a workspace's context file or the owner context, newest first, each with Undo, on a page of
-its own linked from the workspace page (and the home page).
+its own linked from the workspace page (and Settings).
 _Avoid_: history, log, activity (that's a model's doing in a session)
 
 **Tidy**:
@@ -124,14 +124,14 @@ each answer, until the topics are covered or the owner has had enough, and wraps
 _Avoid_: onboarding, interview, starter, template
 
 **Get to know me**:
-Get to know for the owner context, from a button on the home page: the owner's life (where they live and who with,
+Get to know for the owner context, from a button in Settings: the owner's life (where they live and who with,
 work, health, plans, how they like answers), saved to the owner context. Its session runs in the first planning
 workspace.
 _Avoid_: onboarding, profile setup
 
 **Backup**:
 The context folder's copy on a git remote the owner chooses, such as a shared folder on a NAS (ADR 0014), pushed
-after every change. The home page says when it's behind.
+after every change. Settings says when it's behind, and the home page's problem line points there.
 _Avoid_: sync, mirror, remote (on its own)
 
 **Fresh start**:
@@ -160,6 +160,18 @@ _Avoid_: read-only workspace, chat workspace
 A workspace tied to a git repository on the worker machine, where a provider that can code may edit files and run
 commands. It has no context file (#301): its name, its line and its connections are in its `workspace.json`.
 _Avoid_: dev workspace, repo workspace
+
+**Home page**:
+The page the Courtyard mark opens (#102): the workspaces, a tile each with one line (what waits on the owner, else
+when it was last used), and New workspace. At its foot, only when needed, main's build with Update and the
+**problem line**, one gold line for the worst thing wrong, with Fix it. Everything else is in Settings.
+_Avoid_: dashboard, launcher, Home (that's a workspace page's first tab)
+
+**Settings**:
+The page with the owner context, the backup when it needs the owner, the sign-ins and Connections, Fresh start and
+logging out every other device (#102): in the sidebar on a desktop, and from the frame's Settings sheet (All
+settings) on a touch screen.
+_Avoid_: preferences, account, profile
 
 **Home**:
 A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
@@ -205,13 +217,13 @@ owner uses elsewhere on the machine (ADR 0015).
 _Avoid_: Codex config, profile, ~/.codex
 
 **Sign-in**:
-A provider's own login, for a provider whose sign-in Courtyard handles (Codex's): started from the home page with a
+A provider's own login, for a provider whose sign-in Courtyard handles (Codex's): started from Settings with a
 link and a one-time code to finish on any device, and kept in the provider's own home. Courtyard sees only the link
 and code. The owner can say Not now to it (ADR 0015).
 _Avoid_: device login (that's the owner's login to Courtyard), token, credentials
 
 **Connections**:
-The list at the foot of the home page of what Courtyard is signed in to: each provider, and GitHub, with Sign in
+The list in Settings of what Courtyard is signed in to: each provider, and GitHub, with Sign in
 and Sign out. A code workspace's own connections (its GitHub repo and Paper file) are in its Connections sheet,
 from its connections line (#308).
 _Avoid_: integrations, accounts, models list
