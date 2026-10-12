@@ -7,7 +7,7 @@ agent's memory. Inside a spec, order comes from GitHub's blocked-by links, as Ma
 - **Each milestone is a group of work** that leaves something usable, titled `N · <name>`, worked through in number
   order. `Later` holds parked ideas, in no order.
 - **Its description gives the build order inside it:** `Build order: #A → #B → #C.`, with a note when something waits
-  on the owner.
+  on the owner. A code workspace's Next up reads this line: it ends at the first full stop, so notes go after it.
 - **Every open issue is in exactly one milestone.**
 
 ## What comes first
