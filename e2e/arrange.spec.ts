@@ -97,7 +97,7 @@ test.describe("on a tablet's rail", () => {
     await expect.poll(() => before(tiles, "Reading list", "Garage gym")).toBe(true);
     // Still Home: letting go isn't a tap on the workspace.
     await expect(page).toHaveURL(/\/$/);
-    const home = page.getByRole("list", { name: "Workspaces" }).getByRole("link");
+    const home = tilesOnHome(page);
     await expect.poll(() => namesOnHome(home, "Reading list", "Garage gym")).toBe(true);
     await shot(page, "arrange-home-after");
 
@@ -132,12 +132,12 @@ test.describe("on a tablet's rail", () => {
     page,
   }) => {
     await page.goto("/");
-    const home = page.getByRole("list", { name: "Workspaces" }).getByRole("link");
-    await expect(home.filter({ hasText: "Reading list" })).toBeVisible();
+    const home = tilesOnHome(page);
+    await expect(tileOnHome(home, "Reading list")).toBeVisible();
     await expect(page.getByRole("main").locator("[data-arrange]")).toHaveCount(0);
 
-    const from = await middleOf(home.filter({ hasText: "Reading list" }));
-    const to = await middleOf(home.filter({ hasText: "Garage gym" }));
+    const from = await middleOf(tileOnHome(home, "Reading list"));
+    const to = await middleOf(tileOnHome(home, "Garage gym"));
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     await page.waitForTimeout(600);
@@ -147,6 +147,17 @@ test.describe("on a tablet's rail", () => {
     expect(await namesOnHome(home, "Garage gym", "Reading list")).toBe(true);
   });
 });
+
+/**
+ * Home's tiles. The list's name is matched exactly: "Workspaces" is also part of the rail's
+ * "Planning workspaces" (#351).
+ */
+const tilesOnHome = (page: Page) =>
+  page.getByRole("main").getByRole("list", { name: "Workspaces", exact: true }).getByRole("link");
+
+/** The tile on Home named `name`, not one whose line below only mentions it (#351). */
+const tileOnHome = (tiles: Locator, name: string) =>
+  tiles.filter({ has: tiles.page().getByText(name, { exact: true }) });
 
 /** Whether `first` comes before `second` among Home's tiles, which are named by their text. */
 const namesOnHome = async (tiles: Locator, first: string, second: string) => {
