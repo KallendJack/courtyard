@@ -788,6 +788,24 @@ const homeFitsOneScreen = async (page: Page) => {
   await expect.poll(async () => (await pageScroll(page)).scrolls).toBe(false);
 };
 
+/** Tapping Build on Next up's first issue keeps Start building and Cancel inside its card. */
+const buildButtonsFitTheirCard = async (page: Page) => {
+  const build = blocks(page).nextUp.getByRole("region", { name: "Build #197" });
+  await build.getByRole("button", { name: "Build" }).click();
+  const [card, start, cancel] = await Promise.all([
+    build.boundingBox(),
+    build.getByRole("button", { name: "Start building" }).boundingBox(),
+    build.getByRole("button", { name: "Cancel" }).boundingBox(),
+  ]);
+  if (card === null || start === null || cancel === null) throw new Error("Not on the page");
+  for (const button of [start, cancel]) {
+    expect(button.x).toBeGreaterThanOrEqual(card.x);
+    expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
+  }
+  await build.getByRole("button", { name: "Cancel" }).click();
+  await expect(build.getByRole("button", { name: "Build" })).toBeVisible();
+};
+
 test.describe("a code workspace's Home (#301, #308)", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -856,6 +874,16 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       const { nextUp } = blocks(page);
       await nextUp.getByRole("button", { name: "More · 9" }).click();
       await expect(nextUp.getByRole("listitem")).toHaveCount(11);
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("once Build is tapped, Start building and Cancel stay inside its card (#346)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      await buildButtonsFitTheirCard(page);
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -951,6 +979,17 @@ test.describe("a code workspace's Home (#301, #308)", () => {
 
   test.describe("building and merging", () => {
     test.use({ viewport: { width: 1440, height: 900 } });
+
+    // Before Build below claims #197.
+    test("once Build is tapped, Start building and Cancel stay inside its card (#346)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      await buildButtonsFitTheirCard(page);
+      await request.post("/api/github/sign-out", { data: {} });
+    });
 
     test("Build shows the issue and its model first, then starts a session on it", async ({
       page,
