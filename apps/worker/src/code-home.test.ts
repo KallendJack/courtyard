@@ -52,10 +52,19 @@ afterEach(async () => {
 /** A worker with a code workspace, Side project, on the fake GitHub with these issues, signed in. */
 const signedInWith = async (
   issues: readonly FakeIssue[],
-  more: { paper?: FakePaperFiles; config?: Record<string, unknown>; signIn?: boolean } = {},
+  more: {
+    paper?: FakePaperFiles;
+    config?: Record<string, unknown>;
+    signIn?: boolean;
+    /** Its milestones' descriptions, by title. */
+    milestones?: Readonly<Record<string, string>>;
+  } = {},
 ) => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project", ...more.config });
-  const github = createFakeGitHub({ issues: { [onGitHub]: issues } });
+  const github = createFakeGitHub({
+    issues: { [onGitHub]: issues },
+    ...(more.milestones === undefined ? {} : { milestones: { [onGitHub]: more.milestones } }),
+  });
   const request = await asOwner(
     testWorker({
       root,
@@ -155,6 +164,32 @@ describe("Next up (#301)", () => {
     expect(await nextUpOf(request)).toEqual([
       [3, null],
       [7, null],
+    ]);
+  });
+
+  it("follows a milestone's Build order line, then the rest of it by number (#336)", async () => {
+    const { request } = await signedInWith(
+      [
+        { number: 12, title: "Tablet hub", milestone: "5 · Tablet hub" },
+        { number: 2, title: "Two", milestone: "4 · Code workspaces" },
+        { number: 3, title: "Three", milestone: "4 · Code workspaces" },
+        { number: 5, title: "Five", milestone: "4 · Code workspaces" },
+        { number: 9, title: "Nine", milestone: "4 · Code workspaces" },
+      ],
+      {
+        milestones: {
+          "4 · Code workspaces": "NOW. Build order: #9 → #7 → #3. Notes in #1.",
+          "5 · Tablet hub": "Next.",
+        },
+      },
+    );
+
+    expect(await nextUpOf(request)).toEqual([
+      [9, "4 · Code workspaces"],
+      [3, "4 · Code workspaces"],
+      [2, "4 · Code workspaces"],
+      [5, "4 · Code workspaces"],
+      [12, "5 · Tablet hub"],
     ]);
   });
 

@@ -222,7 +222,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
   `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
   pull request that closes it), in
-  milestone order (the number a milestone's title leads with, then Later, then none), asked of GitHub only when a
+  milestone order (the number a milestone's title leads with, then Later, then none) and, inside a milestone, the
+  order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
   page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
   message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the
   session's branch. Its routes are a workspace's `next-up` and `next-up/:number/build`.
