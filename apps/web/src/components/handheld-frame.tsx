@@ -15,6 +15,7 @@ import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { useKeptSessions } from "../sessions/kept-sessions.ts";
+import { ARRANGE_HELD, ARRANGE_SLOT, type Held, useArrange } from "./arrange.ts";
 import { Button } from "./button.tsx";
 import { ButtonLink } from "./button-link.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
@@ -150,6 +151,13 @@ export default function HandheldFrame(props: {
     box.focus();
   }, [focusBox, boxOpen, box]);
 
+  // On a tablet the rail arranges the workspaces (#321): hold one and drag it up or down. Let go
+  // where it was, the open one shows its recent sessions, as holding it did before.
+  const arrange = useArrange({
+    workspaces: props.workspaces,
+    stayed: (workspace) => workspace.id === workspaceId && setSheet("recent"),
+  });
+  const listed = tablet ? arrange.workspaces : props.workspaces;
   const tile = (workspace: WorkspaceSummary) => (
     <Tile
       key={workspace.id}
@@ -157,10 +165,13 @@ export default function HandheldFrame(props: {
       look={tablet ? "rail" : "row"}
       open={workspace.id === workspaceId}
       showRecent={() => setSheet("recent")}
+      {...(tablet ? { arrange: arrange.handle(workspace) } : {})}
+      held={tablet && arrange.held?.id === workspace.id}
     />
   );
-  const planning = props.workspaces.filter((workspace) => workspace.mode !== "code");
-  const code = props.workspaces.filter((workspace) => workspace.mode === "code");
+  const held = tablet && listed.find((workspace) => workspace.id === arrange.held?.id);
+  const planning = listed.filter((workspace) => workspace.mode !== "code");
+  const code = listed.filter((workspace) => workspace.mode === "code");
   const newWorkspace = (
     <Link
       to="/new-workspace"
@@ -250,19 +261,30 @@ export default function HandheldFrame(props: {
               className="fixed top-0 bottom-(--frame-bar) left-0 z-20 flex w-[calc(--spacing(28)+env(safe-area-inset-left))] flex-col items-center gap-2.5 overflow-y-auto bg-background pt-4.5 pb-5 pl-[env(safe-area-inset-left)]"
             >
               {home}
-              <ul aria-label="Planning workspaces" className="flex flex-col gap-2 pt-1.5">
+              <ul
+                ref={arrange.group}
+                data-arrange-group=""
+                aria-label="Planning workspaces"
+                className="flex flex-col gap-2 pt-1.5"
+              >
                 {planning.map((workspace) => (
                   <li key={workspace.id}>{tile(workspace)}</li>
                 ))}
                 <li>{newWorkspace}</li>
               </ul>
               {code.length > 0 && (
-                <ul aria-label="Code workspaces" className="flex flex-col gap-2 pt-3">
+                <ul
+                  ref={arrange.group}
+                  data-arrange-group=""
+                  aria-label="Code workspaces"
+                  className="flex flex-col gap-2 pt-3"
+                >
                   {code.map((workspace) => (
                     <li key={workspace.id}>{tile(workspace)}</li>
                   ))}
                 </ul>
               )}
+              {held && arrange.held && <HeldTile workspace={held} held={arrange.held} />}
             </nav>
             <div
               ref={right}
@@ -369,15 +391,23 @@ export default function HandheldFrame(props: {
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
  * (Paper board Handheld · 36). Closed, every tile looks the same, a code workspace's too: it's
  * told apart by its icon, never by colour (#237). A tap always goes to the workspace's page, even
- * from one of its sessions (#276); holding the open one shows its recent sessions. In its corner,
- * how many of its sessions wait on the owner, as the worker says (#345): violet for new replies,
- * gold once one needs an approval. Asked again on every move to another page.
+ * from one of its sessions (#276); holding the open one shows its recent sessions (on a tablet, once let go
+ * where it was: held and dragged, it moves, #321). In its corner, how many of its sessions wait on
+ * the owner, as the worker says (#345): violet for new replies, gold once one needs an approval.
+ * Asked again on every move to another page.
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
   look: "rail" | "row";
   open: boolean;
   showRecent: () => void;
+  /** On a tablet's rail, what holding it to arrange the workspaces takes (#321). */
+  arrange?: ReturnType<ReturnType<typeof useArrange>["handle"]>;
+  /**
+   * Held to move it (#321): the tile itself is the dashed slot where it lands, so the finger that
+   * holds it keeps its touch; its lifted copy (`HeldTile`) follows the finger.
+   */
+  held?: boolean;
 }) {
   const { workspace, open } = props;
   const { pathname } = useLocation();
@@ -394,16 +424,19 @@ function Tile(props: {
       to="/workspaces/$workspaceId"
       params={{ workspaceId: workspace.id }}
       aria-label={workspace.name}
+      {...props.arrange}
       onContextMenu={held}
       className={classes(
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
         "relative flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",
         props.look === "rail"
-          ? "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-label/3.75"
+          ? RAIL_TILE
           : "h-13 gap-2 rounded-lg px-4 text-sm/4.5 whitespace-nowrap",
-        open
-          ? "bg-muted font-bold text-foreground shadow-glow-tile ring-2 ring-primary"
-          : "bg-muted/60 text-foreground/70",
+        props.held
+          ? classes(ARRANGE_SLOT, "text-transparent *:invisible")
+          : open
+            ? "bg-muted font-bold text-foreground shadow-glow-tile ring-2 ring-primary"
+            : "bg-muted/60 text-foreground/70",
       )}
     >
       <WorkspaceIcon icon={workspace.icon} size="tile" open={open} />
@@ -420,6 +453,27 @@ function Tile(props: {
         </span>
       )}
     </Link>
+  );
+}
+
+/** The rail's tile size and shape. */
+const RAIL_TILE = "h-18 w-20 flex-col gap-2 rounded-tile px-1.5 text-center text-label/3.75";
+
+/**
+ * A workspace held on the rail to move it (#321, the style guide's "Arranging"): the tile lifted
+ * at the finger, tilted, with a violet ring, over its dashed slot.
+ */
+function HeldTile(props: { workspace: WorkspaceSummary; held: Held }) {
+  const { held } = props;
+  return (
+    <div
+      aria-hidden
+      style={{ left: held.x, top: held.y, width: held.width, height: held.height }}
+      className={classes("flex -rotate-4 items-center justify-center", RAIL_TILE, ARRANGE_HELD)}
+    >
+      <WorkspaceIcon icon={props.workspace.icon} size="tile" />
+      {props.workspace.name}
+    </div>
   );
 }
 

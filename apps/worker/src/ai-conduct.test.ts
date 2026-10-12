@@ -166,6 +166,7 @@ describe("what every turn tells a model", () => {
       "the tdd skill",
       "diagnosing-bugs",
       "the narrowest check",
+      "the full browser suite runs in CI",
       "load the pr skill",
       "AGENTS.md or CLAUDE.md) win",
     ]) {

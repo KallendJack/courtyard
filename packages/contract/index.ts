@@ -207,5 +207,6 @@ export {
   WorkspaceId,
   WorkspaceList,
   WorkspaceMode,
+  WorkspaceOrder,
   WorkspaceSummary,
 } from "./lib/workspace.ts";

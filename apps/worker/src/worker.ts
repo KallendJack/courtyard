@@ -15,6 +15,7 @@ import {
   WorkspaceId,
   type WorkspaceList,
   type WorkspaceMain,
+  WorkspaceOrder,
   type WorkspaceSummary,
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
@@ -25,7 +26,11 @@ import { changeRoutes } from "./changes/routes.ts";
 import { createCode } from "./code/index.ts";
 import { createConnections } from "./connections/index.ts";
 import { connectionRoutes } from "./connections/routes.ts";
-import { createContextFolder, workspaceChange } from "./context-folder/index.ts";
+import {
+  createContextFolder,
+  WORKSPACES_ARRANGED,
+  workspaceChange,
+} from "./context-folder/index.ts";
 import { documentRoutes } from "./documents/routes.ts";
 import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
@@ -75,6 +80,7 @@ import { tidyRoutes } from "./tidy/routes.ts";
 import { createWorkspaceMain } from "./workspace-main/index.ts";
 import {
   archiveWorkspace,
+  arrangeWorkspaces,
   changeWorkspace,
   checkNewName,
   createWorkspace,
@@ -385,6 +391,17 @@ export const createWorker = (options: {
 
   api.get("/workspaces", async (c) => {
     const workspaces = await listWorkspaces(contextDir);
+    if (!workspaces.ok) return contextError(c, workspaces.error);
+    return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
+  });
+  // The owner's order for the workspaces (#321), from the rail or the sidebar once a tile is let go.
+  api.put("/workspaces/order", async (c) => {
+    const body = await readBody(c, WorkspaceOrder);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const workspaces = await contextFolder.change(
+      () => arrangeWorkspaces(contextDir, body.value.order),
+      () => WORKSPACES_ARRANGED,
+    );
     if (!workspaces.ok) return contextError(c, workspaces.error);
     return c.json({ workspaces: workspaces.value } satisfies WorkspaceList);
   });

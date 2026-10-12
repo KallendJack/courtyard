@@ -3,6 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { LogOut, PanelLeft, Plus, Settings } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
+import { ARRANGE_HELD, ARRANGE_SLOT, useArrange } from "./arrange.ts";
 import { IconButton } from "./button.tsx";
 import { CourtyardLockup } from "./courtyard-mark.tsx";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
@@ -68,7 +69,18 @@ export function AppSidebar(props: {
 
   useEffect(() => remember(collapsed), [collapsed]);
 
-  /** A workspace's row: its icon, violet while it's open, and its name until the sidebar is a rail. */
+  // The sidebar arranges the workspaces (#321): press and hold one, drag it up or down, let go.
+  const arrange = useArrange({ workspaces: props.workspaces });
+  const { held } = arrange;
+
+  /** A workspace's icon, violet while it's open, and its name until the sidebar is a rail. */
+  const label = (workspace: WorkspaceSummary) => (
+    <>
+      <WorkspaceIcon icon={workspace.icon} size="md" open={workspace.id === workspaceId} />
+      <span className="truncate group-data-[collapsed=true]/sidebar:hidden">{workspace.name}</span>
+    </>
+  );
+  /** A workspace's row. Held, it's the dashed slot where it lands; its lifted copy follows. */
   const row = (workspace: WorkspaceSummary) => (
     <li key={workspace.id}>
       <Link
@@ -76,16 +88,20 @@ export function AppSidebar(props: {
         params={{ workspaceId: workspace.id }}
         aria-label={workspace.name}
         title={collapsed ? workspace.name : undefined}
-        className={WORKSPACE_ROW}
+        className={classes(
+          WORKSPACE_ROW,
+          "select-none",
+          held?.id === workspace.id && classes(ARRANGE_SLOT, "*:invisible"),
+        )}
+        {...arrange.handle(workspace)}
       >
-        <WorkspaceIcon icon={workspace.icon} size="md" open={workspace.id === workspaceId} />
-        <span className="truncate group-data-[collapsed=true]/sidebar:hidden">
-          {workspace.name}
-        </span>
+        {label(workspace)}
       </Link>
     </li>
   );
-  const code = props.workspaces.filter((workspace) => workspace.mode === "code");
+  const planning = arrange.workspaces.filter((workspace) => workspace.mode !== "code");
+  const code = arrange.workspaces.filter((workspace) => workspace.mode === "code");
+  const lifted = arrange.workspaces.find((workspace) => workspace.id === held?.id);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -124,8 +140,13 @@ export function AppSidebar(props: {
             onClick={toggle}
           />
         </div>
-        <ul aria-label="Planning workspaces" className="flex flex-col gap-0.5">
-          {props.workspaces.filter((workspace) => workspace.mode !== "code").map(row)}
+        <ul
+          ref={arrange.group}
+          data-arrange-group=""
+          aria-label="Planning workspaces"
+          className="flex flex-col gap-0.5"
+        >
+          {planning.map(row)}
           <li>
             <Link
               to="/new-workspace"
@@ -147,9 +168,23 @@ export function AppSidebar(props: {
         {code.length > 0 && (
           <div className="flex flex-col">
             <h2 className={GROUP_HEADING}>Code</h2>
-            <ul aria-label="Code workspaces" className="flex flex-col gap-0.5">
+            <ul
+              ref={arrange.group}
+              data-arrange-group=""
+              aria-label="Code workspaces"
+              className="flex flex-col gap-0.5"
+            >
               {code.map(row)}
             </ul>
+          </div>
+        )}
+        {held && lifted && (
+          <div
+            aria-hidden
+            style={{ left: held.x, top: held.y, width: held.width, height: held.height }}
+            className={classes(ROW, "-rotate-2 text-interface/normal", ARRANGE_HELD)}
+          >
+            {label(lifted)}
           </div>
         )}
         {workspaceId !== undefined && (
