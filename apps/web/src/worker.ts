@@ -221,6 +221,14 @@ export const deleteSession = (id: SessionId) =>
     schema: z.unknown(),
   });
 
+/** Mark all read (#345): every new reply in the workspace is seen, on every device. */
+export const markAllRead = (workspaceId: WorkspaceId) =>
+  sendJson({
+    path: `/workspaces/${encodeURIComponent(workspaceId)}/seen`,
+    body: {},
+    schema: z.unknown(),
+  });
+
 /** A context file to act on: one workspace's, or the owner context. */
 export type ContextPlace =
   | { readonly kind: "workspace"; readonly id: WorkspaceId }

@@ -261,6 +261,15 @@ export const sessionRoutes = (options: {
     } satisfies SessionList & CodeSessionList);
   });
 
+  // Mark all read (#345): every new reply in the workspace is seen, on every device.
+  routes.post("/workspaces/:id/seen", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const marked = await sessions.markAllSeen(workspace.value.summary.id);
+    if (!marked.ok) return sessionError(c, marked.error);
+    return c.body(null, 204);
+  });
+
   /** Starts a session in a workspace with its first message, and answers with the session. */
   const startIn = async (
     c: Context,

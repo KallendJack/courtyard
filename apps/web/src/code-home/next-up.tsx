@@ -129,9 +129,10 @@ function BuildFirst(props: {
               ? "No model that codes is available right now."
               : `A new session builds it with ${model.label}, on a branch of its own, and claims it on GitHub.`}
           </p>
-          <div className="flex gap-2">
+          {/* In the narrow column the two don't fit side by side, so Cancel wraps under (#346). */}
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
-              fullWidth
+              grow
               disabled={build.busy || model === undefined}
               onClick={() => void build.run()}
             >

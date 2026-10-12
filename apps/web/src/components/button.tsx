@@ -28,6 +28,8 @@ const VARIANTS = {
   /** The way out of what a `Notice` says, such as Get a new code. */
   notice:
     "border-destructive-text bg-transparent text-destructive-text hover:bg-destructive/10 focus-visible:ring-destructive/20",
+  /** An action on what's new, beside its list's heading, such as Mark all read (#345). */
+  soft: "border-primary/30 bg-primary/10 text-primary-text hover:bg-primary/20",
   /** A suggested reply under an answer, sent with a tap. */
   reply: "border-border bg-field text-primary-text hover:bg-accent",
 } as const;
@@ -56,6 +58,7 @@ export function Button({
   variant = "primary",
   size = "md",
   fullWidth = false,
+  grow = false,
   narrowIcon,
   type = "button",
   children,
@@ -64,6 +67,8 @@ export function Button({
   variant?: keyof typeof VARIANTS;
   size?: keyof typeof SIZES;
   fullWidth?: boolean;
+  /** Fills what's left of its row beside other buttons (Start building beside Cancel). */
+  grow?: boolean;
   /** On a narrow screen, only this icon shows, in a round button; the label stays for screen readers. */
   narrowIcon?: ReactNode;
 }) {
@@ -76,6 +81,7 @@ export function Button({
         VARIANTS[variant],
         SIZES[size],
         fullWidth && "w-full",
+        grow && "grow",
         collapses && "max-md:size-9 max-md:px-0",
       )}
       {...props}

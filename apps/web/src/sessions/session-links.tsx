@@ -5,44 +5,54 @@ import {
   type WorkspaceMode,
 } from "@courtyard/contract";
 import { Link, useRouter } from "@tanstack/react-router";
+import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { CARD, LIST_ROW, SectionTitle } from "@/components/page";
 import { ListedSessionText } from "@/components/session-state";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
+import { waitingFirst } from "../code-home/needs.ts";
 import { describeProblem } from "../problems.tsx";
 import { describeWhen } from "../when.ts";
-import { deleteSession } from "../worker.ts";
+import { deleteSession, markAllRead } from "../worker.ts";
+import { KEPT_SESSIONS, loadSessions } from "./kept-sessions.ts";
+
+type Listed = CodeSessionList["sessions"][number];
 
 /** A session whose pull request was merged or closed has ended (#278). */
-export const sessionEnded = (session: CodeSessionList["sessions"][number]) =>
+export const sessionEnded = (session: Listed) =>
   session.pullRequest !== undefined && session.pullRequest.state !== "open";
 
 /**
- * The workspace's sessions, latest first, each saying whose turn it is (#179). In a code
- * workspace, how many code sessions are running across the worker, and any session waiting for one
- * of them to end, which can be removed (#174). A planning workspace's page shows them as a card; a
- * code workspace's, on its Sessions tab (#301).
+ * The workspace's sessions, latest first, each saying whose turn it is (#179); those waiting on the
+ * owner come first, marked for a new reply or an approval, with Mark all read while any new reply
+ * waits (#345). In a code workspace, how many code sessions are running across the worker, and any
+ * session waiting for one of them to end, which can be removed (#174). A planning workspace's page
+ * shows them as a card; a code workspace's, on its Sessions tab (#301).
  */
 export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
   const { sessions, running } = props.list;
   if (sessions.length === 0) return null;
   // A session whose pull request was merged or closed has ended: it leaves the sessions for
   // History, so its place is free for a new one (#278).
-  const current = sessions.filter((session) => !sessionEnded(session));
+  const current = waitingFirst(sessions.filter((session) => !sessionEnded(session)));
   const history = sessions.filter(sessionEnded);
+  const replies = current.some((session) => session.waiting === "reply");
   return (
     <>
       {current.length > 0 && (
         <section aria-label="Sessions" className={CARD}>
-          <div className="flex items-baseline justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <SectionTitle>Sessions</SectionTitle>
-            {props.mode === "code" && (
-              <span className="text-meta text-muted-foreground">
-                {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {props.mode === "code" && (
+                <span className="text-meta text-muted-foreground">
+                  {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
+                </span>
+              )}
+              {replies && <MarkAllRead workspaceId={sessions[0]?.workspaceId} />}
+            </div>
           </div>
           <SessionList sessions={current} />
         </section>
@@ -57,8 +67,8 @@ export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode
   );
 }
 
-/** Sessions, each a link with whose turn it is, and Remove for one waiting to start. */
-function SessionList(props: { sessions: CodeSessionList["sessions"] }) {
+/** Sessions, each a link with whose turn it is and what it waits on, and Remove for one queued. */
+function SessionList(props: { sessions: readonly Listed[] }) {
   return (
     <ul className="mt-2 divide-y">
       {props.sessions.map((session) => (
@@ -75,11 +85,81 @@ function SessionList(props: { sessions: CodeSessionList["sessions"] }) {
               waitsForSlot={session.queued}
               when={describeWhen}
             />
+            {session.waiting !== "nothing" && <WaitingMark on={session.waiting} />}
           </Link>
           {session.queued && <RemoveQueued session={session} />}
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * What a session waits on the owner for, as the worker says (#345): the lilac new-reply tab or the
+ * gold needs-you tab (Paper, Style guide · Handheld, Session slots).
+ */
+function WaitingMark(props: { on: Exclude<Listed["waiting"], "nothing"> }) {
+  const reply = props.on === "reply";
+  return (
+    <span
+      role="img"
+      aria-label={reply ? "New reply" : "Needs you"}
+      className={classes(
+        "flex h-7.5 w-11.5 shrink-0 items-center justify-center self-center rounded-row",
+        reply ? "bg-primary-text" : "bg-warning",
+      )}
+    >
+      <svg aria-hidden viewBox="0 0 16 16" className="size-4">
+        {reply ? (
+          <path
+            d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"
+            className="fill-card"
+          />
+        ) : (
+          <>
+            <path
+              d="M8 1.8L13 3.8V7.6C13 10.6 10.9 13 8 14.2C5.1 13 3 10.6 3 7.6V3.8L8 1.8Z"
+              className="fill-card"
+            />
+            <path
+              d="M5.8 8L7.3 9.5L10.3 6.4"
+              fill="none"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="stroke-warning"
+            />
+          </>
+        )}
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * Mark all read (#345): every new reply in the workspace is seen, on every device; its lists and
+ * tiles clear. An approval still waits: it needs acting on.
+ */
+function MarkAllRead(props: { workspaceId: Listed["workspaceId"] | undefined }) {
+  const router = useRouter();
+  const { workspaceId } = props;
+  const mark = useAction(async () => {
+    if (workspaceId === undefined) return undefined;
+    const marked = await markAllRead(workspaceId);
+    if (marked.kind !== "loaded") return describeProblem(marked).body;
+    const now = await loadSessions(workspaceId);
+    if (now !== undefined) KEPT_SESSIONS.set(workspaceId, now);
+    await router.invalidate();
+    return undefined;
+  });
+  return (
+    <div className="flex flex-col items-end">
+      <Button variant="soft" size="sm" disabled={mark.busy} onClick={() => mark.run()}>
+        <CheckCheck aria-hidden />
+        Mark all read
+      </Button>
+      <FormError message={mark.error} />
+    </div>
   );
 }
 

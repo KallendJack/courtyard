@@ -141,10 +141,11 @@ test("Home is the workspaces, a tile each with its line, and nothing from Settin
   await expect(page.getByRole("region", { name: "Updates" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Problem" })).toHaveCount(0);
 
-  // An answer waiting for the owner: violet, with its count in the tile's corner.
+  // An answer waiting for the owner: violet, by its session's name, with its count in the tile's
+  // corner; the tap opens that session (#345).
   await answered(request, id, "Where does the bench go?");
   await page.reload();
-  const line = tile(page, name).getByText("1 new reply");
+  const line = tile(page, name).getByText(/^New reply · Where does the bench go/i);
   await expect(line).toBeVisible();
   expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe(
     await themeColour(page, "primary-text"),
@@ -152,7 +153,7 @@ test("Home is the workspaces, a tile each with its line, and nothing from Settin
   await expect(tile(page, name).locator("[aria-hidden]").filter({ hasText: /^1$/ })).toBeVisible();
 
   await tile(page, name).click();
-  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/workspaces/${id}/sessions/`));
 });
 
 test("a code workspace's tile says what waits on the owner, in gold with a gold edge", async ({

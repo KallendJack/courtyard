@@ -1,7 +1,7 @@
-import type { WorkspaceSummary } from "@courtyard/contract";
+import type { SessionId, WorkspaceSummary } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useLayout } from "@/components/handheld";
 import { EmptyState } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
@@ -23,27 +23,45 @@ const TILE =
 
 /**
  * A workspace's tile: its icon, its name, and its line, which loads after the page and keeps its
- * place until then.
+ * place until then. A tap opens the workspace, or the one session waiting on the owner there, as
+ * its line names it (#345).
  */
 function Tile(props: { workspace: WorkspaceSummary }) {
   const { workspace } = props;
+  const [opens, setOpens] = useState<SessionId>();
+  const className = classes(TILE, "justify-between bg-muted/60 hover:bg-muted");
+  const inside = (
+    <>
+      <WorkspaceIcon icon={workspace.icon} size="home" />
+      <span className="flex min-w-0 flex-col gap-0.75">
+        <span className="truncate text-lg/5.5 font-bold">{workspace.name}</span>
+        <span data-line="" className="h-4">
+          <Suspense>
+            <TileLine workspace={workspace} onOpens={setOpens} />
+          </Suspense>
+        </span>
+      </span>
+    </>
+  );
   return (
     <li>
-      <Link
-        to="/workspaces/$workspaceId"
-        params={{ workspaceId: workspace.id }}
-        className={classes(TILE, "justify-between bg-muted/60 hover:bg-muted")}
-      >
-        <WorkspaceIcon icon={workspace.icon} size="home" />
-        <span className="flex min-w-0 flex-col gap-0.75">
-          <span className="truncate text-lg/5.5 font-bold">{workspace.name}</span>
-          <span data-line="" className="h-4">
-            <Suspense>
-              <TileLine workspace={workspace} />
-            </Suspense>
-          </span>
-        </span>
-      </Link>
+      {opens === undefined ? (
+        <Link
+          to="/workspaces/$workspaceId"
+          params={{ workspaceId: workspace.id }}
+          className={className}
+        >
+          {inside}
+        </Link>
+      ) : (
+        <Link
+          to="/workspaces/$workspaceId/sessions/$sessionId"
+          params={{ workspaceId: workspace.id, sessionId: opens }}
+          className={className}
+        >
+          {inside}
+        </Link>
+      )}
     </li>
   );
 }
