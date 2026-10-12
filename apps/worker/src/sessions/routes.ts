@@ -16,6 +16,7 @@ import {
   SessionChange,
   type SessionDetail,
   type SessionList,
+  SessionSeen,
   type SessionSummary,
   SkillName,
   StopRequest,
@@ -449,6 +450,17 @@ export const sessionRoutes = (options: {
     const carried = await sessions.carryOn(c.req.param("id"), request.value);
     if (!carried.ok) return sessionError(c, carried.error);
     return c.body(null, 202);
+  });
+
+  // The session's page showed the owner everything up to an event (#334): a new reply up to it
+  // is seen, on every device.
+  routes.post("/sessions/:id/seen", async (c) => {
+    const body = await readBody(c, SessionSeen);
+    if (!body.ok)
+      return apiError(c, { status: 400, error: "Say which event the page showed up to" });
+    const marked = await sessions.markSeen(c.req.param("id"), body.value.upTo);
+    if (!marked.ok) return sessionError(c, marked.error);
+    return c.body(null, 204);
   });
 
   routes.post("/sessions/:id/stop", async (c) => {

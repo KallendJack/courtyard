@@ -669,6 +669,46 @@ describe("the PRs list (#278)", () => {
     expect(sessions.find((session) => session.id === id)?.pullRequest?.conflicts).toBe(true);
   });
 
+  it("says what each waits on the owner for (#334): failing checks, a merge, a conflict, or nothing", async () => {
+    const opened = (branch: string) =>
+      github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1", author: "someone-else" });
+    const failing = opened("failing");
+    github.setChecks(failing, [{ name: "e2e", outcome: "failed" }]);
+    const ready = opened("ready");
+    github.setChecks(ready, [{ name: "e2e", outcome: "passed" }]);
+    const conflicting = opened("conflicting");
+    github.setChecks(conflicting, [{ name: "e2e", outcome: "failed" }]);
+    github.setConflicts(conflicting, true);
+    const running = opened("running");
+    github.setChecks(running, [{ name: "e2e", outcome: "running" }]);
+
+    const listed = await openPullRequests();
+
+    const waiting = (number: number) =>
+      listed.find((open) => open.pullRequest.number === number)?.waiting;
+    expect(waiting(failing)).toBe("failed");
+    expect(waiting(ready)).toBe("merge");
+    expect(waiting(conflicting)).toBe("conflict");
+    expect(waiting(running)).toBe("nothing");
+  });
+
+  it("doesn't wait on the owner for checks the session is fixing, and does once it's done", async () => {
+    const { branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setChecks(number, [{ name: "e2e", outcome: "failed" }]);
+    let release = () => {};
+    holding = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    await runJobs();
+
+    await expect.poll(async () => (await openPullRequests())[0]?.waiting).toBe("nothing");
+    release();
+    holding = undefined;
+    await expect.poll(async () => (await openPullRequests())[0]?.waiting).toBe("failed");
+  });
+
   it("still lists its sessions' open pull requests, as last seen, while GitHub isn't connected", async () => {
     const { branch } = await codeSession();
     const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
