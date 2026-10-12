@@ -64,7 +64,7 @@ const closes = (number: number, text: string) =>
  * Where a milestone comes in the order of work (docs/agents/roadmap.md): by the number its title
  * leads with, then those with none (Later), then issues in no milestone.
  */
-const milestoneRank = (milestone: string | null): readonly [number, number] => {
+export const milestoneRank = (milestone: string | null): readonly [number, number] => {
   if (milestone === null) return [2, 0];
   const leading = /^\s*(\d+)/.exec(milestone)?.[1];
   return leading === undefined ? [1, 0] : [0, Number(leading)];
@@ -74,7 +74,7 @@ const milestoneRank = (milestone: string | null): readonly [number, number] => {
  * The issue numbers a milestone's description lists on its `Build order: #A → #B → #C` line
  * (docs/agents/roadmap.md), in that order: the line ends at a full stop or the line's end.
  */
-const buildOrderOf = (description: string | null): readonly number[] => {
+export const buildOrderOf = (description: string | null): readonly number[] => {
   const line = /build order:(.*?)(?:\.(?=\s|$)|$)/im.exec(description ?? "")?.[1] ?? "";
   return [...line.matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
 };

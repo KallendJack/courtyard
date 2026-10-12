@@ -239,6 +239,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
   (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
   workspace's `main`.
+- **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
+  workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
+  Failed, the worker re-runs the failed jobs once, by itself; failed again (or GitHub refused the re-run), it files a
+  `bug`, `ready-for-agent` issue named after the failing test (the first failure annotation on the job, which the
+  test reporters write on CI, else the job's name) with the job's link, in the lowest-numbered open milestone, and
+  puts it first in that milestone's `Build order:` line (next-up's order rules). What it did for each repository's
+  newest commit is kept in the data folder, so a restart never re-runs or files twice. No session waits on main.
 - **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
   every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
@@ -299,7 +306,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
   clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
   job in the order the workflow started them, the failed one's page, and when a running one should end
-  from how long the build before it took. Its routes are
+  from how long the build before it took; and re-runs a commit's failed jobs, reads the failing test a job's
+  annotations name, lists and describes milestones, and files an issue (#355). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
   newest pushed first, each marked added when a code workspace works on it already (its repository is
@@ -785,6 +793,7 @@ things live only in the worker's memory and go when it restarts.
 - `repos/<owner>/<name>/`: a GitHub repo New workspace → Code got onto the worker machine for a code
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.
+- `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

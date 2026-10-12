@@ -42,6 +42,9 @@ const providers = {
 export default defineConfig({
   testDir: "e2e",
   forbidOnly: Boolean(process.env.CI),
+  // On CI, a failed test is also an annotation on its job, which names it when the worker files a
+  // red main (#355).
+  reporter: process.env.CI ? [["dot"], ["github"]] : "list",
   // Every change commits to git, one command at a time, and each command is a new process. On
   // Windows those are slow to start, and slower still with another copy's tests running, so a
   // session's saves can take 20 seconds: a check waits up to 30, and a test up to a minute.

@@ -79,7 +79,8 @@ const filesPushed = async (remote: string, head: string): Promise<FoundFile[]> =
  * a branch pushed to that bare repository (GitHub's copy, on disk) has a pull request opened for
  * it the first time it's asked about, changing the files the branch changes since `main`, and each
  * commit pushed there gets the `checks` its subject says. A test sets the checks on a commit of
- * main's (`setCommitChecks`), as main's build (#249).
+ * main's (`setCommitChecks`), as main's build (#249), and keeps what Courtyard did about a red
+ * main (#355): each re-run, each issue filed, and its milestones' descriptions.
  */
 export const createFakeGitHub = (
   options: {
@@ -150,6 +151,31 @@ export const createFakeGitHub = (
       list.map((issue) => ({ ...issue, comments: [...(issue.comments ?? [])] })),
     ]),
   );
+  /** Each repository's milestones, numbered from 1 in the order given, by title (#336, #355). */
+  const milestones = new Map(
+    Object.entries(options.milestones ?? {}).map(([repo, described]) => [
+      repo,
+      Object.entries(described).map(([title, description], at) => ({
+        number: at + 1,
+        title,
+        description,
+      })),
+    ]),
+  );
+  const milestoneIn = (repo: string, title: string) =>
+    milestones.get(repo)?.find((milestone) => milestone.title === title);
+  /** Each issue Courtyard filed, in order (#355). */
+  const filed: {
+    readonly number: number;
+    readonly title: string;
+    readonly body: string;
+    readonly labels: readonly string[];
+    readonly milestone: string | null;
+  }[] = [];
+  /** Each time Courtyard re-ran a commit's failed jobs, in order (#355). */
+  const reruns: { readonly repo: string; readonly commit: string }[] = [];
+  /** The failing test each check run's annotations name, by its id (#355). */
+  const failures = new Map<number, string>();
   /** How many times the repositories' issues were asked for, as a test checks they're kept. */
   let issuesAsked = 0;
   const issueIn = (repo: string, number: number) =>
@@ -367,7 +393,7 @@ export const createFakeGitHub = (
             milestoneDescription:
               issue.milestone === undefined
                 ? null
-                : (options.milestones?.[repo]?.[issue.milestone] ?? null),
+                : (milestoneIn(repo, issue.milestone)?.description ?? null),
             comments: [...issue.comments],
           })),
       );
@@ -440,6 +466,55 @@ export const createFakeGitHub = (
       });
       return ok({ number, url: `https://github.com/${pull.repo}/pull/${number}` });
     },
+    rerunFailedJobs: async (accessToken, find) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      reruns.push({ repo: find.repo, commit: find.commit });
+      return ok(null);
+    },
+    checkRunFailure: async (accessToken, { id }) =>
+      refusedToken(accessToken) ?? ok(failures.get(id) ?? null),
+    openMilestones: async (accessToken, { repo }) =>
+      refusedToken(accessToken) ?? ok((milestones.get(repo) ?? []).map((each) => ({ ...each }))),
+    describeMilestone: async (accessToken, { repo, number, description }) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const milestone = milestones.get(repo)?.find((each) => each.number === number);
+      if (milestone === undefined) return err("GitHub said: Not Found");
+      milestone.description = description;
+      return ok(null);
+    },
+    createIssue: async (accessToken, issue) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      // Issues and pull requests share GitHub's numbers.
+      const number =
+        Math.max(
+          0,
+          ...(issues.get(issue.repo) ?? []).map((each) => each.number),
+          ...pulls.map((pull) => pull.number),
+        ) + 1;
+      const milestone =
+        milestones.get(issue.repo)?.find((each) => each.number === issue.milestone)?.title ?? null;
+      filed.push({
+        number,
+        title: issue.title,
+        body: issue.body,
+        labels: [...issue.labels],
+        milestone,
+      });
+      issues.set(issue.repo, [
+        ...(issues.get(issue.repo) ?? []),
+        {
+          number,
+          title: issue.title,
+          labels: [...issue.labels],
+          comments: [],
+          ...(milestone === null ? {} : { milestone }),
+        },
+      ]);
+      return ok({ number, url: `https://github.com/${issue.repo}/issues/${number}` });
+    },
   };
 
   return {
@@ -473,6 +548,16 @@ export const createFakeGitHub = (
     setCommitChecks: (commit: string, checks: readonly FoundCheckRun[]) => {
       commitChecks.set(commit, checks);
     },
+    /** Check run `id`'s annotations name `test` as what failed (#355). */
+    setFailure: (id: number, test: string) => {
+      failures.set(id, test);
+    },
+    /** Each time Courtyard re-ran a commit's failed jobs, in order (#355). */
+    reruns: () => [...reruns],
+    /** Each issue Courtyard filed, in order, with its milestone's title (#355). */
+    issuesFiled: () => [...filed],
+    /** Milestone `title`'s description in `repo` now (#355). */
+    milestoneDescription: (repo: string, title: string) => milestoneIn(repo, title)?.description,
     /** How many times Courtyard has asked for a commit's checks (#249). */
     commitChecksAsked: () => commitChecksAsked,
     /** Each branch Courtyard deleted on GitHub, in order. */
