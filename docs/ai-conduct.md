@@ -270,7 +270,13 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > folder git ignores) rather than running everything again. Base a pull
 > request on the default branch, never on another pull request's branch. Before you open or update one, load the pr
 > skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you
-> can fix it on your branch.
+> can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few
+> words ("the PR page refreshes itself"), with its number after it only where a link helps; never a bare list of
+> numbers.
+
+Numbers are hard to know (#361), so a session leads with what an issue or pull request is whenever it tells the owner
+about one (an order, a status, what it built, what's next). Issue bodies, commit messages and a milestone's `Build
+order:` line keep their numbers, since Next up reads them.
 
 Claude gets a code session's framing after Claude Code's own instructions, its system prompt for coding (the
 `claude_code` preset), with Courtyard's framing appended unchanged, so it codes the way Claude Code does with
