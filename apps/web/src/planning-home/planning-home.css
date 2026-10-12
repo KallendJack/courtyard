@@ -1,0 +1,25 @@
+/*
+ * A planning workspace's Home's own classes (#300), with those of the shared pieces it shows that
+ * are off the first load (its tabs, Home's blocks, kept placeholders), like code-home.css. The
+ * theme is by reference: its names, nothing of its own. They apply only inside the Home: coming
+ * after the theme's, they'd otherwise outrank its classes everywhere.
+ */
+@reference "../styles.css";
+@source "./**/*.tsx";
+@source "../components/workspace-tabs.tsx";
+@source "../components/home-block.tsx";
+
+:where([data-planning-home]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}
+
+/* The Home fills the page's column, so its message box sits at the foot of a short page. */
+[data-planning-home] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+main:has(> [data-planning-home]) {
+  min-height: 100%;
+}

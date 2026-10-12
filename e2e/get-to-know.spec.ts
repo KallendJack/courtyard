@@ -1,11 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { newWorkspace } from "./saving.ts";
+import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
-test("an empty workspace offers Get to know, which opens a session with the skill started, until a line is saved", async ({
+test("What Courtyard knows offers Get to know, which opens a session with the skill started, until a line is saved", async ({
   page,
 }) => {
   const name = `Garden ${Date.now()}`;
   await newWorkspace(page, name);
+  // An empty workspace's Home is only its name, a line and the message box (#300).
+  await startSaving(page, "Hello.");
+  await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
 
   await page.getByRole("button", { name: "Get to know this workspace", exact: true }).click();
 
@@ -21,6 +26,7 @@ test("an empty workspace offers Get to know, which opens a session with the skil
     "The garden faces south.",
   );
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("faces south");
   await expect(
     page.getByRole("button", { name: "Get to know this workspace", exact: true }),

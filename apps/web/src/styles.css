@@ -9,8 +9,9 @@
  * session's flow (chat-flow.css), and the Handheld frame's, its talk strip's and its sheets'
  * (handheld-frame.css) with the Reply box's row while the Talk key listens, which only a touch
  * screen loads, and New workspace's form with the repo picker (new-workspace.css), and a code
- * workspace's Home with its tabs, connections line and radio rows (code-home.css), and the home
- * page's tile lines and foot rows (home.css).
+ * workspace's Home with its tabs, connections line and radio rows (code-home.css), a planning
+ * workspace's Home (planning-home.css), both with Home's blocks, and the home page's tile lines and
+ * foot rows (home.css).
  */
 @source not "./rich-blocks";
 @source not "./things";
@@ -33,8 +34,10 @@
 @source not "./components/repo-picker.tsx";
 @source not "./new-workspace";
 @source not "./code-home";
+@source not "./planning-home";
 @source not "./home";
 @source not "./components/workspace-tabs.tsx";
+@source not "./components/home-block.tsx";
 @source not "./components/connections-line.tsx";
 @source not "./components/radio-row.tsx";
 @source not "./components/kept.tsx";

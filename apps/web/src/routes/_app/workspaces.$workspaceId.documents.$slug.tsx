@@ -75,7 +75,7 @@ function Document(props: DocumentDetail & { workspaceId: WorkspaceId }) {
     });
     return undefined;
   });
-  const above = <BackLink workspaceId={workspaceId} within="Documents" />;
+  const above = <BackLink workspaceId={workspaceId} within="Documents" tab="docs" />;
 
   return (
     <Page>

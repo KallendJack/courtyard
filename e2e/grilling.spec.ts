@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // Grill this plan (docs/ai-conduct.md, Grilling): a flame beside each Plan line.
 
@@ -10,6 +11,7 @@ test("Grill this plan starts a session on the plan with the Grilling tag, and an
   await newWorkspace(page, name);
   await startSaving(page, "save plan: Dig the new beds in March.");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
 
   await page
     .getByRole("region", { name: "Plans" })
@@ -30,12 +32,14 @@ test("Grill this plan starts a session on the plan with the Grilling tag, and an
   await expect(notes).toContainText("Dig the new beds in late March.");
   await expect(notes.getByRole("button", { name: "Undo" })).toBeVisible();
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   const plans = page.getByRole("region", { name: "Plans" });
   await expect(plans.getByRole("listitem")).toHaveText(["Dig the new beds in late March."]);
 });
 
 test("only a workspace's plans can be grilled, not its facts or ideas", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
+  await openWhatCourtyardKnows(page);
 
   await expect(
     page.getByRole("region", { name: "Plans" }).getByRole("button", { name: "Grill this plan" }),

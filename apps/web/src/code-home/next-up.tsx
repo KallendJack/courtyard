@@ -4,13 +4,13 @@ import { Zap } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { Block } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { codingModelIn } from "../review/api.ts";
 import { buildIssue } from "./api.ts";
-import { Block } from "./block.tsx";
 
 /** How many issues show before More. */
 const SHOWN = 3;

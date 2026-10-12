@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openTab } from "./workspace-page.ts";
 
 test("the owner renames a workspace, then archives it after a confirm step", async ({ page }) => {
   // Names of its own, so the test can run again on the same worker.
@@ -64,6 +65,7 @@ test("the owner renames a session from its page and the sidebar, then deletes it
   await confirm.getByRole("button", { name: "Delete session" }).click();
 
   await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+  await openTab(page, "Sessions");
   await expect(page.getByRole("region", { name: "Sessions" })).not.toContainText("Bench and rack");
   await expect(recent.getByRole("link", { name: "Bench and rack" })).toHaveCount(0);
 });

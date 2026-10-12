@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 test("the owner sees every workspace and switches between them in one tap", async ({ page }) => {
   await page.goto("/");
@@ -10,6 +11,7 @@ test("the owner sees every workspace and switches between them in one tap", asyn
   const switcher = page.getByRole("navigation", { name: "Workspaces" });
   await switcher.getByRole("link", { name: "Garage gym" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Facts" })).toContainText(
     "The garage is single, with an up-and-over door.",
   );
@@ -18,7 +20,7 @@ test("the owner sees every workspace and switches between them in one tap", asyn
   );
 
   await switcher.getByRole("link", { name: "office" }).click();
-  await expect(page.getByText("No context file yet.")).toBeVisible();
+  await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
 });
 
 test("a workspace's address loads it directly", async ({ page }) => {
@@ -28,11 +30,17 @@ test("a workspace's address loads it directly", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
 });
 
-test("warns when a context file grows long enough to crowd every message", async ({ page }) => {
+test("warns in What Courtyard knows when a context file grows long enough to crowd every message", async ({
+  page,
+}) => {
+  // Home stays calm: no warning there (#300).
   await page.goto("/workspaces/reading-list");
+  await expect(page.getByRole("link", { name: "What Courtyard knows" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("status")).toContainText("long");
 
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#knows");
   await expect(page.getByRole("region", { name: "Facts" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
 });
@@ -51,7 +59,7 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
 
   await expect(page).toHaveURL(/\/workspaces\/allotment-\d+$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Facts" })).toContainText("Nothing yet.");
+  await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
   await expect(switcher.getByRole("link", { name })).toBeVisible();
 
@@ -71,7 +79,7 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   await expect(icon).toHaveAttribute("data-workspace-icon", "music");
 });
 
-test("what a new workspace is for, when the owner says, shows under its name as the intro line", async ({
+test("what a new workspace is for, when the owner says, goes to its models, not under its name", async ({
   page,
 }) => {
   const name = `Pottery ${Date.now()}`;
@@ -87,7 +95,9 @@ test("what a new workspace is for, when the owner says, shows under its name as 
   await page.getByRole("button", { name: "Add workspace" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  await expect(page.getByText("Turning the shed into a pottery studio by spring")).toBeVisible();
+  // Nothing on the page shows the intro line (#300): only the name, a line and the message box.
+  await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
+  await expect(page.getByText("Turning the shed into a pottery studio by spring")).toHaveCount(0);
 });
 
 test("a name another workspace has gets a clear message", async ({ page }) => {

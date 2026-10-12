@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 test("a save shows as a note under the answer, and Undo takes it out of the context file", async ({
   page,
@@ -13,6 +14,7 @@ test("a save shows as a note under the answer, and Undo takes it out of the cont
   await expect(notes).toContainText("Padel lessons on Tuesdays.");
   const session = page.url();
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Facts" })).toContainText(
     "Padel lessons on Tuesdays.",
   );
@@ -22,6 +24,7 @@ test("a save shows as a note under the answer, and Undo takes it out of the cont
   await expect(notes).toContainText("Undone");
   await expect(notes.getByRole("button", { name: "Undo" })).toHaveCount(0);
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("Nothing yet.");
 });
 
@@ -42,6 +45,7 @@ test("Edit changes a saved line's wording and section where it is", async ({ pag
   await expect(notes).toContainText("Saved to Plans · edited");
   await expect(notes).toContainText("Gym on Monday and Thursday evenings.");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Plans" })).toContainText(
     "Gym on Monday and Thursday evenings.",
   );

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 test("the owner tidies a context file, unticking one change, and Recent changes shows the tidy", async ({
   page,
@@ -16,6 +17,7 @@ test("the owner tidies a context file, unticking one change, and Recent changes 
     ].join("\n"),
   );
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await page.getByRole("link", { name: "Tidy", exact: true }).click();
 
   const proposed = page.getByRole("list", { name: "Proposed changes" });
@@ -28,7 +30,8 @@ test("the owner tidies a context file, unticking one change, and Recent changes 
   await expect(changes).toContainText("Double garage, The garage is 5.4 m by 5.1 m");
 
   await page.getByRole("link", { name: `Back to ${name}` }).click();
-  const file = page.getByRole("main");
+  await openWhatCourtyardKnows(page);
+  const file = page.getByRole("region", { name: "What Courtyard knows" });
   await expect(file).toContainText("Double garage, The garage is 5.4 m by 5.1 m");
   await expect(file).toContainText("Get a quote for rubber flooring (stale)");
   // The session title repeats the first line, so check the second is gone.

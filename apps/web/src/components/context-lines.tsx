@@ -1,3 +1,4 @@
+import type { ContextSection } from "@courtyard/contract";
 import type { ReactNode } from "react";
 
 /**
@@ -30,18 +31,34 @@ export function ContextLines(props: {
   );
 }
 
-/** Facts, Plans and Ideas, each with what it means; `plan` shows each plan, when it's more than its text. */
+/**
+ * Facts, Plans and Ideas, each with what it means; `line` shows each line, when it's more than its
+ * text (a plan with Grill this plan, any line with Fix).
+ */
 export function FactsPlansIdeas(props: {
   facts: readonly string[];
   plans: readonly string[];
   ideas: readonly string[];
-  plan?: (plan: string) => ReactNode;
+  line?: (line: string, section: ContextSection) => ReactNode;
 }) {
+  const { line } = props;
+  const shown = (section: ContextSection) =>
+    line === undefined ? undefined : (text: string) => line(text, section);
   return (
     <>
-      <ContextLines title="Facts" hint="True now" lines={props.facts} />
-      <ContextLines title="Plans" hint="Decided, not done" lines={props.plans} line={props.plan} />
-      <ContextLines title="Ideas" hint="Being considered" lines={props.ideas} />
+      <ContextLines title="Facts" hint="True now" lines={props.facts} line={shown("facts")} />
+      <ContextLines
+        title="Plans"
+        hint="Decided, not done"
+        lines={props.plans}
+        line={shown("plans")}
+      />
+      <ContextLines
+        title="Ideas"
+        hint="Being considered"
+        lines={props.ideas}
+        line={shown("ideas")}
+      />
     </>
   );
 }

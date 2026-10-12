@@ -68,9 +68,9 @@ _Avoid_: system prompt, memory, notes
 
 **Intro line**:
 The line under a context file's title, above its sections: what the workspace is for. The owner gives it as
-**What's it for?** when adding a workspace (or the starter puts a hint there), and the workspace page shows it under
-the workspace's name. Get to know plans its topics from it. A code workspace keeps its line in its `workspace.json`
-instead, as its `description` (#301).
+**What's it for?** when adding a workspace; left empty, there's none (#300: the starter never writes a hint there,
+and an old hint reads as none). Models read it, and Get to know plans its topics from it; the workspace page doesn't
+show it. A code workspace keeps its line in its `workspace.json` instead, as its `description` (#301).
 _Avoid_: description (except a code workspace's field), summary, purpose
 
 **Owner context**:
@@ -115,7 +115,7 @@ _Avoid_: commit (that's how it's kept), revision, update
 
 **Recent changes**:
 The list of changes to a workspace's context file or the owner context, newest first, each with Undo, on a page of
-its own linked from the workspace page (and Settings).
+its own linked from **What Courtyard knows** (and Settings).
 _Avoid_: history, log, activity (that's a model's doing in a session)
 
 **Tidy**:
@@ -124,7 +124,8 @@ ticked by default, and the owner unticks any they don't want.
 _Avoid_: compact, clean up, summarise
 
 **Get to know**:
-A house skill only the owner starts, from a button on an empty workspace's page. It plans the topics worth knowing
+A house skill only the owner starts, from the Skill picker or a button in **What Courtyard knows** while the
+context file has no lines. It plans the topics worth knowing
 from the workspace's name, intro line and the owner context, lists them, then asks one question per message, saving
 each answer, until the topics are covered or the owner has had enough, and wraps up.
 _Avoid_: onboarding, interview, starter, template
@@ -181,10 +182,18 @@ _Avoid_: preferences, account, profile
 
 **Home**:
 A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
-Things, Docs). A code workspace's Home shows, in a fixed order, **Needs you**, **Running**, **Next up** and
-**Main** (its repository's newest main commit with its build), each block hidden when it's empty, then the
-message box.
+Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, **Needs you**,
+**Running**, **Next up** and **Main** (its repository's newest main commit with its build), each block hidden when
+it's empty, then the message box. A planning workspace's Home shows **Next up**, then the one row for **What
+Courtyard knows**, then the message box, which starts a new session; an empty one shows only its name, one line and
+the box.
 _Avoid_: dashboard, overview, landing page
+
+**What Courtyard knows**:
+The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts, plans
+and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes,
+Tidy and its skills.
+_Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:
 The block on a code workspace's Home of everything waiting on the owner (AGENTS.md): approvals, failing checks, new
@@ -193,9 +202,11 @@ replies, pull requests ready to merge, conflicts, and the setup check's offer, e
 _Avoid_: inbox, notifications, to-do, alerts
 
 **Next up**:
-The block on a code workspace's Home of its repository's `ready-for-agent` issues nobody has claimed, in milestone
-order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the model, a second
-starts a session on it and claims the issue on GitHub.
+The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
+claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the
+model, a second starts a session on it and claims the issue on GitHub. A planning workspace's (#300): the session to
+pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the
+next 7 days, soonest first; with neither, it doesn't show.
 _Avoid_: backlog, queue, roadmap (that's the milestones)
 
 **Connections line**:

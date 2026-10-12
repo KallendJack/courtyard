@@ -9,6 +9,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
+import { Block, BlockRow } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
 import { useAction } from "@/lib/use-action";
@@ -16,7 +17,6 @@ import { MattSetupOffer } from "../matt-setup/matt-setup-offer.tsx";
 import { describeProblem } from "../problems.tsx";
 import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";
-import { Block, BlockRow } from "./block.tsx";
 import { agoWords, type Need } from "./needs.ts";
 
 // Home reads what waits on the owner the same way (#102, #334).

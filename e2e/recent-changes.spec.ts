@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 test("a save shows in Recent changes, and Undo there marks its chat note undone", async ({
   page,
@@ -10,6 +11,7 @@ test("a save shows in Recent changes, and Undo there marks its chat note undone"
   const session = page.url();
 
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openWhatCourtyardKnows(page);
   await page.getByRole("link", { name: "Recent changes" }).click();
 
   const changes = page.getByRole("list", { name: "Recent changes" });

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openTab } from "./workspace-page.ts";
 
 test("the owner starts a session, watches the answer stream in, and finds it again later", async ({
   page,
@@ -25,6 +26,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await expect(session.getByRole("alert")).toHaveCount(2);
 
   await page.getByRole("link", { name: "Back to Garage gym" }).click();
+  await openTab(page, "Sessions");
   // By its first line, or the title a model gave it after the first answer.
   await expect(page.getByRole("region", { name: "Sessions" })).toContainText(
     /where should the rack go/i,

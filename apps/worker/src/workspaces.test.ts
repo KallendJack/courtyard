@@ -226,6 +226,38 @@ describe("opening a workspace", () => {
     });
   });
 
+  it("lists the plans dated in the next 7 days, soonest first, for Home's Next up (#300)", async () => {
+    // Monday 12 October 2026, mid-morning.
+    const now = () => new Date(2026, 9, 12, 10).getTime();
+    const other = join(root, "on-12-october");
+    await mkdir(join(other, "context", "garage"), { recursive: true });
+    request = await asOwner(testWorker({ root: other, now }));
+    await writeFile(
+      join(other, "context", "garage", "CONTEXT.md"),
+      [
+        "# Garage",
+        "",
+        "## Plans",
+        "",
+        "- Fit the Remootio sensor magnet by 18 October.",
+        "- Pick shelving that fits the back wall.",
+        "- Skip day on 2026-10-12, today.",
+        "- Bin day Oct 14th",
+        "- Service the car on 20 Oct, past next week.",
+        "- Clear the loft by 5 October, so already gone.",
+        "",
+      ].join("\n"),
+    );
+
+    const { duePlans } = await openWorkspace("garage");
+
+    expect(duePlans).toEqual([
+      { plan: "Skip day on 2026-10-12, today.", due: "2026-10-12" },
+      { plan: "Bin day Oct 14th", due: "2026-10-14" },
+      { plan: "Fit the Remootio sensor magnet by 18 October.", due: "2026-10-18" },
+    ]);
+  });
+
   it("says when a workspace has no context file yet", async () => {
     await workspace("office");
 
@@ -299,9 +331,34 @@ describe("adding a workspace", () => {
     const markdown = await readFile(join(contextDir, "garage-gym", "CONTEXT.md"), "utf8");
     expect(markdown).toMatch(/^# Garage gym\n/);
     const { contextFile } = await openWorkspace("garage-gym");
-    expect(contextFile).toMatchObject({ title: "Garage gym", facts: [], plans: [], ideas: [] });
-    // The hint says how to write lines, in the words of docs/ai-conduct.md.
-    expect(contextFile?.intro).toContain("one line");
+    // No hint where the intro line goes: models would read it as what the workspace is for (#300).
+    expect(contextFile).toMatchObject({
+      title: "Garage gym",
+      intro: "",
+      facts: [],
+      plans: [],
+      ideas: [],
+    });
+    expect(markdown).not.toContain("one line");
+  });
+
+  it("reads a context file whose intro line is still the old starter hint as having none", async () => {
+    await workspace("garage-gym", {
+      "CONTEXT.md": [
+        "# Garage gym",
+        "",
+        "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+        "",
+        "## Facts",
+        "",
+        "- Budget is £1,200.",
+        "",
+      ].join("\n"),
+    });
+
+    const { contextFile } = await openWorkspace("garage-gym");
+
+    expect(contextFile).toMatchObject({ intro: "", facts: ["Budget is £1,200."] });
   });
 
   it("starts the context file with what it's for, when the owner says, as its intro line", async () => {
@@ -321,7 +378,7 @@ describe("adding a workspace", () => {
     });
   });
 
-  it("starts with the hint when what it's for is left empty, and refuses more than one line", async () => {
+  it("starts with no intro line when what it's for is left empty, and refuses more than one line", async () => {
     await postJson(request, "/api/workspaces", { name: "Garage gym", intro: "   " });
     const tooLong = await postJson(request, "/api/workspaces", {
       name: "Shed",
@@ -332,7 +389,7 @@ describe("adding a workspace", () => {
       intro: "A shed.\nA big one.",
     });
 
-    expect((await openWorkspace("garage-gym")).contextFile?.intro).toContain("one line");
+    expect((await openWorkspace("garage-gym")).contextFile?.intro).toBe("");
     expect([tooLong.status, twoLines.status]).toEqual([400, 400]);
     expect(await errorOf(twoLines)).toContain("one line");
     expect((await listWorkspaces()).map((w) => w.id)).toEqual(["garage-gym"]);

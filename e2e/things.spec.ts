@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { pngOf } from "../apps/worker/src/test-files.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // Things (ADR 0020): a model's Thing saves as notes under its answer, each with Open and Undo;
 // the workspace page's Things section, each Thing's card, and the owner's own adds, edits and
@@ -41,6 +42,7 @@ test("the Things section appears with the first Thing, parts under their parent,
   await expect(page.getByRole("region", { name: "Things" })).toHaveCount(0);
   await addKit(page);
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openTab(page, "Things");
 
   const things = page.getByRole("region", { name: "Things" });
   const bike = things.getByRole("link", { name: /Whyte T-140/ });
@@ -149,6 +151,8 @@ test("a Thing save's Open goes to its card: its details, history, the Thing it's
 
   // Recent changes opens a Thing's card too.
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openTab(page, "Home");
+  await openWhatCourtyardKnows(page);
   await page.getByRole("link", { name: "Recent changes" }).click();
   const changes = page.getByRole("list", { name: "Recent changes" });
   await changes
@@ -166,6 +170,7 @@ test("the owner adds, edits and deletes Things themselves, and Undo brings a del
   await newWorkspace(page, name);
   await addKit(page);
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openTab(page, "Things");
   const things = page.getByRole("region", { name: "Things" });
 
   // Add Thing opens the same form as Edit, empty.
@@ -228,6 +233,8 @@ test("the owner adds, edits and deletes Things themselves, and Undo brings a del
   await expect(things).not.toContainText("Deleted");
 
   // Each change is in Recent changes, the delete marked undone.
+  await openTab(page, "Home");
+  await openWhatCourtyardKnows(page);
   await page.getByRole("link", { name: "Recent changes" }).click();
   const changes = page.getByRole("list", { name: "Recent changes" });
   await expect(changes.getByRole("listitem").first()).toContainText("UndoneTyres");

@@ -76,12 +76,17 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 **Context**
 
 - **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
-  model, and adds, changes or removes one line. Text in, text out: it never touches the disk.
+  model, and adds, changes or removes one line. It also picks out the plans that name a day from today to 7 days on
+  (`plansDue`: `2026-10-18`, `18 Oct` or `Oct 18th`, a day without its year being the next to come), which a
+  planning workspace's answer (`GET /api/workspaces/:id`) gives as `duePlans` for its Home's Next up (#300), today
+  being the worker's clock's. Text in, text out: it never touches the disk.
 - **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
   one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
   a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
   A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
   `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
+  A new planning workspace's starter context file has no intro line unless the owner gave one, and the hint older
+  starters wrote there is read as none and left out of what models read (`withoutStarterHint`, #300).
   It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308). It lists
   the workspaces planning ones first, then code ones, each group in the owner's order (#321): one list of ids in
   `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces` (`PUT /api/workspaces/order`), which
@@ -404,15 +409,27 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
+  - **`planning-home/`:** a planning workspace's page under its name (#300; Paper, "Tablet · Planning workspace
+    Home" and its Sessions, Things and Docs tabs), loaded only for one, with a stylesheet of its own
+    (`planning-home.css`, holding the tabs' and Home's blocks' classes too), like `code-home/`. Its tabs, Home ·
+    Sessions · Things · Docs, each but Home shown once it has something, with its count, by the address's hash
+    (`#sessions`, `#things`, `#docs`; a document or Thing deleted from its page comes back to its tab, with Undo).
+    Home: Next up (`next-up.tsx`: the session to pick up again, one the worker says waits on the owner, else the last
+    used in the past week, then the worker's `duePlans`; hidden with neither), then the one row for What Courtyard
+    knows (`knows.tsx`, `#knows`: the facts, plans and ideas, each line with Fix, which shows then starts a session on
+    it, each plan with Grill this plan; Get to know while there are no lines; what else models read, Recent changes,
+    Tidy, and the skills), then the message box pinned at the foot. An empty workspace shows only its name, one line
+    and the box. Drawn blocks (#257, #152, #294) and the page choices that pin and hide them come with their own
+    issues.
   - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
     only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
-    shared pieces only it shows yet: `components/workspace-tabs.tsx`, `connections-line.tsx`, `radio-row.tsx` and the
-    thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
+    shared pieces only the two Homes show: `components/workspace-tabs.tsx`, `home-block.tsx`,
+    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
     `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
-    empty (`block.tsx`): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
+    empty (`components/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
     requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
     (`running.tsx`), Next up with Build (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
