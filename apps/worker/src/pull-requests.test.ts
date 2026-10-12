@@ -892,6 +892,73 @@ describe("a pull request no session opened (#278)", () => {
     });
   });
 
+  it("gets a session on its branch when the repository has it already, unused, which clearing leaves (#326)", async () => {
+    const branch = "process-claims";
+    const head = await pushedBranch(branch);
+    // Made in the owner's checkout before the last commit was pushed: behind, with nothing new.
+    await gitIn(repo, "branch", "--quiet", branch, `${head}~1`);
+    const number = github.openPullRequest({ repo: onGitHub, branch, head });
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(201);
+    const { id } = (await started.json()) as { id: string };
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    const worktree = join(root, "data", "worktrees", id);
+    expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe(branch);
+    expect((await gitIn(worktree, "rev-parse", "HEAD")).trim()).toBe(head);
+    github.merge(number);
+    await runJobs();
+    await runJobs();
+    expect(existsSync(worktree)).toBe(false);
+    expect((await gitIn(repo, "rev-parse", branch)).trim()).toBe(head);
+  });
+
+  it("can't get a session on its branch while the repository's has commits its remote lacks (#326)", async () => {
+    const branch = "process-claims";
+    const head = await pushedBranch(branch);
+    await gitIn(repo, "switch", "--quiet", "-c", branch, head);
+    await writeFile(join(repo, "claims.md"), "Not pushed yet\n");
+    await gitIn(repo, "add", ".");
+    await gitIn(repo, "commit", "--quiet", "-m", "Not pushed yet");
+    await gitIn(repo, "switch", "--quiet", "main");
+    const number = github.openPullRequest({ repo: onGitHub, branch, head });
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(409);
+    expect(await errorOf(started)).toBe(
+      "The session branch couldn't be started: this repository's process-claims has commits that aren't on its remote (origin). Push them or delete the branch, then start the session again.",
+    );
+  });
+
+  it("can't get a session on its branch while it's checked out elsewhere (#326)", async () => {
+    const branch = "process-claims";
+    const head = await pushedBranch(branch);
+    const elsewhere = join(root, "elsewhere");
+    await gitIn(repo, "worktree", "add", "--quiet", "-b", branch, elsewhere, head);
+    const number = github.openPullRequest({ repo: onGitHub, branch, head });
+
+    const started = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/sessions`,
+      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+    );
+
+    expect(started.status).toBe(409);
+    expect(await errorOf(started)).toBe(
+      `The session branch couldn't be started: process-claims is checked out in ${elsewhere} already. Switch that checkout to another branch, then start the session again.`,
+    );
+  });
+
   it("can't get a second session while one is on it", async () => {
     const { branch } = await codeSession();
     const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });

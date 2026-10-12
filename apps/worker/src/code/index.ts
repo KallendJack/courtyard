@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, normalize } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
 import {
   CODE_SESSIONS_AT_ONCE,
@@ -32,7 +32,12 @@ export type PullRequestProblem =
   | { readonly kind: "not-on-github" };
 
 /** A session's branch and the folder it's checked out in. */
-export type SessionBranch = { readonly branch: string; readonly worktree: string };
+export type SessionBranch = {
+  readonly branch: string;
+  readonly worktree: string;
+  /** The branch was in the repository before the session (#326): clearing the session leaves it. */
+  readonly kept?: true;
+};
 
 /** Why a session branch couldn't be started, for the owner. */
 export type BranchRefusal =
@@ -40,6 +45,10 @@ export type BranchRefusal =
   | { readonly kind: "not-git"; readonly repoPath: string }
   /** The repository has no `origin` remote, or it couldn't be reached: git's own words. */
   | { readonly kind: "remote"; readonly reason: string }
+  /** A pull request's branch the repository has already is checked out in `worktree` (#326). */
+  | { readonly kind: "branch-in-use"; readonly branch: string; readonly worktree: string }
+  /** A pull request's branch the repository has already has commits its remote lacks (#326). */
+  | { readonly kind: "branch-ahead"; readonly branch: string }
   | { readonly kind: "git"; readonly reason: string };
 
 /** The remote a code workspace's repository is on: GitHub, by git's usual name for it. */
@@ -65,6 +74,30 @@ const defaultBranchOf = async (
       : ok(branch);
   } catch (error) {
     return err({ kind: "remote", reason: gitFailureReason(error) });
+  }
+};
+
+/**
+ * Whether a branch the repository has already is free for a session to use (#326): checked out in
+ * no worktree, and with no commits `tracking`, its remote branch freshly fetched, lacks.
+ */
+const unusedBranch = async (
+  repoPath: string,
+  ref: { branch: string; tracking: string },
+): Promise<Result<null, BranchRefusal>> => {
+  const { branch, tracking } = ref;
+  try {
+    const listed = await git(repoPath, ["worktree", "list", "--porcelain"]);
+    for (const entry of listed.split(/\r?\n\r?\n/)) {
+      const lines = entry.split(/\r?\n/);
+      if (!lines.includes(`branch refs/heads/${branch}`)) continue;
+      const path = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
+      return err({ kind: "branch-in-use", branch, worktree: normalize(path ?? repoPath) });
+    }
+    const ahead = await git(repoPath, ["rev-list", "--count", `${tracking}..refs/heads/${branch}`]);
+    return ahead.trim() === "0" ? ok(null) : err({ kind: "branch-ahead", branch });
+  } catch (error) {
+    return err({ kind: "git", reason: gitFailureReason(error) });
   }
 };
 
@@ -352,9 +385,9 @@ export const createCode = (options: {
     /**
      * Starts a session on a pull request's branch that no session opened (#278): the branch as
      * it is on the remote, freshly fetched, checked out in the session's own worktree as a branch
-     * of that name tracking it, so the session pushes to the same pull request. Refused when the
-     * repository has a branch of that name already, so clearing the session away never takes one
-     * of the owner's.
+     * of that name tracking it, so the session pushes to the same pull request. One the repository
+     * has already (#326), checked out nowhere and with nothing its remote lacks, is brought up to
+     * the remote and used, and kept when the session is cleared away; any other is refused.
      */
     startOnBranch: async (start: {
       repoPath: string;
@@ -368,12 +401,6 @@ export const createCode = (options: {
       if (named === undefined || branch.startsWith("-")) {
         return err({ kind: "git", reason: `${branch} isn't a branch name git takes` });
       }
-      if ((await gitOrNothing(repoPath, ["branch", "--list", branch])) !== "") {
-        return err({
-          kind: "git",
-          reason: `this repository has a branch called ${branch} already`,
-        });
-      }
       const tracking = `refs/remotes/${REMOTE}/${branch}`;
       try {
         await git(repoPath, ["fetch", "--quiet", REMOTE, `+refs/heads/${branch}:${tracking}`], {
@@ -383,22 +410,27 @@ export const createCode = (options: {
       } catch (error) {
         return err({ kind: "remote", reason: gitFailureReason(error) });
       }
+      const existing = (await gitOrNothing(repoPath, ["branch", "--list", branch])) !== "";
+      if (existing) {
+        const unused = await unusedBranch(repoPath, { branch, tracking });
+        if (!unused.ok) return unused;
+      }
       const worktree = worktreeOf(sessionId);
       try {
-        await git(repoPath, [
-          "worktree",
-          "add",
-          "--quiet",
-          "--track",
-          "-b",
-          branch,
-          worktree,
-          tracking,
-        ]);
+        // One already there is brought up to its remote first: it has nothing the remote lacks.
+        if (existing) {
+          await git(repoPath, ["branch", "--quiet", "--force", "--track", branch, tracking]);
+        }
+        await git(
+          repoPath,
+          existing
+            ? ["worktree", "add", "--quiet", worktree, branch]
+            : ["worktree", "add", "--quiet", "--track", "-b", branch, worktree, tracking],
+        );
       } catch (error) {
         return err({ kind: "git", reason: gitFailureReason(error) });
       }
-      return ok({ branch, worktree });
+      return ok({ branch, worktree, ...(existing ? { kept: true } : {}) });
     },
 
     /**
@@ -481,7 +513,8 @@ export const createCode = (options: {
     /**
      * Clears a session's worktree and branch away, for a session that never started, or one whose
      * pull request was merged or closed (#172): then, `pushed`, its branch on GitHub too (story
-     * 40), only ever one of Courtyard's own (`courtyard/…`). Anything left behind is the
+     * 40), only ever one of Courtyard's own (`courtyard/…`). A branch the session didn't make
+     * (`kept`, #326) stays, in the repository and on GitHub. Anything left behind is the
      * repository's to keep, so a failure here is only logged.
      */
     clearBranch: async (clear: {
@@ -499,7 +532,9 @@ export const createCode = (options: {
       try {
         await git(repoPath, ["worktree", "prune"]);
         const there = await git(repoPath, ["branch", "--list", sessionBranch.branch]);
-        if (there.trim() !== "") await git(repoPath, ["branch", "-D", sessionBranch.branch]);
+        if (there.trim() !== "" && sessionBranch.kept !== true) {
+          await git(repoPath, ["branch", "-D", sessionBranch.branch]);
+        }
       } catch (error) {
         console.error("A session branch couldn't be cleared away:", gitFailureReason(error));
       }
