@@ -198,7 +198,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   read by `workspaces/`, built by `allowlistFor`). `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
   worker's say on every edit and command, which records each one allowed as an activity and words each refusal
   through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
-  module's own fetch from the remote uses it too). `slots.ts` keeps up to three code sessions running at once across the worker (#174), each
+  module's own fetch from the remote uses it too). `slots.ts` keeps up to six code sessions running at once across the worker (#174, #364), each
   turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
   this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
   three waits, first come first served, until one ends. `builds.ts` is the builds queue (#281): the heavy checks
@@ -679,7 +679,7 @@ Where the rest fits:
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time
   limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
   `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a
-  denial tells the model why. With three code sessions' turns running, a fourth records `turn-queued` and waits, `turn-dequeued`
+  denial tells the model why. With six code sessions' turns running, a seventh records `turn-queued` and waits, `turn-dequeued`
   once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
   before it starts clears its branch and worktree away.
 - **The builds queue** (#281). A heavy check the `CodeTurn` allows (or the owner does) waits inside the provider's

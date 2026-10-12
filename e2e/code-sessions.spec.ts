@@ -352,8 +352,11 @@ test("a model that can't code is refused in a code workspace, with the reason", 
 /** Long enough that the fake is still writing it long after the test is done with it. */
 const LONG_TASK = `Refactor ${"the sessions module, the code module and the sidebar, ".repeat(120)}please.`;
 
+/** How many code sessions run at once: the contract's `CODE_SESSIONS_AT_ONCE` (#174, #364). */
+const AT_ONCE = 6;
+
 test.describe("several code sessions at once (#174)", () => {
-  /** Sessions the test keeps busy, so three code sessions are running; stopped at the end. */
+  /** Sessions the test keeps busy, so every place is taken; stopped at the end. */
   const busy: string[] = [];
 
   /** Stops a session's first turn. */
@@ -364,11 +367,11 @@ test.describe("several code sessions at once (#174)", () => {
     for (const id of busy.splice(0)) await stopFirstTurn(request, id);
   });
 
-  test("a fourth waits, saying why, and starts once one of the three ends", async ({
+  test("one more waits, saying why, and starts once one of the others ends", async ({
     page,
     request,
   }) => {
-    for (let started = 0; started < 3; started += 1) {
+    for (let started = 0; started < AT_ONCE; started += 1) {
       busy.push(await startCoding(request, LONG_TASK));
     }
 
@@ -379,7 +382,7 @@ test.describe("several code sessions at once (#174)", () => {
 
     const session = page.getByRole("list", { name: "Session" });
     await expect(session).toContainText(
-      "Waiting: 3 code sessions are running already. This starts as soon as one of them ends.",
+      `Waiting: ${AT_ONCE} code sessions are running already. This starts as soon as one of them ends.`,
     );
     await expect(session).not.toContainText("You said:");
 
@@ -394,14 +397,14 @@ test.describe("several code sessions at once (#174)", () => {
     page,
     request,
   }) => {
-    for (let started = 0; started < 3; started += 1) {
+    for (let started = 0; started < AT_ONCE; started += 1) {
       busy.push(await startCoding(request, LONG_TASK));
     }
     await startCoding(request, "From session to pull request");
 
     await page.goto("/workspaces/side-project#sessions");
     const sessions = page.getByRole("region", { name: "Sessions" });
-    await expect(sessions).toContainText("3 of 3 code sessions running");
+    await expect(sessions).toContainText(`${AT_ONCE} of ${AT_ONCE} code sessions running`);
     const waiting = sessions
       .getByRole("listitem")
       .filter({ hasText: "From session to pull request" });
