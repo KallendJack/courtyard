@@ -87,6 +87,23 @@ test("code is coloured by language from the theme", async ({ page }) => {
   expect(highlighter().length).toBeGreaterThan(0);
 });
 
+test("a diff's added lines are moss and its removed lines red, as on a PR's page", async ({
+  page,
+}) => {
+  const code = " squat 5x5\n-bench 3x8\n+bench 4x6";
+  const session = await ask(page, `The change:\n\n\`\`\`diff\n${code}\n\`\`\``);
+  const block = session.getByRole("figure", { name: "Diff" });
+  const line = (text: string) => block.locator("span", { hasText: new RegExp(`^${text}$`) });
+
+  await expect
+    .poll(() => looksOf(line("\\+bench 4x6")))
+    .toEqual({ colour: await themeColour(page, "code-string"), italic: false });
+  expect(await looksOf(line("-bench 3x8"))).toEqual({
+    colour: await themeColour(page, "destructive"),
+    italic: false,
+  });
+});
+
 test("maths is drawn as formulas, in all three forms, and prices stay text", async ({ page }) => {
   const scripts = watchScripts(page);
   const maths = () => scripts.filter((file) => /katex|maths/i.test(file));
