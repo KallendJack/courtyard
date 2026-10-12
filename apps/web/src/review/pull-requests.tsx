@@ -7,11 +7,12 @@ import type {
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
-import { type ComponentProps, lazy, Suspense, useEffect, useState } from "react";
+import { type ComponentProps, lazy, Suspense, useState } from "react";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
 import { useLayout } from "@/components/handheld";
+import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { addStylesheet } from "@/lib/stylesheet";
 import { useAction } from "@/lib/use-action";
@@ -69,6 +70,33 @@ const fromSessions = (sessions: readonly Listed[], state: "open" | "merged"): Ro
 const versionOf = (sessions: readonly Listed[]) =>
   JSON.stringify(sessions.map((session) => [session.id, session.pullRequest]));
 
+/** Each workspace's open pull requests as last known, for the tab's lifetime. */
+const KEPT_OPEN = createKept<OpenPullRequestList>();
+
+/**
+ * Every open pull request on a code workspace's repository, asked for again as its sessions' pull
+ * requests change (and when `again` changes, after the page merged one, say); none while `asking`
+ * is false.
+ */
+export const useOpenPullRequests = (
+  workspaceId: WorkspaceId,
+  sessions: readonly Listed[],
+  asking = true,
+  again = 0,
+) => {
+  const version = versionOf(sessions);
+  // The last list known shows at once, asked for again quietly (nothing jumps in late).
+  return useKept(KEPT_OPEN, {
+    key: workspaceId,
+    load: async () => {
+      const loaded = await loadOpenPullRequests(workspaceId);
+      return loaded.kind === "loaded" ? loaded.data : undefined;
+    },
+    again: `${version}:${again}`,
+    asking,
+  });
+};
+
 /**
  * A code workspace's pull requests (#240, #278; Paper, "PRs: every open PR"): every open one on
  * its repository, whoever opened it (a session, a Claude Code helper, the owner on GitHub), latest
@@ -80,22 +108,13 @@ const versionOf = (sessions: readonly Listed[]) =>
 export default function PullRequests(props: {
   workspaceId: WorkspaceId;
   sessions: CodeSessionList["sessions"];
+  /** The open ones as the page has them already (a code workspace's Home, #301), if it does. */
+  open?: OpenPullRequestList | undefined;
 }) {
   const { workspaceId, sessions } = props;
   const [showing, setShowing] = useState<"open" | "merged">("open");
-  const [open, setOpen] = useState<OpenPullRequestList>();
-  const version = versionOf(sessions);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again as the sessions' pull requests change
-  useEffect(() => {
-    let current = true;
-    void loadOpenPullRequests(workspaceId).then((loaded) => {
-      if (current && loaded.kind === "loaded") setOpen(loaded.data);
-    });
-    return () => {
-      current = false;
-    };
-  }, [workspaceId, version]);
+  const asked = useOpenPullRequests(workspaceId, sessions, props.open === undefined);
+  const open = props.open ?? asked;
 
   const rows: Row[] =
     showing === "merged" || open === undefined
@@ -111,7 +130,9 @@ export default function PullRequests(props: {
           };
         });
   const merged = fromSessions(sessions, "merged");
-  if (rows.length === 0 && merged.length === 0 && showing === "open") return null;
+  // Nothing known yet: the list keeps its place with faint rows until it comes.
+  const unknown = open === undefined && showing === "open";
+  if (!unknown && rows.length === 0 && merged.length === 0 && showing === "open") return null;
 
   return (
     <section aria-labelledby="pull-requests" data-review="" className="flex flex-col gap-3">
@@ -120,7 +141,7 @@ export default function PullRequests(props: {
           id="pull-requests"
           className="text-label font-semibold tracking-label text-muted-foreground uppercase"
         >
-          Pull requests · {rows.length} {showing}
+          {unknown ? "Pull requests" : `Pull requests · ${rows.length} ${showing}`}
         </h2>
         <SegmentedChoice
           label="Show"
@@ -130,7 +151,9 @@ export default function PullRequests(props: {
           onChange={setShowing}
         />
       </div>
-      {rows.length === 0 ? (
+      {unknown ? (
+        <PlaceholderRows count={2} size="tall" />
+      ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {showing === "open" ? "None open." : "None merged yet."}
         </p>

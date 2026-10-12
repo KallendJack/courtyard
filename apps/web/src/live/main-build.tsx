@@ -99,12 +99,12 @@ const namesSaid = (jobs: readonly BuildJob[]) => {
 };
 
 /** Where the build stands, after its title: "Unit tests · about 2 min". */
-const standing = (build: MainBuild) => {
+const standing = (build: MainBuild, updates: boolean) => {
   switch (build.kind) {
     case "passed":
-      return "Passed · ready to update";
+      return updates ? "Passed · ready to update" : "Passed";
     case "failed":
-      return `${namesSaid(build.jobs.filter((job) => job.outcome === "failed"))} failed · Update waits`;
+      return `${namesSaid(build.jobs.filter((job) => job.outcome === "failed"))} failed${updates ? " · Update waits" : ""}`;
     case "running": {
       const running = build.jobs.filter((job) => job.outcome === "running");
       const what = running.length === 1 && running[0] ? running[0].name : "Running";
@@ -130,34 +130,66 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
 export function MainBuildCard(props: {
   newest: LiveVersion;
   build: MainBuild;
-  onUpdate: () => void;
+  /** Update, on the live copy; without it, the bar alone (another repository's main, #301). */
+  onUpdate?: () => void;
+  /**
+   * As a row, with a label in capitals before it that names it too ("Main" on a code workspace's
+   * Home, #301; Paper, "Code workspace Home"): its title on one line, its bars thin, and each job's
+   * name for screen readers only.
+   */
+  label?: string;
 }) {
   const { build } = props;
+  const row = props.label !== undefined;
   // "7d518cd Rail and Talk key" reads as "Rail and Talk key 7d518cd".
   const [commit = "", ...words] = props.newest.title.split(" ");
   return (
     <section
-      aria-label="Updates"
-      className="mt-4 flex flex-wrap items-center gap-4 rounded-card border bg-surface py-4 pr-4 pl-4.5"
+      aria-label={props.label ?? "Updates"}
+      className={classes(
+        "flex flex-wrap items-center border bg-surface",
+        row
+          ? "gap-3.5 rounded-bubble py-2.5 pr-2.5 pl-3.5"
+          : "mt-4 gap-4 rounded-card py-4 pr-4 pl-4.5",
+      )}
     >
-      <div className="flex min-w-60 flex-1 flex-col gap-2.5">
+      {props.label !== undefined && (
+        <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+          {props.label}
+        </span>
+      )}
+      <div className={classes("flex min-w-60 flex-1 flex-col", row ? "gap-1.5" : "gap-2.5")}>
         <div className="flex justify-between gap-3">
-          <p className="min-w-0 text-interface font-semibold wrap-anywhere">
+          <p
+            className={classes(
+              "min-w-0 wrap-anywhere",
+              row ? "truncate text-label font-bold" : "text-interface font-semibold",
+            )}
+          >
             {words.join(" ")} {commit}
           </p>
           <p
             role="status"
             className={classes("shrink-0 text-label font-semibold", STANDING_LOOKS[build.kind])}
           >
-            {standing(build)}
+            {standing(build, props.onUpdate !== undefined)}
           </p>
         </div>
         <ol aria-label="Main's build" className="flex gap-1">
           {build.jobs.map((job) => (
             <li key={job.name} className="flex min-w-0 flex-1 flex-col gap-2.5">
-              <span aria-hidden className={classes("h-2 rounded-sm", LOOKS[job.outcome].bar)} />
               <span
-                className={classes("truncate text-caption font-semibold", LOOKS[job.outcome].name)}
+                aria-hidden
+                className={classes(
+                  row ? "h-1.5 rounded-full" : "h-2 rounded-sm",
+                  LOOKS[job.outcome].bar,
+                )}
+              />
+              <span
+                className={classes(
+                  row ? "sr-only" : "truncate text-caption font-semibold",
+                  LOOKS[job.outcome].name,
+                )}
               >
                 {job.name}
                 <span className="sr-only">: {LOOKS[job.outcome].said}</span>
@@ -167,18 +199,20 @@ export function MainBuildCard(props: {
         </ol>
       </div>
       {build.kind === "failed" ? (
-        <WebButton variant="outline" size="lg" href={build.details}>
+        <WebButton variant="outline" size={row ? "md" : "lg"} href={build.details}>
           Details
         </WebButton>
       ) : (
-        <Button
-          size="lg"
-          variant={build.kind === "running" ? "outline" : "primary"}
-          disabled={build.kind === "running"}
-          onClick={props.onUpdate}
-        >
-          Update
-        </Button>
+        props.onUpdate !== undefined && (
+          <Button
+            size={row ? "md" : "lg"}
+            variant={build.kind === "running" ? "outline" : "primary"}
+            disabled={build.kind === "running"}
+            onClick={props.onUpdate}
+          >
+            Update
+          </Button>
+        )
       )}
     </section>
   );

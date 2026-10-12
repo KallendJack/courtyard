@@ -16,6 +16,7 @@
     "@courtyard/contract": "workspace:*",
     "@courtyard/skills": "workspace:*",
     "@hono/node-server": "^2.1.3",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@openai/codex": "0.161.0",
     "hono": "^4.13.12",
     "sharp": "0.35.5",
@@ -24,7 +25,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "1.32.0",
     "@types/node": "^24.19.1",
     "@types/web-push": "^3.6.4",
     "vitest": "5.0.2"

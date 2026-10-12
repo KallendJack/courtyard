@@ -56,14 +56,16 @@ The plain line icon a workspace shows on its tile and beside its name, one of a 
 _Avoid_: colour, emoji, logo, avatar
 
 **Context file**:
-A workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first.
+A planning workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first. A code
+workspace has none (#301): what it knows lives in its repository.
 _Avoid_: system prompt, memory, notes
 
 **Intro line**:
 The line under a context file's title, above its sections: what the workspace is for. The owner gives it as
 **What's it for?** when adding a workspace (or the starter puts a hint there), and the workspace page shows it under
-the workspace's name. Get to know plans its topics from it.
-_Avoid_: description, summary, purpose
+the workspace's name. Get to know plans its topics from it. A code workspace keeps its line in its `workspace.json`
+instead, as its `description` (#301).
+_Avoid_: description (except a code workspace's field), summary, purpose
 
 **Owner context**:
 `OWNER.md` at the top of the context folder: what's true across the owner's whole life (About me) and how they like
@@ -156,8 +158,32 @@ _Avoid_: read-only workspace, chat workspace
 
 **Code workspace**:
 A workspace tied to a git repository on the worker machine, where a provider that can code may edit files and run
-commands.
+commands. It has no context file (#301): its name, its line and its connections are in its `workspace.json`.
 _Avoid_: dev workspace, repo workspace
+
+**Home**:
+A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
+Things, Docs). A code workspace's Home shows, in a fixed order, **Needs you**, **Running**, **Next up** and
+**Main** (its repository's newest main commit with its build), each block hidden when it's empty, then the
+message box.
+_Avoid_: dashboard, overview, landing page
+
+**Needs you**:
+The block on a code workspace's Home of everything waiting on the owner (AGENTS.md): approvals, failing checks, new
+replies, pull requests ready to merge, conflicts, and the setup check's offer, each a row with its one-tap action
+(Approve, Review, Open, Merge, Bring up to date).
+_Avoid_: inbox, notifications, to-do, alerts
+
+**Next up**:
+The block on a code workspace's Home of its repository's `ready-for-agent` issues nobody has claimed, in milestone
+order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the model, a second
+starts a session on it and claims the issue on GitHub.
+_Avoid_: backlog, queue, roadmap (that's the milestones)
+
+**Connections line**:
+The quiet line under a code workspace's name that says its GitHub repo and its Paper file, and opens its
+**Connections sheet** (#308): GitHub, and the one Paper file to pick or make (ADR 0023), with one Connect.
+_Avoid_: chips, integrations bar, settings
 
 ### Models
 
@@ -186,7 +212,8 @@ _Avoid_: device login (that's the owner's login to Courtyard), token, credential
 
 **Connections**:
 The list at the foot of the home page of what Courtyard is signed in to: each provider, and GitHub, with Sign in
-and Sign out.
+and Sign out. A code workspace's own connections (its GitHub repo and Paper file) are in its Connections sheet,
+from its connections line (#308).
 _Avoid_: integrations, accounts, models list
 
 **GitHub sign-in**:
@@ -223,8 +250,8 @@ _Avoid_: the plugin, Matt's plugin (for the copy), installed skills
 
 **Setup check**:
 What a code workspace's page offers, once, when its repository is missing what Matt's setup skill writes (its
-`docs/agents/` files, the Agent skills section, the triage labels): one approval that makes the labels and opens a
-pull request with the files.
+`docs/agents/` files, the Agent skills section, the triage labels): a row of Needs you that opens one approval,
+which makes the labels and opens a pull request with the files.
 _Avoid_: onboarding, setup wizard
 
 **House skill**:

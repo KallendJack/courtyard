@@ -1,49 +1,40 @@
 import {
   ChangeId,
-  CODE_SESSIONS_AT_ONCE,
   CONTEXT_FILE_LONG_CHARACTERS,
   CodeSessionList,
   type ContextFile,
   hasLines,
   type OwnerContextShared,
-  type SessionSummary,
   type SkillSummary,
   WORKSPACE_NAME_MAX_LENGTH,
   type WorkspaceId,
-  type WorkspaceMode,
+  type WorkspaceSummary,
 } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
-import { Button, IconButton } from "@/components/button";
+import { IconButton } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FactsPlansIdeas } from "@/components/context-lines";
-import { FormError } from "@/components/form-error";
 import { IconChooser } from "@/components/icon-chooser";
 import { EmptyState, Notice, StatusPill } from "@/components/notice";
-import { CARD, LIST_ROW, Page, PageTitle, SectionTitle } from "@/components/page";
+import { CARD, Page, PageTitle, SectionTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
-import { ListedSessionText, useRefreshWhileBusy } from "@/components/session-state";
+import { useRefreshWhileBusy } from "@/components/session-state";
 import { SkillList } from "@/components/skill-list";
-import { classes } from "@/lib/classes";
-import { useAction } from "@/lib/use-action";
 import { DocumentsSection } from "../../documents/documents-section.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer } from "../../sessions/composer.tsx";
 import { GetToKnow } from "../../sessions/get-to-know.tsx";
 import { GrillablePlan } from "../../sessions/grill-plan.tsx";
 import { startSession } from "../../sessions/messages.ts";
+import { SessionLinks } from "../../sessions/session-links.tsx";
 import { ThingsSection } from "../../things/things-section.tsx";
-import { describeWhen } from "../../when.ts";
-import { archiveWorkspace, changeWorkspace, deleteSession, fromWorker } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, fromWorker } from "../../worker.ts";
 
-// Loaded only for a code workspace, with the home page's Connections (#99).
-const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
-// Loaded only for a code workspace: the setup check's offer (#181).
-const MattSetupOffer = lazy(() => import("../../matt-setup/matt-setup-offer.tsx"));
-// Loaded only for a code workspace: its pull requests, with the review's stylesheet (#240).
-const PullRequests = lazy(() => import("../../review/pull-requests.tsx"));
+// A code workspace's Home and its tabs (#301), with a stylesheet of its own: loaded only for one.
+const CodeHome = lazy(() => import("../../code-home/code-home.tsx"));
 // A pull request no session opened (#278): loaded only when one is opened.
 const Review = lazy(() =>
   import("../../review/pull-requests.tsx").then((module) => ({ default: module.PullRequestPage })),
@@ -75,6 +66,13 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
     import("../../workspace-page.ts").then((page) => page.loadWorkspacePage(params.workspaceId)),
   component: Workspace,
 });
+
+/** A document or a Thing just deleted from its page, which its section offers to undo. */
+type Deleted = {
+  readonly kind: "document" | "thing";
+  readonly name: string;
+  readonly change: ChangeId | undefined;
+};
 
 function Workspace() {
   const { detail, sessions, providers, skills, documents, things } = Route.useLoaderData();
@@ -141,7 +139,7 @@ function Workspace() {
   const toggle = (what: "rename" | "archive") =>
     setTidying((was) => (was === what ? undefined : what));
   /** A document or a Thing just deleted from its page, which its section offers to undo. */
-  const deleted =
+  const deleted: Deleted | undefined =
     search.name === undefined
       ? undefined
       : { kind: search.kind ?? "document", name: search.name, change: search.deleted };
@@ -157,7 +155,8 @@ function Workspace() {
   };
 
   return (
-    <Page wide>
+    // A code workspace's Home ends with its message box, pinned at the foot (#301).
+    <Page wide flushBottom={workspace.mode === "code"}>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
@@ -214,6 +213,54 @@ function Workspace() {
           </ConfirmStep>
         </div>
       )}
+      {workspace.mode === "code" ? (
+        <Suspense fallback={null}>
+          <CodeHome
+            workspace={workspace}
+            description={detail.data.description}
+            list={sessionList}
+            providers={providers}
+            skills={skills}
+            hash={hash}
+          />
+        </Suspense>
+      ) : (
+        <PlanningHome
+          workspace={workspace}
+          contextFile={contextFile}
+          ownerContextShared={ownerContextShared}
+          sessionList={sessionList}
+          loaded={{ sessions, providers, skills, documents, things }}
+          deleted={deleted}
+          onUndone={undone}
+        />
+      )}
+    </Page>
+  );
+}
+
+/**
+ * A planning workspace's page under its title: what it's for, the message box, then its cards:
+ * what's been said and known, and its skills, on the left; its Things and documents on the right.
+ */
+function PlanningHome(props: {
+  workspace: WorkspaceSummary;
+  contextFile: ContextFile | null;
+  ownerContextShared: OwnerContextShared;
+  sessionList: CodeSessionList;
+  loaded: Pick<
+    ReturnType<typeof Route.useLoaderData>,
+    "sessions" | "providers" | "skills" | "documents" | "things"
+  >;
+  deleted: Deleted | undefined;
+  onUndone: () => Promise<void>;
+}) {
+  const { workspace, contextFile, ownerContextShared, sessionList, deleted } = props;
+  const { sessions, providers, skills, documents, things } = props.loaded;
+  const navigate = useNavigate();
+  const undone = props.onUndone;
+  return (
+    <>
       {contextFile !== null && contextFile.intro !== "" && (
         // One line, as a reminder; the whole file is further down.
         <p className="mt-2 line-clamp-1 text-body text-muted-foreground">{contextFile.intro}</p>
@@ -222,14 +269,6 @@ function Workspace() {
         <div className="mt-4">
           <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
         </div>
-      )}
-
-      {workspace.mode === "code" && (
-        // Where a session would start, so the owner knows to sign in to GitHub first (#99).
-        <Suspense fallback={null}>
-          <SignIns part="github-notice" />
-          <MattSetupOffer workspaceId={workspace.id} />
-        </Suspense>
       )}
       <div className="mt-6 md:mt-8">
         {providers.kind === "loaded" ? (
@@ -254,78 +293,59 @@ function Workspace() {
           <p className="text-sm text-muted-foreground">{describeProblem(providers).body}</p>
         )}
       </div>
-      {workspace.mode === "code" && (
-        // The PRs tab's list (#240), until the page has tabs (#222): what waits on the owner.
-        <Suspense fallback={null}>
-          <div className="mt-6 empty:hidden">
-            <PullRequests workspaceId={workspace.id} sessions={sessionList.sessions} />
-          </div>
-        </Suspense>
-      )}
-
       {/*
         The workspace's cards: what's been said and known, and its skills, on the left; what it has
-        on the right. Only a planning workspace has things, so only it gets the second column.
+        on the right.
       */}
-      <div
-        className={classes(
-          "mt-6 grid gap-4",
-          workspace.mode === "planning" &&
-            "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] @3xl:items-start",
-        )}
-      >
+      <div className="mt-6 grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] @3xl:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-          {sessions.kind === "loaded" && <SessionLinks list={sessionList} mode={workspace.mode} />}
+          {sessions.kind === "loaded" && <SessionLinks list={sessionList} mode="planning" />}
           <section aria-label="Context file" className={CARD}>
             <ContextFileCard
               workspaceId={workspace.id}
-              mode={workspace.mode}
               contextFile={contextFile}
               ownerContextShared={ownerContextShared}
             />
           </section>
-          {skills.kind === "loaded" && <Skills skills={skills.data.skills} mode={workspace.mode} />}
+          {skills.kind === "loaded" && <Skills skills={skills.data.skills} />}
         </div>
-        {workspace.mode === "planning" && (
-          <div className="flex min-w-0 flex-col gap-4">
-            {things.kind === "loaded" && (
-              <ThingsSection
-                workspaceId={workspace.id}
-                list={things.data}
-                {...(deleted?.kind === "thing" ? { deleted } : {})}
-                onUndone={undone}
-              />
-            )}
-            {documents.kind === "loaded" && (
-              <DocumentsSection
-                workspaceId={workspace.id}
-                documents={documents.data.documents}
-                {...(deleted?.kind === "document" ? { deleted } : {})}
-                onUndone={undone}
-              />
-            )}
-          </div>
-        )}
+        <div className="flex min-w-0 flex-col gap-4">
+          {things.kind === "loaded" && (
+            <ThingsSection
+              workspaceId={workspace.id}
+              list={things.data}
+              {...(deleted?.kind === "thing" ? { deleted } : {})}
+              onUndone={undone}
+            />
+          )}
+          {documents.kind === "loaded" && (
+            <DocumentsSection
+              workspaceId={workspace.id}
+              documents={documents.data.documents}
+              {...(deleted?.kind === "document" ? { deleted } : {})}
+              onUndone={undone}
+            />
+          )}
+        </div>
       </div>
-    </Page>
+    </>
   );
 }
 
 /**
  * The context file's card: its sections, or a way to start one, then what else models here read
- * and the ways to look after it (Recent changes, Tidy).
+ * and the ways to look after it (Recent changes, Tidy). Only a planning workspace has one (#301).
  */
 function ContextFileCard(props: {
   workspaceId: WorkspaceId;
-  mode: WorkspaceMode;
   contextFile: ContextFile | null;
   ownerContextShared: OwnerContextShared;
 }) {
-  const { workspaceId, mode, contextFile, ownerContextShared } = props;
+  const { workspaceId, contextFile, ownerContextShared } = props;
   return (
     <>
       <SectionTitle>Context file</SectionTitle>
-      {mode === "planning" && (contextFile === null || !hasLines(contextFile)) && (
+      {(contextFile === null || !hasLines(contextFile)) && (
         <GetToKnow
           about={{ kind: "workspace", id: workspaceId }}
           label="Get to know this workspace"
@@ -353,10 +373,7 @@ function ContextFileCard(props: {
               </StatusPill>
             </div>
           )}
-          <ContextFileSections
-            contextFile={contextFile}
-            {...(mode === "planning" && { workspaceId })}
-          />
+          <ContextFileSections contextFile={contextFile} workspaceId={workspaceId} />
         </>
       )}
       {ownerContextShared !== "none" && (
@@ -403,7 +420,7 @@ function ContextFileCard(props: {
  * it comes from, and why any can't be used, then how to add one. Nothing here is a setting:
  * skills are files.
  */
-function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode }) {
+function Skills(props: { skills: readonly SkillSummary[] }) {
   return (
     <section aria-label="Skills" className={CARD}>
       <div className="flex flex-col gap-1">
@@ -418,8 +435,7 @@ function Skills(props: { skills: readonly SkillSummary[]; mode: WorkspaceMode })
       </div>
       <p className="mt-4 text-sm/5.25 text-muted-foreground">
         Add your own: a folder with a <code>SKILL.md</code>, in an <code>.agents/skills</code>{" "}
-        folder in this workspace's folder, {props.mode === "code" && "or its repo's, "}or at the top
-        of your context folder for every workspace.
+        folder in this workspace's folder, or at the top of your context folder for every workspace.
       </p>
     </section>
   );
@@ -451,102 +467,16 @@ const useSessionList = (loaded: CodeSessionList | undefined) => {
 };
 
 /**
- * The workspace's sessions, latest first, each saying whose turn it is (#179). In a code
- * workspace, how many code sessions are running across the worker, and any session waiting for one
- * of them to end, which can be removed (#174).
+ * The context file's sections. Its intro is shown under the workspace's title instead. Each plan
+ * has Grill this plan.
  */
-function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
-  const { sessions, running } = props.list;
-  if (sessions.length === 0) return null;
-  // A session whose pull request was merged or closed has ended: it leaves the sessions for
-  // History, so its place is free for a new one (#278).
-  const ended = (session: CodeSessionList["sessions"][number]) =>
-    session.pullRequest !== undefined && session.pullRequest.state !== "open";
-  const current = sessions.filter((session) => !ended(session));
-  const history = sessions.filter(ended);
-  return (
-    <>
-      {current.length > 0 && (
-        <section aria-label="Sessions" className={CARD}>
-          <div className="flex items-baseline justify-between gap-4">
-            <SectionTitle>Sessions</SectionTitle>
-            {props.mode === "code" && (
-              <span className="text-meta text-muted-foreground">
-                {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
-              </span>
-            )}
-          </div>
-          <SessionList sessions={current} />
-        </section>
-      )}
-      {history.length > 0 && (
-        <section aria-label="History" className={CARD}>
-          <SectionTitle>History</SectionTitle>
-          <SessionList sessions={history} />
-        </section>
-      )}
-    </>
-  );
-}
-
-/** Sessions, each a link with whose turn it is, and Remove for one waiting to start. */
-function SessionList(props: { sessions: CodeSessionList["sessions"] }) {
-  return (
-    <ul className="mt-2 divide-y">
-      {props.sessions.map((session) => (
-        <li key={session.id} className="flex items-center gap-2">
-          <Link
-            to="/workspaces/$workspaceId/sessions/$sessionId"
-            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-            className={classes(LIST_ROW, "min-w-0 flex-1")}
-          >
-            <ListedSessionText
-              title={session.title}
-              now={session.now}
-              updatedAt={session.updatedAt}
-              waitsForSlot={session.queued}
-              when={describeWhen}
-            />
-          </Link>
-          {session.queued && <RemoveQueued session={session} />}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** Remove, for a session waiting to start: it goes, with the message it was waiting to answer. */
-function RemoveQueued(props: { session: SessionSummary }) {
-  const router = useRouter();
-  const remove = useAction(async () => {
-    const removed = await deleteSession(props.session.id);
-    if (removed.kind !== "loaded") return describeProblem(removed).body;
-    await router.invalidate();
-    return undefined;
-  });
-  return (
-    <div className="flex shrink-0 flex-col items-end">
-      <Button variant="quiet" size="xs" disabled={remove.busy} onClick={() => remove.run()}>
-        Remove
-      </Button>
-      <FormError message={remove.error} />
-    </div>
-  );
-}
-
-/**
- * The context file's sections. Its intro is shown under the workspace's title instead. Given the
- * workspace (a planning one), each plan has Grill this plan.
- */
-function ContextFileSections(props: { contextFile: ContextFile; workspaceId?: WorkspaceId }) {
+function ContextFileSections(props: { contextFile: ContextFile; workspaceId: WorkspaceId }) {
   const { contextFile, workspaceId } = props;
   return (
     <div className="mt-4 space-y-6">
       <FactsPlansIdeas
         {...contextFile}
-        {...(workspaceId !== undefined && {
-          plan: (plan: string) => <GrillablePlan workspaceId={workspaceId} plan={plan} />,
-        })}
+        plan={(plan: string) => <GrillablePlan workspaceId={workspaceId} plan={plan} />}
       />
       {contextFile.other !== "" && (
         <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">

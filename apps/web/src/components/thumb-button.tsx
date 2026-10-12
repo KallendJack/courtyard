@@ -3,12 +3,13 @@ import { classes } from "@/lib/classes";
 
 /**
  * The Paper boards' thumb-sized buttons (Handheld · 16, 17, 18), side by side at the bottom of a
- * card, in thumb reach: Deny and Allow on an approval, Merge and Close PR on a review. Its classes
- * are off the first load: they're in the stylesheets of the pieces that use it (approval-card.css,
- * review.css), and apply only inside those pieces.
+ * card, in thumb reach: Deny and Allow on an approval, Merge and Close PR on a review; or one at
+ * the end of a row that needs the owner (a code workspace's Needs you, #301). Its classes are off
+ * the first load: they're in the stylesheets of the pieces that use it (approval-card.css,
+ * review.css, code-home.css), and apply only inside those pieces.
  */
 const BASE =
-  "flex items-center justify-center gap-2 text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
+  "flex items-center justify-center gap-2 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
 
 const LOOKS = {
   /** The way out: Deny, Close PR. */
@@ -18,6 +19,8 @@ const LOOKS = {
   /** The one big action of a screen, in violet: Merge (#240). Greyed out the same way. */
   primary:
     "bg-primary font-bold text-primary-foreground hover:bg-primary/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset",
+  /** In gold, as what needs the owner: Approve on a row of Needs you (#301). */
+  needs: "bg-warning font-bold text-background hover:bg-warning/85 disabled:opacity-50",
 } as const;
 
 /** How much of the row it takes, beside the other. */
@@ -28,6 +31,7 @@ export function ThumbButton({
   grow = 1,
   tall = false,
   fit = false,
+  row = false,
   type = "button",
   ...props
 }: Omit<ComponentProps<"button">, "className"> & {
@@ -40,6 +44,8 @@ export function ThumbButton({
    * PR, #278).
    */
   fit?: boolean;
+  /** A pill at the end of a row, the same width on every row (Needs you's Merge, Approve, #301). */
+  row?: boolean;
 }) {
   return (
     <button
@@ -47,9 +53,11 @@ export function ThumbButton({
       className={classes(
         BASE,
         LOOKS[look],
-        fit
-          ? "h-12 shrink-0 rounded-lg px-5"
-          : classes("basis-0 rounded-card", GROW[grow], tall ? "h-15" : "h-14"),
+        row
+          ? "h-9 min-w-24 shrink-0 rounded-full px-4 text-sm/4.5"
+          : fit
+            ? "h-12 shrink-0 rounded-lg px-5 text-base/5"
+            : classes("basis-0 rounded-card text-base/5", GROW[grow], tall ? "h-15" : "h-14"),
       )}
       {...props}
     />

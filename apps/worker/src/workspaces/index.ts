@@ -58,6 +58,8 @@ export type AllowlistSettings = z.infer<typeof AllowlistSettings>;
 export const PaperSettings = z.object({
   command: z.string().trim().min(1),
   fileId: z.string().trim().min(1),
+  /** The file's name in Paper, kept when it's connected from the workspace's page (#308). */
+  name: z.string().trim().min(1).optional(),
 });
 export type PaperSettings = z.infer<typeof PaperSettings>;
 
@@ -66,6 +68,11 @@ const WorkspaceConfig = z
   .object({
     name: z.string().trim().min(1).optional(),
     mode: WorkspaceMode.default("planning"),
+    /**
+     * A code workspace's one line, What it's for (#301): it has no context file, so this is where
+     * the line its page shows under its name lives.
+     */
+    description: z.string().trim().min(1).optional(),
     /** The git repository a code workspace works on, on the worker machine. */
     repoPath: z.string().min(1).optional(),
     /** A code workspace's changes to the default command allowlist, if any. */
@@ -86,6 +93,7 @@ type Config =
       readonly kind: "read";
       readonly name?: string;
       readonly mode: WorkspaceMode;
+      readonly description?: string;
       readonly icon?: WorkspaceIcon;
       readonly repoPath?: string;
       readonly allowlist?: AllowlistSettings;
@@ -95,11 +103,14 @@ type Config =
 
 export type Workspace = {
   readonly summary: WorkspaceSummary;
+  /** Its context file: a planning workspace's; never a code workspace's, which has none (#301). */
   readonly contextFile: ContextFile | null;
   /** The workspace's folder on the worker machine. */
   readonly folder: string;
-  /** The context file exactly as written, for models to read. */
+  /** The context file exactly as written, for models to read; never a code workspace's. */
   readonly contextMarkdown: string | null;
+  /** A code workspace's one line, What it's for (#301), or `null` when it has none. */
+  readonly description: string | null;
   /** A code workspace's repository on the worker machine, as its config names it. */
   readonly repoPath: string | null;
   /** A code workspace's changes to the default command allowlist: none when its config has none. */
@@ -142,11 +153,12 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, icon, repoPath, allowlist, connections } = parsed.data;
+  const { name, mode, description, icon, repoPath, allowlist, connections } = parsed.data;
   return {
     kind: "read",
     mode,
     ...(name === undefined ? {} : { name }),
+    ...(description === undefined ? {} : { description }),
     ...(icon === undefined ? {} : { icon }),
     ...(repoPath === undefined ? {} : { repoPath }),
     ...(allowlist === undefined ? {} : { allowlist }),
@@ -169,10 +181,15 @@ const readWorkspace = async (
       message: `The ${id} workspace's ${CONTEXT_FILE} can't be read.`,
     });
   }
-  const contextFile = markdown.value === undefined ? null : parseContextFile(markdown.value);
+  const read = markdown.value === undefined ? null : parseContextFile(markdown.value);
   const valid = config.kind === "read" ? config : undefined;
-  const name = valid?.name ?? contextFile?.title ?? id;
+  const name = valid?.name ?? read?.title ?? id;
   const mode = valid?.mode ?? "planning";
+  // A code workspace has no context file (#301): one made before then is read only for the name
+  // and the one line it held, until its workspace.json has them.
+  const code = mode === "code";
+  const contextFile = code ? null : read;
+  const migrated = read !== null && read.intro !== STARTER_INTRO ? read.intro : "";
 
   return ok({
     summary: {
@@ -186,7 +203,8 @@ const readWorkspace = async (
     },
     contextFile,
     folder,
-    contextMarkdown: markdown.value ?? null,
+    contextMarkdown: code ? null : (markdown.value ?? null),
+    description: code ? (valid?.description ?? (migrated || null)) : null,
     repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
     allowlist: valid?.allowlist ?? { add: [], remove: [] },
     paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
@@ -263,6 +281,15 @@ export const listCodeWorkspaces = async (
   );
 };
 
+/**
+ * Paper's command on the worker machine, as the first code workspace that names Paper has it
+ * (ADR 0023), for connecting Paper in another (#308); `undefined` when none does.
+ */
+export const paperCommandInUse = async (contextDir: string) => {
+  const every = await readEveryWorkspace(contextDir);
+  return every.ok ? every.value.find((workspace) => workspace.paper)?.paper?.command : undefined;
+};
+
 /** How many workspaces there are, archived ones too. */
 export const countWorkspaces = async (
   contextDir: string,
@@ -300,15 +327,27 @@ export const isArchived = async (contextDir: string, id: WorkspaceId) => {
   return !workspace.ok && workspace.error.kind === "archived";
 };
 
-/** Keeps a name or icon in a workspace's config, alongside whatever else is there. */
+const ConfigOnDisk = z.record(z.string(), z.unknown());
+
+/**
+ * Keeps fields in a workspace's config, alongside whatever else is there: a name or icon, or
+ * what `change` makes of the config as it is on disk.
+ */
 const keepInConfig = async (
   workspace: Workspace,
-  fields: { name?: string; icon?: WorkspaceIcon },
+  fields:
+    | { name?: string; icon?: WorkspaceIcon }
+    | ((config: Readonly<Record<string, unknown>>) => Record<string, unknown>),
 ): Promise<Result<null, WorkspaceError>> => {
   // Read as it is on disk, so fields the worker doesn't know about are kept too.
   const path = join(workspace.folder, CONFIG_FILE);
-  const config = await readJsonFile(path, z.record(z.string(), z.unknown()));
-  const written = config.ok ? await writeJsonFile(path, { ...config.value, ...fields }) : config;
+  const config = await readJsonFile(path, ConfigOnDisk);
+  const written = config.ok
+    ? await writeJsonFile(path, {
+        ...config.value,
+        ...(typeof fields === "function" ? fields(config.value ?? {}) : fields),
+      })
+    : config;
   return written.ok
     ? ok(null)
     : err({
@@ -409,6 +448,10 @@ const archivedClash = async (
   };
 };
 
+/** A starter context file's intro line, when the owner didn't say what the workspace is for. */
+const STARTER_INTRO =
+  "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.";
+
 /**
  * A new workspace's context file: its title, its intro line (what it's for, when the owner said,
  * or else a line on how to fill it in), then empty Facts, Plans and Ideas (docs/ai-conduct.md,
@@ -418,8 +461,7 @@ export const starterContextFile = (name: string, intro?: string) =>
   [
     `# ${name}`,
     "",
-    intro ||
-      "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+    intro || STARTER_INTRO,
     "",
     "## Facts",
     "",
@@ -430,8 +472,9 @@ export const starterContextFile = (name: string, intro?: string) =>
   ].join("\n");
 
 /**
- * Writes a new workspace's context file and config into its empty folder: a code workspace's
- * config names its repository (README, Code workspaces).
+ * Writes a new workspace's files into its empty folder: a planning workspace's context file and
+ * config; a code workspace's config alone, naming its repository and holding its name and one line
+ * (README, Code workspaces; #301), since it has no context file.
  */
 const writeStarterFiles = async (
   folder: string,
@@ -446,17 +489,25 @@ const writeStarterFiles = async (
     kind: "storage",
     message: "The new workspace couldn't be saved.",
   };
-  try {
-    await writeFile(join(folder, CONTEXT_FILE), starterContextFile(starter.name, starter.intro), {
-      flag: "wx",
-    });
-  } catch {
-    return err(problem);
+  if (starter.repoPath === undefined) {
+    try {
+      await writeFile(join(folder, CONTEXT_FILE), starterContextFile(starter.name, starter.intro), {
+        flag: "wx",
+      });
+    } catch {
+      return err(problem);
+    }
   }
   const config =
     starter.repoPath === undefined
       ? { icon: starter.icon }
-      : { mode: "code", repoPath: starter.repoPath, icon: starter.icon };
+      : {
+          name: starter.name,
+          mode: "code",
+          repoPath: starter.repoPath,
+          ...(starter.intro ? { description: starter.intro } : {}),
+          icon: starter.icon,
+        };
   const written = await writeJsonFile(join(folder, CONFIG_FILE), config, { exclusive: true });
   return written.ok ? ok(null) : err(problem);
 };
@@ -482,8 +533,8 @@ export const checkNewName = async (
 /**
  * Adds a workspace called `name`: its folder, a starter context file starting with `intro` when
  * there is one, and the icon its name suggests, kept in its config. With `repoPath`, it's a code
- * workspace on that repository (#258). Refuses a name that can't be a folder name or that another
- * workspace has.
+ * workspace on that repository (#258), with no context file: `intro` is its config's description
+ * (#301). Refuses a name that can't be a folder name or that another workspace has.
  */
 export const createWorkspace = async (
   contextDir: string,
@@ -552,6 +603,34 @@ export const changeWorkspace = async (
   // Read again: a new name can suggest another icon, when the owner hasn't picked one.
   const changed = await readWorkspace(contextDir, summary.id);
   return changed.ok ? ok(changed.value.summary) : changed;
+};
+
+/**
+ * Connects a code workspace's one Paper file (ADR 0023, #308), kept in its config's connections
+ * beside anything else there, replacing the file it had. Refuses a planning workspace, and a config
+ * that was ignored, which is left for the owner to fix.
+ */
+export const connectPaper = async (
+  contextDir: string,
+  connect: { id: string; paper: PaperSettings },
+): Promise<Result<Workspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, connect.id);
+  if (!workspace.ok) return workspace;
+  const { summary } = workspace.value;
+  if (summary.configProblem !== undefined) {
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  if (summary.mode !== "code") {
+    return err({ kind: "invalid", message: "Only a code workspace connects Paper." });
+  }
+  const kept = await keepInConfig(workspace.value, (config) => {
+    const connections = ConfigOnDisk.safeParse(config.connections);
+    return {
+      connections: { ...(connections.success ? connections.data : {}), paper: connect.paper },
+    };
+  });
+  if (!kept.ok) return kept;
+  return readWorkspace(contextDir, summary.id);
 };
 
 /**

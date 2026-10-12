@@ -1,5 +1,6 @@
 import {
   OpenPullRequestList,
+  type ProviderList,
   type PullRequestMerging,
   PullRequestReview,
   type PullRequestSessionStart,
@@ -42,6 +43,18 @@ export const endPullRequest = (
     body: how.kind === "merge" ? ({ head: how.head } satisfies PullRequestMerging) : {},
     schema: z.unknown(),
   });
+
+/**
+ * The first model that codes, which a session started from a pull request or Build (#298) works
+ * with: the one a new session would start with, among those that code.
+ */
+export const codingModelIn = (providers: ProviderList["providers"]) => {
+  for (const provider of providers) {
+    const model = provider.available && provider.capabilities.codes && provider.models[0];
+    if (model) return { ref: { provider: provider.id, model: model.id }, label: model.label };
+  }
+  return undefined;
+};
 
 /** Every open pull request on a code workspace's repository, whoever opened it (#278). */
 export const loadOpenPullRequests = (workspaceId: WorkspaceId) =>

@@ -208,12 +208,53 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toContain(await quotedInGuide("The Paper file has two pages"));
   });
 
-  it("tells a model that uses no tools nothing of Paper, since it isn't given Paper", async () => {
+  it("tells a model that uses no tools nothing of how to use Paper, since it isn't given Paper, only that it can't", async () => {
     await withPaper();
 
     const { framing } = await firstTurn(CODES);
 
-    expect(framing.instructions).not.toContain("Paper");
+    expect(framing.instructions).not.toContain("You can read and draw Paper designs");
+    expect(framing.instructions).not.toContain("file-1");
+    expect(framing.instructions).toContain(
+      await quotedInGuide("Its Paper file is connected, but this model can't"),
+    );
+  });
+
+  it("tells a code turn nothing of a context file, even one its workspace kept from before (#301)", async () => {
+    await asCode();
+    await contextFile("# Garage gym\n\nA side project.\n\n## Facts\n- Single garage.\n");
+
+    const { instructions } = (await firstTurn(CODES)).framing;
+
+    expect(instructions).not.toMatch(/context_file|context file/i);
+    expect(instructions).not.toContain("Single garage");
+    expect(instructions).not.toContain("Facts are true now");
+  });
+
+  it("tells a code turn its connections in one line: what it has, what's missing and where the owner adds it (#308)", async () => {
+    await withPaper();
+
+    const withTools = (await firstTurn({ ...CODES, usesTools: true })).framing.instructions;
+
+    // The test repository's remote is on GitHub, but Courtyard isn't signed in here.
+    expect(withTools).toContain(
+      `${(await quotedInGuide("This workspace's connections:")).replace("<connections>", 'Paper, in its Paper file "file-1"')} ${await quotedInGuide("Courtyard isn't signed in to GitHub")}`,
+    );
+    expect(withTools).not.toContain(await quotedInGuide("It has no Paper file connected"));
+  });
+
+  it("tells a code turn with no Paper file where the owner connects one (#308)", async () => {
+    await asCode();
+
+    const { instructions } = (await firstTurn({ ...CODES, usesTools: true })).framing;
+
+    expect(instructions).toContain(
+      [
+        await quotedInGuide("This workspace has no connections yet."),
+        await quotedInGuide("Courtyard isn't signed in to GitHub"),
+        await quotedInGuide("It has no Paper file connected"),
+      ].join(" "),
+    );
   });
 
   it("tells a model that reads no files only what it can do", async () => {

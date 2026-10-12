@@ -58,6 +58,27 @@ export type GitHubApi = {
     pull: { readonly repo: string; readonly number: number },
   ) => Promise<Result<readonly FoundFile[], string>>;
   /**
+   * The open issues in `repo` with `label` (#301's Next up), each with its milestone and its
+   * comments' text, which say whether someone has claimed it.
+   */
+  readonly openIssues: (
+    accessToken: string,
+    find: { readonly repo: string; readonly label: string },
+  ) => Promise<Result<readonly FoundIssue[], string>>;
+  /**
+   * The title and description of each open pull request in `repo` (#301): what says which issues
+   * they close. Lighter than `openPullRequests`, which asks for each one's checks.
+   */
+  readonly openPullRequestTexts: (
+    accessToken: string,
+    find: { readonly repo: string },
+  ) => Promise<Result<readonly { readonly title: string; readonly body: string }[], string>>;
+  /** Comments on issue `number` in `repo` (Build's claim, #298). */
+  readonly commentOnIssue: (
+    accessToken: string,
+    comment: { readonly repo: string; readonly number: number; readonly body: string },
+  ) => Promise<Result<null, string>>;
+  /**
    * Merges pull request `number` in `repo`, only while its latest commit is still `head` (#160):
    * GitHub's reason in plain words when it won't.
    */
@@ -141,6 +162,17 @@ export type FoundFile = {
   readonly additions: number;
   readonly deletions: number;
   readonly patch: string | null;
+};
+
+/** An open issue as GitHub has it (#301). */
+export type FoundIssue = {
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  /** Its milestone's title, or `null` when it's in none. */
+  readonly milestone: string | null;
+  /** The text of each comment on it, oldest first. */
+  readonly comments: readonly string[];
 };
 
 /** One check on a pull request's latest commit, and how it's going. */
@@ -274,6 +306,21 @@ const PullFiles = z.array(
 );
 const Refusal = z.object({ message: z.string() });
 const Labels = z.array(z.object({ name: z.string() }));
+/** A repository's issues: a pull request is listed among them too, with `pull_request`. */
+const Issues = z.array(
+  z.object({
+    number: z.number().int().positive(),
+    title: z.string(),
+    html_url: z.url({ protocol: /^https$/ }),
+    milestone: z.object({ title: z.string() }).nullable(),
+    comments: z.number().int().nonnegative(),
+    pull_request: z.unknown().optional(),
+  }),
+);
+const Comments = z.array(z.object({ body: z.string().nullable().optional() }));
+const PullTexts = z.array(z.object({ title: z.string(), body: z.string().nullable() }));
+/** How many issues' comments are asked for at once. */
+const COMMENTS_AT_ONCE = 8;
 /** A pull request just opened. */
 const Opened = z.object({
   number: z.number().int().positive(),
@@ -668,6 +715,75 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       } catch {
         return err("GitHub couldn't be asked what the pull request changes.");
       }
+    },
+
+    openIssues: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const label = encodeURIComponent(find.label);
+      try {
+        const listed: z.infer<typeof Issues> = [];
+        for (let page = 1; page <= FILE_PAGES; page += 1) {
+          const issues = await apiGet(
+            accessToken,
+            `/repos/${repo.data}/issues?state=open&labels=${label}&per_page=${PAGE}&page=${page}`,
+            Issues,
+          );
+          listed.push(...issues.filter((issue) => issue.pull_request === undefined));
+          if (issues.length < PAGE) break;
+        }
+        // Only an issue with comments is asked for them, a few at a time.
+        const found: FoundIssue[] = [];
+        for (let at = 0; at < listed.length; at += COMMENTS_AT_ONCE) {
+          const some = await Promise.all(
+            listed.slice(at, at + COMMENTS_AT_ONCE).map(async (issue) => ({
+              number: issue.number,
+              title: issue.title,
+              url: issue.html_url,
+              milestone: issue.milestone?.title ?? null,
+              comments:
+                issue.comments === 0
+                  ? []
+                  : (
+                      await apiGet(
+                        accessToken,
+                        `/repos/${repo.data}/issues/${issue.number}/comments?per_page=${PAGE}`,
+                        Comments,
+                      )
+                    ).map((comment) => comment.body ?? ""),
+            })),
+          );
+          found.push(...some);
+        }
+        return ok(found);
+      } catch {
+        return err("GitHub couldn't be asked for the repository's issues.");
+      }
+    },
+
+    openPullRequestTexts: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      try {
+        const pulls = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/pulls?state=open&per_page=${PAGE}`,
+          PullTexts,
+        );
+        return ok(pulls.map((pull) => ({ title: pull.title, body: pull.body ?? "" })));
+      } catch {
+        return err("GitHub couldn't be asked for the pull requests.");
+      }
+    },
+
+    commentOnIssue: async (accessToken, comment) => {
+      const repo = RepoName.safeParse(comment.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      return apiChange(accessToken, `/repos/${repo.data}/issues/${comment.number}/comments`, {
+        method: "POST",
+        body: { body: comment.body },
+        fallback: `GitHub couldn't comment on #${comment.number}.`,
+      });
     },
 
     merge: async (accessToken, pull) => {
