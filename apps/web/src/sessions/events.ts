@@ -554,6 +554,8 @@ export const useSessionTurns = (sessionId: SessionId) => {
 
   return {
     turns: log.turns,
+    /** The last event number shown, which the page tells the worker the owner has seen (#334). */
+    lastSeq: log.lastSeq,
     modelTitle: log.modelTitle,
     pullRequest: log.pullRequest,
     queuedMessages: log.queuedMessages,

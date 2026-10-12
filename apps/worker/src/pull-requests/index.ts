@@ -13,6 +13,7 @@ import type { FoundPullRequest } from "../github/index.ts";
 import { bringUpToDateMessage } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
+import { pullRequestWaiting } from "../waiting/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
 
 /**
@@ -130,18 +131,20 @@ export const createPullRequests = (options: {
             branch: found.branch,
             base: found.base,
             from: fromOf(listed, found),
+            waiting: pullRequestWaiting(pullRequest, sessionOn(listed, found.branch, found.number)),
           })),
         );
       }
       return ok(
         listed
-          .flatMap((session) =>
+          .flatMap((session): OpenPullRequest[] =>
             session.pullRequest?.state === "open" && session.branch !== undefined
               ? [
                   {
                     pullRequest: session.pullRequest,
                     branch: session.branch,
-                    from: { kind: "session", sessionId: session.id, title: session.title } as const,
+                    from: { kind: "session", sessionId: session.id, title: session.title },
+                    waiting: pullRequestWaiting(session.pullRequest, session),
                   },
                 ]
               : [],

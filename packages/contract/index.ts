@@ -89,6 +89,7 @@ export {
   PullRequestMerging,
   PullRequestReview,
   PullRequestSessionStart,
+  PullRequestWaiting,
   pullRequestEnded,
 } from "./lib/pull-request.ts";
 export {
@@ -135,7 +136,14 @@ export {
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
 } from "./lib/session-event.ts";
-export { Doing, ListedSession, SessionList, TurnNow } from "./lib/session-state.ts";
+export {
+  Doing,
+  ListedSession,
+  SessionList,
+  SessionSeen,
+  SessionWaiting,
+  TurnNow,
+} from "./lib/session-state.ts";
 export { ProviderSignIn, SignInList, SignInState } from "./lib/sign-in.ts";
 export { SkillName, SkillSource } from "./lib/skill-name.ts";
 export {

@@ -23,6 +23,7 @@ import { Composer } from "../../sessions/composer.tsx";
 import type { DocumentsHere } from "../../sessions/documents.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { removeQueued, sendMessage } from "../../sessions/messages.ts";
+import { useSeen } from "../../sessions/seen.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import {
   carryOn,
@@ -99,9 +100,15 @@ function Session(props: {
   documents?: DocumentsHere;
 }) {
   const { session } = props;
-  const { turns, modelTitle, pullRequest, queuedMessages, problem, reconnecting } = useSessionTurns(
-    session.id,
-  );
+  const {
+    turns,
+    lastSeq: shownUpTo,
+    modelTitle,
+    pullRequest,
+    queuedMessages,
+    problem,
+    reconnecting,
+  } = useSessionTurns(session.id);
   const removeQueuedMessage = useCallback(
     async (queued: number) => {
       const removed = await removeQueued({ sessionId: session.id, queued });
@@ -131,6 +138,8 @@ function Session(props: {
   );
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
+  // What the page shows, the owner has seen, on whichever device (#334).
+  useSeen(session.id, shownUpTo, running);
   /** The latest answer offers suggested replies, so the message box says one's own is welcome too (#154). */
   const suggesting =
     last?.state.kind === "done" && last.replies.length > 0 && !session.workspaceArchived;

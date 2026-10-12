@@ -58,11 +58,11 @@ const usedWords = (sessions: readonly Listed[], now = Date.now()) => {
 
 /**
  * What a workspace's tile says under its name (#102; Paper, "Home"): what waits on the owner when
- * something does, worked out by Needs you's own rules (`needs.ts`); violet new replies, with their
- * count in the tile's corner, or on a code workspace (or for anything but a reply) gold with a gold
- * edge, and how many of its sessions are running. Otherwise when it was last used. Until its
- * sessions are known (a first visit), a faint line in the line's place; a code workspace's pull
- * requests join in place once GitHub answers. No model is asked.
+ * something does, as the worker decided it and Needs you reads it (`needs.ts`, #334); violet new
+ * replies, with their count in the tile's corner, or on a code workspace (or for anything but a
+ * reply) gold with a gold edge, and how many of its sessions are running. Otherwise when it was
+ * last used. Until its sessions are known (a first visit), a faint line in the line's place; a
+ * code workspace's pull requests join in place once GitHub answers. No model is asked.
  */
 export default function TileLine(props: { workspace: WorkspaceSummary }) {
   const { workspace } = props;

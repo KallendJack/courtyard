@@ -12,6 +12,8 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   renders and calls the worker's API; it holds no state and does no model work.
 - **One contract.** Everything that crosses between web app and worker is a Zod schema in the shared contract package,
   with types inferred from it. Nowhere else defines those shapes.
+- **What waits on the owner (a new reply, an approval, a failing check, a PR to merge) is decided once, in the
+  worker,** and every screen reads it; no screen works it out itself.
 - **One seam inside the worker: the provider.** Claude, Codex and the scripted fake sit behind it. Add another seam only
   when two real implementations exist. Side effects that tests must observe (sending a notification, the clock) are
   passed in as dependencies.

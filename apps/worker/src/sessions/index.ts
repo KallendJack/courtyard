@@ -26,6 +26,7 @@ import {
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
+  SessionSeen,
   type SessionSummary,
   type SkillName,
   SOURCES_MAX,
@@ -140,6 +141,7 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
+import { type Answer, answerOf, sessionWaiting } from "../waiting/index.ts";
 import {
   getWorkspace,
   isArchived,
@@ -430,6 +432,10 @@ type RunningSession = {
    * the worker runs: after a restart, deleting any of them asks.
    */
   paperMade: Set<string>;
+  /** Its latest answer (#334), from its event log once recovered, then as each is written. */
+  answer: Answer | undefined;
+  /** The event number the owner has seen it up to, on any device (#334), once read from its folder. */
+  seen: number | undefined;
 };
 
 /**
@@ -496,6 +502,8 @@ export const createSessions = (options: {
       queues: false,
       ended: Promise.resolve(),
       paperMade: new Set(),
+      answer: undefined,
+      seen: undefined,
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -518,6 +526,19 @@ export const createSessions = (options: {
   const folderOf = (id: SessionId) => join(sessionsDir, id);
   const sessionFilePath = (id: SessionId) => join(folderOf(id), "session.json");
   const eventsPath = (id: SessionId) => join(folderOf(id), "events.jsonl");
+  const seenPath = (id: SessionId) => join(folderOf(id), "seen.json");
+
+  /** The event number the owner has seen a session up to (#334), read from its folder once. */
+  const seenOf = async (
+    id: SessionId,
+    session: RunningSession,
+  ): Promise<Result<number, SessionError>> => {
+    if (session.seen !== undefined) return ok(session.seen);
+    const kept = await readJsonFile(seenPath(id), SessionSeen);
+    if (!kept.ok) return err(STORAGE_ERROR);
+    session.seen = kept.value?.upTo ?? 0;
+    return ok(session.seen);
+  };
 
   const readEvents = async (id: SessionId): Promise<Result<SessionEvent[], SessionError>> => {
     const text = await readTextFile(eventsPath(id));
@@ -562,6 +583,7 @@ export const createSessions = (options: {
     }
     session.nextSeq += 1;
     if (numbered.data.type === "pull-request") pullRequests.set(id, numbered.data.pullRequest);
+    session.answer = answerOf(numbered.data) ?? session.answer;
     for (const listener of session.listeners) listener(numbered.data);
     return ok(numbered.data);
   };
@@ -599,6 +621,7 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     session.queues = events.value.some((event) => event.type === "message-queued");
+    for (const event of events.value) session.answer = answerOf(event) ?? session.answer;
     // The owner's Undo and Edit can come after a turn ends, so it's the last turn's own events
     // that say whether it was left open.
     const last = events.value.findLast(
@@ -1514,8 +1537,8 @@ export const createSessions = (options: {
   };
 
   /**
-   * A workspace's sessions, most recently active first, each with whose turn it is and whether
-   * it's waiting for a code session to end.
+   * A workspace's sessions, most recently active first, each with whose turn it is, whether it's
+   * waiting for a code session to end, and what it waits on the owner for (#334).
    */
   const sessionsOf = async (
     workspaceId: WorkspaceId,
@@ -1533,10 +1556,22 @@ export const createSessions = (options: {
       const now = await turnNowOf(file.value.id);
       if (!now.ok) return now;
       const pullRequest = await lastPullRequestOf(file.value);
+      const queued = options.code.slots.waits(file.value.id);
+      const session = runningSession(file.value.id);
+      const seen = await seenOf(file.value.id, session);
+      if (!seen.ok) return seen;
       summaries.push({
         ...summaryOf(file.value),
         now: now.value,
-        queued: options.code.slots.waits(file.value.id),
+        waiting: sessionWaiting({
+          now: now.value,
+          queued,
+          pullRequest,
+          answer: session.answer,
+          seen: seen.value,
+          clock: options.now(),
+        }),
+        queued,
         ...(pullRequest === undefined ? {} : { pullRequest }),
       });
     }
@@ -2329,6 +2364,27 @@ export const createSessions = (options: {
 
     /** A workspace's sessions, most recently active first, each with whether it's waiting. */
     list: sessionsOf,
+
+    /**
+     * The owner has seen the session up to event `upTo` (#334), on whichever device: kept in its
+     * folder, never going back nor past its last event, so only an answer after it is a new reply.
+     */
+    markSeen: async (rawId: string, upTo: number): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+        const was = await seenOf(id, session);
+        if (!was.ok) return was;
+        const seen = Math.min(upTo, (session.nextSeq ?? 1) - 1);
+        if (seen <= was.value) return ok(null);
+        const written = await writeJsonFile(seenPath(id), { upTo: seen } satisfies SessionSeen);
+        if (!written.ok) return err(STORAGE_ERROR);
+        session.seen = seen;
+        return ok(null);
+      });
+    },
 
     /** How many code sessions are running, across the worker. */
     codeRunning: () => options.code.slots.running(),

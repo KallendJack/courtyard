@@ -110,7 +110,15 @@ export const PullRequestFrom = z.discriminatedUnion("kind", [
 ]);
 export type PullRequestFrom = z.infer<typeof PullRequestFrom>;
 
-/** One of a repository's open pull requests, whoever opened it (#278). */
+/**
+ * What an open pull request waits on the owner for (#334; AGENTS.md), decided once, by the worker:
+ * its failing checks (unless its session is fixing them), a merge once its checks pass, its
+ * conflict with its base; or nothing.
+ */
+export const PullRequestWaiting = z.enum(["failed", "merge", "conflict", "nothing"]);
+export type PullRequestWaiting = z.infer<typeof PullRequestWaiting>;
+
+/** One of a repository's open pull requests, whoever opened it (#278), and what it waits on. */
 export const OpenPullRequest = z.object({
   pullRequest: PullRequest,
   /** The branch it merges from. */
@@ -118,6 +126,7 @@ export const OpenPullRequest = z.object({
   /** The branch it merges into, once GitHub has said. */
   base: z.string().optional(),
   from: PullRequestFrom,
+  waiting: PullRequestWaiting,
 });
 export type OpenPullRequest = z.infer<typeof OpenPullRequest>;
 

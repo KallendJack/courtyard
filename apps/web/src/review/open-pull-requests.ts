@@ -7,9 +7,18 @@ import { loadOpenPullRequests } from "./api.ts";
 
 type Listed = CodeSessionList["sessions"][number];
 
-/** What the sessions' pull requests are now, so the list is asked for again when one changes. */
+/**
+ * What the sessions' pull requests are now, and whether each session with one is working on it,
+ * so the list, with what each waits on the owner for (#334), is asked for again when one changes.
+ */
 const versionOf = (sessions: readonly Listed[]) =>
-  JSON.stringify(sessions.map((session) => [session.id, session.pullRequest]));
+  JSON.stringify(
+    sessions.map((session) => [
+      session.id,
+      session.pullRequest,
+      session.pullRequest !== undefined && session.now.kind === "working",
+    ]),
+  );
 
 /** Each workspace's open pull requests as last known, for the tab's lifetime. */
 const KEPT_OPEN = createKept<OpenPullRequestList>();
