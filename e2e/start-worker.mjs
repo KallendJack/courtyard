@@ -191,26 +191,26 @@ writeFileSync(
   }),
 );
 
-// A second code workspace, Home project (#301), for its Home's blocks, on a repository of its own
-// standing in for octo-owner/home-project: its one line in workspace.json, no Paper file yet, and
+// A second code workspace, Workbench (#301), for its Home's blocks, on a repository of its own
+// standing in for octo-owner/workbench: its one line in workspace.json, no Paper file yet, and
 // on the fake GitHub (below) its ready issues and a helper's pull request whose checks passed.
 const homeOrigin = join(codeDir, "home-origin.git");
-const homeOnGitHub = "https://github.com/octo-owner/home-project.git";
+const homeOnGitHub = "https://github.com/octo-owner/workbench.git";
 git(codeDir, "init", "-q", "--bare", "-b", "main", "home-origin.git");
 git(codeDir, "clone", "-q", "home-origin.git", "home-repo");
 const homeRepo = join(codeDir, "home-repo");
 git(homeRepo, "remote", "set-url", "origin", homeOnGitHub);
 git(homeRepo, "config", `url.${homeOrigin.replaceAll("\\", "/")}.insteadOf`, homeOnGitHub);
-writeFileSync(join(homeRepo, "README.md"), "# Home project\n");
+writeFileSync(join(homeRepo, "README.md"), "# Workbench\n");
 git(homeRepo, "add", ".");
 git(homeRepo, "commit", "-qm", "Start");
 git(homeRepo, "push", "-q", "origin", "main");
 const homeHead = git(homeRepo, "rev-parse", "HEAD");
-mkdirSync(join(contextDir, "home-project"), { recursive: true });
+mkdirSync(join(contextDir, "workbench"), { recursive: true });
 writeFileSync(
-  join(contextDir, "home-project", "workspace.json"),
+  join(contextDir, "workbench", "workspace.json"),
   JSON.stringify({
-    name: "Home project",
+    name: "Workbench",
     mode: "code",
     repoPath: homeRepo,
     description: "Plan and code with AI models, one workspace per area of life",
@@ -269,7 +269,7 @@ const { createFakePaperFiles } = await import("../apps/worker/src/paper/fake.ts"
 const paper = createFakePaperFiles({
   files: [
     { id: "file-courtyard", name: "Courtyard" },
-    { id: "file-home", name: "Home project" },
+    { id: "file-home", name: "Workbench" },
     { id: "file-kitchens", name: "Garrett Kitchens" },
   ],
 });
@@ -291,10 +291,10 @@ const github = createFakeGitHub({
     "octo-owner/stacks",
     ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
   ],
-  // Home project's ready issues (#301): in milestones, one claimed by a comment, and more than
+  // Workbench's ready issues (#301): in milestones, one claimed by a comment, and more than
   // Next up shows before More.
   issues: {
-    "octo-owner/home-project": [
+    "octo-owner/workbench": [
       { number: 251, title: "One Reply box everywhere", milestone: "4 · Code workspaces" },
       { number: 197, title: "The rail on desktop", milestone: "4 · Code workspaces" },
       {
@@ -329,9 +329,9 @@ const github = createFakeGitHub({
     conflicts: (subject) => subject.includes("[conflicts]"),
   },
 });
-// A Claude Code helper's pull request on Home project whose checks passed: ready to merge (#301).
+// A Claude Code helper's pull request on Workbench whose checks passed: ready to merge (#301).
 const helperPull = github.openPullRequest({
-  repo: "octo-owner/home-project",
+  repo: "octo-owner/workbench",
   branch: "313-builds",
   head: homeHead,
   title: "Builds take turns",
@@ -339,14 +339,14 @@ const helperPull = github.openPullRequest({
   author: "octo-owner",
 });
 github.setChecks(helperPull, [{ name: "verify", outcome: "passed" }]);
-// Home project's main has passed its build (#301's Main row).
+// Workbench's main has passed its build (#301's Main row).
 github.setCommitChecks(
   homeHead,
   ["Checks", "Unit tests", "E2E 1/2", "E2E 2/2"].map((name, i) => ({
     id: i + 1,
     name,
     outcome: "passed",
-    url: `https://github.com/octo-owner/home-project/actions/runs/1/job/${i + 1}`,
+    url: `https://github.com/octo-owner/workbench/actions/runs/1/job/${i + 1}`,
     startedAt: "2026-10-12T09:00:00Z",
     completedAt: "2026-10-12T09:03:00Z",
   })),

@@ -534,7 +534,7 @@ test.describe("on the unfolded Fold", () => {
     request,
   }) => {
     await signIn(request);
-    await page.goto("/workspaces/side-project");
+    await page.goto("/workspaces/side-project#prs");
     const row = page
       .getByRole("region", { name: /^Pull requests/ })
       .getByRole("listitem", { name: /Bump home-assistant/ });
@@ -680,7 +680,7 @@ test.describe("on the unfolded Fold", () => {
     await sheet.getByRole("button", { name: "Close" }).click();
     await expect(sheet).toBeHidden();
     await expect(page).toHaveURL(/\/workspaces\/garrett-kitchens$/);
-    await expect(page.getByRole("button", { name: /garrett-kitchens/ })).toContainText(
+    await expect(page.getByRole("button", { name: /No Paper file/ })).toContainText(
       "No Paper file",
     );
     await page.goto("/new-workspace");
@@ -716,7 +716,7 @@ test.describe("on the cover screen", () => {
 });
 
 // A code workspace's Home (#301; Paper, "Code workspace Home", desktop, tablet and cover screen)
-// and connecting Paper from it (#308), on start-worker.mjs's Home project: its one line, ready
+// and connecting Paper from it (#308), on start-worker.mjs's Workbench: its one line, ready
 // issues on the fake GitHub in milestones (one claimed), and a helper's pull request whose checks
 // passed. Tests here run in order: the last ones build an issue and merge the pull request.
 
@@ -726,7 +726,7 @@ const shot = async (page: Page, name: string) => {
   if (folder !== undefined) await page.screenshot({ path: join(folder, `${name}.png`) });
 };
 
-const HOME = "/workspaces/home-project";
+const HOME = "/workspaces/workbench";
 
 /** Home's blocks, by their labels. */
 const blocks = (page: Page) => ({
@@ -735,14 +735,14 @@ const blocks = (page: Page) => ({
   nextUp: page.getByRole("region", { name: "Next up" }),
 });
 
-/** What every Home shows of Home project before anything is built or merged. */
+/** What every Home shows of Workbench before anything is built or merged. */
 const showsHome = async (page: Page) => {
   await page.goto(HOME);
-  await expect(page.getByRole("heading", { level: 1, name: "Home project" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
   await expect(
     page.getByText("Plan and code with AI models, one workspace per area of life"),
   ).toBeVisible();
-  const line = page.getByRole("button", { name: /octo-owner\/home-project/ });
+  const line = page.getByRole("button", { name: /octo-owner\/workbench/ });
   await expect(line).toContainText("No Paper file");
 
   const { needsYou, running, nextUp } = blocks(page);
@@ -825,15 +825,15 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(row).toBeVisible();
 
       // GitHub answers slowly from now on: the way back mustn't wait for it.
-      await page.route("**/api/workspaces/home-project/pull-requests", async (route) => {
+      await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 8000));
         await route.continue();
       });
       const workspaces = page.getByRole("navigation", { name: "Workspaces" });
       await workspaces.getByRole("link", { name: "Side project" }).click();
       await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
-      await workspaces.getByRole("link", { name: "Home project" }).click();
-      await expect(page.getByRole("heading", { level: 1, name: "Home project" })).toBeVisible();
+      await workspaces.getByRole("link", { name: "Workbench" }).click();
+      await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
       await page
         .getByRole("navigation", { name: "Workspace tabs" })
         .getByRole("link", { name: /^PRs/ })
@@ -865,28 +865,28 @@ test.describe("a code workspace's Home (#301, #308)", () => {
     }) => {
       await signIn(request);
       await page.goto(HOME);
-      await page.getByRole("button", { name: /octo-owner\/home-project/ }).click();
+      await page.getByRole("button", { name: /octo-owner\/workbench/ }).click();
 
       const sheet = page.getByRole("dialog", { name: "Connections" });
       await expect(sheet.getByRole("region", { name: "GitHub" })).toContainText(
-        "Connected · octo-owner/home-project",
+        "Connected · octo-owner/workbench",
       );
       const files = sheet.getByRole("group", { name: "Paper file" });
-      await expect(files.getByRole("radio", { name: "Home project" })).toBeChecked();
-      await expect(files.locator("label", { hasText: "Home project" })).toContainText("Same name");
+      await expect(files.getByRole("radio", { name: "Workbench" })).toBeChecked();
+      await expect(files.locator("label", { hasText: "Workbench" })).toContainText("Same name");
       await expect(files.getByRole("radio", { name: "Courtyard" })).not.toBeChecked();
       await expect(files.getByRole("radio", { name: "Make a new file" })).toBeVisible();
       await shot(page, "tablet-connect-paper");
 
-      await sheet.getByRole("button", { name: "Connect Home project" }).click();
+      await sheet.getByRole("button", { name: "Connect Workbench" }).click();
       await expect(sheet).toBeHidden();
-      await expect(page.getByRole("button", { name: /octo-owner\/home-project/ })).toContainText(
-        "Paper · Home project",
+      await expect(page.getByRole("button", { name: /octo-owner\/workbench/ })).toContainText(
+        "Paper · Workbench",
       );
       // It's kept: the page says so after a reload.
       await page.reload();
-      await expect(page.getByRole("button", { name: /octo-owner\/home-project/ })).toContainText(
-        "Paper · Home project",
+      await expect(page.getByRole("button", { name: /octo-owner\/workbench/ })).toContainText(
+        "Paper · Workbench",
       );
       await request.post("/api/github/sign-out", { data: {} });
     });
@@ -896,7 +896,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       request,
     }) => {
       await signIn(request);
-      const asks = await request.post("/api/workspaces/home-project/sessions", {
+      const asks = await request.post("/api/workspaces/workbench/sessions", {
         data: {
           text: "run command: git merge origin/main (for: Bring #251 up to date)",
           model: { provider: "fake", model: "echo" },
@@ -904,7 +904,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       });
       expect(asks.status()).toBe(201);
       // A long answer keeps its turn working for a while (the fake writes a word every 40 ms).
-      const works = await request.post("/api/workspaces/home-project/sessions", {
+      const works = await request.post("/api/workspaces/workbench/sessions", {
         data: {
           text: `Activity lines ${"word ".repeat(900)}`,
           model: { provider: "fake", model: "echo" },
@@ -964,7 +964,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(build).toContainText("claims it on GitHub");
       await build.getByRole("button", { name: "Start building" }).click();
 
-      await expect(page).toHaveURL(/\/workspaces\/home-project\/sessions\/[\w-]+$/);
+      await expect(page).toHaveURL(/\/workspaces\/workbench\/sessions\/[\w-]+$/);
       await expect(page.getByRole("list", { name: "Session" })).toContainText(
         'Build issue #197, "The rail on desktop"',
       );

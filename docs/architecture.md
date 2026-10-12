@@ -535,7 +535,7 @@ the web app parses every answer with these schemas.
 ### Outside the apps
 
 - **`e2e/`:** the browser tests. `start-worker.mjs` starts a real worker on fresh folders with the fake providers,
-  the fake GitHub (with two pull requests no session opened, #278, and for a second code workspace, Home project,
+  the fake GitHub (with two pull requests no session opened, #278, and for a second code workspace, Workbench,
   ready issues in milestones and a helper's pull request, #301), the owner's Paper files in memory (#308) and a
   stand-in for Matt Pocock's plugin;
   `fixtures/context/` is the context folder they start from.

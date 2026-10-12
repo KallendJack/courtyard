@@ -338,7 +338,7 @@ test("the sidebar lists code workspaces apart from planning ones", async ({ page
   const workspaces = page.getByRole("navigation", { name: "Workspaces" });
   await expect(
     workspaces.getByRole("list", { name: "Code workspaces" }).getByRole("link"),
-  ).toHaveText(["Home project", "Side project"]);
+  ).toHaveText(["Side project", "Workbench"]);
   await expect(workspaces.getByRole("list", { name: "Planning workspaces" })).not.toContainText(
     "Side project",
   );

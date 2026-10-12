@@ -1,4 +1,5 @@
 import { gitOrNothing } from "../git.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok } from "../result.ts";
 import type {
   DeviceSignIn,
@@ -234,8 +235,13 @@ export const createFakeGitHub = (
       : undefined;
   };
 
-  /** For the browser tests: the pull request for a branch pushed to GitHub's copy on disk. */
-  const pushed = async (find: { repo: string; branch: string }) => {
+  /**
+   * For the browser tests: the pull request for a branch pushed to GitHub's copy on disk, one at
+   * a time, so two pages asking at once never open a branch's pull request twice.
+   */
+  const pushedInTurn = createOneAtATime();
+  const pushed = (find: { repo: string; branch: string }) => pushedInTurn(() => pushedNow(find));
+  const pushedNow = async (find: { repo: string; branch: string }) => {
     const onPush = onPushFor(find.repo);
     if (onPush === undefined) return;
     const head = await gitOrNothing(onPush.remote, ["rev-parse", `refs/heads/${find.branch}`]);
