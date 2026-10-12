@@ -29,6 +29,17 @@ const answered = async (request: APIRequestContext, workspace: string, text: str
   return id;
 };
 
+/**
+ * Waits until the worker has the session titled `title` as seen. A session's page says so once its
+ * turns have loaded, so a test that leaves as soon as the heading shows would sometimes beat it
+ * (#354).
+ */
+const seen = async (request: APIRequestContext, workspace: string, title: string) => {
+  await expect
+    .poll(async () => (await listOf(request, workspace)).find((s) => s.title === title)?.waiting)
+    .toBe("nothing");
+};
+
 const madeWorkspace = async (request: APIRequestContext) => {
   const name = `Mountain biking ${Date.now()}`;
   const made = await request.post("/api/workspaces", { data: { name } });
@@ -93,18 +104,13 @@ test("a tile names the newest session waiting, and the list marks them and puts 
   // Opened, it's seen: one waits, and its tile opens it.
   await sessionRows(page).nth(0).getByRole("link").click();
   await expect(page.getByRole("heading", { level: 1, name: "Saturday Shops" })).toBeVisible();
-  // The page says it's seen once its turns have loaded: leaving before then, it never would (#354).
-  await expect
-    .poll(
-      async () =>
-        (await listOf(request, workspace.id)).find((s) => s.title === "Saturday Shops")?.waiting,
-    )
-    .toBe("nothing");
+  await seen(request, workspace.id, "Saturday Shops");
   await page.goto("/");
   await expect(tile(page, workspace.name)).toContainText("New reply · Brake Pads");
   await expect(tile(page, workspace.name)).not.toContainText("more");
   await tile(page, workspace.name).click();
   await expect(page.getByRole("heading", { level: 1, name: "Brake Pads" })).toBeVisible();
+  await seen(request, workspace.id, "Brake Pads");
   await page.goto(`/workspaces/${workspace.id}`);
   await expect(sessionRows(page).filter({ has: newReplyMark(page) })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Mark all read" })).toHaveCount(0);
