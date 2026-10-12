@@ -3,6 +3,7 @@ import { err, ok } from "../result.ts";
 import type {
   DeviceSignIn,
   FoundCheck,
+  FoundCheckRun,
   FoundFile,
   FoundPullRequest,
   FoundRepo,
@@ -65,7 +66,8 @@ const filesPushed = async (remote: string, head: string): Promise<FoundFile[]> =
  * (#160), and a test can give it files and a conflict. With `opensOnPush`, for the browser tests,
  * a branch pushed to that bare repository (GitHub's copy, on disk) has a pull request opened for
  * it the first time it's asked about, changing the files the branch changes since `main`, and each
- * commit pushed there gets the `checks` its subject says.
+ * commit pushed there gets the `checks` its subject says. A test sets the checks on a commit of
+ * main's (`setCommitChecks`), as main's build (#249).
  */
 export const createFakeGitHub = (
   options: {
@@ -123,6 +125,9 @@ export const createFakeGitHub = (
   const labels = new Map(
     Object.entries(options.labels ?? {}).map(([repo, names]) => [repo, [...names]]),
   );
+  /** The checks on each commit a test set them for (#249), and how often they were asked for. */
+  const commitChecks = new Map<string, readonly FoundCheckRun[]>();
+  let commitChecksAsked = 0;
   /** Each branch deleted on GitHub, in order. */
   const deleted: { readonly repo: string; readonly branch: string }[] = [];
   /** Every pull request opened, numbered from 1, with the files it changes (#160). */
@@ -293,6 +298,12 @@ export const createFakeGitHub = (
           .map(found),
       );
     },
+    commitChecks: async (accessToken, { commit }) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      commitChecksAsked += 1;
+      return ok(commitChecks.get(commit) ?? []);
+    },
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
     merge: async (accessToken, { number, head }) => {
@@ -377,6 +388,12 @@ export const createFakeGitHub = (
     merge: merged,
     /** The pull request was closed without merging. */
     close: (number: number) => change(number, { state: "closed" }),
+    /** The checks on `commit` are now these, in the order GitHub lists them (#249). */
+    setCommitChecks: (commit: string, checks: readonly FoundCheckRun[]) => {
+      commitChecks.set(commit, checks);
+    },
+    /** How many times Courtyard has asked for a commit's checks (#249). */
+    commitChecksAsked: () => commitChecksAsked,
     /** Each branch Courtyard deleted on GitHub, in order. */
     branchesDeleted: () => [...deleted],
     /** A repository's labels now, in the order they were made (#181). */

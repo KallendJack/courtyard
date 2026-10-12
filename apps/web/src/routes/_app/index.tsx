@@ -15,7 +15,7 @@ const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
 const Notifications = lazy(() => import("../../notifications/notifications-card.tsx"));
 // Asked for once the page shows anyway: it waits for the worker's word on whether main has moved on.
 const LiveUpdate = lazy(() =>
-  import("../../live-update.tsx").then((module) => ({ default: module.LiveUpdate })),
+  import("../../live/live-update.tsx").then((module) => ({ default: module.LiveUpdate })),
 );
 
 const loggedIn = getRouteApi("/_app");

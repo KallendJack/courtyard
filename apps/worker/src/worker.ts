@@ -277,6 +277,13 @@ export const createWorker = (options: {
     dataDir,
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
+    // Main's build (#249), on the repository the live copy's remote is on GitHub.
+    buildOf: async (find) => {
+      const repo = liveCopy === null ? undefined : await code.onGitHub(liveCopy);
+      if (!repo?.ok) return null;
+      const build = await github.mainBuild({ repo: repo.value, ...find });
+      return build.ok ? (build.value ?? null) : null;
+    },
   });
   // Queued messages a stopped worker left waiting go now (#177).
   sessions

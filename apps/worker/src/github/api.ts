@@ -5,7 +5,8 @@ import { err, ok, type Result } from "../result.ts";
 /**
  * GitHub itself, as the worker asks it (#99): signing in through Courtyard's GitHub App with a
  * device code, refreshing the sign-in, who is signed in with which repos, and a session branch's
- * pull request: its state and checks (#172), its files, Merge and Close (#160). Passed in to the
+ * pull request: its state and checks (#172), its files, Merge and Close (#160); and main's build
+ * (#249). Passed in to the
  * worker like the clock, so tests use an in-memory fake; this file is the one real one.
  */
 export type GitHubApi = {
@@ -46,6 +47,11 @@ export type GitHubApi = {
     accessToken: string,
     find: { readonly repo: string },
   ) => Promise<Result<readonly FoundPullRequest[], string>>;
+  /** The checks on `commit` in `repo` (#249): main's build, one per CI job, each try of it. */
+  readonly commitChecks: (
+    accessToken: string,
+    find: { readonly repo: string; readonly commit: string },
+  ) => Promise<Result<readonly FoundCheckRun[], string>>;
   /** The files pull request `number` in `repo` changes, each with its diff (#160). */
   readonly pullRequestFiles: (
     accessToken: string,
@@ -142,6 +148,16 @@ export type FoundCheck = {
   readonly name: string;
   /** `other` for one that ended neither passing nor failing: skipped, cancelled. */
   readonly outcome: "running" | "passed" | "failed" | "other";
+};
+
+/** A check on a commit, with when it ran and its page on GitHub (#249). */
+export type FoundCheckRun = FoundCheck & {
+  /** GitHub's id for it: a later try of a job has a higher one. */
+  readonly id: number;
+  /** Its page on GitHub, with its log. */
+  readonly url: string;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
 };
 
 /** A device sign-in in progress. Only `link`, `code` and when it runs out reach the browser. */
@@ -282,6 +298,22 @@ const CheckRuns = z.object({
     z.object({ name: z.string(), status: z.string(), conclusion: z.string().nullable() }),
   ),
 });
+/** A commit's check runs, with what main's build shows of each (#249). */
+const CommitCheckRuns = z.object({
+  check_runs: z.array(
+    z.object({
+      id: z.number().int(),
+      name: z.string(),
+      status: z.string(),
+      conclusion: z.string().nullable(),
+      html_url: z.url({ protocol: /^https$/ }),
+      started_at: z.string().nullable(),
+      completed_at: z.string().nullable(),
+    }),
+  ),
+});
+/** A commit, as GitHub's addresses take it. */
+const Commit = z.string().regex(/^[0-9a-f]{40}$/);
 
 /** What GitHub calls a check that ended in failure. */
 const FAILED = new Set(["failure", "timed_out", "action_required", "startup_failure"]);
@@ -582,6 +614,31 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         return ok(found);
       } catch {
         return err("GitHub couldn't be asked for the pull requests.");
+      }
+    },
+
+    commitChecks: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      const commit = Commit.safeParse(find.commit);
+      if (!repo.success || !commit.success) return err("That isn't a commit on GitHub.");
+      try {
+        const { check_runs } = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/commits/${commit.data}/check-runs?per_page=${PAGE}`,
+          CommitCheckRuns,
+        );
+        return ok(
+          check_runs.map((run) => ({
+            id: run.id,
+            name: run.name,
+            outcome: outcomeOf(run),
+            url: run.html_url,
+            startedAt: run.started_at,
+            completedAt: run.completed_at,
+          })),
+        );
+      } catch {
+        return err("GitHub couldn't be asked about main's build.");
       }
     },
 

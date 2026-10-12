@@ -30,6 +30,10 @@ The clone of `main` the everyday Courtyard runs from, separate from any copy it'
 updated only when the owner chooses (ADR 0011).
 _Avoid_: production, prod, deployment, release
 
+**Main's build**:
+CI on `main`'s newest commit, shown beside Update as one bar per job; Update waits for it to pass (#249).
+_Avoid_: pipeline, deploy status
+
 **Web app**:
 The part the owner opens in a browser. Static files that show things and call the worker; it does no model work and
 stores nothing.

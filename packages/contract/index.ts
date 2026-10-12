@@ -54,7 +54,7 @@ export { GitHubConnection } from "./lib/github.ts";
 export { GitHubRepoName } from "./lib/github-repo-name.ts";
 export { GitHubRepo, GitHubRepoList } from "./lib/github-repos.ts";
 export { Health } from "./lib/health.ts";
-export { LiveStatus, LiveUpdateResult, LiveVersion } from "./lib/live.ts";
+export { BuildJob, LiveStatus, LiveUpdateResult, LiveVersion, MainBuild } from "./lib/live.ts";
 export { MattSetup, MattSetupAnswer, MattSetupPiece } from "./lib/matt-setup.ts";
 export {
   NotificationSubscription,

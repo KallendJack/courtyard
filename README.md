@@ -129,15 +129,17 @@ A step-by-step setup checklist, on any machine, is [#100](https://github.com/Kal
 
 The worker starts when you log on and again if it stops (the live copy's task, above).
 
-**To update** to the newest `main`, press **Update** on the home page when it says a new version
-is ready (it checks every few hours), or run:
+**To update** to the newest `main`, press **Update** on the home page (or in Settings on a tablet
+or phone) when it says a new version is ready (it checks every few hours), or run:
 
 ```powershell
 & <live copy>\scripts\live\update.ps1
 ```
 
 - **It refuses** if the live copy has changes of its own, isn't on `main`, or `main`'s newest
-  commit isn't passing CI.
+  commit isn't passing CI. While you're signed in to GitHub from Connections, with the GitHub App
+  installed on the live copy's repo, the app shows main's build beside Update, one bar per CI job,
+  and offers Update only once it has passed.
 - **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
   and builds, then starts the worker and waits for it to answer. It shuts the worker down first
   because Windows can refuse to replace files a running worker has open. A turn running at that

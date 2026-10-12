@@ -1,10 +1,11 @@
-import type { LiveStatus, LiveUpdateResult } from "@courtyard/contract";
+import type { LiveUpdateResult } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
-import { describeProblem } from "./problems.tsx";
-import { type FromWorker, loadLive, startLiveUpdate } from "./worker.ts";
+import { describeProblem } from "../problems.tsx";
+import { loadLive, startLiveUpdate } from "./api.ts";
+import { MainBuildCard, useLive } from "./main-build.tsx";
 
 /** How often the page asks how an update is going. The worker is down for part of it. */
 const FOLLOW_EVERY_MS = 3000;
@@ -39,30 +40,24 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
 }
 
 /**
- * Updating the live app from the app (ADR 0011): a quiet notice when main has moved on, Update,
- * then how it went once the worker is back. Nothing at all on a worker that isn't a live copy.
- * Asked for once the page is showing, since the worker may be asking GitHub whether main has
- * moved on: the page never waits for that.
+ * Updating the live app from the app (ADR 0011): when main has moved on, main's build beside
+ * Update (#249), which waits for it to pass; then how the update went once the worker is back.
+ * Nothing at all on a worker that isn't a live copy. Asked for once the page is showing, since the
+ * worker may be asking GitHub whether main has moved on: the page never waits for that.
  */
 export function LiveUpdate() {
-  const [status, setStatus] = useState<FromWorker<LiveStatus>>();
+  const [status, setStatus] = useLive();
   const [following, setFollowing] = useState<Following>({ kind: "idle" });
+  const loaded = status?.kind === "loaded" ? status.data : undefined;
+  // Started from another device, or before this page was opened.
+  const updating = loaded?.kind === "live" && loaded.lastUpdate?.outcome === "running";
 
   useEffect(() => {
-    let current = true;
-    void loadLive().then((result) => {
-      if (!current) return;
-      setStatus(result);
-      const live = result.kind === "loaded" ? result.data : undefined;
-      // Started from another device, or before this page was opened.
-      if (live?.kind === "live" && live.lastUpdate?.outcome === "running") {
-        setFollowing({ kind: "updating", since: null, at: Date.now() });
-      }
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
+    if (!updating) return;
+    setFollowing((was) =>
+      was.kind === "idle" ? { kind: "updating", since: null, at: Date.now() } : was,
+    );
+  }, [updating]);
 
   useEffect(() => {
     if (following.kind !== "updating") return;
@@ -88,7 +83,7 @@ export function LiveUpdate() {
       current = false;
       clearTimeout(timer);
     };
-  }, [following]);
+  }, [following, setStatus]);
 
   if (status?.kind !== "loaded" || status.data.kind !== "live") return null;
   const live = status.data;
@@ -114,7 +109,10 @@ export function LiveUpdate() {
     content = <span>No word from the update yet. Check back in a few minutes.</span>;
   } else if (following.kind === "problem") {
     content = <FormError message={following.message} />;
+  } else if (live.newerOnMain && live.newest && live.build) {
+    return <MainBuildCard newest={live.newest} build={live.build} onUpdate={update} />;
   } else if (live.newerOnMain && live.newest) {
+    // No build to go by (GitHub can't be asked): Update as it was before main's build showed.
     content = (
       <>
         <span>A new version is ready: {live.newest.title}</span>

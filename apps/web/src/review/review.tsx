@@ -1,5 +1,4 @@
 import type {
-  LiveStatus,
   ModelRef,
   PullRequest,
   PullRequestReview,
@@ -24,10 +23,12 @@ import { ThumbButton } from "@/components/thumb-button";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { useAction } from "@/lib/use-action";
+import { startLiveUpdate } from "../live/api.ts";
+import { updateOffer, useLive } from "../live/main-build.tsx";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "../sessions/answer.tsx";
 import type { Turn } from "../sessions/events.ts";
-import { type FromWorker, loadLive, loadProviders, startLiveUpdate } from "../worker.ts";
+import { type FromWorker, loadProviders } from "../worker.ts";
 import {
   bringUpToDate,
   endPullRequest,
@@ -548,7 +549,8 @@ const whenSaid = (iso: string) => {
 /**
  * A merged or closed pull request, folded to one card (#278; Paper, "PR page: merged, folded"):
  * what happened, how much it changed, and what to do next: Update Courtyard when the worker is a
- * live copy that main has moved on from, Start a new session, and Show the changes.
+ * live copy that main has moved on from (quiet while main's build runs, gone if it failed, #249),
+ * Start a new session, and Show the changes.
  */
 function Folded(props: {
   workspaceId: WorkspaceId;
@@ -559,17 +561,9 @@ function Folded(props: {
   const { review } = props;
   const merged = review.pullRequest.state === "merged";
   const navigate = useNavigate();
-  const [live, setLive] = useState<LiveStatus>();
-  useEffect(() => {
-    if (!merged) return;
-    let current = true;
-    void loadLive().then((loaded) => {
-      if (current && loaded.kind === "loaded") setLive(loaded.data);
-    });
-    return () => {
-      current = false;
-    };
-  }, [merged]);
+  // Update follows main's build as the home page's does (#249): offered once it has passed.
+  const [live] = useLive(merged);
+  const offer = updateOffer(live?.kind === "loaded" ? live.data : undefined);
   const update = useAction(async () => {
     const started = await startLiveUpdate();
     // Already running, from another device: the home page follows that one.
@@ -580,7 +574,7 @@ function Folded(props: {
     await navigate({ to: "/" });
     return undefined;
   });
-  const offersUpdate = live?.kind === "live" && live.newerOnMain;
+  const offersUpdate = offer === "ready" || offer === "waiting";
   const what = merged
     ? `Merged into ${review.base}${review.mergedAt === undefined ? "" : ` ${whenSaid(review.mergedAt)}`}`
     : "Closed without merging";
@@ -618,7 +612,12 @@ function Folded(props: {
       </div>
       <div className="flex flex-wrap gap-2.5">
         {offersUpdate && (
-          <Button size="lg" disabled={update.busy} onClick={() => void update.run()}>
+          <Button
+            size="lg"
+            variant={offer === "ready" ? "primary" : "outline"}
+            disabled={offer !== "ready" || update.busy}
+            onClick={() => void update.run()}
+          >
             <RefreshCw aria-hidden />
             Update Courtyard
           </Button>

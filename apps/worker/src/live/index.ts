@@ -1,7 +1,12 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { type LiveStatus, LiveUpdateResult, type LiveVersion } from "@courtyard/contract";
+import {
+  type LiveStatus,
+  LiveUpdateResult,
+  type LiveVersion,
+  type MainBuild,
+} from "@courtyard/contract";
 import { readTextFile } from "../files.ts";
 import { gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -16,6 +21,13 @@ const ANSWER_REUSED_FOR_MS = 60 * 1000;
  * so a worker that's offline doesn't try a fetch every time the home page opens.
  */
 const RECHECK_AFTER_FAILURE_MS = 5 * 60 * 1000;
+/**
+ * How long an answer about main's build is reused while it runs (#249). A page showing it asks
+ * every 15 seconds or so, so GitHub is asked at most that often, and only while someone looks.
+ */
+const BUILD_RUNNING_REUSED_FOR_MS = 10 * 1000;
+/** How long an answer about main's build is reused once it has finished, or couldn't be had. */
+const BUILD_REUSED_FOR_MS = 60 * 1000;
 /**
  * An update still "running" after this long ended without saying how it went. Longer than the
  * update task's own 30-minute limit (install-task.ps1), so a slow update is never cut short.
@@ -58,6 +70,11 @@ export const createLive = (options: {
   dataDir: string;
   now: () => number;
   startUpdate: (command: UpdateCommand) => void | Promise<void>;
+  /**
+   * Main's build on `commit` (#249), with the commit before it on main to judge how long it
+   * takes; `null` when GitHub can't be asked.
+   */
+  buildOf?: (find: { commit: string; previous: string | null }) => Promise<MainBuild | null>;
 }): Live => {
   const { liveCopy, updateTask, dataDir, now } = options;
   if (liveCopy === null) {
@@ -103,6 +120,32 @@ export const createLive = (options: {
     return check.newest;
   };
 
+  /** The last answer about main's build, for which commit, and when to ask again. */
+  let build:
+    | { readonly commit: string; readonly answer: Promise<MainBuild | null>; until: number }
+    | undefined;
+
+  /**
+   * Main's build on `commit`, asking GitHub at most every 10 seconds while it runs, and once a
+   * minute otherwise. Pages asking at once share one question.
+   */
+  const buildOn = (commit: string) => {
+    const { buildOf } = options;
+    if (buildOf === undefined) return Promise.resolve(null);
+    if (build === undefined || build.commit !== commit || now() >= build.until) {
+      const asked = now();
+      const answer = git("rev-parse", "--verify", "--quiet", `${commit}^`).then((previous) =>
+        buildOf({ commit, previous: previous ?? null }),
+      );
+      const asking = { commit, answer, until: asked + BUILD_REUSED_FOR_MS };
+      build = asking;
+      void answer.then((found) => {
+        if (found?.kind === "running") asking.until = asked + BUILD_RUNNING_REUSED_FOR_MS;
+      });
+    }
+    return build.answer;
+  };
+
   const lastUpdate = async (): Promise<Result<LiveUpdateResult | null, LiveError>> => {
     const text = await readTextFile(resultFile);
     if (!text.ok) return err({ kind: "not-started", message: "live-update.json can't be read." });
@@ -137,12 +180,15 @@ export const createLive = (options: {
       ]);
       if (running === null) return { kind: "off" };
       const newest = newestCommit === undefined ? null : await versionOf(newestCommit);
+      const newerOnMain = newest !== null && newest.commit !== running.commit;
       return {
         kind: "live",
         running,
         newest,
-        newerOnMain: newest !== null && newest.commit !== running.commit,
+        newerOnMain,
         lastUpdate: last.ok ? last.value : null,
+        // Only asked while there's something to update to.
+        build: newerOnMain ? await buildOn(newest.commit) : null,
       };
     },
     update: async () => {

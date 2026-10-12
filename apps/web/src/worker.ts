@@ -3,7 +3,6 @@ import {
   type CarryOnRequest,
   ContextBackup,
   type GetToKnowRequest,
-  LiveStatus,
   type NewWorkspace,
   OwnerContextDetail,
   type PasswordForm,
@@ -168,13 +167,6 @@ export const addWorkspace = (workspace: NewWorkspace) =>
 
 /** Whether the context folder's backup has every change. */
 export const loadBackup = () => fromWorker("/backup", ContextBackup);
-
-/** Whether this worker can update itself from the app, and what's newer. */
-export const loadLive = () => fromWorker("/live", LiveStatus);
-
-/** Starts updating the live copy; the worker restarts partway through. */
-export const startLiveUpdate = () =>
-  sendJson({ path: "/live/update", body: {}, schema: z.unknown() });
 
 /** The owner context, or `null` when there isn't one yet. */
 export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextDetail);

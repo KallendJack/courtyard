@@ -15,6 +15,35 @@ export const LiveUpdateResult = z.object({
 });
 export type LiveUpdateResult = z.infer<typeof LiveUpdateResult>;
 
+/** One job of a CI run, as its segment of main's build bar shows it (#249). */
+export const BuildJob = z.object({
+  name: z.string(),
+  /** `other` for one that ended neither passing nor failing: skipped, cancelled. */
+  outcome: z.enum(["running", "passed", "failed", "other"]),
+});
+export type BuildJob = z.infer<typeof BuildJob>;
+
+/**
+ * Main's build (#249): CI on main's newest commit as GitHub has it, each job in the order the
+ * workflow starts them. Update waits for it to pass.
+ */
+export const MainBuild = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("running"),
+    jobs: z.array(BuildJob),
+    /** When it should end, from how long main's build before it took; `null` when unknown. */
+    endsAround: z.iso.datetime({ offset: true }).nullable(),
+  }),
+  z.object({ kind: z.literal("passed"), jobs: z.array(BuildJob) }),
+  z.object({
+    kind: z.literal("failed"),
+    jobs: z.array(BuildJob),
+    /** The first failed job's page on GitHub, with its log. */
+    details: z.url({ protocol: /^https$/ }),
+  }),
+]);
+export type MainBuild = z.infer<typeof MainBuild>;
+
 /** Whether this worker can update itself from the app, and if so, what it runs and what's newer. */
 export const LiveStatus = z.discriminatedUnion("kind", [
   /** Not a live copy: development, tests, or a worker set up by hand. */
@@ -27,6 +56,11 @@ export const LiveStatus = z.discriminatedUnion("kind", [
     /** Whether main has moved on from what's running. */
     newerOnMain: z.boolean(),
     lastUpdate: LiveUpdateResult.nullable(),
+    /**
+     * Main's build while main has moved on (#249): `null` when it hasn't, or GitHub can't be
+     * asked (no one signed in, or the live copy's remote isn't on GitHub).
+     */
+    build: MainBuild.nullable(),
   }),
 ]);
 export type LiveStatus = z.infer<typeof LiveStatus>;
