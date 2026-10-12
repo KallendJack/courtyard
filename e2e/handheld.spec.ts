@@ -489,6 +489,22 @@ test.describe("unfolded", () => {
       expect(before.x).toBeCloseTo(after.x, 0);
       expect(before.x + before.width).toBeCloseTo(after.x + after.width, 0);
     });
+
+    test("what's typed in the message box as soon as it shows stays, and typing carries on once the frame is there (#359)", async ({
+      page,
+    }) => {
+      await page.route("**/assets/handheld-frame-*.js", async (route) => {
+        await new Promise((done) => setTimeout(done, 2_000));
+        await route.continue();
+      });
+      await page.goto("/workspaces/garage-gym");
+      const message = page.getByRole("textbox", { name: "Message" });
+      await message.click();
+      await page.keyboard.type("About the");
+      await expect(page.getByRole("button", { name: "Talk", exact: true })).toBeVisible();
+      await page.keyboard.type(" bench:");
+      await expect(message).toHaveValue("About the bench:");
+    });
   });
 
   test("the Model button shows the model it sends with by its short name, inside the button", async ({
