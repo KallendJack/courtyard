@@ -42,19 +42,28 @@ const keepHold: Background = (work) => {
   void work.finally(() => background.delete(work));
 };
 
+/** How long a test's background work may take to settle once the test has ended. */
+const SETTLE_MS = 5000;
+
 /**
- * For tests: removes a test's folder once the work its workers started in the background has
- * settled, since that work writes into it (#226). `leftRunning` is for a file whose tests can end
- * with a turn still running (one waiting on an approval, say, in a code session's repository):
- * removing it is then tried again a few times, until that file's tests stop what they start.
+ * For tests: removes a test's folder once the work its workers started in the background (its
+ * turns, titling, notifying) has settled, since that work writes into it (#226). Throws when it
+ * doesn't settle: a test that ends with a turn still running (one held, or waiting on an approval)
+ * must stop it first (#230).
  */
-export const removeTestFolder = async (root: string, options: { leftRunning?: boolean } = {}) => {
-  while (background.size > 0) await Promise.all(background);
-  await rm(root, {
-    recursive: true,
-    force: true,
-    ...(options.leftRunning ? { maxRetries: 5 } : {}),
+export const removeTestFolder = async (root: string) => {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), SETTLE_MS);
   });
+  while (background.size > 0) {
+    if ((await Promise.race([Promise.all(background), late])) === "late") {
+      background.clear();
+      throw new Error("The test left a turn running: stop what it starts before it ends.");
+    }
+  }
+  clearTimeout(timer);
+  await rm(root, { recursive: true, force: true });
 };
 
 /**

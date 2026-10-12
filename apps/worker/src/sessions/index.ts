@@ -83,6 +83,7 @@ import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { paperConnection } from "../paper/index.ts";
 import {
+  bringUpToDateMessage,
   checksFailedMessage,
   codeRefusalReason,
   DOCUMENT_TOOL_NAME,
@@ -241,6 +242,8 @@ const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
   now.url === was.url &&
   now.state === was.state &&
   now.head === was.head &&
+  // One recorded before conflicts were (#278) didn't conflict.
+  (now.conflicts ?? false) === (was.conflicts ?? false) &&
   JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
   JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
@@ -424,9 +427,9 @@ type RunningSession = {
 };
 
 /**
- * Given work nobody waits for once it has started (titling a session, notifying the owner), which
- * settles without throwing. The worker lets it run; tests keep hold of it, to wait for it before
- * removing the folders it writes into.
+ * Given work nobody waits for once it has started (a turn, titling a session, notifying the
+ * owner), which settles without throwing. The worker lets it run; tests keep hold of it, to wait
+ * for it before removing the folders it writes into.
  */
 export type Background = (work: Promise<void>) => void;
 
@@ -1294,6 +1297,7 @@ export const createSessions = (options: {
       coding: start.coding,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
+    options.background(session.ended);
     return ok(null);
   };
 
@@ -1747,6 +1751,50 @@ export const createSessions = (options: {
     },
 
     /**
+     * Bring up to date (#278): fetches the base branch of a code session's pull request, then
+     * sends the session the worker's message to merge it in and fix the conflict, on the model
+     * the owner last used there; queued while a turn runs.
+     */
+    bringUpToDate: async (rawId: string): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id, workspaceId } = found.value;
+      const code = await codeBranchOf(found.value);
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      if (code === undefined) return err({ kind: "no-pull-request" });
+      // As recorded, or, opened since it was last followed, as GitHub has it now.
+      const pullRequest = pullRequestIn(events.value) ?? (await options.code.pullRequestOf(code));
+      if (pullRequest === undefined) return err({ kind: "no-pull-request" });
+      if (pullRequestEnded(pullRequest)) {
+        return err({ kind: "pull-request-ended", state: pullRequest.state });
+      }
+      const fresh = await options.code.freshDefault(code.repoPath);
+      if (!fresh.ok) return err({ kind: "branch-refused", refusal: fresh.error });
+      const last = events.value.findLast((event) => event.type === "owner-message");
+      if (last?.type !== "owner-message") return err({ kind: "no-pull-request" });
+      const message: NewMessage = {
+        text: bringUpToDateMessage({ number: pullRequest.number, base: fresh.value.branch }),
+        model: last.model,
+        ...(last.effort === undefined ? {} : { effort: last.effort }),
+      };
+      const provider = await providerIn(workspaceId, message);
+      if (!provider.ok) return provider;
+      await settled(id);
+      const started = await startTurn({
+        id,
+        workspaceId,
+        provider: provider.value.provider,
+        message,
+        since: freshStarts,
+        coding: true,
+      });
+      return !started.ok && started.error.kind === "busy"
+        ? queueMessage({ id, message, attachments: [] })
+        : started;
+    },
+
+    /**
      * Merges a code session's pull request on GitHub (#160), refused with the reason while it
      * can't merge, and only while its latest commit is `reviewed`, the one the owner looked at. Once
      * merged, the session ends as one merged on GitHub does: the merge is recorded, and its worktree
@@ -1913,6 +1961,13 @@ export const createSessions = (options: {
       starter?: boolean;
       /** The files attached to the first message, checked (#78). */
       attachments?: readonly PreparedAttachment[];
+      /**
+       * In a code workspace, the branch of a pull request no session opened (#278), to work on in
+       * place of a session branch of its own.
+       */
+      onBranch?: string;
+      /** Its title, in place of its first message's first line; kept as the starter's is. */
+      title?: string;
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -1931,7 +1986,9 @@ export const createSessions = (options: {
       const branched =
         repoPath === undefined
           ? undefined
-          : await options.code.startBranch({ repoPath, sessionId: id });
+          : start.onBranch === undefined
+            ? await options.code.startBranch({ repoPath, sessionId: id })
+            : await options.code.startOnBranch({ repoPath, sessionId: id, branch: start.onBranch });
       if (branched !== undefined && !branched.ok) {
         return err({ kind: "branch-refused", refusal: branched.error });
       }
@@ -1940,8 +1997,10 @@ export const createSessions = (options: {
         id,
         workspaceId: start.workspaceId,
         // A message with no words is titled by the first file it carried (#164).
-        title: titleFrom(start.message.text || (start.attachments?.[0]?.attachment.name ?? "")),
-        ...(start.starter ? { titledBy: "starter" } : {}),
+        title:
+          start.title ??
+          titleFrom(start.message.text || (start.attachments?.[0]?.attachment.name ?? "")),
+        ...(start.starter || start.title !== undefined ? { titledBy: "starter" } : {}),
         createdAt: at,
         updatedAt: at,
         ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),

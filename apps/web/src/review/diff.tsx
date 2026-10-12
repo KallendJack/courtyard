@@ -38,8 +38,9 @@ const ROW = {
 } as const;
 
 /**
- * One file's diff, sized for a narrow window (Paper, Handheld · 18 and 04): long lines wrap
- * rather than scroll sideways, under their own + or −, so it reads on the cover screen.
+ * One file's diff. On a phone (Paper, Handheld · 18 and 04) long lines wrap rather than scroll
+ * sideways, under their own + or −, so it reads on the cover screen. From a tablet up (#278) it
+ * takes the height it's given and scrolls inside it, and lines never wrap: each scrolls sideways.
  */
 export function Diff(props: { file: ChangedFile; place: string }) {
   const { file } = props;
@@ -47,9 +48,9 @@ export function Diff(props: { file: ChangedFile; place: string }) {
   return (
     <section
       aria-label={`Diff of ${file.path}`}
-      className="flex min-w-0 flex-col overflow-clip rounded-card bg-surface"
+      className="flex min-w-0 flex-col overflow-clip rounded-card border bg-surface md:h-full"
     >
-      <div className="flex items-baseline justify-between gap-3 px-3.5 py-3 shadow-divide">
+      <div className="flex shrink-0 items-baseline justify-between gap-3 px-3.5 py-3 shadow-divide">
         <p className="min-w-0 truncate font-mono text-meta/4 text-foreground" title={file.path}>
           {file.path}
           {file.status === "added" ? " · new" : file.status === "removed" ? " · deleted" : ""}
@@ -63,33 +64,40 @@ export function Diff(props: { file: ChangedFile; place: string }) {
             : "GitHub shows no diff for this file: it's binary, or too large to show."}
         </p>
       ) : (
-        hunks.map((hunk) => (
-          // Each hunk shows different lines of the file.
-          <div key={hunk.lines} className="flex flex-col py-1">
-            <p className="px-3.5 pt-1.5 pb-1 font-mono text-caption text-placeholder">
-              {hunk.lines}
-            </p>
-            {hunk.rows.map((row, line) => {
-              const shown = ROW[row.kind];
-              return (
-                <p
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines never move
-                  key={line}
-                  className={classes(
-                    "flex gap-2 px-3.5 py-0.5 font-mono text-meta whitespace-pre-wrap",
-                    shown.look,
-                  )}
-                >
-                  <span aria-hidden className="w-2 shrink-0 select-none">
-                    {shown.sign}
-                  </span>
-                  {shown.name !== undefined && <span className="sr-only">{shown.name}: </span>}
-                  <span className="min-w-0 wrap-anywhere">{row.text || " "}</span>
+        // From a tablet up, the lines scroll here, both ways, under the file's name.
+        <div data-diff-lines="" className="md:min-h-0 md:flex-1 md:overflow-auto">
+          <div className="md:w-max md:min-w-full">
+            {hunks.map((hunk) => (
+              // Each hunk shows different lines of the file.
+              <div key={hunk.lines} className="flex flex-col py-1">
+                <p className="px-3.5 pt-1.5 pb-1 font-mono text-caption text-placeholder">
+                  {hunk.lines}
                 </p>
-              );
-            })}
+                {hunk.rows.map((row, line) => {
+                  const shown = ROW[row.kind];
+                  return (
+                    <p
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines never move
+                      key={line}
+                      className={classes(
+                        "flex gap-2 px-3.5 py-0.5 font-mono text-meta whitespace-pre-wrap md:whitespace-pre",
+                        shown.look,
+                      )}
+                    >
+                      <span aria-hidden className="w-2 shrink-0 select-none">
+                        {shown.sign}
+                      </span>
+                      {shown.name !== undefined && <span className="sr-only">{shown.name}: </span>}
+                      <span className="min-w-0 wrap-anywhere md:wrap-normal">
+                        {row.text || " "}
+                      </span>
+                    </p>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-        ))
+        </div>
       )}
     </section>
   );

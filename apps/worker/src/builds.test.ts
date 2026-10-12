@@ -37,7 +37,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[], env: Environment = {}) =>
@@ -176,6 +176,7 @@ describe("the builds queue (#281)", () => {
     expect(activitiesIn(events).map((activity) => activity.kind)).not.toContain(
       "waiting-for-build",
     );
+    builds[0]?.finish();
   });
 
   it("runs as many builds at once as the worker's setting allows", async () => {
@@ -187,6 +188,9 @@ describe("the builds queue (#281)", () => {
     await vi.waitFor(() => expect(builds).toHaveLength(2));
     const third = await startCoding(request, "A photo on its own");
     await waitingWith(request, third, 2);
+    for (const build of builds) build.finish();
+    await vi.waitFor(() => expect(builds).toHaveLength(3));
+    builds[2]?.finish();
   });
 });
 
@@ -290,5 +294,6 @@ process.exit(0);`,
     await waitingWith(request, second, 2);
     outside?.free();
     await vi.waitFor(() => expect(builds).toHaveLength(2));
+    for (const build of builds) build.finish();
   });
 });

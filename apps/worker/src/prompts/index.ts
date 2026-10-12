@@ -1241,6 +1241,13 @@ export const checksFailedMessage = (failed: {
   `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
 
 /**
+ * What the worker sends a code session when the owner taps Bring up to date on its pull request
+ * (#278), once it has fetched the base branch: merge it in and fix the conflict.
+ */
+export const bringUpToDateMessage = (pull: { number: number; base: string }) =>
+  `Your pull request #${pull.number} conflicts with ${pull.base}, so it can't merge and its checks may not run. Bring it up to date: ${pull.base} is freshly fetched as origin/${pull.base}, so merge origin/${pull.base} into your session branch, fix each conflict so the changes on both sides are kept, run the checks, then commit and push to the same pull request. If a conflict needs the owner to decide, say which and why.`;
+
+/**
  * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
  * the owner can allow waits for their approval instead (#171), and is told only if they deny it.
  */

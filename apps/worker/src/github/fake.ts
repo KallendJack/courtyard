@@ -83,6 +83,8 @@ export const createFakeGitHub = (
       readonly remote: string;
       /** The checks on a commit pushed, from its subject. */
       readonly checks: (subject: string) => readonly FoundCheck[];
+      /** Whether a commit pushed conflicts with `main`, from its subject (#278). */
+      readonly conflicts?: (subject: string) => boolean;
     };
   } = {},
 ) => {
@@ -154,6 +156,8 @@ export const createFakeGitHub = (
     /** Its title and description, as the model wrote them with gh. */
     title?: string;
     body?: string;
+    /** Who opened it, by their login: the account signed in unless a test says (#278). */
+    author?: string;
   }) => {
     const number = pulls.length + 1;
     const files = open.files ?? [];
@@ -171,6 +175,9 @@ export const createFakeGitHub = (
       files,
       changes: changesOf(files),
       conflicts: false,
+      fork: false,
+      author: open.author ?? account,
+      mergedAt: null,
     });
     return number;
   };
@@ -179,6 +186,14 @@ export const createFakeGitHub = (
     accessToken === current?.accessToken ? undefined : err("That token doesn't work.");
   const latestFor = (find: { repo: string; branch: string }) =>
     pulls.findLast((pull) => pull.repo === find.repo && pull.branch === find.branch);
+  /** A pull request as GitHub gives it, without what only the fake keeps. */
+  const found = (pull: (typeof pulls)[number]): FoundPullRequest => {
+    const { repo: _, files: __, ...rest } = pull;
+    return rest;
+  };
+  /** Merged now, as GitHub records it. */
+  const merged = (number: number) =>
+    change(number, { state: "merged", mergedAt: new Date().toISOString() });
 
   /** For the browser tests: the pull request for a branch pushed to GitHub's copy on disk. */
   const pushed = async (find: { repo: string; branch: string }) => {
@@ -191,14 +206,16 @@ export const createFakeGitHub = (
     const files = await filesPushed(onPush.remote, head);
     const subject = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%s", head])) ?? "";
     const checks = onPush.checks(subject);
+    const conflicts = onPush.conflicts?.(subject) ?? false;
     if (pull === undefined) {
       // Titled and described by its first commit, as gh pr create --fill would.
       const body = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%b", head])) ?? "";
       change(openPullRequest({ ...find, head, files, title: subject, body: body.trim() }), {
         checks,
+        conflicts,
       });
     } else {
-      change(pull.number, { head, checks, files, changes: changesOf(files) });
+      change(pull.number, { head, checks, conflicts, files, changes: changesOf(files) });
     }
   };
 
@@ -245,9 +262,36 @@ export const createFakeGitHub = (
       if (refused !== undefined) return refused;
       await pushed(find);
       const pull = latestFor(find);
-      if (pull === undefined) return ok(null);
-      const { repo: _, branch: __, files: ___, ...found } = pull;
-      return ok(found);
+      return ok(pull === undefined ? null : found(pull));
+    },
+    pullRequestNumbered: async (accessToken, find) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const pull = pulls.find((each) => each.repo === find.repo && each.number === find.number);
+      return ok(pull === undefined ? null : found(pull));
+    },
+    openPullRequests: async (accessToken, find) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      // For the browser tests: every branch pushed to GitHub's copy has its pull request, whoever
+      // pushed it.
+      const onPush = options.opensOnPush;
+      if (onPush !== undefined) {
+        const listed = await gitOrNothing(onPush.remote, [
+          "for-each-ref",
+          "--format=%(refname:short)",
+          "refs/heads",
+        ]);
+        for (const branch of (listed ?? "").split("\n")) {
+          if (branch !== "" && branch !== "main") await pushed({ repo: find.repo, branch });
+        }
+      }
+      return ok(
+        pulls
+          .filter((pull) => pull.repo === find.repo && pull.state === "open")
+          .reverse()
+          .map(found),
+      );
     },
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
@@ -258,7 +302,7 @@ export const createFakeGitHub = (
       if (pull?.state !== "open") return err("GitHub said: Pull Request is not mergeable");
       if (pull.conflicts) return err("GitHub said: Pull Request is not mergeable");
       if (pull.head !== head) return err("GitHub said: Head branch was modified.");
-      change(number, { state: "merged" });
+      merged(number);
       return ok(null);
     },
     close: async (accessToken, { number }) => {
@@ -330,7 +374,7 @@ export const createFakeGitHub = (
     /** Its state on GitHub now, as a test checks Merge or Close reached it (#160). */
     stateOf: (number: number) => pulls[pullNumbered(number)]?.state,
     /** The pull request was merged, on GitHub or from Courtyard. */
-    merge: (number: number) => change(number, { state: "merged" }),
+    merge: merged,
     /** The pull request was closed without merging. */
     close: (number: number) => change(number, { state: "closed" }),
     /** Each branch Courtyard deleted on GitHub, in order. */

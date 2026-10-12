@@ -8,7 +8,7 @@ import { classes } from "@/lib/classes";
  * review.css), and apply only inside those pieces.
  */
 const BASE =
-  "flex basis-0 items-center justify-center gap-2 rounded-card text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
+  "flex items-center justify-center gap-2 text-base/5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
 
 const LOOKS = {
   /** The way out: Deny, Close PR. */
@@ -27,6 +27,7 @@ export function ThumbButton({
   look,
   grow = 1,
   tall = false,
+  fit = false,
   type = "button",
   ...props
 }: Omit<ComponentProps<"button">, "className"> & {
@@ -34,11 +35,22 @@ export function ThumbButton({
   grow?: keyof typeof GROW;
   /** A little taller, at the foot of a card with more in it (an approval). */
   tall?: boolean;
+  /**
+   * As wide as its words, beside a title rather than in thumb reach (a desktop's Merge and Close
+   * PR, #278).
+   */
+  fit?: boolean;
 }) {
   return (
     <button
       type={type}
-      className={classes(BASE, LOOKS[look], GROW[grow], tall ? "h-15" : "h-14")}
+      className={classes(
+        BASE,
+        LOOKS[look],
+        fit
+          ? "h-12 shrink-0 rounded-lg px-5"
+          : classes("basis-0 rounded-card", GROW[grow], tall ? "h-15" : "h-14"),
+      )}
       {...props}
     />
   );

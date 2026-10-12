@@ -21,7 +21,7 @@ import type {
   UserToken,
 } from "./api.ts";
 
-export type { FoundRepo, GitHubApi } from "./api.ts";
+export type { FoundPullRequest, FoundRepo, GitHubApi } from "./api.ts";
 
 /**
  * Courtyard's own GitHub sign-in (#99), through the GitHub App the owner registered and installed
@@ -151,17 +151,16 @@ const namesOf = (names: readonly string[]) =>
 const mergeReadiness = (pull: FoundPullRequest): MergeReadiness => {
   const refused = (reason: string) => ({ kind: "refused", reason }) as const;
   if (pull.state !== "open") return refused(`It's ${pull.state} already.`);
-  if (pull.conflicts) {
-    return refused(
-      `It conflicts with ${pull.base}. Ask the session to bring its branch up to date.`,
-    );
-  }
+  if (pull.conflicts) return refused(`It conflicts with ${pull.base}: Bring it up to date.`);
   const failed = namesWith(pull.checks, "failed");
   if (failed.length > 0) return refused(`Merge waits for ${namesOf(failed)} to pass.`);
   const running = namesWith(pull.checks, "running");
   if (running.length > 0) return refused(`Merge waits for ${namesOf(running)} to finish.`);
   return { kind: "ready" };
 };
+
+/** An open pull request as GitHub gave it, and as a session shows it (#278). */
+export type OpenFound = { readonly found: FoundPullRequest; readonly pullRequest: PullRequest };
 
 /** A pull request GitHub gave, read into Courtyard's shape, or why it couldn't be. */
 const readPull = <T>(shape: z.ZodType<T>, pull: unknown): Result<T, GitHubProblem> => {
@@ -312,6 +311,45 @@ export const createGitHub = (options: {
     return ok({ ...signedIn.value, pull: found.value });
   };
 
+  /** Pull request `number` in `repo`, as `latestPull` gives one; `null` when there's none. */
+  const numberedPull = async (find: {
+    repo: string;
+    number: number;
+  }): Promise<
+    Result<{ github: GitHubApi; token: string; pull: FoundPullRequest | null }, GitHubProblem>
+  > => {
+    const signedIn = await tokenFor(api);
+    if (!signedIn.ok) return signedIn;
+    const found = await signedIn.value.github.pullRequestNumbered(signedIn.value.token, find);
+    if (!found.ok) return err({ kind: "github", message: found.error });
+    return ok({ ...signedIn.value, pull: found.value });
+  };
+
+  /** A pull request as the owner reviews it: its files and their diffs, checks and Merge. */
+  const reviewOf = async (of: {
+    github: GitHubApi;
+    token: string;
+    repo: string;
+    pull: FoundPullRequest;
+  }): Promise<Result<PullRequestReview, GitHubProblem>> => {
+    const { pull } = of;
+    const files = await of.github.pullRequestFiles(of.token, {
+      repo: of.repo,
+      number: pull.number,
+    });
+    if (!files.ok) return err({ kind: "github", message: files.error });
+    return readPull(PullRequestReview, {
+      pullRequest: { ...pull, checks: checksOf(pull.checks) },
+      branch: pull.branch,
+      base: pull.base,
+      checks: pull.checks,
+      body: pull.body,
+      files: files.value,
+      merge: mergeReadiness(pull),
+      ...(pull.mergedAt === null ? {} : { mergedAt: pull.mergedAt }),
+    });
+  };
+
   return {
     status: async (): Promise<Result<GitHubConnection, "storage">> => {
       if (api === null) return ok({ kind: "not-set-up" });
@@ -390,18 +428,50 @@ export const createGitHub = (options: {
       const found = await latestPull(find);
       if (!found.ok) return found;
       const { github, token, pull } = found.value;
-      if (pull === null) return ok(undefined);
-      const files = await github.pullRequestFiles(token, { repo: find.repo, number: pull.number });
-      if (!files.ok) return err({ kind: "github", message: files.error });
-      return readPull(PullRequestReview, {
-        pullRequest: { ...pull, checks: checksOf(pull.checks) },
-        branch: find.branch,
-        base: pull.base,
-        checks: pull.checks,
-        body: pull.body,
-        files: files.value,
-        merge: mergeReadiness(pull),
-      });
+      return pull === null ? ok(undefined) : reviewOf({ github, token, repo: find.repo, pull });
+    },
+
+    /** Pull request `number` in `repo` as the owner reviews it (#278), whoever opened it. */
+    reviewNumbered: async (find: {
+      repo: string;
+      number: number;
+    }): Promise<Result<PullRequestReview | undefined, GitHubProblem>> => {
+      const found = await numberedPull(find);
+      if (!found.ok) return found;
+      const { github, token, pull } = found.value;
+      return pull === null ? ok(undefined) : reviewOf({ github, token, repo: find.repo, pull });
+    },
+
+    /**
+     * Pull request `number` in `repo` as GitHub has it (#278): `undefined` when there's none by
+     * that number.
+     */
+    pullRequestNumbered: async (find: {
+      repo: string;
+      number: number;
+    }): Promise<Result<FoundPullRequest | undefined, GitHubProblem>> => {
+      const found = await numberedPull(find);
+      return found.ok ? ok(found.value.pull ?? undefined) : found;
+    },
+
+    /**
+     * Every open pull request in `repo`, latest first, whoever opened it (#278), each as a session
+     * shows one, with the branch it's from, who opened it and its description.
+     */
+    openPullRequests: async (find: {
+      repo: string;
+    }): Promise<Result<readonly OpenFound[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const { github, token } = signedIn.value;
+      const found = await github.openPullRequests(token, find);
+      if (!found.ok) return err({ kind: "github", message: found.error });
+      return ok(
+        found.value.flatMap((pull) => {
+          const read = readPull(PullRequest, { ...pull, checks: checksOf(pull.checks) });
+          return read.ok ? [{ found: pull, pullRequest: read.value }] : [];
+        }),
+      );
     },
 
     /** Merges pull request `number` in `repo`, only while its latest commit is `head` (#160). */

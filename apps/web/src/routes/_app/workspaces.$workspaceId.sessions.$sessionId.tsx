@@ -145,13 +145,11 @@ function Session(props: {
     async (message: NewMessage, files: readonly File[]) => {
       const sent = await sendMessage({ sessionId: session.id, message, files });
       if (sent.kind !== "loaded") return describeProblem(sent).body;
-      // Changes asked for from the review: the session's answer is in the conversation.
-      if (reviewing) await toConversation();
       // What the owner just sent is at the end, so that's where they go.
-      else toLatest();
+      toLatest();
       return undefined;
     },
-    [session.id, reviewing, toConversation, toLatest],
+    [session.id, toLatest],
   );
   const runningTurn = running ? last?.seq : undefined;
   const stop = useCallback(async () => {
@@ -233,20 +231,41 @@ function Session(props: {
   const toggle = (what: "rename" | "delete") =>
     setTidying((was) => (was === what ? undefined : what));
 
+  if (reviewing) {
+    // The pull request's page, in place of the conversation (#278): its own heading and ask line.
+    return (
+      <Suspense>
+        <Review
+          workspaceId={session.workspaceId}
+          of={{ kind: "session", sessionId: session.id }}
+          fallbackTitle={session.title}
+          pullRequest={pullRequest}
+          session={{
+            id: session.id,
+            turns,
+            // On the model and effort it last used: the ask line has no pickers.
+            send: async (text) => {
+              if (last === undefined) return "This session has no model to ask with yet.";
+              const sent = await sendMessage({
+                sessionId: session.id,
+                message: {
+                  text,
+                  model: last.model,
+                  ...(last.effort === undefined ? {} : { effort: last.effort }),
+                },
+              });
+              return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
+            },
+          }}
+          onShowSession={toConversation}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <Page flushBottom>
-      {reviewing ? (
-        // The review has its own heading: All PRs, and the pull request's title (#240).
-        <Suspense>
-          <Review
-            sessionId={session.id}
-            workspaceId={session.workspaceId}
-            sessionTitle={session.title}
-            pullRequest={pullRequest}
-            onEnded={toConversation}
-          />
-        </Suspense>
-      ) : tidying === "rename" ? (
+      {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
           <RenameForm
@@ -287,7 +306,7 @@ function Session(props: {
           {session.title}
         </PageTitle>
       )}
-      {session.branch !== undefined && !reviewing && (
+      {session.branch !== undefined && (
         <div className="mt-3">
           <BranchStrip
             branch={session.branch}
@@ -327,15 +346,11 @@ function Session(props: {
         </div>
       )}
       {ended !== undefined && (
-        <div className="mt-4">
-          <Notice>
-            Its pull request was {ended}, so this session can be read but takes no more messages.
-            {running
-              ? "Its branch and worktree are cleared away once the turn running now ends."
-              : "Its branch and worktree are cleared away."}{" "}
-            Start a new session to carry on.
-          </Notice>
-        </div>
+        // Nothing went wrong, so one quiet line rather than a notice (#278).
+        <p className="mt-3 text-sm text-muted-foreground">
+          Its pull request was {ended}, so this session takes no more messages: start a new session
+          to carry on.
+        </p>
       )}
       {reconnecting && (
         <div className="mt-4">
@@ -345,7 +360,7 @@ function Session(props: {
         </div>
       )}
 
-      {reviewing ? null : problem ? (
+      {problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
         </div>
@@ -373,9 +388,7 @@ function Session(props: {
 
       {/* Pinned to the foot of the page's panel, which keeps clear of a phone's gesture bar (#266). */}
       <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">
-        {away && !reviewing && problem === undefined && (
-          <JumpToLatest answering={running} onJump={toLatest} />
-        )}
+        {away && problem === undefined && <JumpToLatest answering={running} onJump={toLatest} />}
         <Composer
           providers={props.providers}
           {...(last ? { initialModel: last.model } : {})}
@@ -384,14 +397,7 @@ function Session(props: {
           disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
           {...(running ? { stop } : {})}
           placeholder={
-            // On the review, which session it goes to: the one whose branch the PR is (#279).
-            reviewing
-              ? `To: ${session.title}`
-              : running
-                ? "Queue a message…"
-                : suggesting
-                  ? "Or type your own reply…"
-                  : "Reply…"
+            running ? "Queue a message…" : suggesting ? "Or type your own reply…" : "Reply…"
           }
           compactOnNarrow
           {...(props.skills === undefined ? {} : { skills: props.skills })}

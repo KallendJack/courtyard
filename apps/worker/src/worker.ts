@@ -52,6 +52,8 @@ import {
   createFakeProvider,
   type Provider,
 } from "./providers/index.ts";
+import { createPullRequests } from "./pull-requests/index.ts";
+import { pullRequestRoutes } from "./pull-requests/routes.ts";
 import { createRepos } from "./repos/index.ts";
 import { repoProblem, repoRoutes } from "./repos/routes.ts";
 import { ok, type Result } from "./result.ts";
@@ -318,6 +320,7 @@ export const createWorker = (options: {
   api.route("/", gitHubRoutes(github));
   const repos = createRepos({ dataDir, contextDir, github, code });
   api.route("/", repoRoutes(repos));
+  api.route("/", pullRequestRoutes(createPullRequests({ contextDir, code, sessions })));
   api.route("/", notificationRoutes(notifications));
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));

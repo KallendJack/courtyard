@@ -40,7 +40,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) =>
@@ -668,6 +668,7 @@ describe("several code sessions at once (#174)", () => {
     await vi.waitFor(() => expect(turns).toHaveLength(3));
     expect(new Set(turns.map((turn) => turn.worktree)).size).toBe(3);
     expect(turns.map((turn) => turn.env.COURTYARD_SESSION_SLOT).sort()).toEqual(["1", "2", "3"]);
+    for (const turn of turns) turn.finish();
   });
 
   it("has a fourth wait, saying so, and start in the first slot that frees", async () => {
@@ -702,6 +703,7 @@ describe("several code sessions at once (#174)", () => {
     expect(turns[3]?.env).toEqual(first?.env);
     turns[3]?.finish();
     await followSession(request, { sessionId: fourth, until: "turn-completed", after: 3 });
+    for (const turn of turns) turn.finish();
   });
 
   it("lets a waiting session be removed before it starts, clearing its branch and worktree away", async () => {
@@ -729,6 +731,7 @@ describe("several code sessions at once (#174)", () => {
     turns[0]?.finish();
     await followSession(request, { sessionId: fifth, until: "turn-dequeued", after: 2 });
     await vi.waitFor(() => expect(turns).toHaveLength(4));
+    for (const turn of turns) turn.finish();
   });
 
   it("never holds back a planning workspace's sessions", async () => {
@@ -744,6 +747,7 @@ describe("several code sessions at once (#174)", () => {
 
     const events = await followSession(request, { sessionId: id, until: "turn-completed" });
     expect(events.map((event) => event.type)).not.toContain("turn-queued");
+    for (const turn of turns) turn.finish();
   });
 });
 

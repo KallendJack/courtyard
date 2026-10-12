@@ -124,6 +124,55 @@ writeFileSync(join(repo, "README.md"), "# Side project\n");
 git(repo, "add", ".");
 git(repo, "commit", "-qm", "Start");
 git(repo, "push", "-q", "origin", "main");
+
+// Pull requests no session opened (#278), each a branch pushed to GitHub's copy: a Claude Code
+// helper's, its description signed as its PR skill signs them; and a big one, with over 300 lines,
+// one of them long, and a long description, for the PR page's one-screen checks.
+const pushBranch = (branch, files, messages) => {
+  git(repo, "switch", "-q", "-c", branch);
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(repo, name), text);
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", ...messages.flatMap((message) => ["-m", message]));
+  git(repo, "push", "-q", "origin", branch);
+  git(repo, "switch", "-q", "main");
+  // Only GitHub's copy has it, as a helper's branch would be.
+  git(repo, "branch", "-q", "-D", branch);
+};
+pushBranch("306-machine-lock", { "builds.md": "Builds take turns across the whole PC\n" }, [
+  "Builds queue across the whole PC [e2e running]",
+  "## Summary\n\nBuilds take turns across the whole PC, not just the worker.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+]);
+const LONG_LINE = `export const wide = "${"a long line that never wraps ".repeat(12).trim()}";`;
+pushBranch(
+  "wide-review",
+  {
+    "wide.ts": [
+      LONG_LINE,
+      ...Array.from({ length: 320 }, (_, i) => `export const line${i + 1} = ${i + 1};`),
+    ].join("\n"),
+  },
+  [
+    "A wide review [e2e passes]",
+    [
+      "## Summary",
+      "",
+      "The review uses the whole width, so long lines read without wrapping.",
+      "",
+      ...Array.from(
+        { length: 40 },
+        (_, i) => `Paragraph ${i + 1} of a long description, which reads inside its own panel.\n`,
+      ),
+      "## Evidence",
+      "",
+      "A new e2e test at 1440 by 900 and 950 by 712.",
+      "",
+      "## Merge Danger",
+      "",
+      "Two-way door.",
+    ].join("\n"),
+  ],
+);
+
 mkdirSync(join(contextDir, "side-project"), { recursive: true });
 writeFileSync(
   join(contextDir, "side-project", "workspace.json"),
@@ -149,9 +198,10 @@ git(kitchensPusher, "push", "-q", "origin", "main");
 
 const { startWorker } = await import("../apps/worker/src/start.ts");
 // GitHub in memory (#99): a sign-in finishes a couple of seconds after it starts. A session branch
-// pushed to origin.git gets a pull request (#172), changing the files the branch changes (#160).
-// Its checks are on each commit pushed: verify passes, and e2e fails, unless the commit's subject
-// says "[e2e running]" or "[e2e passes]".
+// pushed to origin.git gets a pull request (#172), changing the files the branch changes (#160),
+// and so does any other branch there once the PRs list is asked for (#278). Its checks are on each
+// commit pushed: verify passes, and e2e fails, unless the commit's subject says "[e2e running]" or
+// "[e2e passes]".
 const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
 // A push service in memory (#173), so a device turned on in a test is never sent to for real.
 const { createFakePush } = await import("../apps/worker/src/notifications/fake.ts");
@@ -189,7 +239,7 @@ startWorker({
   github: createFakeGitHub({
     finishAfterMs: 2000,
     // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
-    // isn't yet, newest pushed first.
+    // isn't yet, newest pushed first, then enough more to make 62, as many as the owner's (#286).
     repos: [
       "octo-owner/courtyard",
       {
@@ -201,6 +251,7 @@ startWorker({
       },
       { fullName: "octo-owner/side-project", private: false },
       "octo-owner/stacks",
+      ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
     ],
     opensOnPush: {
       remote: origin,
@@ -215,6 +266,8 @@ startWorker({
               : "failed",
         },
       ],
+      // A commit whose subject says "[conflicts]" conflicts with main (#278).
+      conflicts: (subject) => subject.includes("[conflicts]"),
     },
   }).api,
   sendPush: createFakePush().send,
