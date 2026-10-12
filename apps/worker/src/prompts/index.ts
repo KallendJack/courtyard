@@ -199,7 +199,7 @@ const connectionsPart = (connections: WorkspaceConnections, usesTools: boolean) 
   const missing = [
     ...(github.kind === "signed-out"
       ? [
-          "Courtyard isn't signed in to GitHub, so pushing and pull requests won't work: the owner signs in from Connections on Courtyard's home page.",
+          "Courtyard isn't signed in to GitHub, so pushing and pull requests won't work: the owner signs in from Connections in Courtyard's Settings.",
         ]
       : []),
     ...(github.kind === "not-on-github"

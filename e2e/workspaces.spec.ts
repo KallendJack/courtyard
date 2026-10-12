@@ -5,7 +5,7 @@ test("the owner sees every workspace and switches between them in one tap", asyn
 
   const list = page.getByRole("main");
   await expect(list.getByRole("link", { name: "Garage gym" })).toBeVisible();
-  await expect(list.getByRole("link", { name: /office/ })).toContainText("No context file yet");
+  await expect(list.getByRole("link", { name: /office/ })).toBeVisible();
 
   const switcher = page.getByRole("navigation", { name: "Workspaces" });
   await switcher.getByRole("link", { name: "Garage gym" }).click();

@@ -12,7 +12,7 @@ import type { Notifications } from "./index.ts";
 const storageError = (c: Context, error: StorageError) =>
   apiError(c, { status: 500, error: error.message });
 
-/** Notifications, turned on and off per device from the home page (#173). */
+/** Notifications, turned on and off per device from Settings (#173). */
 export const notificationRoutes = (notifications: Notifications) => {
   const routes = new Hono();
 

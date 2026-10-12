@@ -53,12 +53,12 @@ export function LimitNotice(props: {
         <Notice
           title={title}
           action={
-            <ButtonLink to="/" variant="outline" size="sm">
+            <ButtonLink to="/settings" hash="connections" variant="outline" size="sm">
               Go to sign in
             </ButtonLink>
           }
         >
-          {resets(reason.resetAt)} Sign in to {overflow.label} on the home page to carry on there.
+          {resets(reason.resetAt)} Sign in to {overflow.label} in Settings to carry on there.
         </Notice>
       );
     case "at-limit": {

@@ -1,114 +1,111 @@
+import type { WorkspaceSummary } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { useLayout } from "@/components/handheld";
 import { EmptyState } from "@/components/notice";
-import { LIST_ROW, Page, PageTitle } from "@/components/page";
+import { Page, PageTitle } from "@/components/page";
 import { WorkspaceIcon } from "@/components/workspace-icon";
 import { classes } from "@/lib/classes";
-import { BackupStatus } from "../../backup-status.tsx";
-import { LogOutOthers } from "../../log-out-others.tsx";
-import { OwnerContextPanel } from "../../owner-context-panel.tsx";
-import { loadOwnerContext } from "../../worker.ts";
 
-// Loaded once the page shows: the page never waits for it, and it stays off the first load.
-const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
-const Notifications = lazy(() => import("../../notifications/notifications-card.tsx"));
-// Asked for once the page shows anyway: it waits for the worker's word on whether main has moved on.
-const LiveUpdate = lazy(() =>
-  import("../../live/live-update.tsx").then((module) => ({ default: module.LiveUpdate })),
-);
+// Loaded once the page shows, so the page never waits for them and they stay off the first load:
+// each tile's line, and the foot rows.
+const TileLine = lazy(() => import("../../home/tile-line.tsx"));
+const HomeFoot = lazy(() => import("../../home/foot.tsx"));
 
 const loggedIn = getRouteApi("/_app");
 
-export const Route = createFileRoute("/_app/")({
-  loader: async () => ({ ownerContext: await loadOwnerContext() }),
-  component: Home,
-});
+export const Route = createFileRoute("/_app/")({ component: Home });
 
+/** A tile's size and shape: two across on the cover screen, three from a tablet up. */
+const TILE =
+  "relative flex h-29.5 flex-col rounded-tile p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:h-33 lg:h-37.5";
+
+/**
+ * A workspace's tile: its icon, its name, and its line, which loads after the page and keeps its
+ * place until then.
+ */
+function Tile(props: { workspace: WorkspaceSummary }) {
+  const { workspace } = props;
+  return (
+    <li>
+      <Link
+        to="/workspaces/$workspaceId"
+        params={{ workspaceId: workspace.id }}
+        className={classes(TILE, "justify-between bg-muted/60 hover:bg-muted")}
+      >
+        <WorkspaceIcon icon={workspace.icon} size="home" />
+        <span className="flex min-w-0 flex-col gap-0.75">
+          <span className="truncate text-lg/5.5 font-bold">{workspace.name}</span>
+          <span data-line="" className="h-4">
+            <Suspense>
+              <TileLine workspace={workspace} />
+            </Suspense>
+          </span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+/**
+ * Home (#102; Paper, "Home", desktop, tablet and cover screen): calm and touch-first. The
+ * workspaces are the page, a big tile each and New workspace; at its foot, near the thumbs and only
+ * when needed, main's build with Update and one gold line for something wrong. Everything else
+ * that was here (the owner context, sign-ins, Connections, Fresh start) is in Settings.
+ */
 function Home() {
   const workspaces = loggedIn.useLoaderData();
-  const { ownerContext } = Route.useLoaderData();
+  const short = useLayout() === "cover";
   if (workspaces.kind !== "loaded") return null;
   const list = workspaces.data.workspaces;
 
   return (
-    <Page>
-      <PageTitle>Workspaces</PageTitle>
-      <Suspense fallback={null}>
-        <LiveUpdate />
-      </Suspense>
-      <BackupStatus />
-      <Suspense fallback={null}>
-        <SignIns part="boxes" />
-      </Suspense>
-      <OwnerContextPanel
-        result={ownerContext}
-        canGetToKnow={list.some((workspace) => workspace.mode === "planning")}
-      />
-      {list.length === 0 ? (
-        <EmptyState>
-          No workspaces yet.{" "}
-          <Link to="/new-workspace" className="text-foreground underline">
-            Add your first
-          </Link>{" "}
-          for one area of your life.
-        </EmptyState>
-      ) : (
-        <ul className="mt-6 divide-y">
-          {list.map((workspace) => (
-            <li key={workspace.id}>
-              <Link
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId: workspace.id }}
-                className={LIST_ROW}
-              >
-                <span className="flex items-center gap-3 font-medium">
-                  <WorkspaceIcon icon={workspace.icon} size="md" />
-                  {workspace.name}
-                </span>
-                <span className="flex gap-2 text-meta text-muted-foreground">
-                  {workspace.mode === "code" ? (
-                    <span>Code</span>
-                  ) : (
-                    !workspace.hasContextFile && <span>No context file yet</span>
+    <Page wide fill>
+      <div data-home="" className="contents">
+        <PageTitle>Workspaces</PageTitle>
+        {list.length === 0 ? (
+          <EmptyState>
+            No workspaces yet.{" "}
+            <Link to="/new-workspace" className="text-foreground underline">
+              Add your first
+            </Link>{" "}
+            for one area of your life.
+          </EmptyState>
+        ) : (
+          // From a tablet up only the tiles scroll, under the title and above the foot rows (#339).
+          // The space round them keeps a focused tile's ring in view.
+          <div className="-mx-1 mt-3 p-1 md:mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+            <ul
+              aria-label="Workspaces"
+              className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3"
+            >
+              {list.map((workspace) => (
+                <Tile key={workspace.id} workspace={workspace} />
+              ))}
+              <li>
+                <Link
+                  to="/new-workspace"
+                  className={classes(
+                    TILE,
+                    "items-center justify-center gap-2.5 border-stroke border-dashed border-input text-interface font-semibold text-foreground/85 hover:bg-muted/60",
                   )}
-                  {workspace.configProblem !== undefined && (
-                    <span className="text-destructive-text">Config ignored</span>
-                  )}
-                </span>
-              </Link>
-            </li>
-          ))}
-          <li>
-            <Link to="/new-workspace" className={classes(LIST_ROW, "text-muted-foreground")}>
-              <span className="flex items-center gap-3">
-                {/* As wide as a dot, so the names line up. */}
-                <Plus className="-mx-[3px] size-4 shrink-0" aria-hidden />
-                New workspace
-              </span>
-            </Link>
-          </li>
-        </ul>
-      )}
-      <Suspense fallback={null}>
-        <SignIns
-          part="list"
-          beside={
-            <Suspense fallback={null}>
-              <Notifications />
-            </Suspense>
-          }
-        />
-      </Suspense>
-      <div className="mt-7 flex justify-end">
-        <Link
-          to="/fresh-start"
-          className="text-meta font-medium text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
-        >
-          Fresh start…
-        </Link>
+                >
+                  <span className="flex size-10 items-center justify-center rounded-row bg-muted">
+                    <Plus aria-hidden className="size-4.5" />
+                  </span>
+                  New workspace
+                </Link>
+              </li>
+            </ul>
+          </div>
+        )}
+        <div className="mt-auto shrink-0 pt-6">
+          <Suspense>
+            <HomeFoot workspaces={list} short={short} />
+          </Suspense>
+        </div>
       </div>
-      <LogOutOthers />
     </Page>
   );
 }

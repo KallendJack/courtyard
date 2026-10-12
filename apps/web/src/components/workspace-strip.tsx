@@ -1,6 +1,6 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link, useParams } from "@tanstack/react-router";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, Plus, Settings } from "lucide-react";
 import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
@@ -56,6 +56,16 @@ export function WorkspaceStrip(props: {
         )}
         {code.map(link)}
       </nav>
+      <Link
+        to="/settings"
+        aria-label="Settings"
+        className={classes(
+          STRIP_LINK,
+          "size-9 justify-center text-muted-foreground data-[status=active]:text-foreground",
+        )}
+      >
+        <Settings className="size-[18px]" />
+      </Link>
       <IconButton label="Log out" icon={<LogOut />} onClick={props.onLogOut} />
     </header>
   );

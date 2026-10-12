@@ -8,12 +8,14 @@ const WorkspaceMark = lazy(() => import("./workspace-marks.tsx"));
 const SIZES = {
   /** Beside a name in a line of text: the way back to a workspace. */
   sm: "size-3.5",
-  /** Beside a name in a list: the sidebar, the strip, the home page's workspaces. */
+  /** Beside a name in a list: the sidebar, the strip. */
   md: "size-4",
   /** On a workspace's tile in the Handheld frame. */
   tile: "size-5",
   /** One to pick in the Icon sheet. */
   lg: "size-6",
+  /** On a workspace's tile on Home (#102). */
+  home: "size-7",
 } as const;
 
 /**

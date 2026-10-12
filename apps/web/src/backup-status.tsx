@@ -5,7 +5,7 @@ import { describeWhen } from "./when.ts";
 import { loadBackup } from "./worker.ts";
 
 /**
- * Whether the context folder's backup has every change (ADR 0014), on the home page. Asked for
+ * Whether the context folder's backup has every change (ADR 0014), in Settings (#102). Asked for
  * once the page is showing, since the worker may be partway through a push: the page never waits
  * for the backup. Nothing at all while it's up to date, or when the worker couldn't say.
  */

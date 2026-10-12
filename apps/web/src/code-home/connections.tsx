@@ -138,7 +138,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
           ) : github.kind === "signed-out" ? (
             <span className="text-label font-medium text-warning">
               Not connected:{" "}
-              <Link to="/" hash="connections" className="underline">
+              <Link to="/settings" hash="connections" className="underline">
                 sign in from Connections
               </Link>
             </span>

@@ -16,7 +16,7 @@ import { GetToKnow } from "./sessions/get-to-know.tsx";
 import { type FromWorker, startOwnerContext } from "./worker.ts";
 
 /**
- * The owner context on the home page: what every workspace's models read about the owner
+ * The owner context in Settings (#102): what every workspace's models read about the owner
  * (ADR 0010), or a way to start one.
  */
 export function OwnerContextPanel(props: {

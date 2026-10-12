@@ -17,7 +17,7 @@ export type SignInProblem =
   | { readonly kind: "storage" };
 
 /**
- * Signing in, from the home page, to the providers whose sign-in Courtyard handles (ADR 0015):
+ * Signing in, from Settings, to the providers whose sign-in Courtyard handles (ADR 0015):
  * each sign-in's state from its provider, and the owner's Not now, kept across restarts until they
  * sign in after all.
  */
@@ -99,7 +99,7 @@ export const createSignIns = (options: { providers: readonly Provider[]; dataDir
 
     signOut: (name: string) => acting(name, async (signIn) => fromProvider(await signIn.signOut())),
 
-    /** The owner said Not now: the home page stops asking them to sign in. */
+    /** The owner said Not now: Settings stops asking them to sign in. */
     notNow: (name: string) =>
       acting(name, async (_, id) => {
         const notNow = await readNotNow();

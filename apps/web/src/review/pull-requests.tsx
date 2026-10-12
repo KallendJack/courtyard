@@ -12,14 +12,18 @@ import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
 import { useLayout } from "@/components/handheld";
-import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { PlaceholderRows } from "@/components/kept";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { addStylesheet } from "@/lib/stylesheet";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { bringUpToDate, loadOpenPullRequests } from "./api.ts";
+import { bringUpToDate } from "./api.ts";
 import { ChecksState } from "./checks.tsx";
+import { useOpenPullRequests } from "./open-pull-requests.ts";
 import css from "./review.css?inline";
+
+// A code workspace's Home asks for them too (#301), as does Home's tile for it (#102).
+export { useOpenPullRequests } from "./open-pull-requests.ts";
 
 // The review's stylesheet (review.css), which has the list's classes too.
 addStylesheet("review", css);
@@ -65,37 +69,6 @@ const fromSessions = (sessions: readonly Listed[], state: "open" | "merged"): Ro
         : [],
     )
     .sort((a, b) => b.pullRequest.number - a.pullRequest.number);
-
-/** What the sessions' pull requests are now, so the list is asked for again when one changes. */
-const versionOf = (sessions: readonly Listed[]) =>
-  JSON.stringify(sessions.map((session) => [session.id, session.pullRequest]));
-
-/** Each workspace's open pull requests as last known, for the tab's lifetime. */
-const KEPT_OPEN = createKept<OpenPullRequestList>();
-
-/**
- * Every open pull request on a code workspace's repository, asked for again as its sessions' pull
- * requests change (and when `again` changes, after the page merged one, say); none while `asking`
- * is false.
- */
-export const useOpenPullRequests = (
-  workspaceId: WorkspaceId,
-  sessions: readonly Listed[],
-  asking = true,
-  again = 0,
-) => {
-  const version = versionOf(sessions);
-  // The last list known shows at once, asked for again quietly (nothing jumps in late).
-  return useKept(KEPT_OPEN, {
-    key: workspaceId,
-    load: async () => {
-      const loaded = await loadOpenPullRequests(workspaceId);
-      return loaded.kind === "loaded" ? loaded.data : undefined;
-    },
-    again: `${version}:${again}`,
-    asking,
-  });
-};
 
 /**
  * A code workspace's pull requests (#240, #278; Paper, "PRs: every open PR"): every open one on

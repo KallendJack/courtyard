@@ -15,6 +15,7 @@ import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { Button } from "./button.tsx";
+import { ButtonLink } from "./button-link.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import { FrameButton, modelMark } from "./frame-button.tsx";
 import type { Layout, MessageBox, TalkTarget } from "./handheld.ts";
@@ -329,6 +330,10 @@ export default function HandheldFrame(props: {
         fits="top"
       >
         <LiveUpdate />
+        {/* The owner context, Connections and the rest that left Home (#102). */}
+        <ButtonLink variant="outline" to="/settings">
+          All settings
+        </ButtonLink>
         <Button variant="outline" onClick={props.onLogOut}>
           <LogOut aria-hidden />
           Log out

@@ -135,12 +135,19 @@ export function MainBuildCard(props: {
   /**
    * As a row, with a label in capitals before it that names it too ("Main" on a code workspace's
    * Home, #301; Paper, "Code workspace Home"): its title on one line, its bars thin, and each job's
-   * name for screen readers only.
+   * name for screen readers only. Beside Update ("New version" on Home, #102), where the build stands
+   * leaves out what Update says itself: "Passed", not "Passed · ready to update".
    */
   label?: string;
+  /**
+   * As a row on a narrow screen (Home on the cover screen, #102; Paper, "Cover · Home"): the
+   * label and the short commit as its title, and where the build stands for screen readers only.
+   */
+  short?: boolean;
 }) {
   const { build } = props;
   const row = props.label !== undefined;
+  const short = row && props.short === true;
   // "7d518cd Rail and Talk key" reads as "Rail and Talk key 7d518cd".
   const [commit = "", ...words] = props.newest.title.split(" ");
   return (
@@ -154,11 +161,22 @@ export function MainBuildCard(props: {
       )}
     >
       {props.label !== undefined && (
-        <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+        <span
+          className={classes(
+            "shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase",
+            short && "max-sm:sr-only",
+          )}
+        >
           {props.label}
         </span>
       )}
-      <div className={classes("flex min-w-60 flex-1 flex-col", row ? "gap-1.5" : "gap-2.5")}>
+      <div
+        className={classes(
+          "flex min-w-60 flex-1 flex-col",
+          row ? "gap-1.5" : "gap-2.5",
+          short && "max-sm:min-w-0",
+        )}
+      >
         <div className="flex justify-between gap-3">
           <p
             className={classes(
@@ -166,13 +184,19 @@ export function MainBuildCard(props: {
               row ? "truncate text-label font-bold" : "text-interface font-semibold",
             )}
           >
-            {words.join(" ")} {commit}
+            {short && <span className="sm:hidden">{props.label} · </span>}
+            <span className={short ? "max-sm:hidden" : undefined}>{words.join(" ")} </span>
+            {commit}
           </p>
           <p
             role="status"
-            className={classes("shrink-0 text-label font-semibold", STANDING_LOOKS[build.kind])}
+            className={classes(
+              "shrink-0 text-label font-semibold",
+              STANDING_LOOKS[build.kind],
+              short && "max-sm:sr-only",
+            )}
           >
-            {standing(build, props.onUpdate !== undefined)}
+            {standing(build, props.onUpdate !== undefined && !row)}
           </p>
         </div>
         <ol aria-label="Main's build" className="flex gap-1">

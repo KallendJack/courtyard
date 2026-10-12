@@ -1,6 +1,6 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link, useParams } from "@tanstack/react-router";
-import { LogOut, PanelLeft, Plus } from "lucide-react";
+import { LogOut, PanelLeft, Plus, Settings } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { IconButton } from "./button.tsx";
@@ -157,15 +157,29 @@ export function AppSidebar(props: {
             <RecentSessions workspaces={props.workspaces} />
           </Suspense>
         )}
-        <button
-          type="button"
-          onClick={props.onLogOut}
-          title={collapsed ? "Log out" : undefined}
-          className={classes(ROW, "mt-auto text-sm text-muted-foreground")}
-        >
-          <LogOut className="size-4 shrink-0" aria-hidden />
-          <span className="group-data-[collapsed=true]/sidebar:sr-only">Log out</span>
-        </button>
+        {/* Settings (#102): the owner context, Connections and the rest that left Home. */}
+        <div className="mt-auto flex flex-col gap-0.5 text-sm text-muted-foreground">
+          <Link
+            to="/settings"
+            title={collapsed ? "Settings" : undefined}
+            className={classes(
+              ROW,
+              "data-[status=active]:bg-muted data-[status=active]:text-foreground",
+            )}
+          >
+            <Settings className="size-4 shrink-0" aria-hidden />
+            <span className="group-data-[collapsed=true]/sidebar:sr-only">Settings</span>
+          </Link>
+          <button
+            type="button"
+            onClick={props.onLogOut}
+            title={collapsed ? "Log out" : undefined}
+            className={ROW}
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden />
+            <span className="group-data-[collapsed=true]/sidebar:sr-only">Log out</span>
+          </button>
+        </div>
       </nav>
     </aside>
   );

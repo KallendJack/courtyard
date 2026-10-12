@@ -450,7 +450,7 @@ describe("Codex's status, when it can't be used", () => {
       id: "codex",
       label: "Codex",
       available: false,
-      reason: "Codex isn't signed in. Sign in to Codex on the home page.",
+      reason: "Codex isn't signed in. Sign in to Codex in Settings.",
       signedOut: true,
     });
   });
@@ -1134,7 +1134,7 @@ describe("what never passes between Codex and the worker", () => {
       ok: false,
       error: {
         kind: "provider-unavailable",
-        message: "Codex isn't signed in. Sign in to Codex on the home page.",
+        message: "Codex isn't signed in. Sign in to Codex in Settings.",
       },
     });
     expect(

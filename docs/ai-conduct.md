@@ -414,7 +414,7 @@ that uses tools. With none of them, it starts instead:
 Then, for each that's missing, its sentence. Courtyard not signed in to GitHub:
 
 > Courtyard isn't signed in to GitHub, so pushing and pull requests won't work: the owner signs in from Connections
-> on Courtyard's home page.
+> in Courtyard's Settings.
 
 A repository whose remote isn't on GitHub:
 
@@ -906,7 +906,7 @@ A save that meets a workspace with no context file writes the starter without an
 
 ## Starter owner context
 
-Built with #31. The home page's Start your owner context writes `OWNER.md` from a template (`startOwnerContext` in
+Built with #31. Settings' Start your owner context writes `OWNER.md` from a template (`startOwnerContext` in
 `apps/worker/src/owner-context/`), never over an existing file:
 
 1. "Owner context" as the title.
@@ -915,7 +915,7 @@ Built with #31. The home page's Start your owner context writes `OWNER.md` from 
    because any line inside a section counts as one of its lines.
 3. About me, with empty Facts, Plans and Ideas under it, then an empty How to answer me.
 
-The home page warns once the owner context passes `OWNER_CONTEXT_LONG_CHARACTERS` (in the contract), a quarter of
+Settings warns once the owner context passes `OWNER_CONTEXT_LONG_CHARACTERS` (in the contract), a quarter of
 a context file's threshold, since it goes with every message in every workspace.
 
 ## Saving context lines
@@ -1043,7 +1043,7 @@ The owner can stop, or carry on chatting, whenever they like; saving follows the
 the owner didn't say. Since a skill replacing a house one keeps its "only the owner starts it", the owner can rewrite
 either skill for a workspace, or everywhere, and the button starts theirs.
 
-The home page offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). It's the same, with the
+Settings offers **Get to know me** for an owner context with no lines (or no `OWNER.md`). It's the same, with the
 house skill **Get to know me** (`get-to-know-me`) and the message "Get to know me.", saving to the owner context only.
 Its session runs in the first planning workspace, as a session needs a workspace and only a planning one's models save
 to About me; it's listed for planning workspaces only. Its description:
@@ -1080,7 +1080,7 @@ Its text:
 >   stop"): what you saved, in a few words a topic, then the topics skipped or not reached. Ask no new question in it.
 ### Tidying
 
-The owner asks for a tidy from the workspace page (or the home page for the owner context). The model is given the
+The owner asks for a tidy from the workspace page (or Settings for the owner context). The model is given the
 whole file with its labels and proposes changes, never a rewritten file: merge these lines, remove this stale line or
 dropped idea, shorten this one. Each follows the context-line rules, and none may add something new. The owner sees
 each change, ticked by default, and the ones they leave ticked are saved as one change.
