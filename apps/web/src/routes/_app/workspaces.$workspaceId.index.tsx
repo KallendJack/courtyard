@@ -8,6 +8,7 @@ import { IconChooser } from "@/components/icon-chooser";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { useRefreshWhileBusy } from "@/components/session-state";
+import { WorkspaceMenu } from "@/components/workspace-menu";
 import type { Deleted } from "../../planning-home/planning-home.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { archiveWorkspace, changeWorkspace, fromWorker } from "../../worker.ts";
@@ -97,6 +98,7 @@ function Workspace() {
     await router.invalidate();
     return undefined;
   };
+  /** A planning workspace's line above its name: its icon, to change it, and "Workspace". */
   const above = (
     // The chooser stays outside the words' capitals: its sheet is inside it.
     <div className="flex items-center gap-2">
@@ -106,12 +108,35 @@ function Workspace() {
         choose={(icon) => change({ icon })}
       />
       <span className="text-meta/4 font-semibold tracking-label text-muted-foreground uppercase">
-        {workspace.mode === "code" ? "Code workspace" : "Workspace"}
+        Workspace
       </span>
     </div>
   );
   const toggle = (what: "rename" | "archive") =>
     setTidying((was) => (was === what ? undefined : what));
+  // A code workspace's title is its name alone, with rename, its icon and archive behind one ⋯
+  // (#333; Paper, "Code workspace Home"); a planning workspace's keeps its line and buttons.
+  const code = workspace.mode === "code";
+  const actions = code ? (
+    <WorkspaceMenu
+      workspaceName={workspace.name}
+      icon={workspace.icon}
+      choose={(icon) => change({ icon })}
+      onRename={() => setTidying("rename")}
+      onArchive={() => setTidying("archive")}
+    />
+  ) : (
+    <>
+      <IconButton label="Rename workspace" icon={<Pencil />} onClick={() => toggle("rename")} />
+      <IconButton
+        label="Archive workspace"
+        icon={<Archive />}
+        expanded={tidying === "archive"}
+        look={tidying === "archive" ? "pressed" : "quiet"}
+        onClick={() => toggle("archive")}
+      />
+    </>
+  );
   /** A document or a Thing just deleted from its page, which its section offers to undo. */
   const deleted: Deleted | undefined =
     search.name === undefined
@@ -135,7 +160,7 @@ function Workspace() {
     <Page wide flushBottom fill={workspace.mode === "code"}>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
-          {above}
+          {!code && above}
           <RenameForm
             label="Workspace name"
             value={workspace.name}
@@ -146,25 +171,7 @@ function Workspace() {
           />
         </div>
       ) : (
-        <PageTitle
-          above={above}
-          actions={
-            <>
-              <IconButton
-                label="Rename workspace"
-                icon={<Pencil />}
-                onClick={() => toggle("rename")}
-              />
-              <IconButton
-                label="Archive workspace"
-                icon={<Archive />}
-                expanded={tidying === "archive"}
-                look={tidying === "archive" ? "pressed" : "quiet"}
-                onClick={() => toggle("archive")}
-              />
-            </>
-          }
-        >
+        <PageTitle {...(code ? {} : { above })} actions={actions}>
           {workspace.name}
         </PageTitle>
       )}
@@ -189,11 +196,10 @@ function Workspace() {
           </ConfirmStep>
         </div>
       )}
-      {workspace.mode === "code" ? (
+      {code ? (
         <Suspense fallback={null}>
           <CodeHome
             workspace={workspace}
-            description={detail.data.description}
             list={sessionList}
             providers={providers}
             skills={skills}

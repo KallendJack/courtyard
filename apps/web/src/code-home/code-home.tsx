@@ -71,15 +71,15 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
- * cover screen): its one line and its connections line (#308), its tabs (Home · Sessions · PRs),
- * and on Home, in a fixed order, Needs you, Running, Next up, Main, then the message box at the
- * foot. From a tablet up it's exactly the screen tall and never scrolls (#335): the blocks share
- * the height left, each keeping its place, empty or not (#283), and scroll inside their cards.
- * Its knowledge lives in its repository, so it has no context file, Things or skills here.
+ * cover screen): its connections line (#308), its tabs (Home · Sessions · PRs), and on Home, in a
+ * fixed order, Needs you, Running, Next up, Main, then the message box at the foot. From a tablet
+ * up it's exactly the screen tall and never scrolls (#335): the blocks share the height left, each
+ * keeping its place, empty or not (#283), and scroll inside their cards. Its one line, What it's
+ * for, stays in its workspace.json for the home chat and turns, never on the page (#333). Its
+ * knowledge lives in its repository, so it has no context file, Things or skills.
  */
 export default function CodeHome(props: {
   workspace: WorkspaceSummary;
-  description: string | undefined;
   list: CodeSessionList;
   providers: FromWorker<ProviderList>;
   skills: FromWorker<SkillList>;
@@ -167,11 +167,6 @@ export default function CodeHome(props: {
   return (
     <div data-code-home="">
       <div className="mt-2 flex flex-col gap-2">
-        {props.description !== undefined && (
-          <p className="line-clamp-1 text-interface font-medium text-muted-foreground">
-            {props.description}
-          </p>
-        )}
         {connections === undefined ? (
           <PlaceholderRows count={1} size="text" />
         ) : (
