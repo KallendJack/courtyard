@@ -1,6 +1,7 @@
 import { type ApprovalAsk, type Doing, skillTitle, type TurnNow } from "@courtyard/contract";
 import { useEffect, useRef, useState } from "react";
 import { classes } from "@/lib/classes";
+import { elapsedWords } from "../when.ts";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
 
 // Whose turn it is in a session (#179, Paper board Handheld · 20): Working in violet, Needs you in
@@ -52,16 +53,6 @@ export const askWords = (ask: ApprovalAsk) => {
     default:
       return `asks to change ${ask.path}`;
   }
-};
-
-/** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
-export const elapsedWords = (ms: number) => {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  const two = (n: number) => String(n).padStart(2, "0");
-  const minutes = Math.floor(seconds / 60);
-  return minutes < 60
-    ? `${minutes}:${two(seconds % 60)}`
-    : `${Math.floor(minutes / 60)}:${two(minutes % 60)}:${two(seconds % 60)}`;
 };
 
 /** How long it's been since `since`, as `elapsedWords` says it, ticking every second. */

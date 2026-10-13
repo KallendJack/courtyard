@@ -310,20 +310,17 @@ describe("main's build (#249)", () => {
       .toBe("signed-in");
   });
 
-  it("shows main's newest build running, each job in the order the workflow starts them", async () => {
-    const before = await merge("The build before");
-    github.setCommitChecks(before, [
-      job(1, "Checks", "passed", {
-        started: "2026-10-06T11:00:00Z",
-        completed: "2026-10-06T11:01:00Z",
-      }),
-      job(2, "E2E 1/4", "passed", {
-        started: "2026-10-06T11:00:00Z",
-        completed: "2026-10-06T11:03:00Z",
-      }),
-    ]);
+  /** Main's build, as the live status gives it. */
+  const buildOf = async () => {
+    const status = await statusOf(request);
+    return status.kind === "live" ? status.build : undefined;
+  };
+  /** Each stage's jobs, by name and how they're going. */
+  const stagesOf = async () =>
+    (await buildOf())?.stages.map((stage) => stage.map((each) => [each.name, each.outcome]));
+
+  it("with no workflow to go by, shows each job in one stage, in the order GitHub made them", async () => {
     const newest = await merge("Rail and Talk key");
-    // GitHub lists them in any order: the bar keeps the workflow's.
     github.setCommitChecks(newest, [
       job(13, "E2E 2/4", "running", { started: "2026-10-06T11:59:00Z" }),
       job(11, "Unit tests", "running", { started: "2026-10-06T11:59:00Z" }),
@@ -331,43 +328,41 @@ describe("main's build (#249)", () => {
       job(12, "E2E 1/4", "running", { started: "2026-10-06T11:59:00Z" }),
     ]);
 
-    expect(await statusOf(request)).toMatchObject({
-      newerOnMain: true,
-      build: {
-        kind: "running",
-        jobs: [
-          { name: "Checks", outcome: "passed" },
-          { name: "Unit tests", outcome: "running" },
-          { name: "E2E 1/4", outcome: "running" },
-          { name: "E2E 2/4", outcome: "running" },
-        ],
-        // Started at 11:59, and the build before took 3 minutes.
-        endsAround: "2026-10-06T12:02:00.000Z",
-      },
+    expect(await buildOf()).toMatchObject({
+      kind: "running",
+      startedAt: "2026-10-06T11:59:00.000Z",
     });
+    expect(await stagesOf()).toEqual([
+      [
+        ["Checks", "passed"],
+        ["Unit tests", "running"],
+        ["E2E 1/4", "running"],
+        ["E2E 2/4", "running"],
+      ],
+    ]);
   });
 
-  it("says it passed, so Update can be offered", async () => {
+  it("says it passed, and when, so Update can be offered", async () => {
     const newest = await merge("Rail and Talk key");
     github.setCommitChecks(newest, jobsOf([]));
 
-    const status = await statusOf(request);
-
-    expect(status).toMatchObject({ newerOnMain: true, build: { kind: "passed" } });
-    if (status.kind === "live") expect(status.build?.jobs).toHaveLength(6);
+    expect(await buildOf()).toMatchObject({
+      kind: "passed",
+      startedAt: "2026-10-06T11:58:00.000Z",
+      completedAt: "2026-10-06T12:01:00.000Z",
+    });
+    expect((await stagesOf())?.flat()).toHaveLength(6);
   });
 
   it("says which job failed, and where its log is", async () => {
     const newest = await merge("Rail and Talk key");
     github.setCommitChecks(newest, jobsOf(["passed", "failed", "passed", "failed"]));
 
-    expect(await statusOf(request)).toMatchObject({
-      build: {
-        kind: "failed",
-        details: "https://github.com/octo-owner/courtyard/actions/runs/1/job/11",
-        jobs: expect.arrayContaining([{ name: "Unit tests", outcome: "failed" }]),
-      },
+    expect(await buildOf()).toMatchObject({
+      kind: "failed",
+      details: "https://github.com/octo-owner/courtyard/actions/runs/1/job/11",
     });
+    expect((await stagesOf())?.flat()).toContainEqual(["Unit tests", "failed"]);
   });
 
   it("shows only the latest try of a job that was run again", async () => {
@@ -377,19 +372,209 @@ describe("main's build (#249)", () => {
       job(20, "Unit tests", "passed"),
     ]);
 
-    const status = await statusOf(request);
+    expect(await buildOf()).toMatchObject({ kind: "passed" });
+    expect((await stagesOf())?.flat().map(([name]) => name)).toEqual([
+      "Checks",
+      "Unit tests",
+      "E2E 1/4",
+      "E2E 2/4",
+      "E2E 3/4",
+      "E2E 4/4",
+    ]);
+  });
 
-    expect(status).toMatchObject({ build: { kind: "passed" } });
-    if (status.kind === "live") {
-      expect(status.build?.jobs.map((each) => each.name)).toEqual([
-        "Checks",
-        "Unit tests",
-        "E2E 1/4",
-        "E2E 2/4",
-        "E2E 3/4",
-        "E2E 4/4",
+  describe("in stages, from the workflow's own order (#337)", () => {
+    /** A workflow where a preview waits on lint and build, and the browser tests on the preview. */
+    const DEPLOY = [
+      "name: Deploy",
+      "on: push",
+      "jobs:",
+      "  lint:",
+      "    name: Lint",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: pnpm lint # needs: nothing",
+      "  build:",
+      "    name: 'Build'",
+      "    steps:",
+      "      - run: |",
+      "          echo needs: [lint]",
+      "  preview:",
+      "    name: Deploy preview",
+      "    needs: [lint, build]",
+      "  e2e:",
+      '    name: "E2E"',
+      "    needs:",
+      "      - preview",
+      "",
+    ].join("\n");
+
+    it("puts a job after the jobs it needs, and one that hasn't started yet waits", async () => {
+      const newest = await merge("New gallery page");
+      github.setWorkflows(newest, [{ path: ".github/workflows/deploy.yml", text: DEPLOY }]);
+      // GitHub lists them in any order: the stages keep the workflow's.
+      github.setCommitChecks(newest, [
+        job(3, "Deploy preview", "running", { started: "2026-10-06T11:59:00Z" }),
+        job(2, "Build", "passed"),
+        job(1, "Lint", "passed"),
       ]);
-    }
+
+      const status = await statusOf(request);
+
+      expect(status.kind === "live" && status.build).toMatchObject({
+        kind: "running",
+        stages: [
+          [
+            { name: "Lint", outcome: "passed", needs: [] },
+            { name: "Build", outcome: "passed", needs: [] },
+          ],
+          [{ name: "Deploy preview", outcome: "running", needs: ["Lint", "Build"] }],
+          [{ name: "E2E", outcome: "waiting", needs: ["Deploy preview"], startedAt: null }],
+        ],
+      });
+    });
+
+    /** Courtyard's own CI: three jobs side by side, the browser tests in four shards. */
+    const CI = [
+      "name: CI",
+      "jobs:",
+      "  checks:",
+      "    name: Checks",
+      "    runs-on: ubuntu-latest",
+      "  unit:",
+      "    name: Unit tests",
+      "  e2e:",
+      `    name: E2E \${{ matrix.shard }}/4`,
+      "    strategy:",
+      "      fail-fast: false",
+      "      matrix:",
+      "        shard: [1, 2, 3, 4]",
+      "",
+    ].join("\n");
+    const ciOn = (commit: string, workflow: { done?: boolean; startedAt?: string } = {}) =>
+      github.setWorkflows(commit, [{ path: ".github/workflows/ci.yml", text: CI, ...workflow }]);
+
+    /** Main's build before the newest, which passed: Checks 1 min, Unit tests 2, E2E 3. */
+    const passedBefore = async (started: string) => {
+      const before = await merge("The build before");
+      const at = (minutes: number) =>
+        new Date(Date.parse(started) + minutes * MINUTES).toISOString();
+      github.setCommitChecks(before, [
+        job(1, "Checks", "passed", { started, completed: at(1) }),
+        job(2, "Unit tests", "passed", { started, completed: at(2) }),
+        ...[1, 2, 3, 4].map((shard) =>
+          job(2 + shard, `E2E ${shard}/4`, "passed", { started, completed: at(3) }),
+        ),
+      ]);
+      return before;
+    };
+
+    it("with no job needing another, has one stage, a matrix's runs folded with their count", async () => {
+      const newest = await merge("Rail and Talk key");
+      ciOn(newest, { startedAt: "2026-10-06T11:58:30Z" });
+      github.setCommitChecks(newest, [
+        job(13, "E2E 2/4", "running"),
+        job(11, "Unit tests", "running"),
+        job(10, "Checks", "passed"),
+        job(12, "E2E 1/4", "passed"),
+        job(14, "E2E 3/4", "running"),
+        job(15, "E2E 4/4", "running"),
+      ]);
+
+      expect(await buildOf()).toMatchObject({
+        kind: "running",
+        // Its latest try, as its workflow says.
+        startedAt: "2026-10-06T11:58:30.000Z",
+        stages: [
+          [
+            { name: "Checks", outcome: "passed", shards: null, needs: [] },
+            { name: "Unit tests", outcome: "running", shards: null },
+            { name: "E2E", outcome: "running", shards: { done: 1, total: 4 } },
+          ],
+        ],
+      });
+    });
+
+    it("judges when it should end from how long each job usually takes, whatever ran again later", async () => {
+      const before = await merge("The build before");
+      // A shard of the build before, run again twenty minutes later: still three minutes long.
+      github.setCommitChecks(before, [
+        job(1, "Checks", "passed", {
+          started: "2026-10-06T11:00:00Z",
+          completed: "2026-10-06T11:01:00Z",
+        }),
+        job(2, "Unit tests", "passed", {
+          started: "2026-10-06T11:00:00Z",
+          completed: "2026-10-06T11:02:00Z",
+        }),
+        ...[1, 2, 3, 4].map((shard) =>
+          job(2 + shard, `E2E ${shard}/4`, shard === 4 ? "failed" : "passed", {
+            started: "2026-10-06T11:00:00Z",
+            completed: "2026-10-06T11:03:00Z",
+          }),
+        ),
+        job(9, "E2E 4/4", "passed", {
+          started: "2026-10-06T11:23:00Z",
+          completed: "2026-10-06T11:26:00Z",
+        }),
+      ]);
+      const newest = await merge("Rail and Talk key");
+      ciOn(newest);
+      github.setCommitChecks(newest, [
+        job(10, "Checks", "running", { started: "2026-10-06T11:59:00Z" }),
+        job(11, "Unit tests", "running", { started: "2026-10-06T11:59:00Z" }),
+        ...[1, 2, 3, 4].map((shard) =>
+          job(11 + shard, `E2E ${shard}/4`, "running", { started: "2026-10-06T11:59:00Z" }),
+        ),
+      ]);
+
+      // Started at 11:59, and the browser tests usually take three minutes.
+      expect(await buildOf()).toMatchObject({
+        kind: "running",
+        endsAround: "2026-10-06T12:02:00.000Z",
+      });
+    });
+
+    it("is nearly done once its jobs have run longer than they usually do, never later", async () => {
+      await passedBefore("2026-10-06T11:00:00Z");
+      const newest = await merge("Rail and Talk key");
+      ciOn(newest);
+      const times = { started: "2026-10-06T11:50:00Z", completed: "2026-10-06T11:53:00Z" };
+      github.setCommitChecks(newest, [
+        job(10, "Checks", "passed", times),
+        job(11, "Unit tests", "passed", times),
+        ...[1, 2, 3, 4].map((shard) =>
+          job(11 + shard, `E2E ${shard}/4`, shard === 1 ? "running" : "passed", times),
+        ),
+      ]);
+
+      // Ten minutes in, where the browser tests usually take three.
+      const build = await buildOf();
+      expect(build).toMatchObject({ kind: "running" });
+      const endsAround = build?.kind === "running" ? build.endsAround : null;
+      expect(Date.parse(endsAround ?? "")).toBeLessThanOrEqual(now);
+    });
+
+    it("waits for a job that hasn't started, until its workflow has finished without it", async () => {
+      const newest = await merge("New gallery page");
+      github.setWorkflows(newest, [
+        { path: ".github/workflows/deploy.yml", text: DEPLOY, done: true },
+      ]);
+      github.setCommitChecks(newest, [
+        job(1, "Lint", "passed"),
+        job(2, "Build", "failed"),
+        job(3, "Deploy preview", "other"),
+      ]);
+
+      expect(await stagesOf()).toEqual([
+        [
+          ["Lint", "passed"],
+          ["Build", "failed"],
+        ],
+        [["Deploy preview", "other"]],
+        [["E2E", "other"]],
+      ]);
+    });
   });
 
   it("asks GitHub nothing about builds while the live copy is on main's newest", async () => {

@@ -31,8 +31,10 @@ updated only when the owner chooses (ADR 0011).
 _Avoid_: production, prod, deployment, release
 
 **Main's build**:
-CI on `main`'s newest commit, shown beside Update as one bar per job; Update waits for it to pass (#249).
-_Avoid_: pipeline, deploy status
+CI on `main`'s newest commit, shown beside Update; Update waits for it to pass (#249). Its jobs are drawn in
+**stages**, from the workflow's own order: jobs that start together share a stage, and a job that `needs:` others
+sits in a stage after theirs (#337).
+_Avoid_: pipeline (in code and UI text), deploy status
 
 **Web app**:
 The part the owner opens in a browser. Static files that show things and call the worker; it does no model work and

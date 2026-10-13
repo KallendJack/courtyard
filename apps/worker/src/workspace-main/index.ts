@@ -12,9 +12,14 @@ import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
  * one Home offers Update on.
  */
 
-/** How long an answer is kept while its build runs, and once it has finished. */
-const KEEP_RUNNING_MS = 15 * 1000;
+/**
+ * How long an answer is kept while its build runs, and once it has finished. A page showing it
+ * asks every 10 seconds while it runs (#337).
+ */
+const KEEP_RUNNING_MS = 8 * 1000;
 const KEEP_MS = 60 * 1000;
+/** How many of main's earlier builds say how long each job usually takes (#337). */
+const EARLIER_BUILDS = 10;
 
 /** Why a workspace's main can't be shown. */
 export type WorkspaceMainProblem =
@@ -62,11 +67,12 @@ export const createWorkspaceMain = (options: {
       if (!fresh.ok) return err({ kind: "unknown" });
       const read = await gitOrNothing(repoPath, [
         "log",
-        "-2",
+        "--first-parent",
+        `--max-count=${EARLIER_BUILDS + 1}`,
         `--format=%H${FIELD}%h${FIELD}%s${FIELD}%b${RECORD}`,
         fresh.value.tracking,
       ]);
-      const [newest, previous] = (read ?? "")
+      const [newest, ...earlier] = (read ?? "")
         .split(RECORD)
         .filter((record) => record.trim() !== "")
         .map((record) => {
@@ -77,13 +83,15 @@ export const createWorkspaceMain = (options: {
       const build = await options.github.mainBuild({
         repo: repo.value,
         commit: newest.commit,
-        previous: previous?.commit ?? null,
+        earlier: earlier.map((each) => each.commit),
       });
       const main: WorkspaceMain = {
         newest,
         // No checks at all says nothing about main: the row shows none.
         build:
-          build.ok && build.value !== undefined && build.value.jobs.length > 0 ? build.value : null,
+          build.ok && build.value !== undefined && build.value.stages.length > 0
+            ? build.value
+            : null,
         liveCopy: (await liveRepoOf()) === repo.value,
       };
       kept.set(repo.value, { at: now(), main });

@@ -359,10 +359,31 @@ const helperPull = github.openPullRequest({
   author: "octo-owner",
 });
 github.setChecks(helperPull, [{ name: "verify", outcome: "passed" }]);
-// Workbench's main has passed its build (#301's Main row).
+// Workbench's main has passed its build (#301's Main row): its workflow runs the checks, the unit
+// tests and two shards of browser tests side by side (#337), and GitHub lists them in any order.
+github.setWorkflows(homeHead, [
+  {
+    path: ".github/workflows/ci.yml",
+    done: true,
+    text: [
+      "name: CI",
+      "jobs:",
+      "  checks:",
+      "    name: Checks",
+      "  unit:",
+      "    name: Unit tests",
+      "  e2e:",
+      `    name: E2E \${{ matrix.shard }}/2`,
+      "    strategy:",
+      "      matrix:",
+      "        shard: [1, 2]",
+      "",
+    ].join("\n"),
+  },
+]);
 github.setCommitChecks(
   homeHead,
-  ["Checks", "Unit tests", "E2E 1/2", "E2E 2/2"].map((name, i) => ({
+  ["E2E 2/2", "Unit tests", "E2E 1/2", "Checks"].map((name, i) => ({
     id: i + 1,
     name,
     outcome: "passed",
