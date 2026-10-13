@@ -10,12 +10,9 @@ import { RenameForm } from "@/components/rename-form";
 import { useRefreshWhileBusy } from "@/components/session-state";
 import type { Deleted } from "../../planning-home/planning-home.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
-import { archiveWorkspace, changeWorkspace, fromWorker } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, fromWorker, NOT_FOUND } from "../../worker.ts";
 
-// A code workspace's Home and its tabs (#301), with a stylesheet of its own: loaded only for one.
-const CodeHome = lazy(() => import("../../code-home/code-home.tsx"));
-// A planning workspace's Home and its tabs (#300), the same way.
-const PlanningHome = lazy(() => import("../../planning-home/planning-home.tsx"));
+// The workspace's Home, code (#301) or planning (#300), comes with its data (workspace-page.ts).
 // A pull request no session opened (#278): loaded only when one is opened.
 const Review = lazy(() =>
   import("../../review/pull-requests.tsx").then((module) => ({ default: module.PullRequestPage })),
@@ -49,7 +46,7 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
 });
 
 function Workspace() {
-  const { detail, sessions, providers, skills, documents, things } = Route.useLoaderData();
+  const { detail, home, sessions, providers, skills, documents, things } = Route.useLoaderData();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
@@ -79,15 +76,16 @@ function Workspace() {
   }
   if (detail.kind === "not-found") {
     return (
-      <Page>
-        <PageTitle>No such workspace</PageTitle>
+      <Page header={<PageTitle>No such workspace</PageTitle>}>
         <Link to="/" className="mt-3 w-fit text-muted-foreground underline">
           All workspaces
         </Link>
       </Page>
     );
   }
-  if (detail.kind !== "loaded") return <Problem result={detail} />;
+  if (detail.kind !== "loaded" || home === undefined) {
+    return <Problem result={detail.kind === "loaded" ? NOT_FOUND : detail} />;
+  }
   const { workspace, contextFile, ownerContextShared } = detail.data;
 
   const change = async (wanted: { name: string } | { icon: typeof workspace.icon }) => {
@@ -129,9 +127,9 @@ function Workspace() {
     await router.invalidate();
   };
 
-  return (
-    // A workspace's Home ends with its message box, pinned at the foot (#301, #300).
-    <Page wide flushBottom>
+  /** The top of the page: its name, and archiving it once asked. Each Home adds its tabs. */
+  const header = (
+    <>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
@@ -188,33 +186,33 @@ function Workspace() {
           </ConfirmStep>
         </div>
       )}
-      {workspace.mode === "code" ? (
-        <Suspense fallback={null}>
-          <CodeHome
-            workspace={workspace}
-            description={detail.data.description}
-            list={sessionList}
-            providers={providers}
-            skills={skills}
-            hash={hash}
-          />
-        </Suspense>
-      ) : (
-        <Suspense fallback={null}>
-          <PlanningHome
-            workspace={workspace}
-            contextFile={contextFile}
-            ownerContextShared={ownerContextShared}
-            duePlans={detail.data.duePlans ?? []}
-            list={sessionList}
-            loaded={{ providers, skills, documents, things }}
-            hash={hash}
-            deleted={deleted}
-            onUndone={undone}
-          />
-        </Suspense>
-      )}
-    </Page>
+    </>
+  );
+
+  // A workspace's Home: its name and tabs pinned at the top, its message box at the foot (#339).
+  return home.kind === "code" ? (
+    <home.Home
+      header={header}
+      workspace={workspace}
+      description={detail.data.description}
+      list={sessionList}
+      providers={providers}
+      skills={skills}
+      hash={hash}
+    />
+  ) : (
+    <home.Home
+      header={header}
+      workspace={workspace}
+      contextFile={contextFile}
+      ownerContextShared={ownerContextShared}
+      duePlans={detail.data.duePlans ?? []}
+      list={sessionList}
+      loaded={{ providers, skills, documents, things }}
+      hash={hash}
+      deleted={deleted}
+      onUndone={undone}
+    />
   );
 }
 

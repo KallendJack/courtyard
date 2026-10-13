@@ -19,6 +19,7 @@ import { FileTree, lineCounts } from "@/components/file-tree";
 import { FormError } from "@/components/form-error";
 import { type Layout, useLayout } from "@/components/handheld";
 import { Notice } from "@/components/notice";
+import { PAGE_SCROLL } from "@/components/page-scroll";
 import { ThumbButton } from "@/components/thumb-button";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -127,7 +128,11 @@ export default function Review(props: {
   return (
     // Where the review's own classes apply (review.css): inside it, so not on itself.
     <div data-review="" className="contents">
-      <main className="mx-auto flex w-full flex-col px-4 pt-6 pb-6 md:h-full md:min-h-0 md:px-4.5 md:pt-5 md:pb-4 xl:px-7">
+      {/* On a phone it scrolls as one column, by itself: the panel it sits on never does (#339). */}
+      <main
+        data-scroll-restoration-id={PAGE_SCROLL}
+        className="mx-auto flex h-full min-h-0 w-full flex-col overflow-y-auto px-4 pt-6 pb-6 md:px-4.5 md:pt-5 md:pb-4 xl:px-7"
+      >
         {review === undefined || review.kind !== "loaded" ? (
           <div className="flex flex-col gap-2">
             <BackLink workspaceId={props.workspaceId} pullRequests />

@@ -12,7 +12,7 @@ import { BackLink } from "@/components/back-link";
 import { Button } from "@/components/button";
 import { useFilePicker } from "@/components/file-picker";
 import { FormError } from "@/components/form-error";
-import { PageTitle } from "@/components/page";
+import { Page, PageTitle } from "@/components/page";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "../sessions/answer.tsx";
@@ -24,8 +24,9 @@ import { StatusChip, ThingPhoto, ThingRows } from "./thing-rows.tsx";
 import { boughtInWords } from "./words.ts";
 
 /**
- * A Thing's card (ADR 0020): its photo and the details it has, the Thing it's part of and its
- * parts, Edit, Change photo and Delete, then its history, newest first, drawn like an answer.
+ * A Thing's page (ADR 0020): its name pinned at the top, then its photo and the details it has,
+ * the Thing it's part of and its parts, Edit, Change photo and Delete, then its history, newest
+ * first, drawn like an answer.
  */
 export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list: ThingList }) {
   const { thing, history, workspaceId } = props;
@@ -70,7 +71,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
     ["Where", thing.where],
   ] as const;
 
-  return (
+  const header = (
     <ThingsScope>
       <PageTitle
         above={
@@ -84,104 +85,111 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
       >
         {thing.name}
       </PageTitle>
-      <div className="mt-6 flex flex-col gap-6">
-        {editing ? (
-          <ThingForm
-            thing={thing}
-            parents={all.filter((each) => each.partOf === undefined && each.slug !== thing.slug)}
-            hasParts={parts.length > 0}
-            save={async (form, photo) => {
-              // Saving with nothing changed is just closing the form: the worker would refuse it.
-              if (photo === undefined && sameFields(thing, form)) return undefined;
-              // The fields and a new photo go together, as one change with one Undo.
-              const changed = await changeThing({ workspaceId, slug: thing.slug, form, photo });
-              if (changed.kind !== "loaded") return describeProblem(changed).body;
-              await router.invalidate();
-              return undefined;
-            }}
-            onDone={() => setEditing(false)}
-          />
-        ) : (
-          <>
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-7">
-              {thing.photo && <ThingPhoto workspaceId={workspaceId} thing={thing} size="card" />}
-              <dl className="flex grow flex-col">
-                {details.map(([label, value]) =>
-                  value === undefined ? null : (
-                    <Detail key={label} label={label}>
-                      {value}
-                    </Detail>
-                  ),
-                )}
-                {parent !== undefined && (
-                  <Detail label="Part of">
-                    <Link
-                      to="/workspaces/$workspaceId/things/$slug"
-                      params={{ workspaceId, slug: parent.slug }}
-                      className="font-medium text-primary-text underline"
-                    >
-                      {parent.name}
-                    </Link>
-                  </Detail>
-                )}
-              </dl>
-            </div>
-            {parts.length > 0 && (
-              <ThingRows
-                workspaceId={workspaceId}
-                things={parts}
-                all={all}
-                within={thing.slug}
-                label={`Parts of ${thing.name}`}
-              />
-            )}
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={photoPicker.open}
-                  disabled={upload.busy}
-                >
-                  {thing.photo ? "Change photo" : "Upload photo"}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void remove.run()}
-                  disabled={remove.busy}
-                >
-                  Delete
-                </Button>
-              </div>
-              {photoPicker.picker}
-              <FormError message={upload.error ?? remove.error} />
-            </div>
-          </>
-        )}
-        {history.length > 0 && (
-          <section aria-label="History" className="flex flex-col gap-2.5 border-t pt-5">
-            <h2 className="display-section text-lg/6.5">History</h2>
-            <ul className="flex flex-col gap-2.5">
-              {history.map((entry, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: a history only changes as a whole, when the Thing does
-                <li key={index} className="flex gap-4">
-                  <span className="w-24 shrink-0 text-sm/6 text-muted-foreground">
-                    {entry.date === null ? "" : boughtInWords(entry.date)}
-                  </span>
-                  <div className="min-w-0 grow">
-                    <Answer text={entry.text} running={false} replayed={entry.text.length} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
     </ThingsScope>
+  );
+
+  return (
+    <Page header={header}>
+      <ThingsScope>
+        <div className="mt-6 flex flex-col gap-6">
+          {editing ? (
+            <ThingForm
+              thing={thing}
+              parents={all.filter((each) => each.partOf === undefined && each.slug !== thing.slug)}
+              hasParts={parts.length > 0}
+              save={async (form, photo) => {
+                // Saving with nothing changed is just closing the form: the worker would refuse it.
+                if (photo === undefined && sameFields(thing, form)) return undefined;
+                // The fields and a new photo go together, as one change with one Undo.
+                const changed = await changeThing({ workspaceId, slug: thing.slug, form, photo });
+                if (changed.kind !== "loaded") return describeProblem(changed).body;
+                await router.invalidate();
+                return undefined;
+              }}
+              onDone={() => setEditing(false)}
+            />
+          ) : (
+            <>
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-7">
+                {thing.photo && <ThingPhoto workspaceId={workspaceId} thing={thing} size="card" />}
+                <dl className="flex grow flex-col">
+                  {details.map(([label, value]) =>
+                    value === undefined ? null : (
+                      <Detail key={label} label={label}>
+                        {value}
+                      </Detail>
+                    ),
+                  )}
+                  {parent !== undefined && (
+                    <Detail label="Part of">
+                      <Link
+                        to="/workspaces/$workspaceId/things/$slug"
+                        params={{ workspaceId, slug: parent.slug }}
+                        className="font-medium text-primary-text underline"
+                      >
+                        {parent.name}
+                      </Link>
+                    </Detail>
+                  )}
+                </dl>
+              </div>
+              {parts.length > 0 && (
+                <ThingRows
+                  workspaceId={workspaceId}
+                  things={parts}
+                  all={all}
+                  within={thing.slug}
+                  label={`Parts of ${thing.name}`}
+                />
+              )}
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={photoPicker.open}
+                    disabled={upload.busy}
+                  >
+                    {thing.photo ? "Change photo" : "Upload photo"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void remove.run()}
+                    disabled={remove.busy}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                {photoPicker.picker}
+                <FormError message={upload.error ?? remove.error} />
+              </div>
+            </>
+          )}
+          {history.length > 0 && (
+            <section aria-label="History" className="flex flex-col gap-2.5 border-t pt-5">
+              <h2 className="display-section text-lg/6.5">History</h2>
+              <ul className="flex flex-col gap-2.5">
+                {history.map((entry, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a history only changes as a whole, when the Thing does
+                  <li key={index} className="flex gap-4">
+                    <span className="w-24 shrink-0 text-sm/6 text-muted-foreground">
+                      {entry.date === null ? "" : boughtInWords(entry.date)}
+                    </span>
+                    <div className="min-w-0 grow">
+                      <Answer text={entry.text} running={false} replayed={entry.text.length} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      </ThingsScope>
+    </Page>
   );
 }
 

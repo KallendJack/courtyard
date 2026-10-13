@@ -64,8 +64,7 @@ export function Problem({ result }: { result: NoData }) {
   const { title, body } = describeProblem(result);
 
   return (
-    <Page>
-      <PageTitle>{title}</PageTitle>
+    <Page header={<PageTitle>{title}</PageTitle>}>
       <p className="mt-2 text-muted-foreground">{body}</p>
       {result.kind === "logged-out" && (
         <Link to="/login" className="mt-3 w-fit font-medium text-primary-text underline">

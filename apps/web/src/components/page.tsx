@@ -1,33 +1,61 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { classes } from "@/lib/classes";
+import { useLayout } from "./handheld.ts";
+import { PAGE_SCROLL, PageScrollContext } from "./page-scroll.ts";
 
-/** A page's reading column inside the raised panel. */
+/**
+ * A screen (#339): a pinned header, one scrolling middle and a pinned footer, filling the raised
+ * panel, so nothing scrolls the title or the main action away. Only the middle scrolls, and no
+ * other box on the screen scrolls it: what follows the scroll (a session's turns) finds it through
+ * `usePageScroll`. The cover screen is too short to pin a header too, so there the header scrolls
+ * with the middle as one column, and only the footer stays put.
+ */
 export function Page(props: {
+  /** The middle, which scrolls. */
   children: ReactNode;
-  /** No space below: the page ends with something pinned to the bottom (the message box). */
-  flushBottom?: boolean;
+  /** Pinned at the top: the title, and what goes with it (a back link, tabs). */
+  header?: ReactNode;
+  /** Pinned at the foot: the main action (the message box, Save, Create). */
+  footer?: ReactNode;
   /**
    * The panel's whole width rather than a reading column, for a page of cards (a workspace's),
    * which lays them out by its own width: a column on a phone, two once there's room.
    */
   wide?: boolean;
-  /**
-   * At least the panel's height, so what ends the page sits at its foot (Home's foot rows, #102);
-   * from a tablet up, exactly its height, so the page's own scrolling area keeps its title and foot
-   * in view (owner, 2026-10-12; #339 makes this the app's).
-   */
-  fill?: boolean;
 }) {
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const oneColumn = useLayout() === "cover";
+  const column = classes(
+    "mx-auto flex w-full flex-col px-4 md:px-8",
+    props.wide ? "@container max-w-5xl" : "max-w-reading",
+  );
+  const header = props.header !== undefined && (
+    <div className={classes(column, "shrink-0 pt-6 md:pt-12")}>{props.header}</div>
+  );
   return (
-    <main
-      className={classes(
-        "mx-auto flex w-full flex-col px-4 pt-6 md:px-8 md:pt-12",
-        props.wide ? "@container max-w-5xl" : "max-w-reading",
-        !props.flushBottom && "pb-10",
-        props.fill && "min-h-full md:h-full",
+    <main className="flex h-full min-h-0 flex-col">
+      {!oneColumn && header}
+      <div
+        ref={setScroller}
+        data-scroll-restoration-id={PAGE_SCROLL}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
+        {oneColumn && header}
+        <div
+          className={classes(
+            column,
+            "grow",
+            props.header === undefined && "pt-6 md:pt-12",
+            props.footer === undefined && "pb-10",
+          )}
+        >
+          <PageScrollContext value={scroller}>{props.children}</PageScrollContext>
+        </div>
+      </div>
+      {props.footer !== undefined && (
+        // Where Jump to latest floats from, just above the message box.
+        <div className={classes(column, "relative shrink-0")}>{props.footer}</div>
       )}
-    >
-      {props.children}
     </main>
   );
 }

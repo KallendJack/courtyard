@@ -26,6 +26,8 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   violet is open, live or chosen; gold is something that needs the owner; moss is passed or connected; red is
   failed. Components join classes with `lib/classes.ts`, which merges nothing, so no class-merging code reaches the
   first load.
+- **Every screen is a pinned header, one scrolling middle and a pinned footer** (the shared page layout,
+  `components/page.tsx`, #339); nothing scrolls the title or the main action away.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
   feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece

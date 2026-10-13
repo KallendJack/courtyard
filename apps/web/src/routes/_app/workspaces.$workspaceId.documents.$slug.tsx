@@ -24,8 +24,7 @@ function DocumentPage() {
   const workspaceId = WorkspaceId.safeParse(params.workspaceId);
   if (document.kind === "not-found" || !workspaceId.success) {
     return (
-      <Page>
-        <PageTitle>No such document</PageTitle>
+      <Page header={<PageTitle>No such document</PageTitle>}>
         <p className="mt-3 text-muted-foreground">
           It may have been renamed or deleted.{" "}
           {workspaceId.success && (
@@ -77,8 +76,8 @@ function Document(props: DocumentDetail & { workspaceId: WorkspaceId }) {
   });
   const above = <BackLink workspaceId={workspaceId} within="Documents" tab="docs" />;
 
-  return (
-    <Page>
+  const header = (
+    <>
       {renaming ? (
         <div className="flex flex-col gap-2">
           {above}
@@ -124,6 +123,11 @@ function Document(props: DocumentDetail & { workspaceId: WorkspaceId }) {
         </div>
       </div>
       <FormError message={remove.error} />
+    </>
+  );
+
+  return (
+    <Page header={header}>
       <div className="mt-6">
         {body === "" ? (
           <p className="text-muted-foreground">Nothing below its name yet.</p>

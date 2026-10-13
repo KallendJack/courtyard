@@ -17,8 +17,7 @@ function ThingPage() {
   const workspaceId = WorkspaceId.safeParse(params.workspaceId);
   if (thing.kind === "not-found" || !workspaceId.success) {
     return (
-      <Page>
-        <PageTitle>No such Thing</PageTitle>
+      <Page header={<PageTitle>No such Thing</PageTitle>}>
         <p className="mt-3 text-muted-foreground">
           It may have been deleted.{" "}
           {workspaceId.success && (
@@ -37,13 +36,11 @@ function ThingPage() {
   if (thing.kind !== "loaded") return <Problem result={thing} />;
   if (list.kind !== "loaded") return <Problem result={list} />;
   return (
-    <Page>
-      <ThingCard
-        key={thing.data.thing.slug}
-        workspaceId={workspaceId.data}
-        list={list.data}
-        {...thing.data}
-      />
-    </Page>
+    <ThingCard
+      key={thing.data.thing.slug}
+      workspaceId={workspaceId.data}
+      list={list.data}
+      {...thing.data}
+    />
   );
 }

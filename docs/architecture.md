@@ -365,10 +365,15 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   workspaces down the side or across the top; the rest are pages. `_app/index.tsx` is the home page (#102), the
   workspaces as tiles; `_app/settings.tsx` is Settings, with everything that used to be on the home page besides
   them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
-  devices), in the sidebar on a desktop and behind the frame's Settings sheet on a touch screen. Behind the login a page scrolls on its raised
-  panel, never the window (#266), so the sidebar or the Handheld frame stays put and the scroll bar sits on the
-  panel's edge: `components/page-scroll.ts` hands the panel to whatever follows the scroll (a session's turns), and
-  names it to the router, which keeps its scroll per page.
+  devices), in the sidebar on a desktop and behind the frame's Settings sheet on a touch screen. Behind the login
+  each page sits on a raised panel that never scrolls, nor does the window (#266), so the sidebar or the Handheld
+  frame stays put. Every page is `components/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
+  scrolling middle and a pinned footer (its main action: the message box, Save, Create), so nothing scrolls the
+  title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
+  PR page (`review/`) lays itself out, fitting the screen. `components/page-scroll.ts` hands the scrolling middle
+  to whatever follows the scroll (a session's turns), and names it to the router, which keeps its scroll per page.
+  A workspace's page loads its Home's code (code or planning) with its data (`workspace-page.ts`), so the page
+  shows whole.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
   offline worker or a refusal comes back as a value to show. A page load waits for a slow worker (`untilAnswered`):
   it's tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without
@@ -504,8 +509,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
     put what's said there as they would in a message box. A code workspace just made opens with its
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).
-  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; from a tablet up the page is one
-    screen, its title and foot rows in view and only the tiles scrolling, until #339 makes that the app's), with a stylesheet of its own
+  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; its title pinned at the
+    top, the foot rows at the foot, and only the tiles scrolling between them, #339), with a stylesheet of its own
     (`home.css`, holding `components/kept.tsx`'s classes too), like `code-home/`. Each tile's line
     (`tile-line.tsx`): what waits on the owner, as the worker says and Needs you reads it (`code-home/needs.ts`),
     from the workspace's sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home

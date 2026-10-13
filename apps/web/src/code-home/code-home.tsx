@@ -8,10 +8,11 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { Page } from "@/components/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -60,6 +61,8 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
  * Its knowledge lives in its repository, so it has no context file, Things or skills here.
  */
 export default function CodeHome(props: {
+  /** The page's title and what goes with it, pinned above the line and the tabs. */
+  header: ReactNode;
   workspace: WorkspaceSummary;
   description: string | undefined;
   list: CodeSessionList;
@@ -149,91 +152,56 @@ export default function CodeHome(props: {
     list.sessions.some((session) => session.now.kind === "working");
   const beside = layout !== "cover" && anyLeft && (nextUp === undefined || nextUp.length > 0);
 
-  return (
-    <div data-code-home="">
-      <div className="mt-2 flex flex-col gap-2">
-        {props.description !== undefined && (
-          <p className="line-clamp-1 text-interface font-medium text-muted-foreground">
-            {props.description}
-          </p>
-        )}
-        {connections === undefined ? (
-          <PlaceholderRows count={1} size="text" />
-        ) : (
-          <>
-            <ConnectionsLine
-              connections={connections}
-              open={connecting}
-              onOpen={() => setConnecting(true)}
-              anchor={line}
-            />
-            <ConnectionsSheet
-              open={connecting}
-              onClose={closeSheet}
-              workspaceId={workspace.id}
-              workspaceName={workspace.name}
-              connections={connections}
-              onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
-              anchor={line}
-            />
-          </>
+  // Its own classes apply inside each part (code-home.css), but not to the page's title above.
+  const header = (
+    <>
+      {props.header}
+      <div data-code-home="">
+        <div className="mt-2 flex flex-col gap-2">
+          {props.description !== undefined && (
+            <p className="line-clamp-1 text-interface font-medium text-muted-foreground">
+              {props.description}
+            </p>
+          )}
+          {connections === undefined ? (
+            <PlaceholderRows count={1} size="text" />
+          ) : (
+            <>
+              <ConnectionsLine
+                connections={connections}
+                open={connecting}
+                onOpen={() => setConnecting(true)}
+                anchor={line}
+              />
+              <ConnectionsSheet
+                open={connecting}
+                onClose={closeSheet}
+                workspaceId={workspace.id}
+                workspaceName={workspace.name}
+                connections={connections}
+                onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
+                anchor={line}
+              />
+            </>
+          )}
+        </div>
+        <Suspense fallback={null}>
+          <SignIns part="github-notice" />
+        </Suspense>
+
+        {showsTabs && (
+          <div className="mt-3.5">
+            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+          </div>
         )}
       </div>
-      <Suspense fallback={null}>
-        <SignIns part="github-notice" />
-      </Suspense>
+    </>
+  );
 
-      {showsTabs && (
-        <div className="mt-3.5">
-          <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
-        </div>
-      )}
-
-      {chosen === "sessions" ? (
-        <div className="mt-4 flex flex-col gap-4">
-          <SessionLinks list={list} mode="code" />
-        </div>
-      ) : chosen === "prs" ? (
-        <div className="mt-4">
-          <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col items-stretch gap-3.5 md:flex-row md:items-start">
-            {anyLeft && (
-              <div className="flex min-w-0 grow basis-0 flex-col gap-3.5">
-                <NeedsYou
-                  workspaceId={workspace.id}
-                  needs={needs}
-                  pending={needsPending}
-                  setup={setup}
-                  onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
-                  onChanged={changed}
-                />
-                <Running
-                  workspaceId={workspace.id}
-                  sessions={list.sessions}
-                  running={list.running}
-                />
-              </div>
-            )}
-            {providers.kind === "loaded" && (
-              <NextUp
-                workspaceId={workspace.id}
-                issues={nextUp}
-                providers={providers.data.providers}
-                beside={beside}
-              />
-            )}
-          </div>
-          <MainRow workspaceId={workspace.id} />
-        </div>
-      )}
-
-      {/* On a touch screen the message box docks in the frame, so this keeps no room of its own. */}
-      <div
-        className={classes("sticky bottom-0 mt-auto bg-card", layout === "desktop" && "pt-6 pb-6")}
-      >
+  // On a touch screen the message box docks in the frame, so the foot keeps no room of its own.
+  const footer = (
+    <div data-code-home="">
+      <div className={classes(layout === "desktop" && "pt-6 pb-6")}>
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
@@ -257,5 +225,52 @@ export default function CodeHome(props: {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <Page wide header={header} footer={footer}>
+      <div data-code-home="">
+        {chosen === "sessions" ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <SessionLinks list={list} mode="code" />
+          </div>
+        ) : chosen === "prs" ? (
+          <div className="mt-4">
+            <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-col items-stretch gap-3.5 md:flex-row md:items-start">
+              {anyLeft && (
+                <div className="flex min-w-0 grow basis-0 flex-col gap-3.5">
+                  <NeedsYou
+                    workspaceId={workspace.id}
+                    needs={needs}
+                    pending={needsPending}
+                    setup={setup}
+                    onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
+                    onChanged={changed}
+                  />
+                  <Running
+                    workspaceId={workspace.id}
+                    sessions={list.sessions}
+                    running={list.running}
+                  />
+                </div>
+              )}
+              {providers.kind === "loaded" && (
+                <NextUp
+                  workspaceId={workspace.id}
+                  issues={nextUp}
+                  providers={providers.data.providers}
+                  beside={beside}
+                />
+              )}
+            </div>
+            <MainRow workspaceId={workspace.id} />
+          </div>
+        )}
+      </div>
+    </Page>
   );
 }
