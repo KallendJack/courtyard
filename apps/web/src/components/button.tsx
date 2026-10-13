@@ -12,6 +12,8 @@ const BASE =
 const VARIANTS = {
   /** The main action. */
   primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+  /** The main action on something that needs the owner first, in gold (Grill, #363). */
+  needs: "border-transparent bg-warning text-background hover:bg-warning/85",
   /** Any other action, such as Cancel. */
   outline: "border-input bg-input/30 text-foreground hover:bg-input/50",
   /** Archiving, deleting, logging out. */

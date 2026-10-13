@@ -753,17 +753,18 @@ const showsHome = async (page: Page) => {
   // Nothing runs yet, so its block isn't there at all.
   await expect(running).toHaveCount(0);
 
-  // The ready issues nobody claimed, in milestone order: three, then More.
+  // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
+  // issues nobody claimed, with Build; the rest, in milestone order, under More.
   await expect(nextUp).toContainText("4 · Code workspaces");
+  const grill = nextUp.getByRole("region", { name: "Grill #117" });
+  await expect(grill).toContainText("Sub-agents for code review");
+  await expect(grill).toContainText("Next in order · needs grilling first");
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
-  await expect(nextUp.getByRole("listitem")).toHaveText([
-    /#251\s*One Reply box everywhere/,
-    /#255\s*Paste images on the Fold/,
-  ]);
+  await expect(nextUp.getByRole("listitem")).toHaveCount(0);
   await expect(nextUp).not.toContainText("Claimed by a helper");
-  await expect(nextUp.getByRole("button", { name: "More · 9" })).toBeVisible();
+  await expect(nextUp.getByRole("button", { name: "More · 11" })).toBeVisible();
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -872,8 +873,12 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await shot(page, "tablet-home");
 
       const { nextUp } = blocks(page);
-      await nextUp.getByRole("button", { name: "More · 9" }).click();
-      await expect(nextUp.getByRole("listitem")).toHaveCount(11);
+      await nextUp.getByRole("button", { name: "More · 11" }).click();
+      await expect(nextUp.getByRole("listitem")).toHaveText([
+        /#251\s*One Reply box everywhere/,
+        /#255\s*Paste images on the Fold/,
+        ...Array.from({ length: 9 }, () => /A later idea/),
+      ]);
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1010,6 +1015,24 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // It's claimed, so Next up moves on to the next one.
       await page.goto(HOME);
       await expect(blocks(page).nextUp.getByRole("region", { name: "Build #251" })).toBeVisible();
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("Grill shows the issue and its model first, then starts a grilling session on it (#363)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const grill = blocks(page).nextUp.getByRole("region", { name: "Grill #117" });
+      await grill.getByRole("button", { name: "Grill" }).click();
+      await expect(grill).toContainText("A new session grills it with Fake (echoes you)");
+      await grill.getByRole("button", { name: "Start grilling" }).click();
+
+      await expect(page).toHaveURL(/\/workspaces\/workbench\/sessions\/[\w-]+$/);
+      await expect(page.getByRole("list", { name: "Session" })).toContainText(
+        'Grill issue #117, "Sub-agents for code review"',
+      );
       await request.post("/api/github/sign-out", { data: {} });
     });
 

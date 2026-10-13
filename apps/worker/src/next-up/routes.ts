@@ -30,12 +30,14 @@ const nextUpProblem = (c: Context, problem: NextUpProblem) => {
         status: 409,
         error: "Someone has claimed that issue since: it's being built already.",
       });
+    case "nothing-to-grill":
+      return apiError(c, { status: 404, error: "That issue doesn't need grilling any more." });
     case "session":
       return sessionError(c, problem.error);
   }
 };
 
-/** A code workspace's Next up and Build (#301, #298), mounted under `/api`. */
+/** A code workspace's Next up, Build and Grill (#301, #298, #363), mounted under `/api`. */
 export const nextUpRoutes = (nextUp: NextUpModule) => {
   const routes = new Hono();
 
@@ -55,6 +57,18 @@ export const nextUpRoutes = (nextUp: NextUpModule) => {
     );
     if (!built.ok) return nextUpProblem(c, built.error);
     return c.json(built.value satisfies SessionSummary, 201);
+  });
+
+  routes.post("/workspaces/:id/next-up/:number/grill", async (c) => {
+    const body = await readBody(c, BuildIssue);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const grilled = await nextUp.grill(
+      c.req.param("id"),
+      IssueNumber.parse(c.req.param("number")),
+      body.value,
+    );
+    if (!grilled.ok) return nextUpProblem(c, grilled.error);
+    return c.json(grilled.value satisfies SessionSummary, 201);
   });
 
   return routes;

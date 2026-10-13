@@ -236,7 +236,11 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
   page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
   message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the
-  session's branch. Its routes are a workspace's `next-up` and `next-up/:number/build`.
+  session's branch. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
+  `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
+  message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
+  and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
+  `next-up/:number/grill`.
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
   (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
@@ -449,7 +453,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
     empty (`components/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
     requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
-    (`running.tsx`), Next up with Build (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
+    (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
     box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
     for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a

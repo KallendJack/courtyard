@@ -3,11 +3,12 @@ import {
   type NextUpIssue,
   SESSION_TITLE_MAX_LENGTH,
   type SessionSummary,
+  SkillName,
   type WorkspaceId,
 } from "@courtyard/contract";
 import type { Code } from "../code/index.ts";
 import type { FoundIssue, GitHub, GitHubProblem } from "../github/index.ts";
-import { buildIssueMessage } from "../prompts/index.ts";
+import { buildIssueMessage, grillIssueMessage } from "../prompts/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
@@ -21,6 +22,15 @@ import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
 
 /** The label an issue ready for a model to build carries (Matt Pocock's triage labels). */
 export const READY_LABEL = "ready-for-agent";
+
+/**
+ * The labels of an issue that needs grilling before it's built (Matt Pocock's triage labels):
+ * Next up offers Grill for one on its milestone's Build order line (#363).
+ */
+const GRILL_LABELS = ["needs-triage", "needs-info"] as const;
+
+/** The skill a Grill starts: Matt Pocock's grilling in a code workspace, else the house one. */
+const GRILLING = SkillName.parse("grilling");
 
 /** How long a repository's Next up is kept before GitHub is asked again. */
 const KEEP_MS = 2 * 60 * 1000;
@@ -36,6 +46,8 @@ export type NextUpProblem =
   | { readonly kind: "no-such-issue" }
   /** Someone claimed the issue since the page showed it. */
   | { readonly kind: "claimed" }
+  /** The issue isn't one Next up offers Grill on: ready, closed, or off its Build order line. */
+  | { readonly kind: "nothing-to-grill" }
   | { readonly kind: "session"; readonly error: SessionError };
 
 /** A claim on an issue, as AGENTS.md's claim rule words it: a comment starting "Building this". */
@@ -103,9 +115,9 @@ const inOrder = (a: FoundIssue, b: FoundIssue) => {
   );
 };
 
-/** A session's title from its issue, kept to a title's length. */
-const titleFor = (issue: NextUpIssue) => {
-  const title = `Build #${issue.number}: ${issue.title}`;
+/** A session's title from what it does (Build, Grill) and its issue, kept to a title's length. */
+const titleFor = (does: "Build" | "Grill", issue: NextUpIssue) => {
+  const title = `${does} #${issue.number}: ${issue.title}`;
   return title.length <= SESSION_TITLE_MAX_LENGTH
     ? title
     : `${title.slice(0, SESSION_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
@@ -136,23 +148,48 @@ export const createNextUp = (options: {
       : err({ kind: "not-on-github" });
   };
 
-  /** The repository's ready issues nobody has claimed, in order, asked of GitHub now. */
+  /**
+   * The repository's ready issues nobody has claimed, and those on a Build order line that need
+   * grilling first (#363), in order, asked of GitHub now. Only a ready one's comments are asked
+   * for: a grill claims nothing.
+   */
   const read = async (repo: string): Promise<Result<NextUpIssue[], NextUpProblem>> => {
-    const [issues, pulls] = await Promise.all([
-      github.openIssues({ repo, label: READY_LABEL }),
+    const [issues, pulls, ...unready] = await Promise.all([
+      github.openIssues({ repo, label: READY_LABEL, withComments: true }),
       github.openPullRequestTexts({ repo }),
+      ...GRILL_LABELS.map((label) => github.openIssues({ repo, label, withComments: false })),
     ]);
     if (!issues.ok) return err({ kind: "github", problem: issues.error });
     if (!pulls.ok) return err({ kind: "github", problem: pulls.error });
     const texts = pulls.value.map((pull) => `${pull.title}\n${pull.body}`);
-    const unclaimed = issues.value
-      .filter(
-        (issue) => !claimedIn(issue.comments) && !texts.some((text) => closes(issue.number, text)),
-      )
-      .sort(inOrder)
-      .map(({ number, title, url, milestone }) => ({ number, title, url, milestone }));
-    kept.set(repo, { at: now(), issues: unclaimed });
-    return ok(unclaimed);
+    const ready = issues.value.filter(
+      (issue) => !claimedIn(issue.comments) && !texts.some((text) => closes(issue.number, text)),
+    );
+    const toGrill: FoundIssue[] = [];
+    for (const found of unready) {
+      if (!found.ok) return err({ kind: "github", problem: found.error });
+      toGrill.push(
+        ...found.value.filter(
+          (issue) =>
+            buildOrderOf(issue.milestoneDescription).includes(issue.number) &&
+            ![...issues.value, ...toGrill].some((each) => each.number === issue.number),
+        ),
+      );
+    }
+    const offered = [
+      ...ready.map((issue) => ({ issue, ready: true })),
+      ...toGrill.map((issue) => ({ issue, ready: false })),
+    ]
+      .sort((a, b) => inOrder(a.issue, b.issue))
+      .map(({ issue: { number, title, url, milestone }, ready }) => ({
+        number,
+        title,
+        url,
+        milestone,
+        ready,
+      }));
+    kept.set(repo, { at: now(), issues: offered });
+    return ok(offered);
   };
 
   return {
@@ -180,9 +217,9 @@ export const createNextUp = (options: {
       const { workspaceId, repo } = found.value;
       const fresh = await read(repo);
       if (!fresh.ok) return fresh;
-      const issue = fresh.value.find((each) => each.number === number);
+      const issue = fresh.value.find((each) => each.number === number && each.ready);
       if (issue === undefined) {
-        const any = await github.openIssues({ repo, label: READY_LABEL });
+        const any = await github.openIssues({ repo, label: READY_LABEL, withComments: false });
         const there = any.ok && any.value.some((each) => each.number === number);
         return err({ kind: there ? "claimed" : "no-such-issue" });
       }
@@ -193,7 +230,7 @@ export const createNextUp = (options: {
           model: build.model,
           ...(build.effort === undefined ? {} : { effort: build.effort }),
         },
-        title: titleFor(issue),
+        title: titleFor("Build", issue),
       });
       if (!created.ok) return err({ kind: "session", error: created.error });
       const listed = await sessions.list(workspaceId);
@@ -210,6 +247,36 @@ export const createNextUp = (options: {
       }
       kept.delete(repo);
       return created;
+    },
+
+    /**
+     * Grill (#363): a new code session on `grill.model` with the grilling skill, whose first
+     * message is an issue on a Build order line that isn't ready yet. It claims nothing, and takes
+     * no place among the code sessions running.
+     */
+    grill: async (
+      rawId: string,
+      number: number,
+      grill: BuildIssue,
+    ): Promise<Result<SessionSummary, NextUpProblem>> => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return found;
+      const fresh = await read(found.value.repo);
+      if (!fresh.ok) return fresh;
+      const issue = fresh.value.find((each) => each.number === number && !each.ready);
+      if (issue === undefined) return err({ kind: "nothing-to-grill" });
+      const created = await sessions.create({
+        workspaceId: found.value.workspaceId,
+        message: {
+          text: grillIssueMessage(issue),
+          model: grill.model,
+          skill: GRILLING,
+          ...(grill.effort === undefined ? {} : { effort: grill.effort }),
+        },
+        title: titleFor("Grill", issue),
+        placeless: true,
+      });
+      return created.ok ? created : err({ kind: "session", error: created.error });
     },
   };
 };
