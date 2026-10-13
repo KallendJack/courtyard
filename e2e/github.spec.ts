@@ -406,6 +406,49 @@ test.describe("on a desktop", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // A button shows it's working (#330; Paper, "Desktop · PR page: quick questions, merging").
+  test("Merge on a slow merge says it's merging, in full colour, and takes no second tap", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await pullRequestFrom(request, "Say it's merging [e2e passes]");
+    let merges = 0;
+    await page.route("**/merge", async (route) => {
+      merges += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.continue();
+    });
+
+    await page.goto("/workspaces/side-project#prs");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Say it's merging/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+    const review = page.getByRole("region", { name: "Review" });
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    await expect(merge).toBeEnabled();
+    const colour = await merge.evaluate((button) => getComputedStyle(button).backgroundColor);
+    await merge.click();
+
+    const merging = review.getByRole("button", { name: "Merging…" });
+    await expect(merging).toBeVisible();
+    await expect(merging).toHaveAttribute("aria-busy", "true");
+    await expect(merging).not.toBeDisabled();
+    // Its colour at rest, not hovered.
+    await page.mouse.move(0, 0);
+    expect(await merging.evaluate((button) => getComputedStyle(button).backgroundColor)).toBe(
+      colour,
+    );
+    await expect(review.getByRole("button", { name: "Close PR" })).toBeDisabled();
+    await merging.click();
+
+    await expect(page.getByRole("region", { name: "Merged" })).toContainText("Merged into main");
+    expect(merges).toBe(1);
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   test("the PRs list shows every open pull request, and the ask line on one no session opened starts a session on its branch", async ({
     page,
     request,

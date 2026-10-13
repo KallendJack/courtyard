@@ -39,7 +39,12 @@ export function LimitNotice(props: {
         <Notice
           title={title}
           action={
-            <Button size="sm" disabled={carryOn.busy} onClick={() => void carryOn.run()}>
+            <Button
+              size="sm"
+              busy={carryOn.busy}
+              busyLabel="Carrying on…"
+              onClick={() => void carryOn.run()}
+            >
               Carry on with {overflow.label}
             </Button>
           }

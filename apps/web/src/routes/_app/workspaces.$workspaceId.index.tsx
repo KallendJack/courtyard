@@ -172,6 +172,7 @@ function Workspace() {
           <ConfirmStep
             question={`Archive ${workspace.name}?`}
             confirmLabel="Archive workspace"
+            busyLabel="Archiving…"
             onCancel={() => setTidying(undefined)}
             confirm={async () => {
               const archived = await archiveWorkspace(workspace.id);

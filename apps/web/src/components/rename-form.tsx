@@ -50,10 +50,10 @@ export function RenameForm(props: {
         autoComplete="off"
       />
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={save.busy}>
+        <Button type="submit" size="sm" busy={save.busy} busyLabel="Saving…">
           Save
         </Button>
-        <Button variant="outline" size="sm" onClick={props.onDone}>
+        <Button variant="outline" size="sm" waiting={save.busy} onClick={props.onDone}>
           Cancel
         </Button>
       </div>

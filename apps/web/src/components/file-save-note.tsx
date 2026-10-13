@@ -49,7 +49,13 @@ export function FileSaveNote(props: {
                 Open
               </ButtonLink>
             )}
-            <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
+            <Button
+              variant="quiet"
+              size="xs"
+              onClick={() => void undo.run()}
+              busy={undo.busy}
+              busyLabel="Undoing…"
+            >
               Undo
             </Button>
           </>

@@ -153,7 +153,13 @@ function MarkAllRead(props: { workspaceId: Listed["workspaceId"] | undefined }) 
   });
   return (
     <div className="flex flex-col items-end">
-      <Button variant="soft" size="sm" disabled={mark.busy} onClick={() => mark.run()}>
+      <Button
+        variant="soft"
+        size="sm"
+        busy={mark.busy}
+        busyLabel="Marking read…"
+        onClick={() => mark.run()}
+      >
         <CheckCheck aria-hidden />
         Mark all read
       </Button>
@@ -173,7 +179,13 @@ function RemoveQueued(props: { session: SessionSummary }) {
   });
   return (
     <div className="flex shrink-0 flex-col items-end">
-      <Button variant="quiet" size="xs" disabled={remove.busy} onClick={() => remove.run()}>
+      <Button
+        variant="quiet"
+        size="xs"
+        busy={remove.busy}
+        busyLabel="Removing…"
+        onClick={() => remove.run()}
+      >
         Remove
       </Button>
       <FormError message={remove.error} />

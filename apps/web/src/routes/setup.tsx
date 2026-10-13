@@ -10,6 +10,7 @@ export const Route = createFileRoute("/setup")({
       endpoint="/setup"
       autoComplete="new-password"
       submitLabel="Create my login"
+      busyLabel="Creating your login…"
       confirm
       check={(password) =>
         password.length < MIN_PASSWORD_LENGTH

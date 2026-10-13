@@ -37,7 +37,12 @@ export default function IconSheet(props: {
           : "Shows beside its name wherever it's listed."}{" "}
         Courtyard suggests one from the name; change it any time.
       </p>
-      <div role="radiogroup" aria-label="Icon" className="grid w-full max-w-92 grid-cols-5 gap-2.5">
+      <div
+        role="radiogroup"
+        aria-label="Icon"
+        aria-busy={save.busy}
+        className="grid w-full max-w-92 grid-cols-5 gap-2.5"
+      >
         {Icons.options.map((icon) => {
           const chosen = icon === props.icon;
           const { name } = ICONS[icon];
@@ -56,8 +61,10 @@ export default function IconSheet(props: {
                 value={icon}
                 aria-label={name}
                 checked={chosen}
-                disabled={save.busy}
-                onChange={() => void choose(icon)}
+                // While one is being kept, another tap waits for it (#330).
+                onChange={() => {
+                  if (!save.busy) void choose(icon);
+                }}
                 className="sr-only"
               />
               <WorkspaceIcon icon={icon} size="lg" open={chosen} />

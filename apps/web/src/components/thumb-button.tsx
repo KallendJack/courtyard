@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { classes } from "@/lib/classes";
+import { type Busy, useBusy } from "./button.tsx";
 
 /**
  * The Paper boards' thumb-sized buttons (Handheld · 16, 17, 18), side by side at the bottom of a
@@ -33,20 +34,28 @@ export function ThumbButton({
   fit = false,
   row = false,
   type = "button",
+  busy = false,
+  busyLabel,
+  waiting = false,
+  disabled,
+  onClick,
+  children,
   ...props
-}: Omit<ComponentProps<"button">, "className"> & {
-  look: keyof typeof LOOKS;
-  grow?: keyof typeof GROW;
-  /** A little taller, at the foot of a card with more in it (an approval). */
-  tall?: boolean;
-  /**
-   * As wide as its words, beside a title rather than in thumb reach (a desktop's Merge and Close
-   * PR, #278).
-   */
-  fit?: boolean;
-  /** A pill at the end of a row, the same width on every row (Needs you's Merge, Approve, #301). */
-  row?: boolean;
-}) {
+}: Omit<ComponentProps<"button">, "className"> &
+  Busy & {
+    look: keyof typeof LOOKS;
+    grow?: keyof typeof GROW;
+    /** A little taller, at the foot of a card with more in it (an approval). */
+    tall?: boolean;
+    /**
+     * As wide as its words, beside a title rather than in thumb reach (a desktop's Merge and Close
+     * PR, #278).
+     */
+    fit?: boolean;
+    /** A pill at the end of a row, the same width on every row (Needs you's Merge, Approve, #301). */
+    row?: boolean;
+  }) {
+  const { working, attributes } = useBusy({ busy, busyLabel, onClick });
   return (
     <button
       type={type}
@@ -59,7 +68,11 @@ export function ThumbButton({
             ? "h-12 shrink-0 rounded-lg px-5 text-base/5"
             : classes("basis-0 rounded-card text-base/5", GROW[grow], tall ? "h-15" : "h-14"),
       )}
+      disabled={disabled === true || waiting}
       {...props}
-    />
+      {...attributes}
+    >
+      {working ?? children}
+    </button>
   );
 }

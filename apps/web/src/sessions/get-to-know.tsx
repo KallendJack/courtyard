@@ -32,7 +32,7 @@ export function GetToKnow(props: {
   return (
     <InfoBox label={props.label}>
       <p className="min-w-0 flex-1 basis-60">{props.children}</p>
-      <Button size="sm" onClick={() => void start.run()} disabled={start.busy}>
+      <Button size="sm" onClick={() => void start.run()} busy={start.busy} busyLabel="Starting…">
         {props.label}
       </Button>
       {start.error !== undefined && (

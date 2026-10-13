@@ -170,10 +170,15 @@ function FixLine(props: { workspaceId: WorkspaceId; line: string }) {
         <FixStep>
           <p className="text-sm text-muted-foreground">Starts a session: "{message}"</p>
           <div className="flex gap-2">
-            <Button size="sm" disabled={start.busy} onClick={() => void start.run()}>
+            <Button
+              size="sm"
+              busy={start.busy}
+              busyLabel="Starting…"
+              onClick={() => void start.run()}
+            >
               Start
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+            <Button size="sm" variant="outline" waiting={start.busy} onClick={() => setOpen(false)}>
               Cancel
             </Button>
           </div>

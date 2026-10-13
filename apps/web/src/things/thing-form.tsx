@@ -168,10 +168,10 @@ export function ThingForm(props: {
       </Pair>
       <FormError message={photoProblem ?? save.error} />
       <div className="flex justify-end gap-3 pt-1.5">
-        <Button variant="outline" onClick={props.onDone}>
+        <Button variant="outline" waiting={save.busy} onClick={props.onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={save.busy}>
+        <Button type="submit" busy={save.busy} busyLabel="Saving…">
           Save
         </Button>
       </div>

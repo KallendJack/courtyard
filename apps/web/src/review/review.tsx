@@ -305,7 +305,8 @@ function Reviewing(props: {
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={bring.busy}
+      busy={bring.busy}
+      busyLabel="Bringing up to date…"
       onClick={() => void bring.run()}
     >
       <RefreshCw aria-hidden />
@@ -316,7 +317,9 @@ function Reviewing(props: {
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={merge.kind === "refused" || end.busy}
+      disabled={merge.kind === "refused"}
+      busy={end.busy}
+      busyLabel="Merging…"
       aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
       onClick={() => void end.run({ kind: "merge", head: pullRequest.head })}
     >
@@ -325,7 +328,12 @@ function Reviewing(props: {
     </ThumbButton>
   );
   const closeAction = (
-    <ThumbButton look="quiet" fit={desktop} onClick={() => setClosing(true)}>
+    <ThumbButton
+      look="quiet"
+      fit={desktop}
+      waiting={end.busy || bring.busy}
+      onClick={() => setClosing(true)}
+    >
       Close PR
     </ThumbButton>
   );
@@ -376,6 +384,7 @@ function Reviewing(props: {
             <ConfirmStep
               question={`Close PR #${pullRequest.number}?`}
               confirmLabel="Close PR"
+              busyLabel="Closing…"
               onCancel={() => setClosing(false)}
               confirm={() => endNow({ kind: "close" })}
             >
@@ -521,10 +530,10 @@ function StartSession(props: {
         {start.kind === "ask" ? `asking “${start.text}”` : "to merge main in and fix the conflict"}?
       </p>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={props.busy} onClick={props.onStart}>
+        <Button busy={props.busy} busyLabel="Starting…" onClick={props.onStart}>
           Start the session
         </Button>
-        <Button variant="outline" onClick={props.onCancel}>
+        <Button variant="outline" waiting={props.busy} onClick={props.onCancel}>
           Cancel
         </Button>
       </div>
@@ -611,7 +620,9 @@ function Folded(props: {
           <Button
             size="lg"
             variant={offer === "ready" ? "primary" : "outline"}
-            disabled={offer !== "ready" || update.busy}
+            disabled={offer !== "ready"}
+            busy={update.busy}
+            busyLabel="Updating…"
             onClick={() => void update.run()}
           >
             <RefreshCw aria-hidden />

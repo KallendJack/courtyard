@@ -214,7 +214,8 @@ function PullRequestRow(props: { workspaceId: WorkspaceId; row: Row }) {
         ) : conflicts ? (
           <Button
             aria-label={`${action} ${title}`}
-            disabled={bring.busy}
+            busy={bring.busy}
+            busyLabel="Bringing up to date…"
             onClick={() => void bring.run()}
             {...look}
           >

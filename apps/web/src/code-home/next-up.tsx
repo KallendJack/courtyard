@@ -133,13 +133,15 @@ function BuildFirst(props: {
           <div className="flex flex-wrap justify-end gap-2">
             <Button
               grow
-              disabled={build.busy || model === undefined}
+              disabled={model === undefined}
+              busy={build.busy}
+              busyLabel="Starting…"
               onClick={() => void build.run()}
             >
               <Zap aria-hidden />
               Start building
             </Button>
-            <Button variant="outline" onClick={() => setConfirming(false)}>
+            <Button variant="outline" waiting={build.busy} onClick={() => setConfirming(false)}>
               Cancel
             </Button>
           </div>

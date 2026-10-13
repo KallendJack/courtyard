@@ -158,7 +158,13 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
   const muted = change.undo === "undone";
   const actions =
     change.undo === "available" ? (
-      <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
+      <Button
+        variant="quiet"
+        size="xs"
+        onClick={() => void undo.run()}
+        busy={undo.busy}
+        busyLabel="Undoing…"
+      >
         Undo
       </Button>
     ) : undefined;
@@ -348,7 +354,8 @@ export function RecentChanges(props: { workspace: Whose }) {
             variant="outline"
             size="sm"
             onClick={() => void showMore.run()}
-            disabled={showMore.busy}
+            busy={showMore.busy}
+            busyLabel="Loading more…"
           >
             Show more
           </Button>

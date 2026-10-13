@@ -110,14 +110,20 @@ function Document(props: DocumentDetail & { workspaceId: WorkspaceId }) {
           Updated {inASentence(describeWhen(document.updatedAt))} · {document.path}
         </p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setRenaming(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            waiting={remove.busy}
+            onClick={() => setRenaming(true)}
+          >
             Rename
           </Button>
           <Button
             variant="destructive"
             size="sm"
             onClick={() => void remove.run()}
-            disabled={remove.busy}
+            busy={remove.busy}
+            busyLabel="Deleting…"
           >
             Delete
           </Button>

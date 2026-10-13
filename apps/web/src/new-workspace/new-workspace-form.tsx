@@ -171,7 +171,13 @@ export function NewWorkspaceForm() {
             </div>
             <FormError message={add.error} />
             <div className="flex justify-end">
-              <Button type="submit" size="lg" disabled={add.busy || picked === undefined}>
+              <Button
+                type="submit"
+                size="lg"
+                disabled={picked === undefined}
+                busy={add.busy}
+                busyLabel="Creating…"
+              >
                 {name.trim() === "" ? "Create" : `Create ${name.trim()}`}
               </Button>
             </div>
@@ -182,7 +188,7 @@ export function NewWorkspaceForm() {
             {introField(
               `One line${talks ? ", or hold Talk" : ""}. It sits at the top of the context file, and Get to know starts from it.`,
             )}
-            <Button type="submit" disabled={add.busy}>
+            <Button type="submit" busy={add.busy} busyLabel="Adding…">
               Add workspace
             </Button>
           </form>

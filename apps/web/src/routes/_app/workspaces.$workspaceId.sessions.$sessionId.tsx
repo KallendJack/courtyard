@@ -330,6 +330,7 @@ function Session(props: {
           <ConfirmStep
             question={`Delete “${session.title}”?`}
             confirmLabel="Delete session"
+            busyLabel="Deleting…"
             onCancel={() => setTidying(undefined)}
             confirm={async () => {
               const deleted = await deleteSession(session.id);

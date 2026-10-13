@@ -285,7 +285,8 @@ function Approve(props: {
         look="needs"
         row
         aria-label={`Approve: ${props.label}`}
-        disabled={approve.busy}
+        busy={approve.busy}
+        busyLabel="Approving…"
         onClick={() => void approve.run()}
       >
         Approve
@@ -313,7 +314,8 @@ function Merge(props: { workspaceId: WorkspaceId; pull: OpenPullRequest; onChang
         look="primary"
         row
         aria-label={`Merge ${pullTitle(props.pull)}`}
-        disabled={merge.busy}
+        busy={merge.busy}
+        busyLabel="Merging…"
         onClick={() => void merge.run()}
       >
         Merge
@@ -341,7 +343,8 @@ function BringUpToDate(props: { workspaceId: WorkspaceId; session: Listed; label
         look="needs"
         row
         aria-label={`Bring up to date ${props.label}`}
-        disabled={bring.busy}
+        busy={bring.busy}
+        busyLabel="Bringing up to date…"
         onClick={() => void bring.run()}
       >
         Bring up to date
