@@ -8,12 +8,12 @@ import { loadMain } from "./api.ts";
 /** Each workspace's main as last known, for the tab's lifetime; `null` when there's none to show. */
 const KEPT_MAIN = createKept<WorkspaceMain | null>();
 
-/** How often the row asks again while main's build runs. */
-const ASK_EVERY_MS = 15 * 1000;
+/** How often the row asks again while main's build runs (#337). */
+const ASK_EVERY_MS = 10 * 1000;
 
 /**
- * Main (#301; Paper, "Code workspace Home"): the newest commit on the repository's main with
- * #249's build bar, what matters after a merge. Update shows only on the workspace whose
+ * Main (#301; Paper, "Code workspace Home"): the newest commit on the repository's main with its
+ * build as a row (#337), which opens every job, what matters after a merge. Update shows only on the workspace whose
  * repository Courtyard's live copy runs from, once main has moved on from it (its Updates card,
  * which follows the update); other repositories show the bar alone. Hidden while there's no build
  * to show.
@@ -52,7 +52,7 @@ function LiveMain(props: { main: WorkspaceMain }) {
   const [status] = useLive();
   const live = status?.kind === "loaded" ? status.data : undefined;
   if (live?.kind === "live" && (live.newerOnMain || live.lastUpdate?.outcome === "running")) {
-    return <LiveUpdate />;
+    return <LiveUpdate label="Main" />;
   }
   const { main } = props;
   return main.build === null ? null : (

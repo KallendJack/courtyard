@@ -72,10 +72,19 @@ const newVersion = (page: Page) =>
         lastUpdate: null,
         build: {
           kind: "passed",
-          jobs: ["Checks", "Unit tests", "E2E 1/2", "E2E 2/2"].map((name) => ({
-            name,
-            outcome: "passed",
-          })),
+          // Courtyard's CI: three jobs side by side, the browser tests in two shards (#337).
+          stages: [
+            ["Checks", "Unit tests", "E2E"].map((name) => ({
+              name,
+              outcome: "passed",
+              startedAt: "2026-10-13T09:57:00Z",
+              completedAt: "2026-10-13T10:00:00Z",
+              shards: name === "E2E" ? { done: 2, total: 2 } : null,
+              needs: [],
+            })),
+          ],
+          startedAt: "2026-10-13T09:57:00Z",
+          completedAt: "2026-10-13T10:00:00Z",
         },
       },
     }),
@@ -202,7 +211,7 @@ test("the foot rows show only when needed: a new version with Update, and the wo
 
   const version = page.getByRole("region", { name: "New version" });
   await expect(version).toContainText("Builds take turns 8d57986");
-  await expect(version.getByRole("status")).toHaveText("Passed");
+  await expect(version.getByRole("status")).toHaveText("Passed · 3:00");
   await expect(version.getByRole("button", { name: "Update" })).toBeEnabled();
   const problem = page.getByRole("region", { name: "Problem" });
   await expect(problem).toContainText(/^Backup behind since \d\d:\d\d/);
@@ -238,6 +247,25 @@ test("Settings has the owner context, the sign-ins and Connections, Fresh start 
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Fresh start…" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Log out all other devices" })).toBeVisible();
+});
+
+// Owner rule (2026-10-12): nothing jumps in. Settings' Connections keeps its place with faint rows
+// until where each sign-in stands is known.
+test("Settings' Connections keeps its place until it's known", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/sign-ins", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/settings");
+  const connections = page.getByRole("region", { name: "Connections" });
+  await expect(connections.locator("[data-placeholder]")).toBeVisible();
+  release();
+  await expect(connections.getByRole("listitem", { name: "Fake", exact: true })).toBeVisible();
+  await expect(connections.locator("[data-placeholder]")).toHaveCount(0);
 });
 
 test.describe("on a tablet", () => {

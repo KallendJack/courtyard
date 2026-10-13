@@ -240,6 +240,11 @@ const SessionFile = z.object({
   branch: z.string().optional(),
   /** Its branch was in the repository before it (#326), so clearing it away leaves the branch. */
   keepsBranch: z.literal(true).optional(),
+  /**
+   * A code session that takes no place among those running, nor a port slot: a grill from Next up
+   * (#363), which builds nothing.
+   */
+  placeless: z.literal(true).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -789,6 +794,8 @@ export const createSessions = (options: {
     effort: Effort | undefined;
     /** Whether it's in a code session, so it runs only once it has a slot among them. */
     coding: boolean;
+    /** It's in a code session that takes no slot (a grill, #363), so it runs at once. */
+    placeless: boolean;
     /** Whether it answers the session's first message, so the session is titled once it completes. */
     firstTurn: boolean;
   }) => {
@@ -806,13 +813,14 @@ export const createSessions = (options: {
     const waits = async (ahead: number) => {
       if (!(await append(turn.id, { type: "turn-queued", ahead })).ok) recordingLost = true;
     };
-    const taken = turn.coding
-      ? options.code.slots.take({
-          id: turn.id,
-          signal: stopper.signal,
-          moved: (ahead) => void waits(ahead),
-        })
-      : undefined;
+    const taken =
+      turn.coding && !turn.placeless
+        ? options.code.slots.take({
+            id: turn.id,
+            signal: stopper.signal,
+            moved: (ahead) => void waits(ahead),
+          })
+        : undefined;
     // Every device sees the turn wait, move up, and start (ADR 0006).
     if (taken?.queued) await waits(taken.ahead);
     const slot = await taken?.slot;
@@ -1285,6 +1293,8 @@ export const createSessions = (options: {
     since: number;
     /** It's in a code session, so it runs only once it has a slot among them. */
     coding: boolean;
+    /** It's in a code session that takes no slot (a grill, #363), so it runs at once. */
+    placeless?: boolean;
     /** It answers the session's first message, so the session is titled once it completes. */
     firstTurn?: boolean;
     /** The files the owner attached, checked, to keep in the session's folder (#78). */
@@ -1378,6 +1388,7 @@ export const createSessions = (options: {
       model: start.message.model.model,
       effort: start.message.effort,
       coding: start.coding,
+      placeless: start.placeless ?? false,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
     options.background(session.ended);
@@ -1419,6 +1430,7 @@ export const createSessions = (options: {
         message,
         since,
         coding: file.value.branch !== undefined,
+        placeless: file.value.placeless === true,
         fromQueue: next.seq,
         ...(next.attachments === undefined ? {} : { keptAttachments: next.attachments }),
       });
@@ -2092,6 +2104,8 @@ export const createSessions = (options: {
       onBranch?: string;
       /** Its title, in place of its first message's first line; kept as the starter's is. */
       title?: string;
+      /** In a code workspace, it takes no place among the code sessions running (a grill, #363). */
+      placeless?: boolean;
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -2129,6 +2143,7 @@ export const createSessions = (options: {
         updatedAt: at,
         ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),
         ...(sessionBranch?.kept === true ? { keepsBranch: true } : {}),
+        ...(sessionBranch !== undefined && start.placeless === true ? { placeless: true } : {}),
       };
       const unstarted = async () => {
         if (repoPath !== undefined && sessionBranch !== undefined) {
@@ -2150,6 +2165,7 @@ export const createSessions = (options: {
             message: message.value,
             since,
             coding: sessionBranch !== undefined,
+            placeless: file.placeless === true,
             firstTurn: true,
             ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
           })
@@ -2192,6 +2208,7 @@ export const createSessions = (options: {
         message: message.value,
         since,
         coding: session.value.branch !== undefined,
+        placeless: session.value.placeless === true,
         attachments,
       });
       // A turn is running, so it waits its turn (#177).
@@ -2288,6 +2305,7 @@ export const createSessions = (options: {
         },
         carryingOn: { turn: request.turn },
         coding: found.value.branch !== undefined,
+        placeless: found.value.placeless === true,
         // Its attachments go again too, already in the session's folder.
         ...(message.attachments === undefined ? {} : { keptAttachments: message.attachments }),
         // Carrying on the first message is still the session's first turn.

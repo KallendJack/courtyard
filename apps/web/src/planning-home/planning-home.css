@@ -1,6 +1,6 @@
 /*
  * A planning workspace's Home's own classes (#300), with those of the shared pieces it shows that
- * are off the first load (its tabs, Home's blocks, kept placeholders), like code-home.css. The
+ * are off the first load (its tabs, Home's blocks), like code-home.css. The
  * theme is by reference: its names, nothing of its own. They apply only inside the Home: coming
  * after the theme's, they'd otherwise outrank its classes everywhere.
  */

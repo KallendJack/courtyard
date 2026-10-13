@@ -52,18 +52,26 @@ export type GitHubApi = {
     accessToken: string,
     find: { readonly repo: string; readonly commit: string },
   ) => Promise<Result<readonly FoundCheckRun[], string>>;
+  /**
+   * The workflows that ran on `commit` in `repo` (#337): each one's file as it was on that commit,
+   * which says which job waits on which, and whether its latest try has finished.
+   */
+  readonly commitWorkflows: (
+    accessToken: string,
+    find: { readonly repo: string; readonly commit: string },
+  ) => Promise<Result<readonly FoundWorkflow[], string>>;
   /** The files pull request `number` in `repo` changes, each with its diff (#160). */
   readonly pullRequestFiles: (
     accessToken: string,
     pull: { readonly repo: string; readonly number: number },
   ) => Promise<Result<readonly FoundFile[], string>>;
   /**
-   * The open issues in `repo` with `label` (#301's Next up), each with its milestone and its
-   * comments' text, which say whether someone has claimed it.
+   * The open issues in `repo` with `label` (#301's Next up), each with its milestone and, asked
+   * `withComments`, its comments' text, which say whether someone has claimed it (none otherwise).
    */
   readonly openIssues: (
     accessToken: string,
-    find: { readonly repo: string; readonly label: string },
+    find: { readonly repo: string; readonly label: string; readonly withComments: boolean },
   ) => Promise<Result<readonly FoundIssue[], string>>;
   /**
    * The title and description of each open pull request in `repo` (#301): what says which issues
@@ -234,6 +242,18 @@ export type FoundCheckRun = FoundCheck & {
   readonly url: string;
   readonly startedAt: string | null;
   readonly completedAt: string | null;
+};
+
+/** A workflow that ran on a commit (#337). */
+export type FoundWorkflow = {
+  /** Its file in the repository: `.github/workflows/ci.yml`. */
+  readonly path: string;
+  /** Its file's text, as it was on the commit. */
+  readonly text: string;
+  /** Its latest try has finished, so a job with no run by now never will have one. */
+  readonly done: boolean;
+  /** When its latest try started, or `null` when GitHub doesn't say. */
+  readonly startedAt: string | null;
 };
 
 /** A device sign-in in progress. Only `link`, `code` and when it runs out reach the browser. */
@@ -415,6 +435,20 @@ const WorkflowRuns = z.object({
     }),
   ),
 });
+/** The workflow runs on a commit, with each one's file and its latest try (#337). */
+const WorkflowFiles = z.object({
+  workflow_runs: z.array(
+    z.object({
+      path: z.string(),
+      status: z.string().nullable(),
+      run_started_at: z.string().nullable().optional(),
+    }),
+  ),
+});
+/** A file's contents, as GitHub gives it. */
+const FileContents = z.object({ content: z.string(), encoding: z.literal("base64") });
+/** A workflow's file: only GitHub's workflow folder, by a path safe in an address. */
+const WorkflowPath = z.string().regex(/^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/);
 /** A check run's annotations, where a test reporter names what failed (#355). */
 const Annotations = z.array(
   z.object({
@@ -760,6 +794,40 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       }
     },
 
+    commitWorkflows: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      const commit = Commit.safeParse(find.commit);
+      if (!repo.success || !commit.success) return err("That isn't a commit on GitHub.");
+      try {
+        const { workflow_runs } = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/actions/runs?head_sha=${commit.data}&per_page=${PAGE}`,
+          WorkflowFiles,
+        );
+        // GitHub lists the newest first: a workflow that ran twice on the commit is its newest run.
+        const byPath = new Map(workflow_runs.toReversed().map((run) => [run.path, run]));
+        const found: FoundWorkflow[] = [];
+        for (const [path, run] of byPath) {
+          const file = WorkflowPath.safeParse(path);
+          if (!file.success) continue;
+          const { content } = await apiGet(
+            accessToken,
+            `/repos/${repo.data}/contents/${file.data}?ref=${commit.data}`,
+            FileContents,
+          );
+          found.push({
+            path: file.data,
+            text: Buffer.from(content, "base64").toString("utf8"),
+            done: run.status === "completed",
+            startedAt: run.run_started_at ?? null,
+          });
+        }
+        return ok(found);
+      } catch {
+        return err("GitHub couldn't be asked for main's workflows.");
+      }
+    },
+
     pullRequestFiles: async (accessToken, pull) => {
       const repo = RepoName.safeParse(pull.repo);
       if (!repo.success) return err("That isn't a repository on GitHub.");
@@ -814,7 +882,7 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
               milestone: issue.milestone?.title ?? null,
               milestoneDescription: issue.milestone?.description ?? null,
               comments:
-                issue.comments === 0
+                issue.comments === 0 || !find.withComments
                   ? []
                   : (
                       await apiGet(

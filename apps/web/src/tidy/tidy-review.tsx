@@ -6,10 +6,10 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
-import { LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { PlaceholderRows } from "@/components/kept";
 import { NoteRow } from "@/components/note-row";
 import { EmptyState } from "@/components/notice";
 import { Page } from "@/components/page";
@@ -180,11 +180,14 @@ function OneTidy(props: { workspace: Whose; name: string; header: ReactNode; aga
   );
 
   if (asking.kind === "asking") {
+    // Faint rows in the shape of what comes, its count then its changes, filled in place; what
+    // it waits on is said only to a screen reader (owner, 2026-10-12: nothing jumps in).
     return page(
-      <p role="status" className="flex items-center gap-2.5 text-body">
-        <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin text-primary-text" />
-        Reading {props.name} for lines to merge, remove or shorten…
-      </p>,
+      <div role="status" className="flex flex-col gap-6">
+        <span className="sr-only">Reading {props.name} for lines to merge, remove or shorten…</span>
+        <PlaceholderRows count={1} size="text" />
+        <PlaceholderRows count={3} size="tall" />
+      </div>,
     );
   }
   if (asking.kind === "failed") {

@@ -463,6 +463,31 @@ const parseJson = (text: string): unknown => {
   }
 };
 
+const NO_EVENTS: Log = {
+  lastSeq: 0,
+  turns: [],
+  modelTitle: undefined,
+  pullRequest: undefined,
+  queuedMessages: [],
+};
+
+/**
+ * Each session's log as last shown, for the tab's lifetime (owner, 2026-10-12: nothing jumps in):
+ * coming back to a session shows it at once, and its stream carries on after it.
+ */
+const shownLogs = new Map<SessionId, Log>();
+
+/** A log shown again: all of its text shows at once, none of it revealed again. */
+const shownAgain = (log: Log): Log => ({
+  ...log,
+  turns: log.turns.map((turn) => ({
+    ...turn,
+    parts: turn.parts.map((part) =>
+      part.kind === "text" ? { ...part, replayed: part.text.length } : part,
+    ),
+  })),
+});
+
 /** How long to wait before opening a stream again after the browser gave up on one. */
 const RECONNECT_MS = 3000;
 /** The longest a replay of the event log is taken to last after (re)connecting. */
@@ -475,23 +500,29 @@ const REPLAY_MS = 500;
  * Events are applied once per frame, however many arrive, so a burst redraws the page once. The
  * worker sends what's already in the event log in one burst on (re)connecting, so everything up to
  * the first quiet frame after it (and within `REPLAY_MS`) counts as replayed: its text shows at
- * once rather than revealed.
+ * once rather than revealed. A session shown before in this tab starts from where it was shown,
+ * and is ready at once; one opened for the first time is ready once its replay has arrived.
  */
 export const useSessionTurns = (sessionId: SessionId) => {
-  const [log, dispatch] = useReducer(applyBatch, {
-    lastSeq: 0,
-    turns: [],
-    modelTitle: undefined,
-    pullRequest: undefined,
-    queuedMessages: [],
+  const [log, dispatch] = useReducer(applyBatch, sessionId, (id) => {
+    const shown = shownLogs.get(id);
+    return shown === undefined ? NO_EVENTS : shownAgain(shown);
   });
   const [problem, setProblem] = useState<string>();
   const [reconnecting, setReconnecting] = useState(false);
-  const lastSeen = useRef(0);
+  /** Whether the session's events so far have arrived, so its conversation can show. */
+  const [ready, setReady] = useState(() => shownLogs.has(sessionId));
+  const lastSeen = useRef(log.lastSeq);
+
+  useEffect(() => {
+    if (log !== NO_EVENTS) shownLogs.set(sessionId, log);
+  }, [sessionId, log]);
 
   useEffect(() => {
     let source: EventSource | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    /** Shows the conversation once a stream that sends nothing has had time to. */
+    let quiet: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
     let queued: SessionEvent[] = [];
     let frame: number | undefined;
@@ -512,6 +543,8 @@ export const useSessionTurns = (sessionId: SessionId) => {
       if (queued.length === 0) {
         replaying = false;
         hidden = false;
+        // The replay is all in, so the conversation shows as a whole.
+        setReady(true);
         return;
       }
       dispatch({ events: queued, replayed: replaying || hidden });
@@ -531,6 +564,8 @@ export const useSessionTurns = (sessionId: SessionId) => {
         replaying = true;
         connectedAt = performance.now();
         setReconnecting(false);
+        clearTimeout(quiet);
+        quiet = setTimeout(() => setReady(true), REPLAY_MS);
       };
       opened.onmessage = (message) => {
         const event = SessionEvent.safeParse(parseJson(message.data));
@@ -559,6 +594,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     return () => {
       stopped = true;
       clearTimeout(retry);
+      clearTimeout(quiet);
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", onVisibility);
       source?.close();
@@ -574,5 +610,6 @@ export const useSessionTurns = (sessionId: SessionId) => {
     queuedMessages: log.queuedMessages,
     problem,
     reconnecting,
+    ready,
   };
 };

@@ -8,10 +8,12 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ButtonLink } from "@/components/button-link";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { InfoBox } from "@/components/notice";
 import { Page } from "@/components/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
@@ -34,8 +36,23 @@ import { Running } from "./running.tsx";
 // The Home's own stylesheet (code-home.css), added once, when a code workspace's page first opens.
 addStylesheet("code-home", css);
 
-// Where a code session would start, so the owner knows to sign in to GitHub first (#99).
-const SignIns = lazy(() => import("../sign-ins/sign-ins.tsx"));
+/**
+ * Where a code session would start: that its sessions can't reach GitHub until Courtyard is signed
+ * in to it (#99), with the way to Connections.
+ */
+function GitHubNotice() {
+  return (
+    <InfoBox label="GitHub isn't connected">
+      <span className="min-w-60 flex-1">
+        A session here can work, but can't push its branch or open a pull request until Courtyard is
+        signed in to GitHub.
+      </span>
+      <ButtonLink size="sm" to="/settings" hash="connections">
+        Sign in to GitHub
+      </ButtonLink>
+    </InfoBox>
+  );
+}
 
 /** The tabs a code workspace's page has, by their hash; Home has none (#301). */
 const TABS = { sessions: "Sessions", prs: "PRs" } as const;
@@ -138,8 +155,11 @@ export default function CodeHome(props: {
     ...(list.sessions.length > 0
       ? [{ hash: "sessions", label: TABS.sessions, count: list.sessions.length }]
       : []),
-    ...(pulls.length > 0 || list.sessions.some((session) => session.pullRequest !== undefined)
-      ? [{ hash: "prs", label: TABS.prs, count: pulls.length }]
+    // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
+    ...(pulls.length > 0 ||
+    list.sessions.some((session) => session.pullRequest !== undefined) ||
+    (open === undefined && tab === "prs")
+      ? [{ hash: "prs", label: TABS.prs, ...(open === undefined ? {} : { count: pulls.length }) }]
       : []),
   ];
   // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
@@ -185,9 +205,8 @@ export default function CodeHome(props: {
             </>
           )}
         </div>
-        <Suspense fallback={null}>
-          <SignIns part="github-notice" />
-        </Suspense>
+        {/* With the connections line, so it never comes on its own and pushes the rest down. */}
+        {connections?.github.kind === "signed-out" && <GitHubNotice />}
 
         {showsTabs && (
           <div className="mt-3.5">

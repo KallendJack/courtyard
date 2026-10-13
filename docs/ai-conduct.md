@@ -370,6 +370,18 @@ not to:
 > claimed for you on GitHub already, so don't claim it again. Build it the way this repository does, and open a pull
 > request that closes it.
 
+Next up also offers the issues on a milestone's Build order line that aren't ready yet (`needs-triage` or
+`needs-info`, #363), in their place in the order. When the next in order is one, Grill takes Build's place on top, and
+starts a new session with the Grilling skill (Matt Pocock's in a code workspace), once the owner has seen the issue
+and the model. The worker claims nothing, since a grill builds nothing, and the session doesn't take a place among the
+code sessions running (it gets no port slot). Its first message:
+
+> Grill issue #<number>, "<title>", so it can be built. Read it first with gh issue view <number> --comments, then
+> grill the owner on it until it's clear enough to build. Once you agree, put the decisions on the issue as a comment,
+> and label it ready-for-agent in place of needs-triage or needs-info; when it changes what the owner sees, draw it on
+> the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next
+> up offers Build once it's ready.
+
 ## Paper
 
 Built with #180 (ADR 0023). Paper is the first tool connection: a code workspace whose `workspace.json` names Paper
