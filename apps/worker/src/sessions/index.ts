@@ -1303,6 +1303,8 @@ export const createSessions = (options: {
     keptAttachments?: readonly Attachment[];
     /** Sent by the worker because the session's pull request's checks failed (#172). */
     checksFailed?: { pullRequest: number; head: string; checks: [string, ...string[]] };
+    /** Sent by the worker because the session's pull request conflicted with its base (#382). */
+    conflicted?: { pullRequest: number; head: string };
     /** Sends the owner's queued message with this event number (#177), unless it's gone meanwhile. */
     fromQueue?: number;
   }): Promise<Result<null, SessionError>> => {
@@ -1354,6 +1356,7 @@ export const createSessions = (options: {
       ...(start.message.skill === undefined ? {} : { skill: start.message.skill }),
       ...(attachments.length === 0 ? {} : { attachments }),
       ...(start.checksFailed === undefined ? {} : { checksFailed: start.checksFailed }),
+      ...(start.conflicted === undefined ? {} : { conflicted: start.conflicted }),
       ...(start.fromQueue === undefined ? {} : { queued: start.fromQueue }),
     };
     const { fromQueue } = start;
@@ -1826,6 +1829,11 @@ export const createSessions = (options: {
         }
         return;
       }
+      // A conflict first: its checks may not run again until it's brought up to date (#382).
+      if (pullRequest.conflicts === true) {
+        await bringUpToDateOnce({ id, workspaceId, repoPath, events: events.value, pullRequest });
+        return;
+      }
       if (pullRequest.checks.kind === "failed") {
         const { failed } = pullRequest.checks;
         await fixChecks({ id, workspaceId, events: events.value, pullRequest, failed });
@@ -1835,6 +1843,44 @@ export const createSessions = (options: {
       console.error(`Session ${id}: its pull request couldn't be followed`, error),
     );
     return following;
+  };
+
+  /**
+   * Starts a turn asking the model to bring a pull request that conflicts with its base up to
+   * date (#382), the message Bring up to date sends (#278), on the model the owner last used:
+   * once per commit, so a conflict the model can't resolve waits for the owner instead of looping.
+   */
+  const bringUpToDateOnce = async (bring: {
+    id: SessionId;
+    workspaceId: WorkspaceId;
+    repoPath: string;
+    events: readonly SessionEvent[];
+    pullRequest: PullRequest;
+  }) => {
+    const { pullRequest } = bring;
+    const asked = bring.events.some(
+      (event) => event.type === "owner-message" && event.conflicted?.head === pullRequest.head,
+    );
+    const last = bring.events.findLast((event) => event.type === "owner-message");
+    if (asked || last?.type !== "owner-message") return;
+    const fresh = await options.code.freshDefault(bring.repoPath);
+    if (!fresh.ok) return;
+    const message: NewMessage = {
+      text: bringUpToDateMessage({ number: pullRequest.number, base: fresh.value.branch }),
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerFor(message);
+    if (!provider.ok || !provider.value.capabilities.codes) return;
+    await startTurn({
+      id: bring.id,
+      workspaceId: bring.workspaceId,
+      provider: provider.value,
+      message,
+      since: freshStarts,
+      coding: true,
+      conflicted: { pullRequest: pullRequest.number, head: pullRequest.head },
+    });
   };
 
   /**
