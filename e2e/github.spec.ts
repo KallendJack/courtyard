@@ -833,11 +833,10 @@ const blocks = (page: Page) => ({
 const showsHome = async (page: Page) => {
   await page.goto(HOME);
   await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
-  await expect(
-    page.getByText("Plan and code with AI models, one workspace per area of life"),
-  ).toBeVisible();
   const line = page.getByRole("button", { name: /octo-owner\/workbench/ });
   await expect(line).toContainText("No Paper file");
+  // Its one line stays in workspace.json, off the page (#333).
+  await expect(page.getByText("Plan and code with AI models")).toHaveCount(0);
 
   const { needsYou, running, nextUp } = blocks(page);
   await expect(needsYou).toContainText(/Needs you · \d+/);
