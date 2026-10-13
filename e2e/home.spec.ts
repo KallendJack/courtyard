@@ -240,6 +240,25 @@ test("Settings has the owner context, the sign-ins and Connections, Fresh start 
   await expect(page.getByRole("button", { name: "Log out all other devices" })).toBeVisible();
 });
 
+// Owner rule (2026-10-12): nothing jumps in. Settings' Connections keeps its place with faint rows
+// until where each sign-in stands is known.
+test("Settings' Connections keeps its place until it's known", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/sign-ins", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/settings");
+  const connections = page.getByRole("region", { name: "Connections" });
+  await expect(connections.locator("[data-placeholder]")).toBeVisible();
+  release();
+  await expect(connections.getByRole("listitem", { name: "Fake", exact: true })).toBeVisible();
+  await expect(connections.locator("[data-placeholder]")).toHaveCount(0);
+});
+
 test.describe("on a tablet", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
 
