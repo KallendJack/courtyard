@@ -52,6 +52,32 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(github).toContainText("Not connected");
 });
 
+// Owner rule (2026-10-12): nothing jumps in. That GitHub isn't connected comes with the workspace's
+// connections line, in its faint place, rather than on its own and above the rest later.
+test("a code workspace says GitHub isn't connected with its connections line, not before it", async ({
+  page,
+}) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/workspaces/side-project/connections", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/workspaces/side-project");
+  await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+  await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+  const notConnected = page.getByRole("region", { name: "GitHub isn't connected" });
+  // Long enough for a notice of its own to have come.
+  await page.waitForTimeout(1000);
+  await expect(notConnected).toHaveCount(0);
+
+  release();
+  await expect(notConnected).toContainText("can't push its branch or open a pull request");
+  await expect(page.getByRole("button", { name: /octo-owner\/side-project|GitHub/ })).toBeVisible();
+});
+
 // From session to pull request (#172): on this worker the fake GitHub opens a pull request for a
 // session branch once it's pushed, and its e2e check fails on every commit.
 test("a code session shows its branch and pull request, and a failing check starts a turn to fix it", async ({

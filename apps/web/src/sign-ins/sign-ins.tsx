@@ -1,7 +1,6 @@
 import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
 import { ConnectionCard, type ConnectionState } from "@/components/connection-card";
 import { CopyButton } from "@/components/copy-button";
 import { FormError } from "@/components/form-error";
@@ -478,42 +477,14 @@ function Connections(props: { beside: ReactNode }) {
 }
 
 /**
- * On a code workspace's page, where a session would start: that its sessions can't reach GitHub
- * until Courtyard is signed in to it (#99), with the way to Connections.
+ * Settings' sign-in boxes, or its Connections: one lazy load. Beside Connections goes `beside`
+ * (the notifications toggle).
  */
-function GitHubNotice() {
-  const { github } = useModels();
-  useEffect(() => {
-    void reload();
-  }, []);
-  if (github === undefined || github.kind === "signed-in") return null;
-  return (
-    <InfoBox label="GitHub isn't connected">
-      <span className="min-w-60 flex-1">
-        A session here can work, but can't push its branch or open a pull request until Courtyard is
-        signed in to GitHub.
-      </span>
-      <ButtonLink size="sm" to="/settings" hash="connections">
-        Sign in to GitHub
-      </ButtonLink>
-    </InfoBox>
-  );
-}
-
-/**
- * Settings' sign-in boxes, or its Connections; or, on a code workspace's page, whether GitHub is
- * connected: one lazy load. Beside Connections goes `beside` (the notifications toggle).
- */
-export default function SignIns(props: {
-  part: "boxes" | "list" | "github-notice";
-  beside?: ReactNode;
-}) {
+export default function SignIns(props: { part: "boxes" | "list"; beside?: ReactNode }) {
   switch (props.part) {
     case "boxes":
       return <SignInBoxes />;
     case "list":
       return <Connections beside={props.beside} />;
-    case "github-notice":
-      return <GitHubNotice />;
   }
 }
