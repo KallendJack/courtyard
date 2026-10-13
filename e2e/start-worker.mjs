@@ -182,11 +182,13 @@ pushBranch(
 mkdirSync(join(contextDir, "side-project"), { recursive: true });
 writeFileSync(
   join(contextDir, "side-project", "workspace.json"),
-  // Its sessions draw in Paper (ADR 0023): the fake plays Paper, so the command never runs.
+  // Its sessions draw in Paper (ADR 0023): the fake plays Paper, so the command never runs. Its
+  // one line stays off its page (#333).
   JSON.stringify({
     name: "Side project",
     mode: "code",
     repoPath: repo,
+    description: "Somewhere to try things out",
     connections: { paper: { command: "/path/to/paper", fileId: "file-1" } },
   }),
 );

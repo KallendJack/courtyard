@@ -442,7 +442,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
     only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
     shared pieces only the two Homes show: `components/workspace-tabs.tsx`, `home-block.tsx`,
-    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
+    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Under its name, which has
+    one quiet ⋯ beside it (`components/workspace-menu.tsx`: Rename, Change icon and Archive, #333), comes its
+    connections line; its one line stays in `workspace.json`, off the page. The connections line opens the Connections sheet
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
@@ -546,8 +548,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
   (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
-  lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
-  (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
+  lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
+  in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`
+  on a planning page, loaded when first opened): a Handheld sheet on a touch screen, a
   bottom sheet on a desktop. Arrange workspaces (#321): holding a workspace on a tablet's rail or in the sidebar and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the strip, the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
