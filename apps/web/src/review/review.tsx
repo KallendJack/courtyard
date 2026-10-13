@@ -60,6 +60,12 @@ const versionOf = (pullRequest: PullRequest | undefined) =>
 const filesSaid = (count: number) => (count === 1 ? "1 file" : `${count} files`);
 
 /**
+ * How often the page of a pull request no session opened asks for it again while it's open (#329),
+ * as no session's events say when it changes.
+ */
+const FOLLOW_EVERY_MS = 15 * 1000;
+
+/**
  * Where the answers to what the owner asks from a PR page start, for each session: how many turns
  * it had when last asked (#278). Kept while the app is open, so the answer still shows once the
  * page is opened again, or opened for a session the ask line just started.
@@ -118,6 +124,23 @@ export default function Review(props: {
   }, [key, version, changes]);
 
   const loaded = review?.kind === "loaded" ? review.data : undefined;
+  // One no session opened is asked for again every so often while it's open, so its checks and
+  // Merge follow GitHub; one that can't be asked for just now keeps showing as it was.
+  const following = of.kind === "number" && loaded?.pullRequest.state === "open";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `of` is the same pull request while `key` is
+  useEffect(() => {
+    if (!following) return;
+    let current = true;
+    const timer = setInterval(() => {
+      void loadReview(of).then((again) => {
+        if (current && again.kind === "loaded") setReview(again);
+      });
+    }, FOLLOW_EVERY_MS);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [key, following]);
   const pullRequest = loaded?.pullRequest ?? props.pullRequest;
   const title =
     pullRequest === undefined
@@ -208,6 +231,8 @@ function Reviewing(props: {
   const [chosen, setChosen] = useState<string>();
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState<Starting>();
+  /** Merge was tapped while it can't merge: why shows beside it, until it can (#329). */
+  const [askedWhy, setAskedWhy] = useState(false);
   const [, setDismissed] = useState(0);
   const diff = useRef<HTMLDivElement>(null);
   const file = files.find((one) => one.path === chosen) ?? files[0];
@@ -312,17 +337,32 @@ function Reviewing(props: {
       Bring up to date
     </ThumbButton>
   ) : (
+    // Greyed out while it can't merge, but a tap says why rather than nothing.
     <ThumbButton
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={merge.kind === "refused" || end.busy}
+      disabled={end.busy}
+      aria-disabled={merge.kind === "refused" ? true : undefined}
       aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
-      onClick={() => void end.run({ kind: "merge", head: pullRequest.head })}
+      onClick={() =>
+        merge.kind === "refused"
+          ? setAskedWhy(true)
+          : void end.run({ kind: "merge", head: pullRequest.head })
+      }
     >
       <GitMerge aria-hidden />
       Merge
     </ThumbButton>
+  );
+  const whyWaits = askedWhy && !conflicts && merge.kind === "refused" && (
+    <p
+      role="status"
+      aria-label="Why Merge waits"
+      className="text-sm font-medium text-muted-foreground"
+    >
+      {merge.reason}
+    </p>
   );
   const closeAction = (
     <ThumbButton look="quiet" fit={desktop} onClick={() => setClosing(true)}>
@@ -356,9 +396,12 @@ function Reviewing(props: {
           {status}
         </div>
         {desktop && actions && (
-          <div className="flex shrink-0 gap-2.5">
-            {closeAction}
-            {mainAction}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <div className="flex gap-2.5">
+              {closeAction}
+              {mainAction}
+            </div>
+            {whyWaits}
           </div>
         )}
       </div>
@@ -440,9 +483,12 @@ function Reviewing(props: {
           )}
 
           {!desktop && actions && (
-            <div className="flex shrink-0 gap-3">
-              {mainAction}
-              {closeAction}
+            <div className="flex shrink-0 flex-col gap-1.5">
+              <div className="flex gap-3">
+                {mainAction}
+                {closeAction}
+              </div>
+              {whyWaits}
             </div>
           )}
           <FormError message={problem} />

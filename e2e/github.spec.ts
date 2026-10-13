@@ -528,6 +528,41 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // #329: a PR page no session opened loaded once, so Merge stayed greyed out after its checks
+  // passed, and tapping it said nothing.
+  test("a PR page no session opened follows its checks, and Merge says why it waits when tapped", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /The page follows its checks/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+    const review = page.getByRole("region", { name: "Review" });
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      /^#\d+ The page follows its checks/,
+    );
+    await expect(review.getByText("Checks running", { exact: true })).toBeVisible();
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    await expect(merge).toBeDisabled();
+
+    // Tapped while it waits, it says why beside it, and merges nothing.
+    await merge.click({ force: true });
+    await expect(review.getByRole("status", { name: "Why Merge waits" })).toHaveText(
+      "Merge waits for e2e to finish.",
+    );
+
+    // The fake's checks pass while the page is open: it follows them with no reload.
+    await expect(review.getByText("Checks passed", { exact: true })).toBeVisible();
+    await expect(merge).toBeEnabled();
+    await expect(review.getByRole("status", { name: "Why Merge waits" })).toHaveCount(0);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   // #319: a long branch ran under its checks and the Review button.
   test("a pull request's long branch is cut short, clear of its checks", async ({
     page,

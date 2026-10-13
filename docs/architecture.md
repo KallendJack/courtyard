@@ -471,7 +471,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     where it stands and one line, sent to the PR's session on the model it last used, or, with no session, starting
     one on its branch once the owner has seen what starts), and Merge, or Bring up to date when it conflicts, and
     Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
-    reach on a tablet, where the answer takes What changed's place. Merged or closed, it folds to one card with
+    reach on a tablet, where the answer takes What changed's place. A Merge that can't merge yet is greyed out
+    but still takes a tap, which says why beside it (#329). A session's PR is asked for again as its session's
+    events change it; one no session opened, every 15 seconds while it's open (#329). Merged or closed, it folds to one card with
     what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
     build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
