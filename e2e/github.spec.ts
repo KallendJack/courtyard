@@ -488,17 +488,22 @@ test.describe("on a desktop", () => {
       .getByRole("link", { name: /^Review/ });
     const address = await review.getAttribute("href");
 
+    // Its review, asked for by its number, or through its session once one has opened it.
+    const isReview = (url: URL) =>
+      /\/workspaces\/side-project\/pull-requests\/\d+$|\/sessions\/[^/]+\/pull-request$/.test(
+        url.pathname,
+      );
     let release = () => {};
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await page.route("**/api/workspaces/side-project/pull-requests/*", async (route) => {
+    await page.route(isReview, async (route) => {
       await held;
       await route.continue();
     });
     await page.goto(address ?? "");
     const title = page.getByRole("heading", { level: 1 });
-    await expect(title).toHaveText(/^#\d+$/);
+    await expect(title).toHaveText(/^#\d+/);
     await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
     await expect(page.getByText("Asking GitHub")).toHaveCount(0);
     const before = await title.boundingBox();
@@ -511,7 +516,7 @@ test.describe("on a desktop", () => {
 
     // GitHub answers slowly from now on: the way back mustn't wait for it.
     await page.unrouteAll({ behavior: "ignoreErrors" });
-    await page.route("**/api/workspaces/side-project/pull-requests/*", async (route) => {
+    await page.route(isReview, async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 8000));
       await route.continue();
     });
