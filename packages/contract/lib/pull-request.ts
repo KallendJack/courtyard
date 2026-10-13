@@ -135,19 +135,62 @@ export const OpenPullRequestList = z.object({ pullRequests: z.array(OpenPullRequ
 export type OpenPullRequestList = z.infer<typeof OpenPullRequestList>;
 
 /**
- * Starting a session on a pull request that has none (#278), on its branch: with the owner's
- * question, or to bring it up to date with its base.
+ * Starting a session on a pull request that has none (#278), on its branch, to bring it up to
+ * date with its base. Fix it in a session starts one too (`PullRequestFix`, #327).
  */
 export const PullRequestSessionStart = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("ask"),
-    text: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH),
-    model: ModelRef,
-    effort: Effort.optional(),
-  }),
   z.object({ kind: z.literal("bring-up-to-date"), model: ModelRef, effort: Effort.optional() }),
 ]);
 export type PullRequestSessionStart = z.infer<typeof PullRequestSessionStart>;
+
+/** The most a quick question's answer points at in the diff (#327). */
+export const QUICK_LINES_MAX = 3;
+
+/** A line in a pull request's diff an answer points at: its file, and the line in it as changed. */
+export const QuickLine = z.object({
+  path: z.string().min(1),
+  line: z.number().int().positive(),
+});
+export type QuickLine = z.infer<typeof QuickLine>;
+
+/** One quick question about a pull request, and its answer (#327). */
+export const QuickAnswer = z.object({
+  question: z.string(),
+  /** In Markdown. */
+  answer: z.string(),
+  /** Lines in the diff it points at, each one the diff shows. */
+  lines: z.array(QuickLine).max(QUICK_LINES_MAX),
+});
+export type QuickAnswer = z.infer<typeof QuickAnswer>;
+
+/**
+ * Quick questions about a pull request (#327): a small read-only conversation, outside any
+ * session, in which a model reads the pull request and changes nothing. Kept by the worker while
+ * it runs; `model` is the one it was asked with, `null` before anything was asked.
+ */
+export const QuickQuestions = z.object({
+  model: ModelRef.nullable(),
+  asked: z.array(QuickAnswer),
+});
+export type QuickQuestions = z.infer<typeof QuickQuestions>;
+
+/** A quick question to ask about a pull request, and the model to ask. */
+export const QuickQuestion = z.object({
+  text: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH),
+  model: ModelRef,
+});
+export type QuickQuestion = z.infer<typeof QuickQuestion>;
+
+/**
+ * Fix it in a session (#327): the quick questions carried over to a session on the pull
+ * request's branch, the one on it already or a new one, on this model.
+ */
+export const PullRequestFix = z.object({ model: ModelRef, effort: Effort.optional() });
+export type PullRequestFix = z.infer<typeof PullRequestFix>;
+
+/** The session Fix it in a session went to, and whether it started it. */
+export const PullRequestFixed = z.object({ sessionId: SessionId, started: z.boolean() });
+export type PullRequestFixed = z.infer<typeof PullRequestFixed>;
 
 /**
  * Merging a session's pull request: the latest commit the owner reviewed, so a pull request that

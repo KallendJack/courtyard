@@ -133,7 +133,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
   (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
   far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
-  tools, and the text for Tidy and titling a session.
+  tools, and the text for Tidy, titling a session and a pull request's quick questions.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
   workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
   one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
@@ -276,12 +276,20 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
   author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
   is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
-  usual), and the ask line or Bring up to date on it starts a session on its own branch (`code/`'s
+  usual), and Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s
   `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
   repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
   the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
   the start is refused, saying which. Its
   routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
+- **`quick-questions/`:** quick questions about a pull request (#327): a small read-only conversation on its page,
+  whoever opened it. Each question is a one-off question (`answerOnce`, no tools, no files) worded by `prompts/`, with
+  the pull request's review from `pull-requests/`, so its model reads the pull request and changes nothing, and no
+  session, branch or worktree is involved. It keeps the lines an answer points at only where the diff shows them, and
+  keeps each pull request's conversation in the worker's memory (the latest 50), one question at a time. Fix it in a
+  session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
+  branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
+  `pull-requests/:number/fix`.
 - **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
   I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
   answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
@@ -467,11 +475,16 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     Summary's first line, and Read it all for the whole description, `description.ts`, in a panel that scrolls),
     the changed files as a tree (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`), each
     scrolling inside, the diff's lines never wrapping there (on a phone they wrap and the page scrolls as one).
-    Then the latest answer to what was asked from the page, the ask line (`components/ask-line.tsx`: quick asks for
-    where it stands and one line, sent to the PR's session on the model it last used, or, with no session, starting
-    one on its branch once the owner has seen what starts), and Merge, or Bring up to date when it conflicts, and
+    Then the ask line (`components/ask-line.tsx`: quick asks for where it stands and one line), which asks quick
+    questions (#327, `quick-questions.tsx`, through `quick-questions/`): the first opens the conversation on the page,
+    beside the file list and the diff on a desktop, in the file list's and What changed's place on a tablet (the list
+    folding into an "n of N files" switcher above the diff, `components/select.tsx`'s `shown`), and as a sheet over
+    the diff on a phone, with its own ask line, Merge and Close PR coming back once it closes. Its header names the
+    model, and a line an answer points at shows marked in the diff with a tap. Follow-ups go in the same line, and
+    Fix it in a session beside them carries the conversation over to the PR's session, or, with none, to a new one
+    on its branch once the owner has seen what starts. Then Merge, or Bring up to date when it conflicts, and
     Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
-    reach on a tablet, where the answer takes What changed's place. Merged or closed, it folds to one card with
+    reach on a tablet. Merged or closed, it folds to one card with
     what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
     build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a

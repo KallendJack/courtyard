@@ -1,9 +1,14 @@
 import {
+  type ModelRef,
   OpenPullRequestList,
   type ProviderList,
+  type PullRequestFix,
+  PullRequestFixed,
   type PullRequestMerging,
   PullRequestReview,
   type PullRequestSessionStart,
+  type QuickQuestion,
+  QuickQuestions,
   type SessionId,
   SessionSummary,
   type WorkspaceId,
@@ -78,3 +83,52 @@ export const startOnPullRequest = (
     body: start,
     schema: SessionSummary,
   });
+
+/** A pull request by its workspace and number, whichever page shows it (#327). */
+export type NumberedPullRequest = { readonly workspaceId: WorkspaceId; readonly number: number };
+
+const questionsOf = (pull: NumberedPullRequest) =>
+  `${pullRequestOf({ kind: "number", ...pull })}/questions`;
+
+/** The quick questions asked about a pull request so far, and their answers (#327). */
+export const loadQuickQuestions = (pull: NumberedPullRequest) =>
+  fromWorker(questionsOf(pull), QuickQuestions);
+
+/** Asks a quick question about a pull request: the conversation with its answer, once it comes. */
+export const askQuickQuestion = (pull: NumberedPullRequest, question: QuickQuestion) =>
+  sendJson({ path: questionsOf(pull), body: question, schema: QuickQuestions });
+
+/**
+ * Fix it in a session (#327): the quick questions carried over to the session on the pull
+ * request's branch, or a new one there.
+ */
+export const fixInSession = (pull: NumberedPullRequest, fix: PullRequestFix) =>
+  sendJson({
+    path: `${pullRequestOf({ kind: "number", ...pull })}/fix`,
+    body: fix,
+    schema: PullRequestFixed,
+  });
+
+/** Every model on offer, each with its name in a word or two ("Sonnet 5.5"). */
+const modelsIn = (providers: ProviderList["providers"]) =>
+  providers.flatMap((provider) =>
+    provider.available
+      ? provider.models.map((model) => ({
+          ref: { provider: provider.id, model: model.id },
+          name: model.name,
+          room: model.limit === undefined,
+        }))
+      : [],
+  );
+
+/**
+ * The model quick questions ask (#327): the one a conversation started with, while it's on offer,
+ * else the first on offer with room, else the first on offer.
+ */
+export const askingModelIn = (providers: ProviderList["providers"], started: ModelRef | null) => {
+  const models = modelsIn(providers);
+  const same = models.find(
+    (model) => model.ref.provider === started?.provider && model.ref.model === started.model,
+  );
+  return same ?? models.find((model) => model.room) ?? models[0];
+};

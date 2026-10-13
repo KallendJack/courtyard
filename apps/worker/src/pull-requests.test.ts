@@ -6,8 +6,10 @@ import {
   CodeSessionList,
   GitHubConnection,
   OpenPullRequestList,
+  PullRequestFixed,
   PullRequestReview,
   PushNotice,
+  QuickQuestions,
   type SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -636,6 +638,13 @@ const pushedBranch = async (branch: string) => {
   return head;
 };
 
+/** Asks a quick question about Side project's pull request `number` (#327). */
+const askAbout = (number: number, text: string) =>
+  postJson(request, `/api/workspaces/side-project/pull-requests/${number}/questions`, {
+    text,
+    model: FAKE_MODEL,
+  });
+
 /** A description a Claude Code helper wrote: signed as its PR skill signs them. */
 const SIGNED =
   "## Summary\n\nBuilds take turns.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)";
@@ -867,7 +876,7 @@ describe("a pull request no session opened (#278)", () => {
     expect(missing.status).toBe(404);
   });
 
-  it("gets a session on its branch, started with the owner's question, which then opens it", async () => {
+  it("gets a session on its branch, which then opens it", async () => {
     const head = await pushedBranch("306-machine-lock");
     const number = github.openPullRequest({
       repo: onGitHub,
@@ -879,13 +888,12 @@ describe("a pull request no session opened (#278)", () => {
     const started = await postJson(
       request,
       `/api/workspaces/side-project/pull-requests/${number}/sessions`,
-      { kind: "ask", text: "Can this be merged?", model: FAKE_MODEL },
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
     );
 
     expect(started.status).toBe(201);
     const { id } = (await started.json()) as { id: string };
-    const events = await followSession(request, { sessionId: id, until: "turn-completed" });
-    expect(events[0]).toMatchObject({ type: "owner-message", text: "Can this be merged?" });
+    await followSession(request, { sessionId: id, until: "turn-completed" });
     const worktree = join(root, "data", "worktrees", id);
     expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe("306-machine-lock");
     expect((await gitIn(worktree, "rev-parse", "HEAD")).trim()).toBe(head);
@@ -936,7 +944,7 @@ describe("a pull request no session opened (#278)", () => {
     const started = await postJson(
       request,
       `/api/workspaces/side-project/pull-requests/${number}/sessions`,
-      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
     );
 
     expect(started.status).toBe(201);
@@ -965,7 +973,7 @@ describe("a pull request no session opened (#278)", () => {
     const started = await postJson(
       request,
       `/api/workspaces/side-project/pull-requests/${number}/sessions`,
-      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
     );
 
     expect(started.status).toBe(409);
@@ -984,7 +992,7 @@ describe("a pull request no session opened (#278)", () => {
     const started = await postJson(
       request,
       `/api/workspaces/side-project/pull-requests/${number}/sessions`,
-      { kind: "ask", text: "Explain this change", model: FAKE_MODEL },
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
     );
 
     expect(started.status).toBe(409);
@@ -1000,12 +1008,131 @@ describe("a pull request no session opened (#278)", () => {
     const started = await postJson(
       request,
       `/api/workspaces/side-project/pull-requests/${number}/sessions`,
-      { kind: "ask", text: "Can this be merged?", model: FAKE_MODEL },
+      { kind: "bring-up-to-date", model: FAKE_MODEL },
     );
 
     expect(started.status).toBe(409);
     expect(await errorOf(started)).toBe(
       "A session is on this pull request already: ask it from its page.",
     );
+  });
+});
+
+// Quick questions (#327): a small read-only conversation about any pull request, on its page,
+// outside any session. The model reads the pull request and changes nothing.
+describe("quick questions about a pull request (#327)", () => {
+  it("are answered from the pull request alone, starting no session, and kept for its page", async () => {
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: "306-machine-lock",
+      head: "c0ffee1",
+      body: SIGNED,
+    });
+
+    const asked = await askAbout(number, "Explain this change");
+
+    expect(asked.status).toBe(200);
+    const expected = {
+      model: FAKE_MODEL,
+      asked: [
+        { question: "Explain this change", answer: "You asked: Explain this change", lines: [] },
+      ],
+    };
+    expect(QuickQuestions.parse(await asked.json())).toEqual(expected);
+    const kept = await request(`/api/workspaces/side-project/pull-requests/${number}/questions`);
+    expect(QuickQuestions.parse(await kept.json())).toEqual(expected);
+    const listed = await request("/api/workspaces/side-project/sessions");
+    expect(CodeSessionList.parse(await listed.json()).sessions).toEqual([]);
+    expect(await gitIn(repo, "worktree", "list", "--porcelain")).not.toContain("worktrees");
+  });
+
+  it("keeps the lines an answer points at only where the diff shows them", async () => {
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: "talk",
+      head: "c0ffee1",
+      files: [
+        {
+          path: "apps/web/src/talk-button.tsx",
+          status: "modified",
+          additions: 2,
+          deletions: 1,
+          patch: TALK_PATCH,
+        },
+      ],
+    });
+
+    const asked = await askAbout(
+      number,
+      "Where? point at apps/web/src/talk-button.tsx line 3 point at apps/web/src/talk-button.tsx line 9 point at README.md line 1",
+    );
+
+    expect(QuickQuestions.parse(await asked.json()).asked[0]?.lines).toEqual([
+      { path: "apps/web/src/talk-button.tsx", line: 3 },
+    ]);
+  });
+
+  it("keeps nothing of a question the model couldn't answer, and says why", async () => {
+    const number = github.openPullRequest({ repo: onGitHub, branch: "talk", head: "c0ffee1" });
+
+    const asked = await askAbout(number, "Explain this, please fail");
+
+    expect(asked.status).toBe(502);
+    expect(await errorOf(asked)).toBe("The fake didn't answer, because it was asked not to.");
+    const kept = await request(`/api/workspaces/side-project/pull-requests/${number}/questions`);
+    expect(QuickQuestions.parse(await kept.json())).toEqual({ model: null, asked: [] });
+  });
+
+  it("carry over to a new session on its branch with Fix it in a session", async () => {
+    const head = await pushedBranch("306-machine-lock");
+    const number = github.openPullRequest({ repo: onGitHub, branch: "306-machine-lock", head });
+    const fix = () =>
+      postJson(request, `/api/workspaces/side-project/pull-requests/${number}/fix`, {
+        model: FAKE_MODEL,
+      });
+    const nothing = await fix();
+    expect(nothing.status).toBe(409);
+    expect(await errorOf(nothing)).toBe(
+      "Nothing has been asked about it yet, so there's nothing to carry over.",
+    );
+    await askAbout(number, "What could break?");
+
+    const fixing = await fix();
+
+    expect(fixing.status).toBe(201);
+    const { sessionId } = PullRequestFixed.parse(await fixing.json());
+    const events = await followSession(request, { sessionId, until: "turn-completed" });
+    expect(events[0]).toMatchObject({
+      type: "owner-message",
+      text: await quotedInGuide("The owner asked about pull request #<number>", {
+        number: String(number),
+        questions: "Owner: What could break?\n\nAnswer: You asked: What could break?",
+      }),
+    });
+    const worktree = join(root, "data", "worktrees", sessionId);
+    expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe("306-machine-lock");
+  });
+
+  it("carry over to the session on its branch, when one is", async () => {
+    const { id, branch, lastSeq } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    await askAbout(number, "Why three?");
+
+    const fixing = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/fix`,
+      { model: FAKE_MODEL },
+    );
+
+    expect(fixing.status).toBe(200);
+    expect(PullRequestFixed.parse(await fixing.json())).toEqual({ sessionId: id, started: false });
+    const events = await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: lastSeq,
+    });
+    expect(events.find((event) => event.type === "owner-message")).toMatchObject({
+      text: expect.stringContaining("Owner: Why three?"),
+    });
   });
 });

@@ -251,20 +251,8 @@ function Session(props: {
           pullRequest={pullRequest}
           session={{
             id: session.id,
-            turns,
-            // On the model and effort it last used: the ask line has no pickers.
-            send: async (text) => {
-              if (last === undefined) return "This session has no model to ask with yet.";
-              const sent = await sendMessage({
-                sessionId: session.id,
-                message: {
-                  text,
-                  model: last.model,
-                  ...(last.effort === undefined ? {} : { effort: last.effort }),
-                },
-              });
-              return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
-            },
+            // Fix it in a session goes on the model and effort it last used.
+            last: last === undefined ? undefined : { model: last.model, effort: last.effort },
           }}
           onShowSession={toConversation}
         />

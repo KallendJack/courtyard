@@ -66,6 +66,8 @@ import {
 } from "./providers/index.ts";
 import { createPullRequests } from "./pull-requests/index.ts";
 import { pullRequestRoutes } from "./pull-requests/routes.ts";
+import { createQuickQuestions } from "./quick-questions/index.ts";
+import { quickQuestionRoutes } from "./quick-questions/routes.ts";
 import { createRedMain } from "./red-main/index.ts";
 import { createRepos } from "./repos/index.ts";
 import { repoProblem, repoRoutes } from "./repos/routes.ts";
@@ -366,7 +368,12 @@ export const createWorker = (options: {
   api.route("/", gitHubRoutes(github));
   const repos = createRepos({ dataDir, contextDir, github, code });
   api.route("/", repoRoutes(repos));
-  api.route("/", pullRequestRoutes(createPullRequests({ contextDir, code, sessions })));
+  const pullRequests = createPullRequests({ contextDir, code, sessions });
+  api.route("/", pullRequestRoutes(pullRequests));
+  api.route(
+    "/",
+    quickQuestionRoutes(createQuickQuestions({ contextDir, providers, pullRequests })),
+  );
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(createNextUp({ contextDir, code, github, sessions, now })));
   // A code workspace's main and its build, for its Home's Main row (#301, #249).

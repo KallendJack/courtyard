@@ -1,24 +1,27 @@
 import type {
+  Effort,
   ModelRef,
+  ProviderList,
   PullRequest,
   PullRequestReview,
-  PullRequestSessionStart,
+  QuickLine,
+  QuickQuestions,
   SessionId,
   WorkspaceId,
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, GitMerge, Info, RefreshCw, X } from "lucide-react";
+import { GitMerge, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AskLine } from "@/components/ask-line";
 import { BackLink } from "@/components/back-link";
-import { Button, IconButton } from "@/components/button";
+import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
-import { CapsLabel } from "@/components/caps-label";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FileTree, lineCounts } from "@/components/file-tree";
 import { FormError } from "@/components/form-error";
-import { type Layout, useLayout } from "@/components/handheld";
+import { useLayout } from "@/components/handheld";
 import { Notice } from "@/components/notice";
+import { Select } from "@/components/select";
 import { ThumbButton } from "@/components/thumb-button";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -26,19 +29,22 @@ import { useAction } from "@/lib/use-action";
 import { startLiveUpdate } from "../live/api.ts";
 import { updateOffer, useLive } from "../live/main-build.tsx";
 import { describeProblem } from "../problems.tsx";
-import { Answer } from "../sessions/answer.tsx";
-import type { Turn } from "../sessions/events.ts";
 import { type FromWorker, loadProviders } from "../worker.ts";
 import {
+  askingModelIn,
+  askQuickQuestion,
   bringUpToDate,
   codingModelIn,
   endPullRequest,
+  fixInSession,
+  loadQuickQuestions,
   loadReview,
   type ReviewOf,
   startOnPullRequest,
 } from "./api.ts";
 import { ChecksState } from "./checks.tsx";
 import { Diff } from "./diff.tsx";
+import { QuickQuestionsPanel } from "./quick-questions.tsx";
 import css from "./review.css?inline";
 import { WhatChanged } from "./what-changed.tsx";
 
@@ -60,30 +66,25 @@ const versionOf = (pullRequest: PullRequest | undefined) =>
 const filesSaid = (count: number) => (count === 1 ? "1 file" : `${count} files`);
 
 /**
- * Where the answers to what the owner asks from a PR page start, for each session: how many turns
- * it had when last asked (#278). Kept while the app is open, so the answer still shows once the
- * page is opened again, or opened for a session the ask line just started.
+ * The session a pull request is from: Bring up to date and Fix it in a session go to it, on the
+ * model it last used.
  */
-const askedFrom = new Map<SessionId, number>();
-
-/** The session a pull request is from, for its page's ask line and the answers it shows. */
-export type AskingSession = {
+export type PullRequestSession = {
   readonly id: SessionId;
-  readonly turns: readonly Turn[];
-  /** Sends a message on the model the session last used: an error to show, or nothing. */
-  readonly send: (text: string) => Promise<string | undefined>;
+  /** The model and effort it last used, once it has one. */
+  readonly last: { readonly model: ModelRef; readonly effort?: Effort | undefined } | undefined;
 };
 
 /**
- * A pull request's page (#160, #240, #278; Paper, "PR page: checks passed, ask line",
- * "conflicts" and "merged, folded"), for a session's own or one no session opened. From a tablet
- * up it fits one screen and never scrolls as a whole: its title, where it stands and its main
- * action stay in view, What changed takes one line, and the changed files' tree and the chosen
- * file's diff take the height that's left, each scrolling inside. A desktop has Close PR and the
- * main action beside the title and the latest answer in a card above the ask line; a tablet has
- * them as thumb buttons at the foot, the answer in What changed's place. Merged or closed, it folds
- * to one card with what to do next. On a phone it stacks and scrolls, as its agreed board has it.
- * Loaded only when it's opened, with its own stylesheet.
+ * A pull request's page (#160, #240, #278, #327; Paper, "PR page: checks passed, ask line",
+ * "conflicts", "merged, folded" and "quick questions"), for a session's own or one no session
+ * opened. From a tablet up it fits one screen and never scrolls as a whole: its title, where it
+ * stands and its main action stay in view, What changed takes one line, and the changed files'
+ * tree and the chosen file's diff take the height that's left, each scrolling inside. A desktop
+ * has Close PR and the main action beside the title; a tablet has them as thumb buttons at the
+ * foot. The ask line asks quick questions, which open beside the diff (see `QuickQuestionsPanel`).
+ * Merged or closed, it folds to one card with what to do next. On a phone it stacks and scrolls,
+ * as its agreed board has it. Loaded only when it's opened, with its own stylesheet.
  */
 export default function Review(props: {
   workspaceId: WorkspaceId;
@@ -95,9 +96,9 @@ export default function Review(props: {
    * asked for again as it changes.
    */
   pullRequest?: PullRequest | undefined;
-  /** The session it's from, when one is: what the ask line asks, and its answers. */
-  session?: AskingSession;
-  /** Shows the session's conversation: Bring up to date has sent it a message. */
+  /** The session it's from, when one is. */
+  session?: PullRequestSession;
+  /** Shows the session's conversation: Bring up to date or Fix it in a session sent it a message. */
   onShowSession?: () => void;
 }) {
   const { of } = props;
@@ -164,13 +165,16 @@ const quickAsks = (review: PullRequestReview) => {
   if (pullRequest.conflicts) return ["Why does it conflict?", "Explain this change"];
   switch (pullRequest.checks.kind) {
     case "failed":
-      return ["Fix the failing check", "Explain this change"];
+      return ["Why did the check fail?", "Explain this change"];
     case "passed":
       return ["Explain this change", "What could break?"];
     default:
       return ["Can this be merged?", "Explain this change"];
   }
 };
+
+/** The quick ask beside a follow-up, once quick questions are open. */
+const FOLLOW_UP_ASKS = ["What could break?"];
 
 /**
  * The first model that codes, which a session started on a pull request works with: the one a new
@@ -181,9 +185,12 @@ const codingModel = async () => {
   return providers.kind === "loaded" ? codingModelIn(providers.data.providers) : undefined;
 };
 
-/** A session about to start on a pull request no session opened, shown before it starts. */
+/**
+ * A session about to start on a pull request no session opened, shown before it starts: to bring
+ * it up to date, or to fix what came up in its quick questions (#327).
+ */
 type Starting = {
-  readonly start: PullRequestSessionStart;
+  readonly kind: "bring-up-to-date" | "fix";
   readonly model: { readonly ref: ModelRef; readonly label: string };
 };
 
@@ -192,13 +199,14 @@ function Reviewing(props: {
   of: ReviewOf;
   title: string;
   review: PullRequestReview;
-  session?: AskingSession;
+  session?: PullRequestSession;
   onShowSession?: () => void;
   /** It was merged or closed from here: it's asked for again. */
   onChanged: () => void;
 }) {
-  const { of, review, session } = props;
+  const { review, session } = props;
   const { pullRequest, files, merge } = review;
+  const pull = { workspaceId: props.workspaceId, number: pullRequest.number };
   const layout = useLayout();
   const navigate = useNavigate();
   /** The whole description is open, with the files folded into one bar. */
@@ -208,16 +216,48 @@ function Reviewing(props: {
   const [chosen, setChosen] = useState<string>();
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState<Starting>();
-  const [, setDismissed] = useState(0);
+  /** The quick questions asked so far (#327), and whether they're open on the page. */
+  const [questions, setQuestions] = useState<QuickQuestions>({ model: null, asked: [] });
+  const [asking, setAsking] = useState(false);
+  /** A question asked whose answer hasn't come yet. */
+  const [pending, setPending] = useState<string>();
+  /** The line an answer pointed at, shown marked in the diff. */
+  const [marked, setMarked] = useState<QuickLine>();
+  const [providers, setProviders] = useState<ProviderList["providers"]>();
   const diff = useRef<HTMLDivElement>(null);
   const file = files.find((one) => one.path === chosen) ?? files[0];
   const place = file === undefined ? 0 : files.indexOf(file) + 1;
   const open = pullRequest.state === "open";
   const conflicts = open && pullRequest.conflicts === true;
   const desktop = layout === "desktop";
+  const cover = layout === "cover";
+  const panelOpen = open && asking;
+  const asked = questions.asked.length > 0;
+
+  // What was asked before, kept by the worker, and the models to ask with.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once for each pull request
+  useEffect(() => {
+    let current = true;
+    void loadQuickQuestions(pull).then((loaded) => {
+      if (!current || loaded.kind !== "loaded") return;
+      setQuestions(loaded.data);
+      // Kept from before, they open again, except over a phone's diff.
+      if (loaded.data.asked.length > 0 && layout !== "cover") setAsking(true);
+    });
+    void loadProviders().then((loaded) => {
+      if (current && loaded.kind === "loaded") setProviders(loaded.data.providers);
+    });
+    return () => {
+      current = false;
+    };
+  }, [pull.workspaceId, pull.number]);
+
+  const askingModel =
+    providers === undefined ? undefined : askingModelIn(providers, questions.model);
 
   const choose = (path: string) => {
     setChosen(path);
+    setMarked(undefined);
     // On a narrow screen the diff is below the tree: it comes into view.
     const top = diff.current?.getBoundingClientRect().top;
     if (top !== undefined && top > window.innerHeight * 0.6) {
@@ -225,9 +265,16 @@ function Reviewing(props: {
     }
   };
 
+  /** Shows a line an answer points at, marked, in the diff; on a phone the sheet makes way. */
+  const point = (line: QuickLine) => {
+    setChosen(line.path);
+    setMarked(line);
+    if (cover) setAsking(false);
+  };
+
   /** Merges or closes it, then asks for it again: an error to show, or nothing once it's done. */
   const endNow = async (how: Parameters<typeof endPullRequest>[1]) => {
-    const ended = await endPullRequest(of, how);
+    const ended = await endPullRequest(props.of, how);
     if (ended.kind !== "loaded") return describeProblem(ended).body;
     setClosing(false);
     props.onChanged();
@@ -236,69 +283,63 @@ function Reviewing(props: {
   const end = useAction(endNow);
 
   /** Asks a session started on this pull request's branch, once the owner has seen what starts. */
-  const offerStart = async (start: (model: ModelRef) => PullRequestSessionStart) => {
+  const offerStart = async (kind: Starting["kind"]) => {
     const model = await codingModel();
     if (model === undefined) return "No model that codes is available right now.";
-    setStarting({ start: start(model.ref), model: { ref: model.ref, label: model.label } });
+    setStarting({ kind, model: { ref: model.ref, label: model.label } });
     return undefined;
   };
 
   const bring = useAction(async () => {
-    if (session === undefined) {
-      return offerStart((model) => ({ kind: "bring-up-to-date", model }));
-    }
+    if (session === undefined) return offerStart("bring-up-to-date");
     const brought = await bringUpToDate(session.id);
     if (brought.kind !== "loaded") return describeProblem(brought).body;
     props.onShowSession?.();
     return undefined;
   });
 
+  /** A quick question (#327): the conversation opens on the page, and the answer comes into it. */
   const ask = async (text: string) => {
-    if (session === undefined) return offerStart((model) => ({ kind: "ask", text, model }));
-    const before = session.turns.length;
-    const problem = await session.send(text);
-    if (problem === undefined) {
-      askedFrom.set(session.id, before);
-      setDismissed((was) => was + 1);
-    }
-    return problem;
+    const model = askingModel ?? (await askingModelNow(questions));
+    if (model === undefined) return "No model is available to ask right now.";
+    setAsking(true);
+    setReading(false);
+    setPending(text);
+    const answered = await askQuickQuestion(pull, { text, model: model.ref });
+    setPending(undefined);
+    if (answered.kind !== "loaded") return describeProblem(answered).body;
+    setQuestions(answered.data);
+    return undefined;
   };
 
-  const start = useAction(async () => {
-    if (starting === undefined || of.kind !== "number") return undefined;
-    const started = await startOnPullRequest(of, starting.start);
-    if (started.kind !== "loaded") return describeProblem(started).body;
-    const id = started.data.id;
-    const asking = starting.start.kind === "ask";
-    if (asking) askedFrom.set(id, 0);
-    await navigate({
-      to: "/workspaces/$workspaceId/sessions/$sessionId",
-      params: { workspaceId: props.workspaceId, sessionId: id },
-      // The answer to a question shows on the pull request's page; bringing it up to date, in
-      // the session.
-      search: asking ? { view: "review" } : {},
-    });
+  /**
+   * Fix it in a session (#327): the conversation carried over to the pull request's session, on
+   * the model it last used; or, with none, to a new one on its branch once the owner has seen it.
+   */
+  const fix = useAction(async () => {
+    if (session === undefined) return offerStart("fix");
+    if (session.last === undefined) return "This session has no model to send it with yet.";
+    const { model, effort } = session.last;
+    const fixed = await fixInSession(pull, { model, ...(effort === undefined ? {} : { effort }) });
+    if (fixed.kind !== "loaded") return describeProblem(fixed).body;
+    props.onShowSession?.();
     return undefined;
   });
 
-  const baseline = session === undefined ? undefined : askedFrom.get(session.id);
-  const answering =
-    session === undefined || baseline === undefined
-      ? undefined
-      : { turn: session.turns[baseline], queued: session.turns.length <= baseline };
-  const dismiss = () => {
-    if (session !== undefined) askedFrom.delete(session.id);
-    setDismissed((was) => was + 1);
-  };
-  const answer =
-    answering === undefined ? undefined : (
-      <AnswerCard
-        turn={answering.turn}
-        passed={pullRequest.checks.kind === "passed" && !conflicts}
-        layout={layout}
-        onDismiss={dismiss}
-      />
-    );
+  const start = useAction(async () => {
+    if (starting === undefined) return undefined;
+    const started =
+      starting.kind === "fix"
+        ? await fixInSession(pull, { model: starting.model.ref })
+        : await startOnPullRequest(pull, { kind: "bring-up-to-date", model: starting.model.ref });
+    if (started.kind !== "loaded") return describeProblem(started).body;
+    const sessionId = "sessionId" in started.data ? started.data.sessionId : started.data.id;
+    await navigate({
+      to: "/workspaces/$workspaceId/sessions/$sessionId",
+      params: { workspaceId: props.workspaceId, sessionId },
+    });
+    return undefined;
+  });
 
   const mainAction = conflicts ? (
     <ThumbButton
@@ -329,8 +370,52 @@ function Reviewing(props: {
       Close PR
     </ThumbButton>
   );
-  const actions = open && !closing && starting === undefined;
-  const problem = end.error ?? bring.error;
+  // On a phone the quick questions' sheet covers the foot, so they come back once it closes.
+  const actions = open && !closing && starting === undefined && !(cover && panelOpen);
+  const problem = end.error ?? bring.error ?? fix.error;
+
+  const askLine = (
+    <AskLine
+      label="Ask about this PR"
+      placeholder={asked ? "Ask a follow-up…" : "Ask about this PR…"}
+      quick={asked ? FOLLOW_UP_ASKS : quickAsks(review)}
+      actions={[
+        ...(asked && !panelOpen ? [{ label: "Quick questions", run: () => setAsking(true) }] : []),
+        ...(asked ? [{ label: "Fix it in a session", run: () => void fix.run() }] : []),
+      ]}
+      ask={ask}
+      disabled={fix.busy}
+    />
+  );
+
+  const panel = panelOpen ? (
+    <QuickQuestionsPanel
+      look={cover ? "sheet" : "panel"}
+      model={askingModel?.name}
+      asked={questions.asked}
+      pending={pending}
+      onClose={() => setAsking(false)}
+      onPoint={point}
+      {...(cover && starting === undefined ? { foot: askLine } : {})}
+    />
+  ) : null;
+
+  // On a tablet the quick questions take the file list's place, which folds into a switcher
+  // above the diff; on a desktop they sit beside both; on a phone they're a sheet over them.
+  const folded = panelOpen && layout === "tablet";
+  const placeShown =
+    folded && files.length > 1 && file !== undefined ? (
+      <Select
+        look="pill"
+        label="Choose a file"
+        shown={`${place} of ${files.length} files`}
+        options={files.map((one) => ({ value: one.path, label: one.path }))}
+        value={file.path}
+        onChange={choose}
+      />
+    ) : (
+      `${place} of ${files.length}`
+    );
 
   const status = (
     <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-meta/4">
@@ -386,12 +471,8 @@ function Reviewing(props: {
             </ConfirmStep>
           )}
 
-          {/* On a tablet or phone, the latest answer takes What changed's place (✕ goes back). */}
-          {answer !== undefined && !desktop ? (
-            answer
-          ) : (
-            <WhatChanged body={review.body} open={reading} onOpen={setReading} />
-          )}
+          {/* On a tablet the quick questions take What changed's room too. */}
+          {!folded && <WhatChanged body={review.body} open={reading} onOpen={setReading} />}
 
           {reading ? (
             <div className="flex min-h-13 shrink-0 items-center justify-between gap-3 rounded-card border bg-surface py-2 pr-3 pl-4">
@@ -403,21 +484,37 @@ function Reviewing(props: {
               </Button>
             </div>
           ) : (
-            <div className="grid gap-3 md:min-h-0 md:flex-1 md:grid-cols-[12.25rem_minmax(0,1fr)] xl:grid-cols-[16.25rem_minmax(0,1fr)]">
-              {files.length > 0 ? (
-                <FileTree files={files} chosen={file?.path} onChoose={choose} />
-              ) : (
-                <p className="rounded-card bg-surface p-4 text-sm text-muted-foreground">
-                  It changes no files.
-                </p>
+            <div
+              className={classes(
+                "grid gap-3 md:min-h-0 md:flex-1",
+                folded
+                  ? "md:grid-cols-2"
+                  : panelOpen && desktop
+                    ? "md:grid-cols-[12.25rem_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[16.25rem_minmax(0,1.25fr)_minmax(0,1fr)]"
+                    : "md:grid-cols-[12.25rem_minmax(0,1fr)] xl:grid-cols-[16.25rem_minmax(0,1fr)]",
               )}
+            >
+              {folded && panel}
+              {!folded &&
+                (files.length > 0 ? (
+                  <FileTree files={files} chosen={file?.path} onChoose={choose} />
+                ) : (
+                  <p className="rounded-card bg-surface p-4 text-sm text-muted-foreground">
+                    It changes no files.
+                  </p>
+                ))}
               <div ref={diff} className="flex min-w-0 scroll-mt-4 flex-col md:min-h-0">
-                {file !== undefined && <Diff file={file} place={`${place} of ${files.length}`} />}
+                {file !== undefined && (
+                  <Diff
+                    file={file}
+                    place={placeShown}
+                    marked={marked?.path === file.path ? marked.line : undefined}
+                  />
+                )}
               </div>
+              {desktop && panel}
             </div>
           )}
-
-          {desktop && answer}
 
           {starting !== undefined ? (
             <StartSession
@@ -429,14 +526,7 @@ function Reviewing(props: {
               onCancel={() => setStarting(undefined)}
             />
           ) : (
-            open && (
-              <AskLine
-                label="Ask about this PR"
-                placeholder="Ask about this PR…"
-                quick={quickAsks(review)}
-                ask={ask}
-              />
-            )
+            open && !(cover && panelOpen) && askLine
           )}
 
           {!desktop && actions && (
@@ -446,59 +536,24 @@ function Reviewing(props: {
             </div>
           )}
           <FormError message={problem} />
+          {cover && panel}
         </>
       )}
     </section>
   );
 }
 
-/**
- * The latest answer to what the owner asked from the page (#278): the question, then the answer
- * as it comes, in a card whose height is capped, scrolling inside it. A check when the pull
- * request's checks passed, else an i.
- */
-function AnswerCard(props: {
-  turn: Turn | undefined;
-  passed: boolean;
-  layout: Layout;
-  onDismiss: () => void;
-}) {
-  const { turn } = props;
-  return (
-    <section
-      aria-label="Answer"
-      className="flex max-h-40 shrink-0 items-start gap-3 rounded-card border border-primary/25 bg-primary/8 py-3 pr-2.5 pl-3.5 xl:pl-4"
-    >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary-text [&_svg]:size-3.5">
-        {props.passed ? <Check aria-hidden /> : <Info aria-hidden />}
-      </span>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 self-stretch">
-        <CapsLabel tone="muted">{turn?.text ?? "Asked"}</CapsLabel>
-        <div className="min-h-0 overflow-y-auto text-interface font-medium">
-          {turn === undefined ? (
-            <p className="text-muted-foreground">Asks once the turn running now ends.</p>
-          ) : turn.answer === "" ? (
-            <p className="text-muted-foreground">
-              {turn.state.kind === "running" ? "Asking the session…" : "No answer came."}
-            </p>
-          ) : (
-            <Answer
-              text={turn.answer}
-              running={turn.state.kind === "running"}
-              replayed={turn.answer.length}
-              compact
-            />
-          )}
-        </div>
-      </div>
-      <IconButton label="Close the answer" icon={<X />} size="md" onClick={props.onDismiss} />
-    </section>
-  );
-}
+/** The model to ask, from the providers asked for now: when the page hadn't had them yet. */
+const askingModelNow = async (questions: QuickQuestions) => {
+  const providers = await loadProviders();
+  return providers.kind === "loaded"
+    ? askingModelIn(providers.data.providers, questions.model)
+    : undefined;
+};
 
 /**
  * What starts before it starts (AGENTS.md, Tap or talk): a session on the pull request's branch,
- * the model it works with, and its first message.
+ * the model it works with, and what it's told to do.
  */
 function StartSession(props: {
   branch: string;
@@ -508,7 +563,7 @@ function StartSession(props: {
   onStart: () => void;
   onCancel: () => void;
 }) {
-  const { start } = props.starting;
+  const { starting } = props;
   return (
     <section
       aria-label="Start a session"
@@ -517,8 +572,10 @@ function StartSession(props: {
       <p className="text-interface">
         <span className="font-semibold">No session is on this pull request.</span> Start one on{" "}
         <span className="font-mono text-primary-text">{props.branch}</span> with{" "}
-        {props.starting.model.label},{" "}
-        {start.kind === "ask" ? `asking “${start.text}”` : "to merge main in and fix the conflict"}?
+        {starting.model.label},{" "}
+        {starting.kind === "fix"
+          ? "carrying the quick questions over, to make the change they came to?"
+          : "to merge main in and fix the conflict?"}
       </p>
       <div className="flex flex-wrap gap-2">
         <Button disabled={props.busy} onClick={props.onStart}>
