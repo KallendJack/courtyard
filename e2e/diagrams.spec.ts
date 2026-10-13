@@ -56,6 +56,48 @@ test("a mermaid block is drawn as a diagram, and Mermaid loads only when an answ
   expect(mermaid().length).toBeGreaterThan(0);
 });
 
+// Owner rule (2026-10-12): nothing jumps in. Until Mermaid has drawn it, a diagram keeps a faint
+// place, never its code; coming back, it's drawn at once.
+test.describe("while Mermaid loads", () => {
+  // The service worker would serve Mermaid's code itself, past the hold.
+  test.use({ serviceWorkers: "block" });
+
+  test("a diagram keeps a faint place until it's drawn, never its code, and shows at once on coming back", async ({
+    page,
+  }) => {
+    const answer = await ask(page, withDiagram(CHAIN));
+    await expect(
+      answer.getByRole("figure", { name: "Diagram", exact: true }).locator("svg"),
+    ).toBeVisible();
+    const address = page.url();
+
+    // A fresh tab: Mermaid has to load again, and is held.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/assets/mermaid-*.js", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(address);
+    await expect(answer).toContainText("That's the lot.");
+    await expect(answer.locator("[data-placeholder]")).toBeVisible();
+    await expect(answer).not.toContainText("flowchart TD");
+    release();
+    const diagram = answer.getByRole("figure", { name: "Diagram", exact: true });
+    await expect(diagram.locator("svg")).toBeVisible();
+    await expect(answer.locator("[data-placeholder]")).toHaveCount(0);
+
+    // Away and back: the diagram is there with the answer, not drawn again after it.
+    await page.getByRole("link", { name: "Back to Garage gym" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+    await page.goBack();
+    await expect(answer).toContainText("That's the lot.");
+    expect(await diagram.locator("svg").count()).toBe(1);
+  });
+});
+
 /** Diagrams Mermaid draws, written to run script or load something, each in a way Mermaid has. */
 const HOSTILE = [
   // Its own settings, to turn the strict ones off and load pictures from its styles.
