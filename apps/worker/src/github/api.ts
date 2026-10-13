@@ -58,12 +58,12 @@ export type GitHubApi = {
     pull: { readonly repo: string; readonly number: number },
   ) => Promise<Result<readonly FoundFile[], string>>;
   /**
-   * The open issues in `repo` with `label` (#301's Next up), each with its milestone and its
-   * comments' text, which say whether someone has claimed it.
+   * The open issues in `repo` with `label` (#301's Next up), each with its milestone and, asked
+   * `withComments`, its comments' text, which say whether someone has claimed it (none otherwise).
    */
   readonly openIssues: (
     accessToken: string,
-    find: { readonly repo: string; readonly label: string },
+    find: { readonly repo: string; readonly label: string; readonly withComments: boolean },
   ) => Promise<Result<readonly FoundIssue[], string>>;
   /**
    * The title and description of each open pull request in `repo` (#301): what says which issues
@@ -814,7 +814,7 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
               milestone: issue.milestone?.title ?? null,
               milestoneDescription: issue.milestone?.description ?? null,
               comments:
-                issue.comments === 0
+                issue.comments === 0 || !find.withComments
                   ? []
                   : (
                       await apiGet(
