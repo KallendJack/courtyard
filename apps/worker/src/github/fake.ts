@@ -8,6 +8,7 @@ import type {
   FoundFile,
   FoundPullRequest,
   FoundRepo,
+  FoundWorkflow,
   GitHubApi,
   SignInEnd,
   UserToken,
@@ -183,6 +184,8 @@ export const createFakeGitHub = (
   /** The checks on each commit a test set them for (#249), and how often they were asked for. */
   const commitChecks = new Map<string, readonly FoundCheckRun[]>();
   let commitChecksAsked = 0;
+  /** The workflows that ran on each commit a test set them for (#337). */
+  const commitWorkflows = new Map<string, readonly FoundWorkflow[]>();
   /** Each branch deleted on GitHub, in order. */
   const deleted: { readonly repo: string; readonly branch: string }[] = [];
   /** Every pull request opened, numbered from 1, with the files it changes (#160). */
@@ -372,6 +375,8 @@ export const createFakeGitHub = (
       commitChecksAsked += 1;
       return ok(commitChecks.get(commit) ?? []);
     },
+    commitWorkflows: async (accessToken, { commit }) =>
+      refusedToken(accessToken) ?? ok(commitWorkflows.get(commit) ?? []),
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
     openIssues: async (accessToken, { repo, label }) => {
@@ -547,6 +552,29 @@ export const createFakeGitHub = (
     /** The checks on `commit` are now these, in the order GitHub lists them (#249). */
     setCommitChecks: (commit: string, checks: readonly FoundCheckRun[]) => {
       commitChecks.set(commit, checks);
+    },
+    /**
+     * The workflows that ran on `commit` are these files (#337): still running unless a test says
+     * one is `done`.
+     */
+    setWorkflows: (
+      commit: string,
+      workflows: readonly {
+        path: string;
+        text: string;
+        done?: boolean;
+        startedAt?: string;
+      }[],
+    ) => {
+      commitWorkflows.set(
+        commit,
+        workflows.map((workflow) => ({
+          path: workflow.path,
+          text: workflow.text,
+          done: workflow.done ?? false,
+          startedAt: workflow.startedAt ?? null,
+        })),
+      );
     },
     /** Check run `id`'s annotations name `test` as what failed (#355). */
     setFailure: (id: number, test: string) => {

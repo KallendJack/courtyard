@@ -23,6 +23,7 @@ import type {
   GitHubApi,
   UserToken,
 } from "./api.ts";
+import { mainBuildOf, typicalLengths } from "./main-build.ts";
 
 export type {
   FoundCheckRun,
@@ -181,14 +182,8 @@ const jobsOf = (runs: readonly FoundCheckRun[]): readonly FoundCheckRun[] => {
   return [...byName.values()].sort((a, b) => a.first - b.first).map((job) => job.latest);
 };
 
-/** How long a build took from its first job starting to its last ending, if every job passed. */
-const durationOf = (jobs: readonly FoundCheckRun[]) => {
-  if (jobs.length === 0 || jobs.some((job) => job.outcome !== "passed")) return null;
-  const starts = jobs.map((job) => Date.parse(job.startedAt ?? ""));
-  const ends = jobs.map((job) => Date.parse(job.completedAt ?? ""));
-  const took = Math.max(...ends) - Math.min(...starts);
-  return Number.isFinite(took) && took > 0 ? took : null;
-};
+/** The most earlier builds kept, finished, to judge how long each job usually takes (#337). */
+const FINISHED_KEPT = 200;
 
 /** An open pull request as GitHub gave it, and as a session shows it (#278). */
 export type OpenFound = { readonly found: FoundPullRequest; readonly pullRequest: PullRequest };
@@ -366,23 +361,26 @@ export const createGitHub = (options: {
     return ok({ ...signedIn.value, pull: found.value });
   };
 
-  /** How long each finished build took, by commit (#249): `null` when it didn't all pass. */
-  const durations = new Map<string, number | null>();
+  /** The jobs of each earlier build once it has finished, by commit (#337). */
+  const finished = new Map<string, readonly FoundCheckRun[]>();
 
-  /** How long the build on `commit` took, asked of GitHub until it has finished. */
-  const tookOn = async (
+  /** The jobs on `commit`, asked of GitHub until its build has finished; none if it can't be. */
+  const jobsOn = async (
     github: GitHubApi,
     token: string,
     find: { repo: string; commit: string },
-  ): Promise<number | null> => {
-    const known = durations.get(find.commit);
+  ): Promise<readonly FoundCheckRun[]> => {
+    const known = finished.get(find.commit);
     if (known !== undefined) return known;
     const found = await github.commitChecks(token, find);
-    if (!found.ok) return null;
+    if (!found.ok) return [];
     const jobs = jobsOf(found.value);
-    const duration = durationOf(jobs);
-    if (jobs.every((job) => job.outcome !== "running")) durations.set(find.commit, duration);
-    return duration;
+    if (jobs.every((job) => job.outcome !== "running")) {
+      finished.set(find.commit, jobs);
+      const [oldest] = finished.keys();
+      if (finished.size > FINISHED_KEPT && oldest !== undefined) finished.delete(oldest);
+    }
+    return jobs;
   };
 
   /** A pull request as the owner reviews it: its files and their diffs, checks and Merge. */
@@ -616,15 +614,16 @@ export const createGitHub = (options: {
     },
 
     /**
-     * Main's build on `commit` in `repo` (#249), each job in the workflow's order: running while
-     * any job is (or none has started yet), failed when one has, else passed. While it runs, when
-     * it should end, from how long the build on `previous` took. `undefined` when no one is
-     * signed in to ask.
+     * Main's build on `commit` in `repo` (#249), in stages from its workflows' own order (#337):
+     * running while any job is or waits (or none has started yet), failed when one has, else
+     * passed. While it runs, when it should end, from how long each job took on the builds of
+     * `earlier` commits (main's before it, newest first). `undefined` when no one is signed in to
+     * ask.
      */
     mainBuild: async (find: {
       repo: string;
       commit: string;
-      previous: string | null;
+      earlier: readonly string[];
     }): Promise<Result<MainBuild | undefined, GitHubProblem>> => {
       const signedIn = await tokenFor(api);
       if (!signedIn.ok) return signedIn.error.kind === "signed-out" ? ok(undefined) : signedIn;
@@ -632,25 +631,22 @@ export const createGitHub = (options: {
       const found = await github.commitChecks(token, find);
       if (!found.ok) return err({ kind: "github", message: found.error });
       const runs = jobsOf(found.value);
-      const jobs = runs.map((run) => ({ name: run.name, outcome: run.outcome }));
-      const failed = runs.find((run) => run.outcome === "failed");
-      if (failed !== undefined) return ok({ kind: "failed", jobs, details: failed.url });
-      if (runs.length > 0 && runs.every((run) => run.outcome !== "running")) {
-        return ok({ kind: "passed", jobs });
-      }
-      const started = Math.min(...runs.map((run) => Date.parse(run.startedAt ?? "")));
-      const took =
-        find.previous === null
-          ? null
-          : await tookOn(github, token, { repo: find.repo, commit: find.previous });
-      return ok({
-        kind: "running",
-        jobs,
-        endsAround:
-          took === null || !Number.isFinite(started)
-            ? null
-            : new Date(started + took).toISOString(),
-      });
+      // Without its workflows, each job is drawn on its own.
+      const workflows = await github.commitWorkflows(token, find);
+      const running = runs.length === 0 || runs.some((run) => run.outcome === "running");
+      const earlier = running
+        ? await Promise.all(
+            find.earlier.map((commit) => jobsOn(github, token, { repo: find.repo, commit })),
+          )
+        : [];
+      return ok(
+        mainBuildOf({
+          runs,
+          workflows: workflows.ok ? workflows.value : [],
+          typical: typicalLengths(earlier),
+          now: now(),
+        }),
+      );
     },
 
     /**

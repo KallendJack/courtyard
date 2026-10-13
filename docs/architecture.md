@@ -239,7 +239,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   session's branch. Its routes are a workspace's `next-up` and `next-up/:number/build`.
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
-  (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
+  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
   workspace's `main`.
 - **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
   workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
@@ -311,9 +311,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
   check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
   pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
-  job in the order the workflow started them, the failed one's page, and when a running one should end
-  from how long the build before it took; and re-runs a commit's failed jobs, reads the failing test a job's
+  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
+  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
+  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
+  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
+  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
+  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
   annotations name, lists and describes milestones, and files an issue (#355). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
@@ -341,7 +344,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
   ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). While main has moved on, it
   also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
-  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 10
+  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
   seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
@@ -479,9 +482,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
     of the home page (main's build as a row labelled New version, #102) and in the Handheld frame's Settings
     (`live-update.tsx`), and main's build beside Update
-    (`main-build.tsx`, #249): the newest main's title, one bar per CI job (violet running, moss passed,
-    red failed), and Update, offered only once it has passed; quiet while it runs; Details, the failed
-    job's page on GitHub, once it has failed. Its hook asks again every 15 seconds while the build runs
+    (`main-build.tsx`, #249): the newest main's title, its jobs in stages (#337, drawn by the shared
+    `components/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey waiting, its
+    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered only
+    once it has passed; quiet while it runs; Details, the failed job's page on GitHub, once it has failed. Its
+    hook asks again every 10 seconds while the build runs
     and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
     follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
     first load.

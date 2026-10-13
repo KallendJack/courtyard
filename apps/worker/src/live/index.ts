@@ -23,9 +23,11 @@ const ANSWER_REUSED_FOR_MS = 60 * 1000;
 const RECHECK_AFTER_FAILURE_MS = 5 * 60 * 1000;
 /**
  * How long an answer about main's build is reused while it runs (#249). A page showing it asks
- * every 15 seconds or so, so GitHub is asked at most that often, and only while someone looks.
+ * every 10 seconds (#337), so GitHub is asked about that often, and only while someone looks.
  */
-const BUILD_RUNNING_REUSED_FOR_MS = 10 * 1000;
+const BUILD_RUNNING_REUSED_FOR_MS = 8 * 1000;
+/** How many of main's earlier builds say how long each job usually takes (#337). */
+const EARLIER_BUILDS = 10;
 /** How long an answer about main's build is reused once it has finished, or couldn't be had. */
 const BUILD_REUSED_FOR_MS = 60 * 1000;
 /**
@@ -71,10 +73,10 @@ export const createLive = (options: {
   now: () => number;
   startUpdate: (command: UpdateCommand) => void | Promise<void>;
   /**
-   * Main's build on `commit` (#249), with the commit before it on main to judge how long it
-   * takes; `null` when GitHub can't be asked.
+   * Main's build on `commit` (#249), with main's commits before it, newest first, to judge how
+   * long each job takes (#337); `null` when GitHub can't be asked.
    */
-  buildOf?: (find: { commit: string; previous: string | null }) => Promise<MainBuild | null>;
+  buildOf?: (find: { commit: string; earlier: readonly string[] }) => Promise<MainBuild | null>;
 }): Live => {
   const { liveCopy, updateTask, dataDir, now } = options;
   if (liveCopy === null) {
@@ -134,8 +136,13 @@ export const createLive = (options: {
     if (buildOf === undefined) return Promise.resolve(null);
     if (build === undefined || build.commit !== commit || now() >= build.until) {
       const asked = now();
-      const answer = git("rev-parse", "--verify", "--quiet", `${commit}^`).then((previous) =>
-        buildOf({ commit, previous: previous ?? null }),
+      const answer = git(
+        "rev-list",
+        "--first-parent",
+        `--max-count=${EARLIER_BUILDS}`,
+        `${commit}^`,
+      ).then((earlier) =>
+        buildOf({ commit, earlier: (earlier ?? "").split("\n").filter((line) => line !== "") }),
       );
       const asking = { commit, answer, until: asked + BUILD_REUSED_FOR_MS };
       build = asking;

@@ -296,7 +296,23 @@ describe("main (#301's Main row)", () => {
     expect(response.status).toBe(200);
     expect(WorkspaceMain.parse(await response.json())).toEqual({
       newest: { commit: head, title: `${head.slice(0, 7)} Start` },
-      build: { kind: "passed", jobs: [{ name: "Checks", outcome: "passed" }] },
+      build: {
+        kind: "passed",
+        startedAt: "2026-10-12T09:00:00.000Z",
+        completedAt: "2026-10-12T09:01:00.000Z",
+        stages: [
+          [
+            {
+              name: "Checks",
+              outcome: "passed",
+              startedAt: "2026-10-12T09:00:00.000Z",
+              completedAt: "2026-10-12T09:01:00.000Z",
+              shards: null,
+              needs: [],
+            },
+          ],
+        ],
+      },
       liveCopy: true,
     });
   });
