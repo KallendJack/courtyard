@@ -67,8 +67,8 @@ const TAIL_NEVER = [/^-[A-Za-z0-9]*[fF]/, /^--follow/];
  */
 const LOOKS = ["cat", "ls", "head", "wc", "grep", "diff"];
 
-/** The package scripts a session runs to check its own work. */
-const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify"];
+/** The package scripts a session runs to check its own work, and to format it (#388). */
+const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify", "format"];
 /**
  * The tools those scripts run, run directly (#202), never in a mode that waits forever. They run
  * the same code the scripts do; `biome check --write` formats only files in the worktree, since a
@@ -151,6 +151,9 @@ const GIT_LOOKS = [
   "grep",
   "shortlog",
   "describe",
+  "merge-base",
+  "ls-remote",
+  "check-ignore",
 ];
 /** Gh's commands that only look. */
 const GH_LOOKS = [
@@ -186,6 +189,65 @@ const pushesOwn = (rest: readonly string[], { branch }: OwnWork) => {
     `HEAD:refs/heads/${branch}`,
     `${branch}:${branch}`,
   ].includes(refspec);
+};
+
+/** What `git merge` may say besides the branch it merges in: no strategy, no squash (#388). */
+const MERGE_FLAGS = new Set(["--no-edit", "--no-ff", "-q", "--quiet"]);
+
+/**
+ * Whether a merge brings a branch from origin into the session branch, plainly (#388): `git merge
+ * origin/main`, with `--no-edit`, `--no-ff`, `-q` or a message (`-m <text>`), as Bring up to date
+ * asks; or `git merge --abort`, which undoes one that stopped on a conflict.
+ */
+const mergesBase = (rest: readonly string[]) => {
+  if (rest.length === 1 && rest[0] === "--abort") return true;
+  const named: string[] = [];
+  for (let at = 0; at < rest.length; at += 1) {
+    const word = rest[at] ?? "";
+    if (word === "-m" || word === "--message") at += 1;
+    else if (!word.startsWith("--message=") && !MERGE_FLAGS.has(word)) named.push(word);
+  }
+  const [branch, ...more] = named;
+  return more.length === 0 && branch !== undefined && /^origin\/[\w./-]+$/.test(branch);
+};
+
+/** What `git fetch` may say besides the remote and its branches. */
+const FETCH_FLAGS = new Set(["-q", "--quiet", "--prune", "-p"]);
+
+/**
+ * Whether a fetch only brings origin's branches up to date (#388): `git fetch`, `git fetch
+ * origin`, `git fetch origin main`, never into a local branch (`main:main`) or from elsewhere.
+ */
+const fetchesOrigin = (rest: readonly string[]) => {
+  const [remote, ...branches] = rest.filter((word) => !FETCH_FLAGS.has(word));
+  if (remote === undefined) return true;
+  return (
+    remote === "origin" &&
+    branches.every((branch) => /^[\w./-]+$/.test(branch) && !branch.startsWith("-"))
+  );
+};
+
+/**
+ * What node is never asked for: code given on the line, code loaded before the script, or a
+ * debugger to attach (#388).
+ */
+const NODE_NEVER = [
+  /^-e$/,
+  /^--eval/,
+  /^-p$/,
+  /^--print/,
+  /^-r$/,
+  /^--require/,
+  /^--import/,
+  /^--loader/,
+  /^--experimental-loader/,
+  /^--inspect/,
+];
+
+/** Whether node runs a script file of the repository's, named first (#388): `node scripts/x.ts`. */
+const runsScript = (rest: readonly string[]) => {
+  const [script] = rest;
+  return script !== undefined && /^[^-].*\.(?:[cm]?js|[cm]?ts)$/.test(script);
 };
 
 /** A gh command's flags: those that take a value, and those that stand alone. */
@@ -349,8 +411,9 @@ const readsOnly = (rest: readonly string[]) => {
  * too, and the tools they run, run directly (#202), git and gh commands that only look, adding and
  * committing on the session branch, pushing it, and opening and updating its own pull request
  * (#172), commenting on it and re-running a run's failed jobs, for a flake that isn't its own
- * (#356), and filing, labelling, commenting on and closing the repository's issues, as Matt
- * Pocock's skills do (#181).
+ * (#356), filing, labelling, commenting on and closing the repository's issues, as Matt
+ * Pocock's skills do (#181), and fetching origin, merging a branch from it into the session branch
+ * and running the repository's own scripts and tests with node (#388).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   ...LOOKS.map((look) => ({ words: [look], more: true })),
@@ -419,6 +482,19 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     texts: GH_TEXTS,
   },
   { words: ["gh", "run", "rerun"], more: true, own: rerunsFailed },
+  // Bringing the session branch up to date with its base (#388).
+  { words: ["git", "fetch"], more: true, never: GIT_NEVER, own: fetchesOrigin },
+  {
+    words: ["git", "merge"],
+    more: true,
+    never: GIT_NEVER,
+    onSessionBranch: true,
+    own: mergesBase,
+    texts: ["-m", "--message"],
+  },
+  // The repository's own scripts and tests, run directly (#388).
+  { words: ["node", "--test"], more: true, never: NODE_NEVER },
+  { words: ["node"], more: true, never: NODE_NEVER, own: runsScript },
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
