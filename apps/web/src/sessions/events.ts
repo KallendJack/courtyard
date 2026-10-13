@@ -151,8 +151,6 @@ export type Turn = {
   readonly approval:
     | { readonly seq: number; readonly ask: ApprovalAsk; readonly why: string | undefined }
     | undefined;
-  /** Whether it's waiting for one of the code sessions running to end before it starts (#174). */
-  readonly queued: boolean;
   /**
    * Whether the worker sent it, not the owner, because the session's pull request's checks
    * failed (#172): the failed checks open its activity in place of the owner's message.
@@ -160,7 +158,10 @@ export type Turn = {
   readonly fixesChecks: boolean;
   /** When the owner's message was recorded, which the Working line counts from (#179). */
   readonly startedAt: string;
-  /** What its model is doing now, while it runs: its latest activity, or writing its answer. */
+  /**
+   * What its model is doing now, while it runs: its latest activity, or writing its answer; or,
+   * before it starts, waiting for a place among the code sessions running (#362).
+   */
   readonly doing: Doing;
   readonly state:
     | { readonly kind: "running" }
@@ -270,7 +271,6 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             sources: [],
             images: [],
             approval: undefined,
-            queued: false,
             fixesChecks: event.checksFailed !== undefined,
             startedAt: event.at,
             doing: { kind: "thinking" },
@@ -352,11 +352,24 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         holds: (turn) => turn.approval?.seq === event.approval,
         change: (turn) => ({ ...turn, approval: undefined }),
       });
-    case "turn-queued":
+    // Waiting for a place among the code sessions running, and moving up, until it starts (#362).
+    case "turn-queued": {
+      const { ahead } = event;
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          doing:
+            ahead === undefined
+              ? { kind: "waiting-for-place" }
+              : { kind: "waiting-for-place", ahead },
+        }),
+      });
+    }
     case "turn-dequeued":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, queued: event.type === "turn-queued" }),
+        change: (turn) => ({ ...turn, doing: { kind: "thinking" } }),
       });
     case "turn-completed":
       return withLastTurn(log, {

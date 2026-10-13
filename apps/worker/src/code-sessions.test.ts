@@ -727,6 +727,41 @@ describe("several code sessions at once (#174)", () => {
     for (const turn of turns) turn.finish();
   });
 
+  it("says each waiting one is waiting for a place, with how many are ahead, until it starts (#362)", async () => {
+    const { provider, turns } = heldCoder();
+    const request = await start([provider]);
+    await takeEveryPlace(request);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
+    const listed = async () =>
+      CodeSessionList.parse(await (await request("/api/workspaces/side-project/sessions")).json())
+        .sessions;
+    const doingOf = async (id: string) => {
+      const now = (await listed()).find((session) => session.id === id)?.now;
+      return now?.kind === "working" ? now.doing : now;
+    };
+
+    const next = await startCoding(request, "From session to pull request");
+    const after = await startCoding(request, "Chat scrolling, again");
+
+    const [, nextWaits] = await followSession(request, { sessionId: next, until: "turn-queued" });
+    const [, afterWaits] = await followSession(request, { sessionId: after, until: "turn-queued" });
+    expect(nextWaits).toMatchObject({ type: "turn-queued", ahead: 0 });
+    expect(afterWaits).toMatchObject({ type: "turn-queued", ahead: 1 });
+    expect(await doingOf(next)).toEqual({ kind: "waiting-for-place", ahead: 0 });
+    expect(await doingOf(after)).toEqual({ kind: "waiting-for-place", ahead: 1 });
+
+    turns[0]?.finish();
+
+    // The next starts, thinking again, and the one after it moves up.
+    await followSession(request, { sessionId: next, until: "turn-dequeued", after: 2 });
+    await followSession(request, { sessionId: after, until: "turn-queued", after: 2 });
+    expect(await doingOf(next)).toEqual({ kind: "thinking" });
+    expect(await doingOf(after)).toEqual({ kind: "waiting-for-place", ahead: 0 });
+    for (const turn of turns) turn.finish();
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE + 2));
+    for (const turn of turns) turn.finish();
+  });
+
   it("lets a waiting session be removed before it starts, clearing its branch and worktree away", async () => {
     const { provider, turns } = heldCoder();
     const request = await start([provider]);

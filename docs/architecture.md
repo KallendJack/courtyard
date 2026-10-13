@@ -696,8 +696,10 @@ Where the rest fits:
   limit (Claude's hook too). Allow or Deny, from any device, goes through `sessions/` and is recorded as
   `approval-answered`, so the browser's card goes everywhere; the first answer stands. A stop ends the wait, and a
   denial tells the model why. With six code sessions' turns running, a seventh records `turn-queued` and waits, `turn-dequeued`
-  once it starts; the workspace's sessions list marks it `queued`, with how many are running, and deleting it
-  before it starts clears its branch and worktree away.
+  once it starts; `turn-queued` carries how many turns wait ahead of it, recorded again each time it moves up
+  (#362), so its `now` is `waiting-for-place` with that count on every screen until it starts. The workspace's
+  sessions list marks it `queued`, with how many are running, and deleting it before it starts clears its branch
+  and worktree away.
 - **The builds queue** (#281). A heavy check the `CodeTurn` allows (or the owner does) waits inside the provider's
   call for its place in `code/`'s builds queue before it's recorded as `ran-command`, recording a
   `waiting-for-build` activity with how many builds are ahead each time that changes (the browser keeps one line

@@ -1,6 +1,5 @@
 import {
   type Activity,
-  CODE_SESSIONS_AT_ONCE,
   type FailureReason,
   type ProviderList,
   type SessionId,
@@ -327,15 +326,12 @@ export const TurnView = memo(function TurnView(props: {
           </div>
         );
       })}
-      {turn.queued && turn.state.kind === "running" && (
-        <TurnNote>
-          Waiting: {CODE_SESSIONS_AT_ONCE} code sessions are running already. This starts as soon as
-          one of them ends.
-        </TurnNote>
-      )}
       {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
-      {/* While it runs, what it's doing now (#179); an approval it waits on says so itself. */}
-      {turn.state.kind === "running" && !turn.queued && turn.approval === undefined && (
+      {/*
+        While it runs, what it's doing now (#179), or that it waits for a place (#362); an approval
+        it waits on says so itself.
+      */}
+      {turn.state.kind === "running" && turn.approval === undefined && (
         <WorkingLine since={turn.startedAt} doing={turn.doing} />
       )}
       {turn.approval !== undefined && turn.state.kind === "running" && (
