@@ -300,6 +300,42 @@ describe("main (#301's Main row)", () => {
       liveCopy: true,
     });
   });
+
+  it("names a merge commit by the title of the pull request it merged (#335)", async () => {
+    await codeWorkspace(root, "side-project", repo);
+    await gitIn(repo, "switch", "--quiet", "-c", "301-code-workspace-home");
+    await writeFile(join(repo, "home.md"), "Home\n");
+    await gitIn(repo, "add", ".");
+    await gitIn(repo, "commit", "--quiet", "-m", "Draw the Home");
+    await gitIn(repo, "switch", "--quiet", "main");
+    await gitIn(
+      repo,
+      "merge",
+      "--quiet",
+      "--no-ff",
+      "-m",
+      "Merge pull request #331 from octo-owner/301-code-workspace-home",
+      "-m",
+      "Code workspace Home",
+      "301-code-workspace-home",
+    );
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const head = await gitIn(repo, "rev-parse", "HEAD");
+    const github = createFakeGitHub();
+    const request = await asOwner(testWorker({ root, github: github.api }));
+    await postJson(request, "/api/github/sign-in", {});
+    github.approve();
+    await expect
+      .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+      .toBe("signed-in");
+
+    const response = await request("/api/workspaces/side-project/main");
+
+    expect(WorkspaceMain.parse(await response.json()).newest).toEqual({
+      commit: head,
+      title: `${head.slice(0, 7)} Code workspace Home`,
+    });
+  });
 });
 
 describe("connections (#308)", () => {

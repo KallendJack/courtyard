@@ -446,8 +446,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
-    `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
-    empty (`components/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
+    `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each keeping its
+    place when empty with one quiet line (`components/home-block.tsx`, shared with a planning workspace's Home;
+    from a tablet up the page is the screen's height and never scrolls, the blocks sharing the height left and
+    their rows scrolling inside their cards through its `BlockRows`, #335): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
     requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
     (`running.tsx`), Next up with Build (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message

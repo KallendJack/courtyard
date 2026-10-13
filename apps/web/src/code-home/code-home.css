@@ -20,12 +20,13 @@
   @tailwind utilities source(none);
 }
 
-/* The Home fills the page's column, so its message box sits at the foot of a short page. */
+/*
+ * The Home fills the page's column, so its message box sits at its foot; from a tablet up the page
+ * is the screen's height (`Page`'s fill), and the Home no taller (#335).
+ */
 [data-code-home] {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-}
-main:has(> [data-code-home]) {
-  min-height: 100%;
+  min-height: 0;
 }

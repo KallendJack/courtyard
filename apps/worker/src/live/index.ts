@@ -8,7 +8,7 @@ import {
   type MainBuild,
 } from "@courtyard/contract";
 import { readTextFile } from "../files.ts";
-import { gitOrNothing } from "../git.ts";
+import { commitTitle, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
 /**
@@ -90,11 +90,13 @@ export const createLive = (options: {
   let check: { readonly newest: Promise<string | undefined>; readonly until: number } | undefined;
 
   const versionOf = async (ref: string): Promise<LiveVersion | null> => {
-    const [commit, title] = await Promise.all([
+    const [commit, read] = await Promise.all([
       git("rev-parse", ref),
-      git("log", "-1", "--format=%h %s", ref),
+      git("log", "-1", "--format=%h%x1f%s%x1f%b", ref),
     ]);
-    return commit && title ? { commit, title } : null;
+    if (!commit || !read) return null;
+    const [short = "", subject = "", body = ""] = read.split("\x1f");
+    return { commit, title: commitTitle({ short, subject, body }) };
   };
 
   const fetchNewest = async () => {

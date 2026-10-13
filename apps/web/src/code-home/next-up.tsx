@@ -4,9 +4,8 @@ import { Zap } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
-import { Block } from "@/components/home-block";
+import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
-import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { codingModelIn } from "../review/api.ts";
@@ -15,26 +14,27 @@ import { buildIssue } from "./api.ts";
 /** How many issues show before More. */
 const SHOWN = 3;
 
+/** From a tablet up, a narrow column beside Needs you and Running, as tall as theirs. */
+const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
+
 /**
  * Next up (#301; Paper, "Code workspace Home"): the repository's ready issues nobody has claimed,
  * in milestone order, three of them then More, the milestone they're in beside its label. The
  * first has Build (#298): one tap shows the issue and the model it'll be built with, a second
- * starts the session, which the worker claims the issue for. Hidden when none is ready.
+ * starts the session, which the worker claims the issue for. More opens the rest inside its card,
+ * which keeps its height, and becomes Fewer (#335). With none ready it says so.
  */
 export function NextUp(props: {
   workspaceId: WorkspaceId;
   /** `undefined` while nothing is known yet (a first visit): the block keeps its place. */
   issues: readonly NextUpIssue[] | undefined;
   providers: ProviderList["providers"];
-  /** A narrow column beside the others, or the whole width. */
-  beside: boolean;
 }) {
   const [more, setMore] = useState(false);
-  const column = classes("min-w-0", props.beside && "w-62.5 shrink-0 xl:w-80");
   if (props.issues === undefined) {
     return (
-      <div className={column}>
-        <Block label="Next up">
+      <div className={COLUMN}>
+        <Block label="Next up" fill>
           <PlaceholderRows count={1} size="tall" />
           <PlaceholderRows count={2} size="line" />
         </Block>
@@ -42,38 +42,51 @@ export function NextUp(props: {
     );
   }
   const [first, ...rest] = props.issues;
-  if (first === undefined) return null;
+  if (first === undefined) {
+    return (
+      <div className={COLUMN}>
+        <Block label="Next up" fill>
+          <BlockEmpty>Nothing ready to build</BlockEmpty>
+        </Block>
+      </div>
+    );
+  }
   const shown = more ? rest : rest.slice(0, SHOWN - 1);
-  const hidden = rest.length - shown.length;
+  /** How many More opens. */
+  const hidden = Math.max(rest.length - (SHOWN - 1), 0);
   return (
-    <div className={column}>
-      <Block label="Next up" aside={first.milestone ?? undefined}>
-        <BuildFirst workspaceId={props.workspaceId} issue={first} providers={props.providers} />
+    <div className={COLUMN}>
+      <Block label="Next up" aside={first.milestone ?? undefined} fill>
+        <div className="shrink-0">
+          <BuildFirst workspaceId={props.workspaceId} issue={first} providers={props.providers} />
+        </div>
         {shown.length > 0 && (
-          <ul className="flex flex-col gap-0.5 pt-1">
-            {shown.map((issue) => (
-              <li key={issue.number} aria-label={`#${issue.number} ${issue.title}`}>
-                <a
-                  href={issue.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
-                >
-                  <span className="w-8.5 shrink-0 text-label font-bold text-placeholder">
-                    #{issue.number}
-                  </span>
-                  <span className="min-w-0 grow truncate text-label font-semibold text-foreground/90">
-                    {issue.title}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
+          <BlockRows>
+            <ul className="flex flex-col gap-0.5 pt-1">
+              {shown.map((issue) => (
+                <li key={issue.number} aria-label={`#${issue.number} ${issue.title}`}>
+                  <a
+                    href={issue.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
+                  >
+                    <span className="w-8.5 shrink-0 text-label font-bold text-placeholder">
+                      #{issue.number}
+                    </span>
+                    <span className="min-w-0 grow truncate text-label font-semibold text-foreground/90">
+                      {issue.title}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </BlockRows>
         )}
         {hidden > 0 && (
-          <div>
-            <Button variant="quietPrimary" size="xs" onClick={() => setMore(true)}>
-              More · {hidden}
+          <div className="shrink-0">
+            <Button variant="quietPrimary" size="xs" onClick={() => setMore((was) => !was)}>
+              {more ? "Fewer" : `More · ${hidden}`}
             </Button>
           </div>
         )}

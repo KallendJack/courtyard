@@ -130,8 +130,9 @@ function Workspace() {
   };
 
   return (
-    // A workspace's Home ends with its message box, pinned at the foot (#301, #300).
-    <Page wide flushBottom>
+    // A workspace's Home ends with its message box, pinned at the foot (#301, #300); a code
+    // workspace's is the screen's height from a tablet up, and never scrolls (#335).
+    <Page wide flushBottom fill={workspace.mode === "code"}>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
