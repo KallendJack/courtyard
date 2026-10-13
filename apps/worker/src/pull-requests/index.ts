@@ -1,6 +1,8 @@
 import {
   type CodeSessionList,
+  type NewMessage,
   type OpenPullRequest,
+  type PullRequestFixed,
   type PullRequestFrom,
   type PullRequestReview,
   type PullRequestSessionStart,
@@ -63,6 +65,14 @@ const fromOf = (sessions: readonly Listed[], found: FoundPullRequest): PullReque
 };
 
 const sessionProblem = (error: SessionError): PullRequestsProblem => ({ kind: "session", error });
+
+/** Why no session can start on a pull request's branch: it has ended, or it's from a fork. */
+const startRefused = (found: FoundPullRequest): PullRequestsProblem | undefined => {
+  if (found.state !== "open") {
+    return sessionProblem({ kind: "pull-request-ended", state: found.state });
+  }
+  return found.fork ? { kind: "fork" } : undefined;
+};
 
 export const createPullRequests = (options: {
   contextDir: string;
@@ -213,8 +223,8 @@ export const createPullRequests = (options: {
     },
 
     /**
-     * Starts a session on the branch of pull request `number`, which no session is on: with the
-     * owner's question, or to bring it up to date with its base, freshly fetched.
+     * Starts a session on the branch of pull request `number`, which no session is on, to bring it
+     * up to date with its base, freshly fetched.
      */
     startSession: async (
       rawId: string,
@@ -227,29 +237,47 @@ export const createPullRequests = (options: {
       if (session !== undefined && !pullRequestEnded(session.pullRequest)) {
         return err({ kind: "has-session" });
       }
-      if (found.state !== "open") {
-        return err(sessionProblem({ kind: "pull-request-ended", state: found.state }));
-      }
-      if (found.fork) return err({ kind: "fork" });
-      const effort = start.effort === undefined ? {} : { effort: start.effort };
-      let first: { text: string; title?: string };
-      if (start.kind === "ask") {
-        first = { text: start.text };
-      } else {
-        const fresh = await code.freshDefault(repoPath);
-        if (!fresh.ok) return err(sessionProblem({ kind: "branch-refused", refusal: fresh.error }));
-        first = {
-          text: bringUpToDateMessage({ number, base: fresh.value.branch }),
-          title: `Bring #${number} up to date`,
-        };
-      }
+      const refused = startRefused(found);
+      if (refused !== undefined) return err(refused);
+      const fresh = await code.freshDefault(repoPath);
+      if (!fresh.ok) return err(sessionProblem({ kind: "branch-refused", refusal: fresh.error }));
       const created = await sessions.create({
         workspaceId,
-        message: { text: first.text, model: start.model, ...effort },
+        message: {
+          text: bringUpToDateMessage({ number, base: fresh.value.branch }),
+          model: start.model,
+          ...(start.effort === undefined ? {} : { effort: start.effort }),
+        },
         onBranch: found.branch,
-        ...(first.title === undefined ? {} : { title: first.title }),
+        title: `Bring #${number} up to date`,
       });
       return created.ok ? created : err(sessionProblem(created.error));
+    },
+
+    /**
+     * Sends `message` to the session on pull request `number`'s branch, or starts one there with
+     * it (Fix it in a session, #327): the session it went to, and whether it started it.
+     */
+    carryOver: async (
+      rawId: string,
+      number: number,
+      message: NewMessage,
+    ): Promise<Result<PullRequestFixed, PullRequestsProblem>> => {
+      const pull = await numbered(rawId, number);
+      if (!pull.ok) return pull;
+      const { session, found, workspaceId } = pull.value;
+      if (session !== undefined && !pullRequestEnded(session.pullRequest)) {
+        const sent = await sessions.send({ rawId: session.id, message, attachments: [] });
+        return sent.ok
+          ? ok({ sessionId: session.id, started: false })
+          : err(sessionProblem(sent.error));
+      }
+      const refused = startRefused(found);
+      if (refused !== undefined) return err(refused);
+      const created = await sessions.create({ workspaceId, message, onBranch: found.branch });
+      return created.ok
+        ? ok({ sessionId: created.value.id, started: true })
+        : err(sessionProblem(created.error));
     },
   };
 };
