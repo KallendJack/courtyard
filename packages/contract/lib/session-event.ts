@@ -122,6 +122,16 @@ export const SessionEvent = z.discriminatedUnion("type", [
         checks: z.array(z.string()).min(1),
       })
       .optional(),
+    /**
+     * Sent by the worker, not the owner (#382): the session's pull request conflicted with its
+     * base on its commit `head`, and the message asks the model to bring it up to date.
+     */
+    conflicted: z
+      .object({
+        pullRequest: z.number().int().positive(),
+        head: z.string(),
+      })
+      .optional(),
     /** Sent from the queue (#177): the queued message, by its event number, it sends. */
     queued: z.number().int().positive().optional(),
   }),

@@ -185,7 +185,19 @@ test("the owner reviews a session's pull request file by file, asks for a change
         lastUpdate: null,
         build: {
           kind: "running",
-          jobs: [{ name: "Checks", outcome: "running" }],
+          stages: [
+            [
+              {
+                name: "Checks",
+                outcome: "running",
+                startedAt: null,
+                completedAt: null,
+                shards: null,
+                needs: [],
+              },
+            ],
+          ],
+          startedAt: null,
           endsAround: null,
         },
       },
@@ -856,11 +868,10 @@ const blocks = (page: Page) => ({
 const showsHome = async (page: Page) => {
   await page.goto(HOME);
   await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
-  await expect(
-    page.getByText("Plan and code with AI models, one workspace per area of life"),
-  ).toBeVisible();
   const line = page.getByRole("button", { name: /octo-owner\/workbench/ });
   await expect(line).toContainText("No Paper file");
+  // Its one line stays in workspace.json, off the page (#333).
+  await expect(page.getByText("Plan and code with AI models")).toHaveCount(0);
 
   const { needsYou, running, nextUp } = blocks(page);
   await expect(needsYou).toContainText(/Needs you · \d+/);
@@ -886,11 +897,18 @@ const showsHome = async (page: Page) => {
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
   await expect(main).toContainText(/Start [0-9a-f]{7}/);
-  await expect(main.getByRole("status")).toHaveText("Passed");
-  await expect(main.getByRole("list", { name: "Main's build" }).getByRole("listitem")).toHaveCount(
-    4,
-  );
+  await expect(main.getByRole("status")).toHaveText("Passed · 3:00");
   await expect(main.getByRole("button", { name: "Update" })).toHaveCount(0);
+  // A tap opens its full graph: its jobs in the workflow's order, whatever order GitHub gave.
+  await main.getByRole("button", { name: /Main's build/ }).click();
+  const graph = page.getByRole("dialog", { name: "Main's build" });
+  await expect(graph.getByRole("list", { name: "Main's build" }).getByRole("listitem")).toHaveText([
+    /^Checks: passed/,
+    /^Unit tests: passed/,
+    /^E2E: passed/,
+  ]);
+  await graph.getByRole("button", { name: "Done" }).click();
+  await expect(graph).toBeHidden();
 
   // Tabs show once they have something: no sessions yet, one pull request.
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });

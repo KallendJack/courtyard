@@ -125,6 +125,29 @@ describe("a code workspace's one line (#301)", () => {
       description: "Plan and code with AI models.",
     });
   });
+
+  it("is none when the context file kept from before still holds the old starter hint (#333)", async () => {
+    await codeWorkspace(root, "side-project", repo);
+    await writeFile(
+      join(root, "context", "side-project", "CONTEXT.md"),
+      [
+        "# Side project",
+        "",
+        "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+        "",
+        "## Facts",
+        "",
+      ].join("\n"),
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    const detail = WorkspaceDetail.parse(
+      await (await request("/api/workspaces/side-project")).json(),
+    );
+
+    expect(detail).toMatchObject({ workspace: { name: "Side project" }, contextFile: null });
+    expect(detail.description).toBeUndefined();
+  });
 });
 
 describe("Next up (#301)", () => {
@@ -424,7 +447,23 @@ describe("main (#301's Main row)", () => {
     expect(response.status).toBe(200);
     expect(WorkspaceMain.parse(await response.json())).toEqual({
       newest: { commit: head, title: `${head.slice(0, 7)} Start` },
-      build: { kind: "passed", jobs: [{ name: "Checks", outcome: "passed" }] },
+      build: {
+        kind: "passed",
+        startedAt: "2026-10-12T09:00:00.000Z",
+        completedAt: "2026-10-12T09:01:00.000Z",
+        stages: [
+          [
+            {
+              name: "Checks",
+              outcome: "passed",
+              startedAt: "2026-10-12T09:00:00.000Z",
+              completedAt: "2026-10-12T09:01:00.000Z",
+              shards: null,
+              needs: [],
+            },
+          ],
+        ],
+      },
       liveCopy: true,
     });
   });

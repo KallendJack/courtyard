@@ -243,7 +243,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `next-up/:number/grill`.
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
-  (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
+  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
   workspace's `main`.
 - **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
   workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
@@ -259,7 +259,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. That turn first checks whether a failing test is its PR's; a flake that isn't is said on
   the PR and its failed jobs re-run once, with no code changed. Checks failing again on the same commit, after they
-  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR merged or closed,
+  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR that conflicts
+  with its base is brought up to date the same way first (#382): Bring up to date's message, `conflicted` on it, once
+  per commit, so one the model can't resolve waits for the owner's Bring up to date. A PR merged or closed,
   anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
   added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
@@ -315,9 +317,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
   check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
   pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
-  job in the order the workflow started them, the failed one's page, and when a running one should end
-  from how long the build before it took; and re-runs a commit's failed jobs, reads the failing test a job's
+  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
+  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
+  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
+  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
+  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
+  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
   annotations name, lists and describes milestones, and files an issue (#355). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
@@ -345,7 +350,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
   ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). While main has moved on, it
   also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
-  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 10
+  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
   seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
@@ -446,7 +451,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
     only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
     shared pieces only the two Homes show: `components/workspace-tabs.tsx`, `home-block.tsx`,
-    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
+    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Under its name, which has
+    one quiet ⋯ beside it (`components/workspace-menu.tsx`: Rename, Change icon and Archive, #333), comes its
+    connections line; its one line stays in `workspace.json`, off the page. The connections line opens the Connections sheet
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
@@ -486,9 +493,11 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
     of the home page (main's build as a row labelled New version, #102) and in the Handheld frame's Settings
     (`live-update.tsx`), and main's build beside Update
-    (`main-build.tsx`, #249): the newest main's title, one bar per CI job (violet running, moss passed,
-    red failed), and Update, offered only once it has passed; quiet while it runs; Details, the failed
-    job's page on GitHub, once it has failed. Its hook asks again every 15 seconds while the build runs
+    (`main-build.tsx`, #249): the newest main's title, its jobs in stages (#337, drawn by the shared
+    `components/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey waiting, its
+    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered only
+    once it has passed; quiet while it runs; Details, the failed job's page on GitHub, once it has failed. Its
+    hook asks again every 10 seconds while the build runs
     and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
     follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
     first load.
@@ -565,8 +574,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
   (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
-  lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
-  (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
+  lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
+  in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`
+  on a planning page, loaded when first opened): a Handheld sheet on a touch screen, a
   bottom sheet on a desktop. Arrange workspaces (#321): holding a workspace on a tablet's rail or in the sidebar and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the strip, the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
