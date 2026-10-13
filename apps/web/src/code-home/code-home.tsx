@@ -152,8 +152,11 @@ export default function CodeHome(props: {
     ...(list.sessions.length > 0
       ? [{ hash: "sessions", label: TABS.sessions, count: list.sessions.length }]
       : []),
-    ...(pulls.length > 0 || list.sessions.some((session) => session.pullRequest !== undefined)
-      ? [{ hash: "prs", label: TABS.prs, count: pulls.length }]
+    // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
+    ...(pulls.length > 0 ||
+    list.sessions.some((session) => session.pullRequest !== undefined) ||
+    (open === undefined && tab === "prs")
+      ? [{ hash: "prs", label: TABS.prs, ...(open === undefined ? {} : { count: pulls.length }) }]
       : []),
   ];
   // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.

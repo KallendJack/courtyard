@@ -913,11 +913,26 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       request,
     }) => {
       await signIn(request);
+      // The first visit: the list keeps its place, and nothing above it moves when it comes.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
+        await held;
+        await route.continue();
+      });
       await page.goto(`${HOME}#prs`);
-      const row = page
-        .getByRole("region", { name: /^Pull requests/ })
-        .getByRole("listitem", { name: /Builds take turns/ });
+      const list = page.getByRole("region", { name: /^Pull requests/ });
+      await expect(list.locator("[data-placeholder]")).toBeVisible();
+      const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
+      const [tabsBefore, listBefore] = [await tabs.boundingBox(), await list.boundingBox()];
+      release();
+      const row = list.getByRole("listitem", { name: /Builds take turns/ });
       await expect(row).toBeVisible();
+      expect(await tabs.boundingBox()).toEqual(tabsBefore);
+      expect((await list.boundingBox())?.y).toBe(listBefore?.y);
+      await page.unrouteAll({ behavior: "ignoreErrors" });
 
       // GitHub answers slowly from now on: the way back mustn't wait for it.
       await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
