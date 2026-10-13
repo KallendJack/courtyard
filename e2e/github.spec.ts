@@ -447,6 +447,57 @@ test.describe("on a desktop", () => {
 
     await request.post("/api/github/sign-out", { data: {} });
   });
+
+  // Owner rule (2026-10-12): nothing jumps in. While GitHub answers, the PR page is its title and
+  // faint rows in the shape of the page, no spinner and no words; coming back shows it at once.
+  test("the PR page keeps its place while GitHub answers, and shows at once on the way back", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    const review = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Builds queue across the whole PC/ })
+      .getByRole("link", { name: /^Review/ });
+    const address = await review.getAttribute("href");
+
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/workspaces/side-project/pull-requests/*", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(address ?? "");
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText(/^#\d+$/);
+    await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+    await expect(page.getByText("Asking GitHub")).toHaveCount(0);
+    const before = await title.boundingBox();
+
+    release();
+    const whatChanged = page.getByRole("region", { name: "What changed" });
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC");
+    await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+    expect((await title.boundingBox())?.y).toBe(before?.y);
+
+    // GitHub answers slowly from now on: the way back mustn't wait for it.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route("**/api/workspaces/side-project/pull-requests/*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await route.continue();
+    });
+    await page.getByRole("link", { name: "All PRs" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+    await review.click();
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC", {
+      timeout: 2000,
+    });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await request.post("/api/github/sign-out", { data: {} });
+  });
 });
 
 // The PRs tab and the review on the unfolded Fold (#240; Paper, "Tablet · PRs tab", "Tablet · PR

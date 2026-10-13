@@ -65,8 +65,8 @@ export const useKept = <T,>(
 
 /**
  * A faint row the size of a real one: of a block (56 px), of a list of pull requests (76 px), a
- * line of a list (34 px), a line of text (20 px), or a line in small type (16 px: a tile's line on
- * Home, #102).
+ * line of a list (34 px), a line of text (20 px), a line in small type (16 px: a tile's line on
+ * Home, #102), or a page's main panel (288 px: a pull request's files and diff).
  */
 const ROWS = {
   row: "h-14 rounded-row bg-muted/50",
@@ -74,6 +74,7 @@ const ROWS = {
   line: "h-8.5 rounded-md bg-muted/50",
   text: "h-5 w-64 max-w-full rounded-sm bg-muted/50",
   label: "h-4 w-28 max-w-full rounded-sm bg-muted/50",
+  panel: "h-72 rounded-card bg-muted/50",
 } as const;
 
 /**
