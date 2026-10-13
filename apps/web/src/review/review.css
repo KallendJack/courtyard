@@ -11,7 +11,6 @@
 @source "../components/thumb-button.tsx";
 @source "../components/file-tree.tsx";
 @source "../components/ask-line.tsx";
-@source "../components/kept.tsx";
 
 :where([data-review]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

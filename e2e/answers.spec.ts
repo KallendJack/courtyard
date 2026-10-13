@@ -130,6 +130,30 @@ test("maths is drawn as formulas, in all three forms, and prices stay text", asy
   expect(maths().length).toBeGreaterThan(0);
 });
 
+// Owner rule (2026-10-12): nothing jumps in. While formulas' drawing loads, a block with maths in
+// it keeps its room unseen rather than showing the formulas raw.
+test.describe("while formulas' drawing loads", () => {
+  // The service worker would serve the drawing's code itself, past the hold.
+  test.use({ serviceWorkers: "block" });
+
+  test("maths never shows raw", async ({ page }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/assets/maths-plugins-*.js", async (route) => {
+      await held;
+      await route.continue();
+    });
+    const session = await ask(page, "Epley's estimate, \\(w(1 + r/30)\\), holds up to ten reps.");
+    const answer = session.locator("[aria-live]").last();
+    await expect(answer.getByText("Epley's estimate")).toBeHidden();
+    release();
+    await expect(answer.getByRole("math")).toHaveCount(1);
+    await expect(answer.getByText(/Epley's estimate/)).toBeVisible();
+  });
+});
+
 /** A Markdown table, a row per line of cells. */
 const markdownTable = (rows: readonly (readonly string[])[]) => {
   const [heading = [], ...body] = rows;

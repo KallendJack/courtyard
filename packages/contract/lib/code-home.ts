@@ -56,18 +56,23 @@ export const PaperConnecting = z.discriminatedUnion("kind", [
 export type PaperConnecting = z.infer<typeof PaperConnecting>;
 
 /**
- * One issue Next up offers (#301): a `ready-for-agent` issue nobody has claimed, by its number,
- * title and address on GitHub, with its milestone's title when it's in one.
+ * One issue Next up offers (#301), by its number, title and address on GitHub, with its
+ * milestone's title when it's in one: a `ready-for-agent` issue nobody has claimed (`ready`), or
+ * one on its milestone's Build order line that needs grilling first (#363), not `ready`.
  */
 export const NextUpIssue = z.object({
   number: z.number().int().positive(),
   title: z.string(),
   url: z.url({ protocol: /^https$/ }),
   milestone: z.string().nullable(),
+  ready: z.boolean(),
 });
 export type NextUpIssue = z.infer<typeof NextUpIssue>;
 
-/** A code workspace's Next up (#301): its unclaimed ready issues, in milestone order. */
+/**
+ * A code workspace's Next up (#301): its unclaimed ready issues and those on a Build order line
+ * that need grilling first (#363), in milestone order.
+ */
 export const NextUp = z.object({ issues: z.array(NextUpIssue) });
 export type NextUp = z.infer<typeof NextUp>;
 
@@ -84,6 +89,9 @@ export const WorkspaceMain = z.object({
 });
 export type WorkspaceMain = z.infer<typeof WorkspaceMain>;
 
-/** Build (#298): a new code session on this model builds the issue, and claims it on GitHub. */
+/**
+ * Build (#298): a new code session on this model builds the issue, and claims it on GitHub. Grill
+ * (#363) takes the same: a new code session on this model grills an issue that isn't ready.
+ */
 export const BuildIssue = z.object({ model: ModelRef, effort: Effort.optional() });
 export type BuildIssue = z.infer<typeof BuildIssue>;

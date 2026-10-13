@@ -85,9 +85,13 @@ type MathsPlugins = typeof import("./maths-plugins.ts");
 /** Drawing formulas, once it has loaded, so later blocks draw theirs at once. */
 let mathsPlugins: MathsPlugins | undefined;
 
-/** Drawing formulas, loaded the first time a block has maths in it. */
-const useMathsPlugins = (needed: boolean) => {
+/**
+ * Drawing formulas, loaded the first time a block has maths in it: `"loading"` until then, and
+ * `undefined` when there's no maths, or it couldn't load.
+ */
+const useMathsPlugins = (needed: boolean): MathsPlugins | "loading" | undefined => {
   const [loaded, setLoaded] = useState(mathsPlugins);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!needed || loaded) return;
     let current = true;
@@ -97,17 +101,19 @@ const useMathsPlugins = (needed: boolean) => {
         if (current) setLoaded(plugins);
       })
       // The formulas stay as the model wrote them, which still reads.
-      .catch(() => undefined);
+      .catch(() => current && setFailed(true));
     return () => {
       current = false;
     };
   }, [needed, loaded]);
-  return needed ? loaded : undefined;
+  if (!needed || failed) return undefined;
+  return loaded ?? "loading";
 };
 
 /**
  * One block of an answer, memoised on its text, so finished blocks aren't formatted again. A
- * block with maths in it is drawn with formulas once they've loaded.
+ * block with maths in it is drawn with formulas once they've loaded; until then it keeps its room
+ * unseen, never showing them raw (nothing jumps in).
  */
 const Block = memo(function Block(props: {
   text: string;
@@ -115,12 +121,19 @@ const Block = memo(function Block(props: {
   arriving: boolean;
 }) {
   const maths = useMathsPlugins(hasMaths(props.text));
+  const asWritten = (
+    <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+      {props.text}
+    </Markdown>
+  );
   return (
     <Arriving value={props.arriving}>
-      {maths === undefined ? (
-        <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
-          {props.text}
-        </Markdown>
+      {maths === "loading" ? (
+        <div aria-busy className="contents invisible">
+          {asWritten}
+        </div>
+      ) : maths === undefined ? (
+        asWritten
       ) : (
         <Markdown
           remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}

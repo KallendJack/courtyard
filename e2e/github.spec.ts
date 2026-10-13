@@ -52,6 +52,32 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(github).toContainText("Not connected");
 });
 
+// Owner rule (2026-10-12): nothing jumps in. That GitHub isn't connected comes with the workspace's
+// connections line, in its faint place, rather than on its own and above the rest later.
+test("a code workspace says GitHub isn't connected with its connections line, not before it", async ({
+  page,
+}) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/workspaces/side-project/connections", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/workspaces/side-project");
+  await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+  await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+  const notConnected = page.getByRole("region", { name: "GitHub isn't connected" });
+  // Long enough for a notice of its own to have come.
+  await page.waitForTimeout(1000);
+  await expect(notConnected).toHaveCount(0);
+
+  release();
+  await expect(notConnected).toContainText("can't push its branch or open a pull request");
+  await expect(page.getByRole("button", { name: /octo-owner\/side-project|GitHub/ })).toBeVisible();
+});
+
 // From session to pull request (#172): on this worker the fake GitHub opens a pull request for a
 // session branch once it's pushed, and its e2e check fails on every commit.
 test("a code session shows its branch and pull request, and a failing check starts a turn to fix it", async ({
@@ -475,6 +501,62 @@ test.describe("on a desktop", () => {
 
     await request.post("/api/github/sign-out", { data: {} });
   });
+
+  // Owner rule (2026-10-12): nothing jumps in. While GitHub answers, the PR page is its title and
+  // faint rows in the shape of the page, no spinner and no words; coming back shows it at once.
+  test("the PR page keeps its place while GitHub answers, and shows at once on the way back", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    const review = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Builds queue across the whole PC/ })
+      .getByRole("link", { name: /^Review/ });
+    const address = await review.getAttribute("href");
+
+    // Its review, asked for by its number, or through its session once one has opened it.
+    const isReview = (url: URL) =>
+      /\/workspaces\/side-project\/pull-requests\/\d+$|\/sessions\/[^/]+\/pull-request$/.test(
+        url.pathname,
+      );
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(isReview, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(address ?? "");
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText(/^#\d+/);
+    await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+    await expect(page.getByText("Asking GitHub")).toHaveCount(0);
+    const before = await title.boundingBox();
+
+    release();
+    const whatChanged = page.getByRole("region", { name: "What changed" });
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC");
+    await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+    expect((await title.boundingBox())?.y).toBe(before?.y);
+
+    // GitHub answers slowly from now on: the way back mustn't wait for it.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route(isReview, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await route.continue();
+    });
+    await page.getByRole("link", { name: "All PRs" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+    await review.click();
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC", {
+      timeout: 2000,
+    });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await request.post("/api/github/sign-out", { data: {} });
+  });
 });
 
 // The PRs tab and the review on the unfolded Fold (#240; Paper, "Tablet · PRs tab", "Tablet · PR
@@ -844,17 +926,18 @@ const showsHome = async (page: Page) => {
   // Nothing runs yet, so its block isn't there at all.
   await expect(running).toHaveCount(0);
 
-  // The ready issues nobody claimed, in milestone order: three, then More.
+  // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
+  // issues nobody claimed, with Build; the rest, in milestone order, under More.
   await expect(nextUp).toContainText("4 · Code workspaces");
+  const grill = nextUp.getByRole("region", { name: "Grill #117" });
+  await expect(grill).toContainText("Sub-agents for code review");
+  await expect(grill).toContainText("Next in order · needs grilling first");
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
-  await expect(nextUp.getByRole("listitem")).toHaveText([
-    /#251\s*One Reply box everywhere/,
-    /#255\s*Paste images on the Fold/,
-  ]);
+  await expect(nextUp.getByRole("listitem")).toHaveCount(0);
   await expect(nextUp).not.toContainText("Claimed by a helper");
-  await expect(nextUp.getByRole("button", { name: "More · 9" })).toBeVisible();
+  await expect(nextUp.getByRole("button", { name: "More · 11" })).toBeVisible();
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -927,11 +1010,26 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       request,
     }) => {
       await signIn(request);
+      // The first visit: the list keeps its place, and nothing above it moves when it comes.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
+        await held;
+        await route.continue();
+      });
       await page.goto(`${HOME}#prs`);
-      const row = page
-        .getByRole("region", { name: /^Pull requests/ })
-        .getByRole("listitem", { name: /Builds take turns/ });
+      const list = page.getByRole("region", { name: /^Pull requests/ });
+      await expect(list.locator("[data-placeholder]")).toBeVisible();
+      const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
+      const [tabsBefore, listBefore] = [await tabs.boundingBox(), await list.boundingBox()];
+      release();
+      const row = list.getByRole("listitem", { name: /Builds take turns/ });
       await expect(row).toBeVisible();
+      expect(await tabs.boundingBox()).toEqual(tabsBefore);
+      expect((await list.boundingBox())?.y).toBe(listBefore?.y);
+      await page.unrouteAll({ behavior: "ignoreErrors" });
 
       // GitHub answers slowly from now on: the way back mustn't wait for it.
       await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
@@ -963,8 +1061,12 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await shot(page, "tablet-home");
 
       const { nextUp } = blocks(page);
-      await nextUp.getByRole("button", { name: "More · 9" }).click();
-      await expect(nextUp.getByRole("listitem")).toHaveCount(11);
+      await nextUp.getByRole("button", { name: "More · 11" }).click();
+      await expect(nextUp.getByRole("listitem")).toHaveText([
+        /#251\s*One Reply box everywhere/,
+        /#255\s*Paste images on the Fold/,
+        ...Array.from({ length: 9 }, () => /A later idea/),
+      ]);
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1101,6 +1203,24 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // It's claimed, so Next up moves on to the next one.
       await page.goto(HOME);
       await expect(blocks(page).nextUp.getByRole("region", { name: "Build #251" })).toBeVisible();
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("Grill shows the issue and its model first, then starts a grilling session on it (#363)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const grill = blocks(page).nextUp.getByRole("region", { name: "Grill #117" });
+      await grill.getByRole("button", { name: "Grill" }).click();
+      await expect(grill).toContainText("A new session grills it with Fake (echoes you)");
+      await grill.getByRole("button", { name: "Start grilling" }).click();
+
+      await expect(page).toHaveURL(/\/workspaces\/workbench\/sessions\/[\w-]+$/);
+      await expect(page.getByRole("list", { name: "Session" })).toContainText(
+        'Grill issue #117, "Sub-agents for code review"',
+      );
       await request.post("/api/github/sign-out", { data: {} });
     });
 
