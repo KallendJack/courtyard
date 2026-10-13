@@ -755,6 +755,64 @@ describe("the PRs list (#278)", () => {
   });
 });
 
+describe("a pull request that conflicts with main (#382)", () => {
+  it("is brought up to date by itself, on the model its session last used", async () => {
+    const { id, branch, lastSeq } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+
+    await runJobs();
+
+    const events = await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: lastSeq,
+    });
+    expect(events.find((event) => event.type === "owner-message")).toMatchObject({
+      text: await quotedInGuide("Your pull request #<number> conflicts", {
+        number: String(number),
+        base: "main",
+      }),
+      model: FAKE_MODEL,
+      conflicted: { pullRequest: number, head: "c0ffee1" },
+    });
+  });
+
+  it("is brought up to date once for each commit, not each time it's looked at", async () => {
+    const { id, branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+    const broughtUp = async () =>
+      (await eventsOf(id)).filter(
+        (event) => event.type === "owner-message" && event.conflicted !== undefined,
+      ).length;
+
+    await runJobs();
+    await expect.poll(async () => (await eventsOf(id)).at(-1)?.type).toBe("turn-completed");
+    await runJobs();
+    await runJobs();
+
+    expect(await broughtUp()).toBe(1);
+  });
+
+  it("doesn't wait on the owner while its session brings it up to date, and does if that fails", async () => {
+    const { branch } = await codeSession();
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    github.setConflicts(number, true);
+    let release = () => {};
+    holding = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    await runJobs();
+
+    await expect.poll(async () => (await openPullRequests())[0]?.waiting).toBe("nothing");
+    release();
+    holding = undefined;
+    await expect.poll(async () => (await openPullRequests())[0]?.waiting).toBe("conflict");
+  });
+});
+
 describe("bringing a pull request up to date (#278)", () => {
   it("sends its session the message to merge main in and fix the conflict, on the model it last used", async () => {
     const { id, branch, lastSeq } = await codeSession();

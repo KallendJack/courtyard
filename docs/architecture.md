@@ -259,7 +259,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. That turn first checks whether a failing test is its PR's; a flake that isn't is said on
   the PR and its failed jobs re-run once, with no code changed. Checks failing again on the same commit, after they
-  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR merged or closed,
+  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR that conflicts
+  with its base is brought up to date the same way first (#382): Bring up to date's message, `conflicted` on it, once
+  per commit, so one the model can't resolve waits for the owner's Bring up to date. A PR merged or closed,
   anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
   added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
