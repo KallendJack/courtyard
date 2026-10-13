@@ -1,10 +1,10 @@
 import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
 import { ConnectionCard, type ConnectionState } from "@/components/connection-card";
 import { CopyButton } from "@/components/copy-button";
 import { FormError } from "@/components/form-error";
+import { PlaceholderRows } from "@/components/kept";
 import { InfoBox, Notice, WaitingDot } from "@/components/notice";
 import { SectionTitle } from "@/components/page";
 import { WebButton } from "@/components/web-link";
@@ -28,6 +28,8 @@ const FOLLOW_EVERY_MS = 3000;
  * last asked.
  */
 type Snapshot = {
+  /** Whether they've been asked for yet, in this tab: until then, Connections keeps its place. */
+  readonly known: boolean;
   readonly providers: readonly ProviderStatus[];
   readonly signIns: readonly ProviderSignIn[];
   readonly github: GitHubConnection | undefined;
@@ -35,9 +37,10 @@ type Snapshot = {
 
 /**
  * One copy for Settings' sign-in box and its Connections, which change together: either
- * acting on a sign-in shows in both.
+ * acting on a sign-in shows in both. Kept for the tab's lifetime, so coming back to Settings
+ * shows them at once, asked for again quietly.
  */
-let snapshot: Snapshot = { providers: [], signIns: [], github: undefined };
+let snapshot: Snapshot = { known: false, providers: [], signIns: [], github: undefined };
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -57,6 +60,7 @@ const reload = async () => {
   ]);
   if (thisAsk !== asked) return;
   snapshot = {
+    known: true,
     providers: providers.kind === "loaded" ? providers.data.providers : snapshot.providers,
     signIns: signIns.kind === "loaded" ? signIns.data.signIns : snapshot.signIns,
     github: github.kind === "loaded" ? github.data : snapshot.github,
@@ -444,33 +448,45 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
  */
 function Connections(props: { beside: ReactNode }) {
   const models = useModels();
-  const { providers, signIns, github } = models;
-  if (providers.length === 0 && github === undefined) return null;
+  const { known, providers, signIns, github } = models;
+  if (known && providers.length === 0 && github === undefined) return null;
   return (
     <section aria-labelledby="connections" className="mt-12">
       <div id="connections">
         <SectionTitle>Connections</SectionTitle>
       </div>
       <div className="mt-3 flex flex-col gap-2.5 lg:flex-row lg:items-start">
-        <ul className="flex min-w-0 flex-1 flex-col gap-2.5 text-sm/5.25">
-          {providers.map((provider) => {
-            const signIn = signIns.find((s) => s.provider === provider.id);
-            if (signIn !== undefined) {
+        {!known ? (
+          // Not asked for yet: faint rows keep the list's place (nothing jumps in).
+          <div className="min-w-0 flex-1">
+            <PlaceholderRows count={3} />
+          </div>
+        ) : (
+          <ul className="flex min-w-0 flex-1 flex-col gap-2.5 text-sm/5.25">
+            {providers.map((provider) => {
+              const signIn = signIns.find((s) => s.provider === provider.id);
+              if (signIn !== undefined) {
+                return (
+                  <SignInCard
+                    key={provider.id}
+                    models={models}
+                    signIn={signIn}
+                    provider={provider}
+                  />
+                );
+              }
               return (
-                <SignInCard key={provider.id} models={models} signIn={signIn} provider={provider} />
+                <ConnectionCard
+                  key={provider.id}
+                  name={provider.label}
+                  detail={provider.available ? "Signed in on the worker machine" : provider.reason}
+                  state={provider.available ? "connected" : "off"}
+                />
               );
-            }
-            return (
-              <ConnectionCard
-                key={provider.id}
-                name={provider.label}
-                detail={provider.available ? "Signed in on the worker machine" : provider.reason}
-                state={provider.available ? "connected" : "off"}
-              />
-            );
-          })}
-          {github !== undefined && <GitHubCard models={models} github={github} />}
-        </ul>
+            })}
+            {github !== undefined && <GitHubCard models={models} github={github} />}
+          </ul>
+        )}
         <div className="shrink-0 lg:w-67.5">{props.beside}</div>
       </div>
     </section>
@@ -478,42 +494,14 @@ function Connections(props: { beside: ReactNode }) {
 }
 
 /**
- * On a code workspace's page, where a session would start: that its sessions can't reach GitHub
- * until Courtyard is signed in to it (#99), with the way to Connections.
+ * Settings' sign-in boxes, or its Connections: one lazy load. Beside Connections goes `beside`
+ * (the notifications toggle).
  */
-function GitHubNotice() {
-  const { github } = useModels();
-  useEffect(() => {
-    void reload();
-  }, []);
-  if (github === undefined || github.kind === "signed-in") return null;
-  return (
-    <InfoBox label="GitHub isn't connected">
-      <span className="min-w-60 flex-1">
-        A session here can work, but can't push its branch or open a pull request until Courtyard is
-        signed in to GitHub.
-      </span>
-      <ButtonLink size="sm" to="/settings" hash="connections">
-        Sign in to GitHub
-      </ButtonLink>
-    </InfoBox>
-  );
-}
-
-/**
- * Settings' sign-in boxes, or its Connections; or, on a code workspace's page, whether GitHub is
- * connected: one lazy load. Beside Connections goes `beside` (the notifications toggle).
- */
-export default function SignIns(props: {
-  part: "boxes" | "list" | "github-notice";
-  beside?: ReactNode;
-}) {
+export default function SignIns(props: { part: "boxes" | "list"; beside?: ReactNode }) {
   switch (props.part) {
     case "boxes":
       return <SignInBoxes />;
     case "list":
       return <Connections beside={props.beside} />;
-    case "github-notice":
-      return <GitHubNotice />;
   }
 }

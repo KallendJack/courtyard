@@ -18,6 +18,7 @@ import { ConfirmStep } from "@/components/confirm-step";
 import { FileTree, lineCounts } from "@/components/file-tree";
 import { FormError } from "@/components/form-error";
 import { type Layout, useLayout } from "@/components/handheld";
+import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { Notice } from "@/components/notice";
 import { ThumbButton } from "@/components/thumb-button";
 import { classes } from "@/lib/classes";
@@ -28,7 +29,7 @@ import { updateOffer, useLive } from "../live/main-build.tsx";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "../sessions/answer.tsx";
 import type { Turn } from "../sessions/events.ts";
-import { type FromWorker, loadProviders } from "../worker.ts";
+import { loadProviders } from "../worker.ts";
 import {
   bringUpToDate,
   codingModelIn,
@@ -56,6 +57,9 @@ const versionOf = (pullRequest: PullRequest | undefined) =>
         pullRequest.changes,
         pullRequest.conflicts,
       ]);
+
+/** Each pull request's review as last known, for the tab's lifetime, by its session or number. */
+const KEPT_REVIEWS = createKept<PullRequestReview>();
 
 const filesSaid = (count: number) => (count === 1 ? "1 file" : `${count} files`);
 
@@ -109,37 +113,32 @@ export default function Review(props: {
   const { of } = props;
   const [changes, setChanges] = useState(0);
   const version = versionOf(props.pullRequest);
-  const [review, setReview] = useState<FromWorker<PullRequestReview>>();
   const key = of.kind === "session" ? of.sessionId : `${of.workspaceId}#${of.number}`;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again each time the pull request changes, or once it's merged or closed from here
-  useEffect(() => {
-    let current = true;
-    void loadReview(of).then((loaded) => {
-      if (current) setReview(loaded);
-    });
-    return () => {
-      current = false;
-    };
-  }, [key, version, changes]);
-
-  const loaded = review?.kind === "loaded" ? review.data : undefined;
+  /** Why the review couldn't be shown, the last time it was asked for, and whose it was. */
+  const [problem, setProblem] = useState<{ key: string; why: string }>();
+  /** How many times a pull request no session opened has been asked for again while it's open. */
+  const [followed, setFollowed] = useState(0);
+  // The last review known shows at once, asked for again quietly each time the pull request
+  // changes, or once it's merged or closed from here (owner, 2026-10-12: nothing jumps in).
+  const loaded = useKept(KEPT_REVIEWS, {
+    key,
+    load: async () => {
+      const asked = await loadReview(of);
+      if (asked.kind === "loaded") return asked.data;
+      setProblem({ key, why: describeProblem(asked).body });
+      return undefined;
+    },
+    again: `${version}:${changes}:${followed}`,
+  });
+  const failed = loaded === undefined && problem?.key === key ? problem.why : undefined;
   // One no session opened is asked for again every so often while it's open, so its checks and
   // Merge follow GitHub; one that can't be asked for just now keeps showing as it was.
   const following = of.kind === "number" && loaded?.pullRequest.state === "open";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `of` is the same pull request while `key` is
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again for each pull request while it's open
   useEffect(() => {
     if (!following) return;
-    let current = true;
-    const timer = setInterval(() => {
-      void loadReview(of).then((again) => {
-        if (current && again.kind === "loaded") setReview(again);
-      });
-    }, FOLLOW_EVERY_MS);
-    return () => {
-      current = false;
-      clearInterval(timer);
-    };
+    const timer = setInterval(() => setFollowed((count) => count + 1), FOLLOW_EVERY_MS);
+    return () => clearInterval(timer);
   }, [key, following]);
   const pullRequest = loaded?.pullRequest ?? props.pullRequest;
   const title =
@@ -151,28 +150,31 @@ export default function Review(props: {
     // Where the review's own classes apply (review.css): inside it, so not on itself.
     <div data-review="" className="contents">
       <main className="mx-auto flex w-full flex-col px-4 pt-6 pb-6 md:h-full md:min-h-0 md:px-4.5 md:pt-5 md:pb-4 xl:px-7">
-        {review === undefined || review.kind !== "loaded" ? (
-          <div className="flex flex-col gap-2">
-            <BackLink workspaceId={props.workspaceId} pullRequests />
-            <h1 className="display-title text-xl/7.5 wrap-anywhere xl:text-title">{title}</h1>
-            {review === undefined ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Asking GitHub for the pull request…
-              </p>
+        {loaded === undefined ? (
+          <div className="flex flex-col gap-3.5 md:min-h-0 md:flex-1">
+            {/* Laid out as the review's own heading is, so the title stays put when it comes. */}
+            <div className="flex shrink-0 flex-col gap-2 pt-0.5">
+              <BackLink workspaceId={props.workspaceId} pullRequests />
+              <h1 className="display-title text-xl/7.5 wrap-anywhere xl:text-title">{title}</h1>
+              {failed === undefined && <PlaceholderRows count={1} size="label" />}
+            </div>
+            {failed === undefined ? (
+              // Nothing known yet: faint rows in the page's shape, What changed then its files,
+              // filled in place once GitHub answers.
+              <>
+                <PlaceholderRows count={1} />
+                <PlaceholderRows count={1} size="panel" />
+              </>
             ) : (
-              <div className="mt-2">
-                <Notice title="The pull request couldn't be shown">
-                  {describeProblem(review).body}
-                </Notice>
-              </div>
+              <Notice title="The pull request couldn't be shown">{failed}</Notice>
             )}
           </div>
         ) : (
           <Reviewing
-            key={review.data.pullRequest.number}
+            key={loaded.pullRequest.number}
             {...props}
             title={title}
-            review={review.data}
+            review={loaded}
             onChanged={() => setChanges((was) => was + 1)}
           />
         )}

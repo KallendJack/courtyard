@@ -404,7 +404,7 @@ export const createFakeGitHub = (
     },
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
-    openIssues: async (accessToken, { repo, label }) => {
+    openIssues: async (accessToken, { repo, label, withComments }) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       issuesAsked += 1;
@@ -424,7 +424,7 @@ export const createFakeGitHub = (
               issue.milestone === undefined
                 ? null
                 : (milestoneIn(repo, issue.milestone)?.description ?? null),
-            comments: [...issue.comments],
+            comments: withComments ? [...issue.comments] : [],
           })),
       );
     },

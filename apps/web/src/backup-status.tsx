@@ -1,25 +1,31 @@
 import type { ContextBackup } from "@courtyard/contract";
-import { useEffect, useState } from "react";
+import { createKept, useKept } from "@/components/kept";
 import { InfoBox, Notice } from "@/components/notice";
 import { describeWhen } from "./when.ts";
 import { loadBackup } from "./worker.ts";
 
+/** The context backup as last known, for the tab's lifetime: Home's foot rows and Settings. */
+const KEPT_BACKUP = createKept<ContextBackup>();
+
 /**
- * Whether the context folder's backup has every change (ADR 0014), in Settings (#102). Asked for
- * once the page is showing, since the worker may be partway through a push: the page never waits
- * for the backup. Nothing at all while it's up to date, or when the worker couldn't say.
+ * The context backup as last known (nothing jumps in), asked for again whenever a page showing it
+ * opens, since the worker may be partway through a push: the page never waits for the backup.
+ */
+export const useBackup = () =>
+  useKept(KEPT_BACKUP, {
+    key: "backup",
+    load: async () => {
+      const loaded = await loadBackup();
+      return loaded.kind === "loaded" ? loaded.data : undefined;
+    },
+  });
+
+/**
+ * Whether the context folder's backup has every change (ADR 0014), in Settings (#102). Nothing at
+ * all while it's up to date, or when the worker couldn't say.
  */
 export function BackupStatus() {
-  const [backup, setBackup] = useState<ContextBackup>();
-  useEffect(() => {
-    let current = true;
-    void loadBackup().then((result) => {
-      if (current && result.kind === "loaded") setBackup(result.data);
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
+  const backup = useBackup();
 
   if (backup === undefined) return null;
   switch (backup.kind) {

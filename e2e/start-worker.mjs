@@ -307,9 +307,15 @@ const github = createFakeGitHub({
     ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
   ],
   // Workbench's ready issues (#301): in milestones, one claimed by a comment, and more than
-  // Next up shows before More.
+  // Next up shows before More; and first on the Build order line, one that needs grilling (#363).
   issues: {
     "octo-owner/workbench": [
+      {
+        number: 117,
+        title: "Sub-agents for code review",
+        milestone: "4 · Code workspaces",
+        labels: ["needs-triage"],
+      },
       { number: 251, title: "One Reply box everywhere", milestone: "4 · Code workspaces" },
       { number: 197, title: "The rail on desktop", milestone: "4 · Code workspaces" },
       {
@@ -325,6 +331,9 @@ const github = createFakeGitHub({
         milestone: "Later",
       })),
     ],
+  },
+  milestones: {
+    "octo-owner/workbench": { "4 · Code workspaces": "NOW. Build order: #117 → #197 → #251." },
   },
   opensOnPush: {
     remote: origin,

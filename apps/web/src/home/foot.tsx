@@ -1,13 +1,9 @@
 import type { ContextBackup, WorkspaceId, WorkspaceSummary } from "@courtyard/contract";
 import { ButtonLink } from "@/components/button-link";
-import { createKept, useKept } from "@/components/kept";
+import { useBackup } from "../backup-status.tsx";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { describeWhen } from "../when.ts";
-import { loadBackup } from "../worker.ts";
 import "./stylesheet.ts";
-
-/** The context backup as last known, for the tab's lifetime (nothing jumps in late). */
-const KEPT_BACKUP = createKept<ContextBackup>();
 
 /**
  * Something actually wrong, in a few words, and where it's fixed: the backup in Settings, which
@@ -66,13 +62,7 @@ export default function HomeFoot(props: {
   /** On a narrow screen: main's build as the cover screen's board has it. */
   short: boolean;
 }) {
-  const backup = useKept(KEPT_BACKUP, {
-    key: "backup",
-    load: async () => {
-      const loaded = await loadBackup();
-      return loaded.kind === "loaded" ? loaded.data : undefined;
-    },
-  });
+  const backup = useBackup();
   const [worst, ...more] = problemsOf(backup, props.workspaces);
   return (
     <div className="flex flex-col gap-2.5 md:gap-3">
