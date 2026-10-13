@@ -325,13 +325,15 @@ const pullRequestFrom = async (
   request: APIRequestContext,
   subject: string,
   description: readonly string[] = [],
+  /** The files it changes, each with the subject as its one line. */
+  files: readonly string[] = ["talk.md"],
 ) => {
   const messages = [subject, ...description].map((part) => `-m "${part}"`).join(" ");
   const started = await request.post("/api/workspaces/side-project/sessions", {
     data: {
       text: [
-        `edit file talk.md: ${subject}`,
-        "run command: git add talk.md",
+        ...files.map((file) => `edit file ${file}: ${subject}`),
+        `run command: git add ${files.join(" ")}`,
         `run command: git commit ${messages}`,
         "run command: git push -u origin HEAD",
       ].join("\n"),
@@ -444,7 +446,9 @@ test.describe("on a desktop", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
-  test("the PRs list shows every open pull request, and the ask line on one no session opened starts a session on its branch", async ({
+  // Quick questions (#327; Paper, "Desktop · PR page: quick questions, merging"): asked on the
+  // page, read-only, beside the file list and the diff; Fix it in a session starts one.
+  test("the PRs list shows every open pull request, and quick questions on one no session opened open beside the diff, starting a session only to fix", async ({
     page,
     request,
   }) => {
@@ -466,19 +470,43 @@ test.describe("on a desktop", () => {
       "Builds take turns across the whole PC",
     );
 
-    // What starts is shown before it starts: on its branch, with the model it'll use.
+    // The first question opens the conversation on the page, with no session and no new page.
     await review.getByRole("button", { name: "Can this be merged?" }).click();
+    const panel = review.getByRole("region", { name: "Quick questions" });
+    await expect(panel).toContainText("reads the PR, changes nothing");
+    await expect(panel).toContainText("You asked: Can this be merged?");
+    await expect(page).toHaveURL(/\/workspaces\/side-project#pr-\d+$/);
+    await expect(review.getByRole("navigation", { name: "Changed files" })).toBeVisible();
+    await expect(review.getByRole("region", { name: "What changed" })).toBeVisible();
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeVisible();
+
+    // A follow-up in the same ask line; a line an answer points at shows marked in the diff.
+    const ask = review.getByRole("textbox", { name: "Ask about this PR" });
+    await expect(ask).toHaveAttribute("placeholder", "Ask a follow-up…");
+    await ask.fill("Where? point at builds.md line 1");
+    await review.getByRole("button", { name: "Ask", exact: true }).click();
+    await panel.getByRole("button", { name: "builds.md · line 1" }).click();
+    await expect(review.locator("[data-marked]")).toContainText(
+      "Builds take turns across the whole PC",
+    );
+    await shot(page, "pr-quick-questions-desktop");
+
+    // × closes it; it opens again with what was asked.
+    await panel.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(panel).toHaveCount(0);
+    await review.getByRole("button", { name: "Quick questions", exact: true }).click();
+    await expect(panel).toContainText("You asked: Can this be merged?");
+
+    // Fix it in a session shows what starts before it starts: on its branch, with its model.
+    await review.getByRole("button", { name: "Fix it in a session" }).click();
     const start = review.getByRole("region", { name: "Start a session" });
     await expect(start).toContainText("306-machine-lock");
-    await expect(start).toContainText("asking “Can this be merged?”");
+    await expect(start).toContainText("carrying the quick questions over");
     await start.getByRole("button", { name: "Start the session" }).click();
 
-    await expect(page).toHaveURL(/\/sessions\/[\w-]+\?view=review$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      /^#\d+ Builds queue across the whole PC/,
-    );
-    await expect(review.getByRole("region", { name: "Answer" })).toContainText(
-      "You said: Can this be merged?",
+    await expect(page).toHaveURL(/\/sessions\/[\w-]+$/);
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(
+      /The owner asked about pull request #\d+ on its page/,
     );
     await page.goto("/workspaces/side-project#prs");
     await expect(row).toContainText("from the session");
@@ -681,14 +709,21 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
-  // #279: the review's message box went to the workspace's first session, not the PR's own.
-  test("a pull request's review sends its message to the session that opened it", async ({
+  // Quick questions on a tablet (#327; Paper, "Tablet · PR page: quick questions"): they take the
+  // file list's place beside the diff, the list folding into a switcher. #279: what the page sends
+  // a session went to the workspace's first session, not the PR's own.
+  test("quick questions take the file list's place beside the diff, and Fix it in a session goes to the session that opened it", async ({
     page,
     request,
   }) => {
     await signIn(request);
     const first = await pullRequestFrom(request, "Rail spacing [e2e running]");
-    const second = await pullRequestFrom(request, "Loading states [e2e running]");
+    const second = await pullRequestFrom(
+      request,
+      "Loading states [e2e running]",
+      [],
+      ["talk.md", "notes.md"],
+    );
     // The fake titles a session with its first message's first words.
     const firstTitle = "Edit File Talk Md Rail";
     const secondTitle = "Edit File Talk Md Loading";
@@ -701,29 +736,45 @@ test.describe("on the unfolded Fold", () => {
       .click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Loading states/);
 
-    // The ask line goes to the session whose branch the pull request is, with no pickers, and its
-    // answer shows on the page, in place of What changed (#278).
+    // A quick ask opens the conversation in the file list's place; the diff stays in view.
     const review = page.getByRole("region", { name: "Review" });
     const ask = page.getByRole("textbox", { name: "Ask about this PR" });
-    await expect(page.getByRole("combobox")).toHaveCount(0);
-    await ask.fill("Bring it up to date with main");
-    await review.getByRole("button", { name: "Ask", exact: true }).click();
-    const answer = review.getByRole("region", { name: "Answer" });
-    await expect(answer).toContainText("You said: Bring it up to date with main");
-    await expect(review.getByRole("region", { name: "What changed" })).toHaveCount(0);
-    await expect(ask).toHaveValue("");
-    // A quick ask sends with one tap; the answer shown is the latest.
+    const files = review.getByRole("navigation", { name: "Changed files" });
+    const switcher = review.getByRole("combobox", { name: "Choose a file" });
+    await expect(files).toBeVisible();
+    await expect(switcher).toHaveCount(0);
     await review.getByRole("button", { name: "Explain this change" }).click();
-    await expect(answer).toContainText("You said: Explain this change");
-    await answer.getByRole("button", { name: "Close the answer" }).click();
-    await expect(review.getByRole("region", { name: "What changed" })).toBeVisible();
+    const panel = review.getByRole("region", { name: "Quick questions" });
+    await expect(panel).toContainText("You asked: Explain this change");
+    await expect(files).toHaveCount(0);
+    await expect(review.getByRole("region", { name: "What changed" })).toHaveCount(0);
+    await expect(review.getByRole("region", { name: /^Diff of / })).toBeVisible();
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeVisible();
+    await expect(review).toContainText("1 of 2 files");
+    await switcher.selectOption("talk.md");
+    await expect(review.getByRole("region", { name: "Diff of talk.md" })).toBeVisible();
+    await expect(review).toContainText("2 of 2 files");
 
-    await page.goto(`/workspaces/side-project/sessions/${second}`);
+    // A follow-up goes in the same line; × brings the file list back.
+    await expect(ask).toHaveAttribute("placeholder", "Ask a follow-up…");
+    await ask.fill("Why two files?");
+    await review.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(panel).toContainText("You asked: Why two files?");
+    await expect(ask).toHaveValue("");
+    await shot(page, "pr-quick-questions-tablet");
+    await panel.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(files).toBeVisible();
+
+    // Fix it in a session carries the conversation over to the pull request's own session.
+    await review.getByRole("button", { name: "Fix it in a session" }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${second}$`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondTitle);
-    await expect(page.getByText("Bring it up to date with main").first()).toBeVisible();
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(
+      "Owner: Why two files?",
+    );
     await page.goto(`/workspaces/side-project/sessions/${first}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(firstTitle);
-    await expect(page.getByText("Bring it up to date with main")).toHaveCount(0);
+    await expect(page.getByText("Owner: Why two files?")).toHaveCount(0);
 
     // A review whose session has gone has no ask line, so nothing goes to another session.
     const deleted = await request.delete(`/api/sessions/${first}`, { data: {} });
@@ -804,6 +855,46 @@ test.describe("on the cover screen", () => {
     await expect(review).toContainText("Two-way door, the workspace page only.");
     await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeDisabled();
     expect(await pageScrollsSideways(page)).toBe(false);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  // Quick questions on the phone (#327; Paper, "Cover · PR page: quick questions sheet"): a sheet
+  // over the diff with its own ask line; Merge and Close PR come back when it closes.
+  test("quick questions rise as a sheet over the diff, with their own ask line", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await pullRequestFrom(request, "A sheet of questions [e2e running]");
+    await page.goto("/workspaces/side-project#prs");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /A sheet of questions/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+
+    const review = page.getByRole("region", { name: "Review" });
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    await expect(merge).toBeVisible();
+    await review.getByRole("button", { name: "Explain this change" }).click();
+    const sheet = review.getByRole("region", { name: "Quick questions" });
+    await expect(sheet).toContainText("You asked: Explain this change");
+    await expect(sheet).toBeInViewport();
+    await expect(merge).toHaveCount(0);
+    await expect(review.getByRole("button", { name: "Close PR" })).toHaveCount(0);
+    // Its ask line is the only one, inside the sheet.
+    await expect(page.getByRole("textbox", { name: "Ask about this PR" })).toHaveCount(1);
+    await sheet.getByRole("textbox", { name: "Ask about this PR" }).fill("And the tests?");
+    await sheet.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(sheet).toContainText("You asked: And the tests?");
+    expect(await pageScrollsSideways(page)).toBe(false);
+    await shot(page, "pr-quick-questions-cover");
+
+    await sheet.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(merge).toBeVisible();
+    await expect(review.getByRole("button", { name: "Close PR" })).toBeVisible();
 
     await request.post("/api/github/sign-out", { data: {} });
   });

@@ -278,6 +278,27 @@ const scriptedTitle = (message: string): Result<{ title: string }, FailureReason
   return ok({ title });
 };
 
+const POINT_AT = /point at (\S+) line (\d+)/gi;
+
+/**
+ * The answer a quick question about a pull request scripts (#327): "You asked: …", pointing at
+ * each line it names as "point at <path> line <n>". "please fail" fails on purpose.
+ */
+const scriptedQuickAnswer = (message: string): Result<unknown, FailureReason> => {
+  const question = /The owner's question: (.*)$/s.exec(message)?.[1] ?? "";
+  if (/please fail/i.test(question)) {
+    return err({
+      kind: "unknown",
+      message: "The fake didn't answer, because it was asked not to.",
+    });
+  }
+  const lines = [...question.matchAll(POINT_AT)].map(([, path = "", line = "0"]) => ({
+    path,
+    line: Number(line),
+  }));
+  return ok({ answer: `You asked: ${question}`, lines });
+};
+
 /**
  * A pretend sign-in, starting signed out, so signing in can be seen and tested with no real
  * provider: its link and code are made up, and it finishes after `finishAfterMs`, or never.
@@ -471,7 +492,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * any "read file: …" it acts out reading, between any "write: …" it writes (see `scriptedWork`), and "thing add: …" or "thing T2:
  * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
  * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
- * (see `scriptedTidy`), and a session's title its first message (see `scriptedTitle`). "please hit
+ * (see `scriptedTidy`), a session's title its first message (see `scriptedTitle`), and a quick
+ * question's answer the question (see `scriptedQuickAnswer`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
@@ -585,6 +607,8 @@ export const createFakeProvider = (
           return ok(scriptedTidy(message));
         case "title":
           return scriptedTitle(message);
+        case "quick-question":
+          return scriptedQuickAnswer(message);
       }
     },
   };

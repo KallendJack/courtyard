@@ -19,6 +19,8 @@ export function AskLine(props: {
   placeholder: string;
   /** The quick asks, each sent as it reads. */
   quick: readonly string[];
+  /** Actions beside the quick asks that send nothing, such as Fix it in a session (#327). */
+  actions?: readonly { readonly label: string; readonly run: () => void }[];
   /** Sends what was asked: an error to show, or nothing once it's gone. */
   ask: (text: string) => Promise<string | undefined>;
   disabled?: boolean;
@@ -84,6 +86,17 @@ export function AskLine(props: {
             onClick={() => void asking.run(quick)}
           >
             {quick}
+          </Button>
+        ))}
+        {props.actions?.map((action) => (
+          <Button
+            key={action.label}
+            variant="outline"
+            size="sm"
+            disabled={off}
+            onClick={action.run}
+          >
+            {action.label}
           </Button>
         ))}
         <IconButton

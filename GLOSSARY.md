@@ -406,9 +406,20 @@ changes, the ask line, and Merge or Bring up to date. Once merged or closed, it 
 _Avoid_: review screen, PR view
 
 **Ask line**:
-The one-line box on a PR page, with quick asks beside it, that sends a question to the pull request's session on the
-model it already uses; its answer shows on the page.
+The one-line box on a PR page, with quick asks beside it, that asks the pull request's quick questions.
 _Avoid_: composer, chat box (that's the message box)
+
+**Quick questions**:
+A small read-only conversation about one pull request on its PR page, outside any session: a model reads the pull
+request and changes nothing, and its answers can point at lines in the diff. On a tablet it takes the file list's
+place beside the diff; on a phone it's a sheet over it.
+_Avoid_: PR chat, review chat
+
+**Fix it in a session**:
+The one tap on the ask line that carries a pull request's quick questions over to a session on its branch, the one on
+it already or a new one, to make the change they came to. The only way the PR page starts a session besides Bring up
+to date.
+_Avoid_: hand off, escalate
 
 **Bring up to date**:
 The one tap that has a pull request's session merge its base in and fix the conflict, when the pull request conflicts
