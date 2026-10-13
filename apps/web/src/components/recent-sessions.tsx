@@ -1,16 +1,17 @@
 import {
   SESSION_TITLE_MAX_LENGTH,
   type SessionId,
-  SessionList,
   type WorkspaceSummary,
 } from "@courtyard/contract";
 import { Link, useLocation, useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { describeProblem } from "../problems.tsx";
-import { fromWorker, renameSession } from "../worker.ts";
+import { KEPT_SESSIONS, loadSessions } from "../sessions/kept-sessions.ts";
+import { renameSession } from "../worker.ts";
 import { GROUP_HEADING } from "./app-sidebar.tsx";
 import { IconButton } from "./button.tsx";
+import { PlaceholderRows, useKept } from "./kept.tsx";
 import { RenameForm } from "./rename-form.tsx";
 import { SessionStateDot, useRefreshWhileBusy } from "./session-state.tsx";
 
@@ -20,47 +21,37 @@ const RECENT_SESSIONS = 5;
 /**
  * The open workspace's latest sessions in the sidebar, refreshed as the owner moves around and whenever a page
  * reloads its data (after a session is renamed, say), and every few seconds while one is working or needs the
- * owner, which a dot before its title says (#179). Each can be renamed in place.
+ * owner, which a dot before its title says (#179). Each can be renamed in place. Coming back to a workspace shows
+ * them as last known at once; the first time, faint rows keep their place (nothing jumps in).
  */
 export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] }) {
   const { workspaceId } = useParams({ strict: false });
   const { pathname } = useLocation();
   const loadedAt = useRouterState({ select: (state) => state.matches.at(-1)?.updatedAt });
   const router = useRouter();
-  /** The sessions last fetched, and whose they are, so another workspace's are never shown. */
-  const [listed, setListed] = useState<{
-    workspaceId: string;
-    sessions: SessionList["sessions"];
-  }>();
   const [renaming, setRenaming] = useState<SessionId>();
   const workspace = props.workspaces.find((w) => w.id === workspaceId);
-  const sessions = listed && listed.workspaceId === workspaceId ? listed.sessions : [];
-  const shown = sessions.slice(0, RECENT_SESSIONS);
   const [asked, setAsked] = useState(0);
+  // Moving between pages (starting a session, say), a page reloading its data, or a session still
+  // working asks for the list again.
+  const list = useKept(KEPT_SESSIONS, {
+    key: workspaceId ?? "",
+    load: () => loadSessions(workspaceId ?? ""),
+    again: `${pathname}:${loadedAt}:${asked}`,
+    asking: workspaceId !== undefined,
+  });
+  const sessions = list?.sessions ?? [];
+  const shown = sessions.slice(0, RECENT_SESSIONS);
   useRefreshWhileBusy(shown, () => setAsked((times) => times + 1));
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname, loadedAt and asked are the triggers: moving between pages (starting a session, say), a page reloading its data, or a session still working refreshes the list
-  useEffect(() => {
-    if (workspaceId === undefined) return;
-    let current = true;
-    void fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/sessions`, SessionList).then(
-      (result) => {
-        const sessions = result.kind === "loaded" ? result.data.sessions : [];
-        if (current) setListed({ workspaceId, sessions });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [workspaceId, pathname, loadedAt, asked]);
-
-  if (!workspace || sessions.length === 0) return null;
+  if (!workspace || (list !== undefined && sessions.length === 0)) return null;
   return (
     <section
       aria-label={`Recent in ${workspace.name}`}
       className="flex flex-col group-data-[collapsed=true]/sidebar:hidden"
     >
       <h2 className={GROUP_HEADING}>Recent in {workspace.name}</h2>
+      {list === undefined && <PlaceholderRows count={3} size="line" />}
       <ul>
         {shown.map((session) =>
           renaming === session.id ? (
@@ -75,7 +66,9 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
                   const others = sessions.map((s) =>
                     s.id === session.id ? { ...s, ...renamed.data } : s,
                   );
-                  setListed({ workspaceId: session.workspaceId, sessions: others });
+                  if (list !== undefined) {
+                    KEPT_SESSIONS.set(session.workspaceId, { ...list, sessions: others });
+                  }
                   // The session's own page, if it's open, shows the new title too.
                   await router.invalidate();
                   return undefined;

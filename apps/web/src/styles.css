@@ -40,7 +40,6 @@
 @source not "./components/home-block.tsx";
 @source not "./components/connections-line.tsx";
 @source not "./components/radio-row.tsx";
-@source not "./components/kept.tsx";
 
 /*
  * Courtyard's theme. Every colour, font, type size, radius and effect the app uses is defined here

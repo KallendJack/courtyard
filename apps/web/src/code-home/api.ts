@@ -15,15 +15,26 @@ import { fromWorker, sendJson } from "../worker.ts";
 const workspacePath = (workspaceId: WorkspaceId) =>
   `/workspaces/${encodeURIComponent(workspaceId)}`;
 
-/** The ready issues nobody has claimed, in milestone order (#301). */
+/**
+ * The ready issues nobody has claimed, and those on a Build order line that need grilling first,
+ * in milestone order (#301, #363).
+ */
 export const loadNextUp = (workspaceId: WorkspaceId) =>
   fromWorker(`${workspacePath(workspaceId)}/next-up`, NextUp);
 
-/** Build (#298): a new code session builds the issue, which the worker claims on GitHub. */
-export const buildIssue = (workspaceId: WorkspaceId, number: number, build: BuildIssue) =>
+/**
+ * Build (#298): a new code session builds the issue, which the worker claims on GitHub; or Grill
+ * (#363): a new code session grills one that isn't ready yet.
+ */
+export const startOnIssue = (start: {
+  workspaceId: WorkspaceId;
+  number: number;
+  does: "build" | "grill";
+  model: BuildIssue;
+}) =>
   sendJson({
-    path: `${workspacePath(workspaceId)}/next-up/${number}/build`,
-    body: build,
+    path: `${workspacePath(start.workspaceId)}/next-up/${start.number}/${start.does}`,
+    body: start.model,
     schema: SessionSummary,
   });
 

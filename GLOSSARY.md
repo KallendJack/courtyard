@@ -205,7 +205,10 @@ _Avoid_: inbox, notifications, to-do, alerts
 **Next up**:
 The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
 claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the
-model, a second starts a session on it and claims the issue on GitHub. A planning workspace's (#300): the session to
+model, a second starts a session on it and claims the issue on GitHub. When the next on its milestone's Build order
+line isn't ready yet (`needs-triage` or `needs-info`), **Grill** takes the top in gold (#363): it starts a session
+with the grilling skill on that issue, which ends with it marked ready; the first ready issue sits under it with a
+small Build. A grill claims nothing and takes no builder's place in Running. A planning workspace's (#300): the session to
 pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the
 next 7 days, soonest first; with neither, it doesn't show.
 _Avoid_: backlog, queue, roadmap (that's the milestones)
