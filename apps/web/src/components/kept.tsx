@@ -5,8 +5,9 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
  * for as long as the tab is open, one store per kind of answer (`createKept`), by a key naming
  * whose it is (a workspace's id). A page that comes back shows the last-known answer at once and
  * asks again quietly, updating in place (`useKept`); one with nothing known yet shows its block's
- * placeholder rows (`PlaceholderRows`) in the block's place until the answer comes. Its classes
- * are in the stylesheet of the page that shows it (code-home.css, home.css), off the first load.
+ * placeholder rows (`PlaceholderRows`) in the block's place until the answer comes. A whole page
+ * that waits (a pull request's, Tidy) shows them in its own shape, under its title. Its few
+ * classes are in the first load's stylesheet, since every page may show it.
  */
 export type Kept<T> = {
   readonly get: (key: string) => T | undefined;
