@@ -1,6 +1,7 @@
 import {
   type Activity,
   type FailureReason,
+  type HelperId,
   type ProviderList,
   type SessionId,
   skillTitle,
@@ -13,6 +14,7 @@ import { ApprovalCard, approvalWords } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
+import { HelperLine, type HelperStanding } from "@/components/helper-line";
 import { Notice } from "@/components/notice";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { type Queued, QueuedMessages } from "@/components/queued-message";
@@ -23,7 +25,7 @@ import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
-import type { ShownImage, Turn } from "./events.ts";
+import type { Helper, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
@@ -162,6 +164,83 @@ function Activities(props: { activities: readonly Activity[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Whether an activity is waiting for a build, rather than a step of the work. */
+const isWaiting = (activity: Activity) => activity.kind === "waiting-for-build";
+
+/** Where a helper stands (#117), and what its line says of it on the right. */
+const standingOf = (
+  helper: Helper,
+  turn: Turn,
+): { readonly standing: HelperStanding; readonly status: string } => {
+  const steps = helper.activities.filter((activity) => !isWaiting(activity)).length;
+  if (helper.report !== undefined) {
+    return { standing: "done", status: `Done · ${steps} ${steps === 1 ? "step" : "steps"}` };
+  }
+  if (turn.state.kind !== "running") return { standing: "stopped", status: "Stopped" };
+  if (turn.approval?.helper === helper.id) {
+    return { standing: "needs-you", status: "Needs your OK" };
+  }
+  if (helper.waiting) return { standing: "waiting", status: "Waiting for a helper to finish" };
+  const latest = helper.activities.at(-1);
+  if (latest?.kind === "waiting-for-build") {
+    return { standing: "working", status: `Waiting for a build · ${latest.ahead} ahead` };
+  }
+  return {
+    standing: "working",
+    status: latest === undefined ? "Working" : describeActivity(latest),
+  };
+};
+
+/**
+ * The helpers the model started at this point (#117), one line each: tap one for what it did,
+ * then its final report.
+ */
+function HelperLines(props: { turn: Turn; helpers: readonly HelperId[] }) {
+  const { turn } = props;
+  const [open, setOpen] = useState<ReadonlySet<HelperId>>(new Set());
+  const helpers = props.helpers.flatMap((id) => turn.helpers.filter((each) => each.id === id));
+  const toggle = (id: HelperId) =>
+    setOpen((was) => {
+      const now = new Set(was);
+      if (!now.delete(id)) now.add(id);
+      return now;
+    });
+  return (
+    <section aria-label="Helpers" className="flex flex-col gap-1">
+      <p className="text-meta text-muted-foreground">
+        Asked for {helpers.length} {helpers.length === 1 ? "helper" : "helpers"}
+      </p>
+      <ul className="flex flex-col gap-1">
+        {helpers.map((helper) => (
+          <li key={helper.id} aria-label={`Helper · ${helper.name}`}>
+            <HelperLine
+              name={helper.name}
+              {...standingOf(helper, turn)}
+              open={open.has(helper.id)}
+              onToggle={() => toggle(helper.id)}
+              steps={helper.activities.filter((each) => !isWaiting(each)).map(describeActivity)}
+              {...(helper.report === undefined || helper.report.trim() === ""
+                ? {}
+                : {
+                    report: (
+                      <div className="text-foreground/80">
+                        <Answer
+                          text={helper.report}
+                          running={false}
+                          replayed={helper.report.length}
+                          compact
+                        />
+                      </div>
+                    ),
+                  })}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -318,6 +397,10 @@ export const TurnView = memo(function TurnView(props: {
       {turn.parts.map((part, index) => {
         // Only the last piece can still be arriving.
         const running = turn.state.kind === "running" && index === turn.parts.length - 1;
+        if (part.kind === "helpers") {
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts only ever grow, in order
+          return <HelperLines key={index} turn={turn} helpers={part.helpers} />;
+        }
         return part.kind === "activities" ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: parts only ever grow, in order
           <Activities key={index} activities={part.activities} />
@@ -339,7 +422,11 @@ export const TurnView = memo(function TurnView(props: {
       )}
       {turn.approval !== undefined && turn.state.kind === "running" && (
         <ApprovalCard
-          {...approvalWords(turn.approval.ask, turn.approval.why)}
+          {...approvalWords({
+            ask: turn.approval.ask,
+            why: turn.approval.why,
+            helper: turn.helpers.find((each) => each.id === turn.approval?.helper)?.name,
+          })}
           onAnswer={async (answer, waiting) => {
             if (turn.approval === undefined) return undefined;
             const answered = await answerApproval({
