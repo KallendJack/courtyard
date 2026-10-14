@@ -18,7 +18,11 @@ test("a logged-out device is sent to login, gets in with the password, and can l
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByRole("heading", { name: "Workspaces" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page
+    .getByRole("dialog", { name: "Settings" })
+    .getByRole("button", { name: "Log out", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/login$/);
 });
 

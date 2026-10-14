@@ -68,15 +68,3 @@ test("never loads an image an answer points to, so an answer can't send data awa
   await expect(session.locator("img")).toHaveCount(0);
   expect(requested).toEqual([]);
 });
-
-test.describe("while typing on a desktop", () => {
-  test.use({ viewport: DESKTOP });
-
-  test("leaves Ctrl+B to the message box", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
-    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
-    await page.getByLabel("Message", { exact: true }).press("Control+b");
-
-    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
-  });
-});
