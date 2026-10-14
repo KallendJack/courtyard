@@ -975,13 +975,21 @@ test("folding and unfolding keeps the place in a session and a half-written mess
 test.describe("on a desktop", () => {
   test.use({ hasTouch: false, isMobile: false, viewport: { width: 1440, height: 900 } });
 
-  test("the frame stays away: the sidebar, and the message box in the page, with no rails or Talk key", async ({
+  // #197: one frame everywhere. A computer gets the rails and the Talk key, with no sidebar.
+  test("the frame is there: tiles on the left rail, the buttons and the Talk key on the right", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
-    await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
+    const rail = page.getByRole("navigation", { name: "Workspaces" });
+    const left = await boxOf(rail);
+    const content = await boxOf(page.getByRole("main"));
+    expect(left.x + left.width).toBeLessThanOrEqual(content.x);
+    for (const name of [/^Model/, /^Skills$/, /^Settings$/])
+      await expect(page.getByRole("button", { name })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toContainText(
+      "Hold Space",
+    );
+    await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
     await expect(message(page)).toBeVisible();
-    for (const name of ["Talk", "Type", "Skills", "Add"])
-      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   });
 });

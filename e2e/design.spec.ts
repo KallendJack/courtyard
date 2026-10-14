@@ -21,24 +21,6 @@ test("shows an answer's Markdown formatted, not as raw marks", async ({ page }) 
 test.describe("on a desktop", () => {
   test.use({ viewport: DESKTOP });
 
-  test("collapses the sidebar to a rail with Ctrl+B, and remembers it", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
-    const workspaces = page.getByRole("navigation", { name: "Workspaces" });
-    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
-
-    await page.keyboard.press("Control+b");
-    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeHidden();
-    // Still one tap from every workspace: the rail keeps a link to each.
-    await expect(workspaces.getByRole("link", { name: "Garage gym" })).toBeVisible();
-
-    await page.reload();
-    await expect(workspaces.getByRole("link", { name: "Garage gym" })).toBeVisible();
-    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeHidden();
-
-    await page.getByRole("button", { name: "Toggle sidebar" }).click();
-    await expect(workspaces.getByText("Garage gym", { exact: true })).toBeVisible();
-  });
-
   test("shows each workspace's icon by its name, the one its name suggests until one is picked", async ({
     page,
   }) => {

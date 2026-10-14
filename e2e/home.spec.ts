@@ -233,9 +233,10 @@ test("Settings has the owner context, the sign-ins and Connections, Fresh start 
   await settled(page);
   await shot(page, "desktop-home");
 
+  await page.getByRole("button", { name: "Settings" }).click();
   await page
-    .getByRole("navigation", { name: "Workspaces" })
-    .getByRole("link", { name: "Settings" })
+    .getByRole("dialog", { name: "Settings" })
+    .getByRole("link", { name: "All settings" })
     .click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
