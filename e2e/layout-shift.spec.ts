@@ -11,7 +11,12 @@ const signIn = async (request: APIRequestContext) => {
     .toBe("signed-in");
 };
 
-/** Adds up every layout shift the page reports from the start, outside the owner's own input. */
+/**
+ * Adds up every layout shift the page reports from the start, outside the owner's own input. Rows
+ * coming and going inside a block's own scrolling area are its content, not the page moving (owner
+ * on #283: rows appear inside a block's own area, so nothing else moves), so a shift of those
+ * alone doesn't count.
+ */
 const watchShifts = (page: Page) =>
   page.addInitScript(() => {
     const seen: { value: number; sources: string[] }[] = [];
@@ -23,6 +28,10 @@ const watchShifts = (page: Page) =>
         sources?: { node?: Node | null }[];
       }[]) {
         if (entry.hadRecentInput) continue;
+        const nodes = (entry.sources ?? []).map((source) => source.node);
+        const inBlockRows = (node: Node | null | undefined) =>
+          node instanceof Element && node.closest("section li") !== null;
+        if (nodes.length > 0 && nodes.every(inBlockRows)) continue;
         const sources = (entry.sources ?? []).map((source) => {
           const node = source.node;
           if (!(node instanceof Element)) return String(node?.nodeName ?? "?");
