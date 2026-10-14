@@ -70,6 +70,12 @@ const KEPT_REVIEWS = createKept<PullRequestReview>();
 const filesSaid = (count: number) => (count === 1 ? "1 file" : `${count} files`);
 
 /**
+ * How often the page of a pull request no session opened asks for it again while it's open (#329),
+ * as no session's events say when it changes.
+ */
+const FOLLOW_EVERY_MS = 15 * 1000;
+
+/**
  * The session a pull request is from: Bring up to date and Fix it in a session go to it, on the
  * model it last used.
  */
@@ -111,6 +117,8 @@ export default function Review(props: {
   const key = of.kind === "session" ? of.sessionId : `${of.workspaceId}#${of.number}`;
   /** Why the review couldn't be shown, the last time it was asked for, and whose it was. */
   const [problem, setProblem] = useState<{ key: string; why: string }>();
+  /** How many times a pull request no session opened has been asked for again while it's open. */
+  const [followed, setFollowed] = useState(0);
   // The last review known shows at once, asked for again quietly each time the pull request
   // changes, or once it's merged or closed from here (owner, 2026-10-12: nothing jumps in).
   const loaded = useKept(KEPT_REVIEWS, {
@@ -121,9 +129,18 @@ export default function Review(props: {
       setProblem({ key, why: describeProblem(asked).body });
       return undefined;
     },
-    again: `${version}:${changes}`,
+    again: `${version}:${changes}:${followed}`,
   });
   const failed = loaded === undefined && problem?.key === key ? problem.why : undefined;
+  // One no session opened is asked for again every so often while it's open, so its checks and
+  // Merge follow GitHub; one that can't be asked for just now keeps showing as it was.
+  const following = of.kind === "number" && loaded?.pullRequest.state === "open";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again for each pull request while it's open
+  useEffect(() => {
+    if (!following) return;
+    const timer = setInterval(() => setFollowed((count) => count + 1), FOLLOW_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [key, following]);
   const pullRequest = loaded?.pullRequest ?? props.pullRequest;
   const title =
     pullRequest === undefined
@@ -224,6 +241,8 @@ function Reviewing(props: {
   const [chosen, setChosen] = useState<string>();
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState<Starting>();
+  /** Merge was tapped while it can't merge: why shows beside it, until it can (#329). */
+  const [askedWhy, setAskedWhy] = useState(false);
   /** The quick questions asked so far (#327), and whether they're open on the page. */
   const [questions, setQuestions] = useState<QuickQuestions>({ model: null, asked: [] });
   const [asking, setAsking] = useState(false);
@@ -361,17 +380,32 @@ function Reviewing(props: {
       Bring up to date
     </ThumbButton>
   ) : (
+    // Greyed out while it can't merge, but a tap says why rather than nothing.
     <ThumbButton
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={merge.kind === "refused" || end.busy}
+      disabled={end.busy}
+      aria-disabled={merge.kind === "refused" ? true : undefined}
       aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
-      onClick={() => void end.run({ kind: "merge", head: pullRequest.head })}
+      onClick={() =>
+        merge.kind === "refused"
+          ? setAskedWhy(true)
+          : void end.run({ kind: "merge", head: pullRequest.head })
+      }
     >
       <GitMerge aria-hidden />
       Merge
     </ThumbButton>
+  );
+  const whyWaits = askedWhy && !conflicts && merge.kind === "refused" && (
+    <p
+      role="status"
+      aria-label="Why Merge waits"
+      className="text-sm font-medium text-muted-foreground"
+    >
+      {merge.reason}
+    </p>
   );
   const closeAction = (
     <ThumbButton look="quiet" fit={desktop} onClick={() => setClosing(true)}>
@@ -449,9 +483,12 @@ function Reviewing(props: {
           {status}
         </div>
         {desktop && actions && (
-          <div className="flex shrink-0 gap-2.5">
-            {closeAction}
-            {mainAction}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <div className="flex gap-2.5">
+              {closeAction}
+              {mainAction}
+            </div>
+            {whyWaits}
           </div>
         )}
       </div>
@@ -538,9 +575,12 @@ function Reviewing(props: {
           )}
 
           {!desktop && actions && (
-            <div className="flex shrink-0 gap-3">
-              {mainAction}
-              {closeAction}
+            <div className="flex shrink-0 flex-col gap-1.5">
+              <div className="flex gap-3">
+                {mainAction}
+                {closeAction}
+              </div>
+              {whyWaits}
             </div>
           )}
           <FormError message={problem} />

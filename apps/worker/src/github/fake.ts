@@ -79,7 +79,8 @@ const filesPushed = async (remote: string, head: string): Promise<FoundFile[]> =
  * (#160), and a test can give it files and a conflict. With `opensOnPush`, for the browser tests,
  * a branch pushed to that bare repository (GitHub's copy, on disk) has a pull request opened for
  * it the first time it's asked about, changing the files the branch changes since `main`, and each
- * commit pushed there gets the `checks` its subject says. A test sets the checks on a commit of
+ * commit pushed there gets the `checks` its subject says (running ones can pass by themselves,
+ * `passesLater`). A test sets the checks on a commit of
  * main's (`setCommitChecks`), as main's build (#249), and keeps what Courtyard did about a red
  * main (#355): each re-run, each issue filed, and its milestones' descriptions.
  */
@@ -107,6 +108,14 @@ export const createFakeGitHub = (
       readonly checks: (subject: string) => readonly FoundCheck[];
       /** Whether a commit pushed conflicts with `main`, from its subject (#278). */
       readonly conflicts?: (subject: string) => boolean;
+      /**
+       * Whether the checks running on a commit pushed pass by themselves, `afterMs` after its pull
+       * request is first asked for by its number, as a page no session opened asks (#329).
+       */
+      readonly passesLater?: {
+        readonly when: (subject: string) => boolean;
+        readonly afterMs: number;
+      };
     };
   } = {},
 ) => {
@@ -283,16 +292,36 @@ export const createFakeGitHub = (
     const subject = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%s", head])) ?? "";
     const checks = onPush.checks(subject);
     const conflicts = onPush.conflicts?.(subject) ?? false;
+    let number = pull?.number;
     if (pull === undefined) {
       // Titled and described by its first commit, as gh pr create --fill would.
       const body = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%b", head])) ?? "";
-      change(openPullRequest({ ...find, head, files, title: subject, body: body.trim() }), {
-        checks,
-        conflicts,
-      });
+      number = openPullRequest({ ...find, head, files, title: subject, body: body.trim() });
+      change(number, { checks, conflicts });
     } else {
       change(pull.number, { head, checks, conflicts, files, changes: changesOf(files) });
     }
+    const later = onPush.passesLater;
+    if (number !== undefined && later?.when(subject) === true) passingLater.set(number, head);
+  };
+
+  /** The pull requests whose running checks pass once first asked for, with the commit they're on. */
+  const passingLater = new Map<number, string>();
+  /** Their running checks pass a while after the first ask, unless a newer commit came. */
+  const startPassing = (number: number) => {
+    const head = passingLater.get(number);
+    const afterMs = options.opensOnPush?.passesLater?.afterMs;
+    if (head === undefined || afterMs === undefined) return;
+    passingLater.delete(number);
+    setTimeout(() => {
+      const pull = pulls[pullNumbered(number)];
+      if (pull?.head !== head) return;
+      change(number, {
+        checks: pull.checks.map((check) =>
+          check.outcome === "running" ? { ...check, outcome: "passed" } : check,
+        ),
+      });
+    }, afterMs);
   };
 
   const api: GitHubApi = {
@@ -344,6 +373,7 @@ export const createFakeGitHub = (
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       const pull = pulls.find((each) => each.repo === find.repo && each.number === find.number);
+      if (pull !== undefined) startPassing(pull.number);
       return ok(pull === undefined ? null : found(pull));
     },
     openPullRequests: async (accessToken, find) => {
