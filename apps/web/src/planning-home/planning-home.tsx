@@ -166,9 +166,11 @@ export default function PlanningHome(props: {
   );
 
   return (
-    <Page wide header={header} footer={footer}>
+    <Page wide fill={place === ""} header={header} footer={footer}>
       <div data-planning-home="">
-        <div className="mt-4 flex flex-col gap-3.5">
+        <div
+          className={classes("mt-4 flex flex-col gap-3.5", place === "" && "md:min-h-0 md:flex-1")}
+        >
           {place === "sessions" ? (
             <SessionLinks list={list} mode="planning" />
           ) : place === "things" ? (
@@ -198,11 +200,14 @@ export default function PlanningHome(props: {
             />
           ) : (
             <>
-              <NextUp
-                workspaceId={workspace.id}
-                sessions={list.sessions}
-                duePlans={props.duePlans}
-              />
+              {/* A new workspace is only its name, one line and the box. */}
+              {!empty && (
+                <NextUp
+                  workspaceId={workspace.id}
+                  sessions={list.sessions}
+                  duePlans={props.duePlans}
+                />
+              )}
               {!empty && (
                 <Link
                   to="/workspaces/$workspaceId"
