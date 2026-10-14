@@ -127,7 +127,7 @@ test("a document's tables sort on its page, as in an answer", async ({ page }) =
   const price = table.getByRole("columnheader", { name: "Price" });
   await price.getByRole("button").click();
   await expect(price).toHaveAttribute("aria-sort", "ascending");
-  expect(await table.locator("tbody tr td:first-child").allTextContents()).toEqual([
+  await expect(table.locator("tbody tr td:first-child")).toHaveText([
     "Head Evo Speed",
     "Babolat Contact",
     "Bullpadel Indiga CTR",
