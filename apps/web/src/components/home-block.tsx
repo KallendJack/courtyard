@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { classes } from "@/lib/classes";
 
 // The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
@@ -17,6 +17,48 @@ const TONES = {
 
 export type RowTone = keyof typeof TONES;
 
+/** From a tablet up, where blocks share the page's height and their rows scroll inside (#335). */
+const TABLET_UP = "(min-width: 48rem)";
+
+/**
+ * The least height a block can have and still show its label and its first row in full (#398),
+ * from a tablet up, or `undefined` (no least height) on a phone, or when it isn't asked for. It's
+ * measured, since rows differ: an approval's, with its button, is taller than a running one.
+ */
+const useOneRowAtLeast = (section: RefObject<HTMLElement | null>, wanted: boolean) => {
+  const [least, setLeast] = useState<number>();
+  useEffect(() => {
+    const box = section.current;
+    if (!wanted || box === null) return;
+    const tabletUp = window.matchMedia(TABLET_UP);
+    const measure = () => {
+      const label = box.firstElementChild;
+      // Its first row, or the one quiet line an empty block keeps its place with (#283).
+      const row = box.querySelector<HTMLElement>("li, [data-block-empty]");
+      if (!tabletUp.matches || !(label instanceof HTMLElement) || row === null) {
+        setLeast(undefined);
+        return;
+      }
+      const style = getComputedStyle(box);
+      const edges = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"] as const;
+      const around = edges.reduce((sum, edge) => sum + Number.parseFloat(style[edge]), 0);
+      setLeast(around + label.offsetHeight + Number.parseFloat(style.rowGap) + row.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    const rows = new MutationObserver(measure);
+    rows.observe(box, { childList: true, subtree: true });
+    tabletUp.addEventListener("change", measure);
+    return () => {
+      observer.disconnect();
+      rows.disconnect();
+      tabletUp.removeEventListener("change", measure);
+    };
+  }, [section, wanted]);
+  return least;
+};
+
 /** One of Home's blocks: its label in capitals (gold, with a dot, when it needs the owner), and what's beside it. */
 export function Block(props: {
   label: string;
@@ -30,15 +72,25 @@ export function Block(props: {
    * rows, in `BlockRows`, scroll inside it.
    */
   fill?: boolean;
+  /**
+   * From a tablet up, it never gets smaller than its label and one row (#398): with blocks above
+   * and below it, it gives way to them only that far, and its rows scroll inside.
+   */
+  oneRowAtLeast?: boolean;
   children: ReactNode;
 }) {
+  const section = useRef<HTMLElement>(null);
+  const oneRow = useOneRowAtLeast(section, props.oneRowAtLeast === true);
   return (
     <section
+      ref={section}
       aria-label={props.label}
+      style={oneRow === undefined ? undefined : { minHeight: oneRow }}
       className={classes(
         "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
         props.needs && "border-warning/25",
-        props.fill && "md:min-h-0 md:flex-1",
+        props.fill && "md:flex-1",
+        (props.fill || props.oneRowAtLeast) && "md:min-h-0",
       )}
     >
       <div className="flex items-center justify-between gap-2 pb-1.5">
@@ -115,7 +167,11 @@ export function BlockRows(props: { children: ReactNode; capped?: boolean }) {
 
 /** What an empty block says, in one quiet line, keeping its place (#283): "Nothing running". */
 export function BlockEmpty(props: { children: ReactNode }) {
-  return <p className="py-1 text-meta font-medium text-muted-foreground">{props.children}</p>;
+  return (
+    <p data-block-empty="" className="py-1 text-meta font-medium text-muted-foreground">
+      {props.children}
+    </p>
+  );
 }
 
 /**

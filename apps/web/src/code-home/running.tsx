@@ -57,7 +57,8 @@ export function Running(props: {
     );
   }
   return (
-    <Block label="Running" aside={aside}>
+    // Running gives way first when Home is short (#398): down to one row, the rest scrolling.
+    <Block label="Running" aside={aside} oneRowAtLeast>
       <BlockRows capped>
         <ul className="flex flex-col gap-1.5">
           {working.map((session) => (

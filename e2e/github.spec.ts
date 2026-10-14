@@ -1281,6 +1281,43 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post(`/api/sessions/${working}/stop`, { data: { turn: 1 } });
       await request.post("/api/github/sign-out", { data: {} });
     });
+
+    test("with Running full, Needs you still shows its row, and Running's scroll inside (#398)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      const asks = await request.post("/api/workspaces/workbench/sessions", {
+        data: {
+          text: "run command: git merge main (for: Bring #251 up to date)",
+          model: { provider: "fake", model: "echo" },
+        },
+      });
+      expect(asks.status()).toBe(201);
+      const working = [((await asks.json()) as { id: string }).id];
+      for (const name of ["Activity lines", "Swipe between photos", "Paste on the Fold"]) {
+        const works = await request.post("/api/workspaces/workbench/sessions", {
+          data: {
+            text: `${name} ${"word ".repeat(900)}`,
+            model: { provider: "fake", model: "echo" },
+          },
+        });
+        working.push(((await works.json()) as { id: string }).id);
+      }
+
+      await page.goto(HOME);
+      const { needsYou, running } = blocks(page);
+      await expect(running.getByRole("listitem").nth(2)).toBeAttached({ timeout: 45_000 });
+      const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
+      await expect(approval).toContainText("asked", { timeout: 45_000 });
+      await expect(approval).toBeInViewport({ ratio: 1 });
+      await expect(running.getByRole("listitem").first()).toBeInViewport({ ratio: 1 });
+      await shot(page, "tablet-home-needs-you-running-full");
+
+      for (const id of working)
+        await request.post(`/api/sessions/${id}/stop`, { data: { turn: 1 } });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
   });
 
   test.describe("on the cover screen", () => {
