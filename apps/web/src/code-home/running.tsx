@@ -51,14 +51,14 @@ export function Running(props: {
   const aside = `${props.running} of ${CODE_SESSIONS_AT_ONCE}`;
   if (working.length === 0) {
     return (
-      <Block label="Running" aside={aside}>
+      <Block label="Running" aside={aside} fill>
         <BlockEmpty>Nothing running</BlockEmpty>
       </Block>
     );
   }
   return (
-    <Block label="Running" aside={aside}>
-      <BlockRows capped>
+    <Block label="Running" aside={aside} fill>
+      <BlockRows>
         <ul className="flex flex-col gap-1.5">
           {working.map((session) => (
             <li key={session.id} aria-label={session.title}>
