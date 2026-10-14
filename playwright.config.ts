@@ -24,6 +24,9 @@ const port = 8799 + portShift;
 /** A second worker, for the one test that clears everything: a fresh start. */
 const freshStartPort = 8798 + portShift;
 
+/** The tests that sign in to the worker's fake GitHub and out again (#419). */
+const GITHUB_SPECS = /(github|layout-shift)\.spec\.ts$/;
+
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
   COURTYARD_FAKE_PROVIDER: "1",
@@ -57,7 +60,16 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: OWNER_LOGIN },
       dependencies: ["setup"],
-      testIgnore: /fresh-start.spec.ts$/,
+      testIgnore: [/fresh-start.spec.ts$/, GITHUB_SPECS],
+    },
+    {
+      // The worker's fake GitHub has one sign-in, which these tests sign in and out of: one at a
+      // time, so one never signs out under another (#419).
+      name: "github",
+      use: { ...devices["Desktop Chrome"], storageState: OWNER_LOGIN },
+      dependencies: ["setup"],
+      testMatch: GITHUB_SPECS,
+      workers: 1,
     },
     {
       // On its own worker and folders, so clearing everything never touches the other tests.
