@@ -65,22 +65,23 @@ export function Block(props: {
 /**
  * A block's rows, scrolling inside its card when there are more than fit (#335, #398; Paper,
  * Components, "A block with more rows than fit"): its label stays put, a thin thumb shows how far
- * down they go, and a fade at the foot says there's more below, gone at the end.
+ * down they go, and a fade at the foot says there's more below, gone at the end; scrolled down, a
+ * fade at the top says there's more above (#408). One per block: everything that scrolls in it.
  */
 export function BlockRows(props: { children: ReactNode }) {
   const scroller = useRef<HTMLDivElement>(null);
   const rows = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<{ overflows: boolean; atEnd: boolean }>({
-    overflows: false,
-    atEnd: true,
-  });
+  const [fit, setFit] = useState({ overflows: false, atStart: true, atEnd: true });
   const measure = useCallback(() => {
     const box = scroller.current;
     if (box === null) return;
     const overflows = box.scrollHeight > box.clientHeight + 1;
+    const atStart = box.scrollTop <= 1;
     const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
     setFit((was) =>
-      was.overflows === overflows && was.atEnd === atEnd ? was : { overflows, atEnd },
+      was.overflows === overflows && was.atStart === atStart && was.atEnd === atEnd
+        ? was
+        : { overflows, atStart, atEnd },
     );
   }, []);
   useEffect(() => {
@@ -99,6 +100,12 @@ export function BlockRows(props: { children: ReactNode }) {
           {props.children}
         </div>
       </div>
+      {fit.overflows && !fit.atStart && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-linear-to-t from-transparent to-surface"
+        />
+      )}
       {fit.overflows && !fit.atEnd && (
         <div
           aria-hidden

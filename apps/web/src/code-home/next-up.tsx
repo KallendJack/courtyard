@@ -67,13 +67,11 @@ export function NextUp(props: {
   return (
     <div className={COLUMN}>
       <Block label="Next up" aside={first.milestone ?? undefined} fill>
-        {/* Grill, a Build under it and an open Start can outgrow the column: then they scroll. */}
-        <div className="scroll-thin flex flex-col gap-1.5 md:min-h-0 md:overflow-y-auto">
+        {/* Grill, a Build under it, an open Start and More's rows scroll together, as one (#408). */}
+        <BlockRows>
           <StartOnIssue {...on} issue={first} does={first.ready ? "build" : "grill"} />
           {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
-        </div>
-        {shown.length > 0 && (
-          <BlockRows>
+          {shown.length > 0 && (
             <ul className="flex flex-col gap-0.5 pt-1">
               {shown.map((issue) => (
                 <li key={issue.number} aria-label={`#${issue.number} ${issue.title}`}>
@@ -93,8 +91,8 @@ export function NextUp(props: {
                 </li>
               ))}
             </ul>
-          </BlockRows>
-        )}
+          )}
+        </BlockRows>
         {hidden > 0 && (
           <div className="shrink-0">
             <Button variant="quietPrimary" size="xs" onClick={() => setMore((was) => !was)}>

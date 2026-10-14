@@ -1194,12 +1194,15 @@ test.describe("a code workspace's Home (#301, #308)", () => {
         /#255\s*Paste images on the Fold/,
         ...Array.from({ length: 9 }, () => /A later idea/),
       ]);
-      expect((await rowsScroll(nextUp)).overflows).toBe(true);
       expect(Math.round((await nextUp.boundingBox())?.height ?? 0)).toBe(
         Math.round(before?.height ?? 0),
       );
       await expect(nextUp.getByRole("heading", { name: "Next up" })).toBeInViewport();
-      await expect(nextUp.getByRole("button", { name: "Build" })).toBeInViewport();
+      // One scroller for the card and the rows (#408): the first issue shows whole, at the top,
+      // and scrolled to the end, so does the last row.
+      await expect(nextUp.getByRole("button", { name: "Build" })).toBeInViewport({ ratio: 1 });
+      expect((await rowsScroll(nextUp)).overflows).toBe(true);
+      await expect(nextUp.getByRole("listitem").last()).toBeInViewport({ ratio: 1 });
       await homeFitsOneScreen(page);
       await nextUp.getByRole("button", { name: "Fewer" }).click();
       // Under Grill, the rest all wait for More (#363).
