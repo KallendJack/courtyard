@@ -1,5 +1,56 @@
-import type { ComponentProps, ReactNode } from "react";
+import { LoaderCircle } from "lucide-react";
+import { type ComponentProps, type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
+
+/**
+ * A button shows it's working (#330; Paper, "Component · A button shows it's working"): while
+ * what the owner tapped runs, its button keeps its colour and size and ignores more taps, and once
+ * it has run for a moment, a spinner takes its icon's place and `busyLabel` says what it's doing
+ * ("Merging…"). Greyed out (`disabled`) only ever means it can't right now. `waiting` is for the
+ * actions beside a working one (Close PR while Merge merges): dimmed, as when they can't.
+ */
+export type Busy =
+  | { busy?: never; busyLabel?: never; waiting?: boolean }
+  | { busy: boolean; busyLabel: string; waiting?: boolean };
+
+/** How long a quick action has before it shows it's working, so it never flashes (as #269). */
+const WORKING_AFTER_MS = 300;
+
+/**
+ * What a button that might be busy shows and does: its content, swapped for a spinner and what
+ * it's doing once it has been busy a moment, and its tap, ignored while it's busy.
+ */
+export const useBusy = (props: {
+  busy: boolean;
+  busyLabel: string | undefined;
+  onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+}) => {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    setShown(false);
+    if (!props.busy) return;
+    const timer = setTimeout(() => setShown(true), WORKING_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [props.busy]);
+  return {
+    /** The spinner and what it's doing, once it shows; else nothing. */
+    working:
+      props.busy && shown ? (
+        <>
+          <LoaderCircle aria-hidden className="animate-spin" />
+          {props.busyLabel}
+        </>
+      ) : undefined,
+    attributes: {
+      ...(props.busy ? { "aria-busy": true } : {}),
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        // A form's submit button too: a press while it works sends nothing again.
+        if (props.busy) event.preventDefault();
+        else props.onClick?.(event);
+      },
+    },
+  };
+};
 
 /**
  * Courtyard's buttons (ADR 0012). Classes are joined with `classes`, not merged, so these are safe
@@ -63,18 +114,25 @@ export function Button({
   grow = false,
   narrowIcon,
   type = "button",
+  busy = false,
+  busyLabel,
+  waiting = false,
+  disabled,
+  onClick,
   children,
   ...props
-}: Omit<ComponentProps<"button">, "className"> & {
-  variant?: keyof typeof VARIANTS;
-  size?: keyof typeof SIZES;
-  fullWidth?: boolean;
-  /** Fills what's left of its row beside other buttons (Start building beside Cancel). */
-  grow?: boolean;
-  /** On a narrow screen, only this icon shows, in a round button; the label stays for screen readers. */
-  narrowIcon?: ReactNode;
-}) {
+}: Omit<ComponentProps<"button">, "className"> &
+  Busy & {
+    variant?: keyof typeof VARIANTS;
+    size?: keyof typeof SIZES;
+    fullWidth?: boolean;
+    /** Fills what's left of its row beside other buttons (Start building beside Cancel). */
+    grow?: boolean;
+    /** On a narrow screen, only this icon shows, in a round button; the label stays for screen readers. */
+    narrowIcon?: ReactNode;
+  }) {
   const collapses = narrowIcon !== undefined;
+  const { working, attributes } = useBusy({ busy, busyLabel, onClick });
   return (
     <button
       type={type}
@@ -86,17 +144,21 @@ export function Button({
         grow && "grow",
         collapses && "max-md:size-9 max-md:px-0",
       )}
+      disabled={disabled === true || waiting}
       {...props}
+      {...attributes}
     >
       {collapses ? (
         <>
           <span aria-hidden className="contents md:hidden">
-            {narrowIcon}
+            {working === undefined ? narrowIcon : <LoaderCircle className="animate-spin" />}
           </span>
-          <span className="inline-flex items-center gap-1.5 max-md:sr-only">{children}</span>
+          <span className="inline-flex items-center gap-1.5 max-md:sr-only">
+            {working ?? children}
+          </span>
         </>
       ) : (
-        children
+        (working ?? children)
       )}
     </button>
   );
@@ -147,24 +209,33 @@ export function IconButton({
   look = "quiet",
   hint,
   type = "button",
+  busy = false,
+  busyLabel,
+  waiting = false,
+  disabled,
+  onClick,
   ...props
-}: Omit<ComponentProps<"button">, "className" | "children" | "aria-label" | "title"> & {
-  label: string;
-  icon: ReactNode;
-  size?: keyof typeof ICON_SIZES;
-  /** Rounded square rather than round, to match the sidebar's rows. */
-  square?: boolean;
-  /** For a button that opens or shows something: whether it's open, for screen readers. */
-  expanded?: boolean;
-  look?: keyof typeof ICON_LOOKS;
-  /** Added to the hover text, such as a keyboard shortcut. */
-  hint?: string;
-}) {
+}: Omit<ComponentProps<"button">, "className" | "children" | "aria-label" | "title"> &
+  Busy & {
+    label: string;
+    icon: ReactNode;
+    size?: keyof typeof ICON_SIZES;
+    /** Rounded square rather than round, to match the sidebar's rows. */
+    square?: boolean;
+    /** For a button that opens or shows something: whether it's open, for screen readers. */
+    expanded?: boolean;
+    look?: keyof typeof ICON_LOOKS;
+    /** Added to the hover text, such as a keyboard shortcut. */
+    hint?: string;
+  }) {
+  const { working, attributes } = useBusy({ busy, busyLabel, onClick });
+  // Working, its spinner takes the icon's place, and its name says what it's doing.
+  const name = working === undefined || busyLabel === undefined ? label : busyLabel;
   return (
     <button
       type={type}
-      aria-label={label}
-      title={hint === undefined ? label : `${label} (${hint})`}
+      aria-label={name}
+      title={hint === undefined ? name : `${name} (${hint})`}
       {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
       className={classes(
         "inline-flex shrink-0 items-center justify-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 [&_svg]:shrink-0",
@@ -172,9 +243,11 @@ export function IconButton({
         ICON_LOOKS[look],
         ICON_SIZES[size],
       )}
+      disabled={disabled === true || waiting}
       {...props}
+      {...attributes}
     >
-      {icon}
+      {working === undefined ? icon : <LoaderCircle aria-hidden className="animate-spin" />}
     </button>
   );
 }

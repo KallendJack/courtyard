@@ -139,7 +139,13 @@ function Waiting(props: {
           <WaitingDot />
           Waiting for you to finish. The code works for 15 minutes.
         </p>
-        <Button variant="quiet" size="xs" onClick={props.onCancel} disabled={props.busy}>
+        <Button
+          variant="quiet"
+          size="xs"
+          onClick={props.onCancel}
+          busy={props.busy}
+          busyLabel="Cancelling…"
+        >
           Cancel
         </Button>
       </div>
@@ -151,6 +157,7 @@ function Waiting(props: {
 function SignInBox(props: { models: Models; signIn: ProviderSignIn }) {
   const { models, signIn } = props;
   const action = useSignInAction(models, signIn);
+  const doing = action.running?.[0];
   const { state, label, service } = signIn;
   const error = <FormError message={action.error} />;
 
@@ -180,7 +187,8 @@ function SignInBox(props: { models: Models; signIn: ProviderSignIn }) {
                 variant="notice"
                 size="sm"
                 onClick={() => void action.run("start")}
-                disabled={action.busy}
+                busy={action.busy}
+                busyLabel="Getting a code…"
               >
                 Get a new code
               </Button>
@@ -211,11 +219,19 @@ function SignInBox(props: { models: Models; signIn: ProviderSignIn }) {
                 variant="quiet"
                 size="sm"
                 onClick={() => void action.run("not-now")}
-                disabled={action.busy}
+                busy={doing === "not-now"}
+                busyLabel="Hiding it…"
+                waiting={doing === "start"}
               >
                 Not now
               </Button>
-              <Button size="sm" onClick={() => void action.run("start")} disabled={action.busy}>
+              <Button
+                size="sm"
+                onClick={() => void action.run("start")}
+                busy={doing === "start"}
+                busyLabel="Signing in…"
+                waiting={doing === "not-now"}
+              >
                 Sign in to {label}
               </Button>
             </span>
@@ -288,7 +304,8 @@ function SignInCard(props: { models: Models; signIn: ProviderSignIn; provider: P
             variant={act === "start" ? "quietPrimary" : "quiet"}
             size="xs"
             onClick={() => void action.run(act)}
-            disabled={action.busy}
+            busy={action.busy}
+            busyLabel={act === "start" ? "Signing in…" : "Signing out…"}
           >
             {act === "start" ? "Sign in" : "Sign out"}
           </Button>
@@ -332,9 +349,15 @@ const reposLine = (repos: readonly string[] | null) => {
 function GitHubCard(props: { models: Models; github: GitHubConnection }) {
   const { models, github } = props;
   const action = useGitHubAction(models);
+  const doing = action.running?.[0];
   const error = <FormError message={action.error} />;
   const signIn = (label: string) => (
-    <Button size="sm" onClick={() => void action.run("start")} disabled={action.busy}>
+    <Button
+      size="sm"
+      onClick={() => void action.run("start")}
+      busy={action.busy}
+      busyLabel="Getting a code…"
+    >
       {label}
     </Button>
   );
@@ -400,7 +423,8 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
               variant="quiet"
               size="xs"
               onClick={() => void action.run("cancel")}
-              disabled={action.busy}
+              busy={action.busy}
+              busyLabel="Cancelling…"
             >
               Cancel
             </Button>
@@ -420,7 +444,9 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
                 variant="outline"
                 size="xs"
                 onClick={() => void action.run("start")}
-                disabled={action.busy}
+                busy={doing === "start"}
+                busyLabel="Switching…"
+                waiting={doing === "sign-out"}
               >
                 Switch
               </Button>
@@ -428,7 +454,9 @@ function GitHubCard(props: { models: Models; github: GitHubConnection }) {
                 variant="outline"
                 size="xs"
                 onClick={() => void action.run("sign-out")}
-                disabled={action.busy}
+                busy={doing === "sign-out"}
+                busyLabel="Signing out…"
+                waiting={doing === "start"}
               >
                 Sign out
               </Button>

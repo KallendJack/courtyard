@@ -155,14 +155,21 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
     <div className="flex flex-col gap-2 pt-3 pb-6">
       <FormError message={add.error} />
       <div className="flex justify-end">
-        <Button form={formId} type="submit" size="lg" disabled={add.busy || picked === undefined}>
+        <Button
+          form={formId}
+          type="submit"
+          size="lg"
+          disabled={picked === undefined}
+          busy={add.busy}
+          busyLabel="Creating…"
+        >
           {name.trim() === "" ? "Create" : `Create ${name.trim()}`}
         </Button>
       </div>
     </div>
   ) : (
     <div className="pt-3 pb-6">
-      <Button form={formId} type="submit" disabled={add.busy}>
+      <Button form={formId} type="submit" busy={add.busy} busyLabel="Adding…">
         Add workspace
       </Button>
     </div>

@@ -75,7 +75,8 @@ export function ApprovalCard(props: {
     waiting: { onWaiting: (waiting: Waiting) => void; signal: AbortSignal },
   ) => Promise<string | undefined>;
 }) {
-  const [sending, setSending] = useState(false);
+  /** The answer on its way: its button shows it's working, the other waits (#330). */
+  const [sending, setSending] = useState<ApprovalAnswer>();
   const [problem, setProblem] = useState<string>();
   const [waiting, setWaiting] = useState<Waiting>();
   // Stops a kept answer's tries once the card has gone (answered on another device, say).
@@ -86,7 +87,7 @@ export function ApprovalCard(props: {
     return () => card.abort();
   }, []);
   const answer = async (given: ApprovalAnswer) => {
-    setSending(true);
+    setSending(given);
     setProblem(undefined);
     const { signal } = gone.current ?? new AbortController();
     const failed = await props.onAnswer(given, { onWaiting: setWaiting, signal });
@@ -94,7 +95,7 @@ export function ApprovalCard(props: {
     setWaiting(undefined);
     setProblem(failed);
     // Once answered, the card goes with the answer's event; until then it can be answered again.
-    if (failed !== undefined) setSending(false);
+    if (failed !== undefined) setSending(undefined);
   };
   return (
     // Where the card's own classes apply (approval-card.css).
@@ -125,14 +126,23 @@ export function ApprovalCard(props: {
           />
         )}
         <div className="mt-3 flex gap-2.5">
-          <ThumbButton look="quiet" tall disabled={sending} onClick={() => void answer("deny")}>
+          <ThumbButton
+            look="quiet"
+            tall
+            busy={sending === "deny"}
+            busyLabel="Sending…"
+            waiting={sending === "allow"}
+            onClick={() => void answer("deny")}
+          >
             {props.denyLabel ?? "Deny"}
           </ThumbButton>
           <ThumbButton
             look="main"
             grow={1.4}
             tall
-            disabled={sending}
+            busy={sending === "allow"}
+            busyLabel="Allowing…"
+            waiting={sending === "deny"}
             onClick={() => void answer("allow")}
           >
             Allow

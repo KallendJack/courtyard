@@ -18,6 +18,8 @@ export function PasswordPage(props: {
   endpoint: "/setup" | "/login";
   autoComplete: "new-password" | "current-password";
   submitLabel: string;
+  /** What its button says while it works: "Logging in…". */
+  busyLabel: string;
   confirm?: boolean;
   check?: (password: string) => string | undefined;
 }) {
@@ -65,7 +67,7 @@ export function PasswordPage(props: {
             />
           )}
           <FormError message={send.error} />
-          <Button type="submit" size="lg" fullWidth disabled={send.busy}>
+          <Button type="submit" size="lg" fullWidth busy={send.busy} busyLabel={props.busyLabel}>
             {props.submitLabel}
           </Button>
         </form>

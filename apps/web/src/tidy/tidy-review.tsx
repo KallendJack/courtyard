@@ -252,12 +252,14 @@ function OneTidy(props: { workspace: Whose; name: string; header: ReactNode; aga
           <Button
             size="lg"
             onClick={() => void save.run(proposal)}
-            disabled={save.busy || ticked === 0}
+            disabled={ticked === 0}
+            busy={save.busy}
+            busyLabel="Saving…"
           >
             Save {ticked} {ticked === 1 ? "change" : "changes"}
           </Button>
         )}
-        <Button size="lg" variant="outline" onClick={() => void back()}>
+        <Button size="lg" variant="outline" waiting={save.busy} onClick={() => void back()}>
           Cancel
         </Button>
       </div>

@@ -17,6 +17,8 @@ export function ConfirmStep(props: {
   children: ReactNode;
   /** The confirming button: "Archive workspace", say. */
   confirmLabel: string;
+  /** What it says while it works: "Archiving…". */
+  busyLabel: string;
   confirm: () => Promise<string | undefined>;
   onCancel: () => void;
 }) {
@@ -32,11 +34,12 @@ export function ConfirmStep(props: {
             <Button
               variant="destructive"
               onClick={() => void confirm.run()}
-              disabled={confirm.busy}
+              busy={confirm.busy}
+              busyLabel={props.busyLabel}
             >
               {props.confirmLabel}
             </Button>
-            <Button variant="outline" onClick={props.onCancel}>
+            <Button variant="outline" waiting={confirm.busy} onClick={props.onCancel}>
               Cancel
             </Button>
           </div>

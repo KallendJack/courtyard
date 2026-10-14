@@ -19,11 +19,18 @@ export function AskLine(props: {
   placeholder: string;
   /** The quick asks, each sent as it reads. */
   quick: readonly string[];
-  /** Actions beside the quick asks that send nothing, such as Fix it in a session (#327). */
-  actions?: readonly { readonly label: string; readonly run: () => void }[];
+  /**
+   * Actions beside the quick asks that send nothing, such as Fix it in a session (#327). One that's
+   * `busy` shows it's working with its `busyLabel`, and the rest of the line waits (#330).
+   */
+  actions?: readonly {
+    readonly label: string;
+    readonly run: () => void;
+    readonly busy?: boolean;
+    readonly busyLabel?: string;
+  }[];
   /** Sends what was asked: an error to show, or nothing once it's gone. */
   ask: (text: string) => Promise<string | undefined>;
-  disabled?: boolean;
 }) {
   const [text, setText] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -59,7 +66,11 @@ export function AskLine(props: {
     const words = text.trim();
     if (words !== "") void asking.run(words);
   };
-  const off = props.disabled === true || asking.busy;
+  // What's working: a quick ask (its button shows it), something typed (Ask shows it), or an action.
+  const asked = asking.running?.[0];
+  const quickAsked = asked !== undefined && props.quick.includes(asked);
+  const acting = props.actions?.some((action) => action.busy === true) === true;
+  const working = asking.busy || acting;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -73,7 +84,7 @@ export function AskLine(props: {
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder={props.placeholder}
-          disabled={props.disabled}
+          disabled={acting}
           enterKeyHint="send"
           className="h-9 min-w-40 flex-1 bg-transparent text-interface font-medium text-foreground outline-none disabled:opacity-50"
         />
@@ -82,7 +93,9 @@ export function AskLine(props: {
             key={quick}
             variant="outline"
             size="sm"
-            disabled={off}
+            busy={asked === quick}
+            busyLabel="Asking…"
+            waiting={working && asked !== quick}
             onClick={() => void asking.run(quick)}
           >
             {quick}
@@ -93,7 +106,9 @@ export function AskLine(props: {
             key={action.label}
             variant="outline"
             size="sm"
-            disabled={off}
+            busy={action.busy === true}
+            busyLabel={action.busyLabel ?? action.label}
+            waiting={working && action.busy !== true}
             onClick={action.run}
           >
             {action.label}
@@ -104,7 +119,10 @@ export function AskLine(props: {
           label="Ask"
           icon={<ArrowUp />}
           look="filled"
-          disabled={off || text.trim() === ""}
+          busy={asking.busy && !quickAsked}
+          busyLabel="Asking…"
+          waiting={acting || quickAsked}
+          disabled={text.trim() === ""}
         />
       </form>
       <FormError message={asking.error} />

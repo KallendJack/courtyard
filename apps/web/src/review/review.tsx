@@ -372,7 +372,8 @@ function Reviewing(props: {
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={bring.busy}
+      busy={bring.busy}
+      busyLabel="Bringing up to date…"
       onClick={() => void bring.run()}
     >
       <RefreshCw aria-hidden />
@@ -384,7 +385,8 @@ function Reviewing(props: {
       look="primary"
       grow={3}
       fit={desktop}
-      disabled={end.busy}
+      busy={end.busy}
+      busyLabel="Merging…"
       aria-disabled={merge.kind === "refused" ? true : undefined}
       aria-describedby={merge.kind === "refused" ? "merge-refused" : undefined}
       onClick={() =>
@@ -407,7 +409,12 @@ function Reviewing(props: {
     </p>
   );
   const closeAction = (
-    <ThumbButton look="quiet" fit={desktop} onClick={() => setClosing(true)}>
+    <ThumbButton
+      look="quiet"
+      fit={desktop}
+      waiting={end.busy || bring.busy}
+      onClick={() => setClosing(true)}
+    >
       Close PR
     </ThumbButton>
   );
@@ -422,10 +429,18 @@ function Reviewing(props: {
       quick={asked ? FOLLOW_UP_ASKS : quickAsks(review)}
       actions={[
         ...(asked && !panelOpen ? [{ label: "Quick questions", run: () => setAsking(true) }] : []),
-        ...(asked ? [{ label: "Fix it in a session", run: () => void fix.run() }] : []),
+        ...(asked
+          ? [
+              {
+                label: "Fix it in a session",
+                run: () => void fix.run(),
+                busy: fix.busy,
+                busyLabel: "Starting…",
+              },
+            ]
+          : []),
       ]}
       ask={ask}
-      disabled={fix.busy}
     />
   );
 
@@ -505,6 +520,7 @@ function Reviewing(props: {
             <ConfirmStep
               question={`Close PR #${pullRequest.number}?`}
               confirmLabel="Close PR"
+              busyLabel="Closing…"
               onCancel={() => setClosing(false)}
               confirm={() => endNow({ kind: "close" })}
             >
@@ -625,10 +641,10 @@ function StartSession(props: {
           : "to merge main in and fix the conflict?"}
       </p>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={props.busy} onClick={props.onStart}>
+        <Button busy={props.busy} busyLabel="Starting…" onClick={props.onStart}>
           Start the session
         </Button>
-        <Button variant="outline" onClick={props.onCancel}>
+        <Button variant="outline" waiting={props.busy} onClick={props.onCancel}>
           Cancel
         </Button>
       </div>
@@ -715,7 +731,9 @@ function Folded(props: {
           <Button
             size="lg"
             variant={offer === "ready" ? "primary" : "outline"}
-            disabled={offer !== "ready" || update.busy}
+            disabled={offer !== "ready"}
+            busy={update.busy}
+            busyLabel="Updating…"
             onClick={() => void update.run()}
           >
             <RefreshCw aria-hidden />

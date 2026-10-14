@@ -83,6 +83,29 @@ context.fillStyle = "#ffffff";`,
   assert.doesNotMatch(said, /#78|#150/);
 });
 
+test("fails a button greyed out while it works, which says it's busy instead (#330)", async () => {
+  await source({
+    "styles.css": THEME,
+    "things/thing-form.tsx": `const accept = "image/*";
+export const Save = () => (
+  <>
+    <Button type="submit" disabled={save.busy}>Save</Button>
+    <Button disabled={props.busy || picked === undefined}>Add</Button>
+    <Button busy={save.busy} busyLabel="Saving…" disabled={picked === undefined}>Save</Button>
+  </>
+);`,
+  });
+  const { passed, said } = await check();
+  assert.equal(passed, false);
+  assert.match(said, /busy=/);
+  assert.match(said, /things\/thing-form\.tsx:4: disabled=\{save\.busy\}/);
+  assert.match(
+    said,
+    /things\/thing-form\.tsx:5: disabled=\{props\.busy \|\| picked === undefined\}/,
+  );
+  assert.doesNotMatch(said, /thing-form\.tsx:6/);
+});
+
 test("passes a one-off on the allowlist, which has to say why", async () => {
   await source({ "styles.css": THEME, "photo.ts": `context.fillStyle = "#ffffff";` });
   const entry = { file: "photo.ts", value: "#ffffff" };
