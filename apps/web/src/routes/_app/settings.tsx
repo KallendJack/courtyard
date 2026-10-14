@@ -32,8 +32,7 @@ function Settings() {
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
 
   return (
-    <Page>
-      <PageTitle>Settings</PageTitle>
+    <Page header={<PageTitle>Settings</PageTitle>}>
       <OwnerContextPanel
         result={ownerContext}
         canGetToKnow={list.some((workspace) => workspace.mode === "planning")}

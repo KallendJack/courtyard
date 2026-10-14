@@ -20,8 +20,8 @@
 }
 
 /*
- * The Home fills the page's column, so its message box sits at its foot; from a tablet up the page
- * is the screen's height (`Page`'s fill), and the Home no taller (#335).
+ * Each part fills its place in the page; from a tablet up the middle is the room left between the
+ * pinned header and footer (`Page`'s fill), and the Home's blocks no taller (#335).
  */
 [data-code-home] {
   display: flex;

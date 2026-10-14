@@ -1,7 +1,7 @@
 import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { BackLink } from "@/components/back-link";
-import { Page, PageTitle } from "@/components/page";
+import { PageTitle } from "@/components/page";
 import { TidyReview } from "../../tidy/tidy-review.tsx";
 
 export const Route = createFileRoute("/_app/tidy")({
@@ -25,20 +25,18 @@ function Tidy() {
       : undefined;
 
   return (
-    <Page>
-      <PageTitle above={<BackLink workspaceId={id} />}>
-        {id === undefined
-          ? "Tidy your owner context"
-          : `Tidy ${name ?? "this workspace"}'s context`}
-      </PageTitle>
-      <div className="mt-4">
-        {/* A key per place, so going from one file to another starts afresh. */}
-        <TidyReview
-          key={id ?? "owner"}
-          workspace={id}
-          name={id === undefined ? "your owner context" : `${name ?? "this workspace"}'s context`}
-        />
-      </div>
-    </Page>
+    // A key per place, so going from one file to another starts afresh.
+    <TidyReview
+      key={id ?? "owner"}
+      workspace={id}
+      name={id === undefined ? "your owner context" : `${name ?? "this workspace"}'s context`}
+      header={
+        <PageTitle above={<BackLink workspaceId={id} />}>
+          {id === undefined
+            ? "Tidy your owner context"
+            : `Tidy ${name ?? "this workspace"}'s context`}
+        </PageTitle>
+      }
+    />
   );
 }

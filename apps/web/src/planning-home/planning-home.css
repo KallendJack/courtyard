@@ -13,13 +13,3 @@
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
   @tailwind utilities source(none);
 }
-
-/* The Home fills the page's column, so its message box sits at the foot of a short page. */
-[data-planning-home] {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-main:has(> [data-planning-home]) {
-  min-height: 100%;
-}
