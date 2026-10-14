@@ -63,6 +63,8 @@ const BASE =
 const VARIANTS = {
   /** The main action. */
   primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+  /** The main action on something that needs the owner first, in gold (Grill, #363). */
+  needs: "border-transparent bg-warning text-background hover:bg-warning/85",
   /** Any other action, such as Cancel. */
   outline: "border-input bg-input/30 text-foreground hover:bg-input/50",
   /** Archiving, deleting, logging out. */
@@ -181,6 +183,8 @@ const ICON_LOOKS = {
   quiet: "text-muted-foreground hover:bg-muted hover:text-foreground",
   /** Shown pressed, while what it opened is open on the page (a confirm step, say). */
   pressed: "bg-muted text-foreground",
+  /** Ringed in violet, while the menu it opened is open over the page (a workspace's ⋯). */
+  open: "bg-muted text-foreground ring-stroke ring-primary-text",
   /** On a disc in violet: an action beside each line of a list (Grill this plan). */
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */

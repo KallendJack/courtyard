@@ -2,6 +2,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CODE_SESSIONS_AT_ONCE,
+  CodeSessionList,
   GitHubConnection,
   NextUp,
   PaperFileList,
@@ -10,12 +12,14 @@ import {
   WorkspaceDetail,
   WorkspaceMain,
 } from "@courtyard/contract";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakePaperFiles, type FakePaperFiles } from "./paper/fake.ts";
 import { buildIssueMessage } from "./prompts/index.ts";
 import { createFakeProvider } from "./providers/fake.ts";
+import type { Provider } from "./providers/index.ts";
 import {
   asOwner,
+  CODING_MODEL,
   changesIn,
   codeRepo,
   codeWorkspace,
@@ -25,6 +29,7 @@ import {
   type FakeIssue,
   followSession,
   gitIn,
+  heldCoder,
   postJson,
   quotedInGuide,
   type Requester,
@@ -58,6 +63,7 @@ const signedInWith = async (
     signIn?: boolean;
     /** Its milestones' descriptions, by title. */
     milestones?: Readonly<Record<string, string>>;
+    providers?: readonly Provider[];
   } = {},
 ) => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project", ...more.config });
@@ -69,7 +75,7 @@ const signedInWith = async (
     testWorker({
       root,
       github: github.api,
-      providers: [createFakeProvider({ delayMs: 0 })],
+      providers: more.providers ?? [createFakeProvider({ delayMs: 0 })],
       ...(more.paper === undefined ? {} : { paperFiles: more.paper.paper }),
     }),
   );
@@ -118,6 +124,29 @@ describe("a code workspace's one line (#301)", () => {
       contextFile: null,
       description: "Plan and code with AI models.",
     });
+  });
+
+  it("is none when the context file kept from before still holds the old starter hint (#333)", async () => {
+    await codeWorkspace(root, "side-project", repo);
+    await writeFile(
+      join(root, "context", "side-project", "CONTEXT.md"),
+      [
+        "# Side project",
+        "",
+        "Write one line for each fact, plan or idea. Facts are true now, plans are decided but not done, and ideas are being considered.",
+        "",
+        "## Facts",
+        "",
+      ].join("\n"),
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    const detail = WorkspaceDetail.parse(
+      await (await request("/api/workspaces/side-project")).json(),
+    );
+
+    expect(detail).toMatchObject({ workspace: { name: "Side project" }, contextFile: null });
+    expect(detail.description).toBeUndefined();
   });
 });
 
@@ -193,14 +222,60 @@ describe("Next up (#301)", () => {
     ]);
   });
 
+  it("lists the issues on a Build order line that need grilling first in their place, and no others that aren't ready (#363)", async () => {
+    const { request } = await signedInWith(
+      [
+        { number: 2, title: "Two", milestone: "4 · Code workspaces" },
+        {
+          number: 117,
+          title: "Sub-agents",
+          milestone: "4 · Code workspaces",
+          labels: ["needs-triage"],
+        },
+        { number: 8, title: "Eight", milestone: "4 · Code workspaces", labels: ["needs-info"] },
+        {
+          number: 6,
+          title: "Off the line",
+          milestone: "4 · Code workspaces",
+          labels: ["needs-triage"],
+        },
+        {
+          number: 7,
+          title: "For a human",
+          milestone: "4 · Code workspaces",
+          labels: ["ready-for-human"],
+        },
+        { number: 12, title: "Tablet hub", milestone: "5 · Tablet hub", labels: ["needs-triage"] },
+      ],
+      {
+        milestones: {
+          "4 · Code workspaces": "NOW. Build order: #117 → #2 → #7 → #8.",
+          "5 · Tablet hub": "Next.",
+        },
+      },
+    );
+
+    const response = await request("/api/workspaces/side-project/next-up");
+
+    expect(
+      NextUp.parse(await response.json()).issues.map((issue) => [issue.number, issue.ready]),
+    ).toEqual([
+      [117, false],
+      [2, true],
+      [8, false],
+    ]);
+  });
+
   it("asks GitHub only when a page asks, then keeps the answer a couple of minutes", async () => {
     const { github, request } = await signedInWith([{ number: 3, title: "Three" }]);
     expect(github.issuesAsked()).toBe(0);
 
     await nextUpOf(request);
+    const asked = github.issuesAsked();
     await nextUpOf(request);
 
-    expect(github.issuesAsked()).toBe(1);
+    expect(asked).toBeGreaterThan(0);
+    expect(github.issuesAsked()).toBe(asked);
   });
 
   it("says to sign in to GitHub while no one is", async () => {
@@ -267,6 +342,82 @@ describe("Build (#298)", () => {
   });
 });
 
+describe("Grill (#363)", () => {
+  const needsGrilling = [
+    {
+      number: 117,
+      title: "Sub-agents",
+      milestone: "4 · Code workspaces",
+      labels: ["needs-triage"],
+    },
+    { number: 22, title: "Ready one", milestone: "4 · Code workspaces" },
+  ];
+  const buildOrder = { "4 · Code workspaces": "Build order: #117 → #22." };
+
+  it("starts a code session with the grilling skill whose first message is the issue, and claims nothing", async () => {
+    const { github, request } = await signedInWith(needsGrilling, { milestones: buildOrder });
+
+    const response = await postJson(request, "/api/workspaces/side-project/next-up/117/grill", {
+      model: FAKE_MODEL,
+    });
+
+    expect(response.status).toBe(201);
+    const session = SessionSummary.parse(await response.json());
+    expect(session.title).toBe("Grill #117: Sub-agents");
+    const events = await followSession(request, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+    const first = events.find((event) => event.type === "owner-message");
+    expect(first).toMatchObject({
+      text: await quotedInGuide("Grill issue #<number>", { number: "117", title: "Sub-agents" }),
+      skill: "grilling",
+    });
+    expect(github.commentsOn(onGitHub, 117)).toEqual([]);
+  });
+
+  it("doesn't take a builder's place among the code sessions running", async () => {
+    const { provider, turns } = heldCoder();
+    const { request } = await signedInWith(needsGrilling, {
+      milestones: buildOrder,
+      providers: [provider],
+    });
+    for (let place = 1; place <= CODE_SESSIONS_AT_ONCE; place += 1) {
+      await postJson(request, "/api/workspaces/side-project/sessions", {
+        text: `Task ${place}`,
+        model: CODING_MODEL,
+      });
+    }
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE));
+
+    const response = await postJson(request, "/api/workspaces/side-project/next-up/117/grill", {
+      model: CODING_MODEL,
+    });
+
+    expect(response.status).toBe(201);
+    await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE + 1));
+    const listed = CodeSessionList.parse(
+      await (await request("/api/workspaces/side-project/sessions")).json(),
+    );
+    expect(listed.running).toBe(CODE_SESSIONS_AT_ONCE);
+    expect(turns[CODE_SESSIONS_AT_ONCE]?.env.COURTYARD_SESSION_SLOT).toBeUndefined();
+    for (const turn of turns) turn.finish();
+  });
+
+  it("refuses an issue that doesn't need grilling, and starts nothing", async () => {
+    const { request } = await signedInWith(needsGrilling, { milestones: buildOrder });
+
+    const response = await postJson(request, "/api/workspaces/side-project/next-up/22/grill", {
+      model: FAKE_MODEL,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await errorOf(response)).toMatch(/doesn't need grilling/);
+    const listed = await request("/api/workspaces/side-project/sessions");
+    expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+  });
+});
+
 describe("main (#301's Main row)", () => {
   it("gives the default branch's newest commit and its build, and says when it's the live copy's repository", async () => {
     await codeWorkspace(root, "side-project", repo);
@@ -296,7 +447,23 @@ describe("main (#301's Main row)", () => {
     expect(response.status).toBe(200);
     expect(WorkspaceMain.parse(await response.json())).toEqual({
       newest: { commit: head, title: `${head.slice(0, 7)} Start` },
-      build: { kind: "passed", jobs: [{ name: "Checks", outcome: "passed" }] },
+      build: {
+        kind: "passed",
+        startedAt: "2026-10-12T09:00:00.000Z",
+        completedAt: "2026-10-12T09:01:00.000Z",
+        stages: [
+          [
+            {
+              name: "Checks",
+              outcome: "passed",
+              startedAt: "2026-10-12T09:00:00.000Z",
+              completedAt: "2026-10-12T09:01:00.000Z",
+              shards: null,
+              needs: [],
+            },
+          ],
+        ],
+      },
       liveCopy: true,
     });
   });

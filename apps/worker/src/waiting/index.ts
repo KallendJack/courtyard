@@ -54,16 +54,18 @@ export const sessionWaiting = (session: {
 };
 
 /**
- * What an open pull request waits on the owner for: its conflict with its base; its failing
- * checks, unless its session is working on them (#172); a merge once its checks pass; else
- * nothing (its checks still running, say).
+ * What an open pull request waits on the owner for: its conflict with its base, unless its
+ * session is bringing it up to date (#382); its failing checks, unless its session is working on
+ * them (#172); a merge once its checks pass; else nothing (its checks still running, say).
  */
 export const pullRequestWaiting = (
   pullRequest: PullRequest,
   session: { readonly now: TurnNow } | undefined,
 ): PullRequestWaiting => {
   if (pullRequest.state !== "open") return "nothing";
-  if (pullRequest.conflicts === true) return "conflict";
+  if (pullRequest.conflicts === true) {
+    return session?.now.kind === "working" ? "nothing" : "conflict";
+  }
   if (pullRequest.checks.kind === "failed") {
     return session?.now.kind === "working" ? "nothing" : "failed";
   }

@@ -1,16 +1,22 @@
 import type { BuildJob, LiveStatus, LiveVersion, MainBuild } from "@courtyard/contract";
 import { useEffect, useState } from "react";
+import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/build-stages";
 import { Button } from "@/components/button";
+import { Sheet } from "@/components/sheet";
 import { WebButton } from "@/components/web-link";
 import { classes } from "@/lib/classes";
+import { elapsedWords } from "../when.ts";
 import type { FromWorker } from "../worker.ts";
 import { loadLive } from "./api.ts";
 
-/** How often a page showing main's build asks again while it runs (the worker asks GitHub). */
-const ASK_EVERY_MS = 15 * 1000;
+/**
+ * How often a page showing main's build asks again while it runs (the worker asks GitHub), so
+ * Update lights up moments after its last job passes (#337).
+ */
+const ASK_EVERY_MS = 10 * 1000;
 
 /**
- * The live status, asked for once the page is showing, then again every 15 seconds while main's
+ * The live status, asked for once the page is showing, then again every 10 seconds while main's
  * build runs and the page is in front of the owner: hidden, it waits, and asks as soon as it's
  * looked at again. `when` false asks nothing.
  */
@@ -84,33 +90,38 @@ export const updateOffer = (live: LiveStatus | undefined) => {
   }
 };
 
-/** Each job's bar and name, by how it's going: violet running, moss passed, red failed. */
-const LOOKS: Readonly<Record<BuildJob["outcome"], { bar: string; name: string; said: string }>> = {
-  running: { bar: "bg-primary shadow-glow", name: "text-primary-text", said: "running" },
-  passed: { bar: "bg-success", name: "text-placeholder", said: "passed" },
-  failed: { bar: "bg-destructive", name: "text-destructive", said: "failed" },
-  other: { bar: "bg-input", name: "text-placeholder", said: "didn't run" },
-};
-
 /** "Unit tests", or "Unit tests and 2 more". */
 const namesSaid = (jobs: readonly BuildJob[]) => {
   const [first, ...more] = jobs;
   return `${first?.name ?? ""}${more.length === 0 ? "" : ` and ${more.length} more`}`;
 };
 
-/** Where the build stands, after its title: "Unit tests · about 2 min". */
-const standing = (build: MainBuild, updates: boolean) => {
+/** How long until `endsAround`: "about 2 min left", or "nearly done" once it's past. */
+const leftOf = (endsAround: string, now: number) => {
+  const left = Date.parse(endsAround) - now;
+  return left <= 0 ? "nearly done" : `about ${Math.ceil(left / 60_000)} min left`;
+};
+
+/**
+ * Where the build stands, after its title (#337): "Running · 1:24", counting up, with how long
+ * it has left when `full`; "Passed · 2:51"; "Unit tests failed · Update waits".
+ */
+const standing = (build: MainBuild, now: number, said: { full: boolean; updates: boolean }) => {
   switch (build.kind) {
     case "passed":
-      return updates ? "Passed · ready to update" : "Passed";
-    case "failed":
-      return `${namesSaid(build.jobs.filter((job) => job.outcome === "failed"))} failed${updates ? " · Update waits" : ""}`;
+      return build.startedAt === null || build.completedAt === null
+        ? "Passed"
+        : `Passed · ${elapsedWords(Date.parse(build.completedAt) - Date.parse(build.startedAt))}`;
+    case "failed": {
+      const failed = build.stages.flat().filter((job) => job.outcome === "failed");
+      return `${namesSaid(failed)} failed${said.updates ? " · Update waits" : ""}`;
+    }
     case "running": {
-      const running = build.jobs.filter((job) => job.outcome === "running");
-      const what = running.length === 1 && running[0] ? running[0].name : "Running";
-      if (build.endsAround === null) return what;
-      const minutes = Math.max(1, Math.ceil((Date.parse(build.endsAround) - Date.now()) / 60_000));
-      return `${what} · about ${minutes} min`;
+      if (build.startedAt === null) return "Running";
+      const running = `Running · ${elapsedWords(now - Date.parse(build.startedAt))}`;
+      return said.full && build.endsAround !== null
+        ? `${running} · ${leftOf(build.endsAround, now)}`
+        : running;
     }
   }
 };
@@ -121,22 +132,90 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
   failed: "text-destructive",
 };
 
+/** The newest main's title and short commit: "7d518cd Rail and Talk key" reads "Rail and Talk key 7d518cd". */
+const titleOf = (newest: LiveVersion) => {
+  const [commit = "", ...words] = newest.title.split(" ");
+  return { commit, words: words.join(" ") };
+};
+
+/** Update, offered once the build has passed; quiet while it runs; Details once it has failed. */
+function Actions(props: { build: MainBuild; onUpdate?: () => void; size: "md" | "lg" }) {
+  const { build } = props;
+  if (build.kind === "failed") {
+    return (
+      <WebButton variant="outline" size={props.size} href={build.details}>
+        Details
+      </WebButton>
+    );
+  }
+  return (
+    props.onUpdate !== undefined && (
+      <Button
+        size={props.size}
+        variant={build.kind === "running" ? "outline" : "primary"}
+        disabled={build.kind === "running"}
+        onClick={props.onUpdate}
+      >
+        Update
+      </Button>
+    )
+  );
+}
+
 /**
- * Main's build next to Update (#249; Paper, "Main build bar and Update"): the newest main's title
- * and short commit, one bar per CI job joined with small gaps, each job's name under its bar, and
- * Update, offered once it has passed; quiet while it runs; Details, its log on GitHub, once it
- * has failed.
+ * Main's build in full (#337): its title and short commit, where it stands, and its graph, ending
+ * in Update when there is one, or Details once it has failed.
+ */
+function FullBuild(props: {
+  newest: LiveVersion;
+  build: MainBuild;
+  now: number;
+  onUpdate?: () => void;
+}) {
+  const { build, now } = props;
+  const { commit, words } = titleOf(props.newest);
+  const updates = props.onUpdate !== undefined;
+  const actions = (
+    <Actions build={build} size="lg" {...(updates ? { onUpdate: props.onUpdate } : {})} />
+  );
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="min-w-0 text-interface font-bold wrap-anywhere">
+          {words} · {commit}
+        </p>
+        <p
+          role="status"
+          className={classes("text-label font-semibold", STANDING_LOOKS[build.kind])}
+        >
+          {standing(build, now, { full: true, updates })}
+        </p>
+      </div>
+      <BuildGraph
+        stages={build.stages}
+        now={now}
+        {...(build.kind === "failed" || !updates ? {} : { end: actions })}
+      />
+      {build.kind === "failed" && <div className="flex justify-end">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * Main's build next to Update (#249), in stages (#337; Paper, "Component · Main's build as a
+ * pipeline, live"): in full, its jobs drawn from the workflow's own order; or, as a row, one line
+ * with a small graph that opens the full one. Update is offered once it has passed; quiet while it
+ * runs; Details, its log on GitHub, once it has failed. Its times count up while it runs.
  */
 export function MainBuildCard(props: {
   newest: LiveVersion;
   build: MainBuild;
-  /** Update, on the live copy; without it, the bar alone (another repository's main, #301). */
+  /** Update, on the live copy; without it, the build alone (another repository's main, #301). */
   onUpdate?: () => void;
   /**
    * As a row, with a label in capitals before it that names it too ("Main" on a code workspace's
-   * Home, #301; Paper, "Code workspace Home"): its title on one line, its bars thin, and each job's
-   * name for screen readers only. Beside Update ("New version" on Home, #102), where the build stands
-   * leaves out what Update says itself: "Passed", not "Passed · ready to update".
+   * Home, #301; "New version" on Home, #102): its title, small graph and where it stands on one
+   * line; a tap opens the full graph in a sheet.
    */
   label?: string;
   /**
@@ -146,98 +225,55 @@ export function MainBuildCard(props: {
   short?: boolean;
 }) {
   const { build } = props;
-  const row = props.label !== undefined;
-  const short = row && props.short === true;
-  // "7d518cd Rail and Talk key" reads as "Rail and Talk key 7d518cd".
-  const [commit = "", ...words] = props.newest.title.split(" ");
+  const now = useTicking(build.kind === "running");
+  const [open, setOpen] = useState(false);
+  const updates = props.onUpdate === undefined ? {} : { onUpdate: props.onUpdate };
+
+  if (props.label === undefined) {
+    return (
+      <section aria-label="Updates" className="mt-4 rounded-card border bg-surface p-4">
+        <FullBuild newest={props.newest} build={build} now={now} {...updates} />
+      </section>
+    );
+  }
+
+  const short = props.short === true;
+  const { commit, words } = titleOf(props.newest);
   return (
     <section
-      aria-label={props.label ?? "Updates"}
-      className={classes(
-        "flex flex-wrap items-center border bg-surface",
-        row
-          ? "gap-3.5 rounded-bubble py-2.5 pr-2.5 pl-3.5"
-          : "mt-4 gap-4 rounded-card py-4 pr-4 pl-4.5",
-      )}
+      aria-label={props.label}
+      className="flex items-center gap-3.5 rounded-bubble border bg-surface py-2.5 pr-2.5 pl-3.5"
     >
-      {props.label !== undefined && (
+      <OpenRow label="Main's build" onOpen={() => setOpen(true)}>
         <span
           className={classes(
             "shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase",
-            short && "max-sm:sr-only",
+            short && "max-sm:hidden",
           )}
         >
           {props.label}
         </span>
-      )}
-      <div
+        <span className="min-w-0 flex-1 truncate text-label font-bold">
+          {short && <span className="sm:hidden">{props.label} · </span>}
+          <span className={short ? "max-sm:hidden" : undefined}>{words} </span>
+          {commit}
+        </span>
+        <BuildMiniGraph stages={build.stages} />
+      </OpenRow>
+      <p
+        role="status"
         className={classes(
-          "flex min-w-60 flex-1 flex-col",
-          row ? "gap-1.5" : "gap-2.5",
-          short && "max-sm:min-w-0",
+          "shrink-0 text-label font-semibold tabular-nums",
+          STANDING_LOOKS[build.kind],
+          short && "max-sm:sr-only",
         )}
       >
-        <div className="flex justify-between gap-3">
-          <p
-            className={classes(
-              "min-w-0 wrap-anywhere",
-              row ? "truncate text-label font-bold" : "text-interface font-semibold",
-            )}
-          >
-            {short && <span className="sm:hidden">{props.label} · </span>}
-            <span className={short ? "max-sm:hidden" : undefined}>{words.join(" ")} </span>
-            {commit}
-          </p>
-          <p
-            role="status"
-            className={classes(
-              "shrink-0 text-label font-semibold",
-              STANDING_LOOKS[build.kind],
-              short && "max-sm:sr-only",
-            )}
-          >
-            {standing(build, props.onUpdate !== undefined && !row)}
-          </p>
-        </div>
-        <ol aria-label="Main's build" className="flex gap-1">
-          {build.jobs.map((job) => (
-            <li key={job.name} className="flex min-w-0 flex-1 flex-col gap-2.5">
-              <span
-                aria-hidden
-                className={classes(
-                  row ? "h-1.5 rounded-full" : "h-2 rounded-sm",
-                  LOOKS[job.outcome].bar,
-                )}
-              />
-              <span
-                className={classes(
-                  row ? "sr-only" : "truncate text-caption font-semibold",
-                  LOOKS[job.outcome].name,
-                )}
-              >
-                {job.name}
-                <span className="sr-only">: {LOOKS[job.outcome].said}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
-      {build.kind === "failed" ? (
-        <WebButton variant="outline" size={row ? "md" : "lg"} href={build.details}>
-          Details
-        </WebButton>
-      ) : (
-        props.onUpdate !== undefined && (
-          <Button
-            size={row ? "md" : "lg"}
-            variant={build.kind === "running" ? "outline" : "primary"}
-            disabled={build.kind === "running"}
-            onClick={props.onUpdate}
-          >
-            Update
-          </Button>
-        )
-      )}
+        {standing(build, now, { full: false, updates: false })}
+      </p>
+      <Actions build={build} size="md" {...updates} />
+      <Sheet title="Main's build" open={open} onClose={() => setOpen(false)}>
+        <FullBuild newest={props.newest} build={build} now={now} {...updates} />
+      </Sheet>
     </section>
   );
 }

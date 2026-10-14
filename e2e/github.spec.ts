@@ -52,6 +52,32 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(github).toContainText("Not connected");
 });
 
+// Owner rule (2026-10-12): nothing jumps in. That GitHub isn't connected comes with the workspace's
+// connections line, in its faint place, rather than on its own and above the rest later.
+test("a code workspace says GitHub isn't connected with its connections line, not before it", async ({
+  page,
+}) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/workspaces/side-project/connections", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/workspaces/side-project");
+  await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+  await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+  const notConnected = page.getByRole("region", { name: "GitHub isn't connected" });
+  // Long enough for a notice of its own to have come.
+  await page.waitForTimeout(1000);
+  await expect(notConnected).toHaveCount(0);
+
+  release();
+  await expect(notConnected).toContainText("can't push its branch or open a pull request");
+  await expect(page.getByRole("button", { name: /octo-owner\/side-project|GitHub/ })).toBeVisible();
+});
+
 // From session to pull request (#172): on this worker the fake GitHub opens a pull request for a
 // session branch once it's pushed, and its e2e check fails on every commit.
 test("a code session shows its branch and pull request, and a failing check starts a turn to fix it", async ({
@@ -159,7 +185,19 @@ test("the owner reviews a session's pull request file by file, asks for a change
         lastUpdate: null,
         build: {
           kind: "running",
-          jobs: [{ name: "Checks", outcome: "running" }],
+          stages: [
+            [
+              {
+                name: "Checks",
+                outcome: "running",
+                startedAt: null,
+                completedAt: null,
+                shards: null,
+                needs: [],
+              },
+            ],
+          ],
+          startedAt: null,
           endsAround: null,
         },
       },
@@ -287,13 +325,15 @@ const pullRequestFrom = async (
   request: APIRequestContext,
   subject: string,
   description: readonly string[] = [],
+  /** The files it changes, each with the subject as its one line. */
+  files: readonly string[] = ["talk.md"],
 ) => {
   const messages = [subject, ...description].map((part) => `-m "${part}"`).join(" ");
   const started = await request.post("/api/workspaces/side-project/sessions", {
     data: {
       text: [
-        `edit file talk.md: ${subject}`,
-        "run command: git add talk.md",
+        ...files.map((file) => `edit file ${file}: ${subject}`),
+        `run command: git add ${files.join(" ")}`,
         `run command: git commit ${messages}`,
         "run command: git push -u origin HEAD",
       ].join("\n"),
@@ -449,7 +489,9 @@ test.describe("on a desktop", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
-  test("the PRs list shows every open pull request, and the ask line on one no session opened starts a session on its branch", async ({
+  // Quick questions (#327; Paper, "Desktop · PR page: quick questions, merging"): asked on the
+  // page, read-only, beside the file list and the diff; Fix it in a session starts one.
+  test("the PRs list shows every open pull request, and quick questions on one no session opened open beside the diff, starting a session only to fix", async ({
     page,
     request,
   }) => {
@@ -471,23 +513,103 @@ test.describe("on a desktop", () => {
       "Builds take turns across the whole PC",
     );
 
-    // What starts is shown before it starts: on its branch, with the model it'll use.
+    // The first question opens the conversation on the page, with no session and no new page.
     await review.getByRole("button", { name: "Can this be merged?" }).click();
+    const panel = review.getByRole("region", { name: "Quick questions" });
+    await expect(panel).toContainText("reads the PR, changes nothing");
+    await expect(panel).toContainText("You asked: Can this be merged?");
+    await expect(page).toHaveURL(/\/workspaces\/side-project#pr-\d+$/);
+    await expect(review.getByRole("navigation", { name: "Changed files" })).toBeVisible();
+    await expect(review.getByRole("region", { name: "What changed" })).toBeVisible();
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeVisible();
+
+    // A follow-up in the same ask line; a line an answer points at shows marked in the diff.
+    const ask = review.getByRole("textbox", { name: "Ask about this PR" });
+    await expect(ask).toHaveAttribute("placeholder", "Ask a follow-up…");
+    await ask.fill("Where? point at builds.md line 1");
+    await review.getByRole("button", { name: "Ask", exact: true }).click();
+    await panel.getByRole("button", { name: "builds.md · line 1" }).click();
+    await expect(review.locator("[data-marked]")).toContainText(
+      "Builds take turns across the whole PC",
+    );
+    await shot(page, "pr-quick-questions-desktop");
+
+    // × closes it; it opens again with what was asked.
+    await panel.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(panel).toHaveCount(0);
+    await review.getByRole("button", { name: "Quick questions", exact: true }).click();
+    await expect(panel).toContainText("You asked: Can this be merged?");
+
+    // Fix it in a session shows what starts before it starts: on its branch, with its model.
+    await review.getByRole("button", { name: "Fix it in a session" }).click();
     const start = review.getByRole("region", { name: "Start a session" });
     await expect(start).toContainText("306-machine-lock");
-    await expect(start).toContainText("asking “Can this be merged?”");
+    await expect(start).toContainText("carrying the quick questions over");
     await start.getByRole("button", { name: "Start the session" }).click();
 
-    await expect(page).toHaveURL(/\/sessions\/[\w-]+\?view=review$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      /^#\d+ Builds queue across the whole PC/,
-    );
-    await expect(review.getByRole("region", { name: "Answer" })).toContainText(
-      "You said: Can this be merged?",
+    await expect(page).toHaveURL(/\/sessions\/[\w-]+$/);
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(
+      /The owner asked about pull request #\d+ on its page/,
     );
     await page.goto("/workspaces/side-project#prs");
     await expect(row).toContainText("from the session");
 
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
+  // Owner rule (2026-10-12): nothing jumps in. While GitHub answers, the PR page is its title and
+  // faint rows in the shape of the page, no spinner and no words; coming back shows it at once.
+  test("the PR page keeps its place while GitHub answers, and shows at once on the way back", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    const review = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Builds queue across the whole PC/ })
+      .getByRole("link", { name: /^Review/ });
+    const address = await review.getAttribute("href");
+
+    // Its review, asked for by its number, or through its session once one has opened it.
+    const isReview = (url: URL) =>
+      /\/workspaces\/side-project\/pull-requests\/\d+$|\/sessions\/[^/]+\/pull-request$/.test(
+        url.pathname,
+      );
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(isReview, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(address ?? "");
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText(/^#\d+/);
+    await expect(page.locator("main [data-placeholder]").first()).toBeVisible();
+    await expect(page.getByText("Asking GitHub")).toHaveCount(0);
+    const before = await title.boundingBox();
+
+    release();
+    const whatChanged = page.getByRole("region", { name: "What changed" });
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC");
+    await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+    expect((await title.boundingBox())?.y).toBe(before?.y);
+
+    // GitHub answers slowly from now on: the way back mustn't wait for it.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route(isReview, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await route.continue();
+    });
+    await page.getByRole("link", { name: "All PRs" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Side project" })).toBeVisible();
+    await review.click();
+    await expect(whatChanged).toContainText("Builds take turns across the whole PC", {
+      timeout: 2000,
+    });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     await request.post("/api/github/sign-out", { data: {} });
   });
 });
@@ -630,14 +752,21 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
-  // #279: the review's message box went to the workspace's first session, not the PR's own.
-  test("a pull request's review sends its message to the session that opened it", async ({
+  // Quick questions on a tablet (#327; Paper, "Tablet · PR page: quick questions"): they take the
+  // file list's place beside the diff, the list folding into a switcher. #279: what the page sends
+  // a session went to the workspace's first session, not the PR's own.
+  test("quick questions take the file list's place beside the diff, and Fix it in a session goes to the session that opened it", async ({
     page,
     request,
   }) => {
     await signIn(request);
     const first = await pullRequestFrom(request, "Rail spacing [e2e running]");
-    const second = await pullRequestFrom(request, "Loading states [e2e running]");
+    const second = await pullRequestFrom(
+      request,
+      "Loading states [e2e running]",
+      [],
+      ["talk.md", "notes.md"],
+    );
     // The fake titles a session with its first message's first words.
     const firstTitle = "Edit File Talk Md Rail";
     const secondTitle = "Edit File Talk Md Loading";
@@ -650,29 +779,45 @@ test.describe("on the unfolded Fold", () => {
       .click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Loading states/);
 
-    // The ask line goes to the session whose branch the pull request is, with no pickers, and its
-    // answer shows on the page, in place of What changed (#278).
+    // A quick ask opens the conversation in the file list's place; the diff stays in view.
     const review = page.getByRole("region", { name: "Review" });
     const ask = page.getByRole("textbox", { name: "Ask about this PR" });
-    await expect(page.getByRole("combobox")).toHaveCount(0);
-    await ask.fill("Bring it up to date with main");
-    await review.getByRole("button", { name: "Ask", exact: true }).click();
-    const answer = review.getByRole("region", { name: "Answer" });
-    await expect(answer).toContainText("You said: Bring it up to date with main");
-    await expect(review.getByRole("region", { name: "What changed" })).toHaveCount(0);
-    await expect(ask).toHaveValue("");
-    // A quick ask sends with one tap; the answer shown is the latest.
+    const files = review.getByRole("navigation", { name: "Changed files" });
+    const switcher = review.getByRole("combobox", { name: "Choose a file" });
+    await expect(files).toBeVisible();
+    await expect(switcher).toHaveCount(0);
     await review.getByRole("button", { name: "Explain this change" }).click();
-    await expect(answer).toContainText("You said: Explain this change");
-    await answer.getByRole("button", { name: "Close the answer" }).click();
-    await expect(review.getByRole("region", { name: "What changed" })).toBeVisible();
+    const panel = review.getByRole("region", { name: "Quick questions" });
+    await expect(panel).toContainText("You asked: Explain this change");
+    await expect(files).toHaveCount(0);
+    await expect(review.getByRole("region", { name: "What changed" })).toHaveCount(0);
+    await expect(review.getByRole("region", { name: /^Diff of / })).toBeVisible();
+    await expect(review.getByRole("button", { name: "Merge", exact: true })).toBeVisible();
+    await expect(review).toContainText("1 of 2 files");
+    await switcher.selectOption("talk.md");
+    await expect(review.getByRole("region", { name: "Diff of talk.md" })).toBeVisible();
+    await expect(review).toContainText("2 of 2 files");
 
-    await page.goto(`/workspaces/side-project/sessions/${second}`);
+    // A follow-up goes in the same line; × brings the file list back.
+    await expect(ask).toHaveAttribute("placeholder", "Ask a follow-up…");
+    await ask.fill("Why two files?");
+    await review.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(panel).toContainText("You asked: Why two files?");
+    await expect(ask).toHaveValue("");
+    await shot(page, "pr-quick-questions-tablet");
+    await panel.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(files).toBeVisible();
+
+    // Fix it in a session carries the conversation over to the pull request's own session.
+    await review.getByRole("button", { name: "Fix it in a session" }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${second}$`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondTitle);
-    await expect(page.getByText("Bring it up to date with main").first()).toBeVisible();
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(
+      "Owner: Why two files?",
+    );
     await page.goto(`/workspaces/side-project/sessions/${first}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(firstTitle);
-    await expect(page.getByText("Bring it up to date with main")).toHaveCount(0);
+    await expect(page.getByText("Owner: Why two files?")).toHaveCount(0);
 
     // A review whose session has gone has no ask line, so nothing goes to another session.
     const deleted = await request.delete(`/api/sessions/${first}`, { data: {} });
@@ -756,6 +901,46 @@ test.describe("on the cover screen", () => {
 
     await request.post("/api/github/sign-out", { data: {} });
   });
+
+  // Quick questions on the phone (#327; Paper, "Cover · PR page: quick questions sheet"): a sheet
+  // over the diff with its own ask line; Merge and Close PR come back when it closes.
+  test("quick questions rise as a sheet over the diff, with their own ask line", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await pullRequestFrom(request, "A sheet of questions [e2e running]");
+    await page.goto("/workspaces/side-project#prs");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /A sheet of questions/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+
+    const review = page.getByRole("region", { name: "Review" });
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    await expect(merge).toBeVisible();
+    await review.getByRole("button", { name: "Explain this change" }).click();
+    const sheet = review.getByRole("region", { name: "Quick questions" });
+    await expect(sheet).toContainText("You asked: Explain this change");
+    await expect(sheet).toBeInViewport();
+    await expect(merge).toHaveCount(0);
+    await expect(review.getByRole("button", { name: "Close PR" })).toHaveCount(0);
+    // Its ask line is the only one, inside the sheet.
+    await expect(page.getByRole("textbox", { name: "Ask about this PR" })).toHaveCount(1);
+    await sheet.getByRole("textbox", { name: "Ask about this PR" }).fill("And the tests?");
+    await sheet.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(sheet).toContainText("You asked: And the tests?");
+    expect(await pageScrollsSideways(page)).toBe(false);
+    await shot(page, "pr-quick-questions-cover");
+
+    await sheet.getByRole("button", { name: "Close quick questions" }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(merge).toBeVisible();
+    await expect(review.getByRole("button", { name: "Close PR" })).toBeVisible();
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
 });
 
 // A code workspace's Home (#301; Paper, "Code workspace Home", desktop, tablet and cover screen)
@@ -782,11 +967,10 @@ const blocks = (page: Page) => ({
 const showsHome = async (page: Page) => {
   await page.goto(HOME);
   await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
-  await expect(
-    page.getByText("Plan and code with AI models, one workspace per area of life"),
-  ).toBeVisible();
   const line = page.getByRole("button", { name: /octo-owner\/workbench/ });
   await expect(line).toContainText("No Paper file");
+  // Its one line stays in workspace.json, off the page (#333).
+  await expect(page.getByText("Plan and code with AI models")).toHaveCount(0);
 
   const { needsYou, running, nextUp } = blocks(page);
   await expect(needsYou).toContainText(/Needs you · \d+/);
@@ -796,26 +980,34 @@ const showsHome = async (page: Page) => {
   // Nothing runs yet, so its block isn't there at all.
   await expect(running).toHaveCount(0);
 
-  // The ready issues nobody claimed, in milestone order: three, then More.
+  // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
+  // issues nobody claimed, with Build; the rest, in milestone order, under More.
   await expect(nextUp).toContainText("4 · Code workspaces");
+  const grill = nextUp.getByRole("region", { name: "Grill #117" });
+  await expect(grill).toContainText("Sub-agents for code review");
+  await expect(grill).toContainText("Next in order · needs grilling first");
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
-  await expect(nextUp.getByRole("listitem")).toHaveText([
-    /#251\s*One Reply box everywhere/,
-    /#255\s*Paste images on the Fold/,
-  ]);
+  await expect(nextUp.getByRole("listitem")).toHaveCount(0);
   await expect(nextUp).not.toContainText("Claimed by a helper");
-  await expect(nextUp.getByRole("button", { name: "More · 9" })).toBeVisible();
+  await expect(nextUp.getByRole("button", { name: "More · 11" })).toBeVisible();
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
   await expect(main).toContainText(/Start [0-9a-f]{7}/);
-  await expect(main.getByRole("status")).toHaveText("Passed");
-  await expect(main.getByRole("list", { name: "Main's build" }).getByRole("listitem")).toHaveCount(
-    4,
-  );
+  await expect(main.getByRole("status")).toHaveText("Passed · 3:00");
   await expect(main.getByRole("button", { name: "Update" })).toHaveCount(0);
+  // A tap opens its full graph: its jobs in the workflow's order, whatever order GitHub gave.
+  await main.getByRole("button", { name: /Main's build/ }).click();
+  const graph = page.getByRole("dialog", { name: "Main's build" });
+  await expect(graph.getByRole("list", { name: "Main's build" }).getByRole("listitem")).toHaveText([
+    /^Checks: passed/,
+    /^Unit tests: passed/,
+    /^E2E: passed/,
+  ]);
+  await graph.getByRole("button", { name: "Done" }).click();
+  await expect(graph).toBeHidden();
 
   // Tabs show once they have something: no sessions yet, one pull request.
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
@@ -879,11 +1071,26 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       request,
     }) => {
       await signIn(request);
+      // The first visit: the list keeps its place, and nothing above it moves when it comes.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
+        await held;
+        await route.continue();
+      });
       await page.goto(`${HOME}#prs`);
-      const row = page
-        .getByRole("region", { name: /^Pull requests/ })
-        .getByRole("listitem", { name: /Builds take turns/ });
+      const list = page.getByRole("region", { name: /^Pull requests/ });
+      await expect(list.locator("[data-placeholder]")).toBeVisible();
+      const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
+      const [tabsBefore, listBefore] = [await tabs.boundingBox(), await list.boundingBox()];
+      release();
+      const row = list.getByRole("listitem", { name: /Builds take turns/ });
       await expect(row).toBeVisible();
+      expect(await tabs.boundingBox()).toEqual(tabsBefore);
+      expect((await list.boundingBox())?.y).toBe(listBefore?.y);
+      await page.unrouteAll({ behavior: "ignoreErrors" });
 
       // GitHub answers slowly from now on: the way back mustn't wait for it.
       await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
@@ -915,8 +1122,12 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await shot(page, "tablet-home");
 
       const { nextUp } = blocks(page);
-      await nextUp.getByRole("button", { name: "More · 9" }).click();
-      await expect(nextUp.getByRole("listitem")).toHaveCount(11);
+      await nextUp.getByRole("button", { name: "More · 11" }).click();
+      await expect(nextUp.getByRole("listitem")).toHaveText([
+        /#251\s*One Reply box everywhere/,
+        /#255\s*Paste images on the Fold/,
+        ...Array.from({ length: 9 }, () => /A later idea/),
+      ]);
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1053,6 +1264,24 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // It's claimed, so Next up moves on to the next one.
       await page.goto(HOME);
       await expect(blocks(page).nextUp.getByRole("region", { name: "Build #251" })).toBeVisible();
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("Grill shows the issue and its model first, then starts a grilling session on it (#363)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const grill = blocks(page).nextUp.getByRole("region", { name: "Grill #117" });
+      await grill.getByRole("button", { name: "Grill" }).click();
+      await expect(grill).toContainText("A new session grills it with Fake (echoes you)");
+      await grill.getByRole("button", { name: "Start grilling" }).click();
+
+      await expect(page).toHaveURL(/\/workspaces\/workbench\/sessions\/[\w-]+$/);
+      await expect(page.getByRole("list", { name: "Session" })).toContainText(
+        'Grill issue #117, "Sub-agents for code review"',
+      );
       await request.post("/api/github/sign-out", { data: {} });
     });
 

@@ -1,7 +1,8 @@
 import mermaid from "mermaid";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { classes } from "@/lib/classes";
 import { cleanDiagram } from "./diagram-svg.ts";
-import type { DrawingProps } from "./fenced.tsx";
+import { DrawingPlace, type DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";
 
 /** A theme colour by its name in styles.css, as Mermaid needs it: a value, not a variable. */
@@ -82,8 +83,15 @@ const draw = (options: { id: string; source: string }) => {
 };
 
 /**
+ * Each diagram as drawn, by its source, for the tab's lifetime, so one shown again (coming back to
+ * its session or document) is there with the answer rather than drawn again after it.
+ */
+const drawnBefore = new Map<string, SVGSVGElement>();
+
+/**
  * A `mermaid` block drawn as a diagram (ADR 0021), once it has all arrived: Mermaid costs too
- * much to run on every streamed word. A wide one scrolls sideways inside the answer.
+ * much to run on every streamed word. Until it's drawn, a faint place keeps its room (nothing
+ * jumps in). A wide one scrolls sideways inside the answer.
  */
 export default function Diagram({ source, arriving, fallback }: DrawingProps) {
   const id = `diagram-${useId().replace(/[^\w-]/g, "")}`;
@@ -91,8 +99,15 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
   const [failed, setFailed] = useState<string>();
   const [drawn, setDrawn] = useState<string>();
 
-  useEffect(() => {
+  // Before the page paints, so a diagram drawn before never shows its faint place.
+  useLayoutEffect(() => {
     if (arriving) return;
+    const before = drawnBefore.get(source);
+    if (before !== undefined) {
+      holder.current?.replaceChildren(before.cloneNode(true));
+      setDrawn(source);
+      return;
+    }
     let current = true;
     void draw({ id, source }).then((svg) => {
       if (!current) return;
@@ -100,7 +115,8 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
         setFailed(source);
         return;
       }
-      holder.current?.replaceChildren(svg);
+      drawnBefore.set(source, svg);
+      holder.current?.replaceChildren(svg.cloneNode(true));
       setDrawn(source);
     });
     return () => {
@@ -111,10 +127,14 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
   if (arriving || failed === source) return fallback;
   return (
     <RichBlock>
+      {drawn !== source && <DrawingPlace />}
       <figure
         aria-label="Diagram"
         aria-busy={drawn !== source}
-        className="overflow-x-auto rounded-md border bg-field px-5 py-6"
+        className={classes(
+          "overflow-x-auto rounded-md border bg-field px-5 py-6",
+          drawn !== source && "hidden",
+        )}
       >
         <div ref={holder} className="mx-auto w-fit" />
       </figure>

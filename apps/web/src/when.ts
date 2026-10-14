@@ -1,5 +1,15 @@
 const time = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+/** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
+export const elapsedWords = (ms: number) => {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const two = (n: number) => String(n).padStart(2, "0");
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60
+    ? `${minutes}:${two(seconds % 60)}`
+    : `${Math.floor(minutes / 60)}:${two(minutes % 60)}:${two(seconds % 60)}`;
+};
+
 /** When something happened, the way people say it: "Today, 18:42", "Yesterday" or "2 Oct". */
 export const describeWhen = (iso: string, now = new Date()) => {
   const date = new Date(iso);

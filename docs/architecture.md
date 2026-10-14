@@ -133,7 +133,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
   (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
   far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
-  tools, and the text for Tidy and titling a session.
+  tools, and the text for Tidy, titling a session and a pull request's quick questions.
 - **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
   workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
   one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
@@ -236,10 +236,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
   page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
   message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the
-  session's branch. Its routes are a workspace's `next-up` and `next-up/:number/build`.
+  session's branch. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
+  `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
+  message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
+  and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
+  `next-up/:number/grill`.
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
-  (15 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
+  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
   workspace's `main`.
 - **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
   workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
@@ -255,7 +259,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
   checks open its activity. That turn first checks whether a failing test is its PR's; a flake that isn't is said on
   the PR and its failed jobs re-run once, with no code changed. Checks failing again on the same commit, after they
-  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR merged or closed,
+  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR that conflicts
+  with its base is brought up to date the same way first (#382): Bring up to date's message, `conflicted` on it, once
+  per commit, so one the model can't resolve waits for the owner's Bring up to date. A PR merged or closed,
   anywhere, ends the session: it takes no more messages, and once
   no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
   added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
@@ -276,12 +282,20 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
   author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
   is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
-  usual), and the ask line or Bring up to date on it starts a session on its own branch (`code/`'s
+  usual), and Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s
   `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
   repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
   the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
   the start is refused, saying which. Its
   routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
+- **`quick-questions/`:** quick questions about a pull request (#327): a small read-only conversation on its page,
+  whoever opened it. Each question is a one-off question (`answerOnce`, no tools, no files) worded by `prompts/`, with
+  the pull request's review from `pull-requests/`, so its model reads the pull request and changes nothing, and no
+  session, branch or worktree is involved. It keeps the lines an answer points at only where the diff shows them, and
+  keeps each pull request's conversation in the worker's memory (the latest 50), one question at a time. Fix it in a
+  session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
+  branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
+  `pull-requests/:number/fix`.
 - **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
   I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
   answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
@@ -311,9 +325,12 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
   check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
   pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258); and reads main's build from the checks on a commit (#249): the latest try of each
-  job in the order the workflow started them, the failed one's page, and when a running one should end
-  from how long the build before it took; and re-runs a commit's failed jobs, reads the failing test a job's
+  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
+  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
+  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
+  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
+  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
+  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
   annotations name, lists and describes milestones, and files an issue (#355). Its routes are
   `/api/github` and its `sign-in`, `cancel` and `sign-out`.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
@@ -341,7 +358,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
   ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). While main has moved on, it
   also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
-  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 10
+  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
   seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
@@ -442,18 +459,21 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
     only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
     shared pieces only the two Homes show: `components/workspace-tabs.tsx`, `home-block.tsx`,
-    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Its one line and its connections line, which opens the Connections sheet
+    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `review/`. Under its name, which has
+    one quiet ⋯ beside it (`components/workspace-menu.tsx`: Rename, Change icon and Archive, #333), comes its
+    connections line; its one line stays in `workspace.json`, off the page. The connections line opens the Connections sheet
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
     `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
     empty (`components/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
     requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
-    (`running.tsx`), Next up with Build (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
+    (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
     box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
     for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a
-    first visit shows faint placeholder rows in its place; the PRs list does the same. What waits on the owner is
+    first visit shows faint placeholder rows in its place; the PRs list does the same. That GitHub isn't connected
+    comes with the connections line, from the workspace's own connections. What waits on the owner is
     the worker's say (`waiting/`, on each listed session and open pull request), read in one place, `needs.ts`,
     with no React or styles, so the home page's tiles read it the same way; nothing in the web app works it out.
   - **`review/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
@@ -467,11 +487,16 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     Summary's first line, and Read it all for the whole description, `description.ts`, in a panel that scrolls),
     the changed files as a tree (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`), each
     scrolling inside, the diff's lines never wrapping there (on a phone they wrap and the page scrolls as one).
-    Then the latest answer to what was asked from the page, the ask line (`components/ask-line.tsx`: quick asks for
-    where it stands and one line, sent to the PR's session on the model it last used, or, with no session, starting
-    one on its branch once the owner has seen what starts), and Merge, or Bring up to date when it conflicts, and
+    Then the ask line (`components/ask-line.tsx`: quick asks for where it stands and one line), which asks quick
+    questions (#327, `quick-questions.tsx`, through `quick-questions/`): the first opens the conversation on the page,
+    beside the file list and the diff on a desktop, in the file list's and What changed's place on a tablet (the list
+    folding into an "n of N files" switcher above the diff, `components/select.tsx`'s `shown`), and as a sheet over
+    the diff on a phone, with its own ask line, Merge and Close PR coming back once it closes. Its header names the
+    model, and a line an answer points at shows marked in the diff with a tap. Follow-ups go in the same line, and
+    Fix it in a session beside them carries the conversation over to the PR's session, or, with none, to a new one
+    on its branch once the owner has seen what starts. Then Merge, or Bring up to date when it conflicts, and
     Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
-    reach on a tablet, where the answer takes What changed's place. Merged or closed, it folds to one card with
+    reach on a tablet. Merged or closed, it folds to one card with
     what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
     build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
@@ -479,15 +504,17 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
     of the home page (main's build as a row labelled New version, #102) and in the Handheld frame's Settings
     (`live-update.tsx`), and main's build beside Update
-    (`main-build.tsx`, #249): the newest main's title, one bar per CI job (violet running, moss passed,
-    red failed), and Update, offered only once it has passed; quiet while it runs; Details, the failed
-    job's page on GitHub, once it has failed. Its hook asks again every 15 seconds while the build runs
+    (`main-build.tsx`, #249): the newest main's title, its jobs in stages (#337, drawn by the shared
+    `components/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey waiting, its
+    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered only
+    once it has passed; quiet while it runs; Details, the failed job's page on GitHub, once it has failed. Its
+    hook asks again every 10 seconds while the build runs
     and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
     follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
     first load.
   - **`sign-ins/`:** Settings' sign-in box and Connections (each provider, and GitHub with its device code,
-    account and repos, Switch and Sign out), and a code workspace's notice that GitHub isn't connected; one lazy
-    load wherever they show.
+    account and repos, Switch and Sign out); one lazy load. Where they stand is kept for the tab's lifetime, and
+    until it's first known Connections keeps its place with faint rows.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
   - **`matt-setup/`:** the setup check's offer (#181), opened from its row in a code workspace's Needs you (#301):
     an approval card (`components/approval-card.tsx`, which a session's approvals use too) saying what's missing,
@@ -506,7 +533,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).
   - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; from a tablet up the page is one
     screen, its title and foot rows in view and only the tiles scrolling, until #339 makes that the app's), with a stylesheet of its own
-    (`home.css`, holding `components/kept.tsx`'s classes too), like `code-home/`. Each tile's line
+    (`home.css`), like `code-home/`. Each tile's line
     (`tile-line.tsx`): what waits on the owner, as the worker says and Needs you reads it (`code-home/needs.ts`),
     from the workspace's sessions and, on a code workspace, its open pull requests (`review/open-pull-requests.ts`, the store its Home
     and PRs list share), else when it was last used; kept for the tab's lifetime, a faint line in its place until
@@ -525,6 +552,18 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   `ChatFlowScope`: whose turn it is in a session (`session-state.tsx`, in the chat, a workspace's sessions and the
   sidebar's recent ones, which ask again every few seconds while one is working), the Working line and the Your turn
   mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
+  Nothing jumps in (#269; Paper, "Component · A block that loads late keeps its place"): everything that loads
+  after its page uses one shared piece, `kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
+  whose it is (`createKept`, `useKept`), so coming back shows the last answer at once and asks again quietly; a
+  first visit shows faint rows the size of real ones in the block's place (`PlaceholderRows`, no spinner and no
+  words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
+  are in the first load's stylesheet. It holds a code workspace's Home blocks and PRs list, Home's tile lines and
+  foot rows, the sidebar's recent sessions, Recent changes, Settings' Connections and backup, and a pull request's
+  page; a page that waits as a whole (a pull request's, Tidy) shows the rows in its own shape under its title. A
+  session's conversation is kept the same way in `sessions/events.ts` (faint rows until its events have come,
+  and its stream carries on after what was shown); a diagram once drawn is kept by its source, a drawing still to
+  load keeps a faint place rather than showing its code (`rich-blocks/fenced.tsx`), and maths keeps its room
+  unseen until its formulas can be drawn (`sessions/answer.tsx`).
   The frame round every page is picked by `handheld.ts` (#193): a desktop keeps the sidebar (`app-sidebar.tsx`) and,
   in a narrow window, the strip (`workspace-strip.tsx`); a touch screen gets the Handheld frame
   (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`). On a tablet or the
@@ -546,8 +585,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
   (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
-  lucide's) load once a page first shows one, off the first load. The workspace page's icon opens the Icon sheet
-  (`icon-sheet.tsx`, through `icon-chooser.tsx`, loaded when first opened): a Handheld sheet on a touch screen, a
+  lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
+  in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`
+  on a planning page, loaded when first opened): a Handheld sheet on a touch screen, a
   bottom sheet on a desktop. Arrange workspaces (#321): holding a workspace on a tablet's rail or in the sidebar and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the strip, the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the

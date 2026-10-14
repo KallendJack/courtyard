@@ -182,11 +182,13 @@ pushBranch(
 mkdirSync(join(contextDir, "side-project"), { recursive: true });
 writeFileSync(
   join(contextDir, "side-project", "workspace.json"),
-  // Its sessions draw in Paper (ADR 0023): the fake plays Paper, so the command never runs.
+  // Its sessions draw in Paper (ADR 0023): the fake plays Paper, so the command never runs. Its
+  // one line stays off its page (#333).
   JSON.stringify({
     name: "Side project",
     mode: "code",
     repoPath: repo,
+    description: "Somewhere to try things out",
     connections: { paper: { command: "/path/to/paper", fileId: "file-1" } },
   }),
 );
@@ -303,9 +305,15 @@ const github = createFakeGitHub({
     ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
   ],
   // Workbench's ready issues (#301): in milestones, one claimed by a comment, and more than
-  // Next up shows before More.
+  // Next up shows before More; and first on the Build order line, one that needs grilling (#363).
   issues: {
     "octo-owner/workbench": [
+      {
+        number: 117,
+        title: "Sub-agents for code review",
+        milestone: "4 · Code workspaces",
+        labels: ["needs-triage"],
+      },
       { number: 251, title: "One Reply box everywhere", milestone: "4 · Code workspaces" },
       { number: 197, title: "The rail on desktop", milestone: "4 · Code workspaces" },
       {
@@ -321,6 +329,9 @@ const github = createFakeGitHub({
         milestone: "Later",
       })),
     ],
+  },
+  milestones: {
+    "octo-owner/workbench": { "4 · Code workspaces": "NOW. Build order: #117 → #197 → #251." },
   },
   opensOnPush: {
     remote: origin,
@@ -350,10 +361,31 @@ const helperPull = github.openPullRequest({
   author: "octo-owner",
 });
 github.setChecks(helperPull, [{ name: "verify", outcome: "passed" }]);
-// Workbench's main has passed its build (#301's Main row).
+// Workbench's main has passed its build (#301's Main row): its workflow runs the checks, the unit
+// tests and two shards of browser tests side by side (#337), and GitHub lists them in any order.
+github.setWorkflows(homeHead, [
+  {
+    path: ".github/workflows/ci.yml",
+    done: true,
+    text: [
+      "name: CI",
+      "jobs:",
+      "  checks:",
+      "    name: Checks",
+      "  unit:",
+      "    name: Unit tests",
+      "  e2e:",
+      `    name: E2E \${{ matrix.shard }}/2`,
+      "    strategy:",
+      "      matrix:",
+      "        shard: [1, 2]",
+      "",
+    ].join("\n"),
+  },
+]);
 github.setCommitChecks(
   homeHead,
-  ["Checks", "Unit tests", "E2E 1/2", "E2E 2/2"].map((name, i) => ({
+  ["E2E 2/2", "Unit tests", "E2E 1/2", "Checks"].map((name, i) => ({
     id: i + 1,
     name,
     outcome: "passed",

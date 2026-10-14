@@ -2,13 +2,15 @@ import {
   type PlacedLine,
   placeName,
   type RecentChange,
+  type RecentChanges as RecentChangesPage,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { NoteRow, NoteWords } from "@/components/note-row";
 import { EmptyState } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
@@ -286,56 +288,65 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
   );
 }
 
+/** The changes shown, undos left out, and where the next page starts, if there's one. */
+type Listed = {
+  readonly changes: readonly RecentChange[];
+  readonly more: RecentChange["id"] | null;
+};
+
+/** Each place's changes as last shown, for the tab's lifetime: the owner context's by "". */
+const KEPT_CHANGES = createKept<Listed>();
+
+/** A page of changes, with the undos left out: an undo shows as its change marked undone. */
+const listedOf = (page: RecentChangesPage) => ({
+  changes: page.changes.filter((change) => change.kind !== "undo"),
+  more: page.more,
+});
+
 /**
  * Recent changes to a workspace's context file or the owner context (ADR 0013), newest first,
  * 30 at a time, with Undo, under its page's title. Loaded once the page is showing, so the page
- * never waits for git. An undo shows as its change marked undone, so undos aren't listed
- * themselves. Its page gives it a key per place, so a new place starts it afresh.
+ * never waits for git: faint rows keep the list's place the first time, and coming back shows the
+ * list as last shown at once, asked for again quietly. An undo shows as its change marked undone,
+ * so undos aren't listed themselves. Its page gives it a key per place, so a new place starts it
+ * afresh.
  */
 export function RecentChanges(props: { workspace: Whose }) {
   const { workspace } = props;
-  const [changes, setChanges] = useState<RecentChange[]>([]);
-  const [more, setMore] = useState<RecentChange["id"] | null>(null);
+  const key = workspace ?? "";
   const [problem, setProblem] = useState<string>();
-  const [loaded, setLoaded] = useState(false);
+  const listed = useKept(KEPT_CHANGES, {
+    key,
+    load: async () => {
+      const page = await loadChanges(placeOf(workspace));
+      setProblem(page.kind === "loaded" ? undefined : describeProblem(page).body);
+      return page.kind === "loaded" ? listedOf(page.data) : undefined;
+    },
+  });
+  const changes = listed?.changes ?? [];
+  const more = listed?.more ?? null;
 
   const showMore = useAction(async () => {
     if (more === null) return undefined;
     const page = await loadChanges(placeOf(workspace), more);
     if (page.kind !== "loaded") return describeProblem(page).body;
-    const listed = page.data.changes.filter((change) => change.kind !== "undo");
-    setChanges((shown) => [...shown, ...listed]);
-    setMore(page.data.more);
+    const next = listedOf(page.data);
+    KEPT_CHANGES.set(key, { changes: [...changes, ...next.changes], more: next.more });
     return undefined;
   });
 
-  useEffect(() => {
-    let current = true;
-    void loadChanges(placeOf(workspace)).then((page) => {
-      if (!current) return;
-      if (page.kind === "loaded") {
-        setChanges(page.data.changes.filter((change) => change.kind !== "undo"));
-        setMore(page.data.more);
-      } else {
-        setProblem(describeProblem(page).body);
-      }
-      setLoaded(true);
-    });
-    return () => {
-      current = false;
-    };
-  }, [workspace]);
-
   /** Shows an undone change as undone, where it is, with every page shown kept. */
   const markUndone = (id: RecentChange["id"]) =>
-    setChanges((shown) =>
-      shown.map((change) => (change.id === id ? { ...change, undo: "undone" } : change)),
-    );
+    KEPT_CHANGES.set(key, {
+      changes: changes.map((change) => (change.id === id ? { ...change, undo: "undone" } : change)),
+      more,
+    });
 
   return (
     <section aria-label="Recent changes">
       <FormError message={problem} />
-      {loaded && changes.length === 0 && problem === undefined && (
+      {listed === undefined && problem === undefined && <PlaceholderRows count={3} size="tall" />}
+      {listed !== undefined && changes.length === 0 && problem === undefined && (
         <EmptyState>No changes yet.</EmptyState>
       )}
       <ul aria-label="Recent changes" className="space-y-3.5">

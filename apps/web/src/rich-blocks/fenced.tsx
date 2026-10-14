@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { PlaceholderRows } from "@/components/kept";
 import { CodeBlock } from "../sessions/code-block.tsx";
 
 /** What a fenced block's drawing is given. */
@@ -27,6 +28,11 @@ export type DrawingProps = {
 
 /** A drawing module: its default export draws a block's source, or shows the fallback. */
 type Drawing = { readonly default: ComponentType<DrawingProps> };
+
+/** Where a drawing will be, while it's still to be drawn: one faint block, no code, no words. */
+export function DrawingPlace() {
+  return <PlaceholderRows count={1} size="panel" />;
+}
 
 /** A kind of fenced block Courtyard draws itself (ADR 0021). */
 type FencedKind = {
@@ -107,9 +113,9 @@ class Unbroken extends Component<
 
 /**
  * A fenced block Courtyard draws (a chart, a diagram), the one place fences become rich blocks.
- * Until its drawing has loaded, and whenever it can't be drawn while it's still arriving, it shows
- * the source as code; one that can't be drawn once it's all there shows the source under a line
- * saying so. The rest of the answer reads as normal either way.
+ * While it's still arriving it shows the source as code; once it's all there, a faint place keeps
+ * the drawing's room until its drawing has loaded (nothing jumps in), and one that can't be drawn
+ * shows the source under a line saying so. The rest of the answer reads as normal either way.
  */
 export function FencedBlock(props: { kind: FencedKind; language: string; source: string }) {
   const arriving = use(Arriving);
@@ -124,7 +130,7 @@ export function FencedBlock(props: { kind: FencedKind; language: string; source:
       problem={`Couldn't draw this ${props.kind.noun}, so here's what the model wrote`}
     />
   );
-  if (drawing.kind === "loading") return asCode;
+  if (drawing.kind === "loading") return arriving ? asCode : <DrawingPlace />;
   if (drawing.kind === "failed") return fallback;
   const Draw = drawing.drawing.default;
   return (

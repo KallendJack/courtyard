@@ -15,6 +15,7 @@ import { IconButton } from "@/components/button";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FormError } from "@/components/form-error";
 import { JumpToLatest } from "@/components/jump-to-latest";
+import { PlaceholderRows } from "@/components/kept";
 import { Notice, StatusPill } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
@@ -108,6 +109,7 @@ function Session(props: {
     queuedMessages,
     problem,
     reconnecting,
+    ready,
   } = useSessionTurns(session.id);
   const removeQueuedMessage = useCallback(
     async (queued: number) => {
@@ -251,20 +253,8 @@ function Session(props: {
           pullRequest={pullRequest}
           session={{
             id: session.id,
-            turns,
-            // On the model and effort it last used: the ask line has no pickers.
-            send: async (text) => {
-              if (last === undefined) return "This session has no model to ask with yet.";
-              const sent = await sendMessage({
-                sessionId: session.id,
-                message: {
-                  text,
-                  model: last.model,
-                  ...(last.effort === undefined ? {} : { effort: last.effort }),
-                },
-              });
-              return sent.kind === "loaded" ? undefined : describeProblem(sent).body;
-            },
+            // Fix it in a session goes on the model and effort it last used.
+            last: last === undefined ? undefined : { model: last.model, effort: last.effort },
           }}
           onShowSession={toConversation}
         />
@@ -373,6 +363,13 @@ function Session(props: {
       {problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
+        </div>
+      ) : !ready ? (
+        // Its events are still coming: faint rows in the shape of a turn, the owner's message
+        // then the answer, keep the conversation's place, filled in place (nothing jumps in).
+        <div className="mt-6 flex flex-col gap-4">
+          <PlaceholderRows count={1} />
+          <PlaceholderRows count={3} size="text" />
         </div>
       ) : (
         <SessionTurns

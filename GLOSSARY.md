@@ -31,8 +31,10 @@ updated only when the owner chooses (ADR 0011).
 _Avoid_: production, prod, deployment, release
 
 **Main's build**:
-CI on `main`'s newest commit, shown beside Update as one bar per job; Update waits for it to pass (#249).
-_Avoid_: pipeline, deploy status
+CI on `main`'s newest commit, shown beside Update; Update waits for it to pass (#249). Its jobs are drawn in
+**stages**, from the workflow's own order: jobs that start together share a stage, and a job that `needs:` others
+sits in a stage after theirs (#337).
+_Avoid_: pipeline (in code and UI text), deploy status
 
 **Web app**:
 The part the owner opens in a browser. Static files that show things and call the worker; it does no model work and
@@ -204,7 +206,10 @@ _Avoid_: inbox, notifications, to-do, alerts
 **Next up**:
 The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
 claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the
-model, a second starts a session on it and claims the issue on GitHub. A planning workspace's (#300): the session to
+model, a second starts a session on it and claims the issue on GitHub. When the next on its milestone's Build order
+line isn't ready yet (`needs-triage` or `needs-info`), **Grill** takes the top in gold (#363): it starts a session
+with the grilling skill on that issue, which ends with it marked ready; the first ready issue sits under it with a
+small Build. A grill claims nothing and takes no builder's place in Running. A planning workspace's (#300): the session to
 pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the
 next 7 days, soonest first; with neither, it doesn't show.
 _Avoid_: backlog, queue, roadmap (that's the milestones)
@@ -401,9 +406,20 @@ changes, the ask line, and Merge or Bring up to date. Once merged or closed, it 
 _Avoid_: review screen, PR view
 
 **Ask line**:
-The one-line box on a PR page, with quick asks beside it, that sends a question to the pull request's session on the
-model it already uses; its answer shows on the page.
+The one-line box on a PR page, with quick asks beside it, that asks the pull request's quick questions.
 _Avoid_: composer, chat box (that's the message box)
+
+**Quick questions**:
+A small read-only conversation about one pull request on its PR page, outside any session: a model reads the pull
+request and changes nothing, and its answers can point at lines in the diff. On a tablet it takes the file list's
+place beside the diff; on a phone it's a sheet over it.
+_Avoid_: PR chat, review chat
+
+**Fix it in a session**:
+The one tap on the ask line that carries a pull request's quick questions over to a session on its branch, the one on
+it already or a new one, to make the change they came to. The only way the PR page starts a session besides Bring up
+to date.
+_Avoid_: hand off, escalate
 
 **Bring up to date**:
 The one tap that has a pull request's session merge its base in and fix the conflict, when the pull request conflicts

@@ -15,29 +15,55 @@ export const LiveUpdateResult = z.object({
 });
 export type LiveUpdateResult = z.infer<typeof LiveUpdateResult>;
 
-/** One job of a CI run, as its segment of main's build bar shows it (#249). */
+const When = z.iso.datetime({ offset: true });
+
+/**
+ * One job of a CI run, as its row of main's build shows it (#249, #337). A matrix job's runs fold
+ * into one row, with how many of them have finished.
+ */
 export const BuildJob = z.object({
   name: z.string(),
-  /** `other` for one that ended neither passing nor failing: skipped, cancelled. */
-  outcome: z.enum(["running", "passed", "failed", "other"]),
+  /**
+   * `waiting` for one that hasn't started, as it waits on the jobs it needs; `other` for one that
+   * ended neither passing nor failing: skipped, cancelled.
+   */
+  outcome: z.enum(["waiting", "running", "passed", "failed", "other"]),
+  /** When its latest try started, and ended; `null` until it has. */
+  startedAt: When.nullable(),
+  completedAt: When.nullable(),
+  /** A matrix job's runs: how many have finished, of how many; `null` for a job that runs once. */
+  shards: z.object({ done: z.number().int(), total: z.number().int() }).nullable(),
+  /** The jobs it waits on, by name, each in a stage before its own. */
+  needs: z.array(z.string()),
 });
 export type BuildJob = z.infer<typeof BuildJob>;
 
 /**
- * Main's build (#249): CI on main's newest commit as GitHub has it, each job in the order the
- * workflow starts them. Update waits for it to pass.
+ * Main's build (#249, #337): CI on main's newest commit as GitHub has it, in stages drawn from the
+ * workflow's own order: jobs that start together share a stage, and a job that waits on others
+ * sits in a stage after theirs. Update waits for it to pass.
  */
 export const MainBuild = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("running"),
-    jobs: z.array(BuildJob),
-    /** When it should end, from how long main's build before it took; `null` when unknown. */
-    endsAround: z.iso.datetime({ offset: true }).nullable(),
+    stages: z.array(z.array(BuildJob)),
+    /** When its latest try started; `null` until a job has. */
+    startedAt: When.nullable(),
+    /**
+     * When it should end, from how long each job usually takes; `null` when unknown. Already past
+     * when its jobs have run longer than they usually do: it's nearly done.
+     */
+    endsAround: When.nullable(),
   }),
-  z.object({ kind: z.literal("passed"), jobs: z.array(BuildJob) }),
+  z.object({
+    kind: z.literal("passed"),
+    stages: z.array(z.array(BuildJob)),
+    startedAt: When.nullable(),
+    completedAt: When.nullable(),
+  }),
   z.object({
     kind: z.literal("failed"),
-    jobs: z.array(BuildJob),
+    stages: z.array(z.array(BuildJob)),
     /** The first failed job's page on GitHub, with its log. */
     details: z.url({ protocol: /^https$/ }),
   }),

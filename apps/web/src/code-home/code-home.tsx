@@ -8,10 +8,12 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ButtonLink } from "@/components/button-link";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { InfoBox } from "@/components/notice";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -33,8 +35,23 @@ import { Running } from "./running.tsx";
 // The Home's own stylesheet (code-home.css), added once, when a code workspace's page first opens.
 addStylesheet("code-home", css);
 
-// Where a code session would start, so the owner knows to sign in to GitHub first (#99).
-const SignIns = lazy(() => import("../sign-ins/sign-ins.tsx"));
+/**
+ * Where a code session would start: that its sessions can't reach GitHub until Courtyard is signed
+ * in to it (#99), with the way to Connections.
+ */
+function GitHubNotice() {
+  return (
+    <InfoBox label="GitHub isn't connected">
+      <span className="min-w-60 flex-1">
+        A session here can work, but can't push its branch or open a pull request until Courtyard is
+        signed in to GitHub.
+      </span>
+      <ButtonLink size="sm" to="/settings" hash="connections">
+        Sign in to GitHub
+      </ButtonLink>
+    </InfoBox>
+  );
+}
 
 /** The tabs a code workspace's page has, by their hash; Home has none (#301). */
 const TABS = { sessions: "Sessions", prs: "PRs" } as const;
@@ -54,14 +71,14 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
- * cover screen): its one line and its connections line (#308), its tabs (Home · Sessions · PRs),
- * and on Home, in a fixed order, Needs you, Running, Next up, then the message box at the foot.
- * Each block hides when it's empty, so a new workspace shows only its name, its line and the box.
- * Its knowledge lives in its repository, so it has no context file, Things or skills here.
+ * cover screen): its connections line (#308), its tabs (Home · Sessions · PRs), and on Home, in a
+ * fixed order, Needs you, Running, Next up, then the message box at the foot. Each block hides
+ * when it's empty, so a new workspace shows only its name, its connections line and the box. Its
+ * one line, What it's for, stays in its workspace.json for the home chat and turns, never on the
+ * page (#333). Its knowledge lives in its repository, so it has no context file, Things or skills.
  */
 export default function CodeHome(props: {
   workspace: WorkspaceSummary;
-  description: string | undefined;
   list: CodeSessionList;
   providers: FromWorker<ProviderList>;
   skills: FromWorker<SkillList>;
@@ -135,8 +152,11 @@ export default function CodeHome(props: {
     ...(list.sessions.length > 0
       ? [{ hash: "sessions", label: TABS.sessions, count: list.sessions.length }]
       : []),
-    ...(pulls.length > 0 || list.sessions.some((session) => session.pullRequest !== undefined)
-      ? [{ hash: "prs", label: TABS.prs, count: pulls.length }]
+    // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
+    ...(pulls.length > 0 ||
+    list.sessions.some((session) => session.pullRequest !== undefined) ||
+    (open === undefined && tab === "prs")
+      ? [{ hash: "prs", label: TABS.prs, ...(open === undefined ? {} : { count: pulls.length }) }]
       : []),
   ];
   // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
@@ -152,11 +172,6 @@ export default function CodeHome(props: {
   return (
     <div data-code-home="">
       <div className="mt-2 flex flex-col gap-2">
-        {props.description !== undefined && (
-          <p className="line-clamp-1 text-interface font-medium text-muted-foreground">
-            {props.description}
-          </p>
-        )}
         {connections === undefined ? (
           <PlaceholderRows count={1} size="text" />
         ) : (
@@ -179,9 +194,8 @@ export default function CodeHome(props: {
           </>
         )}
       </div>
-      <Suspense fallback={null}>
-        <SignIns part="github-notice" />
-      </Suspense>
+      {/* With the connections line, so it never comes on its own and pushes the rest down. */}
+      {connections?.github.kind === "signed-out" && <GitHubNotice />}
 
       {showsTabs && (
         <div className="mt-3.5">
