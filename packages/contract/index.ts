@@ -32,6 +32,11 @@ export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
 export {
   BuildIssue,
   GitHubLink,
+  LEAD_BUILDERS,
+  LeadBuilder,
+  LeadReady,
+  LeadRun,
+  LeadStatus,
   NextUp,
   NextUpIssue,
   PaperConnecting,

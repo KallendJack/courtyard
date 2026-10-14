@@ -162,6 +162,10 @@ export const SessionSummary = z.object({
   updatedAt: z.iso.datetime(),
   /** Whether a turn is running right now. */
   busy: z.boolean(),
+  /** It's its code workspace's Lead (#347), pinned at the top of its sessions. */
+  lead: z.literal(true).optional(),
+  /** The Lead started it, to build an issue (#347): marked "by Lead". */
+  byLead: z.literal(true).optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 

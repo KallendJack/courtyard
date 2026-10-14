@@ -309,8 +309,11 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      {/* A turn the worker started for a failed check opens with the check, in its activity. */}
-      {!turn.fixesChecks && <OwnerMessage sessionId={sessionId} turn={turn} />}
+      {/*
+       * A turn the worker started opens with what it does: a failed check, in its activity, or
+       * a Lead's merged builder (#347).
+       */}
+      {!turn.fromWorker && <OwnerMessage sessionId={sessionId} turn={turn} />}
       {/* What it wrote, each piece between the activities it's about (#200). */}
       {turn.parts.map((part, index) => {
         // Only the last piece can still be arriving.

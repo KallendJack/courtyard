@@ -161,6 +161,46 @@ export const createNotifications = (options: {
       return written.ok ? ok(null) : err(STORAGE);
     });
 
+  /**
+   * Sends a notification of what a session needs to every device logged in that turned them on.
+   * A device whose subscription has gone, or that logged out, is forgotten.
+   */
+  const notice = async (session: SessionId, need: string) => {
+    // No device has them on: nothing to send, nor keys to make.
+    const devices = await readDevices();
+    if (!devices.ok || devices.value.length === 0) return;
+    const [own, loggedIn, title] = await Promise.all([
+      ownKeys(),
+      options.devicesLoggedIn(),
+      options.titleOf(session),
+    ]);
+    if (!own.ok || !loggedIn.ok || title === undefined) return;
+    const pushed: PushNotice = { title, body: need, session };
+    const payload = JSON.stringify(pushed);
+    const sending = devices.value.filter(({ device }) => loggedIn.value.has(device));
+    const loggedOut = devices.value.filter(({ device }) => !loggedIn.value.has(device));
+    const sent = await Promise.all(
+      sending.map(async (entry) => ({
+        entry,
+        sent: await options.send({ subscription: entry.subscription, payload, keys: own.value }),
+      })),
+    );
+    const forget = [
+      ...loggedOut,
+      ...sent.flatMap(({ entry, sent }) => (!sent.ok && sent.error === "gone" ? [entry] : [])),
+    ];
+    if (forget.length === 0) return;
+    // Only these entries: a device that turned them on meanwhile stays.
+    await changeDevices((kept) =>
+      kept.filter(
+        ({ device, subscription }) =>
+          !forget.some(
+            (gone) => gone.device === device && gone.subscription.endpoint === subscription.endpoint,
+          ),
+      ),
+    );
+  };
+
   return {
     /** The worker's public key, made on its first run. */
     publicKey: async (): Promise<Result<string, StorageError>> => {
@@ -182,53 +222,17 @@ export const createNotifications = (options: {
     turnOff: (endpoint: string) =>
       changeDevices((devices) => devices.filter((kept) => kept.subscription.endpoint !== endpoint)),
 
-    /**
-     * Sends a notification, when a session's event is one the owner hears about, to every device
-     * logged in that turned them on. A device whose subscription has gone, or that logged out,
-     * is forgotten.
-     */
-    sessionEvent: async (
-      session: SessionId,
-      event: SessionEvent,
-      pullRequest: PullRequest | undefined,
-    ) => {
+    /** Sends a notification when a session's event is one the owner hears about. */
+    sessionEvent: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => {
       const need = needOf(event, pullRequest);
-      if (need === undefined) return;
-      // No device has them on: nothing to send, nor keys to make.
-      const devices = await readDevices();
-      if (!devices.ok || devices.value.length === 0) return;
-      const [own, loggedIn, title] = await Promise.all([
-        ownKeys(),
-        options.devicesLoggedIn(),
-        options.titleOf(session),
-      ]);
-      if (!own.ok || !loggedIn.ok || title === undefined) return;
-      const notice: PushNotice = { title, body: need, session };
-      const payload = JSON.stringify(notice);
-      const sending = devices.value.filter(({ device }) => loggedIn.value.has(device));
-      const loggedOut = devices.value.filter(({ device }) => !loggedIn.value.has(device));
-      const sent = await Promise.all(
-        sending.map(async (entry) => ({
-          entry,
-          sent: await options.send({ subscription: entry.subscription, payload, keys: own.value }),
-        })),
-      );
-      const forget = [
-        ...loggedOut,
-        ...sent.flatMap(({ entry, sent }) => (!sent.ok && sent.error === "gone" ? [entry] : [])),
-      ];
-      if (forget.length === 0) return;
-      // Only these entries: a device that turned them on meanwhile stays.
-      await changeDevices((kept) =>
-        kept.filter(
-          ({ device, subscription }) =>
-            !forget.some(
-              (gone) =>
-                gone.device === device && gone.subscription.endpoint === subscription.endpoint,
-            ),
-        ),
-      );
+      return need === undefined ? Promise.resolve() : notice(session, need);
     },
+
+    /**
+     * Sends a notification saying what a session needs, with no event of its own: a Lead's
+     * builder's pull request ready to merge (#347).
+     */
+    notice,
   };
 };
 
