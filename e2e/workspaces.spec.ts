@@ -89,8 +89,9 @@ test("what a new workspace is for, when the owner says, goes to its models, not 
 
   await page.getByLabel("Name").fill(name);
   const forWhat = page.getByLabel("What's it for?");
+  // Every screen has the frame and its Talk key since #197, once its own chunk has come.
   await expect(forWhat).toHaveAccessibleDescription(
-    "One line. It sits at the top of the context file, and Get to know starts from it.",
+    "One line, or hold Talk. It sits at the top of the context file, and Get to know starts from it.",
   );
   await expect(page.getByText("Optional", { exact: true })).toBeVisible();
   await forWhat.fill("Turning the shed into a pottery studio by spring");
