@@ -38,8 +38,47 @@ const staysPut = async (pinned: readonly Locator[], scroll: () => Promise<void>)
 };
 
 /**
+ * How far above the panel's bottom edge the page's lowest drawn thing (a card, a row, a line of
+ * text) ends: nothing runs into the edge, whether the message box is in the page or docked in the
+ * frame below it.
+ */
+const footGap = (page: Page) =>
+  page.locator("main").evaluate((main) => {
+    // The panel the page sits on: the nearest box around `main` with a size of its own.
+    let around = main.parentElement;
+    while (around && around.getBoundingClientRect().height === 0) around = around.parentElement;
+    const panel = (around ?? main).getBoundingClientRect();
+    // Measured at the middle's end, as the owner sees it once scrolled down.
+    const middle = main.querySelector('[data-scroll-restoration-id="page"]');
+    middle?.scrollTo({ top: middle.scrollHeight });
+    const scroller = main
+      .querySelector('[data-scroll-restoration-id="page"]')
+      ?.getBoundingClientRect();
+    let lowest = 0;
+    for (const each of main.querySelectorAll("*")) {
+      const style = getComputedStyle(each);
+      if (style.visibility === "hidden" || style.display === "none") continue;
+      const box = each.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      const painted =
+        style.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+        style.borderBottomWidth !== "0px" ||
+        [...each.childNodes].some((node) => node.nodeType === 3 && node.textContent?.trim());
+      if (!painted) continue;
+      // What the middle has scrolled out of sight isn't drawn.
+      const bottom =
+        scroller && each.closest('[data-scroll-restoration-id="page"]')
+          ? Math.min(box.bottom, scroller.bottom)
+          : box.bottom;
+      lowest = Math.max(lowest, bottom);
+    }
+    return Math.round(panel.bottom - lowest);
+  });
+
+/**
  * With a middle longer than the screen: only the middle scrolls (not the window, nor the panel
- * around the page), and what's pinned stays where it was, in view.
+ * around the page), and what's pinned stays where it was, in view. Before that, as it is, the
+ * page keeps a gap at its foot.
  */
 const keepsPinned = async (page: Page, pinned: readonly Locator[]) => {
   await expect(middle(page)).toHaveCount(1);
@@ -56,6 +95,7 @@ const keepsPinned = async (page: Page, pinned: readonly Locator[]) => {
       { intervals: [250] },
     )
     .toBe(true);
+  expect(await footGap(page)).toBeGreaterThanOrEqual(12);
   await lengthen(middle(page));
   await staysPut(pinned, () => scrollToEnd(middle(page)));
   // Nothing else scrolls: the panel the page sits on, or the window.

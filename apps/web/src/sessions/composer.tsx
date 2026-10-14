@@ -39,10 +39,16 @@ import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-
 import { availableModels } from "./models.ts";
 
 /**
- * The tablet dock's height with the box in it (handheld-frame.css, `[data-dock="tablet"]`): its
- * padding above and below, and the box's least height between.
+ * What the box leaves at the page's foot once it's in the frame's dock, below the panel: the gap
+ * the page keeps everywhere else, so nothing on the page ends against the panel's edge.
  */
-const DOCK_ROOM = "h-[calc(--spacing(20.5)+env(safe-area-inset-bottom))] shrink-0";
+const FOOT_GAP = "h-4 shrink-0";
+/**
+ * Until it docks on a tablet: the dock's height with the box in it (handheld-frame.css,
+ * `[data-dock="tablet"]`: its padding above and below, and the box's least height between), and
+ * the foot's gap, so the swap moves nothing (#283).
+ */
+const DOCK_ROOM = "h-[calc(--spacing(24.5)+env(safe-area-inset-bottom))] shrink-0";
 
 /** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
 const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
@@ -652,7 +658,8 @@ export const Composer = memo(function Composer(props: {
 
   // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page. On
   // a tablet, until it docks, its room in the dock is kept here, so the swap moves nothing (#283).
-  if (awaitingDock) return layout === "tablet" ? <div aria-hidden className={DOCK_ROOM} /> : null;
+  if (awaitingDock)
+    return <div aria-hidden className={layout === "tablet" ? DOCK_ROOM : FOOT_GAP} />;
   return docked ? (
     <>
       <Suspense fallback={null}>
@@ -668,6 +675,7 @@ export const Composer = memo(function Composer(props: {
         />
       </Suspense>
       {createPortal(messageBox, dock.element)}
+      <div aria-hidden className={FOOT_GAP} />
     </>
   ) : (
     messageBox
