@@ -25,7 +25,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { TurnAttachment } from "../attachments/index.ts";
-import type { CodeRefusal } from "../code/index.ts";
+import type { CodeRefusal, IssueGap } from "../code/index.ts";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import { type DocumentToolRefusal, documentPath } from "../documents/index.ts";
 import type {
@@ -1446,6 +1446,14 @@ export const leadToolReply = (done: Result<LeadToolDone, LeadToolRefusal>): Tool
   }
 };
 
+/** What an issue a model tried to file lacks (#324), as its refusal says it. */
+const ISSUE_GAPS: Readonly<Record<IssueGap, string>> = {
+  "no-milestone": "no milestone",
+  "no-category": "no category label",
+  "no-triage": "no triage label",
+  triages: "more than one triage label",
+};
+
 /**
  * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
  * the owner can allow waits for their approval instead (#171), and is told only if they deny it.
@@ -1460,6 +1468,12 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
       return "That command couldn't be read: check its quotes close.";
     case "off-branch":
       return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
+    case "unfiled": {
+      const lacks = refusal.gaps.map((gap) => ISSUE_GAPS[gap]);
+      const last = lacks.pop();
+      const list = lacks.length === 0 ? last : `${lacks.join(", ")} and ${last}`;
+      return `That issue wasn't filed: every issue goes in a milestone (--milestone), with a category label (bug or enhancement) and one triage label (needs-triage, needs-info, ready-for-agent, ready-for-human or wontfix). It has ${list}. Add what's missing and file it again.`;
+    }
     case "denied":
       switch (refusal.what) {
         case "command":

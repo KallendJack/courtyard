@@ -371,6 +371,50 @@ const GH_ISSUES = [
   ["label", "list"],
 ];
 
+/** The flags `gh issue create` takes, read to check the issue it files (#324). */
+const ISSUE_CREATE: GhFlags = {
+  withValue: new Set([
+    ...["--title", "-t", "--body", "-b", "--body-file", "-F", "--label", "-l"],
+    ...["--milestone", "-m", "--assignee", "-a", "--project", "-p", "--template", "-T"],
+    ...["--parent", "--recover", "--repo", "-R"],
+  ]),
+  alone: new Set(["--web", "-w", "--editor", "-e"]),
+};
+
+/** The category labels an issue carries one of (Matt Pocock's triage roles). */
+const CATEGORY_LABELS = new Set(["bug", "enhancement"]);
+/** The triage labels an issue carries exactly one of (Matt Pocock's triage roles). */
+const TRIAGE_LABELS = new Set([
+  "needs-triage",
+  "needs-info",
+  "ready-for-agent",
+  "ready-for-human",
+  "wontfix",
+]);
+
+/** What an issue filed with `gh issue create` lacks of what every issue has (#324). */
+export type IssueGap = "no-milestone" | "no-category" | "no-triage" | "triages";
+
+/**
+ * What the issue a command files lacks (#324): a milestone, a category label, exactly one triage
+ * label. Nothing for a command that files no issue; everything for one whose flags can't be read.
+ */
+export const issueGapsIn = (words: readonly string[]): readonly IssueGap[] => {
+  const [gh, issue, create, ...rest] = words;
+  if (gh !== "gh" || issue !== "issue" || create !== "create") return [];
+  const values = ghParts(rest, ISSUE_CREATE)?.values ?? [];
+  const milestone = values.some(([flag, value]) => PR_MILESTONE.includes(flag) && value !== "");
+  const labels = values
+    .filter(([flag]) => flag === "--label" || flag === "-l")
+    .flatMap(([, value]) => value.split(",").map((label) => label.trim()));
+  const triages = new Set(labels.filter((label) => TRIAGE_LABELS.has(label))).size;
+  return [
+    ...(milestone ? [] : ["no-milestone" as const]),
+    ...(labels.some((label) => CATEGORY_LABELS.has(label)) ? [] : ["no-category" as const]),
+    ...(triages === 0 ? ["no-triage" as const] : triages > 1 ? ["triages" as const] : []),
+  ];
+};
+
 /** The flags `gh run download` takes: none for another repository. */
 const RUN_DOWNLOAD: GhFlags = {
   withValue: new Set(["--dir", "-D", "--name", "-n", "--pattern", "-p"]),

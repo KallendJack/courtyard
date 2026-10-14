@@ -315,6 +315,11 @@ until they answer. Allow lets it happen. Deny, and anything else refused, tells 
   opening your pull request work only on your session branch, <branch>, and the worktree isn't on it now, so that
   didn't run."
 - A command whose quotes don't close: "That command couldn't be read: check its quotes close."
+- `gh issue create` filing an issue with no milestone, no category label, or not exactly one triage label (#324),
+  refused before the owner is asked where it would ask: "That issue wasn't filed: every issue goes in a milestone
+  (--milestone), with a category label (bug or enhancement) and one triage label (needs-triage, needs-info,
+  ready-for-agent, ready-for-human or wontfix). It has <what it lacks: no milestone, no category label, no triage
+  label or more than one triage label>. Add what's missing and file it again."
 - Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
   this turn, so nothing more is done."
 

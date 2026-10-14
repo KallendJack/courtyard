@@ -486,7 +486,10 @@ describe("talking to the Lead (#347)", () => {
           "Skipped issue #22 for now: its builder stopped and its claim is released, and the order doesn't start it again until the owner runs it again.",
       },
     ]);
-    expect(github.commentsOn(onGitHub, 22).at(-1)).toMatch(/^Stopped: /);
+    expect(github.commentsOn(onGitHub, 22)).toEqual([
+      expect.stringMatching(/^Building this: /),
+      "Stopped: the owner skipped it for now, through Courtyard's Lead.",
+    ]);
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23, 24]);
     await runJobs();
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23, 24]);
@@ -523,7 +526,9 @@ describe("talking to the Lead (#347)", () => {
   });
 
   it("asks the owner before it files an issue", async () => {
-    const coder = codingProvider([{ run: "gh issue create --title 'A bug' --body 'It broke.'" }]);
+    const coder = codingProvider([
+      { run: "gh issue create --title 'A bug' --body 'It broke.' -l bug,needs-triage -m Later" },
+    ]);
     const { request } = await signedInWith([], { providers: [coder.provider] });
 
     await run(request, CODING_MODEL);
