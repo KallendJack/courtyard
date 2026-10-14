@@ -1333,6 +1333,56 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post(`/api/sessions/${working}/stop`, { data: { turn: 1 } });
       await request.post("/api/github/sign-out", { data: {} });
     });
+
+    // #398: a block's size is set by the layout, never by its rows. Needs you and Running share the
+    // column evenly, full or empty, and rows past that scroll inside.
+    test("Needs you and Running keep an even share of the column, however full", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const { needsYou, running } = blocks(page);
+      const heights = async (): Promise<[number, number]> => [
+        (await needsYou.boundingBox())?.height ?? 0,
+        (await running.boundingBox())?.height ?? 0,
+      ];
+      await expect(running).toBeVisible();
+      const [calmNeeds, calmRunning] = await heights();
+      expect(Math.abs(calmNeeds - calmRunning)).toBeLessThanOrEqual(2);
+
+      const asks = await request.post("/api/workspaces/workbench/sessions", {
+        data: {
+          text: "run command: git merge main (for: Bring #251 up to date)",
+          model: { provider: "fake", model: "echo" },
+        },
+      });
+      expect(asks.status()).toBe(201);
+      const working = [((await asks.json()) as { id: string }).id];
+      for (const name of ["Activity lines", "Swipe between photos", "Paste on the Fold"]) {
+        const works = await request.post("/api/workspaces/workbench/sessions", {
+          data: {
+            text: `${name} ${"word ".repeat(900)}`,
+            model: { provider: "fake", model: "echo" },
+          },
+        });
+        working.push(((await works.json()) as { id: string }).id);
+      }
+
+      await expect(running.getByRole("listitem").nth(2)).toBeAttached({ timeout: 45_000 });
+      const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
+      await expect(approval).toContainText("asked", { timeout: 45_000 });
+      await expect(approval).toBeInViewport({ ratio: 1 });
+      await expect(running.getByRole("listitem").first()).toBeInViewport({ ratio: 1 });
+      const [busyNeeds, busyRunning] = await heights();
+      // Full, the same even share as when calm: the rows scroll inside, never stretch their block.
+      expect(Math.abs(busyNeeds - busyRunning)).toBeLessThanOrEqual(2);
+      await shot(page, "tablet-home-fixed-blocks");
+
+      for (const id of working)
+        await request.post(`/api/sessions/${id}/stop`, { data: { turn: 1 } });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
   });
 
   test.describe("on the cover screen", () => {
@@ -1350,6 +1400,11 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       expect(nextBox?.y ?? 0).toBeGreaterThan((needsBox?.y ?? 0) + (needsBox?.height ?? 0));
       expect(Math.round(nextBox?.width ?? 0)).toBe(Math.round(needsBox?.width ?? 0));
       expect(await pageScrollsSideways(page)).toBe(false);
+      // #398: each block is the same fixed height, whatever it holds; the page scrolls between them.
+      const tall = await Promise.all(
+        Object.values(blocks(page)).map(async (block) => (await block.boundingBox())?.height ?? 0),
+      );
+      expect(Math.max(...tall) - Math.min(...tall)).toBeLessThanOrEqual(2);
       await shot(page, "cover-home");
       await request.post("/api/github/sign-out", { data: {} });
     });
