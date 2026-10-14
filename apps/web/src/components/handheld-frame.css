@@ -22,11 +22,29 @@
  * The page keeps clear of the frame: of its rails, and of its bottom bar and the message box open
  * above it. The frame measures them as they are. The page scrolls inside what's left (#266), so a
  * page's own bar pinned to its bottom (Jump to latest on a session's page) sits just above them.
+ * Only once the frame has measured them (`data-frame-measured`): until then, the shell's own
+ * room for the rails holds, so the page doesn't widen while this sheet is in and the frame isn't
+ * (#283).
  */
-[data-frame-column] {
+:root[data-frame-measured] [data-frame-column] {
   padding-left: var(--frame-left, 0px);
   padding-right: var(--frame-right, 0px);
   padding-bottom: var(--frame-bottom, 0px);
+}
+/*
+ * On a tablet the page's box is in the dock from the moment it's there, the dock showing with it
+ * and the page keeping its room in the same frame, rather than once the frame has measured it: the
+ * box leaves the page's foot as it goes in, so nothing above moves (#283). Taller than that (what's
+ * attached, a long message), the frame's measure takes over.
+ */
+[data-dock="tablet"]:empty {
+  display: none;
+}
+[data-frame-column]:has([data-dock="tablet"]:not(:empty)) {
+  padding-bottom: max(
+    var(--frame-bottom, 0px),
+    calc(--spacing(20.5) + env(safe-area-inset-bottom))
+  );
 }
 
 /*

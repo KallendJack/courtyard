@@ -30,6 +30,9 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   `components/page.tsx`, #339); nothing scrolls the title or the main action away.
 - **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/kept.tsx`,
   #269): the last answer at once on a revisit, faint rows in its place the first time, never a spinner.
+- **Nothing moves once drawn** (#283, #398): what loads later holds its space from the first frame, at its final size.
+  A dashboard block's size is set by the layout, never by its rows: its rows scroll inside, and empty it keeps its
+  size with one quiet line. `e2e/layout-shift.spec.ts` fails a main page that shifts while it loads.
 - **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/kept.tsx`, #387): every 30 s
   while calm, faster while busy, paused while the tab is hidden and asked at once when it's shown. Never a timer of
   its own.

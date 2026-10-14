@@ -38,6 +38,12 @@ import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
 import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
+/**
+ * The tablet dock's height with the box in it (handheld-frame.css, `[data-dock="tablet"]`): its
+ * padding above and below, and the box's least height between.
+ */
+const DOCK_ROOM = "h-[calc(--spacing(20.5)+env(safe-area-inset-bottom))] shrink-0";
+
 /** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
 const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
 /** ✕, ■ and ↑ under the words while the Talk key listens (#206), loaded the same way. */
@@ -172,7 +178,8 @@ export const Composer = memo(function Composer(props: {
    * On a touch screen the box waits for the frame's dock (#359): shown in the page first, it would
    * move into the dock as the frame arrives, and the keyboard would lose it mid-word.
    */
-  const awaitingDock = useLayout() !== "desktop" && !docked;
+  const layout = useLayout();
+  const awaitingDock = layout !== "desktop" && !docked;
   // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
@@ -643,8 +650,9 @@ export const Composer = memo(function Composer(props: {
     </div>
   );
 
-  // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page.
-  if (awaitingDock) return null;
+  // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page. On
+  // a tablet, until it docks, its room in the dock is kept here, so the swap moves nothing (#283).
+  if (awaitingDock) return layout === "tablet" ? <div aria-hidden className={DOCK_ROOM} /> : null;
   return docked ? (
     <>
       <Suspense fallback={null}>

@@ -1,5 +1,6 @@
 import type { ContextBackup, WorkspaceId, WorkspaceSummary } from "@courtyard/contract";
 import { ButtonLink } from "@/components/button-link";
+import { PlaceholderRows } from "@/components/kept";
 import { useBackup } from "../backup-status.tsx";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { describeWhen } from "../when.ts";
@@ -54,8 +55,9 @@ const problemsOf = (
 /**
  * Home's foot rows (#102; Paper, "Home"), near the thumbs and only when needed: main's build with
  * Update when a new version is there (`live/`), and one gold line for something actually wrong,
- * the worst, "and 1 more" when there's more, with Fix it, which opens where it's fixed. Nothing
- * above them moves when they come.
+ * the worst, "and 1 more" when there's more, with Fix it, which opens where it's fixed. Both keep
+ * their size when all's well, with a quiet line each (#283; Paper, "Home, foot slots keep their
+ * size"), and their place while they're still to come, so nothing moves when they do.
  */
 export default function HomeFoot(props: {
   workspaces: readonly WorkspaceSummary[];
@@ -66,7 +68,17 @@ export default function HomeFoot(props: {
   const [worst, ...more] = problemsOf(backup, props.workspaces);
   return (
     <div className="flex flex-col gap-2.5 md:gap-3">
-      <LiveUpdate label="New version" short={props.short} />
+      <LiveUpdate label="New version" short={props.short} keepsPlace />
+      {worst === undefined && backup === undefined && <PlaceholderRows count={1} size="foot" />}
+      {worst === undefined && backup !== undefined && (
+        <section
+          aria-label="Backup"
+          className="flex min-h-13 items-center gap-3 rounded-bubble border bg-surface py-2 pr-2.5 pl-4"
+        >
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-placeholder" />
+          <p className="min-w-0 grow text-sm/4.5 font-medium text-muted-foreground">Backed up</p>
+        </section>
+      )}
       {worst !== undefined && (
         <section
           aria-label="Problem"

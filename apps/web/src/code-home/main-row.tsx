@@ -11,8 +11,8 @@ const KEPT_MAIN = createKept<WorkspaceMain | null>();
  * Main (#301; Paper, "Code workspace Home"): the newest commit on the repository's main with its
  * build as a row (#337), which opens every job, what matters after a merge. Update shows only on the workspace whose
  * repository Courtyard's live copy runs from, once main has moved on from it (its Updates card,
- * which follows the update); other repositories show the bar alone. Hidden while there's no build
- * to show, and still asked for, so one that starts shows (#387). Asked again at once when `again`
+ * which follows the update); other repositories show the bar alone. With no build to show, a quiet
+ * row in its place (#283), still asked for, so one that starts shows (#387). Asked again at once when `again`
  * changes (after a merge from Home).
  */
 export function MainRow(props: { workspaceId: WorkspaceId; again?: unknown }) {
@@ -27,12 +27,26 @@ export function MainRow(props: { workspaceId: WorkspaceId; again?: unknown }) {
     busy: (known) => (known?.build?.kind === "running" ? MAIN_RUNNING_EVERY_MS : undefined),
   });
 
-  // Nothing known yet: the row keeps its place.
-  if (main === undefined) return <PlaceholderRows count={1} />;
-  if (main === null) return null;
+  // Nothing known yet: the row keeps its place, at its size (#283).
+  if (main === undefined) return <PlaceholderRows count={1} size="bar" />;
+  if (main === null) return <NoBuild />;
   if (main.liveCopy) return <LiveMain main={main} again={props.again} />;
-  return main.build === null ? null : (
-    <MainBuildCard label="Main" newest={main.newest} build={main.build} />
+  if (main.build === null) return <NoBuild />;
+  return <MainBuildCard label="Main" newest={main.newest} build={main.build} />;
+}
+
+/** Main with no build to show keeps its row, at the bar's height, with one quiet line (#283). */
+function NoBuild() {
+  return (
+    <section
+      aria-label="Main"
+      className="flex h-12.5 items-center gap-3.5 rounded-bubble border bg-surface pr-2.5 pl-3.5"
+    >
+      <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+        Main
+      </span>
+      <span className="truncate text-meta font-medium text-muted-foreground">No build yet</span>
+    </section>
   );
 }
 
