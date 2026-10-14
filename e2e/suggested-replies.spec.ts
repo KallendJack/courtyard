@@ -1,12 +1,22 @@
 import { expect, type Page, test } from "@playwright/test";
+import { chooseEffort, chosen } from "./frame.ts";
 
 // Suggested replies (ADR 0017): the fake suggests the replies a message scripts, one line
 // "suggest replies: A | B".
 
-/** Starts a session in garage-gym whose answer suggests `replies`, at `effort`. */
-const startSuggesting = async (page: Page, replies: readonly string[], effort?: string) => {
+/**
+ * Starts a session in garage-gym whose answer suggests `replies`, at `effort` ("high"); on the
+ * cover screen's frame, its box opened with Type.
+ */
+const startSuggesting = async (
+  page: Page,
+  replies: readonly string[],
+  effort?: string,
+  cover = false,
+) => {
   await page.goto("/workspaces/garage-gym");
-  if (effort !== undefined) await page.getByLabel("Effort").selectOption({ label: effort });
+  if (effort !== undefined) await chooseEffort(page, effort);
+  if (cover) await page.getByRole("button", { name: "Type" }).click();
   await page
     .getByLabel("Message", { exact: true })
     .fill(`Where should the rack go?\nsuggest replies: ${replies.join(" | ")}`);
@@ -18,7 +28,7 @@ const startSuggesting = async (page: Page, replies: readonly string[], effort?: 
 test("a suggested reply is sent with a tap, at the turn's effort, and the replies go", async ({
   page,
 }) => {
-  const suggested = await startSuggesting(page, ["Back wall", "By the door"], "High effort");
+  const suggested = await startSuggesting(page, ["Back wall", "By the door"], "high");
   await expect(suggested.getByRole("button")).toHaveText(["Back wall", "By the door"]);
 
   // They survive a reload.
@@ -29,7 +39,7 @@ test("a suggested reply is sent with a tap, at the turn's effort, and the replie
   await expect(session).toContainText("You said: By the door");
   await expect(suggested).toBeHidden();
   await page.reload();
-  await expect(page.getByLabel("Effort").locator("option:checked")).toHaveText("High effort");
+  expect((await chosen(page)).effort).toBe("high");
   await expect(suggested).toBeHidden();
 });
 
@@ -64,7 +74,7 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("the replies stack, one under another", async ({ page }) => {
-    const suggested = await startSuggesting(page, ["Back wall", "By the door"]);
+    const suggested = await startSuggesting(page, ["Back wall", "By the door"], undefined, true);
     await expect(suggested.getByRole("button")).toHaveCount(2);
     const [first, second] = await Promise.all(
       ["Back wall", "By the door"].map((name) =>

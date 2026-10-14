@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { chooseModel } from "./frame.ts";
 import { READING_SESSION_ID } from "./long-session.ts";
 import { fromTheEnd } from "./page-scroll.ts";
 
@@ -253,7 +254,7 @@ test.describe("the chat never jumps back to the top", () => {
     context,
   }) => {
     await page.goto("/workspaces/side-project");
-    await page.getByLabel("Model").selectOption("fake/echo");
+    await chooseModel(page, "fake/echo");
     await page.getByRole("textbox", { name: "Message" }).fill(manyLines(60));
     await page.getByRole("button", { name: "Start" }).click();
     const session = sessionOn(page);

@@ -1,5 +1,6 @@
 import { setTimeout as wait } from "node:timers/promises";
 import { type APIRequestContext, expect, type Locator, type Page, test } from "@playwright/test";
+import { chooseModel } from "./frame.ts";
 
 // Code sessions (#170, ADR 0007), in the Side project code workspace start-worker.mjs sets up. The
 // fake edits a file with "edit file <path>: <line>" and runs a command with "run command: …"
@@ -9,7 +10,7 @@ import { type APIRequestContext, expect, type Locator, type Page, test } from "@
 /** Starts a session in Side project, on the fake, with `lines` as its message. */
 const startOnPage = async (page: Page, lines: readonly string[]) => {
   await page.goto("/workspaces/side-project");
-  await page.getByLabel("Model").selectOption("fake/echo");
+  await chooseModel(page, "fake/echo");
   // Exactly: a session another test left here can have "message" in its Rename button's name.
   await page.getByLabel("Message", { exact: true }).fill(lines.join("\n"));
   await page.getByRole("button", { name: "Start" }).click();
@@ -339,7 +340,7 @@ test("a model that can't code is refused in a code workspace, with the reason", 
   page,
 }) => {
   await page.goto("/workspaces/side-project");
-  await page.getByLabel("Model").selectOption("fake-two/echo");
+  await chooseModel(page, "fake-two/echo");
   await page.getByLabel("Message", { exact: true }).fill("Fix the build");
   await page.getByRole("button", { name: "Start" }).click();
 
@@ -376,7 +377,7 @@ test.describe("several code sessions at once (#174)", () => {
     }
 
     await page.goto("/workspaces/side-project");
-    await page.getByLabel("Model").selectOption("fake/echo");
+    await chooseModel(page, "fake/echo");
     await page.getByLabel("Message", { exact: true }).fill("Fix the build");
     await page.getByRole("button", { name: "Start" }).click();
 
