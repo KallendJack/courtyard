@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 // A code workspace's title area (#333; Paper, "Code workspace Home" and "Tablet · Workspace ⋯:
 // rename, icon, archive"), on start-worker.mjs's Side project, whose workspace.json has a line:
@@ -18,14 +18,32 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return box;
 };
 
+/**
+ * Where `sheet` sits against `anchor`, both measured at once: the page may still be laying out
+ * (the side column comes in late on CI), so two measurements apart can be of two layouts.
+ */
+const against = async (anchor: Locator, sheet: Locator) => {
+  const other = await sheet.elementHandle();
+  return anchor.evaluate((element, other) => {
+    const [a, b] = [element.getBoundingClientRect(), (other as Element).getBoundingClientRect()];
+    return {
+      below: b.top - a.bottom,
+      left: b.left - a.left,
+      right: b.right - a.right,
+      foot: b.bottom,
+    };
+  }, other);
+};
+
 /** Checks the ⋯'s sheet is under it, its right edge level with the ⋯'s, so it never covers the name. */
 const isUnder = async (page: Page) => {
   const more = page.getByRole("button", { name: "Workspace options" });
   const sheet = page.getByRole("dialog", { name: NAME });
   await expect(sheet).toBeVisible();
-  const [button, box] = [await boxOf(more), await boxOf(sheet)];
-  expect(box.y).toBeGreaterThanOrEqual(button.y + button.height);
-  expect(Math.abs(box.x + box.width - (button.x + button.width))).toBeLessThanOrEqual(2);
+  await expect
+    .poll(async () => Math.abs((await against(more, sheet)).right))
+    .toBeLessThanOrEqual(2);
+  expect((await against(more, sheet)).below).toBeGreaterThanOrEqual(0);
   return sheet;
 };
 
@@ -113,10 +131,12 @@ test.describe("a code workspace's title area (#333)", () => {
       await line.click();
       const sheet = page.getByRole("dialog", { name: "Connections" });
       await expect(sheet).toBeVisible();
-      const [under, box] = [await boxOf(line), await boxOf(sheet)];
-      expect(box.y).toBeGreaterThanOrEqual(under.y + under.height);
-      expect(Math.abs(box.x - under.x)).toBeLessThanOrEqual(2);
-      expect(box.y + box.height).toBeLessThanOrEqual(420 - 16);
+      await expect
+        .poll(async () => Math.abs((await against(line, sheet)).left))
+        .toBeLessThanOrEqual(2);
+      const { below, foot } = await against(line, sheet);
+      expect(below).toBeGreaterThanOrEqual(0);
+      expect(foot).toBeLessThanOrEqual(420 - 16);
     });
   });
 });
