@@ -164,7 +164,12 @@ export default function StepByStep(props: {
           <div className="flex items-center gap-3.5">
             {/* Short of room, what they're for gives way, never how far along. */}
             <p className="flex min-w-0 text-label font-bold tracking-label whitespace-pre text-muted-foreground uppercase">
-              {about !== undefined && <span className="truncate">{about} · </span>}
+              {/* A no-break space, which the truncated span's end keeps. */}
+              {about !== undefined && (
+                <span className="truncate">
+                  {about} ·{" "}
+                </span>
+              )}
               <span className="shrink-0">
                 Step {at + 1} of {steps.length}
               </span>
