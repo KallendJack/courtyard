@@ -1137,7 +1137,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await signIn(request);
       const asks = await request.post("/api/workspaces/workbench/sessions", {
         data: {
-          text: "run command: git merge origin/main (for: Bring #251 up to date)",
+          text: "run command: git merge main (for: Bring #251 up to date)",
           model: { provider: "fake", model: "echo" },
         },
       });
@@ -1153,7 +1153,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
 
       await page.goto(HOME);
       const { needsYou, running } = blocks(page);
-      const approval = needsYou.getByRole("listitem", { name: "Run git merge origin/main?" });
+      const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
       await expect(approval).toContainText("asked", { timeout: 45_000 });
       await expect(running.getByRole("listitem")).toContainText(/Activity lines/, {
         timeout: 45_000,
