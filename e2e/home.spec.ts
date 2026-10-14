@@ -369,10 +369,12 @@ const keepsOneScreen = async (page: Page, height: number) => {
   await expect(page.getByRole("region", { name: "New version" })).toBeVisible();
   await settled(page);
 
-  const area = tiles(page).locator("..");
+  // The tiles are the page's scrolling middle; the panel around the page never scrolls.
+  const area = page.locator('[data-scroll-restoration-id="page"]');
+  await expect(area.getByRole("list", { name: "Workspaces" })).toBeVisible();
   const scrolls = await area.evaluate((el) => el.scrollHeight > el.clientHeight);
   expect(scrolls).toBe(true);
-  const panel = page.locator('[data-scroll-restoration-id="page"]');
+  const panel = page.locator("main").locator("..");
   expect(await panel.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
 
   const titleBefore = await title.boundingBox();

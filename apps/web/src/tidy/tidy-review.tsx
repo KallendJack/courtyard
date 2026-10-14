@@ -6,12 +6,13 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { PlaceholderRows } from "@/components/kept";
 import { NoteRow } from "@/components/note-row";
 import { EmptyState } from "@/components/notice";
+import { Page } from "@/components/page";
 import { TickBox } from "@/components/tick-box";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
@@ -128,15 +129,15 @@ function ProposedChange(props: {
  * Tidy (docs/ai-conduct.md, Tidying): asks a model for changes that make a workspace's context
  * file or the owner context shorter, shows each one ticked, and saves the ticked ones as one
  * change. Afterwards it goes to Recent changes, where the tidy can be undone. Asking again starts
- * afresh.
+ * afresh. The page under `header`, with Save and Cancel pinned at its foot.
  */
-export function TidyReview(props: { workspace: Whose; name: string }) {
+export function TidyReview(props: { workspace: Whose; name: string; header: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   return <OneTidy key={attempt} {...props} again={() => setAttempt((n) => n + 1)} />;
 }
 
 /** One tidy: asked for once, then reviewed and saved. */
-function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
+function OneTidy(props: { workspace: Whose; name: string; header: ReactNode; again: () => void }) {
   const { workspace, again } = props;
   const navigate = useNavigate();
   const [asking, setAsking] = useState<Asking>({ kind: "asking" });
@@ -172,32 +173,38 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
     return undefined;
   });
 
+  const page = (middle: ReactNode, footer?: ReactNode) => (
+    <Page header={props.header} {...(footer === undefined ? {} : { footer })}>
+      <div className="mt-4">{middle}</div>
+    </Page>
+  );
+
   if (asking.kind === "asking") {
     // Faint rows in the shape of what comes, its count then its changes, filled in place; what
     // it waits on is said only to a screen reader (owner, 2026-10-12: nothing jumps in).
-    return (
+    return page(
       <div role="status" className="flex flex-col gap-6">
         <span className="sr-only">Reading {props.name} for lines to merge, remove or shorten…</span>
         <PlaceholderRows count={1} size="text" />
         <PlaceholderRows count={3} size="tall" />
-      </div>
+      </div>,
     );
   }
   if (asking.kind === "failed") {
-    return (
+    return page(
       <div className="space-y-3">
         <FormError message={asking.message} />
         <Button variant="outline" onClick={again}>
           Try again
         </Button>
-      </div>
+      </div>,
     );
   }
 
   const { proposal } = asking;
   if (proposal.changes.length === 0) {
-    return (
-      <EmptyState>Nothing worth changing: every line is short, current and said once.</EmptyState>
+    return page(
+      <EmptyState>Nothing worth changing: every line is short, current and said once.</EmptyState>,
     );
   }
   const ticked = proposal.changes.length - unticked.size;
@@ -214,7 +221,7 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
     setUnticked(next);
   };
 
-  return (
+  return page(
     <>
       <p className="text-sm text-muted-foreground">
         {proposal.changes.length} {proposal.changes.length === 1 ? "change" : "changes"} proposed ·{" "}
@@ -233,34 +240,34 @@ function OneTidy(props: { workspace: Whose; name: string; again: () => void }) {
           />
         ))}
       </ul>
-      {/* At the foot of the page's panel, which keeps clear of a phone's gesture bar (#266). */}
-      <div className="sticky bottom-0 -mx-4 mt-6 border-t bg-card px-4 pt-3 pb-6 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
-        <div className="flex gap-2">
-          {stale ? (
-            <Button size="lg" onClick={again}>
-              Tidy again
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              onClick={() => void save.run(proposal)}
-              disabled={ticked === 0}
-              busy={save.busy}
-              busyLabel="Saving…"
-            >
-              Save {ticked} {ticked === 1 ? "change" : "changes"}
-            </Button>
-          )}
-          <Button size="lg" variant="outline" waiting={save.busy} onClick={() => void back()}>
-            Cancel
+    </>,
+    // Pinned at the page's foot, which keeps clear of a phone's gesture bar (#266, #339).
+    <div className="border-t pt-3 pb-6">
+      <div className="flex gap-2">
+        {stale ? (
+          <Button size="lg" onClick={again}>
+            Tidy again
           </Button>
-        </div>
-        {save.error !== undefined && (
-          <div className="mt-2">
-            <FormError message={save.error} />
-          </div>
+        ) : (
+          <Button
+            size="lg"
+            onClick={() => void save.run(proposal)}
+            disabled={ticked === 0}
+            busy={save.busy}
+            busyLabel="Saving…"
+          >
+            Save {ticked} {ticked === 1 ? "change" : "changes"}
+          </Button>
         )}
+        <Button size="lg" variant="outline" waiting={save.busy} onClick={() => void back()}>
+          Cancel
+        </Button>
       </div>
-    </>
+      {save.error !== undefined && (
+        <div className="mt-2">
+          <FormError message={save.error} />
+        </div>
+      )}
+    </div>,
   );
 }

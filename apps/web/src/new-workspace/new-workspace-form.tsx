@@ -5,11 +5,12 @@ import {
   WORKSPACE_NAME_MAX_LENGTH,
 } from "@courtyard/contract";
 import { useRouter } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
 import { useDock, useLayout } from "@/components/handheld";
+import { Page } from "@/components/page";
 import { CodeMark, RepoPicker } from "@/components/repo-picker";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { TextField, WrappingTextField } from "@/components/text-field";
@@ -38,10 +39,11 @@ const nameFromRepo = (repo: string) =>
  * always was, or Code, which lists the owner's GitHub repos to pick one from. Picking one fills in
  * what can be known (its name, and what it's for from its description on GitHub), all shown before
  * Create. On a touch screen nothing is focused until tapped, so the keyboard doesn't cover the
- * page, and the Talk key fills in what it's for.
+ * page, and the Talk key fills in what it's for. The page under `header`, with Create at its foot.
  */
-export function NewWorkspaceForm() {
+export function NewWorkspaceForm(props: { header: ReactNode }) {
   const router = useRouter();
+  const formId = useId();
   const layout = useLayout();
   const dock = useDock();
   const [kind, setKind] = useState<Kind>("planning");
@@ -148,52 +150,64 @@ export function NewWorkspaceForm() {
   );
   const talks = dock !== undefined;
 
+  // The button that adds it is pinned at the page's foot (#339), outside the form, which it names.
+  const footer = code ? (
+    <div className="flex flex-col gap-2 pt-3 pb-6">
+      <FormError message={add.error} />
+      <div className="flex justify-end">
+        <Button
+          form={formId}
+          type="submit"
+          size="lg"
+          disabled={picked === undefined}
+          busy={add.busy}
+          busyLabel="Creating…"
+        >
+          {name.trim() === "" ? "Create" : `Create ${name.trim()}`}
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <div className="pt-3 pb-6">
+      <Button form={formId} type="submit" busy={add.busy} busyLabel="Adding…">
+        Add workspace
+      </Button>
+    </div>
+  );
+
   return (
     // Where the page's own classes apply (new-workspace.css).
     <div data-new-workspace="" className="contents">
-      <div className="mt-5 flex flex-col gap-3.5">
-        <SegmentedChoice
-          label="Kind"
-          look="switch"
-          options={[
-            { value: "planning", label: "Planning" },
-            { value: "code", label: "Code", icon: <CodeMark /> },
-          ]}
-          value={kind}
-          onChange={setKind}
-        />
-        {code ? (
-          <form onSubmit={submit} className="flex flex-col gap-3.5">
-            <Repos repos={repos} picked={picked?.repo} pick={pick} />
-            <div className="grid items-start gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-              {nameField(undefined)}
-              {introField(talks ? "From the repo, or hold Talk." : "From the repo.")}
-            </div>
-            <FormError message={add.error} />
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                size="lg"
-                disabled={picked === undefined}
-                busy={add.busy}
-                busyLabel="Creating…"
-              >
-                {name.trim() === "" ? "Create" : `Create ${name.trim()}`}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <form onSubmit={submit} className="max-w-sm space-y-4">
-            {nameField(add.error)}
-            {introField(
-              `One line${talks ? ", or hold Talk" : ""}. It sits at the top of the context file, and Get to know starts from it.`,
-            )}
-            <Button type="submit" busy={add.busy} busyLabel="Adding…">
-              Add workspace
-            </Button>
-          </form>
-        )}
-      </div>
+      <Page header={props.header} footer={footer}>
+        <div className="mt-5 flex flex-col gap-3.5">
+          <SegmentedChoice
+            label="Kind"
+            look="switch"
+            options={[
+              { value: "planning", label: "Planning" },
+              { value: "code", label: "Code", icon: <CodeMark /> },
+            ]}
+            value={kind}
+            onChange={setKind}
+          />
+          {code ? (
+            <form id={formId} onSubmit={submit} className="flex flex-col gap-3.5">
+              <Repos repos={repos} picked={picked?.repo} pick={pick} />
+              <div className="grid items-start gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                {nameField(undefined)}
+                {introField(talks ? "From the repo, or hold Talk." : "From the repo.")}
+              </div>
+            </form>
+          ) : (
+            <form id={formId} onSubmit={submit} className="max-w-sm space-y-4">
+              {nameField(add.error)}
+              {introField(
+                `One line${talks ? ", or hold Talk" : ""}. It sits at the top of the context file, and Get to know starts from it.`,
+              )}
+            </form>
+          )}
+        </div>
+      </Page>
     </div>
   );
 }

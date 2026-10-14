@@ -79,9 +79,21 @@ function Home() {
   const list = workspaces.data.workspaces;
 
   return (
-    <Page wide fill>
+    // Only the tiles scroll, under the title and above the foot rows (#339).
+    <Page
+      wide
+      header={<PageTitle>Workspaces</PageTitle>}
+      footer={
+        <div data-home="">
+          <div className="pt-4 pb-6 md:pb-8">
+            <Suspense>
+              <HomeFoot workspaces={list} short={short} />
+            </Suspense>
+          </div>
+        </div>
+      }
+    >
       <div data-home="" className="contents">
-        <PageTitle>Workspaces</PageTitle>
         {list.length === 0 ? (
           <EmptyState>
             No workspaces yet.{" "}
@@ -91,9 +103,8 @@ function Home() {
             for one area of your life.
           </EmptyState>
         ) : (
-          // From a tablet up only the tiles scroll, under the title and above the foot rows (#339).
           // The space round them keeps a focused tile's ring in view.
-          <div className="-mx-1 mt-3 p-1 md:mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+          <div className="-mx-1 mt-3 p-1 md:mt-4">
             <ul
               aria-label="Workspaces"
               className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3"
@@ -118,11 +129,6 @@ function Home() {
             </ul>
           </div>
         )}
-        <div className="mt-auto shrink-0 pt-6">
-          <Suspense>
-            <HomeFoot workspaces={list} short={short} />
-          </Suspense>
-        </div>
       </div>
     </Page>
   );

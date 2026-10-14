@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Page, PageTitle } from "@/components/page";
+import { PageTitle } from "@/components/page";
 import { NewWorkspaceForm } from "../../new-workspace/new-workspace-form.tsx";
 
 export const Route = createFileRoute("/_app/new-workspace")({
@@ -13,12 +13,15 @@ export const Route = createFileRoute("/_app/new-workspace")({
  */
 function NewWorkspace() {
   return (
-    <Page>
-      <PageTitle>New workspace</PageTitle>
-      <p className="mt-2 text-body text-muted-foreground">
-        Say what it's for. For code, pick a repo.
-      </p>
-      <NewWorkspaceForm />
-    </Page>
+    <NewWorkspaceForm
+      header={
+        <>
+          <PageTitle>New workspace</PageTitle>
+          <p className="mt-2 text-body text-muted-foreground">
+            Say what it's for. For code, pick a repo.
+          </p>
+        </>
+      }
+    />
   );
 }

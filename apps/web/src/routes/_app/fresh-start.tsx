@@ -94,13 +94,48 @@ function FreshStart() {
   };
 
   return (
-    <Page>
-      <PageTitle above={<BackLink workspaceId={undefined} />}>Fresh start</PageTitle>
-      <p className="mt-2 text-body text-muted-foreground">
-        Clear everything and start Courtyard as on its first run. Use it once you've finished trying
-        things out, or any time you want a clean slate.
-      </p>
-
+    <Page
+      header={
+        <>
+          <PageTitle above={<BackLink workspaceId={undefined} />}>Fresh start</PageTitle>
+          <p className="mt-2 text-body text-muted-foreground">
+            Clear everything and start Courtyard as on its first run. Use it once you've finished
+            trying things out, or any time you want a clean slate.
+          </p>
+        </>
+      }
+      footer={
+        <form onSubmit={submit} className="flex flex-col gap-1.5 border-t pt-4 pb-6">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full md:w-80">
+              <TextField
+                label={`Type “${FRESH_START_WORDS}” to confirm`}
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="destructiveFilled"
+              size="lg"
+              disabled={!matches || running !== null}
+              busy={start.busy}
+              busyLabel="Starting fresh…"
+            >
+              Start fresh
+            </Button>
+            <ButtonLink variant="quiet" size="lg" to="/settings">
+              Cancel
+            </ButtonLink>
+          </div>
+          <p className="text-meta text-muted-foreground">The button works once the words match.</p>
+          {/* A turn that stopped it is named in its notice above, so it's said once. */}
+          {running === null && <FormError message={start.error} />}
+        </form>
+      }
+    >
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         <GoesOrStays
           heading="Goes"
@@ -139,36 +174,6 @@ function FreshStart() {
           <StillRunning running={running} />
         </div>
       )}
-
-      <form onSubmit={submit} className="mt-6 flex flex-col gap-1.5">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full md:w-80">
-            <TextField
-              label={`Type “${FRESH_START_WORDS}” to confirm`}
-              value={typed}
-              onChange={(event) => setTyped(event.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-          <Button
-            type="submit"
-            variant="destructiveFilled"
-            size="lg"
-            disabled={!matches || running !== null}
-            busy={start.busy}
-            busyLabel="Starting fresh…"
-          >
-            Start fresh
-          </Button>
-          <ButtonLink variant="quiet" size="lg" to="/settings">
-            Cancel
-          </ButtonLink>
-        </div>
-        <p className="text-meta text-muted-foreground">The button works once the words match.</p>
-        {/* A turn that stopped it is named in its notice above, so it's said once. */}
-        {running === null && <FormError message={start.error} />}
-      </form>
     </Page>
   );
 }

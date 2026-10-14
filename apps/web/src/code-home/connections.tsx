@@ -23,12 +23,16 @@ const GUTTER = 16;
 /** The sheet's width where there's room (Paper, "Tablet · Connect Paper"). */
 const WIDTH = 440;
 
-/** Where the sheet opens: under the connections line, never past the screen's edge. */
+/**
+ * Where the sheet opens: under the connections line, never past the screen's edge, and no taller
+ * than the room below the line, so its foot stays on screen.
+ */
 const placeUnder = (anchor: HTMLElement | null) => {
   const width = Math.min(WIDTH, window.innerWidth - 2 * GUTTER);
   const box = anchor?.getBoundingClientRect();
   const left = Math.max(GUTTER, Math.min(box?.left ?? GUTTER, window.innerWidth - width - GUTTER));
-  return { top: (box?.bottom ?? 5 * GUTTER) + 12, left, width };
+  const top = (box?.bottom ?? 5 * GUTTER) + 12;
+  return { top, left, width, maxHeight: `calc(100dvh - ${top + GUTTER}px)` };
 };
 
 /**
@@ -48,7 +52,7 @@ export function ConnectionsSheet(props: {
   anchor: RefObject<HTMLButtonElement | null>;
 }) {
   const dialog = useDialog(props.open, props.onClose);
-  const [place, setPlace] = useState(() => ({ top: 0, left: 0, width: 0 }));
+  const [place, setPlace] = useState(() => placeUnder(null));
   useEffect(() => {
     if (props.open) setPlace(placeUnder(props.anchor.current));
   }, [props.open, props.anchor]);
@@ -57,7 +61,7 @@ export function ConnectionsSheet(props: {
       {...dialog}
       aria-label="Connections"
       style={place}
-      className="fixed m-0 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-box border border-input bg-popover p-5 text-popover-foreground shadow-raised backdrop:bg-card/60"
+      className="fixed m-0 overflow-hidden rounded-box border border-input bg-popover p-0 text-popover-foreground shadow-raised backdrop:bg-card/60 open:flex open:flex-col"
     >
       {props.open && <SheetBody {...props} />}
     </dialog>
@@ -111,8 +115,9 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
   const keeps = choice?.kind === "file" && choice.file.id === current;
   const { github } = connections;
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3 pb-1">
+    // Its title and Connect stay put; only what's between them scrolls (#339).
+    <div className="flex min-h-0 flex-col gap-3 p-5">
+      <div className="flex shrink-0 items-start justify-between gap-3 pb-1">
         <div className="flex flex-col gap-1">
           <h2 className="display-section text-sheet-title">Connections</h2>
           <p className="text-label/4.5 font-medium text-muted-foreground">
@@ -122,97 +127,101 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
         <IconButton label="Close" icon={<X />} onClick={props.onClose} />
       </div>
 
-      <section
-        aria-label="GitHub"
-        className="flex items-center gap-3 rounded-bubble bg-secondary px-3.5 py-3"
-      >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground/85">
-          <GitHubMark size={18} />
-        </span>
-        <span className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="text-interface font-bold">GitHub</span>
-          {github.kind === "connected" ? (
-            <span className="truncate text-label font-medium text-success">
-              Connected · {github.repo}
-            </span>
-          ) : github.kind === "signed-out" ? (
-            <span className="text-label font-medium text-warning">
-              Not connected:{" "}
-              <Link to="/settings" hash="connections" className="underline">
-                sign in from Connections
-              </Link>
-            </span>
-          ) : (
-            <span className="text-label font-medium text-muted-foreground">
-              Its repository isn't on GitHub
-            </span>
-          )}
-        </span>
-      </section>
-
-      <fieldset className="flex flex-col gap-2.5 rounded-bubble border border-primary/35 bg-secondary px-3.5 pt-3 pb-3.5">
-        <legend className="sr-only">Paper file</legend>
-        <div className="flex items-center gap-3">
+      <div data-dialog-body="" className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+        <section
+          aria-label="GitHub"
+          className="flex items-center gap-3 rounded-bubble bg-secondary px-3.5 py-3"
+        >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground/85">
-            <PaperMark size={18} />
+            <GitHubMark size={18} />
           </span>
           <span className="flex min-w-0 grow flex-col gap-0.5">
-            <span className="text-interface font-bold">Paper</span>
-            <span className="text-label font-medium text-muted-foreground">
-              One file for this workspace's designs
-            </span>
+            <span className="text-interface font-bold">GitHub</span>
+            {github.kind === "connected" ? (
+              <span className="truncate text-label font-medium text-success">
+                Connected · {github.repo}
+              </span>
+            ) : github.kind === "signed-out" ? (
+              <span className="text-label font-medium text-warning">
+                Not connected:{" "}
+                <Link to="/settings" hash="connections" className="underline">
+                  sign in from Connections
+                </Link>
+              </span>
+            ) : (
+              <span className="text-label font-medium text-muted-foreground">
+                Its repository isn't on GitHub
+              </span>
+            )}
           </span>
-        </div>
-        {problem !== undefined ? (
-          <div className="flex flex-col items-start gap-2">
-            <FormError message={problem} />
-            <Button variant="outline" size="sm" onClick={() => setAsked((was) => was + 1)}>
-              Try again
-            </Button>
-          </div>
-        ) : files === undefined ? (
-          <p className="text-meta text-muted-foreground">Asking Paper for your files…</p>
-        ) : (
-          <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
-            {files.map((file) => (
-              <RadioRow
-                key={file.id}
-                name={radios}
-                label={file.name}
-                chosen={choice?.kind === "file" && choice.file.id === file.id}
-                note={sameName(file.name, workspaceName) ? "Same name" : undefined}
-                onChoose={() => setChoice({ kind: "file", file })}
-              />
-            ))}
-            <RadioRow
-              name={radios}
-              label="Make a new file"
-              chosen={choice?.kind === "new"}
-              note={choice?.kind === "new" ? `Called ${workspaceName}` : undefined}
-              icon={<Plus />}
-              onChoose={() => setChoice({ kind: "new" })}
-            />
-          </div>
-        )}
-      </fieldset>
+        </section>
 
-      <Button
-        size="lg"
-        fullWidth
-        disabled={choice === undefined || keeps}
-        busy={connect.busy}
-        busyLabel="Connecting…"
-        onClick={() => void connect.run()}
-      >
-        {choice === undefined
-          ? "Connect"
-          : choice.kind === "new"
-            ? `Make ${workspaceName} and connect it`
-            : keeps
-              ? `Connected to ${choice.file.name}`
-              : `Connect ${choice.file.name}`}
-      </Button>
-      <FormError message={connect.error} />
+        <fieldset className="flex flex-col gap-2.5 rounded-bubble border border-primary/35 bg-secondary px-3.5 pt-3 pb-3.5">
+          <legend className="sr-only">Paper file</legend>
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground/85">
+              <PaperMark size={18} />
+            </span>
+            <span className="flex min-w-0 grow flex-col gap-0.5">
+              <span className="text-interface font-bold">Paper</span>
+              <span className="text-label font-medium text-muted-foreground">
+                One file for this workspace's designs
+              </span>
+            </span>
+          </div>
+          {problem !== undefined ? (
+            <div className="flex flex-col items-start gap-2">
+              <FormError message={problem} />
+              <Button variant="outline" size="sm" onClick={() => setAsked((was) => was + 1)}>
+                Try again
+              </Button>
+            </div>
+          ) : files === undefined ? (
+            <p className="text-meta text-muted-foreground">Asking Paper for your files…</p>
+          ) : (
+            <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
+              {files.map((file) => (
+                <RadioRow
+                  key={file.id}
+                  name={radios}
+                  label={file.name}
+                  chosen={choice?.kind === "file" && choice.file.id === file.id}
+                  note={sameName(file.name, workspaceName) ? "Same name" : undefined}
+                  onChoose={() => setChoice({ kind: "file", file })}
+                />
+              ))}
+              <RadioRow
+                name={radios}
+                label="Make a new file"
+                chosen={choice?.kind === "new"}
+                note={choice?.kind === "new" ? `Called ${workspaceName}` : undefined}
+                icon={<Plus />}
+                onChoose={() => setChoice({ kind: "new" })}
+              />
+            </div>
+          )}
+        </fieldset>
+      </div>
+
+      <div className="flex shrink-0 flex-col gap-3">
+        <Button
+          size="lg"
+          fullWidth
+          disabled={choice === undefined || keeps}
+          busy={connect.busy}
+          busyLabel="Connecting…"
+          onClick={() => void connect.run()}
+        >
+          {choice === undefined
+            ? "Connect"
+            : choice.kind === "new"
+              ? `Make ${workspaceName} and connect it`
+              : keeps
+                ? `Connected to ${choice.file.name}`
+                : `Connect ${choice.file.name}`}
+        </Button>
+        <FormError message={connect.error} />
+      </div>
     </div>
   );
 }
