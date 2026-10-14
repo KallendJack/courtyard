@@ -11,7 +11,7 @@ import {
 } from "react";
 import { classes } from "@/lib/classes";
 import { FrameButton } from "./frame-button.tsx";
-import type { Dictation, TalkTarget } from "./handheld.ts";
+import { type Dictation, type TalkTarget, typingIn, useFinePointer } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
 import { useWakeLock } from "./wake-lock.ts";
 
@@ -24,7 +24,7 @@ const HOLD_MS = 300;
  */
 type Talk =
   | { kind: "idle"; problem?: string }
-  | { kind: "listening"; held: boolean; words: string; overCancel: boolean };
+  | { kind: "listening"; held: boolean; words: string; overCancel: boolean; sends: boolean };
 
 /**
  * What the strip or the key shows: waiting, or waiting while a turn runs; listening hands-free;
@@ -32,7 +32,8 @@ type Talk =
  */
 type Showing = "idle" | "answering" | "listening" | "held" | "dropping";
 
-type Now = { where: string; problem: string | undefined; words: string };
+/** `sends`: held by a key or the mouse's side button, which sends when let go (#197). */
+type Now = { where: string; problem: string | undefined; words: string; sends: boolean };
 
 type Says = Record<Showing, (now: Now) => { title: string; detail: string }>;
 
@@ -53,6 +54,11 @@ function useTalk(props: {
   cancelKey?: RefObject<HTMLButtonElement | null>;
   /** The box shows its own ✕, ■ and ↑ while it listens, there being no Cancel beside the button. */
   controlsInBox?: boolean;
+  /**
+   * Hold Space (outside a field) or the mouse's side button to talk, anywhere on the page;
+   * letting go sends what was said, and Escape drops it (#197).
+   */
+  holdKeys?: boolean;
 }) {
   const { box } = props;
   const [talk, setTalk] = useState<Talk>({ kind: "idle" });
@@ -61,6 +67,8 @@ function useTalk(props: {
   const dictation = useRef<Dictation>(undefined);
   /** The finger that started listening, until it lifts, and whether it has become a hold. */
   const press = useRef<{ pointer: number; timer: number; held: boolean }>(undefined);
+  /** What a let-go key sends, once the browser has settled its last words. */
+  const sending = useRef<Dictation>(undefined);
 
   const answering = box?.answering === true;
   const wasAnswering = useRef(answering);
@@ -74,10 +82,11 @@ function useTalk(props: {
    * Stops listening: keeping what was said (the browser settles the last words first), dropping
    * it, or because the box sent it.
    */
-  const stop = (how: "keep" | "drop" | "sent") => {
+  const stop = (how: "keep" | "drop" | "sent" | "send") => {
     if (press.current !== undefined) window.clearTimeout(press.current.timer);
     press.current = undefined;
-    if (how === "keep") listening.current?.finish();
+    if (how === "send") sending.current = dictation.current;
+    if (how === "keep" || how === "send") listening.current?.finish();
     else listening.current?.cancel();
     if (how === "drop") dictation.current?.drop();
     dictation.current?.done();
@@ -98,7 +107,7 @@ function useTalk(props: {
 
   const begin = () => {
     if (box === undefined) return;
-    setTalk({ kind: "listening", held: false, words: "", overCancel: false });
+    setTalk({ kind: "listening", held: false, words: "", overCancel: false, sends: false });
     // Sent from the box while it listens, listening stops, and what was said has gone with it; or
     // the box's own ■ or ✕ stops it, keeping what was said or dropping it.
     const into: Dictation = box.dictate({
@@ -123,6 +132,10 @@ function useTalk(props: {
         if (dictation.current !== undefined) return;
         if (words === "") setTalk({ kind: "idle", problem: "Nothing heard" });
         else into.hear(words);
+        if (sending.current === into) {
+          sending.current = undefined;
+          into.send?.();
+        }
       },
       failed: (problem, words) => {
         over = true;
@@ -205,6 +218,78 @@ function useTalk(props: {
     else stop("keep");
   };
 
+  // Hold Space or the mouse's side button: the latest of what's here, for listeners added once.
+  const latest = useRef({ begin, stop, idle: talk.kind === "idle", hasBox: box !== undefined });
+  latest.current = { begin, stop, idle: talk.kind === "idle", hasBox: box !== undefined };
+  useEffect(() => {
+    if (props.holdKeys !== true) return;
+    let holding: "key" | "mouse" | undefined;
+    const start = (how: "key" | "mouse") => {
+      const now = latest.current;
+      if (holding !== undefined || !now.idle || !now.hasBox || !canListen()) return false;
+      holding = how;
+      feel("thump");
+      now.begin();
+      setTalk((was) => (was.kind === "listening" ? { ...was, held: true, sends: true } : was));
+      return true;
+    };
+    const end = (how: "send" | "drop" | "keep") => {
+      holding = undefined;
+      latest.current.stop(how);
+    };
+    const keyDown = (event: globalThis.KeyboardEvent) => {
+      if (holding !== undefined && event.key === "Escape") {
+        event.preventDefault();
+        end("drop");
+        return;
+      }
+      if (event.code !== "Space") return;
+      // Held, Space does nothing else: no scrolling, no button pressed.
+      if (holding === "key") {
+        event.preventDefault();
+        return;
+      }
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (typingIn(event.target)) return;
+      if (start("key")) event.preventDefault();
+    };
+    const keyUp = (event: globalThis.KeyboardEvent) => {
+      if (holding !== "key" || event.code !== "Space") return;
+      event.preventDefault();
+      end("send");
+    };
+    // The side button (4) is the browser's Back: not while Courtyard is open.
+    const mouseDown = (event: globalThis.MouseEvent) => {
+      if (event.button === 3 && start("mouse")) event.preventDefault();
+    };
+    const mouseUp = (event: globalThis.MouseEvent) => {
+      if (event.button !== 3) return;
+      event.preventDefault();
+      if (holding === "mouse") end("send");
+    };
+    const notBack = (event: globalThis.MouseEvent) => {
+      if (event.button === 3) event.preventDefault();
+    };
+    // Away from the window mid-hold, its let-go never comes: what was said stays in the box.
+    const away = () => {
+      if (holding !== undefined) end("keep");
+    };
+    window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
+    window.addEventListener("mousedown", mouseDown);
+    window.addEventListener("mouseup", mouseUp);
+    window.addEventListener("auxclick", notBack);
+    window.addEventListener("blur", away);
+    return () => {
+      window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("mousedown", mouseDown);
+      window.removeEventListener("mouseup", mouseUp);
+      window.removeEventListener("auxclick", notBack);
+      window.removeEventListener("blur", away);
+    };
+  }, [props.holdKeys]);
+
   const titleId = useId();
   const detailId = useId();
   const listeningNow = talk.kind === "listening";
@@ -221,7 +306,8 @@ function useTalk(props: {
         : "held";
   const problem = talk.kind === "idle" ? talk.problem : undefined;
   const words = talk.kind === "listening" ? talk.words : "";
-  const { title, detail } = props.says[showing]({ where: props.where, problem, words });
+  const sends = talk.kind === "listening" && talk.sends;
+  const { title, detail } = props.says[showing]({ where: props.where, problem, words, sends });
 
   return {
     showing,
@@ -276,7 +362,10 @@ const STRIP_SAYS: Says = {
     title: "Listening · tap to stop",
     detail: now.words === "" ? now.where : `“${now.words}”`,
   }),
-  held: () => ({ title: "Let go to stop", detail: "Slide onto Cancel to drop it" }),
+  held: (now) =>
+    now.sends
+      ? { title: "Let go to send", detail: "Escape drops it" }
+      : { title: "Let go to stop", detail: "Slide onto Cancel to drop it" },
   dropping: () => ({ title: "Let go to drop it", detail: "Slide back to keep it" }),
 };
 
@@ -294,7 +383,7 @@ export function TalkBar(props: {
   type: () => void;
 }) {
   const cancelKey = useRef<HTMLButtonElement>(null);
-  const talk = useTalk({ ...props, says: STRIP_SAYS, cancelKey });
+  const talk = useTalk({ ...props, says: STRIP_SAYS, cancelKey, holdKeys: true });
   const { listening, held } = talk;
 
   return (
@@ -381,10 +470,10 @@ export function TalkBar(props: {
  * under its name. The words heard go live into the Reply box beside it, so it doesn't repeat them.
  */
 const KEY_SAYS: Says = {
-  idle: (now) => ({ title: "Talk", detail: now.problem ?? "Hold to speak" }),
+  idle: (now) => ({ title: "Talk", detail: now.problem ?? now.where }),
   answering: (now) => ({ title: "Talk", detail: now.problem ?? "Answering…" }),
   listening: () => ({ title: "Listening", detail: "Tap to stop" }),
-  held: () => ({ title: "Listening", detail: "Let go to stop" }),
+  held: (now) => ({ title: "Listening", detail: now.sends ? "Let go to send" : "Let go to stop" }),
   dropping: () => ({ title: "Listening", detail: "Let go to drop it" }),
 };
 
@@ -397,7 +486,9 @@ const KEY_SAYS: Says = {
  * quiet, and what's said queues.
  */
 export function TalkKey(props: { box: TalkTarget | undefined; type: () => void }) {
-  const talk = useTalk({ ...props, says: KEY_SAYS, where: "", controlsInBox: true });
+  // With a mouse, there's a keyboard: Space is the way to talk, and the key says so (#197).
+  const where = useFinePointer() ? "Hold Space" : "Hold to speak";
+  const talk = useTalk({ ...props, says: KEY_SAYS, where, controlsInBox: true, holdKeys: true });
   const { listening, showing } = talk;
   const quiet = showing === "answering";
 

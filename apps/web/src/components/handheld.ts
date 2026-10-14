@@ -33,6 +33,11 @@ export const useWide = () => useQuery(WIDE);
 /** Whether there's a mouse or trackpad, so likely a keyboard, which won't cover the page. */
 export const useFinePointer = () => useQuery(FINE);
 
+/** Whether the keyboard is in something that takes text, where a key is the field's own. */
+export const typingIn = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
 /**
  * Where the talk strip and the Talk key put what the owner says: the page's message box, or on a
  * page without one, the one field a page offers for talking into (New workspace's What's it for?,
@@ -83,6 +88,8 @@ export type Dictation = {
   drop: () => void;
   /** Listening has stopped, however it stopped. */
   done: () => void;
+  /** Sends what's in the box now, as ↑ does: where a held key let go sends (#197). */
+  send?: () => void;
 };
 
 /**

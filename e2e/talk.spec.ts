@@ -479,3 +479,82 @@ test.describe("on New workspace, unfolded", () => {
     await expect(whatFor).toHaveValue("Pottery: throwing bowls on the wheel");
   });
 });
+
+// #197: a computer gets the same frame, and talks hands-free: hold Space (outside a field) or the
+// mouse's side button, and let go to send.
+test.describe("on a desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false });
+
+  test.beforeEach(async ({ page }) => {
+    await standInSpeechRecognition(page);
+  });
+
+  const key = (page: Page) => page.getByRole("button", { name: "Talk", exact: true });
+
+  test("held, Space talks and letting go sends; in the box it's a space; Escape drops it", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("navigation", { name: "Workspaces" })).toBeVisible();
+    await expect(key(page)).toContainText("Hold Space");
+
+    await page.keyboard.down("Space");
+    await expect(key(page)).toContainText("Let go to send");
+    await hear(page, "Pegs for the bands");
+    await page.keyboard.up("Space");
+    await expect(session(page)).toContainText("You said: Pegs for the bands");
+
+    // In the box, Space is a space.
+    await message(page).click();
+    await page.keyboard.type("two words");
+    await expect(message(page)).toHaveValue("two words");
+    await expect(key(page)).toContainText("Hold Space");
+    await message(page).fill("");
+    await message(page).blur();
+
+    // Escape drops what was said.
+    await page.keyboard.down("Space");
+    await hear(page, "Never mind");
+    await expect(message(page)).toHaveValue("Never mind");
+    await page.keyboard.press("Escape");
+    await page.keyboard.up("Space");
+    await expect(key(page)).toContainText("Hold Space");
+    await expect(message(page)).toHaveValue("");
+  });
+
+  test("the mouse's side button talks too, and isn't the browser's Back", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(key(page)).toContainText("Hold Space");
+    const side = (type: string) =>
+      page.evaluate(
+        (type) =>
+          window.dispatchEvent(
+            new MouseEvent(type, { button: 3, bubbles: true, cancelable: true }),
+          ),
+        type,
+      );
+    // `dispatchEvent` says false when the page prevented what the button does by default: Back.
+    expect(await side("mousedown")).toBe(false);
+    await expect(key(page)).toContainText("Let go to send");
+    await hear(page, "Hooks for the rings");
+    expect(await side("mouseup")).toBe(false);
+    await expect(session(page)).toContainText("You said: Hooks for the rings");
+  });
+
+  test("typing anywhere goes into the message box", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(key(page)).toContainText("Hold Space");
+    await page.keyboard.type("Hello there");
+    await expect(message(page)).toBeFocused();
+    await expect(message(page)).toHaveValue("Hello there");
+  });
+
+  test("a narrow window gets the cover screen's layout", async ({ page }) => {
+    await page.setViewportSize({ width: 500, height: 800 });
+    await page.goto("/workspaces/garage-gym");
+    await expect(page.getByRole("button", { name: "Type" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toContainText(
+      "Tap or hold to talk",
+    );
+  });
+});
