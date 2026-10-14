@@ -101,10 +101,10 @@ function NameForm(props: {
           Saves the whole answer to {props.workspaceName}'s documents.
         </p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={props.onDone}>
+          <Button variant="outline" size="sm" waiting={save.busy} onClick={props.onDone}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={save.busy}>
+          <Button type="submit" size="sm" busy={save.busy} busyLabel="Saving…">
             Save
           </Button>
         </div>

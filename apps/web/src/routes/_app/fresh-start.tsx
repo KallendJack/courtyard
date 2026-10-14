@@ -120,7 +120,9 @@ function FreshStart() {
               type="submit"
               variant="destructiveFilled"
               size="lg"
-              disabled={!matches || running !== null || start.busy}
+              disabled={!matches || running !== null}
+              busy={start.busy}
+              busyLabel="Starting fresh…"
             >
               Start fresh
             </Button>

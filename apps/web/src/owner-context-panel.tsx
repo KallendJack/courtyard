@@ -60,7 +60,12 @@ export function OwnerContextPanel(props: {
             Or write down yourself what's true across your life, such as where you live and how you
             like answers, so no workspace needs telling.
           </p>
-          <Button variant="outline" onClick={() => void start.run()} disabled={start.busy}>
+          <Button
+            variant="outline"
+            onClick={() => void start.run()}
+            busy={start.busy}
+            busyLabel="Starting…"
+          >
             Start your owner context
           </Button>
           <FormError message={start.error} />

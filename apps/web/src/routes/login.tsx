@@ -9,6 +9,7 @@ export const Route = createFileRoute("/login")({
       endpoint="/login"
       autoComplete="current-password"
       submitLabel="Log in"
+      busyLabel="Logging in…"
     />
   ),
 });

@@ -135,10 +135,10 @@ function EditForm(props: {
           />
         )}
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" onClick={props.onDone}>
+          <Button variant="outline" size="sm" waiting={save.busy} onClick={props.onDone}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={save.busy}>
+          <Button type="submit" size="sm" busy={save.busy} busyLabel="Saving…">
             Save
           </Button>
         </div>
@@ -184,11 +184,22 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
       actions={
         undone ? undefined : (
           <>
-            <Button variant="quiet" size="xs" onClick={() => void undo.run()} disabled={undo.busy}>
+            <Button
+              variant="quiet"
+              size="xs"
+              onClick={() => void undo.run()}
+              busy={undo.busy}
+              busyLabel="Undoing…"
+            >
               Undo
             </Button>
             {line !== undefined && (
-              <Button variant="quiet" size="xs" onClick={() => setEditing(true)}>
+              <Button
+                variant="quiet"
+                size="xs"
+                waiting={undo.busy}
+                onClick={() => setEditing(true)}
+              >
                 Edit
               </Button>
             )}

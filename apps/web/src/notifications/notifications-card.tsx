@@ -136,7 +136,8 @@ export default function NotificationsCard() {
         <Switch
           on={here.kind === "ready" && here.on}
           onChange={(on) => void action.run(on)}
-          disabled={here.kind !== "ready" || action.busy}
+          disabled={here.kind !== "ready"}
+          busy={action.busy}
           labelledBy="notifications-here"
           describedBy="notifications-when"
         />

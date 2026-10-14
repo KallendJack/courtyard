@@ -151,7 +151,8 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
                     variant="outline"
                     size="sm"
                     onClick={photoPicker.open}
-                    disabled={upload.busy}
+                    busy={upload.busy}
+                    busyLabel="Uploading…"
                   >
                     {thing.photo ? "Change photo" : "Upload photo"}
                   </Button>
@@ -159,7 +160,8 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
                     variant="destructive"
                     size="sm"
                     onClick={() => void remove.run()}
-                    disabled={remove.busy}
+                    busy={remove.busy}
+                    busyLabel="Deleting…"
                   >
                     Delete
                   </Button>

@@ -49,7 +49,8 @@ export function GrillablePlan(props: {
         icon={<Flame />}
         size="sm"
         look="filled"
-        disabled={grill.busy}
+        busy={grill.busy}
+        busyLabel="Starting the grilling…"
         onClick={() => void grill.run()}
       />
       {props.children}

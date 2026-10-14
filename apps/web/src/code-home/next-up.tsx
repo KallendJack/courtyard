@@ -227,13 +227,15 @@ function StartOnIssue(props: {
             <Button
               variant={look.variant}
               grow
-              disabled={start.busy || model === undefined}
+              disabled={model === undefined}
+              busy={start.busy}
+              busyLabel="Starting…"
               onClick={() => void start.run()}
             >
               <Icon aria-hidden />
               {look.start}
             </Button>
-            <Button variant="outline" onClick={() => setConfirming(false)}>
+            <Button variant="outline" waiting={start.busy} onClick={() => setConfirming(false)}>
               Cancel
             </Button>
           </div>

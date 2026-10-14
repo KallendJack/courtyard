@@ -3,7 +3,8 @@
 // colour, radius, shadow or ring written by value in a Tailwind class (`text-[13px]`,
 // `shadow-[0_0_8px_red]`, `text-sm/[18px]`), and on a colour's hex outside styles.css. A real
 // one-off goes on the allowlist, allowed.json, with the reason it can't be the theme's; an entry
-// nothing needs any more fails too, so the list stays short.
+// nothing needs any more fails too, so the list stays short. It also fails a button greyed out
+// while it works (`disabled={save.busy}`), which shows it's busy instead (#330).
 //
 //   node scripts/theme/check.ts [<web app's src folder> <allowlist>]
 
@@ -94,6 +95,28 @@ const found = (
   )
 ).flat();
 const problems = found.filter((problem) => !isAllowed(problem));
+
+/**
+ * A button greyed out while what the owner tapped runs (#330): greyed out means it can't right
+ * now, so one that's working says so with `busy` (or `waiting`, beside one that is).
+ */
+const GREYED_WHILE_BUSY = /\bdisabled=\{[^}]*\bbusy\b[^}]*\}/g;
+const greyedWhileBusy = (
+  await Promise.all(
+    files
+      .filter((file) => file.endsWith(".tsx"))
+      // As written, comments too: a string such as "image/*" would read as one opening.
+      .map(async (file) =>
+        (await readFile(join(src, file), "utf8")).split("\n").flatMap((line, index) =>
+          [...line.matchAll(GREYED_WHILE_BUSY)].map(([value]) => ({
+            file,
+            line: index + 1,
+            value,
+          })),
+        ),
+      ),
+  )
+).flat();
 const unused = allowed.filter(
   (entry) => !found.some((problem) => problem.file === entry.file && problem.value === entry.value),
 );
@@ -110,4 +133,10 @@ if (unused.length > 0) {
   );
   for (const { file, value } of unused) console.error(`  ${file}: ${value}`);
 }
-if (problems.length > 0 || unused.length > 0) process.exit(1);
+if (greyedWhileBusy.length > 0) {
+  console.error(
+    "Greyed out while it works: a working button keeps its colour with busy={…} and busyLabel, and the ones beside it wait with waiting={…} (#330):",
+  );
+  for (const { file, line, value } of greyedWhileBusy) console.error(`  ${file}:${line}: ${value}`);
+}
+if (problems.length > 0 || unused.length > 0 || greyedWhileBusy.length > 0) process.exit(1);

@@ -191,7 +191,9 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
         <Button
           size="lg"
           fullWidth
-          disabled={choice === undefined || keeps || connect.busy}
+          disabled={choice === undefined || keeps}
+          busy={connect.busy}
+          busyLabel="Connecting…"
           onClick={() => void connect.run()}
         >
           {choice === undefined
