@@ -10,6 +10,7 @@ export type Reachability = "checking" | "down" | "up";
  * worker that's slow to answer (#228), and calls `onBack` when it answers again after it didn't:
  * in an earlier check, or on an earlier try of this one. A worker that always answered doesn't
  * count as coming back, so a page that's broken for another reason never reloads itself in a loop.
+ * The page's data catches up when the tab is shown again too (#387), so `onBack` is called then.
  */
 export const useWorkerWatch = (watch: {
   watching: boolean;
@@ -40,10 +41,13 @@ export const useWorkerWatch = (watch: {
       timer = setTimeout(check, watch.everyMs);
     };
     void check();
+    const shown = () => document.hidden || onBack.current();
+    document.addEventListener("visibilitychange", shown);
 
     return () => {
       stop.abort();
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", shown);
     };
   }, [watch.watching, watch.everyMs]);
 

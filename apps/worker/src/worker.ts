@@ -281,6 +281,11 @@ export const createWorker = (options: {
     commandEnv: github.commandEnv,
     pullRequests: github,
     buildsLock,
+    // Main moved on: the Main row and Update ask afresh rather than reuse what they last had.
+    onMerged: () => {
+      workspaceMain.forget();
+      live.forget();
+    },
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
   const connections = createConnections({
@@ -324,6 +329,8 @@ export const createWorker = (options: {
       return build.ok ? (build.value ?? null) : null;
     },
   });
+  // A code workspace's main and its build, for its Home's Main row (#301, #249).
+  const workspaceMain = createWorkspaceMain({ contextDir, code, github, liveCopy, now });
   // Queued messages a stopped worker left waiting go now (#177).
   sessions
     .resumeQueued()
@@ -376,8 +383,6 @@ export const createWorker = (options: {
   );
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(createNextUp({ contextDir, code, github, sessions, now })));
-  // A code workspace's main and its build, for its Home's Main row (#301, #249).
-  const workspaceMain = createWorkspaceMain({ contextDir, code, github, liveCopy, now });
   api.get("/workspaces/:id/main", async (c) => {
     const main = await workspaceMain.of(c.req.param("id"));
     if (main.ok) return c.json(main.value satisfies WorkspaceMain);

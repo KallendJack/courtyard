@@ -98,7 +98,8 @@ export default function CodeHome(props: {
   /** Asked again when the page has changed something (merged, approved). */
   const [again, setAgain] = useState(0);
   // What loads after the page shows the last answer known at once, and is asked for again
-  // quietly (owner, 2026-10-12: nothing jumps in late); unknown, its block keeps its place.
+  // quietly (owner, 2026-10-12: nothing jumps in late), then kept fresh the shared way (#387);
+  // unknown, its block keeps its place.
   const open = useOpenPullRequests(workspace.id, list.sessions, true, again);
   const connections = useKept(KEPT_CONNECTIONS, {
     key: workspace.id,
@@ -279,7 +280,7 @@ export default function CodeHome(props: {
               )}
             </div>
             <div className="shrink-0">
-              <MainRow workspaceId={workspace.id} />
+              <MainRow workspaceId={workspace.id} again={again} />
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
-import { CodeSessionList } from "@courtyard/contract";
-import { createKept, useKept } from "@/components/kept";
+import { CodeSessionList, type TurnNow } from "@courtyard/contract";
+import { createKept, useFresh, useKept } from "@/components/kept";
 import { fromWorker } from "../worker.ts";
 
 /**
@@ -18,10 +18,30 @@ export const loadSessions = async (workspaceId: string) => {
   return loaded.kind === "loaded" ? loaded.data : undefined;
 };
 
-/** A workspace's sessions as last known, asked for again when `again` changes. */
+/** How often a list of sessions asks again while one of them is working or needs the owner. */
+const BUSY_EVERY_MS = 3000;
+
+/**
+ * How often a list of `sessions` asks again (#387): every few seconds while any is working or
+ * needs the owner, so it keeps saying whose turn it is; otherwise as calm as any block.
+ */
+export const sessionsBusyEveryMs = (sessions: readonly { readonly now: TurnNow }[]) =>
+  sessions.some((session) => session.now.kind !== "your-turn") ? BUSY_EVERY_MS : undefined;
+
+/** Calls `refresh` the shared way (`useFresh`), as often as `sessionsBusyEveryMs` says. */
+export const useFreshSessions = (
+  sessions: readonly { readonly now: TurnNow }[],
+  refresh: () => unknown,
+) => useFresh({ ask: refresh, busyEveryMs: sessionsBusyEveryMs(sessions) });
+
+/**
+ * A workspace's sessions as last known, asked for again when `again` changes, and kept fresh the
+ * shared way, faster while one is working or needs the owner (#387).
+ */
 export const useKeptSessions = (workspaceId: string, again?: unknown) =>
   useKept(KEPT_SESSIONS, {
     key: workspaceId,
     load: () => loadSessions(workspaceId),
     ...(again === undefined ? {} : { again }),
+    busy: (known) => sessionsBusyEveryMs(known.sessions),
   });

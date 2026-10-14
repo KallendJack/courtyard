@@ -118,10 +118,11 @@ export default function Review(props: {
   const key = of.kind === "session" ? of.sessionId : `${of.workspaceId}#${of.number}`;
   /** Why the review couldn't be shown, the last time it was asked for, and whose it was. */
   const [problem, setProblem] = useState<{ key: string; why: string }>();
-  /** How many times a pull request no session opened has been asked for again while it's open. */
-  const [followed, setFollowed] = useState(0);
   // The last review known shows at once, asked for again quietly each time the pull request
-  // changes, or once it's merged or closed from here (owner, 2026-10-12: nothing jumps in).
+  // changes, or once it's merged or closed from here (owner, 2026-10-12: nothing jumps in), and
+  // kept fresh the shared way (#387). One no session opened has no events to follow, so while it's
+  // open it's asked for more often, and its checks and Merge follow GitHub; one that can't be asked
+  // for just now keeps showing as it was.
   const loaded = useKept(KEPT_REVIEWS, {
     key,
     load: async () => {
@@ -130,18 +131,11 @@ export default function Review(props: {
       setProblem({ key, why: describeProblem(asked).body });
       return undefined;
     },
-    again: `${version}:${changes}:${followed}`,
+    again: `${version}:${changes}`,
+    busy: (known) =>
+      of.kind === "number" && known.pullRequest.state === "open" ? FOLLOW_EVERY_MS : undefined,
   });
   const failed = loaded === undefined && problem?.key === key ? problem.why : undefined;
-  // One no session opened is asked for again every so often while it's open, so its checks and
-  // Merge follow GitHub; one that can't be asked for just now keeps showing as it was.
-  const following = of.kind === "number" && loaded?.pullRequest.state === "open";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again for each pull request while it's open
-  useEffect(() => {
-    if (!following) return;
-    const timer = setInterval(() => setFollowed((count) => count + 1), FOLLOW_EVERY_MS);
-    return () => clearInterval(timer);
-  }, [key, following]);
   const pullRequest = loaded?.pullRequest ?? props.pullRequest;
   const title =
     pullRequest === undefined

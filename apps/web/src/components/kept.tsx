@@ -4,7 +4,8 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
  * Nothing jumps in late (owner, 2026-10-12): what a page loads after it shows is kept in memory
  * for as long as the tab is open, one store per kind of answer (`createKept`), by a key naming
  * whose it is (a workspace's id). A page that comes back shows the last-known answer at once and
- * asks again quietly, updating in place (`useKept`); one with nothing known yet shows its block's
+ * asks again quietly, updating in place (`useKept`), and keeps asking the one shared way while it
+ * shows (`useFresh`, #387); one with nothing known yet shows its block's
  * placeholder rows (`PlaceholderRows`) in the block's place until the answer comes. A whole page
  * that waits (a pull request's, Tidy) shows them in its own shape, under its title. Its few
  * classes are in the first load's stylesheet, since every page may show it.
@@ -32,10 +33,55 @@ export const createKept = <T,>(): Kept<T> => {
   };
 };
 
+/** How often a block asks again while nothing it shows is busy (#387). */
+const CALM_EVERY_MS = 30 * 1000;
+
+/**
+ * How every block that shows the worker's data stays fresh (#387): `ask` every 30 seconds while
+ * things are calm, or every `busyEveryMs` while something it shows is busy (a session working,
+ * main's build running); never while the tab is hidden, and at once when it's shown again. One
+ * question at a time. While `asking` is false, nothing is asked.
+ */
+export const useFresh = (options: {
+  ask: () => unknown;
+  asking?: boolean;
+  busyEveryMs?: number | undefined;
+}) => {
+  const { asking = true } = options;
+  const everyMs = options.busyEveryMs ?? CALM_EVERY_MS;
+  const ask = useRef(options.ask);
+  ask.current = options.ask;
+  useEffect(() => {
+    if (!asking) return;
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let waiting = false;
+    const askNow = async () => {
+      clearTimeout(timer);
+      // Hidden: nothing more until it's shown again, which asks at once.
+      if (waiting || document.hidden) return;
+      waiting = true;
+      await ask.current();
+      waiting = false;
+      if (current) timer = setTimeout(askNow, everyMs);
+    };
+    // Hidden, the next ask finds it so and waits; shown again, it asks at once.
+    const shown = () => void askNow();
+    timer = setTimeout(askNow, everyMs);
+    document.addEventListener("visibilitychange", shown);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", shown);
+    };
+  }, [asking, everyMs]);
+};
+
 /**
  * The last-known answer in `kept` for `key` (`undefined` until there's one), asked for with `load`
- * when the page shows it and again whenever `again` changes. An answer `load` can't give
- * (`undefined`) keeps what was known. While `asking` is false, nothing is asked.
+ * when the page shows it, again whenever `again` changes, and kept fresh the shared way
+ * (`useFresh`): `busy` says, of what's known, how often to ask while it's busy. An answer `load`
+ * can't give (`undefined`) keeps what was known. While `asking` is false, nothing is asked.
  */
 export const useKept = <T,>(
   kept: Kept<T>,
@@ -44,6 +90,7 @@ export const useKept = <T,>(
     load: () => Promise<T | undefined>;
     again?: unknown;
     asking?: boolean;
+    busy?: (known: T) => number | undefined;
   },
 ): T | undefined => {
   const { key, asking = true, again } = options;
@@ -61,6 +108,14 @@ export const useKept = <T,>(
       current = false;
     };
   }, [kept, key, asking, again]);
+  useFresh({
+    ask: async () => {
+      const loaded = await load.current();
+      if (loaded !== undefined) kept.set(key, loaded);
+    },
+    asking,
+    busyEveryMs: value === undefined ? undefined : options.busy?.(value),
+  });
   return value;
 };
 
