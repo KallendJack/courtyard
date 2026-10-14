@@ -223,6 +223,25 @@ writeFileSync(
   }),
 );
 
+// A third code workspace, Toolshed, for its Lead (#347): three ready issues on the fake GitHub
+// (below), so its builders never touch Workbench's.
+const shedOrigin = join(codeDir, "shed-origin.git");
+const shedOnGitHub = "https://github.com/octo-owner/toolshed.git";
+git(codeDir, "init", "-q", "--bare", "-b", "main", "shed-origin.git");
+git(codeDir, "clone", "-q", "shed-origin.git", "shed-repo");
+const shedRepo = join(codeDir, "shed-repo");
+git(shedRepo, "remote", "set-url", "origin", shedOnGitHub);
+git(shedRepo, "config", `url.${shedOrigin.replaceAll("\\", "/")}.insteadOf`, shedOnGitHub);
+writeFileSync(join(shedRepo, "README.md"), "# Toolshed\n");
+git(shedRepo, "add", ".");
+git(shedRepo, "commit", "-qm", "Start");
+git(shedRepo, "push", "-q", "origin", "main");
+mkdirSync(join(contextDir, "toolshed"), { recursive: true });
+writeFileSync(
+  join(contextDir, "toolshed", "workspace.json"),
+  JSON.stringify({ name: "Toolshed", mode: "code", repoPath: shedRepo }),
+);
+
 // A repo on GitHub that's no workspace's yet (#258), standing in as a bare repository on disk, for
 // New workspace → Code to get onto the worker machine.
 const kitchens = join(codeDir, "garrett-kitchens.git");
@@ -333,9 +352,15 @@ const github = createFakeGitHub({
         milestone: "Later",
       })),
     ],
+    "octo-owner/toolshed": [
+      { number: 31, title: "Hooks on the pegboard", milestone: "1 · Tidy" },
+      { number: 32, title: "Labels on the drawers", milestone: "1 · Tidy" },
+      { number: 33, title: "A light over the bench", milestone: "1 · Tidy" },
+    ],
   },
   milestones: {
     "octo-owner/workbench": { "4 · Code workspaces": "NOW. Build order: #117 → #197 → #251." },
+    "octo-owner/toolshed": { "1 · Tidy": "NOW. Build order: #31 → #32 → #33." },
   },
   opensOnPush: {
     remote: origin,
