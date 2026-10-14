@@ -31,7 +31,7 @@ import { useAction } from "@/lib/use-action";
 import { startLiveUpdate } from "../live/api.ts";
 import { updateOffer, useLive } from "../live/main-build.tsx";
 import { describeProblem } from "../problems.tsx";
-import { loadProviders } from "../worker.ts";
+import { loadProviders } from "../worker-calls.ts";
 import {
   askingModelIn,
   askQuickQuestion,

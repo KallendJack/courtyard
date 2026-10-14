@@ -1,17 +1,10 @@
 import {
   ApiError,
   type CarryOnRequest,
-  ContextBackup,
-  type GetToKnowRequest,
   type NewWorkspace,
-  OwnerContextDetail,
   type PasswordForm,
-  ProviderList,
   type SaveEdit,
-  type SessionChange,
   type SessionId,
-  SessionSummary,
-  SkillList,
   type StopRequest,
   type WorkspaceChange,
   type WorkspaceId,
@@ -19,7 +12,8 @@ import {
   type WorkspaceOrder,
   WorkspaceSummary,
 } from "@courtyard/contract";
-import { z } from "zod";
+import { z } from "zod/mini";
+import type { $ZodType } from "zod/v4/core";
 
 /** What came back from the worker: the data, or why there isn't any. */
 export type FromWorker<T> =
@@ -38,13 +32,13 @@ export const NOT_FOUND = { kind: "not-found" } as const;
  */
 export const readResponse = async <T>(read: {
   response: Response;
-  schema: z.ZodType<T>;
+  schema: $ZodType<T>;
   unauthorised: "logged-out" | "failed";
 }): Promise<FromWorker<T>> => {
   const { response, schema, unauthorised } = read;
   const body: unknown = await response.json().catch(() => null);
   if (response.ok) {
-    const parsed = schema.safeParse(body);
+    const parsed = z.safeParse(schema, body);
     return parsed.success ? { kind: "loaded", data: parsed.data } : { kind: "offline" };
   }
   if (response.status === 404) return { kind: "not-found" };
@@ -114,7 +108,7 @@ export const untilAnswered = async (send: () => Promise<Response>, signal?: Abor
  * that's slow to answer. A worker that can't be reached, or answers with something unexpected,
  * counts as offline; a worker that answers with an error says what went wrong.
  */
-export const fromWorker = async <T>(path: string, schema: z.ZodType<T>): Promise<FromWorker<T>> => {
+export const fromWorker = async <T>(path: string, schema: $ZodType<T>): Promise<FromWorker<T>> => {
   const response = await untilAnswered(() => fetch(`/api${path}`));
   return response
     ? readResponse({ response, schema, unauthorised: "logged-out" })
@@ -126,7 +120,7 @@ export const sendJson = async <T>(request: {
   path: string;
   method?: "POST" | "PUT" | "PATCH" | "DELETE";
   body: unknown;
-  schema: z.ZodType<T>;
+  schema: $ZodType<T>;
   unauthorised?: "logged-out" | "failed";
   /** Stops the request, and whatever the worker is doing for it, when the page no longer wants it. */
   signal?: AbortSignal;
@@ -156,26 +150,9 @@ export const logOut = () => sendJson({ path: "/logout", body: {}, schema: z.unkn
 export const logOutOthers = () =>
   sendJson({ path: "/logout-others", body: {}, schema: z.unknown() });
 
-/** A workspace's skills, for the skill picker and its Skills section (ADR 0016). */
-export const loadSkills = (workspaceId: WorkspaceId): Promise<FromWorker<SkillList>> =>
-  fromWorker(`/workspaces/${encodeURIComponent(workspaceId)}/skills`, SkillList);
-
-/** The providers and their models, for the model picker. */
-export const loadProviders = () => fromWorker("/providers", ProviderList);
-
 /** Adds a workspace: its folder, a starter context file and an icon suggested from its name. */
 export const addWorkspace = (workspace: NewWorkspace) =>
   sendJson({ path: "/workspaces", body: workspace, schema: WorkspaceSummary });
-
-/** Whether the context folder's backup has every change. */
-export const loadBackup = () => fromWorker("/backup", ContextBackup);
-
-/** The owner context, or `null` when there isn't one yet. */
-export const loadOwnerContext = () => fromWorker("/owner-context", OwnerContextDetail);
-
-/** Starts the owner context from the worker's starter file. */
-export const startOwnerContext = () =>
-  sendJson({ path: "/owner-context", body: {}, schema: OwnerContextDetail });
 
 /** Renames a workspace or changes its icon. Its folder stays as it is. */
 export const changeWorkspace = (id: WorkspaceId, change: WorkspaceChange) =>
@@ -203,15 +180,6 @@ export const archiveWorkspace = (id: WorkspaceId) =>
     schema: z.unknown(),
   });
 
-/** Renames a session. */
-export const renameSession = (id: SessionId, change: SessionChange) =>
-  sendJson({
-    path: `/sessions/${encodeURIComponent(id)}`,
-    method: "PATCH",
-    body: change,
-    schema: SessionSummary,
-  });
-
 /** Deletes a session and its event log. */
 export const deleteSession = (id: SessionId) =>
   sendJson({
@@ -233,17 +201,6 @@ export const markAllRead = (workspaceId: WorkspaceId) =>
 export type ContextPlace =
   | { readonly kind: "workspace"; readonly id: WorkspaceId }
   | { readonly kind: "owner" };
-
-/** Starts a session getting to know a workspace or the owner context, with the worker's starter. */
-export const startGettingToKnow = (about: ContextPlace, start: GetToKnowRequest) =>
-  sendJson({
-    path:
-      about.kind === "owner"
-        ? "/owner-context/get-to-know"
-        : `/workspaces/${encodeURIComponent(about.id)}/get-to-know`,
-    body: start,
-    schema: SessionSummary,
-  });
 
 /** Stops a session's running turn, named by its owner message's event number. */
 export const stopTurn = (sessionId: SessionId, turn: number) =>

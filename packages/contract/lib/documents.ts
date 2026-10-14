@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChangeId } from "./session.ts";
+import { ChangeId } from "./change-id.ts";
 
 // A workspace's documents (ADR 0020): longer writing kept as Markdown in its `docs` folder, named
 // by its first `#` heading. Only the pages that show them load these.
@@ -57,7 +57,7 @@ export const SaveAsDocument = z.object({
 export type SaveAsDocument = z.infer<typeof SaveAsDocument>;
 
 /** A change the owner made to a document, which Undo names: `null` when git couldn't keep it. */
-export const DocumentChanged = z.object({ change: ChangeId.nullable() });
+export const DocumentChanged = z.object({ change: z.nullable(ChangeId) });
 export type DocumentChanged = z.infer<typeof DocumentChanged>;
 
 /** A renamed document, as it is now, and the change that renamed it. */

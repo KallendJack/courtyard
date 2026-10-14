@@ -10,7 +10,7 @@ import { SectionTitle } from "@/components/page";
 import { WebButton } from "@/components/web-link";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { loadProviders } from "../worker.ts";
+import { loadProviders } from "../worker-calls.ts";
 import {
   changeGitHub,
   changeSignIn,

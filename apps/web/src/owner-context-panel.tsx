@@ -13,7 +13,8 @@ import { SectionTitle } from "@/components/page";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "./problems.tsx";
 import { GetToKnow } from "./sessions/get-to-know.tsx";
-import { type FromWorker, startOwnerContext } from "./worker.ts";
+import type { FromWorker } from "./worker.ts";
+import { startOwnerContext } from "./worker-calls.ts";
 
 /**
  * The owner context in Settings (#102): what every workspace's models read about the owner

@@ -97,13 +97,6 @@ export type ProviderStatus = z.infer<typeof ProviderStatus>;
 export const ProviderList = z.object({ providers: z.array(ProviderStatus) });
 export type ProviderList = z.infer<typeof ProviderList>;
 
-/** One change in the context folder's history, by its git commit. */
-export const ChangeId = z
-  .string()
-  .regex(/^[0-9a-f]{40}$/)
-  .brand<"ChangeId">();
-export type ChangeId = z.infer<typeof ChangeId>;
-
 export const SessionId = z.uuid().brand<"SessionId">();
 export type SessionId = z.infer<typeof SessionId>;
 

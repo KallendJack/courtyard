@@ -2,9 +2,8 @@ import {
   type NewMessage,
   type ProviderList,
   SESSION_TITLE_MAX_LENGTH,
-  SessionDetail,
+  type SessionDetail,
   type SkillSummary,
-  WorkspaceId,
 } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
@@ -26,16 +25,8 @@ import { type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { removeQueued, sendMessage } from "../../sessions/messages.ts";
 import { useSeen } from "../../sessions/seen.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
-import {
-  carryOn,
-  deleteSession,
-  fromWorker,
-  loadProviders,
-  loadSkills,
-  NOT_FOUND,
-  renameSession,
-  stopTurn,
-} from "../../worker.ts";
+import { carryOn, deleteSession, stopTurn } from "../../worker.ts";
+import { renameSession } from "../../worker-calls.ts";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
 const Review = lazy(() => import("../../review/review.tsx"));
@@ -43,15 +34,9 @@ const Review = lazy(() => import("../../review/review.tsx"));
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   validateSearch: (search: Record<string, unknown>): { view?: "review" } =>
     search.view === "review" ? { view: "review" } : {},
-  loader: async ({ params }) => {
-    const workspaceId = WorkspaceId.safeParse(params.workspaceId);
-    const [session, providers, skills] = await Promise.all([
-      fromWorker(`/sessions/${encodeURIComponent(params.sessionId)}`, SessionDetail),
-      loadProviders(),
-      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
-    ]);
-    return { session, providers, skills };
-  },
+  // The loader stays in the first load, so it only imports what the page asks for.
+  loader: ({ params }) =>
+    import("../../session-page.ts").then((page) => page.loadSessionPage(params)),
   component: SessionPage,
 });
 
