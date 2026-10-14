@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openRecent } from "./frame.ts";
 import { openTab } from "./workspace-page.ts";
 
 test("the owner starts a session, watches the answer stream in, and finds it again later", async ({
@@ -85,7 +86,7 @@ test("a new session takes the model's title once its first answer is in", async 
 
   // The fake titles a session with the first few words of its message, in title case.
   await expect(page.getByRole("heading", { level: 1, name: titled, exact: true })).toBeVisible();
-  const recent = page.getByRole("region", { name: "Recent in Garage gym" });
+  const recent = await openRecent(page, "Garage gym");
   await expect(recent.getByRole("link", { name: titled, exact: true })).toBeVisible();
 });
 
@@ -132,38 +133,23 @@ test("a session's conversation keeps its place until it comes, and shows at once
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-// Owner rule (2026-10-12): nothing jumps in. The sidebar's recent sessions keep their place with
-// faint rows the first time, and coming back to a workspace shows them at once.
-test("the sidebar's recent sessions keep their place, and show at once on coming back", async ({
-  page,
-}) => {
+// Owner rule (2026-10-12): nothing jumps in. The open workspace's recent sessions, on the sheet its
+// tile opens (#197), show at once, kept from the rail's own ask, and at once on coming back.
+test("the recent sessions show at once, and at once on coming back", async ({ page }) => {
   const message = `rack the plates ${Date.now()}`;
   await page.goto("/workspaces/garage-gym");
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);
 
-  let release = () => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  // The page's own list comes at once; the sidebar's, asked for once the page shows, is held.
-  let asked = 0;
-  await page.route("**/api/workspaces/garage-gym/sessions", async (route) => {
-    asked += 1;
-    if (asked > 1) await held;
-    await route.continue();
-  });
   await page.goto("/workspaces/garage-gym");
-  const recent = page.getByRole("region", { name: "Recent in Garage gym" });
-  await expect(recent.locator("[data-placeholder]")).toBeVisible();
-  release();
-  const link = recent.getByRole("link", { name: /Rack The Plates|rack the plates/ });
-  await expect(link).toBeVisible();
+  const named = /Rack The Plates|rack the plates/;
+  const recent = await openRecent(page, "Garage gym");
+  await expect(recent.getByRole("link", { name: named })).toBeVisible();
   await expect(recent.locator("[data-placeholder]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   // The worker answers slowly from now on: the way back mustn't wait for it.
-  await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.route("**/api/workspaces/garage-gym/sessions", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 8000));
     await route.continue();
@@ -172,6 +158,8 @@ test("the sidebar's recent sessions keep their place, and show at once on coming
   await workspaces.getByRole("link", { name: "Reading list" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Reading list" })).toBeVisible();
   await workspaces.getByRole("link", { name: "Garage gym" }).click();
-  await expect(link).toBeVisible({ timeout: 2000 });
+  await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+  const again = await openRecent(page, "Garage gym");
+  await expect(again.getByRole("link", { name: named })).toBeVisible({ timeout: 2000 });
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

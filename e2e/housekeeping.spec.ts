@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openRecent } from "./frame.ts";
 import { openTab } from "./workspace-page.ts";
 
 test("the owner renames a workspace, then archives it after a confirm step", async ({ page }) => {
@@ -37,7 +38,7 @@ test("the owner renames a workspace, then archives it after a confirm step", asy
   await expect(switcher.getByRole("link", { name: renamed })).toHaveCount(0);
 });
 
-test("the owner renames a session from its page and the sidebar, then deletes it", async ({
+test("the owner renames a session from its page and its workspace's recent sessions, then deletes it", async ({
   page,
 }) => {
   const first = `Where should the bench go? ${Date.now()}`;
@@ -45,19 +46,21 @@ test("the owner renames a session from its page and the sidebar, then deletes it
   await page.getByLabel("Message", { exact: true }).fill(first);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${first}`);
-  const recent = page.getByRole("region", { name: "Recent in Garage gym" });
 
   await page.getByRole("button", { name: "Rename session" }).click();
   await page.getByLabel("Session title").fill("Bench position");
   // Exactly, as Save as document sits under the answer.
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Bench position" })).toBeVisible();
+  // The open workspace's recent sessions, on the sheet its tile opens (#197).
+  const recent = await openRecent(page, "Garage gym");
   await expect(recent.getByRole("link", { name: "Bench position" })).toBeVisible();
 
   await recent.getByRole("button", { name: "Rename Bench position" }).click();
   await recent.getByLabel("Session title").fill("Bench and rack");
   await recent.getByLabel("Session title").press("Enter");
   await expect(recent.getByRole("link", { name: "Bench and rack" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { level: 1, name: "Bench and rack" })).toBeVisible();
 
   await page.getByRole("button", { name: "Delete session" }).click();
@@ -67,5 +70,6 @@ test("the owner renames a session from its page and the sidebar, then deletes it
   await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
   await openTab(page, "Sessions");
   await expect(page.getByRole("region", { name: "Sessions" })).not.toContainText("Bench and rack");
-  await expect(recent.getByRole("link", { name: "Bench and rack" })).toHaveCount(0);
+  const after = await openRecent(page, "Garage gym");
+  await expect(after.getByRole("link", { name: "Bench and rack" })).toHaveCount(0);
 });
