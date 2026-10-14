@@ -80,7 +80,9 @@ test.describe("on the cover screen", () => {
     await page.setViewportSize({ width: COVER_SCREEN.width, height: 300 });
 
     await expect(page.getByLabel("Message", { exact: true })).toBeInViewport({ ratio: 1 });
-    await expect(page.getByRole("button", { name: "Send" })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Talk into the box" })).toBeInViewport({
+      ratio: 1,
+    });
   });
 
   test("never pushes the page sideways with a long word", async ({ page }) => {
