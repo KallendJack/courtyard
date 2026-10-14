@@ -25,7 +25,7 @@ const port = 8799 + portShift;
 const freshStartPort = 8798 + portShift;
 
 /** The tests that sign in to the worker's fake GitHub and out again (#419). */
-const GITHUB_SPECS = /(github|layout-shift)\.spec\.ts$/;
+const GITHUB_SPECS = /(github|layout-shift|lead)\.spec\.ts$/;
 
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
