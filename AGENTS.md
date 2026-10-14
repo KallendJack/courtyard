@@ -30,6 +30,9 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   `components/page.tsx`, #339); nothing scrolls the title or the main action away.
 - **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/kept.tsx`,
   #269): the last answer at once on a revisit, faint rows in its place the first time, never a spinner.
+- **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/kept.tsx`, #387): every 30 s
+  while calm, faster while busy, paused while the tab is hidden and asked at once when it's shown. Never a timer of
+  its own.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
   buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
   feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece

@@ -61,9 +61,13 @@ export const useFresh = (options: {
       // Hidden: nothing more until it's shown again, which asks at once.
       if (waiting || document.hidden) return;
       waiting = true;
-      await ask.current();
-      waiting = false;
-      if (current) timer = setTimeout(askNow, everyMs);
+      try {
+        await ask.current();
+      } finally {
+        // One that failed asks again next time, as one that answered does.
+        waiting = false;
+        if (current) timer = setTimeout(askNow, everyMs);
+      }
     };
     // Hidden, the next ask finds it so and waits; shown again, it asks at once.
     const shown = () => void askNow();
