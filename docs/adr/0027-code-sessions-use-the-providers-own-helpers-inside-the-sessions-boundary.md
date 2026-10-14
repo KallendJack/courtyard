@@ -1,0 +1,44 @@
+# Code sessions use the provider's own helpers inside the session's boundary
+
+Amends ADR 0025 and #89, decided on #117 with the owner (2026-10-11, 2026-10-14). The owner builds in Courtyard day
+to day, and the house process needs helpers there: `code-review` runs two side by side (standards and spec), and
+`implement-spec` hands each ticket to one. ADR 0025 kept Claude Code's sub-agents off, and #89 accepted "no
+Claude-only extras, such as a skill running in a sub-agent".
+
+So **a code session's model can hand parts of a job to helpers, its provider's own sub-agents, and every helper works
+inside the session's boundary.** For Claude that's Claude Code's `Agent` tool:
+
+- **Same rules as the model.** A helper works in the session's worktree and slot. Every one of its tool calls goes
+  through the adapter's PreToolUse hook, which tells it apart by the id Claude Code tags it with, and the worker
+  decides its edits, commands and tool connection calls exactly as the model's (ADRs 0007, 0008). An approval it needs
+  names it, and Deny tells it why, as it tells the model.
+- **Only the repository's and Claude Code's own types:** general-purpose, Explore and Plan, and the repository's
+  `.claude/agents` (ADR 0022). Never the worker machine's (ADR 0003). A helper doesn't start helpers of its own.
+- **The session's model and effort.** Claude Code is told to put every helper on the session's model, whatever its
+  type or the call names (Explore's Haiku included), and the machine's own helper model is dropped.
+- **At most three at once,** and a fourth waits for one to finish rather than being refused. **None in the
+  background:** a turn ends only once all its helpers have finished, and Stop stops them all.
+- **One heavy check at a time per session.** Helpers share the session's folder and ports, so the builds queue runs
+  one of a session's builds at a time, whatever the builds-at-once setting; the others wait, saying so.
+- **The owner sees one line per helper,** named by the description the model gave it, that opens on what it did and
+  its report. Its events go in the session's event log tagged with it, so a reload shows the same.
+- **Only when a skill calls for helpers or the owner asks,** which the house process tells the model.
+
+**Codex follows the same rule when it codes** (#248): its own sub-agents, inside the same boundary, shown the same way.
+A worktree and branch of its own for a helper that writes code is #395.
+
+## Considered options
+
+- **Courtyard's own helper tool, the same on every provider** (as skills are, ADR 0016). Rejected: each provider
+  already tunes its own sub-agents, and a copy would always lag them; what's Courtyard's is the boundary and how the
+  owner sees them, which this keeps the same.
+- **A worktree for every helper.** Not yet: the reviewers only read, and one folder per helper is #395's.
+
+## Consequences
+
+- **What the model is told now allows helpers** (`docs/ai-conduct.md`, Coding), and the hook refuses any type it
+  can't start with plain words.
+- **Claude Code decides how a helper is run.** The hook sees each call, but not a type's own instructions; a
+  repository's own helper that names its own effort in its file keeps it.
+- **A turn with helpers uses more of the plan.** There's no warning before a fan-out (usage is #66); the owner sees
+  each helper as it works and can stop them all.

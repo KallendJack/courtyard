@@ -206,8 +206,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   three waits, first come first served, until one ends. `builds.ts` is the builds queue (#281): the heavy checks
   `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
   pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
-  `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, the
-  rest waiting first come first served. That order lives in the worker's memory only; the build at its front then
+  `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, and
+  one at a time in each session, whose helpers share its folder (#117), the rest waiting first come first served. That order lives in the worker's memory only; the build at its front then
   takes a place in the machine's builds lock (`packages/builds`, #306), which the repo's own scripts take too, so
   sessions also wait behind builds started outside Courtyard, and those behind sessions. The
   module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
@@ -761,6 +761,16 @@ Where the rest fits:
   `waiting-for-build` (with how many places others hold) while a build outside Courtyard, such as a helper's
   `pnpm verify`, holds them all. A session's commands get `COURTYARD_BUILD_HELD=1`, since each of its builds runs only
   once it holds a place, so the repo's own scripts it runs go straight through rather than wait on that place.
+- **Helpers** (#117, ADR 0027). A code turn's model can start helpers, its provider's own sub-agents, through
+  `CodeTurn.helper`: `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
+  running (recording it as `waiting` until then, and again once it has one), and hands back a `HelperTurn`, the
+  turn's say on edits and commands, tool connections and reports, each recording what the helper does as the
+  model's is, tagged with it (`activity` and `approval-requested` carry `helper`), until it reports back
+  (`helper-finished`, with its report). Claude's hook starts one for each `Agent` call it allows (Claude Code's own
+  types and the repository's), tells each helper's tool calls apart by the id Claude Code gives the helper (from its
+  `task_started` message), and hands back its report from the `Agent` call's result; Claude Code puts every helper
+  on the session's model. The fake starts one for each line a message scripts. The browser shows one line per
+  helper where the model started it, which opens on what it did and its report.
 - **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
   `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
   starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and
