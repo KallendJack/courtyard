@@ -9,7 +9,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
-import { Block, BlockRow } from "@/components/home-block";
+import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
 import { useAction } from "@/lib/use-action";
@@ -43,7 +43,8 @@ const pullTitle = (pull: OpenPullRequest) =>
 /**
  * Needs you (#301; Paper, "Code workspace Home"): every approval, failing check, new reply, pull
  * request ready to merge, conflict, and Matt's setup offer, each a row with its one-tap action:
- * Approve, Review, Open, Merge, Bring up to date. Hidden when nothing waits on the owner.
+ * Approve, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
+ * scrolling inside when there are more than fit (#335); with nothing waiting it says so.
  */
 export function NeedsYou(props: {
   workspaceId: WorkspaceId;
@@ -57,38 +58,47 @@ export function NeedsYou(props: {
 }) {
   const [settingUp, setSettingUp] = useState(false);
   const opened = props.setup.state === "opened";
-  if (props.needs.length === 0 && !opened && !props.pending) return null;
   if (props.needs.length === 0 && props.pending) {
     return (
-      <Block label="Needs you" needs>
+      <Block label="Needs you" needs fill>
         <PlaceholderRows count={2} />
       </Block>
     );
   }
+  // Nothing waits: the block keeps its place, calm, with one quiet line (#283).
+  if (props.needs.length === 0 && !opened) {
+    return (
+      <Block label="Needs you" fill>
+        <BlockEmpty>Nothing needs you</BlockEmpty>
+      </Block>
+    );
+  }
   return (
-    <Block label="Needs you" count={props.needs.length} needs>
-      <ul className="flex flex-col gap-1.5">
-        {props.needs.map((need) => (
-          <NeedRow
-            key={keyOf(need)}
+    <Block label="Needs you" count={props.needs.length} needs fill>
+      <BlockRows>
+        <ul className="flex flex-col gap-1.5">
+          {props.needs.map((need) => (
+            <NeedRow
+              key={keyOf(need)}
+              workspaceId={props.workspaceId}
+              need={need}
+              settingUp={settingUp}
+              onSettingUp={() => setSettingUp((was) => !was)}
+              onChanged={props.onChanged}
+            />
+          ))}
+        </ul>
+        {(settingUp || opened) && (
+          <MattSetupOffer
             workspaceId={props.workspaceId}
-            need={need}
-            settingUp={settingUp}
-            onSettingUp={() => setSettingUp((was) => !was)}
-            onChanged={props.onChanged}
+            setup={props.setup}
+            onAnswered={(setup) => {
+              setSettingUp(false);
+              props.onSetup(setup);
+            }}
           />
-        ))}
-      </ul>
-      {(settingUp || opened) && (
-        <MattSetupOffer
-          workspaceId={props.workspaceId}
-          setup={props.setup}
-          onAnswered={(setup) => {
-            setSettingUp(false);
-            props.onSetup(setup);
-          }}
-        />
-      )}
+        )}
+      </BlockRows>
     </Block>
   );
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { classes } from "@/lib/classes";
 
 // The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
@@ -25,6 +25,11 @@ export function Block(props: {
   needs?: boolean;
   /** Beside the label, on the right: "1 of 3", a milestone. */
   aside?: ReactNode;
+  /**
+   * From a tablet up, it takes the height its page gives it, rather than its rows' (#335): its
+   * rows, in `BlockRows`, scroll inside it.
+   */
+  fill?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -33,6 +38,7 @@ export function Block(props: {
       className={classes(
         "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
         props.needs && "border-warning/25",
+        props.fill && "md:min-h-0 md:flex-1",
       )}
     >
       <div className="flex items-center justify-between gap-2 pb-1.5">
@@ -53,6 +59,63 @@ export function Block(props: {
       {props.children}
     </section>
   );
+}
+
+/**
+ * A block's rows, scrolling inside its card from a tablet up when there are more than fit (#335;
+ * Paper, Components, "A block with more rows than fit"): its label stays put, a thin thumb shows
+ * how far down they go, and a fade at the foot says there's more below, gone at the end. `capped`
+ * stops them at a few rows' height in a block that keeps its own size (Running).
+ */
+export function BlockRows(props: { children: ReactNode; capped?: boolean }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const rows = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ overflows: boolean; atEnd: boolean }>({
+    overflows: false,
+    atEnd: true,
+  });
+  const measure = useCallback(() => {
+    const box = scroller.current;
+    if (box === null) return;
+    const overflows = box.scrollHeight > box.clientHeight + 1;
+    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
+    setFit((was) =>
+      was.overflows === overflows && was.atEnd === atEnd ? was : { overflows, atEnd },
+    );
+  }, []);
+  useEffect(() => {
+    const observer = new ResizeObserver(measure);
+    for (const each of [scroller.current, rows.current]) if (each !== null) observer.observe(each);
+    return () => observer.disconnect();
+  }, [measure]);
+  return (
+    <div className="relative flex min-h-0 flex-col md:flex-1">
+      <div
+        ref={scroller}
+        onScroll={measure}
+        className={classes(
+          "scroll-thin min-h-0 md:flex-1 md:overflow-y-auto",
+          props.capped && "md:max-h-56",
+          fit.overflows && "md:pr-2",
+        )}
+      >
+        <div ref={rows} className="flex flex-col gap-1.5">
+          {props.children}
+        </div>
+      </div>
+      {fit.overflows && !fit.atEnd && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-linear-to-b from-transparent to-surface max-md:hidden"
+        />
+      )}
+    </div>
+  );
+}
+
+/** What an empty block says, in one quiet line, keeping its place (#283): "Nothing running". */
+export function BlockEmpty(props: { children: ReactNode }) {
+  return <p className="py-1 text-meta font-medium text-muted-foreground">{props.children}</p>;
 }
 
 /**

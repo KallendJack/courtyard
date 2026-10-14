@@ -1,7 +1,7 @@
 import { CODE_SESSIONS_AT_ONCE, type CodeSessionList, type WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { Block } from "@/components/home-block";
+import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
 import { doingWords } from "@/components/session-state";
 
 type Listed = CodeSessionList["sessions"][number];
@@ -29,8 +29,9 @@ const placesAhead = (session: Listed) => {
 /**
  * Running (#301; Paper, "Code workspace Home"): the workspace's sessions working now, every one,
  * each with what it's doing and for how long, and how many of the worker's slots are taken. Those
- * running come first, then those waiting for a place, the next to start first (#362). Hidden when
- * none is working.
+ * running come first, then those waiting for a place, the next to start first (#362). It keeps
+ * its size beside Needs you, a few rows at most then scrolling inside (#335); with none working
+ * it says so.
  */
 export function Running(props: {
   workspaceId: WorkspaceId;
@@ -47,30 +48,39 @@ export function Running(props: {
     .sort((a, b) => a.ahead - b.ahead)
     .map(({ session }) => session);
   const working = [...busy.filter((session) => !waiting.includes(session)), ...waiting];
-  if (working.length === 0) return null;
+  const aside = `${props.running} of ${CODE_SESSIONS_AT_ONCE}`;
+  if (working.length === 0) {
+    return (
+      <Block label="Running" aside={aside}>
+        <BlockEmpty>Nothing running</BlockEmpty>
+      </Block>
+    );
+  }
   return (
-    <Block label="Running" aside={`${props.running} of ${CODE_SESSIONS_AT_ONCE}`}>
-      <ul className="flex flex-col gap-1.5">
-        {working.map((session) => (
-          <li key={session.id} aria-label={session.title}>
-            <Link
-              to="/workspaces/$workspaceId/sessions/$sessionId"
-              params={{ workspaceId: props.workspaceId, sessionId: session.id }}
-              className="flex items-center gap-2.5 rounded-row bg-secondary px-3 py-2.5 hover:bg-muted"
-            >
-              <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary shadow-glow" />
-              <span className="flex min-w-0 grow flex-col gap-0.5">
-                <span className="truncate text-sm/4.5 font-bold">{session.title}</span>
-                <span className="truncate text-label font-medium text-primary-text">
-                  {session.now.kind === "working" &&
-                    `${capitalised(doingWords(session.now.doing))} · ${forWords(session.now.since)}`}
+    <Block label="Running" aside={aside}>
+      <BlockRows capped>
+        <ul className="flex flex-col gap-1.5">
+          {working.map((session) => (
+            <li key={session.id} aria-label={session.title}>
+              <Link
+                to="/workspaces/$workspaceId/sessions/$sessionId"
+                params={{ workspaceId: props.workspaceId, sessionId: session.id }}
+                className="flex items-center gap-2.5 rounded-row bg-secondary px-3 py-2.5 hover:bg-muted"
+              >
+                <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary shadow-glow" />
+                <span className="flex min-w-0 grow flex-col gap-0.5">
+                  <span className="truncate text-sm/4.5 font-bold">{session.title}</span>
+                  <span className="truncate text-label font-medium text-primary-text">
+                    {session.now.kind === "working" &&
+                      `${capitalised(doingWords(session.now.doing))} · ${forWords(session.now.since)}`}
+                  </span>
                 </span>
-              </span>
-              <ChevronRight aria-hidden className="size-4 shrink-0 text-placeholder" />
-            </Link>
-          </li>
-        ))}
-      </ul>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-placeholder" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </BlockRows>
     </Block>
   );
 }

@@ -65,6 +65,17 @@ export const gitOrNothing = async (folder: string, args: readonly string[]) => {
   }
 };
 
+/**
+ * A commit's title as pages show it, its short hash first ("7d518cd Rail and Talk key"): a pull
+ * request's merge commit by the title it merged, the first line of its message's body (#335).
+ */
+export const commitTitle = (commit: { short: string; subject: string; body: string }) => {
+  const merged = /^Merge pull request #\d+ from /.test(commit.subject)
+    ? commit.body.split("\n").find((line) => line.trim() !== "")
+    : undefined;
+  return `${commit.short} ${merged?.trim() ?? commit.subject}`;
+};
+
 /** What went wrong with a git command, in git's own words: its first error line. */
 export const gitFailureReason = (error: unknown) => {
   const stderr = error instanceof Error && "stderr" in error ? String(error.stderr) : "";
