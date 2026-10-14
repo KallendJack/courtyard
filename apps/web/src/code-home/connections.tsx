@@ -1,10 +1,11 @@
 import type { PaperFile, WorkspaceConnections, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { Plus, X } from "lucide-react";
-import { type RefObject, useEffect, useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button, IconButton } from "@/components/button";
 import { GitHubMark, PaperMark } from "@/components/connections-line";
 import { FormError } from "@/components/form-error";
+import { placeUnder } from "@/components/place-under";
 import { RadioRow } from "@/components/radio-row";
 import { useDialog } from "@/components/use-dialog";
 import { useAction } from "@/lib/use-action";
@@ -18,22 +19,8 @@ type Choice = { readonly kind: "file"; readonly file: PaperFile } | { readonly k
 const sameName = (a: string, b: string) =>
   a.trim().localeCompare(b.trim(), undefined, { sensitivity: "base" }) === 0;
 
-/** The gap the sheet keeps from the screen's edges, as the page's own gutter. */
-const GUTTER = 16;
-/** The sheet's width where there's room (Paper, "Tablet · Connect Paper"). */
-const WIDTH = 440;
-
-/**
- * Where the sheet opens: under the connections line, never past the screen's edge, and no taller
- * than the room below the line, so its foot stays on screen.
- */
-const placeUnder = (anchor: HTMLElement | null) => {
-  const width = Math.min(WIDTH, window.innerWidth - 2 * GUTTER);
-  const box = anchor?.getBoundingClientRect();
-  const left = Math.max(GUTTER, Math.min(box?.left ?? GUTTER, window.innerWidth - width - GUTTER));
-  const top = (box?.bottom ?? 5 * GUTTER) + 12;
-  return { top, left, width, maxHeight: `calc(100dvh - ${top + GUTTER}px)` };
-};
+/** Under the connections line, its left edge level with the line's (Paper, "Tablet · Connect Paper"). */
+const UNDER = { side: "left", gap: 12, width: 440 } as const;
 
 /**
  * The Connections sheet (#308; Paper, "Tablet · Connect Paper"): what the workspace's sessions can
@@ -49,18 +36,15 @@ export function ConnectionsSheet(props: {
   workspaceName: string;
   connections: WorkspaceConnections;
   onConnected: (connections: WorkspaceConnections) => void;
-  anchor: RefObject<HTMLButtonElement | null>;
+  /** The connections line's anchor name (place-under.ts). */
+  anchor: string;
 }) {
   const dialog = useDialog(props.open, props.onClose);
-  const [place, setPlace] = useState(() => placeUnder(null));
-  useEffect(() => {
-    if (props.open) setPlace(placeUnder(props.anchor.current));
-  }, [props.open, props.anchor]);
   return (
     <dialog
       {...dialog}
       aria-label="Connections"
-      style={place}
+      style={placeUnder(props.anchor, UNDER)}
       className="fixed m-0 overflow-hidden rounded-box border border-input bg-popover p-0 text-popover-foreground shadow-raised backdrop:bg-card/60 open:flex open:flex-col"
     >
       {props.open && <SheetBody {...props} />}

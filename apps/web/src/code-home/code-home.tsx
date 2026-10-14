@@ -8,13 +8,14 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
 import { Page } from "@/components/page";
+import { useAnchorName } from "@/components/place-under";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -123,7 +124,7 @@ export default function CodeHome(props: {
     again: list.sessions.length,
   });
   const [connecting, setConnecting] = useState(false);
-  const line = useRef<HTMLButtonElement>(null);
+  const line = useAnchorName();
 
   // Right after New workspace → Code (#308), the Connections sheet offers Paper; skippable.
   useEffect(() => {

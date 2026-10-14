@@ -1,6 +1,5 @@
 import type { WorkspaceConnections } from "@courtyard/contract";
 import { ChevronRight } from "lucide-react";
-import type { RefObject } from "react";
 import { classes } from "@/lib/classes";
 
 /** GitHub's mark, in the colour of the text around it. */
@@ -73,14 +72,15 @@ export function ConnectionsLine(props: {
   connections: WorkspaceConnections;
   open: boolean;
   onOpen: () => void;
-  anchor: RefObject<HTMLButtonElement | null>;
+  /** Its anchor name, for the sheet it opens (place-under.ts). */
+  anchor: string;
 }) {
   const github = gitHubWords(props.connections.github);
   const { paper } = props.connections;
   return (
     <button
-      ref={props.anchor}
       type="button"
+      style={{ anchorName: props.anchor }}
       aria-haspopup="dialog"
       aria-expanded={props.open}
       onClick={props.onOpen}
