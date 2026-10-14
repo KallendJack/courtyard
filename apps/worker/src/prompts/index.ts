@@ -134,7 +134,7 @@ const CODING_ACCESS =
  * written for any repository, never only Courtyard's.
  */
 const HOUSE_PROCESS =
-  "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few words (\"the PR page refreshes itself\"), with its number after it only where a link helps; never a bare list of numbers.";
+  "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Hand parts of the work to helpers (sub-agents) only when a skill you're using calls for them or the owner asks: they work in your working directory under these same rules, at most three at once, and your turn goes on once they've all reported back. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few words (\"the PR page refreshes itself\"), with its number after it only where a link helps; never a bare list of numbers.";
 
 /** What a model may do with the workspace, and in a code session how it works there too. */
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
@@ -1284,6 +1284,17 @@ export const SKILL_NOT_HERE =
  * refused, never let through unchecked (docs/ai-conduct.md, Coding).
  */
 export const UNCHECKED_REQUEST = "That request couldn't be checked, so it was refused.";
+
+/**
+ * What Claude is told of a helper of a type a code session can't start (#117): only Claude Code's
+ * own and the repository's, never the worker machine's (docs/ai-conduct.md, Coding).
+ */
+export const HELPER_NOT_HERE =
+  "That helper isn't one you can start here: start a general-purpose, Explore or Plan helper, or one of the repository's own in .claude/agents.";
+
+/** What Claude is told when a helper tries to start a helper of its own (#117). */
+export const NO_HELPERS_OF_HELPERS =
+  "A helper can't start helpers of its own: do the work yourself, and say in your report what's left.";
 
 /**
  * What Claude is told of a command it asks to run in the background (#178): a turn's commands end

@@ -15,14 +15,26 @@ import {
   Effort,
   type EffortInfo,
   type FailureReason,
+  HelperId,
   ModelId,
   ProviderId,
   type ProviderStatus,
   SkillName,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { exists, listSubfolders, makeTemporaryFolder, readBytes, removeFolder } from "../files.ts";
 import {
+  exists,
+  listFolder,
+  listSubfolders,
+  makeTemporaryFolder,
+  readBytes,
+  readTextFile,
+  removeFolder,
+} from "../files.ts";
+import {
+  codeRefusalReason,
+  HELPER_NOT_HERE,
+  NO_HELPERS_OF_HELPERS,
   NOT_IN_BACKGROUND,
   OUTSIDE_WORKSPACE,
   PAGE_NOT_ALLOWED,
@@ -37,6 +49,7 @@ import {
   type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
+  type HelperTurn,
   jsonSchemaOf,
   type Provider,
   photosOf,
@@ -112,10 +125,10 @@ async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUser
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
 /**
  * The tools a code session gets as well: editing files and running commands, each asked of the
- * worker first (ADR 0007), its task list, and loading the skills it was given (ADRs 0024, 0025).
- * No sub-agents (#117).
+ * worker first (ADR 0007), its task list, loading the skills it was given (ADRs 0024, 0025), and
+ * starting helpers, Claude Code's own sub-agents (#117, ADR 0027).
  */
-const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill"];
+const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill", "Agent"];
 /**
  * How long Claude Code waits on the worker's say in a code session, which may be an approval the
  * owner answers in the morning (#171), or a heavy check's turn in the builds queue (#281): the
@@ -228,12 +241,18 @@ const contentOf = (response: unknown): ToolContent[] =>
  * 0023), and anything the worker adds for a failed one goes to Claude.
  */
 const handResults =
-  (connections: readonly ToolConnection[]): HookCallback =>
+  (connections: readonly ToolConnection[], helpers: Helpers | null): HookCallback =>
   async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") {
       return {};
     }
-    const found = connectionCall(connections, input.tool_name, input.tool_input);
+    // A helper's own, which tell the worker what it did (#117).
+    const helper = await helperOf(helpers, input.agent_id);
+    const found = connectionCall(
+      helper?.connections ?? connections,
+      input.tool_name,
+      input.tool_input,
+    );
     if (found === undefined) return {};
     const failed = input.hook_event_name === "PostToolUseFailure";
     const added = await found.connection.done({
@@ -266,7 +285,11 @@ const isolatedEnv = (): Record<string, string | undefined> => ({
   ...Object.fromEntries(
     Object.entries(process.env).filter(
       // Nor the folders of plugins the owner's own Claude Code loads (ADR 0024).
-      ([key]) => !key.startsWith("COURTYARD_") && key !== "CLAUDE_CODE_PLUGIN_DIRS",
+      // Nor a model the machine gives its own helpers (#117): a session's use the session's.
+      ([key]) =>
+        !key.startsWith("COURTYARD_") &&
+        key !== "CLAUDE_CODE_PLUGIN_DIRS" &&
+        key !== "CLAUDE_CODE_SUBAGENT_MODEL",
     ),
   ),
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
@@ -289,21 +312,51 @@ const isolatedOptions = (): Options => ({
 
 /** Where a repository keeps its own Claude Code skills, each in a folder with its `SKILL.md`. */
 const PROJECT_SKILLS = join(".claude", "skills");
+/** Where a repository keeps its own Claude Code helpers (ADR 0022), each in a Markdown file. */
+const PROJECT_HELPERS = join(".claude", "agents");
+/**
+ * The types of helper Claude Code has itself that a code session may start (#117): general
+ * purpose, exploring a codebase and planning. Never the machine's own (ADR 0003).
+ */
+const BUILT_IN_HELPERS = ["general-purpose", "Explore", "Plan"];
+/** A helper file's frontmatter: the text between its opening and closing `---` lines. */
+const Frontmatter = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/;
+/** A helper's type in its frontmatter, Claude Code's name for it: `name: code-reviewer`. */
+const HelperName = /^name:\s*["']?([^"'\r\n]+?)["']?\s*$/m;
+
+/** The types of the repository's own helpers (ADR 0022), by the name each file gives it. */
+const projectHelpers = async (worktree: string) => {
+  const files = await listFolder(join(worktree, PROJECT_HELPERS));
+  const names: string[] = [];
+  for (const file of files.ok ? files.value : []) {
+    if (!file.endsWith(".md")) continue;
+    const text = await readTextFile(join(worktree, PROJECT_HELPERS, file));
+    const front = text.ok ? Frontmatter.exec(text.value ?? "")?.[1] : undefined;
+    const name = HelperName.exec(front ?? "")?.[1];
+    if (name !== undefined) names.push(name);
+  }
+  return names;
+};
 
 /**
  * What a code session takes from its repository (ADR 0022): Claude Code's project settings
  * source, so its `CLAUDE.md` (and the `AGENTS.md` that points to) and its settings, and only the
- * repository's own skills. The machine's user and local settings, memory and connectors stay off,
- * as on every turn. The project settings can enable plugins, so Claude Code looks for installed
- * plugins in `noPlugins`, an empty folder of the turn's own, never the machine's. Claude Code's
- * background tasks are off. Matt Pocock's skills come as one local plugin, Courtyard's pinned
- * copy, with only the skills it's given turned on (ADR 0024).
+ * repository's own skills and helpers. The machine's user and local settings, memory and
+ * connectors stay off, as on every turn. The project settings can enable plugins, so Claude Code
+ * looks for installed plugins in `noPlugins`, an empty folder of the turn's own, never the
+ * machine's. Claude Code's background tasks are off. Matt Pocock's skills come as one local
+ * plugin, Courtyard's pinned copy, with only the skills it's given turned on (ADR 0024). Every
+ * helper works on the session's model, whatever its type or the model asks for (#117).
  */
 const projectSetup = async (
   worktree: string,
   noPlugins: string,
   plugin: CodePlugin | null,
-): Promise<{ options: Partial<Options> & Pick<Options, "env">; projectSkills: string[] }> => {
+): Promise<{
+  options: Partial<Options> & Pick<Options, "env">;
+  projectSkills: string[];
+  helperTypes: string[];
+}> => {
   const folders = await listSubfolders(join(worktree, PROJECT_SKILLS));
   const projectSkills = [];
   for (const name of folders.ok ? folders.value : []) {
@@ -324,9 +377,13 @@ const projectSetup = async (
         // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
         // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+        // Every helper on the session's model (#117): Claude Code then ignores the model a
+        // helper's type names (Explore's Haiku) and any the Agent call asks for.
+        CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1",
       },
     },
     projectSkills,
+    helperTypes: [...BUILT_IN_HELPERS, ...(await projectHelpers(worktree))],
   };
 };
 
@@ -734,13 +791,91 @@ const BashInput = z.strictObject({
 });
 /** A task list: it touches nothing outside Claude Code, so only its shape is checked. */
 const TodoWriteInput = z.strictObject({ todos: z.array(z.unknown()) });
+/**
+ * Starting a helper (#117): what it's for in a few words, its task and its type. Strict, so a
+ * helper in a folder of its own, or elsewhere, is refused rather than let through unchecked.
+ */
+const AgentInput = z.strictObject({
+  description: z.string(),
+  prompt: z.string(),
+  subagent_type: z.string().optional(),
+  model: z.string().optional(),
+  run_in_background: z.boolean().optional(),
+  name: z.string().optional(),
+});
+
+/** Claude Code saying a helper is running (#117): the id it gave it, and its Agent call's. */
+const TaskStarted = z.object({
+  type: z.literal("system"),
+  subtype: z.literal("task_started"),
+  task_id: z.string(),
+  tool_use_id: z.string(),
+});
+
+/**
+ * A code turn's helpers (#117), as the hooks keep track of them: what each one running does its
+ * work through, by the id of the Agent call that started it, and that call's id by the id Claude
+ * Code gave the helper, which tags each of its tool calls.
+ */
+type Helpers = {
+  readonly running: Map<string, HelperTurn>;
+  readonly callOf: Map<string, string>;
+  /** The types it may start: Claude Code's own, and the repository's. */
+  readonly types: readonly string[];
+};
+
+/** How long a helper's tool call waits to hear which helper it is, checking this often. */
+const HELPER_KNOWN = { checks: 20, everyMs: 50 };
+
+/**
+ * The helper making a tool call, from the id Claude Code tags it with: the one it started as, or
+ * the only helper running. Waits a moment for word of which it is. `undefined` for the model's
+ * own call, or one from a helper it can't tell.
+ */
+const helperOf = async (helpers: Helpers | null, agent: string | undefined) => {
+  if (helpers === null || agent === undefined) return undefined;
+  for (let check = 0; check < HELPER_KNOWN.checks && !helpers.callOf.has(agent); check += 1) {
+    if (helpers.running.size <= 1) break;
+    await wait(HELPER_KNOWN.everyMs);
+  }
+  const call = helpers.callOf.get(agent);
+  if (call !== undefined) return helpers.running.get(call);
+  const [only, ...others] = helpers.running.values();
+  return others.length === 0 ? only : undefined;
+};
+
+/** A helper's report as Claude Code hands its Agent call's result back: its text. */
+const reportOf = (response: unknown) =>
+  contentOf(response)
+    .flatMap((part) => (part.kind === "text" ? [part.text] : []))
+    .join("\n\n")
+    .trim();
+
+/**
+ * Checked after every Agent call (#117): the helper it started has finished, so the worker hears
+ * its report, or what stopped it.
+ */
+const noteHelperDone =
+  (helpers: Helpers): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") {
+      return {};
+    }
+    const helper = input.tool_name === "Agent" ? helpers.running.get(input.tool_use_id) : undefined;
+    if (helper === undefined) return {};
+    helpers.running.delete(input.tool_use_id);
+    await helper.finished(
+      input.hook_event_name === "PostToolUse" ? reportOf(input.tool_response) : input.error,
+    );
+    return {};
+  };
 
 /**
  * The worker's say on a code session's edit or command (ADR 0007): what it answers, or
  * `undefined` for a tool that neither edits nor runs anything.
  */
 const askWorker = async (
-  code: CodeTurn,
+  code: Omit<CodeTurn, "helper">,
   tool: string,
   input: unknown,
 ): Promise<Result<null, string> | undefined> => {
@@ -848,6 +983,40 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
 });
 
 /**
+ * Starts a helper the model asked for (#117), once the worker gives it a place: only one of the
+ * types the turn may start, only from the model itself, never in the background, and always on
+ * the session's model, so any model the call names is dropped.
+ */
+const startHelper = async (start: {
+  helpers: Helpers;
+  code: CodeTurn;
+  input: { tool_input: unknown; tool_use_id: string; agent_id?: string | undefined };
+}): Promise<SyncHookJSONOutput> => {
+  const { helpers, input } = start;
+  if (input.agent_id !== undefined) return decision(false, NO_HELPERS_OF_HELPERS);
+  const agent = AgentInput.safeParse(input.tool_input);
+  if (!agent.success) return decision(false, UNCHECKED_REQUEST);
+  const { model: _, ...asked } = agent.data;
+  const type = asked.subagent_type ?? "general-purpose";
+  if (!helpers.types.includes(type)) return decision(false, HELPER_NOT_HERE);
+  const helper = await start.code.helper({
+    id: HelperId.parse(input.tool_use_id),
+    // Named by what the model said it's for, or by its type when it said nothing.
+    name: asked.description.trim() || type,
+  });
+  if (helper === undefined) return decision(false, codeRefusalReason({ kind: "stopped" }));
+  helpers.running.set(input.tool_use_id, helper);
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      // A turn ends only once its helpers have finished, so none runs in the background.
+      updatedInput: { ...asked, run_in_background: false },
+    },
+  };
+};
+
+/**
  * Checked before every tool call, and the only way one is allowed: none are pre-approved, so
  * anything this doesn't allow is refused, including when it fails. Only the planning tools, only
  * inside the workspace folder once symlinks are followed, and Courtyard's own tools offered this
@@ -868,11 +1037,21 @@ const confineTo =
     connections: readonly ToolConnection[];
     /** A code turn's repository skills, turned on by name (ADR 0022). */
     projectSkills: readonly string[];
+    /** A code turn's helpers (#117), each of whose calls is decided as its own. */
+    helpers: Helpers | null;
   }): HookCallback =>
   async (input) => {
-    const { folder, report, courtyardTools, web, code, connections } = confine;
+    const { folder, courtyardTools, web, helpers } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
+      // A helper's call goes through the same checks as the model's, told as its own (#117).
+      const helper = await helperOf(helpers, input.agent_id);
+      const report = helper?.report ?? confine.report;
+      const code = helper?.code ?? confine.code;
+      const connections = helper?.connections ?? confine.connections;
+      if (confine.code !== null && helpers !== null && input.tool_name === "Agent") {
+        return await startHelper({ helpers, code: confine.code, input });
+      }
       if (courtyardTools.includes(input.tool_name)) return decision(true);
       const connected = connectionCall(connections, input.tool_name, input.tool_input);
       if (connected !== undefined) {
@@ -1102,6 +1281,10 @@ export const createClaudeProvider = (
         code === null || noPlugins === undefined
           ? undefined
           : await projectSetup(folder, noPlugins.value, code.plugin);
+      const helpers: Helpers | null =
+        setup === undefined
+          ? null
+          : { running: new Map(), callOf: new Map(), types: setup.helperTypes };
       try {
         const messages = claudeCode.run({
           prompt: turnPrompt(input.framing),
@@ -1149,6 +1332,7 @@ export const createClaudeProvider = (
                       code,
                       connections,
                       projectSkills: setup?.projectSkills ?? [],
+                      helpers,
                     }),
                   ],
                   // An approval waits on the owner, however long they take (#171).
@@ -1164,8 +1348,9 @@ export const createClaudeProvider = (
                       {
                         hooks: [
                           ...(web === null ? [] : [noteResults(web)]),
-                          ...(connections.length === 0 ? [] : [handResults(connections)]),
+                          ...(connections.length === 0 ? [] : [handResults(connections, helpers)]),
                           ...(code === null ? [] : [noteEnded(code)]),
+                          ...(helpers === null ? [] : [noteHelperDone(helpers)]),
                         ],
                       },
                     ],
@@ -1176,8 +1361,9 @@ export const createClaudeProvider = (
                     PostToolUseFailure: [
                       {
                         hooks: [
-                          ...(connections.length === 0 ? [] : [handResults(connections)]),
+                          ...(connections.length === 0 ? [] : [handResults(connections, helpers)]),
                           ...(code === null ? [] : [noteEnded(code)]),
+                          ...(helpers === null ? [] : [noteHelperDone(helpers)]),
                         ],
                       },
                     ],
@@ -1207,6 +1393,12 @@ export const createClaudeProvider = (
           const started = MessageStart.safeParse(message);
           if (started.success) {
             if (!started.data.parent_tool_use_id) newMessage = true;
+            continue;
+          }
+          // Which helper is which, so each of its tool calls is told as its own (#117).
+          const task = TaskStarted.safeParse(message);
+          if (task.success) {
+            helpers?.callOf.set(task.data.task_id, task.data.tool_use_id);
             continue;
           }
           noteProgress(message, progress);
