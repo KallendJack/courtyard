@@ -7,13 +7,13 @@ import { Link, useLocation, useParams, useRouter, useRouterState } from "@tansta
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { describeProblem } from "../problems.tsx";
-import { KEPT_SESSIONS, loadSessions } from "../sessions/kept-sessions.ts";
+import { KEPT_SESSIONS, loadSessions, sessionsBusyEveryMs } from "../sessions/kept-sessions.ts";
 import { renameSession } from "../worker-calls.ts";
 import { GROUP_HEADING } from "./app-sidebar.tsx";
 import { IconButton } from "./button.tsx";
 import { PlaceholderRows, useKept } from "./kept.tsx";
 import { RenameForm } from "./rename-form.tsx";
-import { SessionStateDot, useRefreshWhileBusy } from "./session-state.tsx";
+import { SessionStateDot } from "./session-state.tsx";
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;
@@ -31,18 +31,17 @@ export function RecentSessions(props: { workspaces: readonly WorkspaceSummary[] 
   const router = useRouter();
   const [renaming, setRenaming] = useState<SessionId>();
   const workspace = props.workspaces.find((w) => w.id === workspaceId);
-  const [asked, setAsked] = useState(0);
-  // Moving between pages (starting a session, say), a page reloading its data, or a session still
-  // working asks for the list again.
+  // Moving between pages (starting a session, say) or a page reloading its data asks for the list
+  // again, and it's kept fresh the shared way, faster while one shown is working (#387).
   const list = useKept(KEPT_SESSIONS, {
     key: workspaceId ?? "",
     load: () => loadSessions(workspaceId ?? ""),
-    again: `${pathname}:${loadedAt}:${asked}`,
+    again: `${pathname}:${loadedAt}`,
     asking: workspaceId !== undefined,
+    busy: (known) => sessionsBusyEveryMs(known.sessions.slice(0, RECENT_SESSIONS)),
   });
   const sessions = list?.sessions ?? [];
   const shown = sessions.slice(0, RECENT_SESSIONS);
-  useRefreshWhileBusy(shown, () => setAsked((times) => times + 1));
 
   if (!workspace || (list !== undefined && sessions.length === 0)) return null;
   return (

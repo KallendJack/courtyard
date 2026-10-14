@@ -1,4 +1,4 @@
-import { ChangeId, CodeSessionList, WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
+import { ChangeId, type CodeSessionList, WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
@@ -7,11 +7,11 @@ import { ConfirmStep } from "@/components/confirm-step";
 import { IconChooser } from "@/components/icon-chooser";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
-import { useRefreshWhileBusy } from "@/components/session-state";
 import { WorkspaceMenu } from "@/components/workspace-menu";
 import type { Deleted } from "../../planning-home/planning-home.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
-import { archiveWorkspace, changeWorkspace, fromWorker, NOT_FOUND } from "../../worker.ts";
+import { KEPT_SESSIONS, loadSessions, useFreshSessions } from "../../sessions/kept-sessions.ts";
+import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../worker.ts";
 
 // The workspace's Home, code (#301) or planning (#300), comes with its data (workspace-page.ts).
 // A pull request no session opened (#278): loaded only when one is opened.
@@ -58,7 +58,11 @@ function Workspace() {
   );
   /** What the owner is doing to the workspace itself, if anything. */
   const [tidying, setTidying] = useState<"rename" | "archive">();
-  const sessionList = useSessionList(sessions.kind === "loaded" ? sessions.data : undefined);
+  const params = Route.useParams();
+  const sessionList = useSessionList(
+    params.workspaceId,
+    sessions.kind === "loaded" ? sessions.data : undefined,
+  );
 
   const pr = pullRequestIn(hash);
   if (pr !== undefined && detail.kind === "loaded") {
@@ -225,24 +229,21 @@ function Workspace() {
 const NO_SESSIONS: CodeSessionList = { sessions: [], running: 0 };
 
 /**
- * The workspace's sessions as the page loaded them, asked for again every few seconds while one is
- * working or needs the owner, so its lists keep saying whose turn it is (#179) and where each pull
- * request stands (#240).
+ * The workspace's sessions as the page loaded them, kept fresh the shared way (#387): every few
+ * seconds while one is working or needs the owner, so its lists keep saying whose turn it is
+ * (#179) and where each pull request stands (#240), and every 30 seconds otherwise, so one started
+ * from another device shows. What it hears is kept for the workspace's tiles too.
  */
-const useSessionList = (loaded: CodeSessionList | undefined) => {
+const useSessionList = (workspaceId: string, loaded: CodeSessionList | undefined) => {
   const [asked, setAsked] = useState<{ from: CodeSessionList; now: CodeSessionList }>();
   const fromPage = loaded ?? NO_SESSIONS;
   // The page's own list until a newer one is asked for, and again whenever the page reloads it.
   const list = asked?.from === fromPage ? asked.now : fromPage;
-  const workspaceId = list.sessions[0]?.workspaceId;
-  useRefreshWhileBusy(list.sessions, () => {
-    if (workspaceId === undefined) return;
-    void fromWorker(
-      `/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
-      CodeSessionList,
-    ).then((result) => {
-      if (result.kind === "loaded") setAsked({ from: fromPage, now: result.data });
-    });
+  useFreshSessions(list.sessions, async () => {
+    const now = await loadSessions(workspaceId);
+    if (now === undefined) return;
+    setAsked({ from: fromPage, now });
+    KEPT_SESSIONS.set(workspaceId, now);
   });
   return list;
 };

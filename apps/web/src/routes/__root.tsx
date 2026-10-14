@@ -36,7 +36,8 @@ function Root() {
   const { auth } = Route.useRouteContext();
   const router = useRouter();
   // Pages already open keep watching the worker, so one that goes away is noticed straight away
-  // rather than on the next click, and the page refreshes its data when it's back.
+  // rather than on the next click, and the page refreshes its data when it's back, and when the
+  // tab is shown again, as every block does (#387).
   const reachability = useWorkerWatch({
     watching: auth.kind === "loaded",
     everyMs: WATCH_EVERY_MS,

@@ -1,5 +1,5 @@
 import { type ApprovalAsk, type Doing, skillTitle, type TurnNow } from "@courtyard/contract";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { elapsedWords } from "../when.ts";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
@@ -63,27 +63,6 @@ export const useElapsed = (since: string) => {
     return () => clearInterval(timer);
   }, []);
   return elapsedWords(now - Date.parse(since));
-};
-
-/** How often a list of sessions asks again while one of them is working or needs the owner. */
-const REFRESH_MS = 3000;
-
-/**
- * Calls `refresh` every few seconds while any of `sessions` is working or needs the owner, so a
- * list of sessions keeps saying whose turn it is.
- */
-export const useRefreshWhileBusy = (
-  sessions: readonly { readonly now: TurnNow }[],
-  refresh: () => void,
-) => {
-  const busy = sessions.some((session) => session.now.kind !== "your-turn");
-  const latest = useRef(refresh);
-  latest.current = refresh;
-  useEffect(() => {
-    if (!busy) return;
-    const timer = setInterval(() => latest.current(), REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [busy]);
 };
 
 const TONES = {
