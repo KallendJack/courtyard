@@ -1,25 +1,16 @@
 import type { WorkspaceIcon as Icon } from "@courtyard/contract";
 import { Archive, Ellipsis, Pencil } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 import { IconButton } from "./button.tsx";
+import { placeUnder, useAnchorName } from "./place-under.ts";
 import { useDialog } from "./use-dialog.ts";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 
 // Loaded when the owner first picks Change icon.
 const IconSheet = lazy(() => import("./icon-sheet.tsx"));
 
-/** The gap the menu keeps from the screen's edges, as the page's own gutter. */
-const GUTTER = 16;
-/** The menu's width where there's room (Paper, "Tablet · Workspace ⋯: rename, icon, archive"). */
-const WIDTH = 300;
-
-/** Where the menu opens: under the ⋯, its right edge level with the ⋯'s, never off the screen. */
-const placeUnder = (anchor: HTMLElement | null) => {
-  const width = Math.min(WIDTH, window.innerWidth - 2 * GUTTER);
-  const box = anchor?.getBoundingClientRect();
-  const right = box?.right ?? window.innerWidth - GUTTER;
-  return { top: (box?.bottom ?? 5 * GUTTER) + 8, left: Math.max(GUTTER, right - width), width };
-};
+/** Under the ⋯, its right edge level with the ⋯'s (Paper, "Tablet · Workspace ⋯: rename, icon, archive"). */
+const UNDER = { side: "right", gap: 8, width: 300 } as const;
 
 /**
  * One quiet ⋯ beside a workspace's name (#333; Paper, "Tablet · Workspace ⋯: rename, icon,
@@ -37,12 +28,8 @@ export function WorkspaceMenu(props: {
   const [open, setOpen] = useState(false);
   /** Whether the Icon sheet is open, or has never been, so it isn't loaded until it's wanted. */
   const [picking, setPicking] = useState<boolean>();
-  const button = useRef<HTMLButtonElement>(null);
+  const anchor = useAnchorName();
   const dialog = useDialog(open, () => setOpen(false));
-  const [place, setPlace] = useState(() => ({ top: 0, left: 0, width: 0 }));
-  useEffect(() => {
-    if (open) setPlace(placeUnder(button.current));
-  }, [open]);
 
   /** Closes the menu, then does what was picked. */
   const then = (action: () => void) => () => {
@@ -53,7 +40,6 @@ export function WorkspaceMenu(props: {
   return (
     <>
       <IconButton
-        ref={button}
         label="Workspace options"
         icon={<Ellipsis />}
         square
@@ -61,11 +47,12 @@ export function WorkspaceMenu(props: {
         expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
+        style={{ anchorName: anchor }}
       />
       <dialog
         {...dialog}
         aria-label={props.workspaceName}
-        style={place}
+        style={placeUnder(anchor, UNDER)}
         className="fixed m-0 rounded-tile border border-input bg-popover text-popover-foreground shadow-raised backdrop:bg-card/60"
       >
         {open && (
