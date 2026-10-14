@@ -29,8 +29,7 @@ export function Page(props: {
   fill?: boolean;
 }) {
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
-  const layout = useLayout();
-  const oneColumn = layout === "cover";
+  const oneColumn = useLayout() === "cover";
   const column = classes(
     "mx-auto flex w-full flex-col px-4 md:px-8",
     props.wide ? "@container max-w-5xl" : "max-w-reading",
@@ -60,12 +59,8 @@ export function Page(props: {
         </div>
       </div>
       {props.footer !== undefined && (
-        // Where Jump to latest floats from, just above the message box. On a touch screen the box
-        // is in the frame's dock, below the panel, so the page keeps the gap at its foot that
-        // it keeps everywhere else, and nothing ends against the panel's edge.
-        <div className={classes(column, "relative shrink-0", layout !== "desktop" && "pb-4")}>
-          {props.footer}
-        </div>
+        // Where Jump to latest floats from, just above the message box.
+        <div className={classes(column, "relative shrink-0")}>{props.footer}</div>
       )}
     </main>
   );
