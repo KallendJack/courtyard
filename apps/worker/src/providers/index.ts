@@ -3,6 +3,7 @@ import type {
   Capabilities,
   Effort,
   FailureReason,
+  HelperId,
   ModelId,
   ModelInfo,
   ModelRef,
@@ -150,6 +151,32 @@ export type CodeTurn = {
    * provider doesn't say has ended is freed when the turn ends.
    */
   readonly ran: (command: string) => void;
+  /**
+   * Starts a helper the model asked for (#117, ADR 0027), named as the owner sees it: the worker
+   * records it, and waits for a place when as many helpers as run at once are running. Answers
+   * what the helper does through, each tagged with it, once it has a place; `undefined` when the
+   * turn was stopped first. A provider starts helpers only on the turn's model and effort.
+   */
+  readonly helper: (helper: {
+    readonly id: HelperId;
+    readonly name: string;
+  }) => Promise<HelperTurn | undefined>;
+};
+
+/**
+ * A helper at work inside its code turn (#117): its own copies of the turn's say on edits and
+ * commands, its tool connections and its reports, so it follows the session's rules, and what the
+ * owner sees of it is tagged with it.
+ */
+export type HelperTurn = {
+  /** Says what the helper is doing, as `TurnInput.report` does for the model. */
+  readonly report: (activity: Activity) => Promise<void>;
+  /** The worker's say on the helper's edits and commands, as on the model's. */
+  readonly code: Omit<CodeTurn, "helper">;
+  /** The turn's tool connections, each call the helper makes asked of the worker as its own. */
+  readonly connections: readonly ToolConnection[];
+  /** Says the helper has finished, with its final report, freeing its place. */
+  readonly finished: (report: string) => Promise<void>;
 };
 
 /** A call to one of a tool connection's tools: the tool by its own name, its input as the model sent it. */
