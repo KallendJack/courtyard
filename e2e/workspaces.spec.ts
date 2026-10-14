@@ -33,16 +33,18 @@ test("a workspace's address loads it directly", async ({ page }) => {
 test("warns in What Courtyard knows when a context file grows long enough to crowd every message", async ({
   page,
 }) => {
+  // The warning, not the talk strip's empty status for a screen reader, which the frame also has.
+  const warning = page.getByRole("status").filter({ hasText: "long" });
   // Home stays calm: no warning there (#300).
   await page.goto("/workspaces/reading-list");
   await expect(page.getByRole("link", { name: "What Courtyard knows" })).toBeVisible();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(warning).toHaveCount(0);
   await openWhatCourtyardKnows(page);
-  await expect(page.getByRole("status")).toContainText("long");
+  await expect(warning).toBeVisible();
 
   await page.goto("/workspaces/garage-gym#knows");
   await expect(page.getByRole("region", { name: "Facts" })).toBeVisible();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(warning).toHaveCount(0);
 });
 
 test("the owner adds a workspace from the sidebar, and it opens ready for a first session", async ({
