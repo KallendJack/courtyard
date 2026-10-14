@@ -26,13 +26,3 @@ export function CourtyardMark(props: { size?: number }) {
     </svg>
   );
 }
-
-/** The mark beside the name. */
-export function CourtyardLockup() {
-  return (
-    <span className="flex items-center gap-2.5">
-      <CourtyardMark />
-      <span className="display-section text-xl tracking-[-0.02em]">Courtyard</span>
-    </span>
-  );
-}

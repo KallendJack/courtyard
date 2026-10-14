@@ -14,7 +14,6 @@ import { hasLines } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLayout } from "@/components/handheld";
 import { Notice } from "@/components/notice";
 import { Page } from "@/components/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
@@ -81,7 +80,6 @@ export default function PlanningHome(props: {
   const { workspace, contextFile, list, deleted } = props;
   const { providers, skills, documents, things } = props.loaded;
   const navigate = useNavigate();
-  const layout = useLayout();
 
   const thingCount = things.kind === "loaded" ? things.data.things.length : 0;
   const docCount = documents.kind === "loaded" ? documents.data.documents.length : 0;
@@ -139,7 +137,7 @@ export default function PlanningHome(props: {
   // On a touch screen the message box docks in the frame, so the foot keeps no room of its own.
   const footer = (
     <div data-planning-home="">
-      <div className={classes(layout === "desktop" && "pt-6 pb-6")}>
+      <div>
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}

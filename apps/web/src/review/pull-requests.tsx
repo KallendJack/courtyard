@@ -11,7 +11,7 @@ import { type ComponentProps, lazy, Suspense, useState } from "react";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
-import { useLayout } from "@/components/handheld";
+import { useWide } from "@/components/handheld";
 import { PlaceholderRows } from "@/components/kept";
 import { SegmentedChoice } from "@/components/segmented-choice";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -157,7 +157,7 @@ function PullRequestRow(props: { workspaceId: WorkspaceId; row: Row }) {
   const { workspaceId, row } = props;
   const { pullRequest, session } = row;
   const navigate = useNavigate();
-  const desktop = useLayout() === "desktop";
+  const desktop = useWide();
   const title = `#${pullRequest.number} ${pullRequest.title ?? session?.title ?? ""}`.trim();
   const fixing = pullRequest.checks.kind === "failed" && session?.now.kind === "working";
   const open = pullRequest.state === "open";

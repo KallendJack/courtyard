@@ -9,7 +9,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } fr
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
-import { useDock, useLayout } from "@/components/handheld";
+import { useDock, useFinePointer } from "@/components/handheld";
 import { Page } from "@/components/page";
 import { CodeMark, RepoPicker } from "@/components/repo-picker";
 import { SegmentedChoice } from "@/components/segmented-choice";
@@ -44,7 +44,7 @@ const nameFromRepo = (repo: string) =>
 export function NewWorkspaceForm(props: { header: ReactNode }) {
   const router = useRouter();
   const formId = useId();
-  const layout = useLayout();
+  const finePointer = useFinePointer();
   const dock = useDock();
   const [kind, setKind] = useState<Kind>("planning");
   const [name, setName] = useState("");
@@ -129,7 +129,7 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
       required
       // The name is the one thing this page needs; on a touch screen the keyboard waits for a tap
       // (#264), so it doesn't cover the page before it's read.
-      autoFocus={layout === "desktop"}
+      autoFocus={finePointer}
     />
   );
   const introField = (hint: string) => (

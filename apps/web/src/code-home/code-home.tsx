@@ -11,13 +11,11 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { ConnectionsLine } from "@/components/connections-line";
-import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
 import { Page } from "@/components/page";
 import { useAnchorName } from "@/components/place-under";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
-import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { loadMattSetup } from "../matt-setup/api.ts";
 import { describeProblem } from "../problems.tsx";
@@ -93,7 +91,6 @@ export default function CodeHome(props: {
   const { workspace, list, providers } = props;
   const navigate = useNavigate();
   const router = useRouter();
-  const layout = useLayout();
   const tab = tabIn(props.hash);
   /** Asked again when the page has changed something (merged, approved). */
   const [again, setAgain] = useState(0);
@@ -212,7 +209,7 @@ export default function CodeHome(props: {
   // On a touch screen the message box docks in the frame, so the foot keeps no room of its own.
   const footer = (
     <div data-code-home="">
-      <div className={classes(layout === "desktop" && "pt-6 pb-6")}>
+      <div>
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}

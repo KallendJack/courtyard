@@ -179,7 +179,7 @@ export const Composer = memo(function Composer(props: {
    * move into the dock as the frame arrives, and the keyboard would lose it mid-word.
    */
   const layout = useLayout();
-  const awaitingDock = layout !== "desktop" && !docked;
+  const awaitingDock = !docked;
   // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
