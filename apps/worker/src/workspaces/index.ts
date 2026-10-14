@@ -67,7 +67,7 @@ export type PaperSettings = z.infer<typeof PaperSettings>;
 const WorkspaceConfig = z
   .object({
     name: z.string().trim().min(1).optional(),
-    mode: WorkspaceMode.default("planning"),
+    mode: z._default(WorkspaceMode, "planning"),
     /**
      * A code workspace's one line, What it's for (#301): it has no context file, so this is where
      * the line its page shows under its name lives.
@@ -80,7 +80,7 @@ const WorkspaceConfig = z
     /** A code workspace's tool connections (ADR 0008): for now only Paper (ADR 0023). */
     connections: z.object({ paper: PaperSettings.optional() }).optional(),
     /** The icon the owner chose, or the one suggested when it was added (#210). */
-    icon: WorkspaceIcon.optional(),
+    icon: z.optional(WorkspaceIcon),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
     message: "is required for a code workspace",

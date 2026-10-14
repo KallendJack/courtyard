@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { ApprovalAnswer, ApprovalAsk } from "./approval.ts";
 import { Attachment, PhotoAttachment } from "./attachment.ts";
+import { ChangeId } from "./change-id.ts";
 import { DocumentSlug } from "./documents.ts";
 import { PullRequest } from "./pull-request.ts";
-import { ChangeId, Effort, ModelRef, PlacedLine } from "./session.ts";
+import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
 import { ThingSave } from "./things.ts";
 
@@ -179,7 +180,7 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("context-saved"),
     save: Save,
     /** The change it was committed as, so Recent changes can find it (absent before #50). */
-    change: ChangeId.optional(),
+    change: z.optional(ChangeId),
   }),
   /** The owner undid the save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("context-undone"), save: z.number().int().positive() }),
@@ -204,7 +205,7 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("document-saved"),
     save: DocumentSave,
     /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
-    change: ChangeId.optional(),
+    change: z.optional(ChangeId),
     answer: z.number().int().positive().optional(),
   }),
   /** The owner undid the document save numbered `save`, whenever and from wherever they did it. */
@@ -215,7 +216,7 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("thing-saved"),
     save: ThingSave,
     /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
-    change: ChangeId.optional(),
+    change: z.optional(ChangeId),
   }),
   /** The owner undid the Thing save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("thing-undone"), save: z.number().int().positive() }),

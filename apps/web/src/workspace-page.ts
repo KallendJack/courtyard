@@ -3,7 +3,8 @@ import type CodeHome from "./code-home/code-home.tsx";
 import { loadDocuments } from "./documents/api.ts";
 import type PlanningHome from "./planning-home/planning-home.tsx";
 import { loadThings } from "./things/api.ts";
-import { type FromWorker, fromWorker, loadProviders, loadSkills, NOT_FOUND } from "./worker.ts";
+import { type FromWorker, fromWorker, NOT_FOUND } from "./worker.ts";
+import { loadProviders, loadSkills } from "./worker-calls.ts";
 
 /** A workspace's Home, by its kind: each with a stylesheet of its own, loaded only for one. */
 export type Home =

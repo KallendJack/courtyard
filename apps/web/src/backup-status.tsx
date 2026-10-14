@@ -2,7 +2,7 @@ import type { ContextBackup } from "@courtyard/contract";
 import { createKept, useKept } from "@/components/kept";
 import { InfoBox, Notice } from "@/components/notice";
 import { describeWhen } from "./when.ts";
-import { loadBackup } from "./worker.ts";
+import { loadBackup } from "./worker-calls.ts";
 
 /** The context backup as last known, for the tab's lifetime: Home's foot rows and Settings. */
 const KEPT_BACKUP = createKept<ContextBackup>();

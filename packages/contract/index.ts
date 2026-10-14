@@ -20,6 +20,7 @@ export {
 } from "./lib/attachment-file.ts";
 export { AuthState, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
 export { ContextBackup } from "./lib/backup.ts";
+export { ChangeId } from "./lib/change-id.ts";
 export {
   RECENT_CHANGES_PAGE,
   RecentChange,
@@ -102,7 +103,6 @@ export {
 export {
   Capabilities,
   CarryOnRequest,
-  ChangeId,
   Effort,
   EffortInfo,
   FirstMessage,

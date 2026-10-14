@@ -8,7 +8,7 @@ import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { describeProblem } from "../problems.tsx";
 import { KEPT_SESSIONS, loadSessions } from "../sessions/kept-sessions.ts";
-import { renameSession } from "../worker.ts";
+import { renameSession } from "../worker-calls.ts";
 import { GROUP_HEADING } from "./app-sidebar.tsx";
 import { IconButton } from "./button.tsx";
 import { PlaceholderRows, useKept } from "./kept.tsx";
