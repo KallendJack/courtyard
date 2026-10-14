@@ -142,6 +142,10 @@ pushBranch("306-machine-lock", { "builds.md": "Builds take turns across the whol
   "Builds queue across the whole PC [e2e running]",
   "## Summary\n\nBuilds take turns across the whole PC, not just the worker.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
 ]);
+// One whose checks are running when its page opens, and pass while it's open (#329).
+pushBranch("329-follows-checks", { "follows.md": "The page follows its checks\n" }, [
+  "The page follows its checks [e2e running] [e2e passes later]",
+]);
 // One with a branch too long for its row, as Dependabot's are (#319).
 pushBranch(
   "dependabot/docker_compose/home-assistant/home-assistant-60f18c2e9d",
@@ -349,6 +353,8 @@ const github = createFakeGitHub({
     ],
     // A commit whose subject says "[conflicts]" conflicts with main (#278).
     conflicts: (subject) => subject.includes("[conflicts]"),
+    // One whose subject says "[e2e passes later]" passes a while after its page first asks (#329).
+    passesLater: { when: (subject) => subject.includes("[e2e passes later]"), afterMs: 5000 },
   },
 });
 // A Claude Code helper's pull request on Workbench whose checks passed: ready to merge (#301).

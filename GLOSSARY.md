@@ -185,8 +185,9 @@ _Avoid_: preferences, account, profile
 **Home**:
 A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
 Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, **Needs you**,
-**Running**, **Next up** and **Main** (its repository's newest main commit with its build), each block hidden when
-it's empty, then the message box. A planning workspace's Home shows **Next up**, then the one row for **What
+**Running**, **Next up** and **Main** (its repository's newest main commit with its build), the first three keeping
+their place when empty with one quiet line ("Nothing running"), then the message box; from a tablet up it fits the
+screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows **Next up**, then the one row for **What
 Courtyard knows**, then the message box, which starts a new session; an empty one shows only its name, one line and
 the box.
 _Avoid_: dashboard, overview, landing page

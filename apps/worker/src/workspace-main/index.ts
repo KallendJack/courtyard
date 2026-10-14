@@ -1,6 +1,6 @@
 import type { WorkspaceMain } from "@courtyard/contract";
 import type { Code } from "../code/index.ts";
-import { gitOrNothing } from "../git.ts";
+import { commitTitle, gitOrNothing } from "../git.ts";
 import type { GitHub } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
@@ -29,6 +29,7 @@ export type WorkspaceMainProblem =
   | { readonly kind: "unknown" };
 
 const FIELD = "\x1f";
+const RECORD = "\x1e";
 
 export const createWorkspaceMain = (options: {
   contextDir: string;
@@ -68,15 +69,15 @@ export const createWorkspaceMain = (options: {
         "log",
         "--first-parent",
         `--max-count=${EARLIER_BUILDS + 1}`,
-        `--format=%H${FIELD}%h %s`,
+        `--format=%H${FIELD}%h${FIELD}%s${FIELD}%b${RECORD}`,
         fresh.value.tracking,
       ]);
       const [newest, ...earlier] = (read ?? "")
-        .split("\n")
-        .filter((line) => line !== "")
-        .map((line) => {
-          const [commit = "", title = ""] = line.split(FIELD);
-          return { commit, title };
+        .split(RECORD)
+        .filter((record) => record.trim() !== "")
+        .map((record) => {
+          const [commit = "", short = "", subject = "", body = ""] = record.trim().split(FIELD);
+          return { commit, title: commitTitle({ short, subject, body }) };
         });
       if (newest === undefined) return err({ kind: "unknown" });
       const build = await options.github.mainBuild({

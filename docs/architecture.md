@@ -465,8 +465,10 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
     make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
     PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
-    `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each hidden when
-    empty (`components/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
+    `sessions/session-links.tsx`, the PRs tab `review/`'s list). Home's blocks, in a fixed order, each keeping its
+    place when empty with one quiet line (`components/home-block.tsx`, shared with a planning workspace's Home;
+    from a tablet up the page is the screen's height and never scrolls, the blocks sharing the height left and
+    their rows scrolling inside their cards through its `BlockRows`, #335): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
     requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
     (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
     commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
@@ -496,7 +498,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     Fix it in a session beside them carries the conversation over to the PR's session, or, with none, to a new one
     on its branch once the owner has seen what starts. Then Merge, or Bring up to date when it conflicts, and
     Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
-    reach on a tablet. Merged or closed, it folds to one card with
+    reach on a tablet. A Merge that can't merge yet is greyed out but still takes a tap, which says why beside it
+    (#329). A session's PR is asked for again as its session's events change it; one no session opened, every 15
+    seconds while it's open (#329). Merged or closed, it folds to one card with
     what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
     build has passed, by `live/`'s rule), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
