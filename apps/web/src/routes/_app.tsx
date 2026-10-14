@@ -24,6 +24,8 @@ const HandheldFrame = lazy(() => import("@/components/handheld-frame"));
 const RAILS =
   "pl-[calc(--spacing(28)+env(safe-area-inset-left))] pr-[calc(--spacing(37.5)+env(safe-area-inset-right))]";
 const TILES = <div aria-hidden className="h-20 shrink-0" />;
+/** The cover screen's bottom bar's room, until the frame has measured it (#283). */
+const BAR = "pb-[calc(--spacing(37)+env(safe-area-inset-bottom))]";
 
 /**
  * Every page behind the owner's login. On a desktop the workspaces are a sidebar that collapses to
@@ -81,7 +83,7 @@ function LoggedIn() {
         {layout === "desktop" && <AppSidebar workspaces={list} onLogOut={logOut} />}
         <div
           data-frame-column=""
-          className={`flex min-w-0 flex-1 flex-col ${layout === "tablet" ? RAILS : ""}`}
+          className={`flex min-w-0 flex-1 flex-col ${layout === "tablet" ? RAILS : layout === "cover" ? BAR : ""}`}
         >
           {layout === "desktop" ? (
             <WorkspaceStrip workspaces={list} onLogOut={logOut} />

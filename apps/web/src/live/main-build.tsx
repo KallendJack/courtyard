@@ -115,7 +115,7 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
 };
 
 /** The newest main's title and short commit: "7d518cd Rail and Talk key" reads "Rail and Talk key 7d518cd". */
-const titleOf = (newest: LiveVersion) => {
+export const titleOf = (newest: LiveVersion) => {
   const [commit = "", ...words] = newest.title.split(" ");
   return { commit, words: words.join(" ") };
 };

@@ -131,8 +131,10 @@ export const useKept = <T,>(
 const ROWS = {
   row: "h-14 rounded-row bg-muted/50",
   tall: "h-19 rounded-row bg-muted/50",
-  /** A bar row, as main's build on a code workspace's Home. */
+  /** A bar row, as main's build on a code workspace's Home and New version on Home. */
   bar: "h-12.5 rounded-bubble bg-muted/50",
+  /** One of Home's foot lines, as its problem line. */
+  foot: "h-13 rounded-bubble bg-muted/50",
   line: "h-8.5 rounded-md bg-muted/50",
   text: "h-5 w-64 max-w-full rounded-sm bg-muted/50",
   label: "h-4 w-28 max-w-full rounded-sm bg-muted/50",

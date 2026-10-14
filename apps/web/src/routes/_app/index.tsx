@@ -3,6 +3,7 @@ import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useLayout } from "@/components/handheld";
+import { PlaceholderRows } from "@/components/kept";
 import { EmptyState } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
 import { WorkspaceIcon } from "@/components/workspace-icon";
@@ -86,7 +87,15 @@ function Home() {
       footer={
         <div data-home="">
           <div className="pt-4 pb-6 md:pb-8">
-            <Suspense>
+            {/* Its two rows' places, until it comes (#283). */}
+            <Suspense
+              fallback={
+                <div className="flex flex-col gap-2.5 md:gap-3">
+                  <PlaceholderRows count={1} size="bar" />
+                  <PlaceholderRows count={1} size="foot" />
+                </div>
+              }
+            >
               <HomeFoot workspaces={list} short={short} />
             </Suspense>
           </div>

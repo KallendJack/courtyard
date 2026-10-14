@@ -46,6 +46,9 @@ const watchShifts = (page: Page) =>
 /** Opens `path`, waits for `ready`, then a moment for anything late, and gives what shifted. */
 const shiftsOn = async (page: Page, path: string, ready: (page: Page) => Promise<void>) => {
   await watchShifts(page);
+  // As slow as a phone, or CI: what comes in late shows as late as it would there.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   await page.goto(path);
   await ready(page);
   await page.waitForTimeout(2500);
@@ -65,7 +68,6 @@ const PAGES: {
     name: "Home",
     path: "/",
     ready: (page) => expect(page.getByRole("heading", { level: 1 })).toBeVisible(),
-    moves: "its foot rows grow the footer when they come (#283: a fixed foot area waits on Paper)",
   },
   {
     name: "a planning workspace",

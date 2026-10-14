@@ -1,11 +1,12 @@
-import type { LiveUpdateResult } from "@courtyard/contract";
+import type { LiveUpdateResult, LiveVersion } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { PlaceholderRows } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
 import { describeProblem } from "../problems.tsx";
 import { loadLive, startLiveUpdate } from "./api.ts";
-import { MainBuildCard, useLive } from "./main-build.tsx";
+import { MainBuildCard, titleOf, useLive } from "./main-build.tsx";
 
 /** How often the page asks how an update is going. The worker is down for part of it. */
 const FOLLOW_EVERY_MS = 3000;
@@ -44,9 +45,11 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
  * Update (#249), which waits for it to pass; then how the update went once the worker is back.
  * Nothing at all on a worker that isn't a live copy. Asked for once the page is showing, since the
  * worker may be asking GitHub whether main has moved on: the page never waits for that. On Home
- * (#102), main's build is a row, labelled `label` ("New version"), `short` on a narrow screen.
+ * (#102), main's build is a row, labelled `label` ("New version"), `short` on a narrow screen;
+ * `keepsPlace` keeps its row there while there's nothing to update, as a quiet Up to date line,
+ * and its place while it's still to come (#283).
  */
-export function LiveUpdate(props: { label?: string; short?: boolean }) {
+export function LiveUpdate(props: { label?: string; short?: boolean; keepsPlace?: boolean }) {
   const [status, setStatus] = useLive();
   const [following, setFollowing] = useState<Following>({ kind: "idle" });
   const loaded = status?.kind === "loaded" ? status.data : undefined;
@@ -86,6 +89,7 @@ export function LiveUpdate(props: { label?: string; short?: boolean }) {
     };
   }, [following, setStatus]);
 
+  if (status === undefined && props.keepsPlace) return <PlaceholderRows count={1} size="bar" />;
   if (status?.kind !== "loaded" || status.data.kind !== "live") return null;
   const live = status.data;
 
@@ -137,7 +141,38 @@ export function LiveUpdate(props: { label?: string; short?: boolean }) {
   ) {
     content = <Result result={live.lastUpdate} offerReload={false} />;
   }
-  if (content === null) return null;
+  if (content === null) return props.keepsPlace ? <UpToDate running={live.running} /> : null;
+  // On Home, in New version's row, at its height (#283).
+  if (props.keepsPlace) {
+    return (
+      <section
+        aria-label="Updates"
+        aria-live="polite"
+        className="flex h-12.5 items-center gap-3 rounded-bubble border bg-surface pr-2.5 pl-3.5 text-sm [&>span]:min-w-0 [&>span]:grow [&>span]:truncate"
+      >
+        {content}
+      </section>
+    );
+  }
 
   return <InfoBox label="Updates">{content}</InfoBox>;
+}
+
+/** What's running, when there's nothing newer: one quiet row in New version's place (#283). */
+function UpToDate(props: { running: LiveVersion }) {
+  const { commit, words } = titleOf(props.running);
+  return (
+    <section
+      aria-label="Up to date"
+      className="flex h-12.5 items-center gap-3.5 rounded-bubble border bg-surface pr-3.5 pl-3.5"
+    >
+      <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase max-sm:hidden">
+        Up to date
+      </span>
+      <span className="min-w-0 grow truncate text-meta font-semibold text-muted-foreground">
+        {words} · {commit}
+      </span>
+      <span className="shrink-0 text-label font-semibold text-success">Live</span>
+    </section>
+  );
 }
