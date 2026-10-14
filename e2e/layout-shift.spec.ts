@@ -87,12 +87,14 @@ const PAGES: {
   },
 ];
 
-for (const [screen, viewport] of [
-  ["the unfolded Fold", { width: 950, height: 712 }],
-  ["the cover screen", { width: 400, height: 900 }],
+for (const [screen, viewport, touch] of [
+  ["the unfolded Fold", { width: 950, height: 712 }, true],
+  ["the cover screen", { width: 400, height: 900 }, true],
+  // The same frame on a computer (#197).
+  ["a desktop", { width: 1440, height: 900 }, false],
 ] as const) {
   test.describe(`on ${screen}`, () => {
-    test.use({ viewport, hasTouch: true, isMobile: true });
+    test.use({ viewport, hasTouch: touch, isMobile: touch });
     for (const each of PAGES) {
       test(`${each.name} loads without moving`, async ({ page, request }) => {
         test.fixme(each.moves !== undefined, each.moves);

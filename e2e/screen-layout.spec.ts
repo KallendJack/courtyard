@@ -117,14 +117,10 @@ const button = (page: Page, name: string | RegExp) =>
 /** A code workspace's connections line, under its name, which opens Connections. */
 const connectionsLine = (page: Page) => button(page, /Paper/);
 
-/**
- * The message box, in the page's own foot on a desktop; on a touch screen it docks in the frame,
- * which never scrolls, so the page has none to check.
- */
-const messageBox = (page: Page, desktop: boolean) =>
-  desktop ? [page.getByRole("main").getByRole("textbox", { name: "Message", exact: true })] : [];
+// The message box docks in the frame on every screen (#197), which never scrolls, so the page has
+// none of its own to check.
 
-const screens = (desktop: boolean) => {
+const screens = () => {
   test("Home keeps its title and foot rows, and only the tiles scroll", async ({ page }) => {
     await page.route("**/api/backup", (route) =>
       route.fulfill({ json: { kind: "behind", since: new Date().toISOString(), reason: "x" } }),
@@ -139,24 +135,20 @@ const screens = (desktop: boolean) => {
   test("a planning workspace keeps its title, its tabs and its message box", async ({ page }) => {
     await page.goto("/workspaces/garage-gym#knows");
     await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
-    await keepsPinned(page, [title(page), tabs(page), ...messageBox(page, desktop)]);
+    await keepsPinned(page, [title(page), tabs(page)]);
   });
 
   test("a code workspace keeps its title, its connections line and its message box", async ({
     page,
   }) => {
     await page.goto("/workspaces/workbench");
-    await keepsPinned(page, [title(page), connectionsLine(page), ...messageBox(page, desktop)]);
+    await keepsPinned(page, [title(page), connectionsLine(page)]);
   });
 
   test("a session keeps its back link, its title and its message box", async ({ page }) => {
     await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
-    await keepsPinned(page, [
-      page.getByRole("link", { name: /^Back to/ }),
-      title(page),
-      ...messageBox(page, desktop),
-    ]);
+    await keepsPinned(page, [page.getByRole("link", { name: /^Back to/ }), title(page)]);
   });
 
   test("a document keeps its title, Rename and Delete", async ({ page }) => {
@@ -225,19 +217,7 @@ const screens = (desktop: boolean) => {
 
 test.describe("on a desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
-  screens(true);
-
-  test("a sheet keeps its title and Done", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
-    await page.getByRole("button", { name: "Change icon" }).click();
-    const sheet = page.getByRole("dialog", { name: "Icon" });
-    const body = sheet.locator("[data-dialog-body]");
-    await lengthen(body);
-    await staysPut(
-      [sheet.getByRole("heading", { name: "Icon" }), sheet.getByRole("button", { name: "Done" })],
-      () => scrollToEnd(body),
-    );
-  });
+  screens();
 
   test("the Connections dialog keeps its title and Connect", async ({ page }) => {
     await page.goto("/workspaces/workbench");
@@ -255,5 +235,5 @@ test.describe("on a desktop", () => {
 
 test.describe("on a tablet", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
-  screens(false);
+  screens();
 });
