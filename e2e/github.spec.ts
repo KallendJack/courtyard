@@ -1309,7 +1309,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await signIn(request);
       const asks = await request.post("/api/workspaces/workbench/sessions", {
         data: {
-          text: "run command: git merge main (for: Bring #251 up to date)",
+          text: "run command: git merge main (for: Bring the reply box up to date)",
           model: { provider: "fake", model: "echo" },
         },
       });
@@ -1358,7 +1358,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
 
       const asks = await request.post("/api/workspaces/workbench/sessions", {
         data: {
-          text: "run command: git merge main (for: Bring #251 up to date)",
+          text: "run command: git merge main (for: Bring the reply box up to date)",
           model: { provider: "fake", model: "echo" },
         },
       });
