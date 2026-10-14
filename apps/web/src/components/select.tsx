@@ -37,17 +37,31 @@ export function Select<T extends string>(props: {
   wideOnly?: boolean;
   /** A warning about the choice, under a field (a model at its usage limit). */
   warning?: string;
+  /**
+   * For a pill, what it shows in place of the chosen option's label, the list still the options:
+   * "1 of 4 files" over the files' names (#327).
+   */
+  shown?: string;
 }) {
   const id = useId();
   const look = LOOKS[props.look];
+  const shown = props.look === "pill" ? props.shown : undefined;
   const picker = (
     <span
       className={classes(
         "relative min-w-0",
         props.look === "pill" ? "inline-flex max-w-56" : "flex",
         props.wideOnly && "max-md:hidden",
+        // The unseen picker's focus, shown on the words over it.
+        shown !== undefined &&
+          "rounded-full has-[select:focus-visible]:ring-3 has-[select:focus-visible]:ring-ring/50",
       )}
     >
+      {shown !== undefined && (
+        <span aria-hidden className={classes("truncate", PILL, "pr-7")}>
+          {shown}
+        </span>
+      )}
       <select
         id={id}
         {...(props.look === "pill" ? { "aria-label": props.label } : {})}
@@ -57,7 +71,12 @@ export function Select<T extends string>(props: {
           const picked = props.options.find((option) => option.value === event.target.value);
           if (picked) props.onChange(picked.value);
         }}
-        className={classes("min-w-0 appearance-none truncate", look.box)}
+        className={classes(
+          "min-w-0 appearance-none truncate",
+          look.box,
+          // Over the words it shows, unseen, so a tap still opens the browser's own list.
+          shown !== undefined && "absolute inset-0 size-full opacity-0",
+        )}
       >
         {props.options.map((option) => (
           <option key={option.value} value={option.value}>

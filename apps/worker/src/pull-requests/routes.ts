@@ -12,10 +12,10 @@ import { sessionError } from "../sessions/routes.ts";
 import type { PullRequests, PullRequestsProblem } from "./index.ts";
 
 /** A pull request's number in a path; anything else names none. */
-const PullNumber = z.coerce.number().int().positive().catch(0);
+export const PullNumber = z.coerce.number().int().positive().catch(0);
 
 /** Why a workspace's pull request couldn't be listed, shown or acted on, as the API answers it. */
-const pullRequestsProblem = (c: Context, problem: PullRequestsProblem) => {
+export const pullRequestsProblem = (c: Context, problem: PullRequestsProblem) => {
   switch (problem.kind) {
     case "workspace":
       return contextError(c, problem.error);
