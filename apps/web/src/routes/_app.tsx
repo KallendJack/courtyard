@@ -9,7 +9,6 @@ import {
   type TalkTarget,
   useLayout,
 } from "@/components/handheld";
-import { PAGE_SCROLL, PageScrollContext } from "@/components/page-scroll";
 import { WorkspaceStrip } from "@/components/workspace-strip";
 import { Problem } from "../problems.tsx";
 import { fromWorker, logOut as logOutOnWorker } from "../worker.ts";
@@ -31,8 +30,8 @@ const TILES = <div aria-hidden className="h-20 shrink-0" />;
  * a rail, or a strip across the top of a narrow window. On a touch screen they're the Handheld
  * frame's: thumb rails and a bottom bar on a tablet or the unfolded Fold, tiles across the top on
  * the folded one. Either way the page itself sits on a raised panel, in the same place, so folding
- * and unfolding keeps it as it was. The page scrolls on that panel, never the window (#266), so
- * what's around it stays where it is.
+ * and unfolding keeps it as it was. The page fills that panel and scrolls only its own middle,
+ * never the window (#266, #339), so what's around it stays where it is.
  */
 export const Route = createFileRoute("/_app")({
   loader: () => fromWorker("/workspaces", WorkspaceList),
@@ -48,8 +47,6 @@ function LoggedIn() {
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
   const [box, setBox] = useState<MessageBox>();
   const [boxOpen, setBoxOpen] = useState(false);
-  /** The panel the page scrolls on, once it's there. */
-  const [scroller, setScroller] = useState<HTMLElement | null>(null);
 
   const logOut = async () => {
     await logOutOnWorker();
@@ -102,15 +99,9 @@ function LoggedIn() {
               />
             </Suspense>
           )}
-          {/* The page scrolls here, never the window (#266). */}
-          <div
-            ref={setScroller}
-            data-scroll-restoration-id={PAGE_SCROLL}
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-t-lg border border-b-0 bg-card pb-[env(safe-area-inset-bottom)] md:mt-3 md:mr-3 md:mb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:rounded-lg md:border-b md:pb-0"
-          >
-            <PageScrollContext value={scroller}>
-              {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
-            </PageScrollContext>
+          {/* The page fills this panel and scrolls its own middle, never the window (#266, #339). */}
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-lg border border-b-0 bg-card pb-[env(safe-area-inset-bottom)] md:mt-3 md:mr-3 md:mb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:rounded-lg md:border-b md:pb-0">
+            {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
           </div>
         </div>
       </div>

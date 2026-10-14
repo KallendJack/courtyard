@@ -28,13 +28,18 @@ function Changes() {
       : undefined;
 
   return (
-    <Page>
-      <PageTitle above={<BackLink workspaceId={id} />}>Recent changes</PageTitle>
-      <p className="mt-2 text-body text-muted-foreground">
-        {id === undefined
-          ? "What's changed in your owner context, newest first."
-          : `What's changed in ${name ?? "this workspace"}'s context file and documents, newest first.`}
-      </p>
+    <Page
+      header={
+        <>
+          <PageTitle above={<BackLink workspaceId={id} />}>Recent changes</PageTitle>
+          <p className="mt-2 text-body text-muted-foreground">
+            {id === undefined
+              ? "What's changed in your owner context, newest first."
+              : `What's changed in ${name ?? "this workspace"}'s context file and documents, newest first.`}
+          </p>
+        </>
+      }
+    >
       <div className="mt-8">
         {/* A key per place, so going from one list to another starts the new one afresh. */}
         <RecentChanges key={id ?? "owner"} workspace={id} />

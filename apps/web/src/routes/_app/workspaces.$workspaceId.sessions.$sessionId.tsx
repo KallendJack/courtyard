@@ -262,8 +262,8 @@ function Session(props: {
     );
   }
 
-  return (
-    <Page flushBottom>
+  const header = (
+    <>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
           {above}
@@ -358,7 +358,37 @@ function Session(props: {
           </StatusPill>
         </div>
       )}
+    </>
+  );
 
+  return (
+    <Page
+      header={header}
+      footer={
+        <div className="pt-2 pb-3 md:pb-6">
+          {away && problem === undefined && <JumpToLatest answering={running} onJump={toLatest} />}
+          {sendProblem && (
+            <div className="mb-3">
+              <FormError message={sendProblem} />
+            </div>
+          )}
+          <Composer
+            providers={props.providers}
+            {...(last ? { initialModel: last.model } : {})}
+            {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
+            // While a turn runs, a message is queued until it ends (#177).
+            disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
+            {...(running ? { stop } : {})}
+            placeholder={
+              running ? "Queue a message…" : suggesting ? "Or type your own reply…" : "Reply…"
+            }
+            compactOnNarrow
+            {...(props.skills === undefined ? {} : { skills: props.skills })}
+            send={send}
+          />
+        </div>
+      }
+    >
       {problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
@@ -386,30 +416,6 @@ function Session(props: {
           follow={follow}
         />
       )}
-      {sendProblem && (
-        <div className="mt-3">
-          <FormError message={sendProblem} />
-        </div>
-      )}
-
-      {/* Pinned to the foot of the page's panel, which keeps clear of a phone's gesture bar (#266). */}
-      <div className="sticky bottom-0 mt-6 bg-card pt-2 pb-3 md:pb-6">
-        {away && problem === undefined && <JumpToLatest answering={running} onJump={toLatest} />}
-        <Composer
-          providers={props.providers}
-          {...(last ? { initialModel: last.model } : {})}
-          {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
-          // While a turn runs, a message is queued until it ends (#177).
-          disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
-          {...(running ? { stop } : {})}
-          placeholder={
-            running ? "Queue a message…" : suggesting ? "Or type your own reply…" : "Reply…"
-          }
-          compactOnNarrow
-          {...(props.skills === undefined ? {} : { skills: props.skills })}
-          send={send}
-        />
-      </div>
     </Page>
   );
 }

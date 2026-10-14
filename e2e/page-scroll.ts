@@ -1,19 +1,16 @@
 import type { Page } from "@playwright/test";
 
 /**
- * What scrolls a page behind the login (#266): the nearest box around its `main` that scrolls up
- * and down, found as the browser lays it out, or the document when nothing around it does.
+ * What scrolls a page behind the login (#266, #339): its middle, which the router knows by name,
+ * or the document when there's none.
  */
 const scrollerOf = (page: Page) =>
-  page.evaluateHandle(() => {
-    let box = document.querySelector("main")?.parentElement;
-    while (box) {
-      const { overflowY } = getComputedStyle(box);
-      if (overflowY === "auto" || overflowY === "scroll") return box;
-      box = box.parentElement;
-    }
-    return document.scrollingElement ?? document.documentElement;
-  });
+  page.evaluateHandle(
+    () =>
+      document.querySelector('[data-scroll-restoration-id="page"]') ??
+      document.scrollingElement ??
+      document.documentElement,
+  );
 
 /** What scrolls the page: its edges on screen, how far it's scrolled, and the window's own scroll. */
 export const pageScroll = async (page: Page) => {

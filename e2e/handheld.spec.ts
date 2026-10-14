@@ -758,13 +758,16 @@ test.describe("unfolded", () => {
       await boxOf(talk),
       await boxOf(page.locator("form", { has: message(page) })),
     ];
-    const titleAt = (await boxOf(title)).y;
+    const titleAt = await boxOf(title);
     await page.mouse.move(content.x + content.width / 2, UNFOLDED.height / 2);
     await page.mouse.wheel(0, 300);
-    await expect.poll(async () => (await boxOf(title)).y).toBeLessThan(titleAt - 100);
+    await expect.poll(async () => (await pageScroll(page)).scrollTop).toBeGreaterThan(100);
 
+    // The title stays put above what scrolls (#339).
     const scroll = await pageScroll(page);
     expect(scroll).toMatchObject({ document: false, scrolls: true, windowScrollY: 0 });
+    expect(await boxOf(title)).toEqual(titleAt);
+    expect(scroll.top).toBeGreaterThanOrEqual(titleAt.y + titleAt.height);
     // Its scroll bar sits on the centre's own edge, inside the right rail, and what scrolls stops
     // short of the message box.
     expect(scroll.right).toBeLessThanOrEqual(key.x + 1);

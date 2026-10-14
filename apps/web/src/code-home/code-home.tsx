@@ -8,12 +8,13 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { ConnectionsLine } from "@/components/connections-line";
 import { useLayout } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
+import { Page } from "@/components/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -79,6 +80,8 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
  * knowledge lives in its repository, so it has no context file, Things or skills.
  */
 export default function CodeHome(props: {
+  /** The page's title and what goes with it, pinned above the line and the tabs. */
+  header: ReactNode;
   workspace: WorkspaceSummary;
   list: CodeSessionList;
   providers: FromWorker<ProviderList>;
@@ -164,86 +167,50 @@ export default function CodeHome(props: {
   const showsTabs = tabs.length > 1 || open === undefined;
   const chosen = tabs.some((each) => each.hash === tab) ? tab : "";
 
-  return (
-    <div data-code-home="">
-      <div className="mt-2 flex flex-col gap-2">
-        {connections === undefined ? (
-          <PlaceholderRows count={1} size="text" />
-        ) : (
-          <>
-            <ConnectionsLine
-              connections={connections}
-              open={connecting}
-              onOpen={() => setConnecting(true)}
-              anchor={line}
-            />
-            <ConnectionsSheet
-              open={connecting}
-              onClose={closeSheet}
-              workspaceId={workspace.id}
-              workspaceName={workspace.name}
-              connections={connections}
-              onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
-              anchor={line}
-            />
-          </>
+  // Its own classes apply inside each part (code-home.css), but not to the page's title above.
+  const header = (
+    <>
+      {props.header}
+      <div data-code-home="">
+        <div className="mt-2 flex flex-col gap-2">
+          {connections === undefined ? (
+            <PlaceholderRows count={1} size="text" />
+          ) : (
+            <>
+              <ConnectionsLine
+                connections={connections}
+                open={connecting}
+                onOpen={() => setConnecting(true)}
+                anchor={line}
+              />
+              <ConnectionsSheet
+                open={connecting}
+                onClose={closeSheet}
+                workspaceId={workspace.id}
+                workspaceName={workspace.name}
+                connections={connections}
+                onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
+                anchor={line}
+              />
+            </>
+          )}
+        </div>
+        {/* With the connections line, so it never comes on its own and pushes the rest down. */}
+        {connections?.github.kind === "signed-out" && <GitHubNotice />}
+
+        {showsTabs && (
+          <div className="mt-3.5">
+            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+          </div>
         )}
       </div>
-      {/* With the connections line, so it never comes on its own and pushes the rest down. */}
-      {connections?.github.kind === "signed-out" && <GitHubNotice />}
+    </>
+  );
 
-      {showsTabs && (
-        <div className="mt-3.5">
-          <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
-        </div>
-      )}
-
-      {/* From a tablet up the page is the screen's height (#335): the tabs' lists scroll here. */}
-      {chosen === "sessions" ? (
-        <div className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
-          <SessionLinks list={list} mode="code" />
-        </div>
-      ) : chosen === "prs" ? (
-        <div className="mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
-          <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
-        </div>
-      ) : (
-        // On Home the blocks share the height between the tabs and Main, each keeping its place;
-        // one with more rows than fit scrolls inside its card (#335, #283).
-        <div className="mt-4 flex flex-col gap-3 md:min-h-0 md:flex-1">
-          <div className="flex flex-col items-stretch gap-3.5 md:min-h-0 md:flex-1 md:flex-row">
-            <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
-              <NeedsYou
-                workspaceId={workspace.id}
-                needs={needs}
-                pending={needsPending}
-                setup={setup}
-                onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
-                onChanged={changed}
-              />
-              <Running workspaceId={workspace.id} sessions={list.sessions} running={list.running} />
-            </div>
-            {providers.kind === "loaded" && (
-              <NextUp
-                workspaceId={workspace.id}
-                issues={nextUp}
-                providers={providers.data.providers}
-              />
-            )}
-          </div>
-          <div className="shrink-0">
-            <MainRow workspaceId={workspace.id} />
-          </div>
-        </div>
-      )}
-
-      {/* On a touch screen the message box docks in the frame, so this keeps no room of its own. */}
-      <div
-        className={classes(
-          "sticky bottom-0 mt-auto shrink-0 bg-card",
-          layout === "desktop" && "pt-6 pb-6",
-        )}
-      >
+  // On a touch screen the message box docks in the frame, so the foot keeps no room of its own.
+  const footer = (
+    <div data-code-home="">
+      <div className={classes(layout === "desktop" && "pt-6 pb-6")}>
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
@@ -267,5 +234,55 @@ export default function CodeHome(props: {
         )}
       </div>
     </div>
+  );
+
+  return (
+    // From a tablet up the middle is exactly the room left and never scrolls (#335): the tabs'
+    // lists scroll inside it, and on Home the blocks share it, their rows scrolling in their cards.
+    <Page wide fill header={header} footer={footer}>
+      <div data-code-home="">
+        {chosen === "sessions" ? (
+          <div className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+            <SessionLinks list={list} mode="code" />
+          </div>
+        ) : chosen === "prs" ? (
+          <div className="mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+            <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
+          </div>
+        ) : (
+          // On Home the blocks share the height above Main, each keeping its place; one with more
+          // rows than fit scrolls inside its card (#335, #283).
+          <div className="mt-4 flex flex-col gap-3 md:min-h-0 md:flex-1">
+            <div className="flex flex-col items-stretch gap-3.5 md:min-h-0 md:flex-1 md:flex-row">
+              <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
+                <NeedsYou
+                  workspaceId={workspace.id}
+                  needs={needs}
+                  pending={needsPending}
+                  setup={setup}
+                  onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
+                  onChanged={changed}
+                />
+                <Running
+                  workspaceId={workspace.id}
+                  sessions={list.sessions}
+                  running={list.running}
+                />
+              </div>
+              {providers.kind === "loaded" && (
+                <NextUp
+                  workspaceId={workspace.id}
+                  issues={nextUp}
+                  providers={providers.data.providers}
+                />
+              )}
+            </div>
+            <div className="shrink-0">
+              <MainRow workspaceId={workspace.id} />
+            </div>
+          </div>
+        )}
+      </div>
+    </Page>
   );
 }

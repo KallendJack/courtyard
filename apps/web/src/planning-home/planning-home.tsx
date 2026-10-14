@@ -13,8 +13,10 @@ import type {
 import { hasLines } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { useLayout } from "@/components/handheld";
 import { Notice } from "@/components/notice";
+import { Page } from "@/components/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -63,6 +65,8 @@ export type PlanningLoaded = {
  * nudge: a planning workspace stays calm (AGENTS.md).
  */
 export default function PlanningHome(props: {
+  /** The page's title and what goes with it, pinned above the tabs. */
+  header: ReactNode;
   workspace: WorkspaceSummary;
   contextFile: ContextFile | null;
   ownerContextShared: OwnerContextShared;
@@ -106,76 +110,36 @@ export default function PlanningHome(props: {
         : "";
   const empty = tabs.length === 1 && (contextFile === null || !hasLines(contextFile));
 
-  return (
-    <div data-planning-home="">
-      {workspace.configProblem !== undefined && (
-        <div className="mt-4">
-          <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
-        </div>
-      )}
-      {empty ? (
-        <p className="mt-2 text-body text-muted-foreground">
-          Tell Courtyard about this, by voice or photo
-        </p>
-      ) : (
-        // In What Courtyard knows, Home is the way back.
-        (tabs.length > 1 || place === "knows") && (
-          <div className="mt-3.5">
-            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={place} />
+  // Its own classes apply inside each part (planning-home.css), but not to the page's title above.
+  const header = (
+    <>
+      {props.header}
+      <div data-planning-home="">
+        {workspace.configProblem !== undefined && (
+          <div className="mt-4">
+            <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
           </div>
-        )
-      )}
-
-      <div className="mt-4 flex flex-col gap-3.5">
-        {place === "sessions" ? (
-          <SessionLinks list={list} mode="planning" />
-        ) : place === "things" ? (
-          things.kind === "loaded" && (
-            <ThingsSection
-              workspaceId={workspace.id}
-              list={things.data}
-              {...(deleted?.kind === "thing" ? { deleted } : {})}
-              onUndone={props.onUndone}
-            />
-          )
-        ) : place === "docs" ? (
-          documents.kind === "loaded" && (
-            <DocumentsSection
-              workspaceId={workspace.id}
-              documents={documents.data.documents}
-              {...(deleted?.kind === "document" ? { deleted } : {})}
-              onUndone={props.onUndone}
-            />
-          )
-        ) : place === "knows" ? (
-          <WhatCourtyardKnows
-            workspaceId={workspace.id}
-            contextFile={contextFile}
-            ownerContextShared={props.ownerContextShared}
-            skills={skills.kind === "loaded" ? skills.data.skills : undefined}
-          />
+        )}
+        {empty ? (
+          <p className="mt-2 text-body text-muted-foreground">
+            Tell Courtyard about this, by voice or photo
+          </p>
         ) : (
-          <>
-            <NextUp workspaceId={workspace.id} sessions={list.sessions} duePlans={props.duePlans} />
-            {!empty && (
-              <Link
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId: workspace.id }}
-                hash="knows"
-                className="flex h-11 items-center gap-2.5 rounded-row border bg-surface px-3.5 text-sm font-bold text-foreground/90 outline-none hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <span className="grow">What Courtyard knows</span>
-                <ChevronRight aria-hidden className="size-4 text-placeholder" />
-              </Link>
-            )}
-          </>
+          // In What Courtyard knows, Home is the way back.
+          (tabs.length > 1 || place === "knows") && (
+            <div className="mt-3.5">
+              <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={place} />
+            </div>
+          )
         )}
       </div>
+    </>
+  );
 
-      {/* On a touch screen the message box docks in the frame, so this keeps no room of its own. */}
-      <div
-        className={classes("sticky bottom-0 mt-auto bg-card", layout === "desktop" && "pt-6 pb-6")}
-      >
+  // On a touch screen the message box docks in the frame, so the foot keeps no room of its own.
+  const footer = (
+    <div data-planning-home="">
+      <div className={classes(layout === "desktop" && "pt-6 pb-6")}>
         {providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
@@ -199,6 +163,62 @@ export default function PlanningHome(props: {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <Page wide header={header} footer={footer}>
+      <div data-planning-home="">
+        <div className="mt-4 flex flex-col gap-3.5">
+          {place === "sessions" ? (
+            <SessionLinks list={list} mode="planning" />
+          ) : place === "things" ? (
+            things.kind === "loaded" && (
+              <ThingsSection
+                workspaceId={workspace.id}
+                list={things.data}
+                {...(deleted?.kind === "thing" ? { deleted } : {})}
+                onUndone={props.onUndone}
+              />
+            )
+          ) : place === "docs" ? (
+            documents.kind === "loaded" && (
+              <DocumentsSection
+                workspaceId={workspace.id}
+                documents={documents.data.documents}
+                {...(deleted?.kind === "document" ? { deleted } : {})}
+                onUndone={props.onUndone}
+              />
+            )
+          ) : place === "knows" ? (
+            <WhatCourtyardKnows
+              workspaceId={workspace.id}
+              contextFile={contextFile}
+              ownerContextShared={props.ownerContextShared}
+              skills={skills.kind === "loaded" ? skills.data.skills : undefined}
+            />
+          ) : (
+            <>
+              <NextUp
+                workspaceId={workspace.id}
+                sessions={list.sessions}
+                duePlans={props.duePlans}
+              />
+              {!empty && (
+                <Link
+                  to="/workspaces/$workspaceId"
+                  params={{ workspaceId: workspace.id }}
+                  hash="knows"
+                  className="flex h-11 items-center gap-2.5 rounded-row border bg-surface px-3.5 text-sm font-bold text-foreground/90 outline-none hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span className="grow">What Courtyard knows</span>
+                  <ChevronRight aria-hidden className="size-4 text-placeholder" />
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </Page>
   );
 }
 

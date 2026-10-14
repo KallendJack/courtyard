@@ -20,7 +20,7 @@ const router = createRouter({
     drawn = location.href;
     return moved;
   },
-  // A page scrolls on its panel, not the window (#266): the panel goes to the top of a new page.
+  // A page scrolls its own middle, not the window (#266, #339): that goes to the top of a new page.
   scrollToTopSelectors: [PAGE_SCROLL_SELECTOR],
 });
 
