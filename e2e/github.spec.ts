@@ -698,8 +698,17 @@ test.describe("on the unfolded Fold", () => {
     const branch = row.getByText(/^dependabot\/docker_compose\//);
     const checks = row.getByText("Checks passed", { exact: true }).locator("visible=true");
     await expect(checks).toBeVisible();
-    const [branchBox, checksBox] = [await branch.boundingBox(), await checks.boundingBox()];
-    expect((branchBox?.x ?? 0) + (branchBox?.width ?? 0)).toBeLessThanOrEqual(checksBox?.x ?? 0);
+    // Both measured at once, until the page has settled: on CI it can still be laying out (#401).
+    const other = await checks.elementHandle();
+    await expect
+      .poll(() =>
+        branch.evaluate(
+          (element, other) =>
+            (other as Element).getBoundingClientRect().left - element.getBoundingClientRect().right,
+          other,
+        ),
+      )
+      .toBeGreaterThanOrEqual(0);
     await request.post("/api/github/sign-out", { data: {} });
   });
 
