@@ -19,7 +19,7 @@ import { ButtonLink } from "@/components/button-link";
 import { ConfirmStep } from "@/components/confirm-step";
 import { FileTree, lineCounts } from "@/components/file-tree";
 import { FormError } from "@/components/form-error";
-import { useLayout } from "@/components/handheld";
+import { useLayout, useWide } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { Notice } from "@/components/notice";
 import { PAGE_SCROLL } from "@/components/page-scroll";
@@ -232,6 +232,7 @@ function Reviewing(props: {
   const { pullRequest, files, merge } = review;
   const pull = { workspaceId: props.workspaceId, number: pullRequest.number };
   const layout = useLayout();
+  const wide = useWide();
   const navigate = useNavigate();
   /** The whole description is open, with the files folded into one bar. */
   const [reading, setReading] = useState(false);
@@ -255,7 +256,8 @@ function Reviewing(props: {
   const place = file === undefined ? 0 : files.indexOf(file) + 1;
   const open = pullRequest.state === "open";
   const conflicts = open && pullRequest.conflicts === true;
-  const desktop = layout === "desktop";
+  // Beside the rails, a wide window has room for the actions and questions beside the diff.
+  const desktop = wide;
   const cover = layout === "cover";
   const panelOpen = open && asking;
   const asked = questions.asked.length > 0;
@@ -457,8 +459,8 @@ function Reviewing(props: {
   ) : null;
 
   // On a tablet the quick questions take the file list's place, which folds into a switcher
-  // above the diff; on a desktop they sit beside both; on a phone they're a sheet over them.
-  const folded = panelOpen && layout === "tablet";
+  // above the diff; in a wide window they sit beside both; on a phone they're a sheet over them.
+  const folded = panelOpen && layout === "tablet" && !desktop;
   const placeShown =
     folded && files.length > 1 && file !== undefined ? (
       <Select

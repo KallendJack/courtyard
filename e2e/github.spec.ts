@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { chooseModel } from "./frame.ts";
 import { pageScroll, pageScrollsSideways } from "./page-scroll.ts";
 
 // Signing in to GitHub through Courtyard (#99), against the fake GitHub start-worker.mjs gives the
@@ -95,7 +96,7 @@ test("a code session shows its branch and pull request, and a failing check star
     .toBe("signed-in");
 
   await page.goto("/workspaces/side-project");
-  await page.getByLabel("Model").selectOption("fake/echo");
+  await chooseModel(page, "fake/echo");
   await page
     .getByLabel("Message", { exact: true })
     .fill(
@@ -156,7 +157,7 @@ const makesPullRequest = (line: string, subject: string) =>
 /** Starts a code session on the fake that opens a pull request, and waits for it to show. */
 const sessionWithPullRequest = async (page: Page, subject: string) => {
   await page.goto("/workspaces/side-project");
-  await page.getByLabel("Model").selectOption("fake/echo");
+  await chooseModel(page, "fake/echo");
   await page
     .getByLabel("Message", { exact: true })
     .fill(makesPullRequest("Talk into the message box", subject));

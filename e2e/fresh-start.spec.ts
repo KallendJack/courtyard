@@ -15,7 +15,12 @@ test("a fresh start from Settings clears every workspace, once the words are typ
   const main = page.getByRole("main");
   await expect(main.getByRole("link", { name: "Garage gym" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Settings" }).click();
+  // Settings is on the frame's Settings sheet (#197).
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page
+    .getByRole("dialog", { name: "Settings" })
+    .getByRole("link", { name: "All settings" })
+    .click();
   await page.getByRole("link", { name: "Fresh start…" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Fresh start" })).toBeVisible();

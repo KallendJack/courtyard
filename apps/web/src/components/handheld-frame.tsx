@@ -20,7 +20,7 @@ import { Button } from "./button.tsx";
 import { ButtonLink } from "./button-link.tsx";
 import { CourtyardMark } from "./courtyard-mark.tsx";
 import { FrameButton, modelMark } from "./frame-button.tsx";
-import type { Layout, MessageBox, TalkTarget } from "./handheld.ts";
+import { type Layout, type MessageBox, type TalkTarget, typingIn } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
 import { RecentSessions } from "./recent-sessions.tsx";
@@ -44,7 +44,7 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
  * a touch screen.
  */
 export default function HandheldFrame(props: {
-  layout: Exclude<Layout, "desktop">;
+  layout: Layout;
   workspaces: readonly WorkspaceSummary[];
   onLogOut: () => void;
   /** Where the page's message box goes. */
@@ -121,6 +121,21 @@ export default function HandheldFrame(props: {
     flushSync(() => setBoxOpen(true));
     box.focus();
   };
+
+  // Typing anywhere goes into the box (#197): a letter typed while nothing that takes text has
+  // the keyboard, and no sheet is open, opens the box with it in. Space is for talking.
+  const typeNow = useRef(type);
+  typeNow.current = type;
+  useEffect(() => {
+    const typed = (event: KeyboardEvent) => {
+      if (event.key.length !== 1 || event.key === " " || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (typingIn(event.target) || document.querySelector("dialog[open]") !== null) return;
+      typeNow.current();
+    };
+    window.addEventListener("keydown", typed);
+    return () => window.removeEventListener("keydown", typed);
+  }, []);
 
   // New session, from the recent sessions (#159): the workspace's page, with its box open for it.
   const navigate = useNavigate();

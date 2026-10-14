@@ -382,8 +382,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   workspaces down the side or across the top; the rest are pages. `_app/index.tsx` is the home page (#102), the
   workspaces as tiles; `_app/settings.tsx` is Settings, with everything that used to be on the home page besides
   them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
-  devices), in the sidebar on a desktop and behind the frame's Settings sheet on a touch screen. Behind the login
-  each page sits on a raised panel that never scrolls, nor does the window (#266), so the sidebar or the Handheld
+  devices), behind the frame's Settings sheet. Behind the login
+  each page sits on a raised panel that never scrolls, nor does the window (#266), so the Handheld
   frame stays put. Every page is `components/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
   scrolling middle and a pinned footer (its main action: the message box, Save, Create), so nothing scrolls the
   title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
@@ -559,7 +559,7 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
   #168) have a stylesheet of their own too (`chat-flow.css`), added when one first shows and applying only inside a
   `ChatFlowScope`: whose turn it is in a session (`session-state.tsx`, in the chat, a workspace's sessions and the
-  sidebar's recent ones, which ask again every few seconds while one is working), the Working line and the Your turn
+  recent sessions sheet's, which ask again every few seconds while one is working), the Working line and the Your turn
   mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
   Nothing jumps in (#269; Paper, "Component · A block that loads late keeps its place"): everything that loads
   after its page uses one shared piece, `kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
@@ -567,23 +567,24 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   first visit shows faint rows the size of real ones in the block's place (`PlaceholderRows`, no spinner and no
   words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
   are in the first load's stylesheet. It holds a code workspace's Home blocks and PRs list, Home's tile lines and
-  foot rows, the sidebar's recent sessions, Recent changes, Settings' Connections and backup, and a pull request's
+  foot rows, the recent sessions sheet, Recent changes, Settings' Connections and backup, and a pull request's
   page; a page that waits as a whole (a pull request's, Tidy) shows the rows in its own shape under its title. A
   session's conversation is kept the same way in `sessions/events.ts` (faint rows until its events have come,
   and its stream carries on after what was shown); a diagram once drawn is kept by its source, a drawing still to
   load keeps a faint place rather than showing its code (`rich-blocks/fenced.tsx`), and maths keeps its room
   unseen until its formulas can be drawn (`sessions/answer.tsx`).
-  The frame round every page is picked by `handheld.ts` (#193): a desktop keeps the sidebar (`app-sidebar.tsx`) and,
-  in a narrow window, the strip (`workspace-strip.tsx`); a touch screen gets the Handheld frame
-  (`handheld-frame.tsx`), loaded only there with its own stylesheet (`handheld-frame.css`). On a tablet or the
-  unfolded Fold (#206): workspace tiles down the left, and down the right labelled buttons (Model, Skills, Add,
+  The frame round every page is the Handheld frame (`handheld-frame.tsx`, #193; on a computer too since #197),
+  loaded after the page with its own stylesheet (`handheld-frame.css`). `handheld.ts` picks its shape by the
+  window's width alone, whatever the device: rails from 600 px, the cover-screen layout below. With rails (a
+  tablet, the unfolded Fold, a computer, #206): workspace tiles down the left, and down the right labelled buttons (Model, Skills, Add,
   Settings) with the Talk key in the bottom corner; on the folded one, tiles across the top and a bottom bar with
   Type and the talk strip. The page's message box (`sessions/composer.tsx`) offers itself to the frame through
   `handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
   the folded Fold. It opens its pickers from the frame's Skills, Photo (Add) and Model buttons. The talk strip and
   the Talk key (`talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
   browser's own speech recognition (`speech.ts`, which also vibrates for it) and put the words in the box as they are
-  heard (#198), for the owner to send, or to queue while a turn runs; on a page without a message box,
+  heard (#198), for the owner to send, or to queue while a turn runs. Holding Space (outside a field) or the
+  mouse's side button talks too, and letting go sends (#197), and a letter typed outside a field goes into the box; on a page without a message box,
 into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). For the Talk key, the box shows ✕, ■ and ↑
   under the words while it listens (`listening-row.tsx`, loaded once it's docked). While the owner talks or an answer
   comes, the screen is kept awake (`wake-lock.ts`) where the browser can;
@@ -591,15 +592,13 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
   (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes, and
-  the listening row's, are in `handheld-frame.css`. A desktop keeps the box's own pickers, and a narrow desktop window its bottom sheets
-  (`sheet.tsx`). A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, in the sidebar, the strip, the
+  the listening row's, are in `handheld-frame.css`. A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
   in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`
-  on a planning page, loaded when first opened): a Handheld sheet on a touch screen, a
-  bottom sheet on a desktop. Arrange workspaces (#321): holding a workspace on a tablet's rail or in the sidebar and
+  on a planning page, loaded when first opened): a Handheld sheet. Arrange workspaces (#321): holding a workspace on the rail and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
-  (the strip, the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
+  (the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
   first load (`arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one
   (`arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it.
   **`lib/`:** small
@@ -790,7 +789,7 @@ Where the rest fits:
 - **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,
   on the latest activity or the answer), an approval waiting, or the turn's end, marked Your turn. A workspace's
   list of sessions has the worker's say for each (`now`: working, needs-you or your-turn), which the workspace page
-  and the sidebar ask for again every few seconds while one is working or needs the owner. Your turn isn't a new
+  and the recent sessions sheet ask for again every few seconds while one is working or needs the owner. Your turn isn't a new
   reply: whether one waits on the owner is `waiting` on the same list (`waiting/`, #334), cleared once the session
   page has shown the owner its answer, on any device.
 - **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`

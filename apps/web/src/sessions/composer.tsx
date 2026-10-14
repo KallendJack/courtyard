@@ -185,7 +185,7 @@ export const Composer = memo(function Composer(props: {
    * move into the dock as the frame arrives, and the keyboard would lose it mid-word.
    */
   const layout = useLayout();
-  const awaitingDock = layout !== "desktop" && !docked;
+  const awaitingDock = !docked;
   // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
@@ -296,6 +296,10 @@ export const Composer = memo(function Composer(props: {
     return sent;
   };
 
+  /** Sending as it is now, for a held key let go (#197), whose box was offered renders ago. */
+  const sendNow = useRef(sendText);
+  sendNow.current = sendText;
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     await sendText(text, text);
@@ -320,13 +324,17 @@ export const Composer = memo(function Composer(props: {
           dictating.current = listener;
           dock?.open();
           setListening(listener.controls);
-          const put = (words: string) =>
-            setText(
-              words === "" ? typed : typed.trim() === "" ? words : `${typed.trimEnd()} ${words}`,
-            );
+          /** What's in the box now: what was typed, then what's been heard. */
+          let now = typed;
+          const put = (words: string) => {
+            now =
+              words === "" ? typed : typed.trim() === "" ? words : `${typed.trimEnd()} ${words}`;
+            setText(now);
+          };
           return {
             hear: put,
             drop: () => put(""),
+            send: () => void sendNow.current(now, now),
             done: () => {
               if (dictating.current === listener) dictating.current = undefined;
               setListening(false);

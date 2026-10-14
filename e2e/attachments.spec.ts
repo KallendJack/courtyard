@@ -18,10 +18,14 @@ const MANUAL: FileToAttach = {
   buffer: Buffer.from(pdfOf(["Titan T-3 J-hooks", "The cup is 64 mm across."])),
 };
 
-/** Attaches files with the paperclip, through the file picker it opens. */
+/**
+ * Attaches files with the frame's Add (Photo on the cover screen, #197), through the file picker it
+ * opens.
+ */
 const attach = async (page: Page, files: readonly FileToAttach[]) => {
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Attach photos or PDFs" }).click();
+  const cover = (page.viewportSize()?.width ?? 1280) < 600;
+  await page.getByRole("button", { name: cover ? "Photo" : "Add", exact: true }).click();
   await (await chooser).setFiles([...files]);
 };
 
@@ -87,7 +91,7 @@ test("what can't go is left out and said in one line, and the rest stay", async 
   await expect(tray(page).getByRole("img", { name: "garage.jpg" })).toBeVisible();
 });
 
-test("five is the most: a sixth is left out and the paperclip greys out", async ({ page }) => {
+test("five is the most: a sixth is left out", async ({ page }) => {
   await page.goto("/workspaces/garage-gym");
   await attach(
     page,
@@ -96,8 +100,6 @@ test("five is the most: a sixth is left out and the paperclip greys out", async 
 
   await expect(tray(page).getByRole("img")).toHaveCount(5);
   await expect(page.getByRole("alert")).toHaveText("Only 5 photos or PDFs go with a message.");
-  await expect(page.getByText("5 of 5")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Attach photos or PDFs" })).toBeDisabled();
 });
 
 test("a PDF with no text is refused by the worker, and the attachments stay to fix", async ({
@@ -181,40 +183,6 @@ test("a picture copied from a web page attaches, but text copied from a document
   });
   expect(pastedPicture).toBe(false);
   await expect(tray(page).getByRole("img", { name: "image.jpg" })).toBeVisible();
-});
-
-test("a desktop has no camera button", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
-  await expect(page.getByRole("button", { name: "Attach photos or PDFs" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Take a photo" })).toBeHidden();
-});
-
-test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
-
-  test("a camera button opens the camera in one tap, and photos attach in a session", async ({
-    page,
-  }) => {
-    await page.goto("/workspaces/garage-gym");
-    await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/sessions\//);
-    // The session page is showing, with its first answer done, so the box is its own.
-    await expect(page.getByRole("button", { name: "Copy answer" })).toBeVisible();
-
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Take a photo" }).click();
-    const camera = await chooser;
-    expect(await camera.element().getAttribute("capture")).toBe("environment");
-    await camera.setFiles([photo("IMG_2041.png")]);
-    await expect(tray(page).getByRole("img", { name: "IMG_2041.jpg" })).toBeVisible();
-
-    await page.getByLabel("Message", { exact: true }).fill("please look");
-    await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByRole("list", { name: "Session" })).toContainText(
-      "I see IMG_2041.jpg (a photo). You said: please look",
-    );
-  });
 });
 
 // A phone, and a foldable opened out, where the same viewer fills a much wider screen.

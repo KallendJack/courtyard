@@ -9,11 +9,13 @@ import { useState } from "react";
 import { describeProblem } from "../problems.tsx";
 import { KEPT_SESSIONS, loadSessions, sessionsBusyEveryMs } from "../sessions/kept-sessions.ts";
 import { renameSession } from "../worker-calls.ts";
-import { GROUP_HEADING } from "./app-sidebar.tsx";
 import { IconButton } from "./button.tsx";
 import { PlaceholderRows, useKept } from "./kept.tsx";
 import { RenameForm } from "./rename-form.tsx";
 import { SessionStateDot } from "./session-state.tsx";
+
+/** The list's heading: "Recent in Garage gym". */
+const GROUP_HEADING = "px-3 pb-1.5 text-meta font-medium text-muted-foreground";
 
 /** How many of a workspace's sessions the sidebar lists. */
 const RECENT_SESSIONS = 5;

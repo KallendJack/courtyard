@@ -47,6 +47,9 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return box;
 };
 
+/** On the cover screen's frame, a phone's or a narrow window's (#197), the box opens with Type. */
+const typeIn = (page: Page) => page.getByRole("button", { name: "Type" }).click();
+
 test.describe("on the cover screen", () => {
   test.use({ viewport: COVER_SCREEN });
 
@@ -63,6 +66,7 @@ test.describe("on the cover screen", () => {
 
   test("keeps the message box compact, leaving room for the keyboard", async ({ page }) => {
     await page.goto(LONG_SESSION);
+    await typeIn(page);
     const form = page.getByLabel("Message", { exact: true }).locator("xpath=ancestor::form");
 
     const box = await boxOf(form);
@@ -71,7 +75,7 @@ test.describe("on the cover screen", () => {
 
   test("keeps the message box in view with the keyboard open", async ({ page }) => {
     await page.goto(LONG_SESSION);
-    await page.getByLabel("Message", { exact: true }).focus();
+    await typeIn(page);
     // The page shrinks to what's left above the keyboard (interactive-widget=resizes-content).
     await page.setViewportSize({ width: COVER_SCREEN.width, height: 300 });
 
@@ -81,12 +85,16 @@ test.describe("on the cover screen", () => {
 
   test("never pushes the page sideways with a long word", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
+    await typeIn(page);
     await page
       .getByLabel("Message", { exact: true })
       .fill(`https://example.com/${"a".repeat(300)}`);
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");
-    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+    // Sent, the box closes into the frame (#197); the strip says when the answer has come.
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toContainText(
+      "Tap or hold to talk",
+    );
 
     expect(await pageScrollsSideways(page)).toBe(false);
   });
@@ -144,9 +152,13 @@ test.describe("at the end of a long session", () => {
     await page.goto(LONG_SESSION);
     // An answer many lines long, so it grows well past the bottom of the screen as it streams.
     const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
+    await typeIn(page);
     await page.getByLabel("Message", { exact: true }).fill(lines);
     await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+    // Sent, the box closes into the frame (#197); the strip says when the answer has come.
+    await expect(page.getByRole("button", { name: "Talk", exact: true })).toContainText(
+      "Tap or hold to talk",
+    );
 
     // It follows once a frame, so the last of the answer can take a frame or two to come into view.
     await expect.poll(() => fromTheEnd(page)).toBeLessThan(2);
@@ -156,6 +168,7 @@ test.describe("at the end of a long session", () => {
 
   test("scrolls a failed turn's reason into view", async ({ page }) => {
     await page.goto(LONG_SESSION);
+    await typeIn(page);
     await page.getByLabel("Message", { exact: true }).fill("please fail");
     await page.getByRole("button", { name: "Send" }).click();
 

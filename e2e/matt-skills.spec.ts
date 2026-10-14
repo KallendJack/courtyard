@@ -8,11 +8,11 @@ test("a code workspace's skill picker offers Matt Pocock's skills the owner star
   page,
 }) => {
   await page.goto("/workspaces/side-project");
-  // Skills are off a code workspace's Home (#301): the message box's picker and the rail have them.
+  // Skills are off a code workspace's Home (#301): the rail's Skills sheet has them (#197).
   await expect(page.getByRole("region", { name: "Skills" })).toHaveCount(0);
 
-  await page.getByLabel("Message", { exact: true }).fill("/");
-  const picker = page.getByRole("listbox");
-  await expect(picker.getByRole("option", { name: /Implement/ })).toBeVisible();
-  await expect(picker.getByRole("option", { name: /Tdd/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Skills" }).click();
+  const picker = page.getByRole("dialog", { name: "Skills" });
+  await expect(picker.getByRole("button", { name: /Implement/ })).toBeVisible();
+  await expect(picker.getByRole("button", { name: /Tdd/ })).toHaveCount(0);
 });

@@ -3,9 +3,7 @@ import { useId } from "react";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { FormError } from "./form-error.tsx";
-import { useLayout } from "./handheld.ts";
 import { HandheldSheet } from "./handheld-sheet.tsx";
-import { Sheet } from "./sheet.tsx";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 import { ICONS } from "./workspace-marks.tsx";
 
@@ -22,7 +20,6 @@ export default function IconSheet(props: {
   onClose: () => void;
   choose: (icon: Icon) => Promise<string | undefined>;
 }) {
-  const handheld = useLayout() !== "desktop";
   const save = useAction(props.choose);
   const radio = useId();
 
@@ -32,10 +29,7 @@ export default function IconSheet(props: {
   const body = (
     <>
       <p className="text-meta text-muted-foreground">
-        {handheld
-          ? "Shows on its tile in the rails."
-          : "Shows beside its name wherever it's listed."}{" "}
-        Courtyard suggests one from the name; change it any time.
+        Shows on its tile in the rails. Courtyard suggests one from the name; change it any time.
       </p>
       <div
         role="radiogroup"
@@ -78,7 +72,7 @@ export default function IconSheet(props: {
       <FormError message={save.error} />
     </>
   );
-  return handheld ? (
+  return (
     <HandheldSheet
       title="Icon"
       aside={props.workspaceName}
@@ -88,9 +82,5 @@ export default function IconSheet(props: {
     >
       {body}
     </HandheldSheet>
-  ) : (
-    <Sheet title="Icon" open={props.open} onClose={props.onClose}>
-      {body}
-    </Sheet>
   );
 }

@@ -42,22 +42,22 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("list", { name: "Session" })).toContainText(
       `You said: Message ${LONG_SESSION_TURNS}`,
     );
-    await expect(page.getByLabel("Message", { exact: true })).toBeEnabled();
-
-    const attach = page.getByRole("button", { name: "Attach photos or PDFs" });
-    expect(await liftFromGestureBar(page, attach)).toBe(GESTURE_BAR);
+    // The cover screen's frame (#197): its bottom bar, with Type, sits at the foot.
+    const type = page.getByRole("button", { name: "Type" });
+    await expect(type).toBeVisible();
+    expect(await liftFromGestureBar(page, type)).toBe(GESTURE_BAR);
   });
 });
 
 test.describe("on a tablet", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test("the sidebar's Log out moves up clear of the gesture bar", async ({ page }) => {
+  test("the Talk key at the foot of the right rail moves up clear of the gesture bar", async ({
+    page,
+  }) => {
     await page.goto("/");
-    // Once there are more workspaces than fit (other tests add theirs), the sidebar scrolls, and
-    // Log out is at the end of it.
-    const sidebar = page.getByRole("navigation", { name: "Workspaces" });
-    const logOut = sidebar.getByRole("button", { name: "Log out", exact: true });
-    expect(await liftFromGestureBar(page, logOut, sidebar)).toBe(GESTURE_BAR);
+    const talk = page.getByRole("button", { name: "Talk", exact: true });
+    await expect(talk).toBeVisible();
+    expect(await liftFromGestureBar(page, talk)).toBe(GESTURE_BAR);
   });
 });

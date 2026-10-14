@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { chooseModel, openBox, openRecent } from "./frame.ts";
 import { READING_SESSION_ID } from "./long-session.ts";
 import { fromTheEnd } from "./page-scroll.ts";
 
@@ -11,6 +12,7 @@ const words = (count: number) => Array.from({ length: count }, (_, i) => `word${
 /** Starts a session in Garage gym with `text` as its first message, and waits for its page. */
 const startSession = async (page: Page, text: string) => {
   await page.goto("/workspaces/garage-gym");
+  await openBox(page);
   await page.getByLabel("Message", { exact: true }).fill(text);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
@@ -59,13 +61,12 @@ test.describe("whose turn it is", () => {
     await expect(sessions.getByRole("link", { name: /The finished one/i })).toContainText(
       "Your turn",
     );
-    // The sidebar's recent sessions mark the one working with a dot.
+    // The open workspace's recent sessions mark the one working with a dot.
+    const recent = await openRecent(page, "Garage gym");
     await expect(
-      page
-        .getByRole("region", { name: "Recent in Garage gym" })
-        .getByRole("link", { name: /The working one/i })
-        .getByRole("img", { name: "Working" }),
+      recent.getByRole("link", { name: /The working one/i }).getByRole("img", { name: "Working" }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
 
     // It's asked again while one works, so the list says when that one ends.
     await expect(working).toContainText("Your turn", { timeout: 45_000 });
@@ -172,6 +173,7 @@ test.describe("reading back while it answers", () => {
     page,
   }) => {
     await page.goto(READING_SESSION);
+    await openBox(page);
     await page.getByRole("textbox", { name: "Message" }).fill(manyLines(80));
     await page.getByRole("button", { name: "Send" }).click();
     const session = sessionOn(page);
@@ -253,7 +255,8 @@ test.describe("the chat never jumps back to the top", () => {
     context,
   }) => {
     await page.goto("/workspaces/side-project");
-    await page.getByLabel("Model").selectOption("fake/echo");
+    await chooseModel(page, "fake/echo");
+    await openBox(page);
     await page.getByRole("textbox", { name: "Message" }).fill(manyLines(60));
     await page.getByRole("button", { name: "Start" }).click();
     const session = sessionOn(page);
@@ -263,6 +266,7 @@ test.describe("the chat never jumps back to the top", () => {
 
     const other = await context.newPage();
     await other.goto(page.url());
+    await openBox(other);
     await other.getByRole("textbox", { name: "Message" }).fill("run command: rm -rf node_modules");
     await other.getByRole("button", { name: "Send" }).click();
     const card = page.getByRole("region", { name: "Needs your OK" });
