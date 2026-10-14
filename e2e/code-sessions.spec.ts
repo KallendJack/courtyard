@@ -139,7 +139,7 @@ test.describe("activity lines on the unfolded Fold", () => {
       `git commit --allow-empty -m "Activity lines stay one line [e2e passes]" -m "${LONG}" -m "${LONG}"`,
       "git push -u origin HEAD",
       `gh pr create --title "Activity lines stay one line" --body "${LONG}"`,
-      `gh issue create --title "Activity lines are too long" --body "${LONG}"`,
+      `gh issue create --title "Activity lines are too long" --body "${LONG}" -l bug,needs-triage -m Later`,
       `gh issue comment 79 --body "${LONG}"`,
       unknown,
     ]);
