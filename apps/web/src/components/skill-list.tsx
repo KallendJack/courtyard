@@ -1,11 +1,9 @@
 import {
   SKILL_SOURCE_NAMES,
-  type SkillName,
   type SkillSummary,
   skillTitle,
   type UsableSkillSummary,
 } from "@courtyard/contract";
-import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
 /**
@@ -137,27 +135,16 @@ export function SkillList(props: { skills: readonly SkillSummary[]; label: strin
 }
 
 /**
- * A workspace's skills to pick one from (a phone's "Use a skill" sheet): each usable one a button,
- * the rest greyed and not pickable, after a line.
+ * The skills whose name or description has `query` in it, ignoring case: what typing after a `/`
+ * in the Reply box narrows the Skills sheet to (#251).
  */
-export function SkillChoices(props: {
-  skills: readonly SkillSummary[];
-  pick: (name: SkillName) => void;
-}): ReactNode {
-  return (
-    <ul aria-label="Skills" className="flex flex-col">
-      {props.skills.map((skill) => (
-        <li key={`${skill.source}:${skill.name}`} className="border-b last:border-b-0">
-          <button
-            type="button"
-            disabled={!usable(skill)}
-            onClick={() => usable(skill) && props.pick(skill.name)}
-            className="-mx-2 flex w-[calc(100%+1rem)] rounded-md px-2 outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:hover:bg-transparent"
-          >
-            <SkillRow skill={skill} size="page" />
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
+export const matchingSkills = (skills: readonly SkillSummary[], query: string) => {
+  const wanted = query.trim().toLowerCase();
+  return wanted === ""
+    ? skills
+    : skills.filter((skill) =>
+        [skill.name, skill.name.replaceAll("-", " "), skill.description].some((text) =>
+          text.toLowerCase().includes(wanted),
+        ),
+      );
+};

@@ -1,14 +1,9 @@
-import { Effort, type ModelRef, type ProviderList, takesEffort } from "@courtyard/contract";
+import { type Effort, type ModelRef, type ProviderList, takesEffort } from "@courtyard/contract";
 import { useState } from "react";
-import { Select } from "@/components/select";
-import { limitLabel } from "./limits.ts";
 import { effortLabel, type OfferedModel, unavailableModel } from "./models.ts";
 
 /** A model's key, as the pickers' values name it. */
 export const modelKey = (model: ModelRef) => `${model.provider}/${model.model}`;
-
-/** The effort picker's value for a model's default: never a level's name, which can't be empty. */
-const DEFAULT = "";
 
 /**
  * The model and effort a message goes with. Until the owner picks, they follow the session's last
@@ -59,9 +54,7 @@ export const useModelChoice = (choice: {
 
 export type ModelChoice = ReturnType<typeof useModelChoice>;
 
-const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-
-/** The model and its effort in a few words, as the chip on a phone shows them. */
+/** The model and its effort in a few words, as the Reply box shows them, quietly (#251). */
 export const choiceSummary = ({ model, effort }: ModelChoice) =>
   model === undefined
     ? "No models available"
@@ -72,60 +65,3 @@ export const choiceSummary = ({ model, effort }: ModelChoice) =>
 /** The model alone, as the Handheld frame's Model button shows it (#193). */
 export const modelName = ({ model }: ModelChoice) =>
   model === undefined ? "No models" : model.name;
-
-/**
- * The model picker, and beside it the effort picker for a model that takes levels of effort:
- * "Default effort" first, then each level.
- */
-export function ModelPickers(props: {
-  models: readonly OfferedModel[];
-  choice: ModelChoice;
-  look: "pill" | "field";
-  /** Only from tablet width up, where there's room beside the message box. */
-  wideOnly?: boolean;
-}) {
-  const { choice, look } = props;
-  const { model } = choice;
-  const wideOnly = props.wideOnly === true;
-  // A kept model whose provider is unavailable is listed too, so the picker still shows it.
-  const models = choice.unavailable && model ? [model, ...props.models] : props.models;
-  return (
-    <>
-      <Select
-        label="Model"
-        look={look}
-        wideOnly={wideOnly}
-        value={model ? modelKey(model.ref) : ""}
-        options={
-          models.length === 0
-            ? [{ value: "", label: "No models available" }]
-            : models.map((m) => ({
-                value: modelKey(m.ref),
-                label: m.limit ? `${m.label} · ${limitLabel(m.limit)}` : m.label,
-              }))
-        }
-        onChange={choice.pickModel}
-        {...(model?.limit ? { warning: capitalised(limitLabel(model.limit)) } : {})}
-      />
-      {model && model.efforts.length > 0 && (
-        <Select
-          label="Effort"
-          look={look}
-          wideOnly={wideOnly}
-          value={choice.effort ?? DEFAULT}
-          options={[
-            { value: DEFAULT, label: effortLabel(model, undefined) },
-            ...model.efforts.map((level) => ({
-              value: level.id,
-              label: effortLabel(model, level.id),
-            })),
-          ]}
-          onChange={(value) => {
-            const level = Effort.safeParse(value);
-            choice.pickEffort(level.success ? level.data : undefined);
-          }}
-        />
-      )}
-    </>
-  );
-}

@@ -175,7 +175,7 @@ const ICON_SIZES = {
     "size-9 md:size-7 [&_svg:not([class*='size-'])]:size-[17px] md:[&_svg:not([class*='size-'])]:size-[15px]",
   /** Inside a small pill, without making it taller (a skill's tag in the message box). */
   inline: "-my-1 size-[18px] [&_svg:not([class*='size-'])]:size-3.5",
-  /** A thumb's size: under the words in the Reply box while the Talk key listens (#206). */
+  /** A thumb's size: the Reply box's buttons (#206, #251). */
   thumb: "size-11 [&_svg:not([class*='size-'])]:size-4",
 } as const;
 
@@ -189,7 +189,7 @@ const ICON_LOOKS = {
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */
   inPill: "text-current hover:bg-primary/10",
-  /** On a quiet disc among the message box's pills (the paperclip). */
+  /** On a quiet disc (a quick question's action). */
   disc: "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
   /** A dark badge ringed in the box's colour, on the corner of a thumbnail (Remove). */
   badge: "border-2 border-field bg-foreground text-background",

@@ -302,7 +302,7 @@ const everywhere = (screen: Screen) => {
     await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
     await expect(recent).toBeHidden();
     await expect(message(page)).toBeFocused();
-    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Talk into the box" })).toBeVisible();
 
     // From the workspace's own page, too: on the cover screen, with the box closed by then.
     await page.getByRole("heading", { level: 1 }).click();
@@ -325,7 +325,7 @@ const everywhere = (screen: Screen) => {
     await expect(settings.getByRole("button", { name: "Log out" })).toBeVisible();
   });
 
-  test("Skills, Photo (on a tablet, Add) and Model open their pickers", async ({ page }) => {
+  test("Skills and Model open their pickers", async ({ page }) => {
     await page.goto("/workspaces/garage-gym");
 
     await page.getByRole("button", { name: "Skills" }).click();
@@ -363,15 +363,16 @@ const everywhere = (screen: Screen) => {
     ).toBeChecked();
     await page.keyboard.press("Escape");
 
-    // A photo or a file: on a tablet, Add.
+    // A photo or a file: the Reply box's + (#251), not the frame's.
+    await expect(page.getByRole("button", { name: "Add", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Photo", exact: true })).toHaveCount(0);
+    await typeIn(page, screen);
     const chooser = page.waitForEvent("filechooser");
-    await page
-      .getByRole("button", { name: screen === "cover" ? "Photo" : "Add", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Add a photo or file" }).click();
     expect((await chooser).isMultiple()).toBe(true);
   });
 
-  test("the message box is only the message and Send: skills, photos and the model come from the frame's buttons", async ({
+  test("the Reply box is +, the words and the mic, which becomes Send: skills and the model come from the frame's buttons", async ({
     page,
   }) => {
     // A workspace's box, which starts a session, and a session's.
@@ -383,14 +384,43 @@ const everywhere = (screen: Screen) => {
       await typeIn(page, screen);
       await expect(message(page)).toBeFocused();
       const box = page.locator("form", { has: message(page) });
-      await expect(box.getByRole("button")).toHaveText([button]);
+      const buttons = () =>
+        box.getByRole("button").evaluateAll((all) => all.map((b) => b.ariaLabel));
+      expect(await buttons()).toEqual(["Add a photo or file", "Talk into the box"]);
       await expect(box.getByRole("combobox")).toHaveCount(0);
-
-      // A `/` is only a slash: no list of skills opens in the box.
-      await message(page).fill("/");
-      await expect(page.getByRole("listbox")).toHaveCount(0);
+      await message(page).fill("Where should the rack go?");
+      expect(await buttons()).toEqual(["Add a photo or file", button]);
       await message(page).fill("");
     }
+  });
+
+  test("a / in the empty box opens the Skills sheet, narrowing as the owner types, and Enter picks", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await typeIn(page, screen);
+    await page.keyboard.type("/");
+    const skills = page.getByRole("dialog", { name: "Skills" });
+    await expect(skills).toBeVisible();
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await page.keyboard.type("gril");
+    await expect(message(page)).toHaveValue("/gril");
+    await expect(skills.getByRole("list", { name: "Skills" }).getByRole("button")).toHaveText([
+      /^Grilling/,
+    ]);
+    await page.keyboard.press("Enter");
+    await expect(skills).toBeHidden();
+    await expect(page.getByText("Skill: Grilling")).toBeVisible();
+    await expect(message(page)).toHaveValue("");
+    await expect(message(page)).toBeFocused();
+
+    // Back past the `/`, it's the box again, with the sheet gone.
+    await page.keyboard.type("/");
+    await expect(skills).toBeVisible();
+    await page.keyboard.press("Backspace");
+    await expect(skills).toBeHidden();
+    await expect(message(page)).toHaveValue("");
+    await expect(message(page)).toBeFocused();
   });
 
   test("with as many models as the providers offer, Model lists each by its full name, by provider", async ({
@@ -592,20 +622,18 @@ test.describe("unfolded", () => {
     }
   });
 
-  test("the right rail is labelled buttons, Model, Skills, Add and a quieter Settings, with the Talk key in the bottom-right corner and no Type", async ({
+  test("the right rail is labelled buttons, Model, Skills and a quieter Settings, with the Talk key in the bottom-right corner and no Type", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
     const content = await besideTheRails(page);
     const model = page.getByRole("button", { name: /^Model: / });
     const skills = page.getByRole("button", { name: "Skills" });
-    const add = page.getByRole("button", { name: "Add" });
     const settings = page.getByRole("button", { name: "Settings" });
-    const rail = [model, skills, add, settings];
+    const rail = [model, skills, settings];
     // Each says what it is; Model with the model's mark before it.
     await expect(model).toContainText(/Model$/);
     await expect(skills).toHaveText("Skills");
-    await expect(add).toHaveText("Add");
     await expect(settings).toHaveText("Settings");
 
     // Top down in that order, beside the page, in the top half, each a thumb's size.
@@ -826,7 +854,7 @@ test.describe("unfolded", () => {
 test.describe("on the cover screen", () => {
   test.use({ viewport: COVER });
 
-  test("workspaces are tiles across the top, and Skills, Photo and Model sit above Type and the talk strip", async ({
+  test("workspaces are tiles across the top, and Skills and Model sit above Type and the talk strip", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");

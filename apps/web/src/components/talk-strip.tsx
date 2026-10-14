@@ -52,8 +52,8 @@ function useTalk(props: {
   says: Says;
   where: string;
   cancelKey?: RefObject<HTMLButtonElement | null>;
-  /** The box shows its own ✕, ■ and ↑ while it listens, there being no Cancel beside the button. */
-  controlsInBox?: boolean;
+  /** Where a tap from elsewhere goes: the Reply box's mic (#251). */
+  talker: RefObject<(() => void) | undefined>;
   /**
    * Hold Space (outside a field) or the mouse's side button to talk, anywhere on the page;
    * letting go sends what was said, and Escape drops it (#197).
@@ -111,7 +111,6 @@ function useTalk(props: {
     // Sent from the box while it listens, listening stops, and what was said has gone with it; or
     // the box's own ■ or ✕ stops it, keeping what was said or dropping it.
     const into: Dictation = box.dictate({
-      controls: props.controlsInBox === true,
       stop: (how) => {
         if (dictation.current !== into) return;
         if (how === "keep") feel("doubleTick");
@@ -218,9 +217,29 @@ function useTalk(props: {
     else stop("keep");
   };
 
-  // Hold Space or the mouse's side button: the latest of what's here, for listeners added once.
-  const latest = useRef({ begin, stop, idle: talk.kind === "idle", hasBox: box !== undefined });
-  latest.current = { begin, stop, idle: talk.kind === "idle", hasBox: box !== undefined };
+  /** A tap from the Reply box's mic (#251): as a tap on the key, listening hands-free or stopping. */
+  const tap = () => {
+    if (!canListen()) return props.type();
+    if (talk.kind === "idle") {
+      feel("thump");
+      begin();
+    } else {
+      feel("doubleTick");
+      stop("keep");
+    }
+  };
+
+  // Hold Space or the mouse's side button, and the box's mic: the latest of what's here, for
+  // listeners added once.
+  const latest = useRef({ begin, stop, tap, idle: talk.kind === "idle", hasBox });
+  latest.current = { begin, stop, tap, idle: talk.kind === "idle", hasBox };
+  const { talker } = props;
+  useEffect(() => {
+    talker.current = () => latest.current.tap();
+    return () => {
+      talker.current = undefined;
+    };
+  }, [talker]);
   useEffect(() => {
     if (props.holdKeys !== true) return;
     let holding: "key" | "mouse" | undefined;
@@ -381,6 +400,7 @@ export function TalkBar(props: {
   box: TalkTarget | undefined;
   /** Opens the box, or the field, with the keyboard in it. */
   type: () => void;
+  talker: RefObject<(() => void) | undefined>;
 }) {
   const cancelKey = useRef<HTMLButtonElement>(null);
   const talk = useTalk({ ...props, says: STRIP_SAYS, cancelKey, holdKeys: true });
@@ -480,15 +500,19 @@ const KEY_SAYS: Says = {
 /**
  * A tablet's Talk key, at the foot of the right rail (#206, the agreed tablet boards): a tall
  * black key with a lilac mic tile, its name and what it does, a line of light and a soft glow.
- * Talking is `useTalk`'s, as the cover screen's strip has it; there's no Cancel beside it, so
- * while it listens the Reply box shows its own ✕, ■ and ↑ under the words (or Escape drops them).
+ * Talking is `useTalk`'s, as the cover screen's strip has it; while it listens the Reply box
+ * shows its ✕, ■ and ↑ (or Escape drops what was said).
  * While it listens it lights up and its tile shows sound bars; while an answer comes it goes
  * quiet, and what's said queues.
  */
-export function TalkKey(props: { box: TalkTarget | undefined; type: () => void }) {
+export function TalkKey(props: {
+  box: TalkTarget | undefined;
+  type: () => void;
+  talker: RefObject<(() => void) | undefined>;
+}) {
   // With a mouse, there's a keyboard: Space is the way to talk, and the key says so (#197).
   const where = useFinePointer() ? "Hold Space" : "Hold to speak";
-  const talk = useTalk({ ...props, says: KEY_SAYS, where, controlsInBox: true, holdKeys: true });
+  const talk = useTalk({ ...props, says: KEY_SAYS, where, holdKeys: true });
   const { listening, showing } = talk;
   const quiet = showing === "answering";
 

@@ -1,10 +1,11 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { Camera, LogOut, Plus, Settings, Sparkle } from "lucide-react";
+import { LogOut, Plus, Settings, Sparkle } from "lucide-react";
 import {
   type ComponentProps,
   type ReactNode,
   type Ref,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -36,7 +37,7 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
 /**
  * The Handheld frame (#193, Paper boards Handheld · 00, 03, 10, 11), in place of the sidebar on a
  * touch screen. On a tablet or the unfolded Fold (#206, the agreed tablet boards): workspace tiles
- * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, Add, and a
+ * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, and a
  * quieter Settings) with the Talk key in the bottom corner; the page's message box, the Reply box,
  * is always there at the foot of the page between them. On a phone or the folded Fold: tiles
  * across the top, and the buttons in a row above Type and the talk strip, Type opening the
@@ -55,6 +56,8 @@ export default function HandheldFrame(props: {
   field: TalkTarget | undefined;
   boxOpen: boolean;
   setBoxOpen: (open: boolean) => void;
+  /** Where the Talk key or strip puts its tap, for the box's mic (#251). */
+  talker: RefObject<(() => void) | undefined>;
 }) {
   const { layout, box, boxOpen, setBoxOpen } = props;
   const tablet = layout === "tablet";
@@ -240,18 +243,6 @@ export default function HandheldFrame(props: {
       <Sparkle aria-hidden strokeWidth={1.6} />
     </QuickAction>
   );
-  // A photo or a file: on a tablet, Add.
-  const add = (
-    <QuickAction
-      look={tablet ? "rail" : "row"}
-      label={tablet ? "Add" : "Photo"}
-      lit={false}
-      disabled={box === undefined}
-      onClick={() => box?.pickPhotos()}
-    >
-      {tablet ? <Plus aria-hidden strokeWidth={1.8} /> : <Camera aria-hidden strokeWidth={1.6} />}
-    </QuickAction>
-  );
   const model = (
     <QuickAction
       look={tablet ? "rail" : "row"}
@@ -309,10 +300,9 @@ export default function HandheldFrame(props: {
             >
               {model}
               {skills}
-              {add}
               {settings}
               <div className="flex-1" />
-              <TalkKey box={talkTo} type={type} />
+              <TalkKey box={talkTo} type={type} talker={props.talker} />
             </div>
           </>
         ) : (
@@ -344,7 +334,6 @@ export default function HandheldFrame(props: {
             >
               <div className="flex gap-2">
                 {skills}
-                {add}
                 {model}
               </div>
               <div className="flex h-16 gap-2">
@@ -352,6 +341,7 @@ export default function HandheldFrame(props: {
                   where={here?.name ?? (pathname === "/" ? "Home" : "Courtyard")}
                   box={talkTo}
                   type={type}
+                  talker={props.talker}
                 />
               </div>
             </div>
@@ -491,7 +481,7 @@ function HeldTile(props: { workspace: WorkspaceSummary; held: Held }) {
 }
 
 /**
- * Skills, Add (Photo) or Model: a labelled button on a tablet's right rail, or a button in the row
+ * Skills or Model: a labelled button on a tablet's right rail, or a button in the row
  * above the bar on the cover screen. Model shows the model it sends with: on the rail, its mark.
  */
 function QuickAction({

@@ -33,8 +33,6 @@ export function Select<T extends string>(props: {
   value: T;
   onChange: (value: T) => void;
   look: keyof typeof LOOKS;
-  /** Only from tablet width up: on a narrow screen something else offers the choice. */
-  wideOnly?: boolean;
   /** A warning about the choice, under a field (a model at its usage limit). */
   warning?: string;
   /**
@@ -51,7 +49,6 @@ export function Select<T extends string>(props: {
       className={classes(
         "relative min-w-0",
         props.look === "pill" ? "inline-flex max-w-56" : "flex",
-        props.wideOnly && "max-md:hidden",
         // The unseen picker's focus, shown on the words over it.
         shown !== undefined &&
           "rounded-full has-[select:focus-visible]:ring-3 has-[select:focus-visible]:ring-ring/50",

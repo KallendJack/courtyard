@@ -368,7 +368,6 @@ function Session(props: {
             placeholder={
               running ? "Queue a message…" : suggesting ? "Or type your own reply…" : "Reply…"
             }
-            compactOnNarrow
             {...(props.skills === undefined ? {} : { skills: props.skills })}
             send={send}
           />
