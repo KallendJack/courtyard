@@ -14,11 +14,14 @@ const BASE =
 const LOOKS = {
   /** The way out: Deny, Close PR. */
   quiet: "bg-muted font-bold text-foreground hover:bg-muted/70 disabled:opacity-50",
-  /** What the owner most likely wants: Allow, Merge. Greyed out, with a ring, until it can. */
-  main: "bg-foreground font-extrabold text-card hover:bg-foreground/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset",
+  /**
+   * What the owner most likely wants: Allow, Merge. Greyed out, with a ring, until it can; the
+   * same when it's `aria-disabled`, which still takes a tap, to say why it waits (#329).
+   */
+  main: "bg-foreground font-extrabold text-card hover:bg-foreground/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset aria-disabled:bg-surface aria-disabled:text-muted-foreground aria-disabled:ring-1 aria-disabled:ring-border aria-disabled:ring-inset",
   /** The one big action of a screen, in violet: Merge (#240). Greyed out the same way. */
   primary:
-    "bg-primary font-bold text-primary-foreground hover:bg-primary/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset",
+    "bg-primary font-bold text-primary-foreground hover:bg-primary/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset aria-disabled:bg-surface aria-disabled:text-muted-foreground aria-disabled:ring-1 aria-disabled:ring-border aria-disabled:ring-inset",
   /** In gold, as what needs the owner: Approve on a row of Needs you (#301). */
   needs: "bg-warning font-bold text-background hover:bg-warning/85 disabled:opacity-50",
 } as const;

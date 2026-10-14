@@ -18,3 +18,14 @@
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
   @tailwind utilities source(none);
 }
+
+/*
+ * Each part fills its place in the page; from a tablet up the middle is the room left between the
+ * pinned header and footer (`Page`'s fill), and the Home's blocks no taller (#335).
+ */
+[data-code-home] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}

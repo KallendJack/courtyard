@@ -139,6 +139,27 @@ describe("what the live copy runs, and whether main is newer", () => {
     });
   });
 
+  it("names a merge commit by the title of the pull request it merged (#335)", async () => {
+    await writeFile(join(pusher, "notes.md"), "Update button\n");
+    await git(
+      pusher,
+      "commit",
+      "-qa",
+      "-m",
+      "Merge pull request #35 from octo-owner/35-update-button",
+      "-m",
+      "Add the Update button",
+    );
+    await git(pusher, "push", "-q", "origin", "main");
+    const request = await workerFor();
+
+    const status = await statusOf(request);
+
+    expect(status).toMatchObject({
+      newest: { title: expect.stringMatching(/^[0-9a-f]{7} Add the Update button$/) },
+    });
+  });
+
   it("says when it's already on the newest main", async () => {
     const request = await workerFor();
 

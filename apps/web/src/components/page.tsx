@@ -22,6 +22,11 @@ export function Page(props: {
    * which lays them out by its own width: a column on a phone, two once there's room.
    */
   wide?: boolean;
+  /**
+   * From a tablet up, the middle is exactly the room left and its content no taller (#335): what's
+   * in it shares that height and scrolls inside its own cards (a code workspace's Home).
+   */
+  fill?: boolean;
 }) {
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const oneColumn = useLayout() === "cover";
@@ -45,6 +50,7 @@ export function Page(props: {
           className={classes(
             column,
             "grow",
+            props.fill && "md:min-h-0",
             props.header === undefined && "pt-6 md:pt-12",
             props.footer === undefined && "pb-10",
           )}

@@ -73,10 +73,11 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
  * cover screen): its connections line (#308), its tabs (Home · Sessions · PRs), and on Home, in a
- * fixed order, Needs you, Running, Next up, then the message box at the foot. Each block hides
- * when it's empty, so a new workspace shows only its name, its connections line and the box. Its
- * one line, What it's for, stays in its workspace.json for the home chat and turns, never on the
- * page (#333). Its knowledge lives in its repository, so it has no context file, Things or skills.
+ * fixed order, Needs you, Running, Next up, Main, then the message box at the foot. From a tablet
+ * up it's exactly the screen tall and never scrolls (#335): the blocks share the height left, each
+ * keeping its place, empty or not (#283), and scroll inside their cards. Its one line, What it's
+ * for, stays in its workspace.json for the home chat and turns, never on the page (#333). Its
+ * knowledge lives in its repository, so it has no context file, Things or skills.
  */
 export default function CodeHome(props: {
   /** The page's title and what goes with it, pinned above the line and the tabs. */
@@ -165,12 +166,6 @@ export default function CodeHome(props: {
   // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
   const showsTabs = tabs.length > 1 || open === undefined;
   const chosen = tabs.some((each) => each.hash === tab) ? tab : "";
-  const anyLeft =
-    needsPending ||
-    needs.length > 0 ||
-    setup.state === "opened" ||
-    list.sessions.some((session) => session.now.kind === "working");
-  const beside = layout !== "cover" && anyLeft && (nextUp === undefined || nextUp.length > 0);
 
   // Its own classes apply inside each part (code-home.css), but not to the page's title above.
   const header = (
@@ -242,46 +237,49 @@ export default function CodeHome(props: {
   );
 
   return (
-    <Page wide header={header} footer={footer}>
+    // From a tablet up the middle is exactly the room left and never scrolls (#335): the tabs'
+    // lists scroll inside it, and on Home the blocks share it, their rows scrolling in their cards.
+    <Page wide fill header={header} footer={footer}>
       <div data-code-home="">
         {chosen === "sessions" ? (
-          <div className="mt-4 flex flex-col gap-4">
+          <div className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
             <SessionLinks list={list} mode="code" />
           </div>
         ) : chosen === "prs" ? (
-          <div className="mt-4">
+          <div className="mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
             <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
           </div>
         ) : (
-          <div className="mt-4 flex flex-col gap-3">
-            <div className="flex flex-col items-stretch gap-3.5 md:flex-row md:items-start">
-              {anyLeft && (
-                <div className="flex min-w-0 grow basis-0 flex-col gap-3.5">
-                  <NeedsYou
-                    workspaceId={workspace.id}
-                    needs={needs}
-                    pending={needsPending}
-                    setup={setup}
-                    onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
-                    onChanged={changed}
-                  />
-                  <Running
-                    workspaceId={workspace.id}
-                    sessions={list.sessions}
-                    running={list.running}
-                  />
-                </div>
-              )}
+          // On Home the blocks share the height above Main, each keeping its place; one with more
+          // rows than fit scrolls inside its card (#335, #283).
+          <div className="mt-4 flex flex-col gap-3 md:min-h-0 md:flex-1">
+            <div className="flex flex-col items-stretch gap-3.5 md:min-h-0 md:flex-1 md:flex-row">
+              <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
+                <NeedsYou
+                  workspaceId={workspace.id}
+                  needs={needs}
+                  pending={needsPending}
+                  setup={setup}
+                  onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
+                  onChanged={changed}
+                />
+                <Running
+                  workspaceId={workspace.id}
+                  sessions={list.sessions}
+                  running={list.running}
+                />
+              </div>
               {providers.kind === "loaded" && (
                 <NextUp
                   workspaceId={workspace.id}
                   issues={nextUp}
                   providers={providers.data.providers}
-                  beside={beside}
                 />
               )}
             </div>
-            <MainRow workspaceId={workspace.id} />
+            <div className="shrink-0">
+              <MainRow workspaceId={workspace.id} />
+            </div>
           </div>
         )}
       </div>

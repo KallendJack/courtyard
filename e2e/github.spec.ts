@@ -650,6 +650,41 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // #329: a PR page no session opened loaded once, so Merge stayed greyed out after its checks
+  // passed, and tapping it said nothing.
+  test("a PR page no session opened follows its checks, and Merge says why it waits when tapped", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    await page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /The page follows its checks/ })
+      .getByRole("link", { name: /^Review/ })
+      .click();
+    const review = page.getByRole("region", { name: "Review" });
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      /^#\d+ The page follows its checks/,
+    );
+    await expect(review.getByText("Checks running", { exact: true })).toBeVisible();
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    await expect(merge).toBeDisabled();
+
+    // Tapped while it waits, it says why beside it, and merges nothing.
+    await merge.click({ force: true });
+    await expect(review.getByRole("status", { name: "Why Merge waits" })).toHaveText(
+      "Merge waits for e2e to finish.",
+    );
+
+    // The fake's checks pass while the page is open: it follows them with no reload.
+    await expect(review.getByText("Checks passed", { exact: true })).toBeVisible();
+    await expect(merge).toBeEnabled();
+    await expect(review.getByRole("status", { name: "Why Merge waits" })).toHaveCount(0);
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   // #319: a long branch ran under its checks and the Review button.
   test("a pull request's long branch is cut short, clear of its checks", async ({
     page,
@@ -934,8 +969,8 @@ const showsHome = async (page: Page) => {
   const ready = needsYou.getByRole("listitem", { name: /Builds take turns/ });
   await expect(ready).toContainText("Checks passed · ready to merge");
   await expect(ready.getByRole("button", { name: /^Merge/ })).toBeVisible();
-  // Nothing runs yet, so its block isn't there at all.
-  await expect(running).toHaveCount(0);
+  // Nothing runs yet: its block keeps its place with one quiet line (#283, #335).
+  await expect(running).toContainText("Nothing running");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
   // issues nobody claimed, with Build; the rest, in milestone order, under More.
@@ -979,6 +1014,25 @@ const showsHome = async (page: Page) => {
 const homeFitsOneScreen = async (page: Page) => {
   await expect.poll(async () => (await pageScroll(page)).scrolls).toBe(false);
 };
+
+/** Whether `box` is wholly on the screen, between its top and `bottom`. */
+const onScreen = async (box: ReturnType<Page["locator"]>, bottom: number) => {
+  const at = await box.boundingBox();
+  if (at === null) throw new Error("Not on the page");
+  return at.y >= 0 && at.y + at.height <= bottom + 0.5;
+};
+
+/** A block's rows that scroll inside its card (#335): how far they can, and scrolled to their end. */
+const rowsScroll = (block: ReturnType<Page["locator"]>) =>
+  block.evaluate((card) => {
+    const rows = [...card.querySelectorAll("*")].find(
+      (each) => getComputedStyle(each).overflowY === "auto" && each.querySelector("li") !== null,
+    );
+    if (rows === undefined) return { overflows: false };
+    const overflows = rows.scrollHeight > rows.clientHeight + 1;
+    rows.scrollTop = rows.scrollHeight;
+    return { overflows };
+  });
 
 /** Tapping Build on Next up's first issue keeps Start building and Cancel inside its card. */
 const buildButtonsFitTheirCard = async (page: Page) => {
@@ -1078,13 +1132,74 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await homeFitsOneScreen(page);
       await shot(page, "tablet-home");
 
+      // More opens the rest inside Next up's own card (#335): it keeps its height, its heading
+      // and the first issue with Build stay put, and More becomes Fewer.
       const { nextUp } = blocks(page);
+      const before = await nextUp.boundingBox();
       await nextUp.getByRole("button", { name: "More · 11" }).click();
       await expect(nextUp.getByRole("listitem")).toHaveText([
         /#251\s*One Reply box everywhere/,
         /#255\s*Paste images on the Fold/,
         ...Array.from({ length: 9 }, () => /A later idea/),
       ]);
+      expect((await rowsScroll(nextUp)).overflows).toBe(true);
+      expect(Math.round((await nextUp.boundingBox())?.height ?? 0)).toBe(
+        Math.round(before?.height ?? 0),
+      );
+      await expect(nextUp.getByRole("heading", { name: "Next up" })).toBeInViewport();
+      await expect(nextUp.getByRole("button", { name: "Build" })).toBeInViewport();
+      await homeFitsOneScreen(page);
+      await nextUp.getByRole("button", { name: "Fewer" }).click();
+      // Under Grill, the rest all wait for More (#363).
+      await expect(nextUp.getByRole("listitem")).toHaveCount(0);
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    // Reported from the Fold (#335): with seven rows in Needs you the page scrolled, the title and
+    // tabs went out of view and Main went under the message box.
+    test("with more in Needs you than fits, the page stays one screen and the rows scroll inside its card (#335)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
+        const response = await route.fetch();
+        const { pullRequests } = (await response.json()) as {
+          pullRequests: { pullRequest: { number: number; title?: string } }[];
+        };
+        const [ready] = pullRequests;
+        if (ready === undefined) throw new Error("No pull request to copy");
+        const more = Array.from({ length: 6 }, (_, at) => ({
+          ...ready,
+          pullRequest: { ...ready.pullRequest, number: 900 + at, title: `Ready ${at + 1}` },
+        }));
+        await route.fulfill({ response, json: { pullRequests: [...pullRequests, ...more] } });
+      });
+      await page.goto(HOME);
+      const { needsYou } = blocks(page);
+      await expect(needsYou.getByRole("listitem", { name: /Ready 6/ })).toHaveCount(1);
+      await homeFitsOneScreen(page);
+
+      // Everything round the blocks is on the screen, and Main ends above the message box.
+      const box = page.getByRole("textbox", { name: "Message" });
+      const boxTop = (await box.boundingBox())?.y ?? 0;
+      const height = page.viewportSize()?.height ?? 0;
+      expect(
+        await onScreen(page.getByRole("heading", { level: 1, name: "Workbench" }), height),
+      ).toBe(true);
+      expect(await onScreen(page.getByRole("navigation", { name: "Workspace tabs" }), height)).toBe(
+        true,
+      );
+      expect(await onScreen(page.getByRole("region", { name: "Main" }), boxTop)).toBe(true);
+      expect(await onScreen(box, height)).toBe(true);
+
+      // Needs you's rows scroll inside its card, under its heading, which stays put.
+      expect((await rowsScroll(needsYou)).overflows).toBe(true);
+      await expect(needsYou.getByRole("listitem", { name: /Ready 6/ })).toBeInViewport();
+      await expect(needsYou.getByRole("heading", { name: /Needs you/ })).toBeInViewport();
+      await homeFitsOneScreen(page);
+      await shot(page, "tablet-home-long-needs-you");
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1137,7 +1252,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await signIn(request);
       const asks = await request.post("/api/workspaces/workbench/sessions", {
         data: {
-          text: "run command: git merge origin/main (for: Bring #251 up to date)",
+          text: "run command: git merge main (for: Bring #251 up to date)",
           model: { provider: "fake", model: "echo" },
         },
       });
@@ -1153,7 +1268,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
 
       await page.goto(HOME);
       const { needsYou, running } = blocks(page);
-      const approval = needsYou.getByRole("listitem", { name: "Run git merge origin/main?" });
+      const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
       await expect(approval).toContainText("asked", { timeout: 45_000 });
       await expect(running.getByRole("listitem")).toContainText(/Activity lines/, {
         timeout: 45_000,
