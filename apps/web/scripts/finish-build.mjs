@@ -10,7 +10,8 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
-const BUDGET_KB = 143;
+// 150 while Zod leaves the first load (#393), then back down to what that leaves room for.
+const BUDGET_KB = 150;
 /** The route files the home page needs as well as the entry: the logged-in layout and the list. */
 const HOME_ROUTES = ["src/routes/_app.tsx", "src/routes/_app/index.tsx"];
 
