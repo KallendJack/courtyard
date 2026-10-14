@@ -100,9 +100,9 @@ for (const [screen, says] of Object.entries(SCREENS)) {
         "About the bench: Could the bench go sideways instead?",
       );
       if (says.strip) {
-        // Cancel beside the strip, so the box keeps its own buttons (the Talk key's has ✕, ■, ↑).
+        // Cancel beside the strip, and the box's own ✕, ■ and ↑, as everywhere (#251).
         await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Stop listening" })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Stop listening" })).toBeVisible();
         await expect(listening).toHaveAccessibleDescription(
           /Could the bench go sideways instead\?/,
         );
@@ -447,6 +447,52 @@ test.describe("the tablet's Talk key", () => {
     );
     await expect(key).toHaveText("TalkHold to speak");
     await expect.poll(() => micOn(page)).toBe(false);
+  });
+
+  test("the Reply box keeps its shape while it listens: its corner and width stay put, and it grows upward to six lines, then scrolls", async ({
+    page,
+  }) => {
+    await standInSpeechRecognition(page);
+    await page.goto("/workspaces/garage-gym");
+    const box = page.locator("form", { has: message(page) });
+    const before = await box.boundingBox();
+    if (!before) throw new Error("no box");
+
+    await page.getByRole("button", { name: "Talk", exact: true }).click();
+    await hear(page, "Can you show the garage");
+    await expect(box.getByRole("button", { name: "Stop listening" })).toBeVisible();
+    const talking = await box.boundingBox();
+    expect(talking).toEqual(before);
+
+    // Long dictation: the box grows upward, its foot where it was, to six lines and no more.
+    const line = 24;
+    await hear(page, words(80));
+    const grown = await box.boundingBox();
+    if (!grown) throw new Error("no box");
+    expect(grown.y + grown.height).toBeCloseTo(before.y + before.height, 0);
+    expect(grown.x).toBe(before.x);
+    expect(grown.width).toBe(before.width);
+    const textarea = await message(page).boundingBox();
+    expect(textarea?.height).toBe(6 * line);
+    expect(await message(page).evaluate((area) => area.scrollHeight > area.clientHeight)).toBe(
+      true,
+    );
+  });
+
+  test("the box's mic talks as a tap on the Talk key does, and becomes Send once there are words", async ({
+    page,
+  }) => {
+    await standInSpeechRecognition(page);
+    await page.goto("/workspaces/garage-gym");
+    const box = page.locator("form", { has: message(page) });
+    await box.getByRole("button", { name: "Talk into the box" }).click();
+    await expect(talking(page, /Tap to stop/)).toBeVisible();
+    await hear(page, "Where should the rack go?");
+    await box.getByRole("button", { name: "Stop listening" }).click();
+    await expect(message(page)).toHaveValue("Where should the rack go?");
+    await expect(box.getByRole("button", { name: "Talk into the box" })).toHaveCount(0);
+    await box.getByRole("button", { name: "Start" }).click();
+    await expect(session(page)).toContainText("You said: Where should the rack go?");
   });
 
   test("where the browser can't listen, the Talk key puts the keyboard in the box", async ({

@@ -580,19 +580,21 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   Settings) with the Talk key in the bottom corner; on the folded one, tiles across the top and a bottom bar with
   Type and the talk strip. The page's message box (`sessions/composer.tsx`) offers itself to the frame through
   `handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
-  the folded Fold. It opens its pickers from the frame's Skills, Photo (Add) and Model buttons. The talk strip and
+  the folded Fold. It is the Reply box (#251), the same on every screen: + for a photo or file, a mic that talks as the Talk key does
+  (the dock's `talk`) and becomes Send, and the model and effort as quiet text; it opens its Skills and Model sheets
+  from the frame's buttons, or Skills from a `/` in the empty box. The talk strip and
   the Talk key (`talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
   browser's own speech recognition (`speech.ts`, which also vibrates for it) and put the words in the box as they are
   heard (#198), for the owner to send, or to queue while a turn runs. Holding Space (outside a field) or the
   mouse's side button talks too, and letting go sends (#197), and a letter typed outside a field goes into the box; on a page without a message box,
-into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). For the Talk key, the box shows ✕, ■ and ↑
-  under the words while it listens (`listening-row.tsx`, loaded once it's docked). While the owner talks or an answer
+into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). While it listens, the box shows ✕, ■ and ↑
+  in place of + and the mic, keeping its shape. While the owner talks or an answer
   comes, the screen is kept awake (`wake-lock.ts`) where the browser can;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
   round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
-  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes, and
-  the listening row's, are in `handheld-frame.css`. A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, the
+  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes are in
+  `handheld-frame.css`. A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
   in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`

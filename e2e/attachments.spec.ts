@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { pdfOf, pngOf } from "../apps/worker/src/test-files.ts";
+import { openBox } from "./frame.ts";
 
 // Photos and PDFs in a message (#78). The fake says what it was given when a message says
 // "please look".
@@ -18,14 +19,14 @@ const MANUAL: FileToAttach = {
   buffer: Buffer.from(pdfOf(["Titan T-3 J-hooks", "The cup is 64 mm across."])),
 };
 
-/**
- * Attaches files with the frame's Add (Photo on the cover screen, #197), through the file picker it
- * opens.
- */
+/** The Reply box's +, which opens the file picker (#251). */
+const plus = (page: Page) => page.getByRole("button", { name: "Add a photo or file" });
+
+/** Attaches files with the Reply box's + (#251), through the file picker it opens. */
 const attach = async (page: Page, files: readonly FileToAttach[]) => {
+  await openBox(page);
   const chooser = page.waitForEvent("filechooser");
-  const cover = (page.viewportSize()?.width ?? 1280) < 600;
-  await page.getByRole("button", { name: cover ? "Photo" : "Add", exact: true }).click();
+  await plus(page).click();
   await (await chooser).setFiles([...files]);
 };
 
@@ -194,15 +195,9 @@ for (const screen of [
     test.use({ viewport: screen.viewport, hasTouch: true, isMobile: true });
 
     test("a finger swiped across a photo shows the next one, and back", async ({ page }) => {
-      // A touch screen has the Handheld frame: photos from its Photo button (Add, on a tablet),
-      // the box from Type on a phone, and always there on a tablet.
+      // Photos from the Reply box's + (#251): the box from Type on a phone, always there on a tablet.
       await page.goto("/workspaces/garage-gym");
-      const chooser = page.waitForEvent("filechooser");
-      await page
-        .getByRole("button", { name: screen.tablet ? "Add" : "Photo", exact: true })
-        .click();
-      await (await chooser).setFiles([photo("garage.png"), photo("hooks.png")]);
-      if (!screen.tablet) await page.getByRole("button", { name: "Type" }).click();
+      await attach(page, [photo("garage.png"), photo("hooks.png")]);
       await page.getByLabel("Message", { exact: true }).fill("please look");
       await page.getByRole("button", { name: "Start" }).click();
       const session = page.getByRole("list", { name: "Session" });
@@ -268,26 +263,27 @@ test("a photo goes with no words, from a workspace's box and a session's, picked
   await expect(tray(page)).toBeHidden();
 });
 
-test("with no words and nothing attached, Start sends nothing", async ({ page }) => {
+test("with no words and nothing attached, there's no Start and Enter sends nothing", async ({
+  page,
+}) => {
   await page.goto("/workspaces/garage-gym");
-  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
+  await page.getByLabel("Message", { exact: true }).press("Enter");
   await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 // The Fold opened out, with its docked Reply box (#206), and folded, on its cover screen.
 for (const screen of [
-  { name: "the unfolded Fold", viewport: { width: 950, height: 712 }, add: "Add" },
-  { name: "the Fold's cover screen", viewport: { width: 400, height: 900 }, add: "Photo" },
+  { name: "the unfolded Fold", viewport: { width: 950, height: 712 } },
+  { name: "the Fold's cover screen", viewport: { width: 400, height: 900 } },
 ])
   test.describe(`on ${screen.name}`, () => {
     test.use({ viewport: screen.viewport, hasTouch: true, isMobile: true });
 
-    test("a photo, then a PDF, goes with no words from the frame's button", async ({ page }) => {
+    test("a photo, then a PDF, goes with no words from the box's +", async ({ page }) => {
       const pick = async (files: readonly FileToAttach[]) => {
-        const chooser = page.waitForEvent("filechooser");
-        await page.getByRole("button", { name: screen.add, exact: true }).click();
-        await (await chooser).setFiles([...files]);
+        await attach(page, files);
         await expect(tray(page)).toBeVisible();
       };
       await page.goto("/workspaces/garage-gym");

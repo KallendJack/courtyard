@@ -45,7 +45,7 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   await expect(signedIn).toContainText("Connected");
 
   await page.goto("/workspaces/side-project");
-  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
   await expect(notConnected).toBeHidden();
 
   await page.goto("/settings");
@@ -254,6 +254,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
   await expect(strip).toContainText("merged");
   await expect(page.getByText("Its pull request was merged")).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.getByLabel("Message", { exact: true }).fill("One more thing");
   await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
 
   await request.post("/api/github/sign-out", { data: {} });
@@ -311,7 +312,7 @@ test("the setup check offers what the repository is missing of Matt's setup, and
   const done = page.getByRole("region", { name: "Matt's setup" });
   await expect(done.getByRole("link", { name: /^pull request #\d+$/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
   await expect(card).toHaveCount(0);
 
   await request.post("/api/github/sign-out", { data: {} });

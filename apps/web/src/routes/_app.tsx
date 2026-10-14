@@ -1,6 +1,6 @@
 import { WorkspaceList } from "@courtyard/contract";
 import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import {
   type Dock,
   DockContext,
@@ -66,10 +66,15 @@ function LoggedIn() {
   }, []);
   const open = useCallback(() => setBoxOpen(true), []);
   const close = useCallback(() => setBoxOpen(false), []);
+  /** The frame's Talk, for the box's mic: set by the Talk key or strip once the frame is there. */
+  const talker = useRef<() => void>(undefined);
+  const talk = useCallback(() => talker.current?.(), []);
   const dock = useMemo<Dock | undefined>(
     () =>
-      dockElement === null ? undefined : { element: dockElement, offer, offerField, open, close },
-    [dockElement, offer, offerField, open, close],
+      dockElement === null
+        ? undefined
+        : { element: dockElement, offer, offerField, open, close, talk },
+    [dockElement, offer, offerField, open, close, talk],
   );
 
   return (
@@ -89,6 +94,7 @@ function LoggedIn() {
               field={field}
               boxOpen={boxOpen}
               setBoxOpen={setBoxOpen}
+              talker={talker}
             />
           </Suspense>
           {/* The page fills this panel and scrolls its own middle, never the window (#266, #339). */}

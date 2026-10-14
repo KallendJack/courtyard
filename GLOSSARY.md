@@ -272,8 +272,8 @@ workspace's project, the owner's for every workspace (Yours, everywhere), Matt P
 _Avoid_: prompt, plugin, command, agent
 
 **Skill picker**:
-The list of a workspace's skills that opens from the message box (a `/` at its start, or the Skill pill), or as a
-sheet on a phone. A picked skill sits in the box as a tag and goes with the message. Of Matt Pocock's skills it lists
+The Skills sheet: a workspace's skills, opened from the frame's Skills or a `/` in the empty Reply box, which
+narrows it as the owner types. A picked skill sits in the box as a tag and goes with the message. Of Matt Pocock's skills it lists
 only those the owner starts.
 _Avoid_: slash command, skill menu
 

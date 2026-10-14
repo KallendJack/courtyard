@@ -8,34 +8,19 @@ import {
   type SkillName,
   type SkillSummary,
 } from "@courtyard/contract";
-import { ArrowUp, Book, Camera, Paperclip, Square } from "lucide-react";
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  lazy,
-  memo,
-  type RefObject,
-  Suspense,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { ArrowUp, Mic, Paperclip, Plus, Square, X } from "lucide-react";
+import { type FormEvent, lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button, IconButton } from "@/components/button";
-import { Chip } from "@/components/chip";
 import { FormError } from "@/components/form-error";
 import { type Listener, useDock, useLayout } from "@/components/handheld";
-import { Sheet } from "@/components/sheet";
-import { inPicker, SkillChoices, usable } from "@/components/skill-list";
-import { matchingSkills, SkillMenu, skillOptionId } from "@/components/skill-menu";
+import { inPicker, matchingSkills } from "@/components/skill-list";
 import { SkillTag } from "@/components/skill-tag";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
-import { choiceSummary, ModelPickers, modelName, useModelChoice } from "./model-pickers.tsx";
+import { choiceSummary, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
 /**
@@ -48,60 +33,13 @@ const FOOT_GAP = "h-4 shrink-0";
  * `[data-dock="tablet"]`: its padding above and below, and the box's least height between), and
  * the foot's gap, so the swap moves nothing (#283).
  */
-const DOCK_ROOM = "h-[calc(--spacing(24.5)+env(safe-area-inset-bottom))] shrink-0";
+const DOCK_ROOM = "h-[calc(--spacing(25)+env(safe-area-inset-bottom))] shrink-0";
 
-/** The Handheld frame's Skills and Model sheets (#194), loaded only when the box is docked in it. */
+/** The Handheld frame's Skills and Model sheets (#194), loaded with the box. */
 const HandheldChoices = lazy(() => import("./handheld-choices.tsx"));
-/** ✕, ■ and ↑ under the words while the Talk key listens (#206), loaded the same way. */
-const ListeningRow = lazy(() => import("@/components/listening-row.tsx"));
 
-/** The tallest the skill list grows, and the least room above the box it opens into. */
-const LIST_HEIGHT = 448;
-const LIST_ROOM_ABOVE = 240;
-
-/** The paperclip's and the camera's names (#78), and what the paperclip says once the tray is full. */
-const ATTACH_LABEL = "Attach photos or PDFs";
-const CAMERA_LABEL = "Take a photo";
+/** What + says once the tray is full. */
 const FULL_HINT = `${ATTACHMENTS.perMessage} is the most a message takes`;
-
-/**
- * The paperclip and, on a phone, the camera (#78): plain in a session's one-row box on a phone, or
- * as discs in the box's toolbar. Each opens its hidden file input.
- */
-function AttachButtons(props: {
-  look: "plain" | "disc";
-  /** Whether the camera shows here; it's only ever on a phone. */
-  camera: boolean;
-  /** The tray is full, so neither can add another. */
-  full: boolean;
-  picker: RefObject<HTMLInputElement | null>;
-  cameraInput: RefObject<HTMLInputElement | null>;
-}) {
-  const disc = props.look === "disc" ? ({ size: "action", look: "disc" } as const) : {};
-  return (
-    <>
-      <IconButton
-        label={ATTACH_LABEL}
-        icon={<Paperclip />}
-        {...disc}
-        disabled={props.full}
-        {...(props.full ? { hint: FULL_HINT } : {})}
-        onClick={() => props.picker.current?.click()}
-      />
-      {props.camera && (
-        <span className="contents md:hidden">
-          <IconButton
-            label={CAMERA_LABEL}
-            icon={<Camera />}
-            {...disc}
-            disabled={props.full}
-            onClick={() => props.cameraInput.current?.click()}
-          />
-        </span>
-      )}
-    </>
-  );
-}
 
 /**
  * Whether a paste is files to attach rather than text (#78). A screenshot comes with no text, and a
@@ -118,17 +56,22 @@ const pastesFiles = (clipboard: DataTransfer) => {
   return words.trim() === "";
 };
 
-/** A `/` at the start of the box, and what's typed after it: what opens and narrows the skill list. */
+/** A `/` at the start of the box, and what's typed after it: what narrows the Skills sheet. */
 const SLASH = /^\/(\S*)$/;
 
 /**
- * A message box with model and effort pickers, and a skill picker when the workspace has skills
- * (ADR 0016). `send` returns an error to show, or nothing on success. Memoised: it doesn't
- * re-render while an answer streams in above it.
+ * The Reply box (#251, Paper board "Component · Reply box keeps one shape"), the same on every
+ * screen, docked in the Handheld frame: one rounded box that only grows upward with the words, to
+ * six lines, then scrolls. + on the left adds a photo or a file; on the right the mic talks, and
+ * becomes Send once there's something to send. The model and effort show as quiet text between;
+ * they change on the rail's Model, and a skill comes from the rail's Skills or a `/` in the box.
+ * While the Talk key listens, ✕ takes the +'s place and ■ and ↑ the mic's, with a thin line
+ * under the words; while it answers, Stop. `send` returns an error to show, or nothing on success.
+ * Memoised: it doesn't re-render while an answer streams in above it.
  */
 export const Composer = memo(function Composer(props: {
   providers: ProviderList["providers"];
-  /** The session's last model and effort, which the pickers follow until the owner picks. */
+  /** The session's last model and effort, which the box follows until the owner picks. */
   initialModel?: ModelRef;
   initialEffort?: Effort;
   disabled?: boolean;
@@ -137,11 +80,6 @@ export const Composer = memo(function Composer(props: {
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
   submitLabel?: string;
-  /**
-   * One line with a round button on a narrow screen (a session, where the model carries on), the
-   * model and effort in a chip above it that opens a sheet.
-   */
-  compactOnNarrow?: boolean;
   /** The workspace's skills, to start one with the message, and the workspace's name. */
   skills?: { readonly workspaceName: string; readonly list: readonly SkillSummary[] };
   /** Sends the message with the files attached to it (#78). */
@@ -157,41 +95,23 @@ export const Composer = memo(function Composer(props: {
   const [choosing, setChoosing] = useState<"model" | "skill">();
   const [text, setText] = useState("");
   const [skill, setSkill] = useState<SkillName>();
-  /** The skill list, opened with the Skill pill rather than a `/`. */
-  const [listOpen, setListOpen] = useState(false);
-  /** The `/…` text the owner closed the list on with Escape, so it stays closed until they type. */
-  const [dismissed, setDismissed] = useState<string>();
-  const [active, setActive] = useState<SkillName>();
   const box = useRef<HTMLTextAreaElement>(null);
-  const form = useRef<HTMLFormElement>(null);
-  const [place, setPlace] = useState<{ side: "above" | "below"; maxHeight: number }>({
-    side: "above",
-    maxHeight: LIST_HEIGHT,
-  });
-  const menuId = useId();
   const send = useAction(props.send);
   const [attaching, setAttaching] = useState<readonly Attaching[]>([]);
   /** Photos still being shrunk, so Send waits for them. */
   const [preparing, setPreparing] = useState(0);
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
-  const camera = useRef<HTMLInputElement>(null);
   const full = attaching.length >= ATTACHMENTS.perMessage;
-  /** On a touch screen, the Handheld frame's place for the box above its bottom bar (#193). */
+  /** The Handheld frame's place for the box (#193), on every screen (#197). */
   const dock = useDock();
-  const docked = dock !== undefined;
-  /**
-   * On a touch screen the box waits for the frame's dock (#359): shown in the page first, it would
-   * move into the dock as the frame arrives, and the keyboard would lose it mid-word.
-   */
   const layout = useLayout();
-  const awaitingDock = !docked;
-  // What the owner says in the talk strip goes in after what's typed when listening starts (#198).
+  // What the owner says goes in after what's typed when listening starts (#198).
   const textNow = useRef(text);
   textNow.current = text;
   /** What's listening for the box, told once it sends so it stops, or stopped from the box. */
   const dictating = useRef<Listener>(undefined);
-  /** The Talk key listens: the box shows its ✕, ■ and ↑ under the words (#206). */
+  /** The Talk key or the mic listens: the box shows ✕, ■ and ↑ (#206). */
   const [listening, setListening] = useState(false);
 
   // The tray's thumbnails go with the box.
@@ -207,7 +127,7 @@ export const Composer = memo(function Composer(props: {
       const { ready, problems } = await prepareFiles(files, attachingNow.current.length);
       setAttaching((was) => [...was, ...ready]);
       send.setError(problems.length === 0 ? undefined : problems.join(" "));
-      // In the Handheld frame, the box opens to show what's attached (or why it can't be).
+      // On the cover screen, the box opens to show what's attached (or why it can't be).
       dock?.open();
     } finally {
       setPreparing((count) => count - 1);
@@ -217,7 +137,7 @@ export const Composer = memo(function Composer(props: {
     releasePreviews([gone]);
     setAttaching((was) => was.filter((each) => each.key !== gone.key));
   };
-  /** Files from a picker, which is emptied so the same file can be picked again. */
+  /** Files from the picker, which is emptied so the same file can be picked again. */
   const picked = (input: HTMLInputElement) => {
     const files = [...(input.files ?? [])];
     input.value = "";
@@ -226,39 +146,65 @@ export const Composer = memo(function Composer(props: {
 
   const skills = props.skills;
   const pickerSkills = skills?.list.filter(inPicker) ?? [];
-  const slash = SLASH.exec(text)?.[1];
-  // Docked in the Handheld frame, skills come only from its Skills sheet (#201).
-  const menuOpen =
-    !docked && skills !== undefined && (listOpen || (slash !== undefined && dismissed !== text));
-  const shown = menuOpen ? matchingSkills(pickerSkills, slash ?? "") : [];
-  const pickable = shown.filter(usable);
-  const highlighted = pickable.find((s) => s.name === active) ?? pickable[0];
+  /** Opened by a `/`, the Skills sheet narrows to what's typed after it. */
+  const slash = choosing === "skill" ? SLASH.exec(text)?.[1] : undefined;
 
-  // The list floats above the box, as on a session page, or below it when the box is near the
-  // top (a workspace page), sized to the room there is.
-  useLayoutEffect(() => {
-    const rect = form.current?.getBoundingClientRect();
-    if (!menuOpen || rect === undefined) return;
-    const above = rect.top - 16;
-    const below = window.innerHeight - rect.bottom - 16;
-    const side = above >= LIST_ROOM_ABOVE || above >= below ? "above" : "below";
-    setPlace({ side, maxHeight: Math.min(LIST_HEIGHT, side === "above" ? above : below) });
-  }, [menuOpen]);
-
-  const closeList = () => {
-    setListOpen(false);
-    setActive(undefined);
-  };
   const pick = (name: SkillName) => {
     setSkill(name);
-    // The `/…` that opened the list was only for finding it.
+    // The `/…` that opened the sheet was only for finding it.
     if (SLASH.test(text)) setText("");
     setChoosing(undefined);
-    closeList();
-    // In the Handheld frame, picked from its Skills button: the box opens to type in.
+    // Picked from the Skills sheet: the box opens to type in.
     if (dock !== undefined) flushSync(dock.open);
     box.current?.focus();
   };
+
+  // While a `/` has the Skills sheet open, typing goes on narrowing it: the sheet has the
+  // keyboard, so its keys come here first. Back past the `/`, or a space, and it's words again.
+  const slashing = slash !== undefined;
+  const narrowed = slashing ? matchingSkills(pickerSkills, slash) : pickerSkills;
+  const narrowNow = useRef({ narrowed, pick });
+  narrowNow.current = { narrowed, pick };
+  useEffect(() => {
+    if (!slashing) return;
+    const backToBox = (now: string) => {
+      flushSync(() => {
+        setText(now);
+        setChoosing(undefined);
+      });
+      box.current?.focus();
+    };
+    const typed = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+      const now = textNow.current;
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        event.stopPropagation();
+        const less = now.slice(0, -1);
+        if (SLASH.test(less)) setText(less);
+        else backToBox(less);
+        return;
+      }
+      if (event.key === "Enter") {
+        // A skill's own row, focused, picks itself.
+        if (event.target instanceof HTMLButtonElement) return;
+        const first = narrowNow.current.narrowed.find((each) => each.kind === "usable");
+        if (first === undefined) return;
+        event.preventDefault();
+        event.stopPropagation();
+        narrowNow.current.pick(first.name);
+        return;
+      }
+      if (event.key.length !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const more = now + event.key;
+      if (SLASH.test(more)) setText(more);
+      else backToBox(more);
+    };
+    window.addEventListener("keydown", typed, { capture: true });
+    return () => window.removeEventListener("keydown", typed, { capture: true });
+  }, [slashing]);
 
   /**
    * Sends `message` with the box's model, effort, skill and attachments, and says whether it went.
@@ -305,7 +251,7 @@ export const Composer = memo(function Composer(props: {
     await sendText(text, text);
   };
 
-  // The Handheld frame's Type, talk strip, Skills, Photo and Model act on this box (#193, #79).
+  // The Handheld frame's Type, Talk, Skills and Model act on this box (#193, #79).
   const model = modelName(choice);
   const hasSkills = skills !== undefined;
   const answering = props.stop !== undefined;
@@ -313,7 +259,6 @@ export const Composer = memo(function Composer(props: {
     () =>
       dock?.offer({
         focus: () => box.current?.focus(),
-        pickPhotos: () => picker.current?.click(),
         chooseModel: () => setChoosing("model"),
         ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
         model,
@@ -323,7 +268,7 @@ export const Composer = memo(function Composer(props: {
           const typed = textNow.current;
           dictating.current = listener;
           dock?.open();
-          setListening(listener.controls);
+          setListening(true);
           /** What's in the box now: what was typed, then what's been heard. */
           let now = typed;
           const put = (words: string) => {
@@ -345,30 +290,6 @@ export const Composer = memo(function Composer(props: {
     [dock, model, hasSkills, choosing, answering],
   );
 
-  /** Arrows move through the skill list, Enter picks, Escape closes it. */
-  const onListKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setDismissed(text);
-      closeList();
-      return true;
-    }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      if (pickable.length === 0) return true;
-      const at = highlighted === undefined ? -1 : pickable.indexOf(highlighted);
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      setActive(pickable[(at + step + pickable.length) % pickable.length]?.name);
-      return true;
-    }
-    if (event.key === "Enter" && !event.shiftKey && highlighted !== undefined) {
-      event.preventDefault();
-      pick(highlighted.name);
-      return true;
-    }
-    return false;
-  };
-
   const label = props.submitLabel ?? "Send";
   const cantSend =
     send.busy ||
@@ -376,193 +297,142 @@ export const Composer = memo(function Composer(props: {
     props.disabled === true ||
     models.length === 0 ||
     choice.unavailable;
-  // On a narrow screen a session's box is one line with a round button, and the chip above it
-  // opens the pickers in a sheet; beside the box they're there from tablet width up.
-  const compact = props.compactOnNarrow === true;
-
-  // The sheets the chips above a narrow desktop window's box open. The Handheld frame's buttons
-  // open its own sheets instead (#194).
-  const sheets = compact && !docked && (
-    <>
-      <Sheet
-        title="Model for this session"
-        open={choosing === "model"}
-        onClose={() => setChoosing(undefined)}
-      >
-        <ModelPickers models={models} choice={choice} look="field" />
-      </Sheet>
-      {skills !== undefined && (
-        <Sheet
-          title="Use a skill"
-          open={choosing === "skill"}
-          onClose={() => setChoosing(undefined)}
-        >
-          <SkillChoices skills={pickerSkills} pick={pick} />
-        </Sheet>
-      )}
-    </>
+  const somethingToSend = text.trim() !== "" || attaching.length > 0;
+  // Each its own button, keyed, so one never fades into another as the box changes.
+  const sendButton = (
+    <IconButton
+      key="send"
+      type="submit"
+      label={label}
+      look="primary"
+      size="thumb"
+      icon={<ArrowUp aria-hidden strokeWidth={2} />}
+      disabled={cantSend}
+    />
   );
+
+  // On the cover screen the box opens above the bar, and the model shows on the Model button
+  // beside it: the box has no room for it there.
+  const quietModel = !listening && layout === "tablet" && models.length > 0;
 
   const messageBox = (
     <div className="flex flex-col gap-1.5">
-      {compact && !docked && (
-        <div className="flex items-center gap-2 md:hidden">
-          <Chip onClick={() => setChoosing("model")}>{choiceSummary(choice)}</Chip>
-          {skills !== undefined && (
-            <Chip icon={<Book />} open={choosing === "skill"} onClick={() => setChoosing("skill")}>
-              Skill
-            </Chip>
-          )}
-        </div>
-      )}
-      {sheets}
-      <div className="relative">
-        <input
-          ref={picker}
-          type="file"
-          accept={`image/*,${PDF_TYPE}`}
-          multiple
-          hidden
-          tabIndex={-1}
-          onChange={(event) => picked(event.currentTarget)}
-        />
-        <input
-          ref={camera}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          tabIndex={-1}
-          onChange={(event) => picked(event.currentTarget)}
-        />
-        <form
-          ref={form}
-          onSubmit={submit}
-          {...(listening ? { "data-listening": "" } : {})}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) closeList();
-          }}
-          // Photos and PDFs dropped anywhere on the box attach (#78).
-          onDragEnter={(event) => {
-            if (event.dataTransfer.types.includes("Files")) setDragging(true);
-          }}
-          onDragOver={(event) => {
-            if (event.dataTransfer.types.includes("Files")) event.preventDefault();
-          }}
-          onDragLeave={(event) => {
-            const into = event.relatedTarget;
-            if (!(into instanceof Node && event.currentTarget.contains(into))) {
-              setDragging(false);
-            }
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
+      <input
+        ref={picker}
+        type="file"
+        accept={`image/*,${PDF_TYPE}`}
+        multiple
+        hidden
+        tabIndex={-1}
+        onChange={(event) => picked(event.currentTarget)}
+      />
+      <form
+        onSubmit={submit}
+        {...(listening ? { "data-listening": "" } : {})}
+        // Photos and PDFs dropped anywhere on the box attach (#78).
+        onDragEnter={(event) => {
+          if (event.dataTransfer.types.includes("Files")) setDragging(true);
+        }}
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+        }}
+        onDragLeave={(event) => {
+          const into = event.relatedTarget;
+          if (!(into instanceof Node && event.currentTarget.contains(into))) {
             setDragging(false);
-            void attach([...event.dataTransfer.files]);
-          }}
-          className={classes(
-            "relative flex flex-col gap-2 rounded-lg border bg-field px-3 pt-2.5 pb-2 shadow-xs focus-within:border-primary-text focus-within:ring-3 focus-within:ring-accent md:px-4 md:pt-3.5 md:pb-3",
-            compact &&
-              (attaching.length === 0
-                ? "max-md:rounded-full max-md:px-1.5 max-md:py-1.5"
-                : "max-md:rounded-box max-md:px-1.5 max-md:py-1.5"),
-          )}
-        >
-          {menuOpen && (
-            <SkillMenu
-              id={menuId}
-              workspaceName={skills.workspaceName}
-              skills={shown}
-              active={highlighted?.name}
-              pick={pick}
-              place={place}
-            />
-          )}
-          {dragging && (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-stroke border-dashed border-primary bg-accent text-sm/4.5 font-semibold text-primary-text"
-            >
-              <Paperclip className="size-5" />
-              Drop photos or PDFs to attach
-            </div>
-          )}
-          {attaching.length > 0 && (
-            <ul
-              aria-label="Attachments"
-              className={classes("flex flex-wrap items-center gap-2", compact && "max-md:px-1.5")}
-            >
-              {attaching.map((each) => (
-                <li key={each.key} className="min-w-0">
-                  {each.preview === undefined ? (
-                    <PdfChip
-                      in="tray"
-                      name={each.file.name}
-                      size={each.file.size}
-                      onRemove={() => remove(each)}
-                    />
-                  ) : (
-                    <PhotoThumb
-                      in="tray"
-                      src={each.preview}
-                      name={each.file.name}
-                      onRemove={() => remove(each)}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* On a phone a session's box is one row: paperclip, camera, the message, Send. */}
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void attach([...event.dataTransfer.files]);
+        }}
+        className={classes(
+          "relative flex flex-col gap-2 rounded-reply border bg-field p-2",
+          listening
+            ? "border-primary-text"
+            : "border-input focus-within:border-primary-text focus-within:ring-3 focus-within:ring-accent",
+        )}
+      >
+        {dragging && (
           <div
-            className={classes(
-              "contents",
-              compact && "max-md:flex max-md:items-center max-md:gap-1",
-            )}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-reply border-stroke border-dashed border-primary bg-accent text-sm/4.5 font-semibold text-primary-text"
           >
-            {compact && !docked && (
-              <span className="contents md:hidden">
-                <AttachButtons
-                  look="plain"
-                  camera
-                  full={full}
-                  picker={picker}
-                  cameraInput={camera}
-                />
-              </span>
-            )}
+            <Paperclip className="size-5" />
+            Drop photos or PDFs to attach
+          </div>
+        )}
+        {(attaching.length > 0 || skill !== undefined) && (
+          <div className="flex flex-wrap items-center gap-2 px-1.5 pt-1">
             {skill !== undefined && (
               <SkillTag
                 name={skill}
                 look="box"
-                iconFromTablet={compact}
                 onRemove={() => {
                   setSkill(undefined);
                   box.current?.focus();
                 }}
               />
             )}
+            {attaching.length > 0 && (
+              <ul aria-label="Attachments" className="flex flex-wrap items-center gap-2">
+                {attaching.map((each) => (
+                  <li key={each.key} className="min-w-0">
+                    {each.preview === undefined ? (
+                      <PdfChip
+                        in="tray"
+                        name={each.file.name}
+                        size={each.file.size}
+                        onRemove={() => remove(each)}
+                      />
+                    ) : (
+                      <PhotoThumb
+                        in="tray"
+                        src={each.preview}
+                        name={each.file.name}
+                        onRemove={() => remove(each)}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {/* One row in every state: what's at either end changes, the box doesn't (#251). */}
+        <div className="flex items-end gap-3">
+          {listening ? (
+            <IconButton
+              label="Throw away what you said"
+              look="pressed"
+              size="thumb"
+              icon={<X aria-hidden strokeWidth={1.8} />}
+              onClick={() => dictating.current?.stop("drop")}
+            />
+          ) : (
+            <IconButton
+              label="Add a photo or file"
+              look="pressed"
+              size="thumb"
+              icon={<Plus aria-hidden strokeWidth={1.8} />}
+              disabled={full}
+              {...(full ? { hint: FULL_HINT } : {})}
+              onClick={() => picker.current?.click()}
+            />
+          )}
+          <div className="relative flex min-w-0 flex-1 py-2.5">
             <textarea
               ref={box}
               aria-label="Message"
-              {...(skills === undefined
-                ? {}
-                : {
-                    // Still the message box to a screen reader, which hears the list it opens.
-                    "aria-autocomplete": "list" as const,
-                    ...(menuOpen ? { "aria-controls": menuId } : {}),
-                    ...(menuOpen && highlighted
-                      ? { "aria-activedescendant": skillOptionId(menuId, highlighted.name) }
-                      : {}),
-                  })}
               value={text}
               onChange={(event) => {
-                setText(event.target.value);
-                setDismissed(undefined);
-                setActive(undefined);
+                const now = event.target.value;
+                setText(now);
+                // A `/` in the empty box opens the Skills sheet, which narrows as typing goes on.
+                if (hasSkills && now === "/" && textNow.current === "") setChoosing("skill");
               }}
               onKeyDown={(event) => {
-                if (menuOpen && onListKey(event)) return;
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
@@ -576,81 +446,54 @@ export const Composer = memo(function Composer(props: {
               }}
               placeholder={props.placeholder}
               rows={1}
-              // One line to start, growing with what's typed, so the keyboard keeps its room.
-              className="block max-h-48 min-h-6 w-full flex-1 resize-none bg-transparent text-base/6 outline-none field-sizing-content md:min-h-12"
+              // One line to start, growing upward with the words to six, then scrolling.
+              className="block max-h-36 min-h-6 w-full resize-none bg-transparent text-base/6 outline-none field-sizing-content"
             />
-            {listening ? (
-              <Suspense fallback={null}>
-                <ListeningRow
-                  drop={() => dictating.current?.stop("drop")}
-                  keep={() => dictating.current?.stop("keep")}
-                  send={label}
-                  sendDisabled={cantSend}
-                />
-              </Suspense>
-            ) : (
-              <div className="flex items-center gap-2">
-                {/* Docked in the Handheld frame, its Photo, Model and Skills buttons do these (#201). */}
-                {!docked && (
-                  <>
-                    <span className={classes("contents", compact && "max-md:hidden")}>
-                      <AttachButtons
-                        look="disc"
-                        camera={!compact}
-                        full={full}
-                        picker={picker}
-                        cameraInput={camera}
-                      />
-                      {full && (
-                        <span className="text-meta text-muted-foreground">
-                          {attaching.length} of {ATTACHMENTS.perMessage}
-                        </span>
-                      )}
-                    </span>
-                    <ModelPickers models={models} choice={choice} look="pill" wideOnly={compact} />
-                    {skills !== undefined && (
-                      <Chip
-                        icon={<Book />}
-                        opens="listbox"
-                        open={menuOpen}
-                        wideOnly={compact}
-                        onClick={() => {
-                          if (menuOpen) closeList();
-                          else setListOpen(true);
-                          box.current?.focus();
-                        }}
-                      >
-                        Skill
-                      </Chip>
-                    )}
-                  </>
-                )}
-                <span className={classes("flex-1", compact && "max-md:hidden")} />
-                {props.stop && (
-                  <Button
-                    variant="outline"
-                    onClick={props.stop}
-                    {...(compact ? { narrowIcon: <Square className="fill-current" /> } : {})}
-                  >
-                    <Square className="fill-current" />
-                    Stop
-                  </Button>
-                )}
-                {/* While a turn runs, Send shows once there's something to queue (#177). */}
-                {(!props.stop || text.trim() !== "" || attaching.length > 0) && (
-                  <Button
-                    type="submit"
-                    disabled={cantSend}
-                    {...(compact ? { narrowIcon: <ArrowUp /> } : {})}
-                  >
-                    {label}
-                  </Button>
-                )}
-              </div>
+            {/* Listening: a thin live line under the words, in the box's padding, so nothing moves. */}
+            {listening && (
+              <span
+                aria-hidden
+                className="absolute bottom-1 left-0 h-0.75 w-7/10 rounded-hair bg-primary-text shadow-glow-hair motion-safe:animate-pulse"
+              />
             )}
           </div>
-        </form>
-      </div>
+          {quietModel && (
+            <span className="flex h-11 min-w-0 shrink items-center truncate text-meta text-muted-foreground">
+              {choiceSummary(choice)}
+            </span>
+          )}
+          {listening ? (
+            <span className="flex shrink-0 gap-2">
+              <IconButton
+                label="Stop listening"
+                look="pressed"
+                size="thumb"
+                icon={<Square aria-hidden className="size-3.5 fill-current" />}
+                onClick={() => dictating.current?.stop("keep")}
+              />
+              {sendButton}
+            </span>
+          ) : somethingToSend ? (
+            // While a turn runs, what's sent now is queued (#177).
+            sendButton
+          ) : answering ? (
+            <Button key="stop" variant="outline" size="lg" onClick={props.stop}>
+              <Square aria-hidden className="size-3.5 fill-current" />
+              Stop
+            </Button>
+          ) : (
+            <IconButton
+              key="talk"
+              label="Talk into the box"
+              look="pressed"
+              size="thumb"
+              icon={<Mic aria-hidden strokeWidth={1.8} />}
+              disabled={dock === undefined}
+              onClick={() => dock?.talk()}
+            />
+          )}
+        </div>
+      </form>
       {props.providers.flatMap((provider) =>
         provider.available
           ? []
@@ -664,11 +507,12 @@ export const Composer = memo(function Composer(props: {
     </div>
   );
 
-  // In the Handheld frame the box sits above its bottom bar, and its sheets stay with the page. On
-  // a tablet, until it docks, its room in the dock is kept here, so the swap moves nothing (#283).
-  if (awaitingDock)
+  // The box is the frame's: it waits for the dock (#359), shown in the page first, it would move
+  // into the dock as the frame arrives, and the keyboard would lose it mid-word. On a tablet,
+  // until it docks, its room in the dock is kept here, so the swap moves nothing (#283).
+  if (dock === undefined)
     return <div aria-hidden className={layout === "tablet" ? DOCK_ROOM : FOOT_GAP} />;
-  return docked ? (
+  return (
     <>
       <Suspense fallback={null}>
         <HandheldChoices
@@ -677,7 +521,7 @@ export const Composer = memo(function Composer(props: {
           changeModel={() => setChoosing("model")}
           models={models}
           choice={choice}
-          skills={skills && { workspaceName: skills.workspaceName, list: pickerSkills }}
+          skills={skills && { workspaceName: skills.workspaceName, list: narrowed }}
           skill={skill}
           pick={pick}
         />
@@ -685,7 +529,5 @@ export const Composer = memo(function Composer(props: {
       {createPortal(messageBox, dock.element)}
       <div aria-hidden className={FOOT_GAP} />
     </>
-  ) : (
-    messageBox
   );
 });

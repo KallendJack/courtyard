@@ -19,8 +19,6 @@ export function SkillTag(props: {
   look: keyof typeof LOOKS;
   /** Takes the skill off the message being written (the box's tag only). */
   onRemove?: () => void;
-  /** Without its book on a narrow screen, where the box is one line (Paper's phone board). */
-  iconFromTablet?: boolean;
 }) {
   const look = LOOKS[props.look];
   const title = skillTitle(props.name);
@@ -31,10 +29,7 @@ export function SkillTag(props: {
         look.tag,
       )}
     >
-      <Book
-        aria-hidden
-        className={classes("shrink-0", look.icon, props.iconFromTablet && "max-md:hidden")}
-      />
+      <Book aria-hidden className={classes("shrink-0", look.icon)} />
       <span className="truncate">
         <span className="sr-only">Skill: </span>
         {title}

@@ -11,7 +11,6 @@
 @source "./handheld-sheet.tsx";
 @source "./sheet-choices.tsx";
 @source "./frame-button.tsx";
-@source "./listening-row.tsx";
 
 :where([data-handheld]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
@@ -41,10 +40,7 @@
   display: none;
 }
 [data-frame-column]:has([data-dock="tablet"]:not(:empty)) {
-  padding-bottom: max(
-    var(--frame-bottom, 0px),
-    calc(--spacing(20.5) + env(safe-area-inset-bottom))
-  );
+  padding-bottom: max(var(--frame-bottom, 0px), calc(--spacing(21) + env(safe-area-inset-bottom)));
 }
 
 /*
@@ -71,55 +67,12 @@
 }
 /*
  * On a tablet, the Reply box (#206): always there at the foot of the page, between the rails,
- * which stay in reach. The message and its button on one line, in a pill, which rounds off less
- * as what's typed grows, and makes room above for what's attached.
+ * which stay in reach. Its shape is its own (composer.tsx), the same on every screen (#251).
  */
 [data-dock="tablet"] {
   margin-inline: var(--frame-left, 0px) var(--frame-right, 0px);
   padding: --spacing(2) --spacing(4.5) calc(--spacing(3.5) + env(safe-area-inset-bottom));
   border-top: 0;
-}
-[data-dock="tablet"] form {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: --spacing(3);
-  min-height: --spacing(15);
-  padding: --spacing(1.5) --spacing(1.5) --spacing(1.5) --spacing(5);
-  border-radius: --theme(--radius-reply);
-  background: var(--color-surface);
-}
-[data-dock="tablet"] form:not(:focus-within) {
-  border-color: var(--color-input);
-}
-[data-dock="tablet"] form:has(> ul) {
-  padding-top: --spacing(3);
-}
-[data-dock="tablet"] form > ul {
-  flex-basis: 100%;
-}
-[data-dock="tablet"] textarea {
-  width: auto;
-  min-width: 0;
-  min-height: --spacing(6);
-  flex: 1 1 0;
-}
-/*
- * While the Talk key listens (listening-row.tsx, #206): the words as they're heard, quieter
- * until they're kept, and under them ✕, the waveform, ■ and ↑, inside a lilac edge.
- */
-[data-dock="tablet"] form[data-listening] {
-  @apply rounded-sheet border-stroke border-primary-text bg-field;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  row-gap: --spacing(2.5);
-  padding: --spacing(3.5) --spacing(3.5) --spacing(3) --spacing(4.5);
-}
-[data-dock="tablet"] form[data-listening] textarea {
-  width: 100%;
-  flex: none;
-  color: var(--color-muted-foreground);
 }
 
 /* The Talk key's sound bars move while it listens (talk-strip.tsx, #206), unless the device asks for less motion. */

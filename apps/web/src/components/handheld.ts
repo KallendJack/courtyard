@@ -58,8 +58,6 @@ export type TalkTarget = {
 
 /** What a page's message box offers the Handheld frame's buttons. */
 export type MessageBox = TalkTarget & {
-  /** Opens the photo picker (the paperclip's). */
-  pickPhotos: () => void;
   chooseModel: () => void;
   /** Only when the workspace has skills. */
   chooseSkill?: () => void;
@@ -73,11 +71,6 @@ export type MessageBox = TalkTarget & {
 export type Listener = {
   /** Stops listening: keeping what was said, dropping it, or because the box sent it. */
   stop: (how: "keep" | "drop" | "sent") => void;
-  /**
-   * The box shows ✕, ■ and ↑ under the words while it listens (#206): for the Talk key, which has
-   * no Cancel beside it as the strip has.
-   */
-  controls: boolean;
 };
 
 /** What the owner says, going into the message box as it's heard. */
@@ -107,6 +100,11 @@ export type Dock = {
   offerField: (field: TalkTarget) => () => void;
   open: () => void;
   close: () => void;
+  /**
+   * Talks into the box as a tap on the Talk key does (#251, the box's mic): listening hands-free,
+   * or stopping and keeping what was said.
+   */
+  talk: () => void;
 };
 
 export const DockContext = createContext<Dock | undefined>(undefined);
