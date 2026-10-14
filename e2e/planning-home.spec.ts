@@ -92,3 +92,23 @@ test("What Courtyard knows holds the facts, plans and ideas, and a line is fixed
     "You said: This line is wrong: Rubber flooring.",
   );
 });
+
+// #398: a block's size is the layout's, never its rows'. On the unfolded Fold, Next up fills the
+// room down to What Courtyard knows, however few its rows.
+test.describe("on the unfolded Fold", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
+
+  test("Next up fills down to What Courtyard knows", async ({ page }) => {
+    await page.goto("/workspaces/garage-gym");
+    const nextUp = page.getByRole("region", { name: "Next up" });
+    const knows = page.getByRole("link", { name: "What Courtyard knows" });
+    await expect(knows).toBeVisible();
+    const [block, link] = [await nextUp.boundingBox(), await knows.boundingBox()];
+    const gap = (link?.y ?? 0) - ((block?.y ?? 0) + (block?.height ?? 0));
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThanOrEqual(16);
+    // The message box is under the link: nothing between them but the page's foot.
+    const box = await page.getByLabel("Message", { exact: true }).boundingBox();
+    expect((box?.y ?? 0) - ((link?.y ?? 0) + (link?.height ?? 0))).toBeLessThan(80);
+  });
+});

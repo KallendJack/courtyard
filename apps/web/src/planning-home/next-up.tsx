@@ -1,7 +1,7 @@
 import type { DuePlan, ListedSession, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { AlignLeft } from "lucide-react";
-import { Block } from "@/components/home-block";
+import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
 import { describeWhen } from "../when.ts";
 
 /** How long ago a session can have been used and still be one to pick up again. */
@@ -41,9 +41,16 @@ export function NextUp(props: {
   duePlans: readonly DuePlan[];
 }) {
   const pickUp = sessionToPickUp(props.sessions);
-  if (pickUp === undefined && props.duePlans.length === 0) return null;
+  // Its size is the layout's, never its rows' (#398): empty, it keeps it, with one quiet line.
+  if (pickUp === undefined && props.duePlans.length === 0) {
+    return (
+      <Block label="Next up" fill>
+        <BlockEmpty>Nothing to pick up</BlockEmpty>
+      </Block>
+    );
+  }
   return (
-    <Block label="Next up">
+    <Block label="Next up" fill>
       {pickUp !== undefined && (
         <Link
           to="/workspaces/$workspaceId/sessions/$sessionId"
@@ -63,21 +70,23 @@ export function NextUp(props: {
         </Link>
       )}
       {props.duePlans.length > 0 && (
-        <ul aria-label="Plans this week" className="flex flex-col gap-0.5 pt-1.5">
-          {props.duePlans.map((due) => (
-            <li
-              key={`${due.due} ${due.plan}`}
-              className="flex min-h-8.5 items-center gap-2.5 px-2.5 py-1.5"
-            >
-              <span className="w-20 shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
-                {dayWords(due.due)}
-              </span>
-              <span className="min-w-0 grow text-label font-semibold text-foreground/90">
-                {due.plan}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <BlockRows>
+          <ul aria-label="Plans this week" className="flex flex-col gap-0.5 pt-1.5">
+            {props.duePlans.map((due) => (
+              <li
+                key={`${due.due} ${due.plan}`}
+                className="flex min-h-8.5 items-center gap-2.5 px-2.5 py-1.5"
+              >
+                <span className="w-20 shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+                  {dayWords(due.due)}
+                </span>
+                <span className="min-w-0 grow text-label font-semibold text-foreground/90">
+                  {due.plan}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </BlockRows>
       )}
     </Block>
   );
