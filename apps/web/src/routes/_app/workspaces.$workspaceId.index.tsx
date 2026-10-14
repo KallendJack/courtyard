@@ -11,7 +11,7 @@ import { WorkspaceMenu } from "@/components/workspace-menu";
 import type { Deleted } from "../../planning-home/planning-home.tsx";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { KEPT_SESSIONS, loadSessions, useFreshSessions } from "../../sessions/kept-sessions.ts";
-import { archiveWorkspace, changeWorkspace, fromWorker, NOT_FOUND } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../worker.ts";
 
 // The workspace's Home, code (#301) or planning (#300), comes with its data (workspace-page.ts).
 // A pull request no session opened (#278): loaded only when one is opened.
