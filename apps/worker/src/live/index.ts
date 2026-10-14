@@ -13,7 +13,8 @@ import { err, ok, type Result } from "../result.ts";
 
 /**
  * How long an answer from the live copy's remote is reused. The worker only asks when a page asks
- * for the live status, so a merge shows the next time the home page opens after this.
+ * for the live status, so a merge on GitHub shows the next time a page asks after this; one made
+ * from the app drops it (`forget`), so it shows at once (#387).
  */
 const ANSWER_REUSED_FOR_MS = 60 * 1000;
 /**
@@ -50,6 +51,8 @@ export type Live = {
   status(): Promise<LiveStatus>;
   /** Starts an update on its own; how it went shows in a later status. */
   update(): Promise<Result<null, LiveError>>;
+  /** Drops the answers reused from the remote and GitHub, once main has moved on (#387). */
+  forget(): void;
 };
 
 const run = promisify(execFile);
@@ -83,6 +86,7 @@ export const createLive = (options: {
     return {
       status: async () => ({ kind: "off" }),
       update: async () => err({ kind: "off" }),
+      forget: () => {},
     };
   }
 
@@ -213,6 +217,10 @@ export const createLive = (options: {
         });
       }
       return ok(null);
+    },
+    forget: () => {
+      check = undefined;
+      build = undefined;
     },
   };
 };

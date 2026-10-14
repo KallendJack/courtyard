@@ -97,6 +97,8 @@ export const createWorkspaceMain = (options: {
       kept.set(repo.value, { at: now(), main });
       return ok(main);
     },
+    /** Drops every answer kept, once main has moved on (a merge from the app, #387). */
+    forget: () => kept.clear(),
   };
 };
 
