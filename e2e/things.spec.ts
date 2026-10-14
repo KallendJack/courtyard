@@ -251,7 +251,8 @@ test("a photo from an attachment shows on its Thing's card and row, and the card
   const name = `Helmets ${Date.now()}`;
   await newWorkspace(page, name);
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Attach photos or PDFs" }).click();
+  // The frame's Add (#197).
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await (await chooser).setFiles([photo("helmet.png")]);
   await startSaving(
     page,
