@@ -18,17 +18,21 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return box;
 };
 
-/** Opens the ⋯, checks its sheet opens under it, and gives the sheet. */
-const openMenu = async (page: Page) => {
+/** Checks the ⋯'s sheet is under it, its right edge level with the ⋯'s, so it never covers the name. */
+const isUnder = async (page: Page) => {
   const more = page.getByRole("button", { name: "Workspace options" });
-  await more.click();
   const sheet = page.getByRole("dialog", { name: NAME });
   await expect(sheet).toBeVisible();
   const [button, box] = [await boxOf(more), await boxOf(sheet)];
   expect(box.y).toBeGreaterThanOrEqual(button.y + button.height);
-  // Its right edge lines up with the ⋯, so it never covers the name.
   expect(Math.abs(box.x + box.width - (button.x + button.width))).toBeLessThanOrEqual(2);
   return sheet;
+};
+
+/** Opens the ⋯, checks its sheet opens under it, and gives the sheet. */
+const openMenu = async (page: Page) => {
+  await page.getByRole("button", { name: "Workspace options" }).click();
+  return isUnder(page);
 };
 
 const titleAsTheBoards = async (page: Page) => {
@@ -90,6 +94,29 @@ test.describe("a code workspace's title area (#333)", () => {
 
     test("the same, with the ⋯'s sheet under it", async ({ page }) => {
       await titleAsTheBoards(page);
+    });
+
+    // Placed once when it opened, it was left 150 px out when the side column came in after (#397).
+    test("the sheet stays under the ⋯ when the page lays out again", async ({ page }) => {
+      await page.goto("/workspaces/side-project");
+      await openMenu(page);
+      await page.setViewportSize({ width: UNFOLDED.width - 120, height: UNFOLDED.height });
+      await isUnder(page);
+    });
+
+    test("the Connections sheet opens under its line with its foot on a short screen", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: UNFOLDED.width, height: 420 });
+      await page.goto("/workspaces/side-project");
+      const line = page.getByRole("button", { name: /octo-owner\/side-project/ });
+      await line.click();
+      const sheet = page.getByRole("dialog", { name: "Connections" });
+      await expect(sheet).toBeVisible();
+      const [under, box] = [await boxOf(line), await boxOf(sheet)];
+      expect(box.y).toBeGreaterThanOrEqual(under.y + under.height);
+      expect(Math.abs(box.x - under.x)).toBeLessThanOrEqual(2);
+      expect(box.y + box.height).toBeLessThanOrEqual(420 - 16);
     });
   });
 });
