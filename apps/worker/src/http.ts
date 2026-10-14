@@ -1,7 +1,7 @@
 import { type ApiError, ATTACHMENTS_FIELD, MESSAGE_FIELD } from "@courtyard/contract";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { z } from "zod";
+import { z } from "zod";
 import { err, ok, type Result } from "./result.ts";
 import type { WorkspaceError } from "./workspaces/index.ts";
 
@@ -10,8 +10,11 @@ export const apiError = (c: Context, problem: { status: ContentfulStatusCode; er
   c.json({ error: problem.error } satisfies ApiError, problem.status);
 
 /** The JSON body a request sent, parsed with `schema`, or the first reason it doesn't fit. */
-export const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Result<T, string>> => {
-  const parsed = schema.safeParse(await c.req.json().catch(() => undefined));
+export const readBody = async <T>(
+  c: Context,
+  schema: z.core.$ZodType<T>,
+): Promise<Result<T, string>> => {
+  const parsed = z.safeParse(schema, await c.req.json().catch(() => undefined));
   return parsed.success ? ok(parsed.data) : err(parsed.error.issues[0]?.message ?? "Bad request");
 };
 
@@ -22,7 +25,7 @@ export const readBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<Res
  */
 export const readWithFiles = async <T>(
   c: Context,
-  read: { schema: z.ZodType<T>; fields: { json: string; files: string } },
+  read: { schema: z.core.$ZodType<T>; fields: { json: string; files: string } },
 ): Promise<Result<{ body: T; files: File[] }, string>> => {
   const { schema, fields } = read;
   if (!c.req.header("content-type")?.startsWith("multipart/form-data")) {
@@ -37,7 +40,7 @@ export const readWithFiles = async <T>(
   } catch {
     body = undefined;
   }
-  const parsed = schema.safeParse(body);
+  const parsed = z.safeParse(schema, body);
   if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Bad request");
   const files = (form?.getAll(fields.files) ?? []).filter((part) => part instanceof File);
   return ok({ body: parsed.data, files });
@@ -50,7 +53,7 @@ export const readWithFiles = async <T>(
  */
 export const readMessage = async <T>(
   c: Context,
-  schema: z.ZodType<T>,
+  schema: z.core.$ZodType<T>,
 ): Promise<Result<{ message: T; files: File[] }, string>> => {
   const fields = { json: MESSAGE_FIELD, files: ATTACHMENTS_FIELD };
   const read = await readWithFiles(c, { schema, fields });

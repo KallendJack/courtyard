@@ -5,7 +5,8 @@ import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
-import { type ContextPlace, startGettingToKnow } from "../worker.ts";
+import type { ContextPlace } from "../worker.ts";
+import { startGettingToKnow } from "../worker-calls.ts";
 
 /**
  * An offer to get to know an empty workspace or owner context (docs/ai-conduct.md, Getting to

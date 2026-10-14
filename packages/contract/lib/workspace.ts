@@ -1,52 +1,14 @@
 import { z } from "zod";
 import { GitHubRepoName } from "./github-repo-name.ts";
+import { WorkspaceIcon, WorkspaceId, WorkspaceSummary } from "./workspace-summary.ts";
 
-/** A workspace's folder name: lowercase letters and digits, words joined by single dashes. */
-export const WorkspaceId = z
-  .string()
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  .brand<"WorkspaceId">();
-export type WorkspaceId = z.infer<typeof WorkspaceId>;
-
-export const WorkspaceMode = z.enum(["planning", "code"]);
-export type WorkspaceMode = z.infer<typeof WorkspaceMode>;
-
-/**
- * The plain line icons a workspace can show on its tile (#210), in the order the Icon sheet
- * offers them. `book` is the plain one a name that says nothing gets.
- */
-export const WorkspaceIcon = z.enum([
-  "bicycle",
-  "garage",
-  "house",
-  "dumbbell",
-  "server",
-  "code",
-  "book",
-  "sprout",
-  "mountain",
-  "camera",
-  "wallet",
-  "heart",
-  "briefcase",
-  "wrench",
-  "music",
-]);
-export type WorkspaceIcon = z.infer<typeof WorkspaceIcon>;
-
-export const WorkspaceSummary = z.object({
-  id: WorkspaceId,
-  name: z.string(),
-  mode: WorkspaceMode,
-  icon: WorkspaceIcon,
-  hasContextFile: z.boolean(),
-  /** Why the workspace's config was ignored, when it was. */
-  configProblem: z.string().optional(),
-});
-export type WorkspaceSummary = z.infer<typeof WorkspaceSummary>;
-
-export const WorkspaceList = z.object({ workspaces: z.array(WorkspaceSummary) });
-export type WorkspaceList = z.infer<typeof WorkspaceList>;
+export {
+  WorkspaceIcon,
+  WorkspaceId,
+  WorkspaceList,
+  WorkspaceMode,
+  WorkspaceSummary,
+} from "./workspace-summary.ts";
 
 /**
  * The owner's order for the workspaces (#321), as the rail or the sidebar left it once a tile was
@@ -71,7 +33,7 @@ const WorkspaceName = z
 
 /** Changing a workspace from the app: its name, its icon, or both. Its folder stays as it is. */
 export const WorkspaceChange = z
-  .object({ name: WorkspaceName.optional(), icon: WorkspaceIcon.optional() })
+  .object({ name: WorkspaceName.optional(), icon: z.optional(WorkspaceIcon) })
   .refine((change) => change.name !== undefined || change.icon !== undefined, {
     message: "Say what to change.",
   });

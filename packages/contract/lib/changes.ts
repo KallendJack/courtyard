@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { ChangeId } from "./change-id.ts";
 import { DocumentChange } from "./documents.ts";
-import { ChangeId, PlacedLine, SessionId } from "./session.ts";
+import { PlacedLine, SessionId } from "./session.ts";
 import { ThingChange } from "./things.ts";
 import { WorkspaceId } from "./workspace.ts";
 
@@ -56,7 +57,7 @@ export const RECENT_CHANGES_PAGE = 30;
 /** A page of Recent changes, and where the next one starts (`null` at the oldest). */
 export const RecentChanges = z.object({
   changes: z.array(RecentChange),
-  more: ChangeId.nullable(),
+  more: z.nullable(ChangeId),
 });
 export type RecentChanges = z.infer<typeof RecentChanges>;
 

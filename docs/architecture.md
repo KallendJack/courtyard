@@ -894,6 +894,10 @@ Each one is written down once, where the link goes.
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
 - **The first-load budget:** the build fails if what the home page needs first grows past its budget
   (`apps/web/scripts/finish-build.mjs`; [ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)).
+  What the first load checks (health, login, the workspace list, errors, a change id) is written in Zod's small
+  edition (`zod/mini`, `packages/contract/lib/{health,auth,api-error,workspace-summary,change-id}.ts`); the rest of
+  the contract is full Zod, which loads with the pages that use it: `web/src/worker-calls.ts`, and loaders that import
+  their page's module when they run (`workspace-page.ts`, `session-page.ts`) (#393).
 
 ## The AI setup
 

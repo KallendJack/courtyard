@@ -4,7 +4,6 @@ import { Page, PageTitle } from "@/components/page";
 import { BackupStatus } from "../../backup-status.tsx";
 import { LogOutOthers } from "../../log-out-others.tsx";
 import { OwnerContextPanel } from "../../owner-context-panel.tsx";
-import { loadOwnerContext } from "../../worker.ts";
 
 // Loaded once the page shows: the page never waits for them.
 const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
@@ -13,7 +12,10 @@ const Notifications = lazy(() => import("../../notifications/notifications-card.
 const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/settings")({
-  loader: async () => ({ ownerContext: await loadOwnerContext() }),
+  // The loader stays in the first load, so its schemas load with the page.
+  loader: async () => ({
+    ownerContext: await import("../../worker-calls.ts").then((calls) => calls.loadOwnerContext()),
+  }),
   component: Settings,
 });
 

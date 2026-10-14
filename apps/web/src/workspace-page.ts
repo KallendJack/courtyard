@@ -1,7 +1,8 @@
 import { CodeSessionList, WorkspaceDetail, WorkspaceId } from "@courtyard/contract";
 import { loadDocuments } from "./documents/api.ts";
 import { loadThings } from "./things/api.ts";
-import { fromWorker, loadProviders, loadSkills, NOT_FOUND } from "./worker.ts";
+import { fromWorker, NOT_FOUND } from "./worker.ts";
+import { loadProviders, loadSkills } from "./worker-calls.ts";
 
 /**
  * Everything a workspace's page shows, asked for at once. Its route imports this when the page

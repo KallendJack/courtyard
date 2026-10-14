@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChangeId } from "./session.ts";
+import { ChangeId } from "./change-id.ts";
 
 // A workspace's Things (ADR 0020): the owner's kit, a Markdown file each in its `things` folder,
 // with fixed fields in front matter and a dated history as the body. Only the pages that show
@@ -138,11 +138,11 @@ export const THING_PHOTO_FIELD = "photo";
 export const THING_FORM_FIELD = "thing";
 
 /** A Thing saved by the owner, as it is now, and the change that saved it (`null` when git couldn't keep it). */
-export const ThingChanged = z.object({ change: ChangeId.nullable(), thing: ThingSummary });
+export const ThingChanged = z.object({ change: z.nullable(ChangeId), thing: ThingSummary });
 export type ThingChanged = z.infer<typeof ThingChanged>;
 
 /** A Thing deleted by the owner, and the change that deleted it, which Undo names. */
-export const ThingDeleted = z.object({ change: ChangeId.nullable() });
+export const ThingDeleted = z.object({ change: z.nullable(ChangeId) });
 export type ThingDeleted = z.infer<typeof ThingDeleted>;
 
 /**
