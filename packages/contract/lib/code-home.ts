@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { LiveVersion, MainBuild } from "./live.ts";
-import { Effort, ModelRef } from "./session.ts";
+import { Effort, ModelRef, SessionId } from "./session.ts";
 
 // A code workspace's Home (#301) and its connections (#308): what its page asks for besides its
 // sessions and pull requests. Only that page parses these, so they stay off the first load.
@@ -95,3 +95,43 @@ export type WorkspaceMain = z.infer<typeof WorkspaceMain>;
  */
 export const BuildIssue = z.object({ model: ModelRef, effort: Effort.optional() });
 export type BuildIssue = z.infer<typeof BuildIssue>;
+
+/**
+ * Run the build order (#347): the Lead starts, or wakes, on this model, and its builders start on
+ * the model its own conversation last used.
+ */
+export const LeadRun = BuildIssue;
+export type LeadRun = z.infer<typeof LeadRun>;
+
+/** How many builders the Lead runs at once (#347): 2 unless the owner says, 1 to 3. */
+export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 3 } as const;
+
+/** A builder the Lead started (#347): its session, its title, and the issue it builds. */
+export const LeadBuilder = z.object({
+  session: SessionId,
+  title: z.string(),
+  issue: z.number().int().positive(),
+});
+export type LeadBuilder = z.infer<typeof LeadBuilder>;
+
+/** A builder's pull request that's ready to merge (#347): checks passed, no conflict. */
+export const LeadReady = LeadBuilder.extend({ pullRequest: z.number().int().positive() });
+export type LeadReady = z.infer<typeof LeadReady>;
+
+/**
+ * A code workspace's Lead (#347), as its Home's Running row and its chat's strip show it: not
+ * started yet; running the build order (`why` saying what it waits for while it holds itself back:
+ * a red main, the machine busy with the owner's own sessions, a decision only they can make);
+ * paused by the owner; or resting, with nothing ready to build (`why` says so). Its builders still
+ * building, the next issues it starts, and the pull requests ready to merge.
+ */
+export const LeadStatus = z.object({
+  state: z.enum(["not-started", "running", "paused", "resting"]),
+  session: SessionId.optional(),
+  why: z.string().optional(),
+  builders: z.number().int().min(LEAD_BUILDERS.atLeast).max(LEAD_BUILDERS.atMost),
+  building: z.array(LeadBuilder),
+  next: z.array(NextUpIssue),
+  ready: z.array(LeadReady),
+});
+export type LeadStatus = z.infer<typeof LeadStatus>;

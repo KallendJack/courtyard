@@ -12,6 +12,7 @@ import {
 import { writeTextFileIn } from "../files.ts";
 import {
   DOCUMENT_TOOL_NAME,
+  LEAD_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   THING_TOOL_NAME,
@@ -183,9 +184,27 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     return [input];
   });
 
+const BUILD_ORDER = /^(?:build order: )?(pause|run|skip #?(\d+)|builders (\d+))\.?$/i;
+
+/**
+ * What a message to a code workspace's Lead scripts its build order tool doing (#347), one per
+ * line: "pause" (as the owner says it), "run", "skip #22" or "builders 3", each with or without
+ * "build order: " before it.
+ */
+const scriptedBuildOrder = (message: string): Record<string, unknown>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, action = "", issue, count] = BUILD_ORDER.exec(line.trim()) ?? [];
+    const verb = action.toLowerCase().split(" ")[0] ?? "";
+    if (verb === "") return [];
+    if (issue !== undefined) return [{ action: "skip", issue: Number(issue) }];
+    if (count !== undefined) return [{ action: "builders", count: Number(count) }];
+    return [{ action: verb }];
+  });
+
 /**
  * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
- * skills loaded first, then saves, documents and Things, then suggested replies.
+ * skills loaded first, then saves, documents and Things, then suggested replies, then the Lead's
+ * build order tool.
  */
 const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
   [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
@@ -193,6 +212,7 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
+  [LEAD_TOOL_NAME, scriptedBuildOrder],
 ];
 
 const SEARCH = /^search the web for: (.+)$/i;
@@ -498,7 +518,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
  * allows (see `scriptedCoding`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
- * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`).
+ * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`). To a Lead,
+ * "pause" pauses the build order (see `scriptedBuildOrder`).
  */
 export const createFakeProvider = (
   options: {

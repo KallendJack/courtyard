@@ -22,7 +22,8 @@ export type Need =
   | { readonly kind: "approval"; readonly session: Listed }
   | { readonly kind: "failed"; readonly pull: OpenPullRequest; readonly count: number }
   | { readonly kind: "reply"; readonly session: Listed }
-  | { readonly kind: "merge"; readonly pull: OpenPullRequest }
+  /** Its session, when one opened it: a Lead's builder says so (#347). */
+  | { readonly kind: "merge"; readonly pull: OpenPullRequest; readonly session?: Listed }
   | { readonly kind: "conflict"; readonly pull: OpenPullRequest; readonly session?: Listed }
   | { readonly kind: "setup"; readonly missing: number };
 
@@ -53,7 +54,10 @@ export const needsOf = (given: {
     count: pull.pullRequest.checks.kind === "failed" ? pull.pullRequest.checks.failed.length : 0,
   }));
   const replies: Need[] = sessionsWaiting("reply").map((session) => ({ kind: "reply", session }));
-  const merges: Need[] = pullsWaiting("merge").map((pull) => ({ kind: "merge", pull }));
+  const merges: Need[] = pullsWaiting("merge").map((pull) => {
+    const session = sessionOf(pull);
+    return session === undefined ? { kind: "merge", pull } : { kind: "merge", pull, session };
+  });
   const conflicts: Need[] = pullsWaiting("conflict").map((pull) => {
     const session = sessionOf(pull);
     return session === undefined ? { kind: "conflict", pull } : { kind: "conflict", pull, session };

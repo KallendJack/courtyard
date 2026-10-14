@@ -444,9 +444,10 @@ test("the sidebar lists code workspaces apart from planning ones", async ({ page
   await page.goto("/");
 
   const workspaces = page.getByRole("navigation", { name: "Workspaces" });
+  // Each may carry a count of what needs the owner, from other tests on the worker.
   await expect(
     workspaces.getByRole("list", { name: "Code workspaces" }).getByRole("link"),
-  ).toHaveText(["Side project", "Workbench"]);
+  ).toHaveText([/^Side project/, /^Toolshed/, /^Workbench/]);
   await expect(workspaces.getByRole("list", { name: "Planning workspaces" })).not.toContainText(
     "Side project",
   );

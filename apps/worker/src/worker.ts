@@ -39,6 +39,8 @@ import { createGitHubApi, type GitHubApi } from "./github/api.ts";
 import { createGitHub, KEEP_FRESH_EVERY_MS } from "./github/index.ts";
 import { gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
+import { createLead } from "./lead/index.ts";
+import { leadRoutes } from "./lead/routes.ts";
 import { rememberingLimits } from "./limits/index.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./live/index.ts";
 import { createMattSetup } from "./matt-setup/index.ts";
@@ -153,6 +155,12 @@ const FOLLOW_PULL_REQUESTS_EVERY_MS = 30_000;
  * minutes, so a failure is re-run within one of it ending.
  */
 const WATCH_MAIN_EVERY_MS = 60_000;
+
+/**
+ * How often each code workspace's Lead looks at its builders and the build order (#347): as often
+ * as pull requests are followed, so a ready one is told soon after its checks pass.
+ */
+const WATCH_LEADS_EVERY_MS = 30_000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
@@ -314,6 +322,31 @@ export const createWorker = (options: {
       );
     },
     background,
+    // The Lead is made below, from the sessions: its turns ask it once they run (#347).
+    lead: {
+      brief: (session) => lead.brief(session),
+      tool: (session, input) => lead.tool(session, input),
+    },
+  });
+  const nextUp = createNextUp({ contextDir, code, github, sessions, now });
+  // A code workspace's main and its build, for its Home's Main row (#301, #249) and its Lead.
+  const workspaceMain = createWorkspaceMain({ contextDir, code, github, liveCopy, now });
+  const lead = createLead({
+    contextDir,
+    dataDir,
+    sessions,
+    nextUp,
+    mainRed: async (workspaceId) => {
+      const main = await workspaceMain.of(workspaceId);
+      return main.ok && main.value.build?.kind === "failed";
+    },
+    notify: (session, need) => {
+      background(
+        notifications
+          .notice(session, need)
+          .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
+      );
+    },
   });
   const live = createLive({
     liveCopy,
@@ -329,8 +362,6 @@ export const createWorker = (options: {
       return build.ok ? (build.value ?? null) : null;
     },
   });
-  // A code workspace's main and its build, for its Home's Main row (#301, #249).
-  const workspaceMain = createWorkspaceMain({ contextDir, code, github, liveCopy, now });
   // Queued messages a stopped worker left waiting go now (#177).
   sessions
     .resumeQueued()
@@ -341,6 +372,8 @@ export const createWorker = (options: {
   repeat(FOLLOW_PULL_REQUESTS_EVERY_MS, sessions.followPullRequests);
   // A red main is re-run once, then filed first in the order (#355).
   repeat(WATCH_MAIN_EVERY_MS, createRedMain({ contextDir, dataDir, code, github }).watch);
+  // Each code workspace's Lead runs its build order (#347).
+  repeat(WATCH_LEADS_EVERY_MS, lead.watch);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
@@ -382,7 +415,8 @@ export const createWorker = (options: {
     quickQuestionRoutes(createQuickQuestions({ contextDir, providers, pullRequests })),
   );
   api.route("/", connectionRoutes(connections));
-  api.route("/", nextUpRoutes(createNextUp({ contextDir, code, github, sessions, now })));
+  api.route("/", nextUpRoutes(nextUp));
+  api.route("/", leadRoutes(lead));
   api.get("/workspaces/:id/main", async (c) => {
     const main = await workspaceMain.of(c.req.param("id"));
     if (main.ok) return c.json(main.value satisfies WorkspaceMain);

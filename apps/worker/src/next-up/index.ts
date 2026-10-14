@@ -202,6 +202,12 @@ export const createNextUp = (options: {
       return read(found.value.repo);
     },
 
+    /** A code workspace's Next up asked of GitHub now, as the Lead reads it each time round (#347). */
+    fresh: async (rawId: string): Promise<Result<NextUpIssue[], NextUpProblem>> => {
+      const found = await repoOf(rawId);
+      return found.ok ? read(found.value.repo) : found;
+    },
+
     /**
      * Build (#298): a new code session on `build.model` whose first message is the issue, once
      * GitHub says nobody has claimed it meanwhile; then the claim on the issue, naming the
@@ -210,7 +216,8 @@ export const createNextUp = (options: {
     build: async (
       rawId: string,
       number: number,
-      build: BuildIssue,
+      /** The model, and whether the workspace's Lead starts it as one of its builders (#347). */
+      build: BuildIssue & { readonly byLead?: boolean },
     ): Promise<Result<SessionSummary, NextUpProblem>> => {
       const found = await repoOf(rawId);
       if (!found.ok) return found;
@@ -231,6 +238,7 @@ export const createNextUp = (options: {
           ...(build.effort === undefined ? {} : { effort: build.effort }),
         },
         title: titleFor("Build", issue),
+        ...(build.byLead === true ? { lead: "builder" as const } : {}),
       });
       if (!created.ok) return err({ kind: "session", error: created.error });
       const listed = await sessions.list(workspaceId);
@@ -247,6 +255,23 @@ export const createNextUp = (options: {
       }
       kept.delete(repo);
       return created;
+    },
+
+    /**
+     * Releases a claim on an issue (AGENTS.md, claim rule): a comment starting "Stopped", saying
+     * why, so Next up offers it again (the Lead's skip, #347).
+     */
+    release: async (
+      rawId: string,
+      number: number,
+      why: string,
+    ): Promise<Result<null, NextUpProblem>> => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return found;
+      const { repo } = found.value;
+      const commented = await github.commentOnIssue({ repo, number, body: `Stopped: ${why}` });
+      kept.delete(repo);
+      return commented.ok ? ok(null) : err({ kind: "github", problem: commented.error });
     },
 
     /**

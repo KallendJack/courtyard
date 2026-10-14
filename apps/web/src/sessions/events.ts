@@ -156,6 +156,13 @@ export type Turn = {
    * failed (#172): the failed checks open its activity in place of the owner's message.
    */
   readonly fixesChecks: boolean;
+  /**
+   * Whether the worker sent it, not the owner, so their message isn't shown: a failed check's
+   * (#172), or a Lead's builder's merged pull request (#347).
+   */
+  readonly fromWorker: boolean;
+  /** What the worker did for a code workspace's Lead after this turn (#347), each in its words. */
+  readonly leadNotes: readonly string[];
   /** When the owner's message was recorded, which the Working line counts from (#179). */
   readonly startedAt: string;
   /**
@@ -272,6 +279,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             images: [],
             approval: undefined,
             fixesChecks: event.checksFailed !== undefined,
+            fromWorker: event.checksFailed !== undefined || event.merged !== undefined,
+            leadNotes: [],
             startedAt: event.at,
             doing: { kind: "thinking" },
             state: { kind: "running" },
@@ -435,6 +444,12 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         change: (turn) => ({ ...turn, things: [...turn.things, note] }),
       });
     }
+    // What the worker did for a code workspace's Lead (#347), under the turn before it.
+    case "lead-note":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, leadNotes: [...turn.leadNotes, event.text] }),
+      });
     case "thing-undone":
       return withTurn(log, {
         seq,

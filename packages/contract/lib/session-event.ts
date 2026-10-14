@@ -135,7 +135,20 @@ export const SessionEvent = z.discriminatedUnion("type", [
       .optional(),
     /** Sent from the queue (#177): the queued message, by its event number, it sends. */
     queued: z.number().int().positive().optional(),
+    /**
+     * Sent by the worker, not the owner, to a code workspace's Lead (#347): one of its builders'
+     * pull requests merged, and the message asks it to move its boards and keep the plan current.
+     */
+    merged: z.object({ pullRequest: z.number().int().positive() }).optional(),
+    /** The owner's tap on Run the build order, which started a code workspace's Lead (#347). */
+    runsBuildOrder: z.literal(true).optional(),
   }),
+  /**
+   * What the worker did for a code workspace's Lead as it ran the build order (#347), in its
+   * words: a builder started, a pull request ready to merge, holding back and why. Shown in the
+   * Lead's chat as its own.
+   */
+  z.object({ ...eventBase, type: z.literal("lead-note"), text: z.string() }),
   /**
    * A message the owner sent while a turn ran (#177): it waits, in order behind any queued before
    * it, and goes as soon as the session can take a turn, unless the owner removes it first.
