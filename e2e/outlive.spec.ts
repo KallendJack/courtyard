@@ -1,5 +1,5 @@
 import { setTimeout as wait } from "node:timers/promises";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
 
 const LONG_MESSAGE =
   "Plan the garage gym in order: clear the floor, fit the rubber mats, bolt the rack to the left " +
@@ -37,6 +37,35 @@ test("a page opened while the worker is down shows it as offline, and recovers b
   await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible({
     timeout: 10_000,
   });
+});
+
+// #390: the offline page's own check, started as it shows, can find the worker already back. It
+// knows the worker was down, so that's the worker coming back, not one that answers oddly.
+test("an offline page whose worker is back by its first check recovers at once", async ({
+  page,
+}) => {
+  await page.goto("/workspaces/garage-gym");
+  await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
+
+  // The worker is down, but the health checks are held, unanswered, until it's back.
+  const held: Route[] = [];
+  await page.route("**/api/**", (route) =>
+    route.request().url().endsWith("/api/health")
+      ? held.push(route)
+      : route.fulfill({ status: 502, body: "Bad Gateway" }),
+  );
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Worker offline" })).toBeVisible();
+  await expect.poll(() => held.length).toBeGreaterThan(0);
+
+  await workerBack(page);
+  // Some were the page's before the reload, gone with it.
+  for (const route of held) await route.continue().catch(() => {});
+  // Before the app-wide check would come round again (every 5 s).
+  await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible({
+    timeout: 4000,
+  });
+  await expect(page.getByText(/answered unexpectedly/)).toHaveCount(0);
 });
 
 test("a session page opened while the worker is down recovers with its whole session", async ({

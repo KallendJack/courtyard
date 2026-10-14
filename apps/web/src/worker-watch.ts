@@ -11,11 +11,14 @@ export type Reachability = "checking" | "down" | "up";
  * in an earlier check, or on an earlier try of this one. A worker that always answered doesn't
  * count as coming back, so a page that's broken for another reason never reloads itself in a loop.
  * The page's data catches up when the tab is shown again too (#387), so `onBack` is called then.
+ * `fromDown`: the page already knows the worker didn't answer (it's showing that it's offline),
+ * so the first answer is it coming back, however soon it comes (#390).
  */
 export const useWorkerWatch = (watch: {
   watching: boolean;
   everyMs: number;
   onBack: () => void;
+  fromDown?: boolean;
 }): Reachability => {
   const [reachability, setReachability] = useState<Reachability>("checking");
   const onBack = useRef(watch.onBack);
@@ -25,7 +28,7 @@ export const useWorkerWatch = (watch: {
     if (!watch.watching) return;
     const stop = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let wasDown = false;
+    let wasDown = watch.fromDown === true;
 
     const check = async () => {
       let tries = 0;
@@ -49,7 +52,7 @@ export const useWorkerWatch = (watch: {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", shown);
     };
-  }, [watch.watching, watch.everyMs]);
+  }, [watch.watching, watch.everyMs, watch.fromDown]);
 
   return reachability;
 };

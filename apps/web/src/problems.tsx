@@ -30,6 +30,7 @@ function WorkerOffline(props: { onBack: () => void }) {
     watching: true,
     everyMs: CHECK_EVERY_MS,
     onBack: props.onBack,
+    fromDown: true,
   });
   const { title, body } = describeProblem({ kind: "offline" });
 
