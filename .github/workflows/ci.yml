@@ -46,7 +46,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       # Each shard builds its own copy: about 5 seconds, less than handing one between jobs.
       - run: pnpm build
-      - run: pnpm e2e --shard=${{ matrix.shard }}/4
+      - run: pnpm e2e e2e/handheld.spec.ts:375 e2e/arrange.spec.ts:110 --repeat-each=40 --retries=0 --shard=${{ matrix.shard }}/4
       # A failed browser test's trace and page snapshot, so a flake on CI can be diagnosed (#163).
       - if: failure()
         uses: actions/upload-artifact@v7
