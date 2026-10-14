@@ -309,8 +309,11 @@ export const TurnView = memo(function TurnView(props: {
           </span>
         </p>
       )}
-      {/* A turn the worker started for a failed check opens with the check, in its activity. */}
-      {!turn.fixesChecks && <OwnerMessage sessionId={sessionId} turn={turn} />}
+      {/*
+       * A turn the worker started opens with what it does: a failed check, in its activity, or
+       * a Lead's merged builder (#347).
+       */}
+      {!turn.fromWorker && <OwnerMessage sessionId={sessionId} turn={turn} />}
       {/* What it wrote, each piece between the activities it's about (#200). */}
       {turn.parts.map((part, index) => {
         // Only the last piece can still be arriving.
@@ -400,6 +403,15 @@ export const TurnView = memo(function TurnView(props: {
             />
           ))}
         </ul>
+      )}
+      {/* What the worker did for a code workspace's Lead since, in its words (#347). */}
+      {turn.leadNotes.length > 0 && (
+        <section aria-label="What the Lead did" className="space-y-2">
+          {turn.leadNotes.map((note, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: notes only ever grow, in order
+            <Answer key={index} text={note} running={false} replayed={note.length} />
+          ))}
+        </section>
       )}
       {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
       {/* The latest turn's end, so a finished session never looks like one still working (#179). */}

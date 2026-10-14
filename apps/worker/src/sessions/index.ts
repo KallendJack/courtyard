@@ -6,6 +6,7 @@ import {
   type ApprovalAnswer,
   type ApprovalAsk,
   type Attachment,
+  type BuildIssue,
   type CarryOnRequest,
   type ChangeId,
   type CodeSessionList,
@@ -94,6 +95,8 @@ import {
   documentReply,
   type FramingWorkspace,
   framingFor,
+  LEAD_TOOL_NAME,
+  type LeadBrief,
   notOfferedReply,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
@@ -143,7 +146,7 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
-import { type Answer, answerOf, sessionWaiting } from "../waiting/index.ts";
+import { type Answered, answeredAfter, sessionWaiting } from "../waiting/index.ts";
 import {
   getWorkspace,
   isArchived,
@@ -245,6 +248,10 @@ const SessionFile = z.object({
    * (#363), which builds nothing.
    */
   placeless: z.literal(true).optional(),
+  /** Its code workspace's Lead (#347), which runs the build order; placeless too. */
+  lead: z.literal(true).optional(),
+  /** Started by its workspace's Lead to build an issue (#347). */
+  byLead: z.literal(true).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -476,7 +483,7 @@ type RunningSession = {
    */
   paperMade: Set<string>;
   /** Its latest answer (#334), from its event log once recovered, then as each is written. */
-  answer: Answer | undefined;
+  answered: Answered;
   /** The event number the owner has seen it up to, on any device (#334), once read from its folder. */
   seen: number | undefined;
 };
@@ -487,6 +494,15 @@ type RunningSession = {
  * for it before removing the folders it writes into.
  */
 export type Background = (work: Promise<void>) => void;
+
+/**
+ * What a code workspace's Lead's turns need from the Lead (#347): the build order as the worker
+ * has it, for its framing, and the answer to a call of its build order tool.
+ */
+export type LeadHooks = {
+  readonly brief: (session: SessionId) => Promise<LeadBrief | undefined>;
+  readonly tool: (session: SessionId, input: unknown) => Promise<ToolReply>;
+};
 
 /**
  * Sessions as jobs with an append-only event log in plain files (ADR 0006): one folder per session
@@ -517,6 +533,8 @@ export const createSessions = (options: {
   notify?: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => void;
   /** Given the titling of a session, which nobody waits for. */
   background: Background;
+  /** A code workspace's Lead (#347): the build order its turns are told, and its tool's answers. */
+  lead?: LeadHooks;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
@@ -546,7 +564,7 @@ export const createSessions = (options: {
       queues: false,
       ended: Promise.resolve(),
       paperMade: new Set(),
-      answer: undefined,
+      answered: { answer: undefined, reporting: false },
       seen: undefined,
     };
     running.set(id, created);
@@ -627,7 +645,7 @@ export const createSessions = (options: {
     }
     session.nextSeq += 1;
     if (numbered.data.type === "pull-request") pullRequests.set(id, numbered.data.pullRequest);
-    session.answer = answerOf(numbered.data) ?? session.answer;
+    session.answered = answeredAfter(session.answered, numbered.data);
     for (const listener of session.listeners) listener(numbered.data);
     return ok(numbered.data);
   };
@@ -665,7 +683,7 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     session.queues = events.value.some((event) => event.type === "message-queued");
-    for (const event of events.value) session.answer = answerOf(event) ?? session.answer;
+    for (const event of events.value) session.answered = answeredAfter(session.answered, event);
     // The owner's Undo and Edit can come after a turn ends, so it's the last turn's own events
     // that say whether it was left open.
     const last = events.value.findLast(
@@ -805,6 +823,13 @@ export const createSessions = (options: {
       stopper.signal.addEventListener("abort", () => resolve("stopped"), { once: true });
     });
     let failure: FailureReason | undefined;
+    /** It's in a code workspace's Lead (#347). */
+    let lead = false;
+    /**
+     * It's in the Lead or one of its builders (#347), whose finished turns send no notification:
+     * the owner hears only of what's ready to merge and what needs their decision.
+     */
+    let quiet = false;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
@@ -842,7 +867,11 @@ export const createSessions = (options: {
       } else {
         const { skills } = workspace.value;
         const inUse = skillsInUse(events.value);
+        lead = file.value?.lead === true;
+        quiet = lead || file.value?.byLead === true;
+        const brief = lead ? await options.lead?.brief(turn.id) : undefined;
         const framing = framingFor({
+          ...(brief === undefined ? {} : { lead: brief }),
           workspace: workspace.value,
           capabilities: turn.provider.capabilities,
           events: events.value,
@@ -973,6 +1002,8 @@ export const createSessions = (options: {
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
+          [LEAD_TOOL_NAME]: async (input) =>
+            (await options.lead?.tool(turn.id, input)) ?? notOfferedReply(LEAD_TOOL_NAME),
         };
         /** A model's call to one of Courtyard's tools, answered only when the framing offers it. */
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
@@ -1133,7 +1164,12 @@ export const createSessions = (options: {
                 worktree,
                 branch,
                 pullRequest: pullRequestIn(events.value)?.number,
-                allowlist: workspace.value.allowlist,
+                // The Lead files an issue only with the owner's OK (#347).
+                allowlist: lead
+                  ? workspace.value.allowlist.filter(
+                      (rule) => rule.words.join(" ") !== "gh issue create",
+                    )
+                  : workspace.value.allowlist,
               },
               command,
             );
@@ -1225,7 +1261,12 @@ export const createSessions = (options: {
     // It isn't the owner's turn when their queued message has just gone.
     if (ended.ok && !queuedGoes) {
       const events = turn.coding ? await readEvents(turn.id) : undefined;
-      options.notify?.(turn.id, ended.value, events?.ok ? pullRequestIn(events.value) : undefined);
+      const pullRequest = events?.ok ? pullRequestIn(events.value) : undefined;
+      // The Lead's and its builders' turns end quietly, unless checks still fail (#347).
+      const stillFailing = pullRequest?.state === "open" && pullRequest.checks.kind === "failed";
+      if (!quiet || ending.type !== "turn-completed" || stillFailing) {
+        options.notify?.(turn.id, ended.value, pullRequest);
+      }
     }
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
@@ -1307,6 +1348,10 @@ export const createSessions = (options: {
     conflicted?: { pullRequest: number; head: string };
     /** Sends the owner's queued message with this event number (#177), unless it's gone meanwhile. */
     fromQueue?: number;
+    /** Sent by the worker to a code workspace's Lead: a builder's pull request merged (#347). */
+    merged?: { pullRequest: number };
+    /** The owner's tap on Run the build order, starting a code workspace's Lead (#347). */
+    runsBuildOrder?: boolean;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -1358,6 +1403,8 @@ export const createSessions = (options: {
       ...(start.checksFailed === undefined ? {} : { checksFailed: start.checksFailed }),
       ...(start.conflicted === undefined ? {} : { conflicted: start.conflicted }),
       ...(start.fromQueue === undefined ? {} : { queued: start.fromQueue }),
+      ...(start.merged === undefined ? {} : { merged: start.merged }),
+      ...(start.runsBuildOrder === true ? { runsBuildOrder: true } : {}),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the
@@ -1631,7 +1678,7 @@ export const createSessions = (options: {
           now: now.value,
           queued,
           pullRequest,
-          answer: session.answer,
+          answer: session.answered.answer,
           seen: seen.value,
           clock: options.now(),
         }),
@@ -1639,7 +1686,14 @@ export const createSessions = (options: {
         ...(pullRequest === undefined ? {} : { pullRequest }),
       });
     }
-    return ok(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    // The Lead is pinned at the top (#347).
+    return ok(
+      summaries.sort(
+        (a, b) =>
+          Number(b.lead === true) - Number(a.lead === true) ||
+          b.updatedAt.localeCompare(a.updatedAt),
+      ),
+    );
   };
 
   /**
@@ -2152,6 +2206,8 @@ export const createSessions = (options: {
       title?: string;
       /** In a code workspace, it takes no place among the code sessions running (a grill, #363). */
       placeless?: boolean;
+      /** In a code workspace, it's the workspace's Lead (#347), or one of its builders. */
+      lead?: "lead" | "builder";
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -2189,7 +2245,11 @@ export const createSessions = (options: {
         updatedAt: at,
         ...(sessionBranch === undefined ? {} : { branch: sessionBranch.branch }),
         ...(sessionBranch?.kept === true ? { keepsBranch: true } : {}),
-        ...(sessionBranch !== undefined && start.placeless === true ? { placeless: true } : {}),
+        ...(sessionBranch !== undefined && (start.placeless === true || start.lead === "lead")
+          ? { placeless: true }
+          : {}),
+        ...(sessionBranch !== undefined && start.lead === "lead" ? { lead: true } : {}),
+        ...(sessionBranch !== undefined && start.lead === "builder" ? { byLead: true } : {}),
       };
       const unstarted = async () => {
         if (repoPath !== undefined && sessionBranch !== undefined) {
@@ -2213,6 +2273,7 @@ export const createSessions = (options: {
             coding: sessionBranch !== undefined,
             placeless: file.placeless === true,
             firstTurn: true,
+            runsBuildOrder: file.lead === true,
             ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
           })
         : err(STORAGE_ERROR);
@@ -2505,7 +2566,10 @@ export const createSessions = (options: {
       return list.ok ? ok(list.value.some((session) => session.busy)) : list;
     },
 
-    /** A workspace's sessions, most recently active first, each with whether it's waiting. */
+    /**
+     * A workspace's sessions, its Lead first (#347), then most recently active first, each with
+     * whether it's waiting.
+     */
     list: sessionsOf,
 
     markSeen,
@@ -2518,7 +2582,7 @@ export const createSessions = (options: {
       const list = await sessionsOf(workspaceId);
       if (!list.ok) return list;
       for (const listed of list.value) {
-        const answer = runningSession(listed.id).answer;
+        const { answer } = runningSession(listed.id).answered;
         if (answer === undefined) continue;
         const marked = await markSeen(listed.id, answer.seq);
         if (!marked.ok) return marked;
@@ -2528,6 +2592,68 @@ export const createSessions = (options: {
 
     /** How many code sessions are running, across the worker. */
     codeRunning: () => options.code.slots.running(),
+
+    /** Records what the worker did for a code workspace's Lead, in its chat (#347). */
+    note: async (id: SessionId, text: string): Promise<Result<null, SessionError>> => {
+      const recorded = await append(id, { type: "lead-note", text });
+      return recorded.ok ? ok(null) : recorded;
+    },
+
+    /**
+     * Sends a code workspace's Lead the worker's message that one of its builders' pull requests
+     * merged (#347), on the model its conversation last used. Refused, as `busy`, while a turn
+     * runs there, so the worker tries again later rather than queueing it as the owner's.
+     */
+    tellMerged: async (
+      id: SessionId,
+      merged: { pullRequest: number; text: string },
+    ): Promise<Result<null, SessionError>> => {
+      const found = await findSession(id);
+      if (!found.ok) return found;
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      const last = events.value.findLast((event) => event.type === "owner-message");
+      if (last?.type !== "owner-message") return err({ kind: "not-found" });
+      const message: NewMessage = {
+        text: merged.text,
+        model: last.model,
+        ...(last.effort === undefined ? {} : { effort: last.effort }),
+      };
+      const provider = await providerIn(found.value.workspaceId, message);
+      if (!provider.ok) return provider;
+      await settled(id);
+      return startTurn({
+        id,
+        workspaceId: found.value.workspaceId,
+        provider: provider.value.provider,
+        message,
+        since: freshStarts,
+        coding: found.value.branch !== undefined,
+        placeless: found.value.placeless === true,
+        merged: { pullRequest: merged.pullRequest },
+      });
+    },
+
+    /** Stops whatever turn runs in a session, and waits for it to end (the Lead's skip, #347). */
+    stopTurn: async (id: SessionId) => {
+      const session = running.get(id);
+      if (session?.turn.kind !== "running") return;
+      session.turn.stopper.abort();
+      await session.ended;
+    },
+
+    /**
+     * The model and effort a session's last message went to, which its picker changes (the Lead's
+     * builders start on it, #347); `undefined` when it can't be read.
+     */
+    lastModelOf: async (id: SessionId): Promise<BuildIssue | undefined> => {
+      const events = await readEvents(id);
+      const last = events.ok
+        ? events.value.findLast((event) => event.type === "owner-message")
+        : undefined;
+      if (last?.type !== "owner-message") return undefined;
+      return { model: last.model, ...(last.effort === undefined ? {} : { effort: last.effort }) };
+    },
 
     /** How many sessions there are, in every workspace. */
     count: async (): Promise<Result<number, SessionError>> => {

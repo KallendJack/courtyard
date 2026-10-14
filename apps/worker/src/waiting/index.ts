@@ -28,6 +28,22 @@ export const answerOf = (event: SessionEvent): Answer | undefined =>
     : undefined;
 
 /**
+ * A session's latest answer as its events come, one at a time: `answer`, and whether its turn
+ * now is a code workspace's Lead reporting (#347), started by the owner's tap on Run the build
+ * order or by the worker when a builder's pull request merged: its answer is a report on Home's
+ * Running row, not a reply the owner waits for.
+ */
+export type Answered = { readonly answer: Answer | undefined; readonly reporting: boolean };
+
+export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
+  if (event.type === "owner-message") {
+    return { ...was, reporting: event.merged !== undefined || event.runsBuildOrder === true };
+  }
+  const answer = was.reporting ? undefined : answerOf(event);
+  return answer === undefined ? was : { ...was, answer };
+};
+
+/**
  * What a session waits on the owner for: the approval its turn waits on; else its latest answer,
  * while the owner hasn't seen it (`seen`, the event number its page last showed up to, on any
  * device), it's under a day old, no turn runs or waits for a slot, and it has no pull request
