@@ -220,6 +220,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
 
     test("the screen stays awake while it listens and while an answer comes, and again when Courtyard comes back into sight", async ({
       page,
+      request,
     }) => {
       await page.goto("/workspaces/garage-gym");
       await expect(talking(page, says.idle)).toBeEnabled();
@@ -234,9 +235,11 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       // replace the long message, and a short answer ends before it's seen kept awake.
       await page.waitForTimeout(500);
 
+      // Long enough to still be coming when it's back in sight, on a slow run too (#371): the fake
+      // writes a word every 40 ms. It's stopped once that's been seen.
       await typeIn(page);
-      await message(page).fill(words(150));
-      await expect(message(page)).toHaveValue(words(150));
+      await message(page).fill(words(900));
+      await expect(message(page)).toHaveValue(words(900));
       await page.getByRole("button", { name: "Start" }).click();
       await expect(talking(page, says.answering)).toBeVisible();
       await expect.poll(() => screenKeptAwake(page)).toBe(true);
@@ -246,7 +249,9 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       await comeBack(page);
       await expect.poll(() => screenKeptAwake(page)).toBe(true);
 
-      await expect(talking(page, says.idle)).toBeVisible({ timeout: 60_000 });
+      const sessionId = /\/sessions\/([^/?#]+)/.exec(page.url())?.[1];
+      await request.post(`/api/sessions/${sessionId}/stop`, { data: { turn: 1 } });
+      await expect(talking(page, says.idle)).toBeVisible({ timeout: 15_000 });
       await expect.poll(() => screenKeptAwake(page)).toBe(false);
     });
 
