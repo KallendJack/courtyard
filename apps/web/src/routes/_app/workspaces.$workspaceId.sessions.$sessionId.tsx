@@ -39,6 +39,8 @@ import {
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
 const Review = lazy(() => import("../../review/review.tsx"));
+/** A code workspace's Lead's strip (#347), loaded only on its chat. */
+const LeadStrip = lazy(() => import("../../sessions/lead-strip.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   validateSearch: (search: Record<string, unknown>): { view?: "review" } =>
@@ -305,15 +307,24 @@ function Session(props: {
           {session.title}
         </PageTitle>
       )}
-      {session.branch !== undefined && (
+      {session.lead === true ? (
+        // The Lead builds on no branch of its own: what it runs shows in its place (#347).
         <div className="mt-3">
-          <BranchStrip
-            branch={session.branch}
-            pullRequest={pullRequest}
-            fixing={running && last?.fixesChecks === true}
-            session={{ workspaceId: session.workspaceId, sessionId: session.id }}
-          />
+          <Suspense fallback={<PlaceholderRows count={1} size="tall" />}>
+            <LeadStrip workspaceId={session.workspaceId} again={shownUpTo} />
+          </Suspense>
         </div>
+      ) : (
+        session.branch !== undefined && (
+          <div className="mt-3">
+            <BranchStrip
+              branch={session.branch}
+              pullRequest={pullRequest}
+              fixing={running && last?.fixesChecks === true}
+              session={{ workspaceId: session.workspaceId, sessionId: session.id }}
+            />
+          </div>
+        )
       )}
       {tidying === "delete" && (
         <div className="mt-4">

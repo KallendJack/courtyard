@@ -1,5 +1,7 @@
 import {
   type BuildIssue,
+  type LeadRun,
+  LeadStatus,
   NextUp,
   type PaperConnecting,
   PaperFileList,
@@ -37,6 +39,18 @@ export const startOnIssue = (start: {
     body: start.model,
     schema: SessionSummary,
   });
+
+/** The workspace's Lead (#347): where it stands, its builders, what's next and what's ready. */
+export const loadLead = (workspaceId: WorkspaceId) =>
+  fromWorker(`${workspacePath(workspaceId)}/lead`, LeadStatus);
+
+/** Run the build order (#347): the Lead starts on this model, or wakes. */
+export const runLead = (workspaceId: WorkspaceId, model: LeadRun) =>
+  sendJson({ path: `${workspacePath(workspaceId)}/lead/run`, body: model, schema: LeadStatus });
+
+/** Pause the Lead (#347): its builders carry on, and nothing new starts. */
+export const pauseLead = (workspaceId: WorkspaceId) =>
+  sendJson({ path: `${workspacePath(workspaceId)}/lead/pause`, body: {}, schema: LeadStatus });
 
 /** The workspace's main: its newest commit and that commit's build (#301's Main row). */
 export const loadMain = (workspaceId: WorkspaceId) =>

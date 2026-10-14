@@ -261,7 +261,11 @@ export const createNextUp = (options: {
      * Releases a claim on an issue (AGENTS.md, claim rule): a comment starting "Stopped", saying
      * why, so Next up offers it again (the Lead's skip, #347).
      */
-    release: async (rawId: string, number: number, why: string): Promise<Result<null, NextUpProblem>> => {
+    release: async (
+      rawId: string,
+      number: number,
+      why: string,
+    ): Promise<Result<null, NextUpProblem>> => {
       const found = await repoOf(rawId);
       if (!found.ok) return found;
       const { repo } = found.value;

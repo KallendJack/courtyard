@@ -1,6 +1,6 @@
-import type { NextUpIssue, ProviderList, WorkspaceId } from "@courtyard/contract";
+import type { LeadStatus, NextUpIssue, ProviderList, WorkspaceId } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
-import { Flame, Zap } from "lucide-react";
+import { Flame, Play, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
@@ -10,7 +10,7 @@ import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { codingModelIn } from "../review/api.ts";
-import { startOnIssue } from "./api.ts";
+import { runLead, startOnIssue } from "./api.ts";
 
 /** How many issues show before More. */
 const SHOWN = 3;
@@ -25,14 +25,20 @@ const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
  * starts the session, which the worker claims the issue for. When the next in order on its Build
  * order line needs grilling first, Grill takes the top in gold (#363; Paper, "Next up offers
  * Grill"), and the first ready issue sits under it with a small Build; the rest wait for More.
- * More opens the rest inside its card, which keeps its height, and becomes Fewer (#335). With
- * none offered it says so.
+ * More opens the rest inside its card, which keeps its height, and becomes Fewer (#335). Under
+ * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
+ * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
+ * it next, in Build's place ("Lead running"). With none offered it says so.
  */
 export function NextUp(props: {
   workspaceId: WorkspaceId;
   /** `undefined` while nothing is known yet (a first visit): the block keeps its place. */
   issues: readonly NextUpIssue[] | undefined;
   providers: ProviderList["providers"];
+  /** The workspace's Lead (#347), once known: Run the build order sits under Build. */
+  lead: LeadStatus | undefined;
+  /** The Lead started or woke. */
+  onLead: (lead: LeadStatus) => void;
 }) {
   const [more, setMore] = useState(false);
   if (props.issues === undefined) {
@@ -69,7 +75,14 @@ export function NextUp(props: {
       <Block label="Next up" aside={first.milestone ?? undefined} fill>
         {/* Grill, a Build under it and an open Start can outgrow the column: then they scroll. */}
         <div className="scroll-thin flex flex-col gap-1.5 md:min-h-0 md:overflow-y-auto">
-          <StartOnIssue {...on} issue={first} does={first.ready ? "build" : "grill"} />
+          <StartOnIssue
+            {...on}
+            issue={first}
+            does={first.ready ? "build" : "grill"}
+            {...(first.ready && props.lead !== undefined
+              ? { lead: { status: props.lead, onLead: props.onLead } }
+              : {})}
+          />
           {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
         </div>
         {shown.length > 0 && (
@@ -143,17 +156,25 @@ function StartOnIssue(props: {
   providers: ProviderList["providers"];
   does: keyof typeof STARTS;
   small?: boolean;
+  /**
+   * On the first ready issue, the workspace's Lead (#347): Run the build order under Build, or,
+   * while it runs, that it starts this next in Build's place.
+   */
+  lead?: { status: LeadStatus; onLead: (lead: LeadStatus) => void };
 }) {
   const { issue } = props;
   const look = STARTS[props.does];
   const Icon = look.icon;
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  /** Run the build order, tapped: what starts shows first, with Start the order. */
+  const [running, setRunning] = useState(false);
+  const leading = props.lead?.status.state === "running";
   /** Start and Cancel, brought into view when they open in a column too short for them (#335). */
   const choices = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (confirming) choices.current?.scrollIntoView({ block: "nearest" });
-  }, [confirming]);
+    if (confirming || running) choices.current?.scrollIntoView({ block: "nearest" });
+  }, [confirming, running]);
   const model = codingModelIn(props.providers);
   const start = useAction(async () => {
     if (model === undefined) return "No model that codes is available right now.";
@@ -168,6 +189,14 @@ function StartOnIssue(props: {
       to: "/workspaces/$workspaceId/sessions/$sessionId",
       params: { workspaceId: props.workspaceId, sessionId: started.data.id },
     });
+    return undefined;
+  });
+  const runOrder = useAction(async () => {
+    if (model === undefined) return "No model that codes is available right now.";
+    const started = await runLead(props.workspaceId, { model: model.ref });
+    if (started.kind !== "loaded") return describeProblem(started).body;
+    setRunning(false);
+    props.lead?.onLead(started.data);
     return undefined;
   });
   const title = (
@@ -186,7 +215,12 @@ function StartOnIssue(props: {
       {props.small || props.does === "grill" ? issue.title : `#${issue.number} ${issue.title}`}
     </a>
   );
-  const status = props.does === "grill" ? "Next in order · needs grilling first" : "Ready to build";
+  const status =
+    props.does === "grill"
+      ? "Next in order · needs grilling first"
+      : leading
+        ? "The Lead starts this next"
+        : "Ready to build";
   return (
     <section
       aria-label={`${look.label} #${issue.number}`}
@@ -239,12 +273,49 @@ function StartOnIssue(props: {
           </div>
           <FormError message={start.error} />
         </>
+      ) : running ? (
+        <>
+          <p className="text-meta text-foreground/90">
+            {model === undefined
+              ? "No model that codes is available right now."
+              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead?.status.builders ?? 2} at a time, each in a session of its own that claims its issue, and tells you what's ready to merge. Merging stays yours.`}
+          </p>
+          <div ref={choices} className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="primary"
+              grow
+              disabled={runOrder.busy || model === undefined}
+              onClick={() => void runOrder.run()}
+            >
+              <Play aria-hidden />
+              Start the order
+            </Button>
+            <Button variant="outline" onClick={() => setRunning(false)}>
+              Cancel
+            </Button>
+          </div>
+          <FormError message={runOrder.error} />
+        </>
+      ) : leading ? (
+        // While the Lead runs, it starts this one: there's no Build to tap (Paper, "Lead running").
+        <p className="flex h-9 items-center justify-center gap-2 rounded-full border border-primary/35 bg-secondary text-meta font-bold text-primary-text">
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
+          Lead is running the order
+        </p>
       ) : (
         !props.small && (
-          <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
-            <Icon aria-hidden />
-            {look.label}
-          </Button>
+          <>
+            <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
+              <Icon aria-hidden />
+              {look.label}
+            </Button>
+            {props.lead !== undefined && (
+              <Button variant="outline" fullWidth onClick={() => setRunning(true)}>
+                <Play aria-hidden />
+                Run the build order
+              </Button>
+            )}
+          </>
         )
       )}
     </section>

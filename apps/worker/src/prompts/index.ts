@@ -1374,7 +1374,8 @@ const leadPart = (brief: LeadBrief) => {
     `Next:\n${list(brief.next.map(({ number, title }) => `${title} (issue #${number})`))}`,
     `Ready for the owner to merge:\n${list(
       brief.ready.map(
-        ({ issue, title, pullRequest }) => `${title} (issue #${issue}, pull request #${pullRequest})`,
+        ({ issue, title, pullRequest }) =>
+          `${title} (issue #${issue}, pull request #${pullRequest})`,
       ),
     )}`,
     `What the worker did for you lately, oldest first:\n${list(brief.notes)}`,

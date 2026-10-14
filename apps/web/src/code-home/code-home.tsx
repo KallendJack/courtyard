@@ -1,5 +1,6 @@
 import type {
   CodeSessionList,
+  LeadStatus,
   MattSetup,
   NextUpIssue,
   ProviderList,
@@ -24,7 +25,7 @@ import { Composer } from "../sessions/composer.tsx";
 import { startSession } from "../sessions/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
 import type { FromWorker } from "../worker.ts";
-import { loadConnections, loadNextUp } from "./api.ts";
+import { loadConnections, loadLead, loadNextUp } from "./api.ts";
 import css from "./code-home.css?inline";
 import { ConnectionsSheet } from "./connections.tsx";
 import { MainRow } from "./main-row.tsx";
@@ -63,6 +64,7 @@ const tabIn = (hash: string): Tab => (hash === "sessions" || hash === "prs" ? ha
 const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
 const KEPT_SETUP = createKept<MattSetup>();
 const KEPT_NEXT_UP = createKept<readonly NextUpIssue[]>();
+const KEPT_LEAD = createKept<LeadStatus>();
 
 const NO_SETUP: MattSetup = { state: "none" };
 
@@ -119,6 +121,12 @@ export default function CodeHome(props: {
     },
     again: list.sessions.length,
   });
+  // The Lead (#347), asked for again as its sessions change, as Next up is.
+  const lead = useKept(KEPT_LEAD, {
+    key: workspace.id,
+    load: async () => known(await loadLead(workspace.id)),
+    again: `${list.sessions.length}-${list.sessions.filter((session) => session.busy).length}-${again}`,
+  });
   const [connecting, setConnecting] = useState(false);
   const line = useRef<HTMLButtonElement>(null);
 
@@ -142,6 +150,12 @@ export default function CodeHome(props: {
   const changed = () => {
     setAgain((was) => was + 1);
     void router.invalidate();
+  };
+
+  /** The Lead started, woke or paused: shown at once, and the lists asked for again. */
+  const leadChanged = (now: LeadStatus) => {
+    KEPT_LEAD.set(workspace.id, now);
+    changed();
   };
 
   const pulls = open?.pullRequests ?? [];
@@ -221,13 +235,22 @@ export default function CodeHome(props: {
                 onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
                 onChanged={changed}
               />
-              <Running workspaceId={workspace.id} sessions={list.sessions} running={list.running} />
+              <Running
+                workspaceId={workspace.id}
+                sessions={list.sessions}
+                running={list.running}
+                lead={lead}
+                providers={providers.kind === "loaded" ? providers.data.providers : undefined}
+                onLead={leadChanged}
+              />
             </div>
             {providers.kind === "loaded" && (
               <NextUp
                 workspaceId={workspace.id}
                 issues={nextUp}
                 providers={providers.data.providers}
+                lead={lead}
+                onLead={leadChanged}
               />
             )}
           </div>
