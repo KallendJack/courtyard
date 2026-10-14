@@ -71,7 +71,12 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await page.goto(HOME);
   const running = page.getByRole("region", { name: "Running" });
   await running.getByRole("link", { name: /Lead/ }).first().click();
-  await page.getByRole("textbox", { name: "Message" }).fill("pause");
+  // The chat drawn first, so the box typed in is the one that stays.
+  await expect(page.getByRole("region", { name: "Build order" })).toContainText("Building · 2");
+  await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+  const box = page.getByRole("textbox", { name: "Message" });
+  await box.fill("pause");
+  await expect(box).toHaveValue("pause");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Paused", { exact: false }).first()).toBeVisible();
 
