@@ -43,3 +43,19 @@ export const chosen = async (page: Page) => {
   await expect(sheet).toBeHidden();
   return now;
 };
+
+/** On the cover screen's frame (under 600 px wide), the message box opens with Type. */
+export const openBox = async (page: Page) => {
+  if ((page.viewportSize()?.width ?? 1280) < 600) {
+    await page.getByRole("button", { name: "Type" }).click();
+  }
+};
+
+/** The open workspace's recent sessions, on the sheet a right-click on its tile opens. */
+export const openRecent = async (page: Page, workspace: string) => {
+  await page
+    .getByRole("navigation", { name: "Workspaces" })
+    .getByRole("link", { name: workspace })
+    .click({ button: "right" });
+  return page.getByRole("region", { name: `Recent in ${workspace}` });
+};

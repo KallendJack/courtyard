@@ -459,8 +459,8 @@ function Reviewing(props: {
   ) : null;
 
   // On a tablet the quick questions take the file list's place, which folds into a switcher
-  // above the diff; on a desktop they sit beside both; on a phone they're a sheet over them.
-  const folded = panelOpen && layout === "tablet";
+  // above the diff; in a wide window they sit beside both; on a phone they're a sheet over them.
+  const folded = panelOpen && layout === "tablet" && !desktop;
   const placeShown =
     folded && files.length > 1 && file !== undefined ? (
       <Select
