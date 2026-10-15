@@ -72,6 +72,11 @@ export const Capabilities = z.object({
   savesContext: z.boolean(),
   /** Searches the web, and reads the pages it finds, in a planning workspace (ADR 0019). */
   searchesWeb: z.boolean(),
+  /**
+   * Takes what the owner adds while it answers into that answer, at its next step (#252); a
+   * provider that doesn't has such a message queued for when the answer ends.
+   */
+  steers: z.boolean(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 

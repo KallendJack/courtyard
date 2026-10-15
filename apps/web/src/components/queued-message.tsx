@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { useState } from "react";
 import { IconButton } from "./button.tsx";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
@@ -32,8 +32,9 @@ const ordinal = (place: number) => {
 
 /**
  * The owner's queued messages, under the Working line, in order (#177, Paper board Handheld · 23):
- * each an outlined bubble with × to remove it, saying when it goes. Every device shows them, and
- * removing one removes it everywhere.
+ * each an outlined bubble with × to remove it, and, for one of words only, Edit to take it back
+ * into the Reply box (#252), saying when it goes. Every device shows them, and removing one
+ * removes it everywhere.
  */
 export function QueuedMessages(props: {
   messages: readonly Queued[];
@@ -41,7 +42,10 @@ export function QueuedMessages(props: {
   running: boolean;
   /** Removes one: what went wrong, or nothing once it's removed. */
   onRemove: (queued: number) => Promise<string | undefined>;
+  /** Takes one back into the Reply box, out of the queue: what went wrong, or nothing (#252). */
+  onEdit?: (queued: Queued) => Promise<string | undefined>;
 }) {
+  const { onEdit } = props;
   const [problem, setProblem] = useState<string>();
   if (props.messages.length === 0) return null;
   return (
@@ -53,6 +57,14 @@ export function QueuedMessages(props: {
               <p className="py-1.5 text-message/5.5 whitespace-pre-wrap wrap-anywhere text-foreground/85 md:text-base/5.5">
                 {queuedLine(message)}
               </p>
+              {onEdit !== undefined && message.attachments === 0 && (
+                <IconButton
+                  label="Edit queued message"
+                  icon={<Pencil />}
+                  size="sm"
+                  onClick={async () => setProblem(await onEdit(message))}
+                />
+              )}
               <IconButton
                 label="Remove queued message"
                 icon={<X />}
@@ -64,7 +76,7 @@ export function QueuedMessages(props: {
               {index > 0
                 ? `Queued · ${ordinal(index + 1)}`
                 : props.running
-                  ? "Queued · sends when this turn ends"
+                  ? "Queued · goes when this answer ends"
                   : "Queued"}
             </p>
           </li>

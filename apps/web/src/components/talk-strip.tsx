@@ -33,7 +33,14 @@ type Talk =
 type Showing = "idle" | "answering" | "listening" | "held" | "dropping";
 
 /** `sends`: held by a key or the mouse's side button, which sends when let go (#197). */
-type Now = { where: string; problem: string | undefined; words: string; sends: boolean };
+type Now = {
+  where: string;
+  problem: string | undefined;
+  words: string;
+  sends: boolean;
+  /** While it answers, what's said goes into the answer (#252), not the queue. */
+  steers: boolean;
+};
 
 type Says = Record<Showing, (now: Now) => { title: string; detail: string }>;
 
@@ -327,7 +334,14 @@ function useTalk(props: {
   const problem = talk.kind === "idle" ? talk.problem : undefined;
   const words = talk.kind === "listening" ? talk.words : "";
   const sends = talk.kind === "listening" && talk.sends;
-  const { title, detail } = props.says[showing]({ where: props.where, problem, words, sends });
+  const steers = box?.steers === true;
+  const { title, detail } = props.says[showing]({
+    where: props.where,
+    problem,
+    words,
+    sends,
+    steers,
+  });
 
   return {
     showing,
@@ -376,7 +390,9 @@ const STRIP_SAYS: Says = {
   idle: (now) => ({ title: "Tap or hold to talk", detail: now.problem ?? now.where }),
   answering: (now) => ({
     title: "Answering · talk to add",
-    detail: now.problem ?? "What you say now queues",
+    detail:
+      now.problem ??
+      (now.steers ? "What you say now goes into this answer" : "What you say now queues"),
   }),
   listening: (now) => ({
     title: "Listening · tap to stop",

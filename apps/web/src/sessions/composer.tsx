@@ -98,6 +98,13 @@ export const Composer = memo(function Composer(props: {
   disabled?: boolean;
   /** While a turn runs: stops it, shown in place of Send until there's a message to queue (#177). */
   stop?: () => void;
+  /** While it runs, what's sent goes into that answer (#252), not the queue. */
+  steers?: boolean;
+  /**
+   * Words to put back in the box, after anything typed, such as a queued message taken back to
+   * edit (#252): each time `key` changes.
+   */
+  draft?: { readonly text: string; readonly key: number };
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
   submitLabel?: string;
@@ -291,6 +298,15 @@ export const Composer = memo(function Composer(props: {
   const model = modelName(choice);
   const hasSkills = skills !== undefined;
   const answering = props.stop !== undefined;
+  const steers = answering && props.steers === true;
+  // Words taken back to edit go in the box, which opens to them (#252).
+  const draft = props.draft;
+  useEffect(() => {
+    if (draft === undefined) return;
+    setText((typed) => (typed.trim() === "" ? draft.text : `${typed.trimEnd()}\n${draft.text}`));
+    dock?.open();
+    box.current?.focus();
+  }, [draft, dock]);
   useEffect(
     () =>
       dock?.offer({
@@ -300,6 +316,7 @@ export const Composer = memo(function Composer(props: {
         model,
         ...(choosing === undefined ? {} : { choosing }),
         answering,
+        ...(steers ? { steers: true } : {}),
         dictate: (listener) => {
           const typed = textNow.current;
           dictating.current = listener;
@@ -323,7 +340,7 @@ export const Composer = memo(function Composer(props: {
           };
         },
       }),
-    [dock, model, hasSkills, choosing, answering, standing],
+    [dock, model, hasSkills, choosing, answering, steers, standing],
   );
 
   const label = props.submitLabel ?? "Send";

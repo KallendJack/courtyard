@@ -56,6 +56,8 @@ export type TalkTarget = {
   focus: () => void;
   /** A turn is running, so what's sent now is queued until it ends (#177). */
   answering: boolean;
+  /** While it answers, what's sent goes into that answer (#252) rather than the queue. */
+  steers?: boolean;
   /**
    * Takes what the owner says in the talk strip or to the Talk key (#79, #198, #206), which goes
    * in after anything typed. Once it's done with it (the box sent it), it tells `listener`, so

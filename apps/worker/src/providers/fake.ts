@@ -24,8 +24,11 @@ import { pageRead, turnSources } from "../sources/index.ts";
 import { pngOf } from "../test-files.ts";
 import type {
   Activity,
+  AddedMessage,
+  AddedMessages,
   CodeTurn,
   FramedAttachment,
+  Framing,
   HelperCode,
   Provider,
   SignIn,
@@ -42,6 +45,7 @@ const CAPABILITIES: Capabilities = {
   usesTools: true,
   savesContext: true,
   searchesWeb: true,
+  steers: true,
 };
 
 /** The levels of effort the fake's model takes, so picking one can be seen and tested. */
@@ -577,6 +581,21 @@ const scriptedPaper = async (paper: ToolConnection, message: string) => {
   return said;
 };
 
+/**
+ * What the owner added while it answered (#252), each noted where it reads it: "noted: …", as a
+ * model taking it on board would, and said to be read.
+ */
+const noted = async (
+  added: AddedMessages,
+  taken: readonly AddedMessage[],
+  emit: TurnInput["emit"],
+) => {
+  for (const each of taken) {
+    added.read(each);
+    await emit(`noted: ${each.text}\n\n`);
+  }
+};
+
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -613,6 +632,13 @@ export const createFakeProvider = (
     beforeReply?: (signal: AbortSignal) => Promise<void>;
     /** Told the model and effort of each turn, so tests can see what reached the model. */
     heard?: (turn: { model: ModelId; effort: Effort | undefined }) => void;
+    /** Told each turn's framing, so tests can see what the model was told. */
+    framed?: (framing: Framing) => void;
+    /**
+     * Whether it takes what the owner adds while it answers (#252): it does, unless this says
+     * not; Fake two never does, so there's a provider that queues instead.
+     */
+    steers?: boolean;
     /** A pretend sign-in, starting signed out (see `fakeSignIn`). The fake answers either way. */
     signIn?: { finishAfterMs?: number };
     /** The second fake, "Fake two", so there's another provider to carry on with. */
@@ -626,8 +652,13 @@ export const createFakeProvider = (
   const id = ProviderId.parse(options.second ? "fake-two" : "fake");
   const label = options.second ? "Fake two" : "Fake";
   const hitsLimit = new RegExp(`please hit ${label}'s limit`, "i");
-  // Fake two doesn't code, so a model that can't is there to be refused in a code workspace.
-  const capabilities = options.second ? { ...CAPABILITIES, codes: false } : CAPABILITIES;
+  // Fake two doesn't code, so a model that can't is there to be refused in a code workspace, nor
+  // steer, so one that queues is there too.
+  const capabilities = {
+    ...CAPABILITIES,
+    ...(options.second ? { codes: false, steers: false } : {}),
+    ...(options.steers === undefined ? {} : { steers: options.steers }),
+  };
 
   return {
     id,
@@ -660,8 +691,10 @@ export const createFakeProvider = (
       cite,
       callTool,
       signal,
+      added,
     }) => {
       options.heard?.({ model, effort });
+      options.framed?.(framing);
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
@@ -694,13 +727,24 @@ export const createFakeProvider = (
       const coded = code === null ? "" : await scriptedCoding(code, last, report);
       const paper = connections.find((connection) => connection.name === "paper");
       const drew = paper === undefined ? "" : await scriptedPaper(paper, last);
+      // "wait for more" waits for what the owner adds while it answers (#252).
+      if (added !== null && /^wait for more$/im.test(last)) {
+        const more = await added.next();
+        if (more !== undefined) await noted(added, [more], emit);
+      }
       const saw = /please look/i.test(last) || last === "" ? seen(framing.attachments) : "";
       // A message of only attachments has nothing to echo (#164).
       const said = last === "" ? "" : `You said: ${last}`;
       for (const word of `${coded}${drew}${saw}${said}`.trimEnd().split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
+        if (added !== null) await noted(added, added.waiting(), emit);
         await emit(word);
+      }
+      // One added as it finishes is still answered, in this reply.
+      if (added !== null) {
+        await noted(added, added.waiting(), emit);
+        added.done();
       }
       if (web !== undefined && web.sources.length > 0) await cite(web.sources);
       return ok(null);

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { chooseModel, openBox, openRecent } from "./frame.ts";
 import { READING_SESSION_ID } from "./long-session.ts";
@@ -9,10 +10,14 @@ import { fromTheEnd } from "./page-scroll.ts";
 /** Words enough that the fake model takes a few seconds to write them. */
 const words = (count: number) => Array.from({ length: count }, (_, i) => `word${i + 1}`).join(" ");
 
-/** Starts a session in Garage gym with `text` as its first message, and waits for its page. */
-const startSession = async (page: Page, text: string) => {
+/**
+ * Starts a session in Garage gym with `text` as its first message, and waits for its page: on
+ * Fake, or on `model` ("fake-two/echo" for one that can't steer, #252).
+ */
+const startSession = async (page: Page, text: string, model?: string) => {
   await page.goto("/workspaces/garage-gym");
   await openBox(page);
+  if (model !== undefined) await chooseModel(page, model);
   await page.getByLabel("Message", { exact: true }).fill(text);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/workspaces\/garage-gym\/sessions\//);
@@ -73,12 +78,12 @@ test.describe("whose turn it is", () => {
   });
 });
 
-test.describe("messages sent while a turn runs", () => {
-  test("queue under the Working line, can be removed, and go in order once the turn ends", async ({
+test.describe("messages sent while a turn runs, on a model that can't steer", () => {
+  test("queue under the Working line, can be removed or edited, and go in order once the turn ends", async ({
     page,
     context,
   }) => {
-    await startSession(page, words(150));
+    await startSession(page, words(150), "fake-two/echo");
     const session = sessionOn(page);
     await expect(session.getByText("Working", { exact: true })).toBeVisible();
 
@@ -91,7 +96,7 @@ test.describe("messages sent while a turn runs", () => {
 
     const queued = page.getByRole("list", { name: "Queued messages" });
     await expect(queued.getByRole("listitem")).toHaveText([
-      /Also check the cover screen in light mode.*Queued · sends when this turn ends/,
+      /Also check the cover screen in light mode.*Queued · goes when this answer ends/,
       /and write the PR the repo's way.*Queued · 2nd/,
     ]);
     // Stop is still there while it answers.
@@ -108,14 +113,57 @@ test.describe("messages sent while a turn runs", () => {
       .getByRole("button", { name: "Remove queued message" })
       .click();
     await expect(queued.getByRole("listitem")).toHaveText([
-      /and write the PR the repo's way.*Queued · sends when this turn ends/,
+      /and write the PR the repo's way.*Queued · goes when this answer ends/,
     ]);
+
+    // Edit takes it back into the Reply box, out of the queue, to send again (#252).
+    await queued.getByRole("button", { name: "Edit queued message" }).click();
+    await expect(queued).toHaveCount(0);
+    await expect(message).toHaveValue("and write the PR the repo's way");
+    await message.press("Enter");
+    await expect(queued.getByRole("listitem")).toHaveCount(1);
 
     await expect(session).toContainText("You said: and write the PR the repo's way", {
       timeout: 45_000,
     });
     await expect(queued).toHaveCount(0);
     await expect(session).not.toContainText("You said: Also check the cover screen");
+  });
+});
+
+test.describe("messages sent while it answers, on a model that steers (#252)", () => {
+  test("go into the answer where they're sent, and the answer carries on from them", async ({
+    page,
+  }) => {
+    // The fake waits for what the owner adds, then says it noted it.
+    await startSession(page, "wait for more");
+    const session = sessionOn(page);
+    await expect(session.getByText("Working", { exact: true })).toBeVisible();
+
+    const message = page.getByRole("textbox", { name: "Message" });
+    await expect(message).toHaveAttribute("placeholder", "Add to this, it'll take it on board…");
+    await message.fill("Use the blue one");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(session).toContainText(/Use the blue one\s*Added while answering/);
+    await expect(session).toContainText("noted: Use the blue one");
+    await expect(session).toContainText(/Your turn · finished/);
+    // It went into the answer: nothing waits in the queue, and no turn of its own follows.
+    await expect(page.getByRole("list", { name: "Queued messages" })).toHaveCount(0);
+    await expect(session).not.toContainText("You said: Use the blue one");
+
+    for (const [name, size] of [
+      ["tablet", { width: 950, height: 712 }],
+      ["cover", { width: 400, height: 900 }],
+      ["desktop", { width: 1440, height: 900 }],
+    ] as const) {
+      await page.setViewportSize(size);
+      await session.getByText("Added while answering").scrollIntoViewIfNeeded();
+      const folder = process.env.COURTYARD_E2E_SHOTS;
+      if (folder !== undefined) {
+        await page.screenshot({ path: join(folder, `${name}-added-while-answering.png`) });
+      }
+    }
   });
 });
 

@@ -60,6 +60,7 @@ const READS_FILES: Capabilities = {
   usesTools: false,
   savesContext: false,
   searchesWeb: false,
+  steers: false,
 };
 /** A provider that codes, as only one may in a code workspace (ADR 0007). */
 const CODES: Capabilities = { ...READS_FILES, codes: true };
@@ -1457,6 +1458,21 @@ describe("Things (#149, ADR 0020)", () => {
 
     expect(saver.framings[0]?.tools.map((one) => one.name)).not.toContain("save_thing");
     expect(saver.framings[0]?.instructions).not.toMatch(/Things|save_thing/);
+  });
+});
+
+describe("steering while it answers (#252)", () => {
+  it("tells a provider that steers that the owner may add to their message, and one that doesn't nothing", async () => {
+    const { provider: steers, turns: steered } = recorder({ ...READS_FILES, steers: true });
+    await (await sessionOn(steers)).say("Where should the rack go?");
+    await rm(join(root, "data"), { recursive: true, force: true });
+    const { provider: queues, turns: queued } = recorder(READS_FILES);
+    await (await sessionOn(queues)).say("Where should the rack go?");
+
+    expect(steered[0]?.framing.instructions).toContain(
+      await quotedInGuide("The owner may add to their message while you answer"),
+    );
+    expect(queued[0]?.framing.instructions).not.toMatch(/add to their message/);
   });
 });
 

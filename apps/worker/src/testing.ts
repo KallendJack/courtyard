@@ -206,6 +206,7 @@ export const signedOutProvider = (): Provider => {
     usesTools: false,
     savesContext: false,
     searchesWeb: false,
+    steers: false,
   };
   const notSignedIn = { kind: "provider-unavailable", message: "Not signed in." } as const;
   return {
@@ -258,7 +259,7 @@ export const renameSession = (request: Requester, id: string, title: unknown) =>
  * For tests: a fake provider that holds each turn open until the test lets it go, if ever. `held`
  * resolves once a turn is being held, so the worker has done all it does before the answer.
  */
-export const gatedProvider = () => {
+export const gatedProvider = (options: { steers?: boolean } = {}) => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -278,7 +279,12 @@ export const gatedProvider = () => {
     ]);
   };
   return {
-    provider: createFakeProvider({ delayMs: 0, beforeReply: heldUntilReleased }),
+    // It queues what the owner sends while it's held (#177), unless it's to steer (#252).
+    provider: createFakeProvider({
+      delayMs: 0,
+      beforeReply: heldUntilReleased,
+      steers: options.steers ?? false,
+    }),
     release,
     held,
   };
@@ -334,6 +340,7 @@ export const savingProvider = (
     usesTools: false,
     savesContext: true,
     searchesWeb: false,
+    steers: false,
   };
   const provider: Provider = {
     id,
@@ -404,6 +411,7 @@ export const codingProvider = (
     usesTools: false,
     savesContext: false,
     searchesWeb: false,
+    steers: false,
   };
   const provider: Provider = {
     id,
@@ -466,6 +474,7 @@ export const drawingProvider = (steps: readonly PaperStep[]) => {
     usesTools: true,
     savesContext: false,
     searchesWeb: false,
+    steers: false,
   };
   const provider: Provider = {
     id,
@@ -526,6 +535,7 @@ export const runningProvider = (
     usesTools: false,
     savesContext: false,
     searchesWeb: false,
+    steers: false,
   };
   const provider: Provider = {
     id,

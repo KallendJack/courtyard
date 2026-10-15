@@ -23,7 +23,7 @@ import { RenameForm } from "@/components/rename-form";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer, type StandIn } from "../../sessions/composer.tsx";
 import type { DocumentsHere } from "../../sessions/documents.tsx";
-import { type Turn, useSessionTurns } from "../../sessions/events.ts";
+import { type QueuedMessage, type Turn, useSessionTurns } from "../../sessions/events.ts";
 import { allowAll, allowAllOff, removeQueued, sendMessage } from "../../sessions/messages.ts";
 import { useSeen } from "../../sessions/seen.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
@@ -118,6 +118,21 @@ function Session(props: {
     },
     [session.id],
   );
+  /** A queued message taken back into the Reply box to edit (#252), each time a new one. */
+  const [draft, setDraft] = useState<{ text: string; key: number }>();
+  const editQueuedMessage = useCallback(
+    async (queued: QueuedMessage) => {
+      const removed = await removeQueued({ sessionId: session.id, queued: queued.seq });
+      if (removed.kind !== "loaded") {
+        return removed.kind === "failed" && removed.status === 409
+          ? "That message has gone already."
+          : describeProblem(removed).body;
+      }
+      setDraft({ text: queued.text, key: queued.seq });
+      return undefined;
+    },
+    [session.id],
+  );
   /** Its pull request was merged or closed, so it takes no more messages (#172). */
   const ended =
     pullRequest !== undefined && pullRequest.state !== "open" ? pullRequest.state : undefined;
@@ -138,6 +153,13 @@ function Session(props: {
   );
   const last = turns.at(-1);
   const running = last?.state.kind === "running";
+  /** What's sent while it answers goes into the answer (#252), on a provider that steers. */
+  const steers =
+    running &&
+    props.providers.some(
+      (provider) =>
+        provider.id === last?.model.provider && provider.available && provider.capabilities.steers,
+    );
   // What the page shows, the owner has seen, on whichever device (#334).
   useSeen(session.id, shownUpTo, running);
   /** The latest answer offers suggested replies, so the message box says one's own is welcome too (#154). */
@@ -466,11 +488,20 @@ function Session(props: {
         providers={props.providers}
         {...(last ? { initialModel: last.model } : {})}
         {...(last?.effort === undefined ? {} : { initialEffort: last.effort })}
-        // While a turn runs, a message is queued until it ends (#177).
+        // While a turn runs, a message goes into its answer (#252), or is queued until it ends
+        // (#177) on a provider that can't take it.
         disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
         {...(running ? { stop } : {})}
+        steers={steers}
+        {...(draft === undefined ? {} : { draft })}
         placeholder={
-          running ? "Queue a message…" : suggesting ? "Or type your own reply…" : "Reply…"
+          running
+            ? steers
+              ? "Add to this, it'll take it on board…"
+              : "Queue a message…"
+            : suggesting
+              ? "Or type your own reply…"
+              : "Reply…"
         }
         {...(props.skills === undefined ? {} : { skills: props.skills })}
         send={send}
@@ -508,6 +539,7 @@ function Session(props: {
           {...(props.documents === undefined ? {} : { documents: props.documents })}
           queuedMessages={queuedMessages}
           onRemoveQueued={removeQueuedMessage}
+          onEditQueued={editQueuedMessage}
           onAway={setAway}
           follow={follow}
           {...(props.stepByStep ? { onStepByStep: stepByStep } : {})}

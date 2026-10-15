@@ -10,6 +10,8 @@ import { z } from "zod";
 import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
 import type {
   Activity,
+  AddedMessage,
+  AddedMessages,
   CodeTurn,
   Provider,
   ToolCall,
@@ -103,6 +105,7 @@ const turnOn = async (provider: Provider, overrides: Partial<TurnInput> = {}) =>
     effort: undefined,
     folder,
     code: null,
+    added: null,
     connections: [],
     framing: {
       instructions: "The turn's instructions.",
@@ -218,6 +221,7 @@ describe("Claude's status", () => {
       usesTools: true,
       savesContext: true,
       searchesWeb: true,
+      steers: true,
     });
   });
 
@@ -2469,6 +2473,115 @@ describe("stopping a Claude turn", () => {
     expect(givenToClaudeCode?.signal.aborted).toBe(true);
     expect(emitted).toEqual(["Half an answer"]);
     expect(result).toEqual({ ok: true, value: null });
+  });
+});
+
+/**
+ * What the owner adds while a turn runs (#252), as the worker hands it to a provider: `add` sends
+ * one, and it says which the provider took, which it says were read, and whether it's done.
+ */
+const ownerAdding = () => {
+  const waiting: AddedMessage[] = [];
+  const read: number[] = [];
+  let done = false;
+  let wake: ((added: AddedMessage | undefined) => void) | undefined;
+  const messages: AddedMessages = {
+    next: () => {
+      const first = waiting.shift();
+      if (first !== undefined || done) return Promise.resolve(first);
+      return new Promise((resolve) => {
+        wake = resolve;
+      });
+    },
+    waiting: () => waiting.splice(0),
+    read: (added) => {
+      read.push(added.seq);
+    },
+    done: () => {
+      done = true;
+      wake?.(undefined);
+    },
+  };
+  return {
+    messages,
+    read,
+    isDone: () => done,
+    add: (added: AddedMessage) => {
+      const waiter = wake;
+      wake = undefined;
+      if (waiter === undefined) waiting.push(added);
+      else waiter(added);
+    },
+  };
+};
+
+describe("steering a Claude turn (#252)", () => {
+  it("gives what the owner adds to Claude Code at its next step, and ends its input with the answer", async () => {
+    const owner = ownerAdding();
+    const prompts: unknown[] = [];
+    let inputEnded = false;
+    const claudeCode: ClaudeCode = {
+      check: async () => ({ account: {}, models: [] }),
+      run: ({ prompt }) =>
+        (async function* () {
+          if (typeof prompt === "string") throw new Error("not streamed");
+          const input = prompt[Symbol.asyncIterator]();
+          prompts.push((await input.next()).value);
+          yield messageStart();
+          yield textDelta("Working on it.");
+          owner.add({ seq: 7, text: "Use the blue one" });
+          // The owner's words come in on the turn's input, for Claude Code to fold in.
+          prompts.push((await input.next()).value);
+          yield messageStart();
+          yield textDelta("Blue it is.");
+          yield { ...success, queued_turn_count: 0 };
+          inputEnded = (await input.next()).done === true;
+        })(),
+    };
+
+    const { emitted, result } = await runTurn(claudeCode, { added: owner.messages });
+
+    expect(result).toEqual({ ok: true, value: null });
+    expect(prompts[1]).toEqual({
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text: "Use the blue one" }] },
+      parent_tool_use_id: null,
+      priority: "next",
+    });
+    // Read once Claude's next message started with it in view.
+    expect(owner.read).toEqual([7]);
+    expect(emitted.join("")).toContain("Blue it is.");
+    expect(owner.isDone()).toBe(true);
+    expect(inputEnded).toBe(true);
+  });
+
+  it("keeps its input open while Claude Code has more of the owner's messages to answer", async () => {
+    const owner = ownerAdding();
+    let inputEnded = false;
+    const claudeCode: ClaudeCode = {
+      check: async () => ({ account: {}, models: [] }),
+      run: ({ prompt }) =>
+        (async function* () {
+          if (typeof prompt === "string") throw new Error("not streamed");
+          const input = prompt[Symbol.asyncIterator]();
+          await input.next();
+          owner.add({ seq: 9, text: "And this" });
+          await input.next();
+          // The answer ended with the owner's message still to answer: another result follows.
+          yield { ...success, queued_turn_count: 1 };
+          expect(owner.isDone()).toBe(false);
+          yield messageStart();
+          yield textDelta("And that.");
+          yield { ...success, queued_turn_count: 0 };
+          inputEnded = (await input.next()).done === true;
+        })(),
+    };
+
+    const { emitted } = await runTurn(claudeCode, { added: owner.messages });
+
+    expect(emitted.join("")).toContain("And that.");
+    expect(owner.read).toEqual([9]);
+    expect(inputEnded).toBe(true);
   });
 });
 

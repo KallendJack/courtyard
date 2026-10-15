@@ -125,6 +125,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 13. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
 14. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
 15. When the turn offers web search: when to search, and how to use what's found (Web search, below).
+16. On a provider that steers (#252), what to do with what the owner adds while it answers (Steering, below).
 
 A call to one of Courtyard's tools that the turn doesn't offer is refused:
 
@@ -140,6 +141,20 @@ conversation markers, then the new message. When the session has attachments, th
 - **Cut off by a restart (#186):** marked as cut off by Courtyard restarting, with whatever was written, then what
   the turn did before it was cut off, one line each, in order (a file read or edited, a command run, a search, a tool
   used), so Continue can carry it on.
+
+A message the owner added while an answer was being written (#252) reads `Owner (while you answered): …` where it
+was sent, the answer carrying on after it; one the turn ended before the model read it, stopped first say, reads
+`Owner (while you answered, though the turn ended before you read it): …`.
+
+**Steering (#252).** On a provider that steers, a message the owner sends while it answers goes into that answer: the
+owner's words as they are, which the model reads at its next step (Claude: after the tool call under way). Its
+instructions say so, once:
+
+> The owner may add to their message while you answer. Take what they add on board from where you are, and don't
+> start over unless it asks you to.
+
+A provider that can't steer (Codex today) is told nothing of it: such a message waits in the queue and goes as the
+next turn's message, as any other does.
 
 **Continue (#186).** After a restart cuts a turn off (an Update, a crash, the PC restarting), the owner's Continue,
 or the worker itself after Update now, sends a new turn on the cut-off turn's model, effort and skill. Its message,

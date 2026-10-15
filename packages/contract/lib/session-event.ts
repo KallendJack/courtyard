@@ -185,6 +185,24 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("queued-message-removed"),
     queued: z.number().int().positive(),
   }),
+  /**
+   * A message the owner sent while a turn ran, on a provider that steers (#252): it went into
+   * that answer where it was sent, for the model to read at its next step, and the answer carries
+   * on below it. `afterApproval` when an approval waited as it was sent: it goes in once the owner
+   * has answered that, and never answers it.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("message-added"),
+    text: z.string(),
+    afterApproval: z.literal(true).optional(),
+  }),
+  /** The turn ended, stopped say, before its model read the added message numbered `added` (#252). */
+  z.object({
+    ...eventBase,
+    type: z.literal("added-not-read"),
+    added: z.number().int().positive(),
+  }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
   z.object({
     ...eventBase,

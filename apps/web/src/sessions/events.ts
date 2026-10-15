@@ -79,7 +79,18 @@ export type AnswerPart =
     }
   | { readonly kind: "activities"; readonly activities: readonly MarkedActivity[] }
   /** Helpers the model started (#117), each by its id in the turn's `helpers`. */
-  | { readonly kind: "helpers"; readonly helpers: readonly HelperId[] };
+  | { readonly kind: "helpers"; readonly helpers: readonly HelperId[] }
+  /**
+   * A message the owner added while it answered (#252), where it was sent: whether an approval
+   * waited as it was sent, and whether the turn ended before the model read it.
+   */
+  | {
+      readonly kind: "added";
+      readonly seq: number;
+      readonly text: string;
+      readonly afterApproval: boolean;
+      readonly unread: boolean;
+    };
 
 /**
  * Something a model did (an activity), marked when it ran without asking because the session was
@@ -362,6 +373,35 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
           { seq, text: event.text, attachments: event.attachments?.length ?? 0 },
         ],
       };
+    case "message-added":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          parts: [
+            ...turn.parts,
+            {
+              kind: "added",
+              seq,
+              text: event.text,
+              afterApproval: event.afterApproval === true,
+              unread: false,
+            },
+          ],
+        }),
+      });
+    case "added-not-read":
+      return withTurn(log, {
+        seq,
+        holds: (turn) =>
+          turn.parts.some((part) => part.kind === "added" && part.seq === event.added),
+        change: (turn) => ({
+          ...turn,
+          parts: turn.parts.map((part) =>
+            part.kind === "added" && part.seq === event.added ? { ...part, unread: true } : part,
+          ),
+        }),
+      });
     case "queued-message-removed":
       return {
         ...log,
