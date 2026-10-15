@@ -6,7 +6,7 @@
  * own. They apply only inside Home: coming after the theme's, they'd otherwise outrank its classes
  * everywhere.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 @source "./**/*.tsx";
 
 :where([data-home]) {

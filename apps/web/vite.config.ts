@@ -24,7 +24,7 @@ const MERMAID_FILE = /[\\/]mermaid[\\/]dist[\\/](chunks[\\/])?mermaid\.esm\.min/
 const NO_ELK = "\0courtyard-no-elk";
 
 /**
- * Mermaid as Courtyard draws diagrams with it (rich-blocks/mermaid.tsx):
+ * Mermaid as Courtyard draws diagrams with it (components/rich-blocks/mermaid.tsx):
  * - From its prebuilt files, its own dependencies bundled in. Built from its source, the CommonJS
  *   among those dependencies need the bundler's helpers for it, which every page shares, and the
  *   bundler splits those helpers into a file of their own on the first load.

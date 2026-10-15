@@ -5,7 +5,7 @@
  * styles.css's, by reference: its names, nothing of its own. They apply only inside a `ThingsScope`
  * (scope.tsx): coming after the theme's, they'd otherwise outrank its classes everywhere.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 @source "./**/*.tsx";
 
 :where([data-things]) {

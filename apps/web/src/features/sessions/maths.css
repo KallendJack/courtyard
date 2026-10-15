@@ -2,7 +2,7 @@
  * Formulas in answers, loaded with KaTeX (maths-plugins.ts), never on the first load. They're in
  * the body text colour; sizes are the Paper board's: 17px inline and 21px centred, on 16px text.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 
 .katex {
   font-size: 1.06em;

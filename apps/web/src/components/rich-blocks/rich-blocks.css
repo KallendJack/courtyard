@@ -5,10 +5,10 @@
  * styles.css's, by reference: its names, nothing of its own. They apply only inside a `RichBlock`
  * (rich-block.tsx): coming after the theme's, they'd otherwise outrank its classes everywhere.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 @source "./**/*.tsx";
 /* The shared piece only a rich block uses: a table heading's sort button. */
-@source "../components/sort-button.tsx";
+@source "../sort-button.tsx";
 
 :where([data-rich-block]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

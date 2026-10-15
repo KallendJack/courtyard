@@ -5,9 +5,9 @@
  * instead. The theme is by reference: its names, nothing of its own. They apply only inside step
  * by step's pieces: coming after the theme's, they'd otherwise outrank its classes everywhere.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 @source "./**/*.tsx";
-@source "../components/thumb-button.tsx";
+@source "../../components/thumb-button.tsx";
 
 /* Step by step fills the page's middle, its Back and Next at the foot, in thumb reach. */
 [data-step-by-step="page"] {

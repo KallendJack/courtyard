@@ -4,10 +4,10 @@
  * theme is by reference: its names, nothing of its own. They apply only inside the Home: coming
  * after the theme's, they'd otherwise outrank its classes everywhere.
  */
-@reference "../styles.css";
+@reference "../../styles.css";
 @source "./**/*.tsx";
-@source "../components/workspace-tabs.tsx";
-@source "../components/home-block.tsx";
+@source "../../components/workspace-tabs.tsx";
+@source "../../components/home-block.tsx";
 
 /*
  * Home fills its place in the page; from a tablet up the middle is the room left between the
