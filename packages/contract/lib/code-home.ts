@@ -130,6 +130,36 @@ export const LeadReady = LeadBuilder.extend({ pullRequest: z.number().int().posi
 export type LeadReady = z.infer<typeof LeadReady>;
 
 /**
+ * Merge in order, tapped (#423): the builders' pull requests the owner's screen showed ready, by
+ * number. The tap is the owner's OK for those only.
+ */
+export const LeadMergeRequest = z.object({
+  pullRequests: z.array(z.number().int().positive()).min(1),
+});
+export type LeadMergeRequest = z.infer<typeof LeadMergeRequest>;
+
+/** A ready issue the Lead holds back (#423), behind the builder's issue changing the same files. */
+export const LeadHeldBack = z.object({
+  issue: z.number().int().positive(),
+  behind: z.number().int().positive(),
+});
+export type LeadHeldBack = z.infer<typeof LeadHeldBack>;
+
+/**
+ * Merge in order (#423), while the Lead does it: merging, with the pull request it's on now (it
+ * waits for its checks, or for its session to bring it up to date), or stopped at one, and why.
+ */
+export const LeadMerge = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("merging"), pullRequest: z.number().int().positive() }),
+  z.object({
+    kind: z.literal("stopped"),
+    pullRequest: z.number().int().positive(),
+    why: z.string(),
+  }),
+]);
+export type LeadMerge = z.infer<typeof LeadMerge>;
+
+/**
  * A code workspace's Lead (#347), as its Home's Running row and its chat's strip show it: not
  * started yet; running the build order (`why` saying what it waits for while it holds itself back:
  * a red main, the machine busy with the owner's own sessions, a decision only they can make);
@@ -146,5 +176,12 @@ export const LeadStatus = z.object({
   ready: z.array(LeadReady),
   /** Until when the builders it starts allow all (#428), while that's still ahead. */
   buildersAllowedAll: z.iso.datetime().optional(),
+  /** Merge in order (#423), while it's merging or stopped. */
+  merge: LeadMerge.optional(),
+  /**
+   * Ready issues it holds back (#423), each behind the builder's issue that changes the same
+   * files: it starts once that one merges.
+   */
+  heldBack: z.array(LeadHeldBack).optional(),
 });
 export type LeadStatus = z.infer<typeof LeadStatus>;

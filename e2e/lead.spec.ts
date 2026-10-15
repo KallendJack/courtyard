@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { LeadStatus } from "../packages/contract/index.ts";
 
 // A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, Lead
 // running, the Lead's chat, Lead resting), on start-worker.mjs's Toolshed: three ready issues on
@@ -104,4 +105,91 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   // Woken, its builders still allow all, as the first test turned on (#428): that's its line.
   await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
+});
+
+// Merge in order and holding back (#423; Paper, "Code Home, Merge in order", "Lead chat, merging
+// in order", "merge stopped at a check"). The e2e builders open no pull requests, so the Lead's
+// status and the open pull requests are given here as the worker would give them.
+test("ready pull requests merge in order from one row, and the Lead's chat says where it is", async ({
+  page,
+  request,
+}) => {
+  const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
+  const [first, second] = real.building;
+  if (first === undefined || second === undefined) throw new Error("two builders expected");
+  const builders = [first, second, first];
+  const numbers = [344, 340, 338];
+  const ready = numbers.map((number, at) => ({ ...builders[at], pullRequest: number }));
+  const pulls = numbers.map((number, at) => ({
+    pullRequest: {
+      number,
+      title: `Pull request ${number}`,
+      url: `https://github.com/octo-owner/toolshed/pull/${number}`,
+      state: "open",
+      head: `c0ffee${at}`,
+      checks: { kind: "passed" },
+      changes: { additions: 3, deletions: 1, files: 1 },
+      conflicts: false,
+    },
+    branch: `courtyard/e2e${at}`,
+    from: { kind: "session", sessionId: builders[at]?.session, title: builders[at]?.title },
+    waiting: "merge",
+  }));
+  let merge: unknown;
+  const status = async () => ({
+    ...(await (await request.get(`/api${HOME}/lead`)).json()),
+    ready,
+    heldBack:
+      real.next[0] === undefined ? [] : [{ issue: real.next[0].number, behind: first.issue }],
+    ...(merge === undefined ? {} : { merge }),
+  });
+  await page.route(`**/api${HOME}/lead`, async (route) => route.fulfill({ json: await status() }));
+  await page.route(`**/api${HOME}/lead/merge-in-order`, async (route) => {
+    merge = { kind: "merging", pullRequest: 344 };
+    await route.fulfill({ json: await status() });
+  });
+  await page.route(`**/api${HOME}/pull-requests`, (route) =>
+    route.fulfill({ json: { pullRequests: pulls } }),
+  );
+
+  await page.goto(HOME);
+  const needsYou = page.getByRole("region", { name: /^Needs you/ });
+  const row = needsYou.getByRole("listitem", { name: "3 PRs ready, in build order" });
+  await expect(row).toContainText("#344 → #340 → #338 · all passed");
+  // One row for them all: none of them has a Merge of its own.
+  await expect(needsYou.getByRole("button", { name: /^Merge #/ })).toHaveCount(0);
+  if (real.next[0] !== undefined) {
+    await expect(page.getByRole("region", { name: "Next up" })).toContainText(
+      `Held back · same files as #${first.issue}, starts once it merges`,
+    );
+  }
+  await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+  for (const [name, size] of [
+    ["tablet", { width: 950, height: 712 }],
+    ["cover", { width: 400, height: 900 }],
+    ["desktop", { width: 1440, height: 900 }],
+  ] as const) {
+    await page.setViewportSize(size);
+    await row.scrollIntoViewIfNeeded();
+    await shot(page, `${name}-code-home-merge-in-order`);
+  }
+  await page.setViewportSize({ width: 950, height: 712 });
+
+  // The Lead's chat: To merge with Merge in order.
+  await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
+  const strip = page.getByRole("region", { name: "Build order" });
+  await expect(strip).toContainText("To merge3Merge in order");
+  await shot(page, "tablet-lead-chat-merging-in-order");
+
+  await page.goto(HOME);
+  await row.getByRole("button", { name: "Merge in order" }).click();
+  await expect(row).toContainText("Merging #344 · #344 → #340 → #338");
+  await expect(row.getByRole("button", { name: "Merge in order" })).toHaveCount(0);
+
+  // Stopped at a check: the chat's To merge says where, in gold.
+  merge = { kind: "stopped", pullRequest: 340, why: "its e2e check failed" };
+  await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
+  await expect(strip).toContainText("Stopped · #340");
+  await shot(page, "tablet-lead-chat-merge-stopped-at-a-check");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });

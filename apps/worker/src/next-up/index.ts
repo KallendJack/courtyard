@@ -72,6 +72,24 @@ const claimedIn = (comments: readonly string[]) => {
 const claimComment = (branch: string, why: string) =>
   `Building this: Courtyard session (${branch}), ${why}`;
 
+/**
+ * The code files an issue names in its description or comments (#423), by path or name, each
+ * once: a word ending in one of the usual kinds of code (`apps/web/src/components/kept.tsx`,
+ * `kept.tsx`). Documents aren't counted: nearly every change touches the glossary and the
+ * architecture, and two changes to them merge without a fight.
+ */
+const filesNamedIn = (texts: readonly string[]) => [
+  ...new Set(
+    texts.flatMap((text) =>
+      [
+        ...text.matchAll(
+          /(?:^|[\s`'"(])((?:[\w.-]+\/)*[\w-]+(?:\.[\w-]+)*\.(?:tsx?|jsx?|mjs|cjs|css|json|ya?ml|html|sh))(?=$|[\s`'"),.:;!?])/gim,
+        ),
+      ].flatMap((match) => (match[1] === undefined ? [] : [match[1]])),
+    ),
+  ),
+];
+
 /** The issues a message names, as `#<number>`, each once. */
 const issuesNamedIn = (text: string) => [
   ...new Set([...text.matchAll(/#(\d+)\b/g)].map((match) => Number(match[1]))),
@@ -142,6 +160,8 @@ export const createNextUp = (options: {
   const { code, github, sessions, now } = options;
   /** Each repository's Next up as last read, and when. */
   const kept = new Map<string, { readonly at: number; readonly issues: NextUpIssue[] }>();
+  /** The files each ready issue names (#423), by repository then number, as last read. */
+  const named = new Map<string, ReadonlyMap<number, readonly string[]>>();
 
   /** A code workspace's id and its repository on GitHub, or why it has no Next up. */
   const repoOf = async (
@@ -199,6 +219,10 @@ export const createNextUp = (options: {
         after: ready ? (blockedBy[0] ?? null) : null,
       }));
     kept.set(repo, { at: now(), issues: offered });
+    named.set(
+      repo,
+      new Map(ready.map((issue) => [issue.number, filesNamedIn([issue.body, ...issue.comments])])),
+    );
     return ok(offered);
   };
 
@@ -210,6 +234,15 @@ export const createNextUp = (options: {
       const last = kept.get(found.value.repo);
       if (last !== undefined && now() - last.at < KEEP_MS) return ok(last.issues);
       return read(found.value.repo);
+    },
+
+    /**
+     * The files each of a code workspace's ready issues names (#423), as Next up last read them,
+     * so the Lead can hold back one a running builder would clash with.
+     */
+    filesNamed: async (rawId: string): Promise<ReadonlyMap<number, readonly string[]>> => {
+      const found = await repoOf(rawId);
+      return (found.ok ? named.get(found.value.repo) : undefined) ?? new Map();
     },
 
     /** A code workspace's Next up asked of GitHub now, as the Lead reads it each time round (#347). */

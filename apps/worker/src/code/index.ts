@@ -383,6 +383,36 @@ export const createCode = (options: {
   };
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
+  /** Each repository's default branch, as its remote said it once (#423). */
+  const defaultBranches = new Map<string, string>();
+
+  /**
+   * The files a session's worktree changes (#423), from the repository: committed since it left
+   * the default branch as last fetched, changed since, and new; none when that can't be told.
+   */
+  const changedFiles = async (change: {
+    repoPath: string;
+    worktree: string;
+  }): Promise<readonly string[]> => {
+    let main = defaultBranches.get(change.repoPath);
+    if (main === undefined) {
+      const told = await defaultBranchOf(change.repoPath, await options.commandEnv());
+      if (!told.ok) return [];
+      main = told.value;
+      defaultBranches.set(change.repoPath, main);
+    }
+    const listed = async (args: readonly string[]) =>
+      ((await gitOrNothing(change.worktree, args)) ?? "")
+        .split(/\r?\n/)
+        .filter((line) => line !== "");
+    const all = await Promise.all([
+      listed(["diff", "--name-only", `refs/remotes/${REMOTE}/${main}...HEAD`]),
+      listed(["diff", "--name-only", "HEAD"]),
+      listed(["ls-files", "--others", "--exclude-standard"]),
+    ]);
+    return [...new Set(all.flat())];
+  };
+
   /**
    * The repository's default branch on its remote, freshly fetched: its name, and the ref it's
    * fetched to; or why it can't be.
@@ -465,6 +495,7 @@ export const createCode = (options: {
   return {
     /** The folder a session's branch is checked out in. */
     worktreeOf,
+    changedFiles,
 
     /**
      * Gives a helper that writes code a branch of its own (#395): from the session branch's last

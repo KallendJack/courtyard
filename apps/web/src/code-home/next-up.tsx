@@ -324,12 +324,18 @@ function StartOnIssue(props: {
       {props.small || props.does === "grill" ? issue.title : `#${issue.number} ${issue.title}`}
     </a>
   );
+  /** The builder's issue the Lead holds this one back behind (#423), changing the same files. */
+  const behind = leading
+    ? props.lead?.status.heldBack?.find((held) => held.issue === issue.number)?.behind
+    : undefined;
   const status =
     props.does === "grill"
       ? "Next in order · needs grilling first"
-      : leading
-        ? "The Lead starts this next"
-        : "Ready to build";
+      : behind !== undefined
+        ? `Held back · same files as #${behind}, starts once it merges`
+        : leading
+          ? "The Lead starts this next"
+          : "Ready to build";
   return (
     <section
       aria-label={`${look.label} #${issue.number}`}

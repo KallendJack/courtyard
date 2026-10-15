@@ -36,6 +36,8 @@ export type FakeIssue = {
   readonly state?: "open" | "closed";
   /** The numbers of the issues in its repository it's blocked by (#377). */
   readonly blockedBy?: readonly number[];
+  /** Its description (#423). */
+  readonly body?: string;
 };
 
 /** An issue as the fake holds it: its comments added to, and closed when a test says (#377). */
@@ -449,6 +451,7 @@ export const createFakeGitHub = (
               issue.milestone === undefined
                 ? null
                 : (milestoneIn(repo, issue.milestone)?.description ?? null),
+            body: issue.body ?? "",
             comments: forBuild ? [...issue.comments] : [],
             blockedBy: forBuild
               ? (issue.blockedBy ?? []).flatMap((number) => {
