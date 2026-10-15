@@ -346,15 +346,14 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /**
    * The owner turned on Allow all for this task (#428), from an approval or the session's menu, or
-   * the Lead started the session with it (`byLead`): until `until` at most, and with `task`, until
-   * the session opens its pull request or ends. Whether it's on now is decided from these events.
+   * the Lead started the session with it: until `until` at most, and with `task`, until the
+   * session opens its pull request or ends. Whether it's on now is decided from these events.
    */
   z.object({
     ...eventBase,
     type: z.literal("allow-all-started"),
     until: z.iso.datetime(),
     task: z.boolean(),
-    byLead: z.literal(true).optional(),
   }),
   /** The owner turned Allow all for this task off (#428) before it ran out. */
   z.object({ ...eventBase, type: z.literal("allow-all-ended") }),

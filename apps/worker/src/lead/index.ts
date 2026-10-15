@@ -12,7 +12,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { buildersAllowAllUntil } from "../allow-all/index.ts";
+import { allowAllUntil } from "../allow-all/index.ts";
 import { readJsonFile, writeJsonFile } from "../files.ts";
 import type { NextUp } from "../next-up/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
@@ -206,6 +206,7 @@ export const createLead = (options: {
   ): Promise<LeadStatus> => {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
     const { building, ready } = buildersOf(kept, listed);
+    const allowing = allowAllUntilOf(kept);
     return {
       state: kept?.state ?? "not-started",
       ...(kept === undefined ? {} : { session: kept.session }),
@@ -214,7 +215,7 @@ export const createLead = (options: {
       building,
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
-      ...(allowAllUntilOf(kept) === undefined ? {} : { buildersAllowedAll: allowAllUntilOf(kept) }),
+      ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
     };
   };
 
@@ -443,7 +444,7 @@ export const createLead = (options: {
         // wake that doesn't say (the Running row's Run) leaves it as it was.
         const allowing =
           run.allowAll === true
-            ? buildersAllowAllUntil(options.now())
+            ? allowAllUntil("task", options.now())
             : run.allowAll === false
               ? undefined
               : was?.allowAllUntil;

@@ -6,6 +6,7 @@ import { addStylesheet } from "@/lib/stylesheet";
 import type { Waiting } from "../patience.ts";
 import { describeProblem } from "../problems.tsx";
 import css from "./approval-card.css?inline";
+import { Button } from "./button.tsx";
 import { CapsLabel } from "./caps-label.tsx";
 import { FormError } from "./form-error.tsx";
 import { StatusPill } from "./notice.tsx";
@@ -190,15 +191,17 @@ export function ApprovalCard(props: {
           />
         )}
         {props.onAllowAll !== undefined && (
-          <button
-            type="button"
-            disabled={sending !== undefined}
-            onClick={props.onAllowAll}
-            className="flex min-h-9 items-center justify-center gap-1.5 self-center rounded-full px-3 text-meta font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-          >
-            <Clock aria-hidden className="size-3.5" />
-            Allow all for this task…
-          </button>
+          <div className="self-center">
+            <Button
+              variant="quiet"
+              size="xs"
+              disabled={sending !== undefined}
+              onClick={props.onAllowAll}
+            >
+              <Clock aria-hidden />
+              Allow all for this task…
+            </Button>
+          </div>
         )}
       </section>
     </div>

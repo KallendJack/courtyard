@@ -195,7 +195,11 @@ export const sessionError = (c: Context, error: SessionError) => {
     case "workspace":
       return contextError(c, error.error);
     case "not-code-session":
-      return apiError(c, { status: 409, error: "Only a code session can allow all." });
+      return apiError(c, {
+        status: 409,
+        error:
+          "Only a code session can allow all, never the Lead: its builders can, from Run the build order.",
+      });
     case "allowing-all":
       return apiError(c, {
         status: 409,

@@ -26,9 +26,6 @@ const HOURS: Readonly<Record<AllowAllLasts, number>> = {
 export const allowAllUntil = (lasts: AllowAllLasts, now: number) =>
   new Date(now + HOURS[lasts] * HOUR_MS).toISOString();
 
-/** When the Lead's builders allow all until (#428): `ALLOW_ALL_MOST_HOURS` from `now`. */
-export const buildersAllowAllUntil = (now: number) => allowAllUntil("task", now);
-
 /**
  * A session's Allow all as its events come, one at a time: its pull request as last recorded, and,
  * while it's turned on, until when, whether until the task is done, and the pull request it had

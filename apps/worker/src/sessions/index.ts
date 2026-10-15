@@ -1204,10 +1204,13 @@ export const createSessions = (options: {
          */
         const decide = async (
           decided: Result<Activity, CodeRefusal>,
-          helper: HelperId | undefined,
-          /** It's allowed because the session is allowing all (#428), so it's marked so. */
-          allowedAll?: boolean,
+          by: {
+            readonly helper: HelperId | undefined;
+            /** It's allowed because the session is allowing all (#428), so it's marked so. */
+            readonly allowedAll?: boolean | undefined;
+          },
         ): Promise<Result<null, string>> => {
+          const { helper, allowedAll } = by;
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
           }
@@ -1293,8 +1296,7 @@ export const createSessions = (options: {
             given.answer === "allow"
               ? ok(asking.allowed)
               : err({ kind: "denied", what: deniedWhat(asking.ask) }),
-            asking.helper,
-            given.allowedAll,
+            { helper: asking.helper, allowedAll: given.allowedAll },
           );
         };
         /**
@@ -1369,18 +1371,19 @@ export const createSessions = (options: {
             edit: async (path) => {
               const place = await editPlaceIn(worktree, path);
               if (place.kind === "inside") {
-                return decide(ok({ kind: "edited-file", path: place.shown }), helper);
+                return decide(ok({ kind: "edited-file", path: place.shown }), { helper });
               }
               if (place.kind === "setup") {
                 const allowed: Activity = { kind: "edited-file", path: place.shown };
-                // Allowing all, a setup file's edit runs without asking (#428).
-                if (allowingAll()) return decide(ok(allowed), helper, true);
+                // Allowing all, a setup file's edit it covers runs without asking (#428).
+                if (place.all && allowingAll())
+                  return decide(ok(allowed), { helper, allowedAll: true });
                 return approval({
                   ask: { kind: "setup", path: place.shown },
                   why: undefined,
                   allowed,
                   helper,
-                  all: true,
+                  ...(place.all ? { all: true } : {}),
                 });
               }
               const outside = resolve(worktree, path);
@@ -1407,12 +1410,12 @@ export const createSessions = (options: {
                 },
                 command,
               );
-              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), helper);
+              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), { helper });
               const refused = allowed.error;
-              if (refused.kind !== "needs-approval") return decide(err(refused), helper);
+              if (refused.kind !== "needs-approval") return decide(err(refused), { helper });
               // Allowing all, what it covers runs without asking (#428).
               if (refused.all === true && allowingAll()) {
-                return decide(ok({ kind: "ran-command", command }), helper, true);
+                return decide(ok({ kind: "ran-command", command }), { helper, allowedAll: true });
               }
               return approval({
                 ask: { kind: "command", command, reason: refused.reason },
@@ -2727,7 +2730,6 @@ export const createSessions = (options: {
               type: "allow-all-started",
               until: start.allowAllUntil,
               task: true,
-              byLead: true,
             })
           : written;
       const started =
@@ -3054,8 +3056,14 @@ export const createSessions = (options: {
     ): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
-      if (found.value.branch === undefined) return err({ kind: "not-code-session" });
+      const { id, workspaceId } = found.value;
+      // A code session's own: never the Lead's, whose builders are allowed all by its order.
+      if (found.value.branch === undefined || found.value.lead === true) {
+        return err({ kind: "not-code-session" });
+      }
+      if (await isArchived(options.contextDir, workspaceId)) {
+        return err({ kind: "workspace-archived" });
+      }
       const session = runningSession(id);
       const started = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
         const pullRequest = await lastPullRequestOf(found.value);

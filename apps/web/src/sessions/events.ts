@@ -77,7 +77,7 @@ export type AnswerPart =
        */
       readonly replayed: number;
     }
-  | { readonly kind: "activities"; readonly activities: readonly Step[] }
+  | { readonly kind: "activities"; readonly activities: readonly MarkedActivity[] }
   /** Helpers the model started (#117), each by its id in the turn's `helpers`. */
   | { readonly kind: "helpers"; readonly helpers: readonly HelperId[] };
 
@@ -85,7 +85,7 @@ export type AnswerPart =
  * Something a model did (an activity), marked when it ran without asking because the session was
  * allowing all (#428): "ran under Allow all".
  */
-export type Step = Activity & { readonly allowedAll?: true };
+export type MarkedActivity = Activity & { readonly allowedAll?: true };
 
 /**
  * A helper the model started (#117): its name, whether it waits for a place among the helpers,
@@ -100,7 +100,7 @@ export type Helper = {
    * that branch merged back into the session's; or kept, as it clashed, for the session to sort.
    */
   readonly branch: HelperBranch;
-  readonly activities: readonly Step[];
+  readonly activities: readonly MarkedActivity[];
   readonly report: string | undefined;
 };
 
@@ -145,7 +145,10 @@ const withText = (
  * An activity after a turn's parts so far: with the ones just before it, or after the text. A
  * build's newer place in the queue takes the older one's line (#281).
  */
-const withActivity = (parts: readonly AnswerPart[], activity: Step): readonly AnswerPart[] => {
+const withActivity = (
+  parts: readonly AnswerPart[],
+  activity: MarkedActivity,
+): readonly AnswerPart[] => {
   const last = parts.at(-1);
   if (last?.kind !== "activities") {
     return [...parts, { kind: "activities", activities: [activity] }];
@@ -393,7 +396,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       });
     case "activity": {
       const { helper } = event;
-      const step: Step = event.allowedAll
+      const marked: MarkedActivity = event.allowedAll
         ? { ...event.activity, allowedAll: true }
         : event.activity;
       return withLastTurn(log, {
@@ -405,10 +408,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             ? {
                 helpers: changeHelper(turn.helpers, helper, (each) => ({
                   ...each,
-                  activities: [...each.activities, step],
+                  activities: [...each.activities, marked],
                 })),
               }
-            : { parts: withActivity(turn.parts, step) }),
+            : { parts: withActivity(turn.parts, marked) }),
           doing: { kind: "activity", activity: event.activity },
         }),
       });

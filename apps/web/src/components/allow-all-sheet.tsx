@@ -1,11 +1,10 @@
 import type { AllowAllLasts } from "@courtyard/contract";
-import { Check } from "lucide-react";
 import { useState } from "react";
-import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { Button } from "./button.tsx";
 import { DialogCard } from "./dialog-card.tsx";
 import { FormError } from "./form-error.tsx";
+import { RadioRow } from "./radio-row.tsx";
 
 /** The lengths to pick from, as the sheet says them, and what its button then says. */
 const LENGTHS: readonly {
@@ -69,40 +68,16 @@ export default function AllowAllSheet(props: {
       }
     >
       <fieldset aria-label="How long" className="flex flex-col gap-2">
-        {LENGTHS.map((length) => {
-          const on = length.lasts === lasts;
-          return (
-            <label
-              key={length.lasts}
-              className={classes(
-                "flex min-h-12 cursor-pointer items-center gap-3 rounded-row px-4 py-2.5 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-                on ? "border-stroke border-primary-text bg-primary/12" : "bg-secondary",
-              )}
-            >
-              <input
-                type="radio"
-                name="allow-all-lasts"
-                checked={on}
-                onChange={() => setLasts(length.lasts)}
-                className="sr-only"
-              />
-              <span className="flex min-w-0 grow flex-col gap-0.5">
-                <span className="text-interface font-bold text-foreground">{length.label}</span>
-                {length.note !== undefined && (
-                  <span className="text-meta text-muted-foreground">{length.note}</span>
-                )}
-              </span>
-              {on && (
-                <span
-                  aria-hidden
-                  className="flex size-4.5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                >
-                  <Check className="size-2.5" strokeWidth={3} />
-                </span>
-              )}
-            </label>
-          );
-        })}
+        {LENGTHS.map((length) => (
+          <RadioRow
+            key={length.lasts}
+            name="allow-all-lasts"
+            label={length.label}
+            detail={length.note}
+            chosen={length.lasts === lasts}
+            onChoose={() => setLasts(length.lasts)}
+          />
+        ))}
       </fieldset>
       <p className="text-meta text-muted-foreground">
         Still asks: edits outside this session's branch, pushing anywhere else, force pushes,

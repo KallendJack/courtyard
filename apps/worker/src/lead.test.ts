@@ -205,8 +205,12 @@ describe("Run the build order (#347)", () => {
     // The Lead itself doesn't allow all, only its builders.
     const listed = await sessionsOf(request);
     expect(listed.find((session) => session.lead === true)?.allowingAll).toBeUndefined();
-    const lead = await eventsSoFar(request, listed.find((each) => each.lead === true)?.id ?? "");
+    const leadId = listed.find((each) => each.lead === true)?.id ?? "";
+    const lead = await eventsSoFar(request, leadId);
     expect(lead.filter((event) => event.type === "allow-all-started")).toEqual([]);
+    // Nor can it be turned on for the Lead's own session.
+    const refused = await postJson(request, `/api/sessions/${leadId}/allow-all`, { lasts: "1h" });
+    expect(refused.status).toBe(409);
 
     // Woken without saying, it keeps it; Run the build order with it off ends it.
     await postJson(request, "/api/workspaces/side-project/lead/pause", {});

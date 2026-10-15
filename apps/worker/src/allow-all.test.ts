@@ -141,36 +141,38 @@ const askedAbout = (asked: readonly Asked[]) =>
 const sendAgain = (request: Requester, id: string) =>
   postJson(request, `/api/sessions/${id}/messages`, { text: "Again", model: CODING_MODEL });
 
-/** Commands and edits that still ask under Allow all (#428 decision 4). */
-const STILL_ASKS = [
-  // Pushing anywhere but its own branch, force pushing, deleting a branch.
-  { run: "git push origin main" },
-  { run: "git push --force origin HEAD" },
-  { run: "git branch -D old-work" },
-  // Anything else on GitHub, outside the session branch: merging, deleting a repository.
-  { run: "gh pr merge 12" },
-  { run: "gh repo delete owner/name --yes" },
+/**
+ * Commands and edits that still ask under Allow all (#428 decision 4), each with what its approval
+ * asks about.
+ */
+const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknown])[] = [
+  // Pushing anywhere but its own branch, force pushing, deleting a branch, however git is told.
+  [{ run: "git push origin main" }, "git push origin main"],
+  [{ run: "git push --force origin HEAD" }, "git push --force origin HEAD"],
+  [{ run: "git branch -D old-work" }, "git branch -D old-work"],
+  [{ run: "git -c a.b=c push --force origin main" }, "git -c a.b=c push --force origin main"],
+  [{ run: "git -C . push origin --delete main" }, "git -C . push origin --delete main"],
+  [{ run: "git --no-pager branch -D main" }, "git --no-pager branch -D main"],
+  // Anything else on GitHub, outside the session branch, however it's run.
+  [{ run: "gh pr merge 12" }, "gh pr merge 12"],
+  [{ run: "gh repo delete owner/name --yes" }, "gh repo delete owner/name --yes"],
+  [{ run: "pnpm exec gh pr merge 12" }, "pnpm exec gh pr merge 12"],
+  [{ run: "npx gh pr merge 12" }, "npx gh pr merge 12"],
   // A path outside the worktree, for an edit or a command.
-  { edit: "../notes.md" },
-  { run: "rm -rf /path/to/elsewhere" },
-  // Credentials, and programs that run another command, or code given on the line.
-  { run: "printenv GH_TOKEN" },
-  { run: "npm token list" },
-  { run: "sh -c ls" },
-  { run: "python3 -c pass" },
-];
-const STILL_ASKED = [
-  "git push origin main",
-  "git push --force origin HEAD",
-  "git branch -D old-work",
-  "gh pr merge 12",
-  "gh repo delete owner/name --yes",
-  expect.stringMatching(/notes\.md$/),
-  "rm -rf /path/to/elsewhere",
-  "printenv GH_TOKEN",
-  "npm token list",
-  "sh -c ls",
-  "python3 -c pass",
+  [{ edit: "../notes.md" }, expect.stringMatching(/notes\.md$/)],
+  [{ run: "rm -rf /path/to/elsewhere" }, "rm -rf /path/to/elsewhere"],
+  // Credentials, and setup files that hold them, run with the repository's secrets, decide how
+  // the model itself is allowed, or say where the worktree's git is.
+  [{ run: "printenv GH_TOKEN" }, "printenv GH_TOKEN"],
+  [{ run: "npm token list" }, "npm token list"],
+  [{ edit: ".npmrc" }, ".npmrc"],
+  [{ edit: ".github/workflows/ci.yml" }, ".github/workflows/ci.yml"],
+  [{ edit: ".claude/settings.json" }, ".claude/settings.json"],
+  [{ edit: ".git" }, ".git"],
+  // Programs that run another command, or code given on the line.
+  [{ run: "sh -c ls" }, "sh -c ls"],
+  [{ run: "pnpm exec sh -c ls" }, "pnpm exec sh -c ls"],
+  [{ run: "python3 -c pass" }, "python3 -c pass"],
 ];
 
 describe("Allow all for this task", () => {
@@ -179,6 +181,8 @@ describe("Allow all for this task", () => {
       { run: "pnpm add left-pad" },
       { run: "cargo test --release" },
       { edit: "package.json" },
+      { edit: ".husky/pre-commit" },
+      { run: "pnpm exec eslint src" },
     ]);
     const request = await start(provider);
     const id = await startSession(request);
@@ -210,12 +214,14 @@ describe("Allow all for this task", () => {
       { kind: "ran-command", command: "pnpm add left-pad" },
       { kind: "ran-command", command: "cargo test --release" },
       { kind: "edited-file", path: "package.json" },
+      { kind: "edited-file", path: ".husky/pre-commit" },
+      { kind: "ran-command", command: "pnpm exec eslint src" },
     ]);
     expect(answers.every((answer) => answer.ok)).toBe(true);
   });
 
   it("still asks for what must always ask, never offering itself there", async () => {
-    const { provider } = codingProvider(STILL_ASKS);
+    const { provider } = codingProvider(STILL_ASKS.map(([step]) => step));
     const request = await start(provider);
     const id = await startSession(request);
     const first = await denyingEach(request, id);
@@ -224,7 +230,7 @@ describe("Allow all for this task", () => {
     await sendAgain(request, id);
     const { asked } = await denyingEach(request, id, first.last);
 
-    expect(askedAbout(asked)).toEqual(STILL_ASKED);
+    expect(askedAbout(asked)).toEqual(STILL_ASKS.map(([, about]) => about));
     expect(asked.map((each) => each.all)).toEqual(STILL_ASKS.map(() => undefined));
   });
 
@@ -335,7 +341,9 @@ describe("Allow all for this task", () => {
     const unknown = await allowAll(request, code, "forever");
 
     expect(refused.status).toBe(409);
-    expect(await errorOf(refused)).toBe("Only a code session can allow all.");
+    expect(await errorOf(refused)).toBe(
+      "Only a code session can allow all, never the Lead: its builders can, from Run the build order.",
+    );
     expect(unknown.status).toBe(400);
     await followSession(request, { sessionId: code, until: "turn-completed" });
   });

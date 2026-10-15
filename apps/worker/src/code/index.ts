@@ -250,12 +250,41 @@ const isSetup = (shown: string, hooks: string | undefined) => {
   );
 };
 
+/**
+ * Setup folders and files Allow all for this task (#428) never edits without asking: git's own
+ * (which says where the repository is, outside the worktree), `.github` (workflows that run with
+ * the repository's secrets), Claude Code's settings (which decide what the model itself may do),
+ * and the package managers' settings, which hold registry tokens.
+ */
+const ALL_ASKING_SETUP = new Set([
+  ".git",
+  ".github",
+  ".claude",
+  ".npmrc",
+  ".yarnrc",
+  ".yarnrc.yml",
+]);
+
+/**
+ * Whether Allow all for this task covers an edit to a setup file (`isSetup`): package scripts and
+ * git hooks ("package.json, hooks and the like"), never one in `ALL_ASKING_SETUP` or a name
+ * Windows could shorten one of those to.
+ */
+const allowsAllSetup = (shown: string) =>
+  !shown
+    .split("/")
+    .map(asWindowsReads)
+    .some((part) => ALL_ASKING_SETUP.has(part) || /~\d/.test(part));
+
 /** Where an edit a model asks for in a session's worktree would land. */
 export type EditPlace =
   /** Inside the worktree: it applies without asking. By its path as the owner sees it. */
   | { readonly kind: "inside"; readonly shown: string }
-  /** Inside, but on a file that decides what its allowed commands run: it needs an approval. */
-  | { readonly kind: "setup"; readonly shown: string }
+  /**
+   * Inside, but on a file that decides what its allowed commands run: it needs an approval, unless
+   * the session allows all and that covers it (`all`, #428).
+   */
+  | { readonly kind: "setup"; readonly shown: string; readonly all: boolean }
   /** Outside the worktree, once symlinks are followed: it needs an approval. */
   | { readonly kind: "outside" };
 
@@ -273,7 +302,7 @@ export const editPlaceIn = async (worktree: string, path: string): Promise<EditP
     hooksPath === undefined || hooksPath === "" ? undefined : shownPath(worktree, hooksPath);
   const inHooks = hooks !== undefined && !hooks.startsWith("..") && !isAbsolute(hooks);
   return isSetup(shown, inHooks ? hooks : undefined)
-    ? { kind: "setup", shown }
+    ? { kind: "setup", shown, all: allowsAllSetup(shown) }
     : { kind: "inside", shown };
 };
 

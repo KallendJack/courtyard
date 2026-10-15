@@ -10,7 +10,7 @@ import {
 } from "@courtyard/contract";
 import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useMemo, useState } from "react";
-import { RanUnderAllowAll } from "@/components/allowing-all";
+import { AllowAllMark } from "@/components/allowing-all";
 import { ApprovalCard, approvalWords } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
@@ -27,7 +27,7 @@ import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
-import type { Helper, ShownImage, Step, Turn } from "./events.ts";
+import type { Helper, MarkedActivity, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
@@ -150,7 +150,7 @@ function ShownImages(props: { sessionId: SessionId; images: readonly ShownImage[
  * What a model did between two pieces of what it wrote, one line each, however long (#285): a line
  * too long for the screen ends in "…".
  */
-function Activities(props: { activities: readonly Step[] }) {
+function Activities(props: { activities: readonly MarkedActivity[] }) {
   return (
     <ul aria-label="What the model did" className="space-y-0.5 text-meta text-muted-foreground">
       {props.activities.map((activity, index) => (
@@ -164,7 +164,7 @@ function Activities(props: { activities: readonly Step[] }) {
         >
           {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
           <span className="truncate">{describeActivity(activity)}</span>
-          {activity.allowedAll === true && <RanUnderAllowAll />}
+          {activity.allowedAll === true && <AllowAllMark>ran under Allow all</AllowAllMark>}
         </li>
       ))}
     </ul>
