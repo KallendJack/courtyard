@@ -1,5 +1,6 @@
 import type { LeadStatus, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
+import { CapsLabel } from "@/components/caps-label";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { classes } from "@/lib/classes";
 import { loadLead } from "../code-home/api.ts";
@@ -8,7 +9,6 @@ import { loadLead } from "../code-home/api.ts";
 const KEPT_LEAD = createKept<LeadStatus>();
 
 const CARD = "flex min-w-0 flex-col gap-1.5 rounded-lg border bg-surface px-3 py-2.5";
-const LABEL = "text-caption font-bold tracking-label uppercase";
 
 /**
  * The strip at the top of a code workspace's Lead's chat (#347; Paper, "Tablet · Lead chat"):
@@ -30,7 +30,9 @@ export default function LeadStrip(props: { workspaceId: WorkspaceId; again: unkn
   return (
     <section aria-label="Build order" className="flex gap-2">
       <div className={classes(CARD, "grow-[1.4] basis-0 border-primary/35")}>
-        <h2 className={classes(LABEL, "text-primary-text")}>Building · {lead.building.length}</h2>
+        <CapsLabel tone="primary" heading={{ level: 2 }}>
+          Building · {lead.building.length}
+        </CapsLabel>
         {lead.building.length === 0 ? (
           <p className="text-meta text-muted-foreground">
             {lead.state === "resting"
@@ -49,7 +51,7 @@ export default function LeadStrip(props: { workspaceId: WorkspaceId; again: unkn
                   className="flex items-center gap-2 hover:underline"
                 >
                   <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-primary" />
-                  <span className="truncate text-label font-bold">{issueOf(builder.title)}</span>
+                  <span className="truncate text-meta font-bold">{issueOf(builder.title)}</span>
                 </Link>
               </li>
             ))}
@@ -57,7 +59,9 @@ export default function LeadStrip(props: { workspaceId: WorkspaceId; again: unkn
         )}
       </div>
       <div className={classes(CARD, "grow basis-0")}>
-        <h2 className={classes(LABEL, "text-muted-foreground")}>Next</h2>
+        <CapsLabel tone="muted" heading={{ level: 2 }}>
+          Next
+        </CapsLabel>
         {lead.next.length === 0 ? (
           <p className="text-meta text-muted-foreground">Nothing ready</p>
         ) : (
@@ -65,7 +69,7 @@ export default function LeadStrip(props: { workspaceId: WorkspaceId; again: unkn
             {lead.next.map((issue) => (
               <li
                 key={issue.number}
-                className="truncate text-label font-semibold text-foreground/90"
+                className="truncate text-meta font-semibold text-foreground/90"
               >
                 #{issue.number} {issue.title}
               </li>
@@ -74,7 +78,9 @@ export default function LeadStrip(props: { workspaceId: WorkspaceId; again: unkn
         )}
       </div>
       <div className={classes(CARD, "w-30 shrink-0 justify-between")}>
-        <h2 className={classes(LABEL, "text-muted-foreground")}>To merge</h2>
+        <CapsLabel tone="muted" heading={{ level: 2 }}>
+          To merge
+        </CapsLabel>
         <p
           className={classes(
             "text-sheet-title font-extrabold",

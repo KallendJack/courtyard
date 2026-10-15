@@ -121,7 +121,7 @@ export function ListedSessionText(props: {
           <span className="truncate font-medium">{props.title}</span>
           <span
             className={classes(
-              "flex shrink-0 items-center gap-1.5 text-label font-bold",
+              "flex shrink-0 items-center gap-1.5 text-meta font-bold",
               TONES[now.kind].text,
             )}
           >

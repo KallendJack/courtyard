@@ -100,7 +100,7 @@ export function HandheldSheet(props: {
               <span className="flex items-center justify-between gap-3">
                 <h2 className="display-title text-sheet-title">{props.title}</h2>
                 {props.aside !== undefined && (
-                  <span className="truncate text-label font-semibold text-placeholder">
+                  <span className="truncate text-meta font-semibold text-placeholder">
                     {props.aside}
                   </span>
                 )}

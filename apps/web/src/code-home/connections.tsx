@@ -105,7 +105,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
       <div className="flex shrink-0 items-start justify-between gap-3 pb-1">
         <div className="flex flex-col gap-1">
           <h2 className="display-section text-sheet-title">Connections</h2>
-          <p className="text-label/4.5 font-medium text-muted-foreground">
+          <p className="text-meta font-medium text-muted-foreground">
             What this workspace's sessions can use
           </p>
         </div>
@@ -123,18 +123,18 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
           <span className="flex min-w-0 grow flex-col gap-0.5">
             <span className="text-interface font-bold">GitHub</span>
             {github.kind === "connected" ? (
-              <span className="truncate text-label font-medium text-success">
+              <span className="truncate text-meta font-medium text-success">
                 Connected · {github.repo}
               </span>
             ) : github.kind === "signed-out" ? (
-              <span className="text-label font-medium text-warning">
+              <span className="text-meta font-medium text-warning">
                 Not connected:{" "}
                 <Link to="/settings" hash="connections" className="underline">
                   sign in from Connections
                 </Link>
               </span>
             ) : (
-              <span className="text-label font-medium text-muted-foreground">
+              <span className="text-meta font-medium text-muted-foreground">
                 Its repository isn't on GitHub
               </span>
             )}
@@ -149,7 +149,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
             </span>
             <span className="flex min-w-0 grow flex-col gap-0.5">
               <span className="text-interface font-bold">Paper</span>
-              <span className="text-label font-medium text-muted-foreground">
+              <span className="text-meta font-medium text-muted-foreground">
                 One file for this workspace's designs
               </span>
             </span>

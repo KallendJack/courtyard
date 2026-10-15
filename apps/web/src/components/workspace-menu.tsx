@@ -108,7 +108,7 @@ function MenuRow(props: {
       <span className="flex flex-col gap-px">
         <span className="text-interface font-semibold text-foreground">{props.children}</span>
         {props.note !== undefined && (
-          <span className="text-label font-medium text-muted-foreground">{props.note}</span>
+          <span className="text-meta font-medium text-muted-foreground">{props.note}</span>
         )}
       </span>
     </button>

@@ -2,6 +2,7 @@ import type { BuildJob, LiveStatus, LiveVersion, MainBuild } from "@courtyard/co
 import { useEffect, useState } from "react";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/build-stages";
 import { Button } from "@/components/button";
+import { CapsLabel } from "@/components/caps-label";
 import { useFresh } from "@/components/kept";
 import { Sheet } from "@/components/sheet";
 import { WebButton } from "@/components/web-link";
@@ -166,10 +167,7 @@ function FullBuild(props: {
         <p className="min-w-0 text-interface font-bold wrap-anywhere">
           {words} · {commit}
         </p>
-        <p
-          role="status"
-          className={classes("text-label font-semibold", STANDING_LOOKS[build.kind])}
-        >
+        <p role="status" className={classes("text-meta font-semibold", STANDING_LOOKS[build.kind])}>
           {standing(build, now, { full: true, updates })}
         </p>
       </div>
@@ -227,15 +225,10 @@ export function MainBuildCard(props: {
       className="flex items-center gap-3.5 rounded-bubble border bg-surface py-2.5 pr-2.5 pl-3.5"
     >
       <OpenRow label="Main's build" onOpen={() => setOpen(true)}>
-        <span
-          className={classes(
-            "shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase",
-            short && "max-sm:hidden",
-          )}
-        >
+        <CapsLabel tone="muted" inline className={classes("shrink-0", short && "max-sm:hidden")}>
           {props.label}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-label font-bold">
+        </CapsLabel>
+        <span className="min-w-0 flex-1 truncate text-meta font-bold">
           {short && <span className="sm:hidden">{props.label} · </span>}
           <span className={short ? "max-sm:hidden" : undefined}>{words} </span>
           {commit}
@@ -245,7 +238,7 @@ export function MainBuildCard(props: {
       <p
         role="status"
         className={classes(
-          "shrink-0 text-label font-semibold tabular-nums",
+          "shrink-0 text-meta font-semibold tabular-nums",
           STANDING_LOOKS[build.kind],
           short && "max-sm:sr-only",
         )}

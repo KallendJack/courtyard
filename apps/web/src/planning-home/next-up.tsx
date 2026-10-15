@@ -1,6 +1,7 @@
 import type { DuePlan, ListedSession, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { AlignLeft } from "lucide-react";
+import { CapsLabel } from "@/components/caps-label";
 import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
 import { describeWhen } from "../when.ts";
 
@@ -62,7 +63,7 @@ export function NextUp(props: {
           </span>
           <span className="flex min-w-0 grow flex-col gap-0.5">
             <span className="truncate text-sm/4.5 font-bold">Pick up: {pickUp.title}</span>
-            <span className="truncate text-label font-medium text-primary-text">
+            <span className="truncate text-meta font-medium text-primary-text">
               {pickUp.waiting === "reply" && "New reply · "}
               {describeWhen(pickUp.updatedAt)}
             </span>
@@ -77,10 +78,10 @@ export function NextUp(props: {
                 key={`${due.due} ${due.plan}`}
                 className="flex min-h-8.5 items-center gap-2.5 px-2.5 py-1.5"
               >
-                <span className="w-20 shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+                <CapsLabel tone="muted" inline className="w-20 shrink-0">
                   {dayWords(due.due)}
-                </span>
-                <span className="min-w-0 grow text-label font-semibold text-foreground/90">
+                </CapsLabel>
+                <span className="min-w-0 grow text-meta font-semibold text-foreground/90">
                   {due.plan}
                 </span>
               </li>

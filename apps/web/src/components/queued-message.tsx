@@ -60,7 +60,7 @@ export function QueuedMessages(props: {
                 onClick={async () => setProblem(await props.onRemove(message.seq))}
               />
             </div>
-            <p className="text-label font-semibold text-muted-foreground">
+            <p className="text-meta font-semibold text-muted-foreground">
               {index > 0
                 ? `Queued · ${ordinal(index + 1)}`
                 : props.running

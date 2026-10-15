@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-r
 import { Archive, Pencil } from "lucide-react";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { IconButton } from "@/components/button";
+import { CapsLabel } from "@/components/caps-label";
 import { ConfirmStep } from "@/components/confirm-step";
 import { IconChooser } from "@/components/icon-chooser";
 import { Page, PageTitle } from "@/components/page";
@@ -109,9 +110,9 @@ function Workspace() {
         icon={workspace.icon}
         choose={(icon) => change({ icon })}
       />
-      <span className="text-meta/4 font-semibold tracking-label text-muted-foreground uppercase">
+      <CapsLabel tone="muted" inline>
         Workspace
-      </span>
+      </CapsLabel>
     </div>
   );
   const toggle = (what: "rename" | "archive") =>

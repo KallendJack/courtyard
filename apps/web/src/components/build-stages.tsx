@@ -189,7 +189,7 @@ export function BuildGraph(props: {
                   </span>
                   <span
                     className={classes(
-                      "shrink-0 text-label font-semibold tabular-nums",
+                      "shrink-0 text-meta font-semibold tabular-nums",
                       LOOKS[job.outcome].time,
                     )}
                   >

@@ -102,9 +102,9 @@ export function Running(props: {
                 className="flex items-center gap-2.5 rounded-row bg-secondary px-3 py-2.5 hover:bg-muted"
               >
                 <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary shadow-glow" />
-                <span className="flex min-w-0 grow flex-col gap-0.5">
+                <span className="flex min-w-0 grow flex-col">
                   <span className="truncate text-sm/4.5 font-bold">{session.title}</span>
-                  <span className="truncate text-label font-medium text-primary-text">
+                  <span className="truncate text-meta font-medium text-primary-text">
                     {session.now.kind === "working" &&
                       `${capitalised(doingWords(session.now.doing))} · ${forWords(session.now.since)}`}
                   </span>
@@ -181,9 +181,7 @@ function LeadRow(props: {
         <LeadMark />
         <span className="flex min-w-0 grow flex-col gap-px">
           <span className="truncate text-sm/4.5 font-bold">{leadTitle(lead)}</span>
-          <span className="truncate text-label font-medium text-primary-text">
-            {leadLine(lead)}
-          </span>
+          <span className="truncate text-meta font-medium text-primary-text">{leadLine(lead)}</span>
         </span>
       </Link>
       <div className="flex shrink-0 flex-col items-end gap-1">

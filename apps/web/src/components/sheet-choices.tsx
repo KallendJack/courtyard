@@ -64,7 +64,7 @@ export function SheetSkills(props: {
                   </span>
                   <span
                     className={classes(
-                      "truncate text-label",
+                      "truncate text-meta",
                       why?.broken ? "text-destructive-text" : "text-muted-foreground",
                     )}
                   >
@@ -99,9 +99,9 @@ export function SheetModelLine(props: { name: string; detail: string; change: ()
           <span className="text-sm/4.5 font-extrabold wrap-anywhere text-foreground">
             {props.name}
           </span>
-          <span className="text-label text-muted-foreground">{props.detail}</span>
+          <span className="text-meta text-muted-foreground">{props.detail}</span>
         </span>
-        <span className="text-label font-bold text-foreground/85">Change</span>
+        <span className="text-meta font-bold text-foreground/85">Change</span>
         <ChevronRight aria-hidden strokeWidth={1.6} />
       </FrameButton>
     </div>
@@ -192,7 +192,7 @@ function ProviderModels<T extends string>(props: {
                 {model.name}
               </span>
               {model.note !== undefined && (
-                <span className="text-label text-muted-foreground">{model.note}</span>
+                <span className="text-meta text-muted-foreground">{model.note}</span>
               )}
             </span>
             <span
