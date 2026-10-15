@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApprovalAnswer, ApprovalAsk } from "./approval.ts";
+import { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "./approval.ts";
 import { Attachment, PhotoAttachment } from "./attachment.ts";
 import { ChangeId } from "./change-id.ts";
 import { DocumentSlug } from "./documents.ts";
@@ -303,6 +303,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     why: z.string().optional(),
     /** The helper asking (#117), or none for the model itself. */
     helper: HelperId.optional(),
+    /** What Allow always would allow (#185), when it's offered: never for what must always ask. */
+    always: AlwaysAllow.optional(),
   }),
   /** The session's pull request as it is now on GitHub, each time it changes (#172). */
   z.object({ ...eventBase, type: z.literal("pull-request"), pullRequest: PullRequest }),
@@ -324,6 +326,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("approval-answered"),
     approval: z.number().int().positive(),
     answer: ApprovalAnswer,
+    /** Allowed always (#185): until the session ends, or in the workspace. */
+    always: AlwaysFor.optional(),
   }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;

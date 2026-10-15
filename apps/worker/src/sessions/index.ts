@@ -3,6 +3,8 @@ import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   type Activity,
+  type AlwaysAllow,
+  type AlwaysFor,
   type ApprovalAnswer,
   type ApprovalAsk,
   type Attachment,
@@ -52,6 +54,7 @@ import {
 } from "../attachments/index.ts";
 import {
   allowlistFor,
+  alwaysRule,
   type BranchRefusal,
   BUILD_HELD_ENV,
   type Code,
@@ -61,11 +64,12 @@ import {
   editPlaceIn,
   type HelperBranch,
   isBuild,
+  namedAs,
   type PullRequestProblem,
   type SessionBranch,
   slotEnv,
 } from "../code/index.ts";
-import type { ContextFolder } from "../context-folder/index.ts";
+import { type ContextFolder, workspaceChange } from "../context-folder/index.ts";
 import {
   answerAsDocument,
   createTurnDocuments,
@@ -152,10 +156,12 @@ import {
 } from "../things/index.ts";
 import { type Answered, answeredAfter, sessionWaiting } from "../waiting/index.ts";
 import {
+  allowAlways,
   getWorkspace,
   isArchived,
   type PaperSettings,
   type Workspace,
+  type WorkspaceError,
   withoutStarterHint,
 } from "../workspaces/index.ts";
 
@@ -206,6 +212,10 @@ export type SessionError =
   | { readonly kind: "approval-not-found" }
   /** The approval's turn has ended (stopped, or the worker restarted), so nothing waits on it. */
   | { readonly kind: "approval-closed" }
+  /** Allow always was asked for an approval that didn't offer it (#185). */
+  | { readonly kind: "always-not-offered" }
+  /** The workspace couldn't keep a command allowed always (#185). */
+  | { readonly kind: "workspace"; readonly error: WorkspaceError }
   /** No message waiting in the session's queue has that event number (#177). */
   | { readonly kind: "queued-not-found" }
   /** The queued message has gone already, as a turn of its own. */
@@ -491,6 +501,28 @@ type TurnState =
   /** Its folder is being deleted, so nothing new can start in it. */
   | { readonly kind: "deleting" };
 
+/** The owner's answer to an approval (#171), and whether they allowed it always (#185). */
+type GivenAnswer = { readonly answer: ApprovalAnswer; readonly always?: AlwaysFor };
+
+/**
+ * What a session's owner allowed always for the session (#185), from its events: each approval's
+ * offer they answered Allow always, This session, to. It ends with the session.
+ */
+const allowedForSession = (events: readonly SessionEvent[]): AlwaysAllow[] => {
+  const offered = new Map<number, AlwaysAllow>();
+  const allowed: AlwaysAllow[] = [];
+  for (const event of events) {
+    if (event.type === "approval-requested" && event.always !== undefined) {
+      offered.set(event.seq, event.always);
+    }
+    if (event.type === "approval-answered" && event.always === "session") {
+      const always = offered.get(event.approval);
+      if (always !== undefined) allowed.push(always);
+    }
+  }
+  return allowed;
+};
+
 type RunningSession = {
   turn: TurnState;
   /** The next event's number, once known. */
@@ -499,7 +531,7 @@ type RunningSession = {
   /** Appends and subscriptions run one at a time, so events are gapless and none is missed. */
   queue: Promise<unknown>;
   /** The approvals its turn is waiting on (#171), by event number: each takes the owner's answer. */
-  approvals: Map<number, (answer: ApprovalAnswer) => void>;
+  approvals: Map<number, (given: GivenAnswer) => void>;
   /**
    * Whether its log has had a message queued (#177), so the end of a turn looks for one to send;
    * a session that never has costs a turn's end nothing.
@@ -1126,6 +1158,12 @@ export const createSessions = (options: {
           return ok(null);
         };
         /**
+         * The commands allowed always (#185) beyond the workspace's allowlist as the turn read it:
+         * those allowed for the session in its earlier turns, then each allowed always while the
+         * turn runs, for the session or the workspace, which its next turn reads.
+         */
+        const allowedAlways: CommandRule[] = allowedForSession(events.value).map(alwaysRule);
+        /**
          * Asks the owner's approval (#171) and waits for it, with no time limit: Allow decides it
          * as `allowed`, Deny refuses it, and a stop ends the wait. A helper's names it (#117).
          */
@@ -1134,12 +1172,14 @@ export const createSessions = (options: {
           why: string | undefined;
           allowed: Activity;
           helper: HelperId | undefined;
+          /** What Allow always would allow (#185), when it's offered. */
+          always?: AlwaysAllow | undefined;
         }): Promise<Result<null, string>> => {
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
           }
-          let answered: (answer: ApprovalAnswer | "stopped") => void = () => {};
-          const answer = new Promise<ApprovalAnswer | "stopped">((resolve) => {
+          let answered: (given: GivenAnswer | "stopped") => void = () => {};
+          const answer = new Promise<GivenAnswer | "stopped">((resolve) => {
             answered = resolve;
           });
           const onStop = () => answered("stopped");
@@ -1154,6 +1194,7 @@ export const createSessions = (options: {
                 ask: asking.ask,
                 ...(asking.why === undefined ? {} : { why: asking.why }),
                 ...(asking.helper === undefined ? {} : { helper: asking.helper }),
+                ...(asking.always === undefined ? {} : { always: asking.always }),
               },
             });
             if (recorded.ok) {
@@ -1170,8 +1211,12 @@ export const createSessions = (options: {
           stopper.signal.removeEventListener("abort", onStop);
           if (asked.ok) session.approvals.delete(asked.value.seq);
           if (given === "stopped") return err(codeRefusalReason({ kind: "stopped" }));
+          // Allowed always, it runs without asking for the rest of the turn too, whichever it's for.
+          if (given.always !== undefined && asking.always !== undefined) {
+            allowedAlways.push(alwaysRule(asking.always));
+          }
           return decide(
-            given === "allow"
+            given.answer === "allow"
               ? ok(asking.allowed)
               : err({ kind: "denied", what: deniedWhat(asking.ask) }),
             asking.helper,
@@ -1275,7 +1320,7 @@ export const createSessions = (options: {
                   pullRequest: pullRequestIn(events.value)?.number,
                   // The Lead files an issue only with the owner's OK (#347), and a helper on its
                   // own branch pushes and opens a pull request only with it (#395).
-                  allowlist: workspace.value.allowlist.filter((rule) => {
+                  allowlist: [...workspace.value.allowlist, ...allowedAlways].filter((rule) => {
                     const words = rule.words.join(" ");
                     if (lead && words === "gh issue create") return false;
                     return own !== true || !OWN_BRANCH_ASKS.includes(words);
@@ -1291,6 +1336,7 @@ export const createSessions = (options: {
                 why,
                 allowed: { kind: "ran-command", command },
                 helper,
+                always: refused.always,
               });
             },
             ran: (command) => options.code.builds.ended(turn.id, command),
@@ -2697,43 +2743,67 @@ export const createSessions = (options: {
     /**
      * The owner's answer to an approval its turn is waiting on (#171), by the approval's event
      * number. Recorded in the session, so every device sees it answered, and only the first answer
-     * counts: answering again, from any device, gives back the one that stands.
+     * counts: answering again, from any device, gives back the one that stands. Allow always
+     * (#185) needs the approval to have offered it; for the workspace, it's kept in the
+     * workspace's settings before the answer is recorded, as a change to the context folder.
      */
     answerApproval: async (answering: {
       rawId: string;
       approval: number;
       answer: ApprovalAnswer;
-    }): Promise<Result<ApprovalAnswer, SessionError>> => {
+      always?: AlwaysFor | undefined;
+    }): Promise<Result<GivenAnswer, SessionError>> => {
       const found = await findSession(answering.rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
+      const { id, workspaceId, title } = found.value;
       const session = runningSession(id);
-      return inOrder(session, async (): Promise<Result<ApprovalAnswer, SessionError>> => {
+      return inOrder(session, async (): Promise<Result<GivenAnswer, SessionError>> => {
         const events = await readEvents(id);
         if (!events.ok) return events;
-        const asked = events.value.some(
+        const asked = events.value.find(
           (event) => event.type === "approval-requested" && event.seq === answering.approval,
         );
-        if (!asked) return err({ kind: "approval-not-found" });
+        if (asked?.type !== "approval-requested") return err({ kind: "approval-not-found" });
         const earlier = events.value.find(
           (event) => event.type === "approval-answered" && event.approval === answering.approval,
         );
-        if (earlier?.type === "approval-answered") return ok(earlier.answer);
+        if (earlier?.type === "approval-answered") {
+          return ok({
+            answer: earlier.answer,
+            ...(earlier.always === undefined ? {} : { always: earlier.always }),
+          });
+        }
         const waiting = session.approvals.get(answering.approval);
         if (waiting === undefined) return err({ kind: "approval-closed" });
+        const { always } = answering;
+        if (always !== undefined && asked.always === undefined) {
+          return err({ kind: "always-not-offered" });
+        }
+        if (always === "workspace" && asked.always !== undefined) {
+          const command = namedAs(asked.always);
+          const kept = await options.contextFolder.change(
+            () =>
+              allowAlways(options.contextDir, {
+                id: workspaceId,
+                allowed: { command, at: new Date(options.now()).toISOString(), session: id, title },
+              }),
+            () => workspaceChange(`Allow always: ${command}`, workspaceId),
+          );
+          if (!kept.ok) return err({ kind: "workspace", error: kept.error });
+        }
+        const given: GivenAnswer = {
+          answer: answering.answer,
+          ...(always === undefined ? {} : { always }),
+        };
         const recorded = await writeEvent({
           id,
           session,
-          event: {
-            type: "approval-answered",
-            approval: answering.approval,
-            answer: answering.answer,
-          },
+          event: { type: "approval-answered", approval: answering.approval, ...given },
         });
         if (!recorded.ok) return recorded;
         session.approvals.delete(answering.approval);
-        waiting(answering.answer);
-        return ok(answering.answer);
+        waiting(given);
+        return ok(given);
       });
     },
 

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type ContextFile,
   type NewWorkspace,
+  SessionId,
   WorkspaceIcon,
   WorkspaceId,
   WorkspaceMode,
@@ -41,12 +42,27 @@ const CommandWords = z
   .refine((words) => words !== "...", "names no command");
 
 /**
+ * A command the owner allowed always in the workspace (#185), from an approval's Allow always: as
+ * `CommandWords`, when, and from which session, by its title then. Kept in the workspace's own
+ * settings, never in the repository's.
+ */
+const AllowedAlways = z.object({
+  command: CommandWords,
+  at: z.iso.datetime(),
+  session: SessionId.optional(),
+  title: z.string().optional(),
+});
+export type AllowedAlways = z.infer<typeof AllowedAlways>;
+
+/**
  * A code workspace's changes to the default command allowlist (spec #169): the commands it adds,
- * and the default ones it removes, each as `CommandWords`.
+ * and the default ones it removes, each as `CommandWords`, and those the owner allowed always
+ * from an approval (#185).
  */
 export const AllowlistSettings = z.object({
   add: z.array(CommandWords).default([]),
   remove: z.array(CommandWords).default([]),
+  always: z.array(AllowedAlways).default([]),
 });
 export type AllowlistSettings = z.infer<typeof AllowlistSettings>;
 
@@ -207,7 +223,7 @@ const readWorkspace = async (
     contextMarkdown: code ? null : (markdown.value ?? null),
     description: code ? (valid?.description ?? (migrated || null)) : null,
     repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
-    allowlist: valid?.allowlist ?? { add: [], remove: [] },
+    allowlist: valid?.allowlist ?? { add: [], remove: [], always: [] },
     paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
   });
 };
@@ -702,6 +718,69 @@ export const connectPaper = async (
   if (!kept.ok) return kept;
   return readWorkspace(contextDir, summary.id);
 };
+
+/**
+ * Changes the commands a code workspace's owner allowed always (#185), kept in its config's
+ * allowlist beside whatever else is there: `change` makes the new list of what was allowed from
+ * the one on disk, whose entries it can't read kept as they are. Refuses a planning workspace, and
+ * a config that was ignored, which is left for the owner to fix.
+ */
+const changeAllowedAlways = async (
+  contextDir: string,
+  id: string,
+  change: (
+    allowed: readonly { readonly entry: unknown; readonly read: AllowedAlways | undefined }[],
+  ) => readonly unknown[],
+): Promise<Result<Workspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, id);
+  if (!workspace.ok) return workspace;
+  const { summary } = workspace.value;
+  if (summary.configProblem !== undefined) {
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  if (summary.mode !== "code") {
+    return err({ kind: "invalid", message: "Only a code workspace allows commands." });
+  }
+  const kept = await keepInConfig(workspace.value, (config) => {
+    const allowlist = ConfigOnDisk.safeParse(config.allowlist);
+    const was = allowlist.success ? allowlist.data : {};
+    const always = z.array(z.unknown()).safeParse(was.always);
+    const entries = (always.success ? always.data : []).map((entry) => {
+      const read = AllowedAlways.safeParse(entry);
+      return { entry, read: read.success ? read.data : undefined };
+    });
+    return { allowlist: { ...was, always: change(entries) } };
+  });
+  if (!kept.ok) return kept;
+  return readWorkspace(contextDir, summary.id);
+};
+
+/**
+ * Allows a command always in a code workspace (#185), from an approval's Allow always, by its
+ * `CommandWords`: kept in its config, where its sessions' turns read it from then on. One already
+ * allowed keeps when it was first.
+ */
+export const allowAlways = (
+  contextDir: string,
+  allowing: { id: string; allowed: AllowedAlways },
+): Promise<Result<Workspace, WorkspaceError>> =>
+  changeAllowedAlways(contextDir, allowing.id, (entries) =>
+    entries.some(({ read }) => read?.command === allowing.allowed.command)
+      ? entries.map(({ entry }) => entry)
+      : [...entries.map(({ entry }) => entry), allowing.allowed],
+  );
+
+/**
+ * Removes a command the owner allowed always in a code workspace (#185), by its `CommandWords`,
+ * so its sessions ask for it again. One that isn't there is already removed.
+ */
+export const removeAllowed = (
+  contextDir: string,
+  removing: { id: string; command: string },
+): Promise<Result<Workspace, WorkspaceError>> =>
+  changeAllowedAlways(contextDir, removing.id, (entries) =>
+    entries.flatMap(({ entry, read }) => (read?.command === removing.command ? [] : [entry])),
+  );
 
 /**
  * Archives a workspace: its folder moves into the archived folder, so it leaves every list but

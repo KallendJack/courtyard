@@ -31,6 +31,9 @@ const LOOKS = {
   soft: "bg-primary-text/15 font-bold text-foreground ring-1 ring-primary-text/50 ring-inset hover:bg-primary-text/20",
   /** In gold, as what needs the owner: Approve on a row of Needs you (#301). */
   needs: "bg-warning font-bold text-background hover:bg-warning/85 disabled:opacity-50",
+  /** Ringed in gold, a quieter choice that needs the owner: an approval's Allow always (#185). */
+  ringed:
+    "bg-transparent font-bold text-foreground ring-1 ring-warning/35 ring-inset hover:bg-warning/10 disabled:opacity-50",
 } as const;
 
 /** How much of the row it takes, beside the other. */
@@ -40,6 +43,7 @@ export function ThumbButton({
   look,
   grow = 1,
   tall = false,
+  low = false,
   fit = false,
   row = false,
   type = "button",
@@ -56,6 +60,8 @@ export function ThumbButton({
     grow?: keyof typeof GROW;
     /** A little taller, at the foot of a card with more in it (an approval). */
     tall?: boolean;
+    /** A little lower, for a quieter choice under the card's own (an approval's Allow always). */
+    low?: boolean;
     /**
      * As wide as its words, beside a title rather than in thumb reach (a desktop's Merge and Close
      * PR, #278).
@@ -75,7 +81,9 @@ export function ThumbButton({
           ? "h-9 min-w-24 shrink-0 rounded-full px-4 text-sm/4.5"
           : fit
             ? "h-12 shrink-0 rounded-lg px-5 text-base/5"
-            : classes("basis-0 rounded-card text-base/5", GROW[grow], tall ? "h-15" : "h-14"),
+            : low
+              ? classes("h-11 basis-0 rounded-card text-sm/4.5", GROW[grow])
+              : classes("basis-0 rounded-card text-base/5", GROW[grow], tall ? "h-15" : "h-14"),
       )}
       disabled={disabled === true || waiting}
       {...props}

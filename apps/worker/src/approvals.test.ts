@@ -1,12 +1,13 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApprovalAnswering, type SessionEvent } from "@courtyard/contract";
+import { AllowedCommands, ApprovalAnswering, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Provider } from "./providers/index.ts";
 import {
   asOwner,
   CODING_MODEL,
+  changesIn,
   codeRepo,
   codeWorkspace,
   codingProvider,
@@ -293,5 +294,201 @@ describe("stopping a turn that waits on an approval", () => {
     });
     await postJson(request, `/api/sessions/${id}/stop`, { turn });
     await followSession(request, { sessionId: id, after: turn, until: "turn-stopped" });
+  });
+});
+
+// Allow always (#185): an approval for a command off the allowlist offers its leading words, for
+// the session or the workspace, so the same command with other arguments doesn't ask again.
+
+/** Answers an approval Allow always, for the session or the workspace. */
+const allowAlways = (
+  request: Requester,
+  id: string,
+  approval: number,
+  always: "session" | "workspace",
+) => postJson(request, `/api/sessions/${id}/approvals/${approval}`, { answer: "allow", always });
+
+/** Starts a code session on the coder, as the owner, and returns its id. */
+const startSession = async (request: Requester) => {
+  const response = await postJson(request, "/api/workspaces/side-project/sessions", {
+    text: "Check your work",
+    model: CODING_MODEL,
+  });
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+};
+
+/** Follows a session's turn after `after` to its end, denying each approval it asks for on the way. */
+const denyingEach = async (request: Requester, id: string, after = 0) => {
+  const asked: Extract<SessionEvent, { type: "approval-requested" }>[] = [];
+  let seen = after;
+  for (;;) {
+    const events = await followSession(request, {
+      sessionId: id,
+      after: seen,
+      until: (event) => event.type === "approval-requested" || event.type === "turn-completed",
+    });
+    const last = events.at(-1);
+    seen = last?.seq ?? seen;
+    if (last?.type !== "approval-requested") return asked;
+    asked.push(last);
+    await answer(request, id, last.seq, "deny");
+  }
+};
+
+/** The workspace's settings, as kept in its `workspace.json`. */
+const settingsOf = async () =>
+  JSON.parse(await readFile(join(root, "context", "side-project", "workspace.json"), "utf8"));
+
+describe("Allow always", () => {
+  it("offers a command's leading words, or one word as itself, and never what must always ask", async () => {
+    const offered = [
+      "pnpm add left-pad",
+      "pnpm exec eslint src/index.ts",
+      "cargo test --release",
+      "docker compose logs web",
+      "make",
+    ];
+    const alwaysAsks = [
+      // Naming a path outside the worktree, or only its program before an option.
+      "git diff /path/to/notes.md",
+      "rm -rf build",
+      // Pushing anywhere but its own branch, force pushing, deleting a branch, merging a PR.
+      "git push origin main",
+      "git push --force origin HEAD",
+      "git branch -D old-work",
+      "gh pr merge 12",
+      "gh api -X DELETE repos/owner/name/git/refs/heads/old-work",
+      // Credentials, and programs that run another command.
+      "npm token list",
+      "gh auth status",
+      "printenv GH_TOKEN",
+      "xargs rm",
+    ];
+    const { provider } = codingProvider([...offered, ...alwaysAsks].map((run) => ({ run })));
+    const request = await start([provider]);
+    const id = await startSession(request);
+
+    const asked = await denyingEach(request, id);
+
+    expect(asked.map((event) => [event.ask, event.always])).toEqual([
+      ...offered.map((command) => [expect.objectContaining({ command }), expect.anything()]),
+      ...alwaysAsks.map((command) => [expect.objectContaining({ command }), undefined]),
+    ]);
+    expect(asked.slice(0, offered.length).map((event) => event.always)).toEqual([
+      { words: ["pnpm", "add"], more: true },
+      { words: ["pnpm", "exec", "eslint"], more: true },
+      { words: ["cargo", "test"], more: true },
+      { words: ["docker", "compose", "logs"], more: true },
+      { words: ["make"], more: false },
+    ]);
+  });
+
+  it("for this session runs it, and the session doesn't ask again, but another session does", async () => {
+    const { provider, answers } = codingProvider([
+      { run: "pnpm add left-pad" },
+      { run: "pnpm add -D vitest" },
+    ]);
+    const request = await start([provider]);
+    const { id, asked } = await untilApproval(request);
+
+    const allowed = await allowAlways(request, id, asked.seq, "session");
+    const rest = await followSession(request, {
+      sessionId: id,
+      after: asked.seq,
+      until: "turn-completed",
+    });
+
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toEqual({ answer: "allow", always: "session" });
+    expect(rest[0]).toMatchObject({
+      type: "approval-answered",
+      approval: asked.seq,
+      answer: "allow",
+      always: "session",
+    });
+    // The same command with other arguments, later in the turn, runs without asking.
+    expect(rest.filter((event) => event.type === "approval-requested")).toEqual([]);
+    expect(answers).toEqual([
+      { ok: true, value: null },
+      { ok: true, value: null },
+    ]);
+
+    // Its next turn doesn't ask either.
+    const last = rest.at(-1)?.seq ?? 0;
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Again", model: CODING_MODEL });
+    expect(await denyingEach(request, id, last)).toEqual([]);
+    // Nothing was kept in the workspace, so another session asks.
+    expect((await settingsOf()).allowlist).toBeUndefined();
+    const other = await startSession(request);
+    expect(await denyingEach(request, other)).toHaveLength(2);
+  });
+
+  it("for this workspace keeps it in the workspace's settings, as a change, and Remove asks again", async () => {
+    const { provider, answers } = codingProvider([{ run: "pnpm add left-pad" }]);
+    const request = await start([provider]);
+    const { id, asked } = await untilApproval(request);
+
+    const allowed = await allowAlways(request, id, asked.seq, "workspace");
+    await followSession(request, { sessionId: id, after: asked.seq, until: "turn-completed" });
+
+    expect(await allowed.json()).toEqual({ answer: "allow", always: "workspace" });
+    expect(answers).toEqual([{ ok: true, value: null }]);
+    // In the workspace's own settings, never the repository's.
+    expect((await settingsOf()).allowlist).toEqual({
+      always: [
+        { command: "pnpm add ...", at: expect.any(String), session: id, title: expect.any(String) },
+      ],
+    });
+    expect((await changesIn(join(root, "context")))[0]?.title).toBe("Allow always: pnpm add ...");
+    const listed = await request("/api/workspaces/side-project/allowed-commands");
+    expect(AllowedCommands.parse(await listed.json())).toEqual({
+      commands: [
+        {
+          allows: { words: ["pnpm", "add"], more: true },
+          at: expect.any(String),
+          from: { session: id, title: expect.any(String) },
+        },
+      ],
+    });
+
+    // Another session runs it, with other arguments, without asking.
+    expect(await denyingEach(request, await startSession(request))).toEqual([]);
+
+    const removed = await postJson(
+      request,
+      "/api/workspaces/side-project/allowed-commands/remove",
+      {
+        allows: { words: ["pnpm", "add"], more: true },
+      },
+    );
+    expect(await removed.json()).toEqual({ commands: [] });
+    expect((await changesIn(join(root, "context")))[0]?.title).toBe(
+      "Stop allowing always: pnpm add ...",
+    );
+    expect(await denyingEach(request, await startSession(request))).toHaveLength(1);
+  });
+
+  it("is refused for an approval that doesn't offer it, and with Deny", async () => {
+    const { provider, answers } = codingProvider([{ run: "rm -rf build" }]);
+    const request = await start([provider]);
+    const { id, asked } = await untilApproval(request);
+
+    const always = await allowAlways(request, id, asked.seq, "workspace");
+    const denying = await postJson(request, `/api/sessions/${id}/approvals/${asked.seq}`, {
+      answer: "deny",
+      always: "session",
+    });
+
+    expect(always.status).toBe(409);
+    expect(await errorOf(always)).toBe(
+      "This approval always asks, so it can't be allowed always. Allow it once instead.",
+    );
+    expect(denying.status).toBe(400);
+    // It still waits, for Allow or Deny.
+    expect((await answer(request, id, asked.seq, "allow")).status).toBe(200);
+    await followSession(request, { sessionId: id, after: asked.seq, until: "turn-completed" });
+    expect(answers).toEqual([{ ok: true, value: null }]);
+    expect((await settingsOf()).allowlist).toBeUndefined();
   });
 });

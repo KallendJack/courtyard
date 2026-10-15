@@ -1,6 +1,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type AllowedCommand,
+  AllowedCommandRemoval,
+  type AllowedCommands,
   ATTACHMENTS,
   type ContextBackup,
   type Health,
@@ -23,7 +26,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
-import { createCode } from "./code/index.ts";
+import { allowsOf, createCode, namedAs } from "./code/index.ts";
 import { createConnections } from "./connections/index.ts";
 import { connectionRoutes } from "./connections/routes.ts";
 import { plansDue } from "./context-file/index.ts";
@@ -92,9 +95,24 @@ import {
   createWorkspace,
   getWorkspace,
   listWorkspaces,
+  removeAllowed,
+  type Workspace,
 } from "./workspaces/index.ts";
 
 export type { Environment, UpdateCommand };
+
+/** A code workspace's Allowed commands (#185), as its list shows them: newest first. */
+const allowedCommandsOf = (workspace: Workspace): AllowedCommands => ({
+  commands: workspace.allowlist.always
+    .map(
+      ({ command, at, session, title }): AllowedCommand => ({
+        allows: allowsOf(command),
+        at,
+        ...(session === undefined || title === undefined ? {} : { from: { session, title } }),
+      }),
+    )
+    .reverse(),
+});
 
 export type Worker = {
   readonly app: Hono;
@@ -564,6 +582,23 @@ export const createWorker = (options: {
       matt,
     });
     return c.json({ skills: skillList(skills) } satisfies SkillList);
+  });
+  // A code workspace's Allowed commands (#185): what its owner allowed always, each to Remove.
+  api.get("/workspaces/:id/allowed-commands", async (c) => {
+    const workspace = await getWorkspace(contextDir, c.req.param("id"));
+    if (!workspace.ok) return contextError(c, workspace.error);
+    return c.json(allowedCommandsOf(workspace.value) satisfies AllowedCommands);
+  });
+  api.post("/workspaces/:id/allowed-commands/remove", async (c) => {
+    const body = await readBody(c, AllowedCommandRemoval);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const command = namedAs(body.value.allows);
+    const removed = await contextFolder.change(
+      () => removeAllowed(contextDir, { id: c.req.param("id"), command }),
+      (made) => workspaceChange(`Stop allowing always: ${command}`, made.summary.id),
+    );
+    if (!removed.ok) return contextError(c, removed.error);
+    return c.json(allowedCommandsOf(removed.value) satisfies AllowedCommands);
   });
   api.get("/workspaces/:id/matt-setup", async (c) => {
     const id = WorkspaceId.safeParse(c.req.param("id"));

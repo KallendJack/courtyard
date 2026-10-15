@@ -481,12 +481,14 @@ export const TurnView = memo(function TurnView(props: {
             why: turn.approval.why,
             helper: turn.helpers.find((each) => each.id === turn.approval?.helper)?.name,
           })}
-          onAnswer={async (answer, waiting) => {
+          always={turn.approval.always}
+          onAnswer={async (answer, waiting, always) => {
             if (turn.approval === undefined) return undefined;
             const answered = await answerApproval({
               sessionId,
               approval: turn.approval.seq,
               answer,
+              always,
               ...waiting,
             });
             return answered.kind === "loaded" ? undefined : describeProblem(answered).body;

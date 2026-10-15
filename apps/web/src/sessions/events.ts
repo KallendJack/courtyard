@@ -1,5 +1,6 @@
 import {
   type Activity,
+  type AlwaysAllow,
   ApiError,
   type ApprovalAsk,
   type Attachment,
@@ -194,6 +195,8 @@ export type Turn = {
         readonly why: string | undefined;
         /** The helper asking (#117), or none for the model itself. */
         readonly helper: HelperId | undefined;
+        /** What Allow always would allow (#185), when it's offered. */
+        readonly always: AlwaysAllow | undefined;
       }
     | undefined;
   /**
@@ -463,7 +466,13 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({
           ...turn,
-          approval: { seq, ask: event.ask, why: event.why, helper: event.helper },
+          approval: {
+            seq,
+            ask: event.ask,
+            why: event.why,
+            helper: event.helper,
+            always: event.always,
+          },
         }),
       });
     case "approval-answered":
