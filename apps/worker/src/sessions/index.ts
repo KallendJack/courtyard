@@ -254,8 +254,22 @@ const SessionFile = z.object({
   lead: z.literal(true).optional(),
   /** Started by its workspace's Lead to build an issue (#347). */
   byLead: z.literal(true).optional(),
+  /**
+   * The issue a code session was started on, claimed for it on GitHub (#324), and whether the
+   * claim stands: it's released when the session stops before a pull request.
+   */
+  claim: z.object({ issue: z.number().int().positive(), standing: z.boolean() }).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
+
+/**
+ * The claim a code session releases if it stops now (#324): one that stands, while it has no pull
+ * request.
+ */
+const claimToRelease = (file: SessionFile, events: readonly SessionEvent[]) =>
+  file.branch !== undefined && file.claim?.standing === true && pullRequestIn(events) === undefined
+    ? { issue: file.claim.issue, branch: file.branch }
+    : undefined;
 
 /** An event before it's numbered and timed. */
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
@@ -513,6 +527,23 @@ export type LeadHooks = {
 };
 
 /**
+ * A code session's claim on the issue it was started on (#324), posted on GitHub by Next up, which
+ * knows the repository's issues. A refusal is only logged: the session builds it anyway.
+ */
+export type ClaimHooks = {
+  /** The issue a first message names, when it names one alone, ready and claimed by nobody. */
+  readonly named: (workspaceId: WorkspaceId, text: string) => Promise<number | undefined>;
+  /** Claims the issue, naming the session's branch and why (AGENTS.md, claim rule). */
+  readonly claim: (
+    workspaceId: WorkspaceId,
+    issue: number,
+    claim: { branch: string; why: string },
+  ) => Promise<void>;
+  /** Releases the claim: "Stopped: <why>". */
+  readonly release: (workspaceId: WorkspaceId, issue: number, why: string) => Promise<void>;
+};
+
+/**
  * Sessions as jobs with an append-only event log in plain files (ADR 0006): one folder per session
  * in the data folder, holding `session.json` and `events.jsonl`. A turn runs on the worker to the
  * end whether or not anyone is watching; anyone can subscribe from a position and follow live.
@@ -543,6 +574,8 @@ export const createSessions = (options: {
   background: Background;
   /** A code workspace's Lead (#347): the build order its turns are told, and its tool's answers. */
   lead?: LeadHooks;
+  /** The claim on the issue a code session was started on (#324). */
+  claims?: ClaimHooks;
 }) => {
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
@@ -712,7 +745,7 @@ export const createSessions = (options: {
    */
   const updateFile = (
     id: SessionId,
-    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt">>,
+    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt" | "claim">>,
   ) =>
     inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
@@ -724,6 +757,35 @@ export const createSessions = (options: {
     });
 
   const markUpdated = (id: SessionId) => updateFile(id, { updatedAt: stamp() });
+
+  /**
+   * Releases a code session's claim on its issue (#324), saying why on GitHub, unless it has a
+   * pull request, which links the issue itself, or the claim was released already.
+   */
+  const releaseClaim = async (id: SessionId, why: (branch: string) => string) => {
+    const [file, events] = await Promise.all([
+      readJsonFile(sessionFilePath(id), SessionFile),
+      readEvents(id),
+    ]);
+    if (!file.ok || !file.value || !events.ok) return;
+    const claim = claimToRelease(file.value, events.value);
+    if (claim === undefined) return;
+    await updateFile(id, { claim: { issue: claim.issue, standing: false } });
+    await options.claims?.release(file.value.workspaceId, claim.issue, why(claim.branch));
+  };
+
+  /** Claims a code session's issue again as it carries on, once its claim was released (#324). */
+  const claimAgain = async (id: SessionId) => {
+    const file = await readJsonFile(sessionFilePath(id), SessionFile);
+    const session = file.ok ? file.value : undefined;
+    const claim = session?.claim;
+    if (session?.branch === undefined || claim === undefined || claim.standing) return;
+    await updateFile(id, { claim: { ...claim, standing: true } });
+    await options.claims?.claim(session.workspaceId, claim.issue, {
+      branch: session.branch,
+      why: "the owner asked",
+    });
+  };
 
   /** A workspace's skills (ADR 0016), as its folder, mode and repo give them. */
   const skillsOf = (workspace: SkillsWorkspace) =>
@@ -1360,6 +1422,14 @@ export const createSessions = (options: {
     // What the turn did to its pull request shows at once, the PR it opened, say (#172), and its
     // notification then says when the PR's checks still fail (story 31).
     if (turn.coding) await followPullRequest(turn.id);
+    // Stopped or failed before its pull request, it lets its issue go (#324).
+    if (turn.coding && ending.type !== "turn-completed") {
+      await releaseClaim(turn.id, (branch) =>
+        ending.type === "turn-stopped"
+          ? `the owner stopped Courtyard session (${branch}) before its pull request.`
+          : `Courtyard session (${branch}) failed before its pull request.`,
+      );
+    }
     // It isn't the owner's turn when their queued message has just gone.
     if (ended.ok && !queuedGoes) {
       const events = turn.coding ? await readEvents(turn.id) : undefined;
@@ -1527,6 +1597,8 @@ export const createSessions = (options: {
       return recorded;
     }
     starting.turn = recorded.value.seq;
+    // Carrying on after it stopped before its pull request, it claims its issue again (#324).
+    if (start.coding && start.firstTurn !== true) await claimAgain(start.id);
     // The checks it fixes start its activity (#172).
     for (const name of start.checksFailed?.checks ?? []) {
       await append(start.id, { type: "activity", activity: { kind: "check-failed", name } });
@@ -2310,6 +2382,8 @@ export const createSessions = (options: {
       placeless?: boolean;
       /** In a code workspace, it's the workspace's Lead (#347), or one of its builders. */
       lead?: "lead" | "builder";
+      /** In a code workspace, the issue it builds, next in order (Build, #298): claimed for it. */
+      issue?: number;
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -2335,6 +2409,15 @@ export const createSessions = (options: {
         return err({ kind: "branch-refused", refusal: branched.error });
       }
       const sessionBranch = branched?.value;
+      // The issue it's started on (#324): Build's, else one its first message names, if it builds.
+      const builds =
+        sessionBranch !== undefined &&
+        start.onBranch === undefined &&
+        start.placeless !== true &&
+        start.lead !== "lead";
+      const issue = builds
+        ? (start.issue ?? (await options.claims?.named(start.workspaceId, start.message.text)))
+        : undefined;
       const file: SessionFile = {
         id,
         workspaceId: start.workspaceId,
@@ -2352,6 +2435,7 @@ export const createSessions = (options: {
           : {}),
         ...(sessionBranch !== undefined && start.lead === "lead" ? { lead: true } : {}),
         ...(sessionBranch !== undefined && start.lead === "builder" ? { byLead: true } : {}),
+        ...(issue === undefined ? {} : { claim: { issue, standing: true } }),
       };
       const unstarted = async () => {
         if (repoPath !== undefined && sessionBranch !== undefined) {
@@ -2385,6 +2469,13 @@ export const createSessions = (options: {
         await unstarted();
         running.delete(id);
         return started;
+      }
+      // Claimed as it starts, so its model finds the claim made for it (AGENTS.md, claim rule).
+      if (issue !== undefined && sessionBranch !== undefined) {
+        await options.claims?.claim(start.workspaceId, issue, {
+          branch: sessionBranch.branch,
+          why: start.issue === undefined ? "the owner asked" : "next in order",
+        });
       }
       return ok(summaryOf(file));
     },
@@ -2630,6 +2721,8 @@ export const createSessions = (options: {
         session.turn.stopper.abort();
         await session.ended;
       }
+      // A turn just ended finishes first: the pull request it opened is recorded by then (#324).
+      if (session.turn.kind === "idle") await session.ended;
       const events = await readEvents(id);
       // Nothing ever ran on its session branch, so that goes too (ADR 0007).
       const neverRan =
@@ -2637,8 +2730,10 @@ export const createSessions = (options: {
         events.value.filter((event) => event.type === "owner-message").length === 1 &&
         events.value.some((event) => event.type === "turn-queued") &&
         !events.value.some((event) => event.type === "turn-dequeued");
+      // Deleted before its pull request, it lets its issue go (#324).
+      const claim = events.ok ? claimToRelease(found.value, events.value) : undefined;
       // In the session's queue, so nothing is being written to it as its folder goes.
-      return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const removed = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
         if (session.turn.kind !== "idle") return err({ kind: "delete-while-running" });
         // A message from another device can't start a turn while the folder goes.
         session.turn = { kind: "deleting" };
@@ -2660,6 +2755,14 @@ export const createSessions = (options: {
         }
         return ok(null);
       });
+      if (removed.ok && claim !== undefined) {
+        await options.claims?.release(
+          workspaceId,
+          claim.issue,
+          `the owner deleted Courtyard session (${claim.branch}) before its pull request.`,
+        );
+      }
+      return removed;
     },
 
     /** Whether a turn is running in any of a workspace's sessions. */
@@ -2736,8 +2839,12 @@ export const createSessions = (options: {
       });
     },
 
-    /** Stops whatever turn runs in a session, and waits for it to end (the Lead's skip, #347). */
-    stopTurn: async (id: SessionId) => {
+    /**
+     * Stops a session building its issue (the Lead's skip, #347): its claim released, saying why
+     * (#324), then whatever turn runs stopped, and waited for to end.
+     */
+    stopBuilding: async (id: SessionId, why: string) => {
+      await releaseClaim(id, () => why);
       const session = running.get(id);
       if (session?.turn.kind !== "running") return;
       session.turn.stopper.abort();

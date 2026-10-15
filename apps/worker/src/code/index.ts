@@ -11,11 +11,11 @@ import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts"
 import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../github/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import { type CommandRule, reachesOut, ruleFor } from "./allowlist.ts";
+import { type CommandRule, type IssueGap, issueGapsIn, reachesOut, ruleFor } from "./allowlist.ts";
 import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
-export { allowlistFor, type CommandRule, isBuild } from "./allowlist.ts";
+export { allowlistFor, type CommandRule, type IssueGap, isBuild } from "./allowlist.ts";
 export { BUILD_HELD_ENV } from "./builds.ts";
 
 /**
@@ -112,7 +112,9 @@ export type CodeRefusal =
   /** A command for the session branch only, such as committing, while the worktree is off it. */
   | { readonly kind: "off-branch"; readonly branch: string }
   /** The owner denied the approval it needed (#171). */
-  | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" };
+  | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" }
+  /** `gh issue create` filing an issue without a milestone, a category or one triage label (#324). */
+  | { readonly kind: "unfiled"; readonly gaps: readonly [IssueGap, ...IssueGap[]] };
 
 /**
  * A command only the owner can allow (#171): one off the command allowlist, or one naming a path
@@ -126,7 +128,8 @@ export type CommandApproval = {
 /**
  * Whether a command may run in a session's worktree without asking: one command, on the command
  * allowlist, naming no path outside the worktree, and, for committing, with the worktree on the
- * session branch. One that could run only with the owner's approval says so.
+ * session branch. One that could run only with the owner's approval says so. An issue filed
+ * without what every issue has is refused before anyone is asked (#324).
  */
 export const commandAllowed = async (
   session: {
@@ -141,6 +144,8 @@ export const commandAllowed = async (
 ): Promise<Result<null, CodeRefusal | CommandApproval>> => {
   const words = wordsOf(command);
   if (!words.ok) return err({ kind: words.error });
+  const [gap, ...gaps] = issueGapsIn(words.value);
+  if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
   const rule = ruleFor(session.allowlist, words.value, {
     branch: session.branch,
     pullRequest: session.pullRequest,

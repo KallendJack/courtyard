@@ -190,7 +190,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
   PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
   It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
-  another repository, and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
+  another repository (an issue filed with no milestone, no `bug` or `enhancement` label or not exactly one triage
+  label is refused before anyone is asked, `issueGapsIn`, #324), and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
   download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202).
   For a flake that isn't its PR's, it comments on its own PR with `gh pr comment` and re-runs one run's failed jobs
   with `gh run rerun <run> --failed`, and nothing more of a run (#356). A backslash at a line's end joins the next
@@ -234,9 +235,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   pull request that closes it), in
   milestone order (the number a milestone's title leads with, then Later, then none) and, inside a milestone, the
   order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
-  page asks and kept two minutes. Build (#298) asks again, starts a code session through `sessions/` whose first
-  message is the issue (`buildIssueMessage`, worded by `prompts/`) and comments the claim on the issue, naming the
-  session's branch. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
+  page asks and kept two minutes. Build (#298) asks again and starts a code session through `sessions/` on the
+  issue, whose first message is the issue (`buildIssueMessage`, worded by `prompts/`). Every session started on an
+  issue has its claim posted here (#324): `sessions/` is handed `named`, `claim` and `release`, and keeps the claim
+  in the session's file. It claims as the session starts (Build's issue, else the one ready issue nobody has claimed
+  that its first message names as `#<number>`), naming its branch; it releases the claim ("Stopped: <why>") when a
+  turn is stopped or fails, or the session is deleted, before it has a pull request, and claims again when it
+  carries on. The Lead's skip releases through `sessions/`'s `stopBuilding`. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
   `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
   message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
   and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and

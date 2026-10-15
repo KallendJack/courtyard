@@ -105,9 +105,16 @@ export const createLead = (options: {
   dataDir: string;
   sessions: Pick<
     Sessions,
-    "create" | "get" | "list" | "lastModelOf" | "codeRunning" | "note" | "tellMerged" | "stopTurn"
+    | "create"
+    | "get"
+    | "list"
+    | "lastModelOf"
+    | "codeRunning"
+    | "note"
+    | "tellMerged"
+    | "stopBuilding"
   >;
-  nextUp: Pick<NextUp, "list" | "fresh" | "build" | "release">;
+  nextUp: Pick<NextUp, "list" | "fresh" | "build">;
   /** Whether a code workspace's main is red now (#355), by its id. */
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
   /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
@@ -370,13 +377,10 @@ export const createLead = (options: {
         stopped: false,
       });
     }
-    await sessions.stopTurn(builder.session);
-    const released = await nextUp.release(
-      workspaceId,
-      issue,
+    await sessions.stopBuilding(
+      builder.session,
       "the owner skipped it for now, through Courtyard's Lead.",
     );
-    if (!released.ok) console.error(`#${issue}'s claim couldn't be released`, released.error);
     const skipped = await noted(
       {
         ...kept,
