@@ -139,6 +139,7 @@ export {
   DocumentSave,
   endsTurn,
   FailureReason,
+  HelperId,
   pullRequestIn,
   queuedIn,
   Save,

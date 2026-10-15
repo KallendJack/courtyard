@@ -21,8 +21,8 @@ A code turn also gets:
   its limit of 30.
 - **`TodoWrite` and `Skill`.** Every call still goes through the adapter's PreToolUse hook, as ADR 0022 says, and
   nothing is pre-approved: a task list update touches no file, so the hook lets it through and the session shows
-  "Updated the task list"; a skill loads only if the turn turned it on. Sub-agents (`Agent`) stay off (#117), and the
-  web tools still follow the workspace's web setting.
+  "Updated the task list"; a skill loads only if the turn turned it on. Sub-agents (`Agent`) stay off (#117; ADR 0027 turns
+  them on, inside the session's boundary), and the web tools still follow the workspace's web setting.
 
 **Codex follows the same rule when it gets code sessions:** its own coding instructions, with Courtyard's framing
 appended. Nothing changes for Codex now, since it doesn't code yet (ADR 0015).

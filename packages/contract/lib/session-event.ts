@@ -21,6 +21,13 @@ export const FailureReason = z.discriminatedUnion("kind", [
 ]);
 export type FailureReason = z.infer<typeof FailureReason>;
 
+/**
+ * A helper a code session's model started (#117, ADR 0027): one of its provider's own sub-agents,
+ * by the id its provider gave it, unique in its turn.
+ */
+export const HelperId = z.string().min(1).brand<"HelperId">();
+export type HelperId = z.infer<typeof HelperId>;
+
 /** What a model is doing during a turn, shown to the owner as it happens. */
 export const Activity = z.discriminatedUnion("kind", [
   /** A file it read, as a path inside the workspace folder. */
@@ -170,7 +177,33 @@ export const SessionEvent = z.discriminatedUnion("type", [
     queued: z.number().int().positive(),
   }),
   z.object({ ...eventBase, type: z.literal("text-delta"), text: z.string() }),
-  z.object({ ...eventBase, type: z.literal("activity"), activity: Activity }),
+  z.object({
+    ...eventBase,
+    type: z.literal("activity"),
+    activity: Activity,
+    /** The helper doing it (#117), or none for the model itself. */
+    helper: HelperId.optional(),
+  }),
+  /**
+   * The model started a helper (#117, ADR 0027), named by the description the model gave it, or
+   * by its type without one. Everything it does is recorded as the model's is, tagged with it.
+   * One that waits for a place, as many helpers as run at once are running, says so, and is
+   * recorded again without it once it has one.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("helper-started"),
+    helper: HelperId,
+    name: z.string(),
+    waiting: z.literal(true).optional(),
+  }),
+  /** A helper finished, with its final report to the model. */
+  z.object({
+    ...eventBase,
+    type: z.literal("helper-finished"),
+    helper: HelperId,
+    report: z.string(),
+  }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),
   /** The owner stopped the turn; whatever was written before stays. */
   z.object({ ...eventBase, type: z.literal("turn-stopped") }),
@@ -253,6 +286,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     ask: ApprovalAsk,
     /** What the model said it's for, when it said. */
     why: z.string().optional(),
+    /** The helper asking (#117), or none for the model itself. */
+    helper: HelperId.optional(),
   }),
   /** The session's pull request as it is now on GitHub, each time it changes (#172). */
   z.object({ ...eventBase, type: z.literal("pull-request"), pullRequest: PullRequest }),

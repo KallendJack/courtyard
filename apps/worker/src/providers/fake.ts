@@ -5,6 +5,7 @@ import {
   type Capabilities,
   Effort,
   type FailureReason,
+  HelperId,
   ModelId,
   ProviderId,
   type SignInState,
@@ -438,6 +439,75 @@ const scriptedCoding = async (code: CodeTurn, message: string, report: TurnInput
   return said;
 };
 
+const HELPER = /^helper (.+?): (.+)$/i;
+const HELPER_REPORT = /^report: (.*)$/i;
+const HOLD_COMMAND = /^hold command: (.+)$/i;
+
+/** Waits until the turn is stopped. */
+const untilStopped = (signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal.aborted) resolve();
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+
+/**
+ * One helper a message scripts (#117), on a line "helper Review against standards: read file:
+ * src/slots.ts | run command: git diff main | report: Follows the standards.": started by that
+ * name once the worker gives it a place, then each step in turn, as the model's own lines do
+ * ("read file: …", "edit file …: …", "run command: … (for: …)"). "hold command: pnpm test" asks to
+ * run a command and keeps it running (a build's place taken) until the turn is stopped, and
+ * "hold" waits until then. "report: …" is its final report, given as it finishes.
+ */
+const scriptedHelper = async (
+  code: CodeTurn,
+  helper: { id: number; name: string; steps: readonly string[] },
+  signal: AbortSignal,
+) => {
+  const turn = await code.helper({ id: HelperId.parse(`helper-${helper.id}`), name: helper.name });
+  if (turn === undefined) return;
+  let report = "";
+  for (const step of helper.steps) {
+    if (signal.aborted) return;
+    const [, read] = READ_FILE.exec(step) ?? [];
+    const [, path, text] = EDIT_FILE.exec(step) ?? [];
+    const [, command, why] = RUN_COMMAND.exec(step) ?? [];
+    const [, held] = HOLD_COMMAND.exec(step) ?? [];
+    const [, said] = HELPER_REPORT.exec(step) ?? [];
+    if (read !== undefined) await turn.report({ kind: "read-file", path: read });
+    else if (path !== undefined && text !== undefined) {
+      const allowed = await turn.code.edit(path);
+      if (allowed.ok) await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
+      else report += `Couldn't edit ${path}: ${allowed.error} `;
+    } else if (command !== undefined) {
+      const allowed = await turn.code.run(command, why);
+      if (allowed.ok) {
+        report += await runIn(code, command);
+        turn.code.ran(command);
+      } else {
+        report += `Couldn't run ${command}: ${allowed.error} `;
+      }
+    } else if (held !== undefined) {
+      if ((await turn.code.run(held)).ok) await untilStopped(signal);
+    } else if (/^hold$/i.test(step)) await untilStopped(signal);
+    else if (said !== undefined) report += said;
+  }
+  if (!signal.aborted) await turn.finished(report.trim());
+};
+
+/**
+ * The helpers a message scripts (#117), one per line (see `scriptedHelper`), all at work at once,
+ * as a model starts several together. The turn goes on once every one has finished.
+ */
+const scriptedHelpers = async (code: CodeTurn, message: string, signal: AbortSignal) => {
+  const helpers = message.split("\n").flatMap((line, id) => {
+    const [, name, steps] = HELPER.exec(line.trim()) ?? [];
+    return name === undefined || steps === undefined
+      ? []
+      : [{ id: id + 1, name, steps: steps.split(" | ").map((step) => step.trim()) }];
+  });
+  await Promise.all(helpers.map((helper) => scriptedHelper(code, helper, signal)));
+};
+
 const PAPER_CALL = /^paper (\w+)(?: (\{.*\}))?$/i;
 
 /** A board the fake draws when a turn asks for a screenshot: a small PNG in Paper's colours. */
@@ -517,7 +587,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
- * allows (see `scriptedCoding`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
+ * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`). To a Lead,
  * "pause" pauses the build order (see `scriptedBuildOrder`).
  */
@@ -605,6 +675,8 @@ export const createFakeProvider = (
           message: "The fake provider failed on purpose, because the message asked it to.",
         });
       }
+      if (code !== null) await scriptedHelpers(code, last, signal);
+      if (signal.aborted) return ok(null);
       const coded = code === null ? "" : await scriptedCoding(code, last, report);
       const paper = connections.find((connection) => connection.name === "paper");
       const drew = paper === undefined ? "" : await scriptedPaper(paper, last);

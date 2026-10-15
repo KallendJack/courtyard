@@ -35,9 +35,12 @@ const exactly = (ask: ApprovalAsk) => {
   }
 };
 
-/** What the model said it's for, as a sentence, and what Deny does. */
-const whyLine = (why: string | undefined) => {
-  const deny = "Deny and it will find another way.";
+/** What the model said it's for, as a sentence, and what Deny does: a helper reports back (#117). */
+const whyLine = (why: string | undefined, helper: string | undefined) => {
+  const deny =
+    helper === undefined
+      ? "Deny and it will find another way."
+      : "Deny and the helper reports back without them.";
   const said = why?.trim();
   if (!said) return deny;
   return `${said}${/[.!?]$/.test(said) ? "" : "."} ${deny}`;
@@ -45,12 +48,20 @@ const whyLine = (why: string | undefined) => {
 
 /**
  * What an approval a code session's turn waits on says (#171): its title, the exact command, file
- * or tool connection's action, and why.
+ * or tool connection's action, and why. One a helper asks for names it (#117).
  */
-export const approvalWords = (ask: ApprovalAsk, why: string | undefined) => ({
-  title: question(ask),
-  exact: exactly(ask),
-  note: whyLine(why),
+export const approvalWords = (approval: {
+  ask: ApprovalAsk;
+  why: string | undefined;
+  /** The name of the helper asking, or none for the model itself. */
+  helper: string | undefined;
+}) => ({
+  title: question(approval.ask),
+  exact: exactly(approval.ask),
+  note: whyLine(approval.why, approval.helper),
+  ...(approval.helper === undefined
+    ? {}
+    : { label: `Needs your OK · Helper · ${approval.helper}` }),
 });
 
 /**
@@ -64,6 +75,8 @@ export function ApprovalCard(props: {
   title: string;
   exact: string;
   note: string;
+  /** Its label above the title: "Needs your OK" unless it says, such as a helper's (#117). */
+  label?: string;
   /** What Deny is called here: "Deny" unless it says. */
   denyLabel?: string;
   /**
@@ -104,7 +117,7 @@ export function ApprovalCard(props: {
         aria-label="Needs your OK"
         className="flex flex-col gap-3 rounded-ask bg-surface p-4.5 ring-stroke ring-warning/55 ring-inset"
       >
-        <CapsLabel tone="warning">Needs your OK</CapsLabel>
+        <CapsLabel tone="warning">{props.label ?? "Needs your OK"}</CapsLabel>
         <h2 className="display-section text-card-title tracking-[-0.015em] text-foreground">
           {props.title}
         </h2>

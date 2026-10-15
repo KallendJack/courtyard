@@ -7,6 +7,7 @@ import {
   type Doing,
   type Effort,
   type FailureReason,
+  type HelperId,
   type ModelRef,
   type PhotoAttachment,
   type PlacedLine,
@@ -75,7 +76,35 @@ export type AnswerPart =
        */
       readonly replayed: number;
     }
-  | { readonly kind: "activities"; readonly activities: readonly Activity[] };
+  | { readonly kind: "activities"; readonly activities: readonly Activity[] }
+  /** Helpers the model started (#117), each by its id in the turn's `helpers`. */
+  | { readonly kind: "helpers"; readonly helpers: readonly HelperId[] };
+
+/**
+ * A helper the model started (#117): its name, whether it waits for a place among the helpers,
+ * everything it did (and waited for) in order, and its final report once it has finished.
+ */
+export type Helper = {
+  readonly id: HelperId;
+  readonly name: string;
+  readonly waiting: boolean;
+  readonly activities: readonly Activity[];
+  readonly report: string | undefined;
+};
+
+/** A helper started after a turn's parts so far: with the ones just before it, or after the rest. */
+const withHelper = (parts: readonly AnswerPart[], helper: HelperId): readonly AnswerPart[] => {
+  const last = parts.at(-1);
+  if (last?.kind !== "helpers") return [...parts, { kind: "helpers", helpers: [helper] }];
+  return [...parts.slice(0, -1), { kind: "helpers", helpers: [...last.helpers, helper] }];
+};
+
+/** A turn's helpers with the one numbered `helper` changed, leaving the rest as they were. */
+const changeHelper = (
+  helpers: readonly Helper[],
+  helper: HelperId,
+  change: (helper: Helper) => Helper,
+) => helpers.map((each) => (each.id === helper ? change(each) : each));
 
 /** Text after a turn's parts so far: added to the text it's writing, or a new piece. */
 const withText = (
@@ -129,6 +158,8 @@ export type Turn = {
   readonly answer: string;
   /** What the model wrote and did, in order: its text between its parts, as Claude shows it (#200). */
   readonly parts: readonly AnswerPart[];
+  /** The helpers it started (#117), in order, each line of which its `parts` place. */
+  readonly helpers: readonly Helper[];
   /** The saves it made, in order. */
   readonly notes: readonly Note[];
   /** The documents saved from it, in order. */
@@ -149,7 +180,13 @@ export type Turn = {
    * from any device; `undefined` when it waits on none.
    */
   readonly approval:
-    | { readonly seq: number; readonly ask: ApprovalAsk; readonly why: string | undefined }
+    | {
+        readonly seq: number;
+        readonly ask: ApprovalAsk;
+        readonly why: string | undefined;
+        /** The helper asking (#117), or none for the model itself. */
+        readonly helper: HelperId | undefined;
+      }
     | undefined;
   /**
    * Whether the worker sent it, not the owner, because the session's pull request's checks
@@ -271,6 +308,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               (before.provider !== event.model.provider || before.model !== event.model.model),
             answer: "",
             parts: [],
+            helpers: [],
             notes: [],
             documents: [],
             things: [],
@@ -314,8 +352,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withLastTurn(log, {
         seq,
         change: (turn) => {
-          // Text after an activity is a paragraph of its own in the answer too, as copied or saved.
-          const after = turn.parts.at(-1)?.kind === "activities" && !/(^|\n\n)$/.test(turn.answer);
+          // Text after an activity or a helper is a paragraph of its own in the answer too, as
+          // copied or saved.
+          const after =
+            (turn.parts.at(-1)?.kind ?? "text") !== "text" && !/(^|\n\n)$/.test(turn.answer);
           return {
             ...turn,
             answer: `${turn.answer}${after ? "\n\n" : ""}${event.text}`,
@@ -324,13 +364,61 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
           };
         },
       });
-    case "activity":
+    case "activity": {
+      const { helper } = event;
       return withLastTurn(log, {
         seq,
         change: (turn) => ({
           ...turn,
-          parts: withActivity(turn.parts, event.activity),
+          // A helper's goes on its own line (#117), the model's between what it writes.
+          ...(helper !== undefined && turn.helpers.some((each) => each.id === helper)
+            ? {
+                helpers: changeHelper(turn.helpers, helper, (each) => ({
+                  ...each,
+                  activities: [...each.activities, event.activity],
+                })),
+              }
+            : { parts: withActivity(turn.parts, event.activity) }),
           doing: { kind: "activity", activity: event.activity },
+        }),
+      });
+    }
+    case "helper-started": {
+      const waiting = event.waiting === true;
+      return withLastTurn(log, {
+        seq,
+        // Recorded again once one that waited has its place.
+        change: (turn) =>
+          turn.helpers.some((each) => each.id === event.helper)
+            ? {
+                ...turn,
+                helpers: changeHelper(turn.helpers, event.helper, (each) => ({ ...each, waiting })),
+              }
+            : {
+                ...turn,
+                parts: withHelper(turn.parts, event.helper),
+                helpers: [
+                  ...turn.helpers,
+                  {
+                    id: event.helper,
+                    name: event.name,
+                    waiting,
+                    activities: [],
+                    report: undefined,
+                  },
+                ],
+              },
+      });
+    }
+    case "helper-finished":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          helpers: changeHelper(turn.helpers, event.helper, (each) => ({
+            ...each,
+            report: event.report,
+          })),
         }),
       });
     case "suggested-replies":
@@ -353,7 +441,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     case "approval-requested":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, approval: { seq, ask: event.ask, why: event.why } }),
+        change: (turn) => ({
+          ...turn,
+          approval: { seq, ask: event.ask, why: event.why, helper: event.helper },
+        }),
       });
     case "approval-answered":
       return withTurn(log, {

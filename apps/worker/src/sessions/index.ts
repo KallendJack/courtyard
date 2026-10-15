@@ -15,6 +15,7 @@ import {
   endsTurn,
   type FailureReason,
   type FirstMessage,
+  type HelperId,
   type ModelRef,
   type NewMessage,
   type Overflow,
@@ -115,6 +116,7 @@ import {
   type CodePlugin,
   type CodeTurn,
   firstWithRoom,
+  type HelperTurn,
   modelsOnOffer,
   offerFor,
   type Provider,
@@ -451,6 +453,12 @@ const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
   };
   return { kind: "working", since: turn[0]?.at ?? new Date(0).toISOString(), doing: doing() };
 };
+
+/**
+ * The most helpers a code turn runs at once (#117): one more waits for a place, and starts once
+ * one of them finishes.
+ */
+const HELPERS_AT_ONCE = 3;
 
 /**
  * Where a session's current turn stands in this worker. A stop handle exists from the moment the
@@ -946,13 +954,19 @@ export const createSessions = (options: {
           now: options.now(),
         });
         const turnDocuments = createTurnDocuments(targetOf(turn));
-        const report = async (activity: Activity) => {
+        /** Records what the model is doing, or one of its helpers (#117), tagged with it. */
+        const reportAs = (helper: HelperId | undefined) => async (activity: Activity) => {
           if (recordingLost || stopper.signal.aborted) return;
           // A document read is what the model has seen of it, before anyone hears of the read.
           if (activity.kind === "read-file") await turnDocuments.read(activity.path);
-          const recorded = await append(turn.id, { type: "activity", activity });
+          const recorded = await append(turn.id, {
+            type: "activity",
+            activity,
+            ...(helper === undefined ? {} : { helper }),
+          });
           if (!recorded.ok) recordingLost = true;
         };
+        const report = reportAs(undefined);
         /** Records the answer's sources (ADR 0019), once, unless the turn was stopped. */
         let cited = false;
         const cite = async (sources: readonly Source[]) => {
@@ -1077,38 +1091,41 @@ export const createSessions = (options: {
         const branch = file.value?.branch;
         const worktree = branch === undefined ? undefined : options.code.worktreeOf(turn.id);
         /**
-         * Says whether something may happen in a code session, telling the owner when it does. A
-         * heavy check waits its turn in the builds queue first (#281), saying how many builds are
-         * ahead of it, and a stop ends the wait.
+         * Says whether something may happen in a code session, telling the owner when it does, as
+         * the model's or as `helper`'s (#117). A heavy check waits its turn in the builds queue
+         * first (#281), saying how many builds are ahead of it, and a stop ends the wait.
          */
         const decide = async (
           decided: Result<Activity, CodeRefusal>,
+          helper: HelperId | undefined,
         ): Promise<Result<null, string>> => {
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
           }
           if (!decided.ok) return err(codeRefusalReason(decided.error));
           const activity = decided.value;
+          const told = reportAs(helper);
           if (activity.kind === "ran-command" && isBuild(activity.command)) {
             const started = await options.code.builds.start({
               id: turn.id,
               command: activity.command,
               signal: stopper.signal,
-              ahead: (ahead) => void report({ kind: "waiting-for-build", ahead }),
+              ahead: (ahead) => void told({ kind: "waiting-for-build", ahead }),
             });
             if (!started) return err(codeRefusalReason({ kind: "stopped" }));
           }
-          await report(activity);
+          await told(activity);
           return ok(null);
         };
         /**
          * Asks the owner's approval (#171) and waits for it, with no time limit: Allow decides it
-         * as `allowed`, Deny refuses it, and a stop ends the wait.
+         * as `allowed`, Deny refuses it, and a stop ends the wait. A helper's names it (#117).
          */
         const approval = async (asking: {
           ask: ApprovalAsk;
           why: string | undefined;
           allowed: Activity;
+          helper: HelperId | undefined;
         }): Promise<Result<null, string>> => {
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
@@ -1128,6 +1145,7 @@ export const createSessions = (options: {
                 type: "approval-requested",
                 ask: asking.ask,
                 ...(asking.why === undefined ? {} : { why: asking.why }),
+                ...(asking.helper === undefined ? {} : { helper: asking.helper }),
               },
             });
             if (recorded.ok) {
@@ -1148,6 +1166,7 @@ export const createSessions = (options: {
             given === "allow"
               ? ok(asking.allowed)
               : err({ kind: "denied", what: deniedWhat(asking.ask) }),
+            asking.helper,
           );
         };
         /**
@@ -1175,77 +1194,162 @@ export const createSessions = (options: {
           });
           if (!recorded.ok) recordingLost = true;
         };
-        /** The tool connections the turn offers: a code workspace's Paper (ADR 0023). */
-        const connections =
+        /**
+         * The tool connections the turn offers, a code workspace's Paper (ADR 0023): the model's,
+         * or a helper's (#117), whose approvals and reports name it.
+         */
+        const connectionsFor = (helper: HelperId | undefined) =>
           turn.provider.capabilities.usesTools && worktree !== undefined && workspace.value.paper
             ? [
                 paperConnection({
                   settings: workspace.value.paper,
                   made: session.paperMade,
-                  approve: (ask, allowed) => approval({ ask, why: undefined, allowed }),
-                  report,
+                  approve: (ask, allowed) => approval({ ask, why: undefined, allowed, helper }),
+                  report: reportAs(helper),
                   show: (image) => show({ connection: "Paper", ...image }),
                 }),
               ]
             : [];
-        /** A code session's turn: each edit and command the model asks for, decided (ADR 0007). */
-        const codeTurn = (
-          worktree: string,
-          branch: string,
-          env: CommandEnv,
-          plugin: CodePlugin | null,
-        ): CodeTurn => ({
-          worktree,
-          plugin,
-          // Its slot, Courtyard's GitHub sign-in for its git and gh (#99), and word that its
-          // builds hold a place in the machine's builds lock (#306): each runs only once the
-          // builds queue has given it one, so the repo's scripts don't wait for another.
-          env: { ...env, ...(slot === undefined ? {} : slotEnv(slot)), ...BUILD_HELD_ENV },
-          edit: async (path) => {
-            const place = await editPlaceIn(worktree, path);
-            if (place.kind === "inside") {
-              return decide(ok({ kind: "edited-file", path: place.shown }));
-            }
-            if (place.kind === "setup") {
+        const connections = connectionsFor(undefined);
+        /**
+         * A code session's say on each edit and command the model asks for, or one of its helpers
+         * (#117), decided the same way (ADR 0007).
+         */
+        const codeTurn = (code: {
+          worktree: string;
+          branch: string;
+          env: CommandEnv;
+          plugin: CodePlugin | null;
+          helper: HelperId | undefined;
+        }): Omit<CodeTurn, "helper"> => {
+          const { worktree, branch, helper } = code;
+          return {
+            worktree,
+            plugin: code.plugin,
+            // Its slot, Courtyard's GitHub sign-in for its git and gh (#99), and word that its
+            // builds hold a place in the machine's builds lock (#306): each runs only once the
+            // builds queue has given it one, so the repo's scripts don't wait for another.
+            env: { ...code.env, ...(slot === undefined ? {} : slotEnv(slot)), ...BUILD_HELD_ENV },
+            edit: async (path) => {
+              const place = await editPlaceIn(worktree, path);
+              if (place.kind === "inside") {
+                return decide(ok({ kind: "edited-file", path: place.shown }), helper);
+              }
+              if (place.kind === "setup") {
+                return approval({
+                  ask: { kind: "setup", path: place.shown },
+                  why: undefined,
+                  allowed: { kind: "edited-file", path: place.shown },
+                  helper,
+                });
+              }
+              const outside = resolve(worktree, path);
               return approval({
-                ask: { kind: "setup", path: place.shown },
+                ask: { kind: "edit", path: outside },
                 why: undefined,
-                allowed: { kind: "edited-file", path: place.shown },
+                allowed: { kind: "edited-file", path: outside },
+                helper,
               });
-            }
-            const outside = resolve(worktree, path);
-            return approval({
-              ask: { kind: "edit", path: outside },
-              why: undefined,
-              allowed: { kind: "edited-file", path: outside },
+            },
+            run: async (command, why) => {
+              const allowed = await commandAllowed(
+                {
+                  worktree,
+                  branch,
+                  pullRequest: pullRequestIn(events.value)?.number,
+                  // The Lead files an issue only with the owner's OK (#347).
+                  allowlist: lead
+                    ? workspace.value.allowlist.filter(
+                        (rule) => rule.words.join(" ") !== "gh issue create",
+                      )
+                    : workspace.value.allowlist,
+                },
+                command,
+              );
+              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), helper);
+              const refused = allowed.error;
+              if (refused.kind !== "needs-approval") return decide(err(refused), helper);
+              return approval({
+                ask: { kind: "command", command, reason: refused.reason },
+                why,
+                allowed: { kind: "ran-command", command },
+                helper,
+              });
+            },
+            ran: (command) => options.code.builds.ended(turn.id, command),
+          };
+        };
+        /** How many helpers are running (#117), and each one waiting for a place, first first. */
+        const helpers = { running: 0, waiting: [] as (() => void)[] };
+        /**
+         * Starts a helper the model asked for (#117): recorded, then given a place once fewer
+         * than `HELPERS_AT_ONCE` are running. One that waits for a place is recorded as waiting,
+         * then again once it has one. `undefined` when the turn was stopped first.
+         */
+        const startHelper = async (
+          started: { id: HelperId; name: string },
+          code: Omit<Parameters<typeof codeTurn>[0], "helper">,
+        ): Promise<HelperTurn | undefined> => {
+          if (stopper.signal.aborted || recordingLost) return undefined;
+          // A place there is now is taken at once, so helpers started together count right.
+          const waits = helpers.running >= HELPERS_AT_ONCE;
+          if (!waits) helpers.running += 1;
+          const record = async (waiting: boolean) => {
+            const recorded = await append(turn.id, {
+              type: "helper-started",
+              helper: started.id,
+              name: started.name,
+              ...(waiting ? { waiting } : {}),
             });
-          },
-          run: async (command, why) => {
-            const allowed = await commandAllowed(
-              {
+            if (!recorded.ok) recordingLost = true;
+            return recorded.ok;
+          };
+          if (!(await record(waits))) return undefined;
+          if (waits) {
+            const placed = await new Promise<boolean>((resolve) => {
+              const onStop = () => resolve(false);
+              const take = () => {
+                stopper.signal.removeEventListener("abort", onStop);
+                helpers.running += 1;
+                resolve(true);
+              };
+              // One may have finished while it was being recorded.
+              if (helpers.running < HELPERS_AT_ONCE) return take();
+              stopper.signal.addEventListener("abort", onStop, { once: true });
+              helpers.waiting.push(take);
+            });
+            if (!placed || stopper.signal.aborted || !(await record(false))) return undefined;
+          }
+          if (stopper.signal.aborted) return undefined;
+          let finished = false;
+          return {
+            report: reportAs(started.id),
+            code: codeTurn({ ...code, helper: started.id }),
+            connections: connectionsFor(started.id),
+            finished: async (said) => {
+              if (finished) return;
+              finished = true;
+              helpers.running -= 1;
+              helpers.waiting.shift()?.();
+              if (stopper.signal.aborted || recordingLost) return;
+              const done = await append(turn.id, {
+                type: "helper-finished",
+                helper: started.id,
+                report: said,
+              });
+              if (!done.ok) recordingLost = true;
+            },
+          };
+        };
+        const where =
+          worktree === undefined || branch === undefined
+            ? undefined
+            : {
                 worktree,
                 branch,
-                pullRequest: pullRequestIn(events.value)?.number,
-                // The Lead files an issue only with the owner's OK (#347).
-                allowlist: lead
-                  ? workspace.value.allowlist.filter(
-                      (rule) => rule.words.join(" ") !== "gh issue create",
-                    )
-                  : workspace.value.allowlist,
-              },
-              command,
-            );
-            if (allowed.ok) return decide(ok({ kind: "ran-command", command }));
-            const refused = allowed.error;
-            if (refused.kind !== "needs-approval") return decide(err(refused));
-            return approval({
-              ask: { kind: "command", command, reason: refused.reason },
-              why,
-              allowed: { kind: "ran-command", command },
-            });
-          },
-          ran: (command) => options.code.builds.ended(turn.id, command),
-        });
+                env: await options.code.commandEnv(),
+                plugin: await mattPlugin(skills),
+              };
         // Raced against the stop, so a provider that ignores it can't keep the session busy.
         const outcome = await Promise.race([
           turn.provider.runTurn({
@@ -1253,14 +1357,12 @@ export const createSessions = (options: {
             effort: turn.effort,
             folder: worktree ?? workspace.value.folder,
             code:
-              worktree === undefined || branch === undefined
+              where === undefined
                 ? null
-                : codeTurn(
-                    worktree,
-                    branch,
-                    await options.code.commandEnv(),
-                    await mattPlugin(skills),
-                  ),
+                : {
+                    ...codeTurn({ ...where, helper: undefined }),
+                    helper: (started) => startHelper(started, where),
+                  },
             connections,
             framing,
             callTool: (call) => {

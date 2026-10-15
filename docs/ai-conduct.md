@@ -274,7 +274,9 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you
 > changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once
 > instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a
-> folder git ignores) rather than running everything again. Base a pull
+> folder git ignores) rather than running everything again. Hand parts of the work to helpers (sub-agents) only when
+> a skill you're using calls for them or the owner asks: they work in your working directory under these same rules, at
+> most three at once, and your turn goes on once they've all reported back. Base a pull
 > request on the default branch, never on another pull request's branch. Before you open or update one, load the pr
 > skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you
 > can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few
@@ -290,7 +292,23 @@ Claude gets a code session's framing after Claude Code's own instructions, its s
 Courtyard's rules on top (ADR 0025). A planning turn and a one-off question get Courtyard's instructions alone, as
 the system prompt. A code turn has no turn limit: it ends when Claude finishes, when the owner stops it, or at a usage
 limit (a planning turn stops after 30 of Claude's round trips). Claude keeps a task list on long work with its
-`TodoWrite` tool, which touches no file; each update shows as "Updated the task list". Sub-agents stay off (#117).
+`TodoWrite` tool, which touches no file; each update shows as "Updated the task list".
+
+Claude hands parts of the work to helpers, Claude Code's own sub-agents, with its `Agent` tool (#117, ADR 0027),
+when a skill calls for them or the owner asks, as the house process says. A helper works in the session's worktree
+under the same rules as the model: every one of its tool calls goes through the same check, its edits and commands
+are decided by the worker the same way, and an approval it needs names it. Each runs on the session's model and
+effort, whatever its type asks for; at most three run at once, and a fourth waits for one to finish; none runs in the
+background, so the turn ends only once they all have. The owner sees one line per helper, named by the description
+Claude gave it, which opens on what it did and its report. Only Claude Code's own types (general-purpose, Explore,
+Plan) and the repository's own in `.claude/agents` can be started; any other is refused with:
+
+> That helper isn't one you can start here: start a general-purpose, Explore or Plan helper, or one of the
+> repository's own in .claude/agents.
+
+A helper doesn't start helpers of its own; one that tries is told:
+
+> A helper can't start helpers of its own: do the work yourself, and say in your report what's left.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. In a code session Claude has Matt Pocock's skills too, from

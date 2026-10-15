@@ -65,10 +65,15 @@ export const createBuildsQueue = (lock: BuildsLock) => {
     next.start(true);
   };
 
-  /** Starts the builds waiting while there's room, and tells the rest how many are ahead. */
+  /**
+   * Starts the builds waiting while there's room, and tells the rest how many are ahead. A
+   * session runs one at a time, whatever the room (#117): its helpers share its folder and slot,
+   * so a build of its own waits for the one it has running.
+   */
   const moveOn = () => {
     while (running.length < lock.atOnce) {
-      const next = waiting.shift();
+      const at = waiting.findIndex((build) => !running.some((each) => each.id === build.id));
+      const next = at === -1 ? undefined : waiting.splice(at, 1)[0];
       if (next === undefined) break;
       const build: Build = {
         id: next.id,

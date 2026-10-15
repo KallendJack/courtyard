@@ -1047,6 +1047,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       ran: (command) => {
         ended.push(command);
       },
+      helper: async () => undefined,
     };
     return { worktree, code, asked, ended };
   };
@@ -1086,6 +1087,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       "Bash",
       "TodoWrite",
       "Skill",
+      "Agent",
     ]);
     expect(options?.permissionMode).toBe("dontAsk");
     // Its AGENTS.md or CLAUDE.md and its skills, never the machine's own setup.
@@ -1448,6 +1450,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         return ok(null);
       },
       ran: () => {},
+      helper: async () => undefined,
     };
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     await runTurn(claudeCode, { folder: worktree, code });
@@ -1484,6 +1487,264 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     expect(edit).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
     expect(command).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
     expect(skill).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  });
+});
+
+describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
+  /**
+   * A code turn whose worker gives every helper a place, keeping what each was started as, what
+   * each asked and reported, and its report once it finished.
+   */
+  const helpingSession = async () => {
+    const worktree = await mkdtemp(join(tmpdir(), "courtyard-worktree-"));
+    const started: { id: string; name: string }[] = [];
+    /** What the model and each helper asked of the worker, the helper's by its name. */
+    const asked: string[] = [];
+    const reported: { helper: string; activity: Activity }[] = [];
+    const finished: { helper: string; report: string }[] = [];
+    const say = (who: string) => ({
+      worktree,
+      env: {},
+      plugin: null,
+      edit: async (path: string) => {
+        asked.push(`${who}: edit ${path}`);
+        return ok(null);
+      },
+      run: async (command: string) => {
+        asked.push(`${who}: run ${command}`);
+        return ok(null);
+      },
+      ran: () => {},
+    });
+    const code: CodeTurn = {
+      ...say("model"),
+      helper: async (helper) => {
+        started.push(helper);
+        return {
+          report: async (activity) => {
+            reported.push({ helper: helper.name, activity });
+          },
+          code: say(helper.name),
+          connections: [],
+          finished: async (report) => {
+            finished.push({ helper: helper.name, report });
+          },
+        };
+      },
+    };
+    return { worktree, code, started, asked, reported, finished };
+  };
+
+  /** A tool call Claude Code checks with the adapter's hook: the model's, or a helper's. */
+  const call = async (
+    options: Options,
+    tool: { name: string; input: unknown; id?: string; helper?: string },
+  ) => {
+    const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
+    if (!hook) throw new Error("no PreToolUse hook");
+    const id = tool.id ?? "tool-1";
+    const answer = await hook(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: tool.name,
+        tool_input: tool.input,
+        tool_use_id: id,
+        session_id: "s",
+        transcript_path: "",
+        cwd: folder,
+        ...(tool.helper === undefined ? {} : { agent_id: tool.helper, agent_type: "Explore" }),
+      },
+      id,
+      { signal: new AbortController().signal },
+    );
+    return "hookSpecificOutput" in answer ? answer.hookSpecificOutput : {};
+  };
+
+  /** Claude Code saying the helper it started for the Agent call `call` runs as `helper`. */
+  const taskStarted = (helper: string, call: string) => ({
+    type: "system",
+    subtype: "task_started",
+    task_id: helper,
+    tool_use_id: call,
+    description: "A helper",
+    task_type: "local_agent",
+  });
+
+  it("offers the Agent tool only in a code session, with every helper on the session's model", async () => {
+    const { worktree, code } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    process.env.CLAUDE_CODE_SUBAGENT_MODEL = "haiku";
+    try {
+      await runTurn(claudeCode, { folder: worktree, code });
+      await runTurn(claudeCode);
+    } finally {
+      delete process.env.CLAUDE_CODE_SUBAGENT_MODEL;
+    }
+    const [coding, planning] = runs.map((run) => run.options);
+
+    expect(coding?.tools).toContain("Agent");
+    expect(planning?.tools).not.toContain("Agent");
+    // Claude Code ignores any model a helper's type or its Agent call names, and the machine's.
+    expect(coding?.env).toMatchObject({ CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
+    expect(coding?.env).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("starts a helper once the worker gives it a place, named by what it's for, never in the background or on another model", async () => {
+    const { worktree, code, started } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    const reviewing = await call(options, {
+      name: "Agent",
+      input: {
+        description: "Review against standards",
+        prompt: "Review the branch against the repository's standards.",
+        subagent_type: "Explore",
+        model: "haiku",
+        run_in_background: true,
+      },
+    });
+    const untitled = await call(options, {
+      name: "Agent",
+      input: { description: " ", prompt: "Plan it.", subagent_type: "Plan" },
+      id: "tool-2",
+    });
+
+    expect(started).toEqual([
+      { id: "tool-1", name: "Review against standards" },
+      { id: "tool-2", name: "Plan" },
+    ]);
+    expect(reviewing).toEqual({
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      updatedInput: {
+        description: "Review against standards",
+        prompt: "Review the branch against the repository's standards.",
+        subagent_type: "Explore",
+        run_in_background: false,
+      },
+    });
+    expect(untitled).toMatchObject({ permissionDecision: "allow" });
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("starts only Claude Code's own types of helper and the repository's, never in a folder of its own", async () => {
+    const { worktree, code, started } = await helpingSession();
+    await mkdir(join(worktree, ".claude", "agents"), { recursive: true });
+    await writeFile(
+      join(worktree, ".claude", "agents", "code-reviewer.md"),
+      "---\nname: code-reviewer\ndescription: Reviews code.\n---\nReview it.\n",
+    );
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    const agent = (input: Record<string, unknown>) => ({
+      name: "Agent",
+      input: { description: "Review it", prompt: "Review it.", ...input },
+    });
+
+    const decisions = [
+      await call(options, agent({ subagent_type: "code-reviewer" })),
+      await call(options, agent({})),
+      await call(options, agent({ subagent_type: "statusline-setup" })),
+      await call(options, agent({ isolation: "worktree" })),
+    ];
+
+    expect(decisions).toEqual([
+      expect.objectContaining({ permissionDecision: "allow" }),
+      expect.objectContaining({ permissionDecision: "allow" }),
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: await quotedInGuide("That helper isn't one you can start here"),
+      },
+      {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: await quotedInGuide("That request couldn't be checked"),
+      },
+    ]);
+    expect(started.map((helper) => helper.name)).toEqual(["Review it", "Review it"]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("checks each of a helper's tool calls as its own, and hands the worker its report when it finishes", async () => {
+    const { worktree, code, asked, reported, finished } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [taskStarted("agent-a", "tool-1"), taskStarted("agent-b", "tool-2"), success],
+    });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    const helper = (description: string) => ({
+      description,
+      prompt: "Look.",
+      subagent_type: "Explore",
+    });
+    await call(options, { name: "Agent", input: helper("Review against standards") });
+    await call(options, { name: "Agent", input: helper("Check the e2e tests"), id: "tool-2" });
+
+    const command = await call(options, {
+      name: "Bash",
+      input: { command: "pnpm test" },
+      id: "tool-3",
+      helper: "agent-b",
+    });
+    await call(options, {
+      name: "Read",
+      input: { file_path: join(worktree, "slots.ts") },
+      id: "tool-4",
+      helper: "agent-a",
+    });
+    await call(options, { name: "Bash", input: { command: "git status" }, id: "tool-5" });
+    await postToolUse(options, {
+      name: "Agent",
+      input: helper("Review against standards"),
+      response: {
+        status: "completed",
+        content: [{ type: "text", text: "Follows the standards." }],
+      },
+    });
+
+    expect(command).toMatchObject({ permissionDecision: "allow" });
+    expect(asked).toEqual(["Check the e2e tests: run pnpm test", "model: run git status"]);
+    expect(reported).toEqual([
+      { helper: "Review against standards", activity: { kind: "read-file", path: "slots.ts" } },
+    ]);
+    expect(finished).toEqual([
+      { helper: "Review against standards", report: "Follows the standards." },
+    ]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("refuses a helper starting helpers of its own, and one the worker couldn't start as the turn stopped", async () => {
+    const { worktree, code } = await helpingSession();
+    const stopped: CodeTurn = { ...code, helper: async () => undefined };
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code });
+    await runTurn(claudeCode, { folder: worktree, code: stopped });
+    const [options, stoppedOptions] = runs.map((run) => run.options);
+    if (!options || !stoppedOptions) throw new Error("no turn ran");
+    const agent = { name: "Agent", input: { description: "Dig deeper", prompt: "Dig." } };
+
+    const nested = await call(options, { ...agent, helper: "agent-a" });
+    const late = await call(stoppedOptions, agent);
+
+    expect(nested).toEqual({
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: await quotedInGuide("A helper can't start helpers of its own"),
+    });
+    expect(late).toEqual({
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: "The owner stopped this turn, so nothing more is done.",
+    });
+    await rm(worktree, { recursive: true, force: true });
   });
 });
 

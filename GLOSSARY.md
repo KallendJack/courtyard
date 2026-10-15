@@ -376,6 +376,11 @@ An event saying what a model is doing: a file it read, a skill it loaded (or one
 or a page it read, a command it ran, an update to its task list, a tool connection it used.
 _Avoid_: tool call, step, trace
 
+**Helper**:
+One of a provider's own sub-agents that a code session's model hands part of its job to, working in the session's
+worktree under its rules and reporting back before the turn ends, shown as a line of its own (ADR 0027).
+_Avoid_: sub-agent, agent, worker (that's Courtyard's other part)
+
 **Web search**:
 A model in a planning workspace looking things up on the web when a question needs current facts, and reading the
 pages it finds or a link the owner sent (ADR 0019).
