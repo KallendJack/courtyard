@@ -10,6 +10,11 @@ export type Layout = "tablet" | "cover";
 const COVER = "(max-width: 599.98px)";
 /** A window wide enough for a page's wide version beside the rails (the PR page's panel). */
 const WIDE = "(min-width: 1280px)";
+/**
+ * From a tablet up (Tailwind's `md`), where a Home block's height is its share of the page's, not
+ * two rows (#398, `Block`'s `fill`).
+ */
+const BLOCKS_FILL = "(min-width: 48rem)";
 /** A mouse or trackpad: where a keyboard is likely and won't cover the page. */
 const FINE = "(pointer: fine)";
 
@@ -29,6 +34,9 @@ export const useLayout = (): Layout => (useQuery(COVER) ? "cover" : "tablet");
 
 /** Whether the window has room for a page's wide version beside the rails. */
 export const useWide = () => useQuery(WIDE);
+
+/** Whether Home's blocks take their share of the page's height, so their size is the layout's. */
+export const useBlocksFill = () => useQuery(BLOCKS_FILL);
 
 /** Whether there's a mouse or trackpad, so likely a keyboard, which won't cover the page. */
 export const useFinePointer = () => useQuery(FINE);
