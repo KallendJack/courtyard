@@ -1,9 +1,9 @@
 import type { Activity, ApprovalAsk } from "@courtyard/contract";
 import { z } from "zod";
-import { PAPER_FAILED, PAPER_MAKES_NO_FILES, paperFileOnly } from "../../agent/prompts/index.ts";
-import type { ToolCall, ToolConnection, ToolContent } from "../../agent/providers/index.ts";
-import type { PaperSettings } from "../../context/workspaces/index.ts";
-import { err, ok, type Result } from "../../result.ts";
+import type { PaperSettings } from "../../features/workspaces/index.ts";
+import { err, ok, type Result } from "../../lib/result.ts";
+import { PAPER_FAILED, PAPER_MAKES_NO_FILES, paperFileOnly } from "../../prompts/index.ts";
+import type { ToolCall, ToolConnection, ToolContent } from "../../providers/index.ts";
 
 /**
  * Paper in code workspaces (ADR 0023): the first tool connection. A code workspace's config names

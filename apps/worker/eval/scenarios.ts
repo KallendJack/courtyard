@@ -1,5 +1,5 @@
 import type { OwnerSection, PlacedLine } from "@courtyard/contract";
-import { pdfOf, pngOf, type TestFile } from "../src/testing.ts";
+import { pdfOf, pngOf, type TestFile } from "../test/testing.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations

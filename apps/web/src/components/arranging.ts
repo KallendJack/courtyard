@@ -1,5 +1,5 @@
 import type { WorkspaceId, WorkspaceSummary } from "@courtyard/contract";
-import { arrangeWorkspaces } from "../worker.ts";
+import { arrangeWorkspaces } from "../api/worker.ts";
 import { type Arranging, dragging, type Press } from "./arrange.ts";
 
 /**

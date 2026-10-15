@@ -1,40 +1,65 @@
 # Courtyard at a glance
 
 Courtyard is a hub for planning and coding with AI models, with one workspace for each area of your life. This page
-is the short version: what the parts are and what each one does. [`architecture.md`](architecture.md) is the full
-reference, in the same order.
+is the short version: what the parts are, where their code lives, and what each feature does.
+[`architecture.md`](architecture.md) is the full reference.
 
 ## 1 · The whole thing
 
 ```
   📱 Web app  ◄── 📜 contract ──►  🖥️ Worker
-                                    ├─ agent
-                                    ├─ context
-                                    ├─ devflow
-                                    ├─ security
-                                    ├─ integrations
-                                    └─ ops
+  apps/web       packages/contract   apps/worker
 ```
 
-| Part | Its job | Where |
-|---|---|---|
-| 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself. | `apps/web` |
-| 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. | `packages/contract` |
-| 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. | `apps/worker` |
+| Part | Its job |
+|---|---|
+| 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself. |
+| 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. |
+| 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. |
 
 - **One machine, one address.** The worker serves the web app and its API together, behind your own HTTPS proxy.
 - **Two folders hold everything kept:** the context folder (what models know about you and your workspaces, in git)
   and the data folder (Courtyard's own state: sessions, logins). Neither is inside this repo.
-- **The worker is split into seven areas,** one folder each in `apps/worker/src`. Every module lives in one of them.
 
-## 2 · The seven areas
+## 2 · The folders
 
-Each area has its job, its folders, and one thing you do followed through it.
+Both apps use the folder names most React and Node projects use, and a feature has the same name on both sides
+(`features/things/` in each).
 
-### 🤖 agent: talking to the models
+**Worker, `apps/worker/src`**
 
-`sessions` · `providers` · `prompts` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` ·
-`waiting`
+| Folder | What's in it |
+|---|---|
+| `features/` | One folder per feature: what it does (`index.ts`) and its part of the API (`routes.ts`) |
+| `providers/` | The one seam to the models: Claude, Codex and the fake look the same to everything else |
+| `prompts/` | Everything a model reads, built from [`ai-conduct.md`](ai-conduct.md) |
+| `auth/` | Who's allowed in and what each may do: `owner`, `sign-ins`, `allow-all`, `workspace-files` |
+| `integrations/` | Other apps: `github` (the only place that talks to GitHub) and `paper` |
+| `config/` | The worker's settings |
+| `lib/` | Small helpers every feature reuses: files, requests, git, `Result` |
+| `main.ts`, `start.ts`, `worker.ts` | Start the worker and wire everything together |
+
+The API tests are in `apps/worker/test/`, beside `src/`.
+
+**Web app, `apps/web/src`**
+
+| Folder | What's in it |
+|---|---|
+| `features/` | One folder per screen or part of one |
+| `components/` | Shared pieces: buttons, fields, the page layout, error lines, rich blocks |
+| `hooks/` | Shared `use…` functions (a component's own stay beside it, like `useKept` in `components/kept.tsx`) |
+| `api/` | Talking to the worker (each feature's own calls are in its `api.ts`) |
+| `routes/` | One file per page |
+| `lib/` | Small helpers: joining classes, times, words |
+| `main.tsx`, `styles.css` | Start the app, and the one theme |
+
+## 3 · The features, by job
+
+### 🤖 Talking to the models
+
+**Worker features:** `sessions` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` · `waiting`
+
+**Web features:** `sessions` · `step-by-step`
 
 You ask "which tyres for winter?":
 
@@ -45,13 +70,15 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
             reads
 ```
 
-- **`providers`** is the one seam: Claude, Codex and the fake look the same to everything else.
 - **`waiting`** decides, once, what waits on you. Every screen reads it.
 
-### 🗂️ context: what Courtyard knows
+### 🗂️ What Courtyard knows
 
-`context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `documents` · `planning-files` ·
-`tidy` · `changes` · `attachments`
+**Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `documents` ·
+`planning-files` · `tidy` · `changes` · `attachments`
+
+**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `documents` · `changes` · `tidy` ·
+`settings`
 
 You say "swapped the chain today":
 
@@ -63,10 +90,12 @@ the chain  a time            changed                   Undo
 
 - **Every change to the context folder** goes through `context-folder`, so each one is a commit you can undo.
 
-### 🛠️ devflow: building code
+### 🛠️ Building code
 
-`code` · `github` · `pull-requests` · `lead` · `next-up` · `red-main` · `repos` · `matt-setup` · `matt-skills` ·
-`workspace-main` · `skills`
+**Worker features:** `code` · `pull-requests` · `lead` · `next-up` · `red-main` · `repos` · `matt-setup` ·
+`matt-skills` · `workspace-main` · `skills` · `connections`
+
+**Web features:** `code-home` · `pull-requests` · `matt-setup`
 
 You tap Build on an issue:
 
@@ -77,39 +106,13 @@ not         its own branch  and what it      watches main's
 blocked     and worktree    waits on         checks
 ```
 
-- **`github`** is the only place that talks to GitHub.
-- **`lead`** runs builders in the milestone's order.
+- **`lead`** runs builders in the milestone's order. **`connections`** is a code workspace's GitHub and Paper.
 
-### 🔒 security: the edges
+### ⚙️ Running Courtyard
 
-`workspace-files` · `allow-all`
+**Worker features:** `live` · `notifications` · `fresh-start`
 
-A model asks to read a file outside its workspace:
-
-```
-workspace-files ─► follows the real path ─► outside the workspace? ─► refused
-```
-
-- **`allow-all`** decides whether a code session skips approvals for now (you chose 1 h, 4 h, 12 h or this task).
-- **The rule:** a session sees only its own workspace, and anything outside a session branch needs your approval.
-
-### 🔌 integrations: other apps
-
-`connections` · `paper`
-
-A code session draws a screen in Paper:
-
-```
-connections ─► paper ─► Paper's MCP server
-the workspace's  reading and drawing run;
-Paper file       deleting someone else's work asks you
-```
-
-- **A connection exists only in the workspaces that name it.**
-
-### ⚙️ ops: running Courtyard
-
-`owner` · `sign-ins` · `notifications` · `live` · `fresh-start`
+**Web features:** `live` · `notifications` · `sign-ins` · `fresh-start` · `login`
 
 You tap Update:
 
@@ -117,40 +120,60 @@ You tap Update:
 live ─► main moved on? ─► waits for builds and turns ─► updates and restarts
 ```
 
-- **`owner`** is your password and device logins. **`sign-ins`** signs in to providers (Codex).
 - **`notifications`** pushes "needs your approval" and "answer ready" to your devices.
 
-### 📜 contract: the shared shapes
+### 🔒 The edges (`auth/`)
 
-`packages/contract`
+A model asks to read a file outside its workspace:
+
+```
+auth/workspace-files ─► follows the real path ─► outside the workspace? ─► refused
+```
+
+- **The rule:** a session sees only its own workspace, and anything outside a session branch needs your approval.
+  `allow-all` skips approvals for a while when you choose (1 h, 4 h, 12 h or this task).
+
+### 📜 The contract
 
 You send a message:
 
 ```
-web app ─► Message schema ─► worker's readBody ─► the same schema checks it again
+web app ─► the message's schema ─► worker's readBody ─► the same schema checks it again
 ```
 
-- **Nowhere else defines these shapes.** Types come from the schemas.
+- **Nowhere else defines these shapes.** Types come from the schemas, in `packages/contract`.
 
-### The web app
+## If you know React or Node
 
-`apps/web/src`: `routes` (the pages), `components` (shared pieces such as buttons and the page layout), and one
-folder per feature (`sessions`, `things`, `code-home`, …). It shows what the worker says and does no model work.
+| You'd look for | In Courtyard |
+|---|---|
+| `features/` or `modules/` | `features/`, in both apps |
+| `components/` | `apps/web/src/components/` |
+| `hooks/` | `apps/web/src/hooks/`, or beside the component that owns it |
+| `utils/` or `lib/` | `lib/`, in both apps |
+| `pages/` or `app/` | `apps/web/src/routes/` |
+| `api/` or `services/` | `apps/web/src/api/`, and each feature's `api.ts` |
+| `routes/` or `controllers/` (server) | each worker feature's `routes.ts` |
+| `config/` | `apps/worker/src/config/` |
+| `middleware/` | the checks in `apps/worker/src/worker.ts` |
+| `types/` or `schemas/` | `packages/contract` |
+| `test/` or `__tests__/` | `apps/worker/test/` (API), `e2e/` (browser) |
 
 ## How it's checked and built
 
 | Job | Tool | Run with |
 |---|---|---|
-| Lint and format | Biome, plus `scripts/theme` and `scripts/areas` | `pnpm check` |
+| Lint and format | Biome, plus `scripts/theme` and `scripts/folders` | `pnpm check` |
 | Types | TypeScript | `pnpm typecheck` |
 | Tests | Vitest (in each package), Playwright (`e2e/`) | `pnpm test`, `pnpm e2e` |
 | Build | Vite (web app) | `pnpm build` |
 | All of it | One build at a time on the machine (`scripts/builds`) | `pnpm verify` |
 
-These are tools, not areas: they check the app, they aren't part of it.
+`scripts/folders` fails `pnpm check` when a folder isn't one of those above or a feature isn't listed here, so this page
+can't drift from the code.
 
 ## Zoom in
 
-- **Every module, in detail:** [`architecture.md`](architecture.md), in the same area order.
+- **Every feature, in detail:** [`architecture.md`](architecture.md).
 - **Why it's built this way:** [`adr/`](adr/).
 - **Courtyard's words:** [`GLOSSARY.md`](../GLOSSARY.md).

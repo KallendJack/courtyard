@@ -1,5 +1,5 @@
 import type { PaperFile } from "@courtyard/contract";
-import { err, ok } from "../../result.ts";
+import { err, ok } from "../../lib/result.ts";
 import { PAPER_NOT_OPEN, type PaperFiles } from "./files.ts";
 
 /**

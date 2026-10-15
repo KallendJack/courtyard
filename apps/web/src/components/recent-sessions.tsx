@@ -6,11 +6,15 @@ import {
 import { Link, useLocation, useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
-import { describeProblem } from "../problems.tsx";
-import { KEPT_SESSIONS, loadSessions, sessionsBusyEveryMs } from "../sessions/kept-sessions.ts";
-import { renameSession } from "../worker-calls.ts";
+import { renameSession } from "../api/worker-calls.ts";
+import {
+  KEPT_SESSIONS,
+  loadSessions,
+  sessionsBusyEveryMs,
+} from "../features/sessions/kept-sessions.ts";
 import { IconButton } from "./button.tsx";
 import { PlaceholderRows, useKept } from "./kept.tsx";
+import { describeProblem } from "./problems.tsx";
 import { RenameForm } from "./rename-form.tsx";
 import { SessionStateDot } from "./session-state.tsx";
 

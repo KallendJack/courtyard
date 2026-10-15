@@ -20,23 +20,28 @@ import { Notice, StatusPill } from "@/components/notice";
 import { OptionsMenu } from "@/components/options-menu";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
-import { describeProblem, Problem } from "../../problems.tsx";
-import { Composer, type StandIn } from "../../sessions/composer.tsx";
-import type { DocumentsHere } from "../../sessions/documents.tsx";
-import { type QueuedMessage, type Turn, useSessionTurns } from "../../sessions/events.ts";
-import { allowAll, allowAllOff, removeQueued, sendMessage } from "../../sessions/messages.ts";
-import { useSeen } from "../../sessions/seen.ts";
-import { SessionTurns } from "../../sessions/session-turns.tsx";
-import type { Steps } from "../../sessions/steps.ts";
-import { carryOn, continueTurn, deleteSession, stopTurn } from "../../worker.ts";
-import { renameSession } from "../../worker-calls.ts";
+import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
+import { renameSession } from "../../api/worker-calls.ts";
+import { describeProblem, Problem } from "../../components/problems.tsx";
+import { Composer, type StandIn } from "../../features/sessions/composer.tsx";
+import type { DocumentsHere } from "../../features/sessions/documents.tsx";
+import { type QueuedMessage, type Turn, useSessionTurns } from "../../features/sessions/events.ts";
+import {
+  allowAll,
+  allowAllOff,
+  removeQueued,
+  sendMessage,
+} from "../../features/sessions/messages.ts";
+import { useSeen } from "../../features/sessions/seen.ts";
+import { SessionTurns } from "../../features/sessions/session-turns.tsx";
+import type { Steps } from "../../features/sessions/steps.ts";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
-const Review = lazy(() => import("../../review/review.tsx"));
+const Review = lazy(() => import("../../features/pull-requests/review.tsx"));
 /** A code workspace's Lead's strip (#347), loaded only on its chat. */
-const LeadStrip = lazy(() => import("../../sessions/lead-strip.tsx"));
+const LeadStrip = lazy(() => import("../../features/sessions/lead-strip.tsx"));
 /** An answer's steps one at a time, in place of the conversation (#241): loaded only then. */
-const StepByStep = lazy(() => import("../../step-by-step/step-by-step.tsx"));
+const StepByStep = lazy(() => import("../../features/step-by-step/step-by-step.tsx"));
 /** Allow all for this task's choice of how long (#428): loaded when it first opens. */
 const AllowAllSheet = lazy(() => import("../../components/allow-all-sheet.tsx"));
 
@@ -45,7 +50,7 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$se
     search.view === "review" ? { view: "review" } : {},
   // The loader stays in the first load, so it only imports what the page asks for.
   loader: ({ params }) =>
-    import("../../session-page.ts").then((page) => page.loadSessionPage(params)),
+    import("../../api/session-page.ts").then((page) => page.loadSessionPage(params)),
   component: SessionPage,
 });
 

@@ -2,7 +2,7 @@ import type { PaperFile } from "@courtyard/contract";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { z } from "zod";
-import { err, ok, type Result } from "../../result.ts";
+import { err, ok, type Result } from "../../lib/result.ts";
 
 /**
  * The owner's Paper files, as connecting Paper from a code workspace's page asks for them (#308):

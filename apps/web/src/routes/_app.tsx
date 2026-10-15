@@ -8,8 +8,8 @@ import {
   type TalkTarget,
   useLayout,
 } from "@/components/handheld";
-import { Problem } from "../problems.tsx";
-import { fromWorker, logOut as logOutOnWorker } from "../worker.ts";
+import { fromWorker, logOut as logOutOnWorker } from "../api/worker.ts";
+import { Problem } from "../components/problems.tsx";
 
 /** The Handheld frame (#193), on every screen (#197), loaded after the page so it stays off the first load. */
 const HandheldFrame = lazy(() => import("@/components/handheld-frame"));

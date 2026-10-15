@@ -1,6 +1,6 @@
 import type { AllowAllLasts } from "@courtyard/contract";
 import { useState } from "react";
-import { useAction } from "@/lib/use-action";
+import { useAction } from "@/hooks/use-action";
 import { Button } from "./button.tsx";
 import { DialogCard } from "./dialog-card.tsx";
 import { FormError } from "./form-error.tsx";

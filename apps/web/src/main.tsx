@@ -2,7 +2,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { PAGE_SCROLL_SELECTOR } from "@/components/page-scroll";
-import { AppError } from "./problems.tsx";
+import { AppError } from "./components/problems.tsx";
 import { routeTree } from "./routeTree.gen.ts";
 import "./styles.css";
 

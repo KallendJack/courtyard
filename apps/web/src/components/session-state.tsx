@@ -1,7 +1,7 @@
 import { type ApprovalAsk, type Doing, skillTitle, type TurnNow } from "@courtyard/contract";
 import { useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
-import { elapsedWords } from "../when.ts";
+import { elapsedWords } from "../lib/when.ts";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
 
 // Whose turn it is in a session (#179, Paper board Handheld · 20): Working in violet, Needs you in

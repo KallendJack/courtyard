@@ -4,7 +4,7 @@ A self-hosted hub for planning and coding with AI models, one workspace per area
 worker that does all the work, and a web app that is static files. Its words are in `GLOSSARY.md`, used in code,
 tests, UI text and commits. What is being built is in the spec issues on GitHub (`docs/spec.md` is the original spec,
 frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before deciding where a change goes, read
-`docs/overview.md` (the parts and the seven areas, short), then `docs/architecture.md`: which part does what, and
+`docs/overview.md` (the parts and their folders, short), then `docs/architecture.md`: which part does what, and
 how the parts connect.
 
 ## Where code goes
@@ -51,12 +51,13 @@ how the parts connect.
   workspace can use. The test, in designs and in code: before adding a block, name three unrelated workspaces that
   would use it. If you can't, it isn't a new block; it's that workspace's data in an existing one (a tyre pressure is
   a value on a pin, a lift's weight week by week is a chart).
-- **Every worker module lives in one of seven areas** (#445): `agent`, `context`, `devflow`, `security`,
-  `integrations` and `ops`, as `apps/worker/src/<area>/<module>/`, with the contract as its own package. A new module
-  goes in the area whose job it does, listed under it in `docs/overview.md` and described in `docs/architecture.md`;
-  `scripts/areas/check.ts` fails `pnpm check` otherwise. A new area is the owner's call.
-- **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`http.ts`), files through
-  `files.ts`, workspace errors through one handler, and tests through `testing.ts`. Check there before writing a
+- **Familiar folders, the same in both apps** (#453). The worker's `src` has `features/`, `providers/`, `prompts/`,
+  `auth/`, `integrations/`, `config/` and `lib/`; the web app's has `features/`, `components/`, `hooks/`, `api/`,
+  `routes/` and `lib/`. A feature has one name in both apps (`features/things/`). A new feature is listed in
+  `docs/overview.md` (and, in the worker, described in `docs/architecture.md`); `scripts/folders/check.ts` fails
+  `pnpm check` otherwise. A new top-level folder is the owner's call.
+- **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`lib/http.ts`), files
+  through `lib/files.ts`, workspace errors through one handler, and tests through `test/testing.ts`. Check there before writing a
   helper; if one is missing, add it there.
 
 ## TypeScript
@@ -114,7 +115,7 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
   for words only the owner has, and opening a page never opens the keyboard on touch.
 - The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
-  `docs/architecture.md` (and `docs/overview.md` for a new module).
+  `docs/architecture.md` (and `docs/overview.md` for a new feature).
 - A PR that changes how Courtyard is installed, set up, run or recovered updates `README.md`.
 - The order of work is the GitHub milestones: `docs/agents/roadmap.md`. **Every issue you file goes in a milestone**
   (`gh issue create --milestone "<title>"`, `Later` when unsure) with a category and a triage label; a Courtyard

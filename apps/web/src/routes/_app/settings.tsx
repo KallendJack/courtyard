@@ -1,20 +1,22 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { Page, PageTitle } from "@/components/page";
-import { BackupStatus } from "../../backup-status.tsx";
-import { LogOutOthers } from "../../log-out-others.tsx";
-import { OwnerContextPanel } from "../../owner-context-panel.tsx";
+import { BackupStatus } from "../../features/settings/backup-status.tsx";
+import { LogOutOthers } from "../../features/settings/log-out-others.tsx";
+import { OwnerContextPanel } from "../../features/settings/owner-context-panel.tsx";
 
 // Loaded once the page shows: the page never waits for them.
-const SignIns = lazy(() => import("../../sign-ins/sign-ins.tsx"));
-const Notifications = lazy(() => import("../../notifications/notifications-card.tsx"));
+const SignIns = lazy(() => import("../../features/sign-ins/sign-ins.tsx"));
+const Notifications = lazy(() => import("../../features/notifications/notifications-card.tsx"));
 
 const loggedIn = getRouteApi("/_app");
 
 export const Route = createFileRoute("/_app/settings")({
   // The loader stays in the first load, so its schemas load with the page.
   loader: async () => ({
-    ownerContext: await import("../../worker-calls.ts").then((calls) => calls.loadOwnerContext()),
+    ownerContext: await import("../../api/worker-calls.ts").then((calls) =>
+      calls.loadOwnerContext(),
+    ),
   }),
   component: Settings,
 });

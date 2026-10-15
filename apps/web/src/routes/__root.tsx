@@ -1,9 +1,9 @@
 import { AuthState } from "@courtyard/contract";
 import { createRootRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
 import { StatusPill } from "@/components/notice";
-import { Problem } from "../problems.tsx";
-import { fromWorker } from "../worker.ts";
-import { useWorkerWatch } from "../worker-watch.ts";
+import { fromWorker } from "../api/worker.ts";
+import { useWorkerWatch } from "../api/worker-watch.ts";
+import { Problem } from "../components/problems.tsx";
 
 export const Route = createRootRoute({
   // Before every page: send the device to setup or login when it isn't in, and away from them

@@ -8,13 +8,13 @@ import { FormError } from "@/components/form-error";
 import { InfoBox, Notice } from "@/components/notice";
 import { Page, PageTitle } from "@/components/page";
 import { TextField } from "@/components/text-field";
-import { useAction } from "@/lib/use-action";
-import { startFresh } from "../../fresh-start/api.ts";
-import { describeProblem, Problem } from "../../problems.tsx";
+import { useAction } from "@/hooks/use-action";
+import { describeProblem, Problem } from "../../components/problems.tsx";
+import { startFresh } from "../../features/fresh-start/api.ts";
 
 export const Route = createFileRoute("/_app/fresh-start")({
   // The loader stays in the first load, so its schemas load with the page.
-  loader: () => import("../../fresh-start/api.ts").then((api) => api.loadFreshStart()),
+  loader: () => import("../../features/fresh-start/api.ts").then((api) => api.loadFreshStart()),
   component: FreshStart,
 });
 

@@ -308,9 +308,9 @@ const { startWorker } = await import("../apps/worker/src/start.ts");
 // and so does any other branch there once the PRs list is asked for (#278). Its checks are on each
 // commit pushed: verify passes, and e2e fails, unless the commit's subject says "[e2e running]" or
 // "[e2e passes]".
-const { createFakeGitHub } = await import("../apps/worker/src/devflow/github/fake.ts");
+const { createFakeGitHub } = await import("../apps/worker/src/integrations/github/fake.ts");
 // A push service in memory (#173), so a device turned on in a test is never sent to for real.
-const { createFakePush } = await import("../apps/worker/src/ops/notifications/fake.ts");
+const { createFakePush } = await import("../apps/worker/src/features/notifications/fake.ts");
 // A context backup that isn't there, so the home page and Settings say the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
@@ -318,7 +318,7 @@ rmSync(missingBackup, { recursive: true, force: true });
 // Matt Pocock's skills for code workspaces (#181), from a stand-in for his plugin on disk, so
 // GitHub is never reached: a few of his skills, and his setup skill's templates.
 const { MATT_TEST_SKILLS, mattSkillsIn, writeMattPlugin } = await import(
-  "../apps/worker/src/testing.ts"
+  "../apps/worker/test/testing.ts"
 );
 const mattPlugin = join(dataDir, "..", "matt-plugin");
 rmSync(mattPlugin, { recursive: true, force: true });
