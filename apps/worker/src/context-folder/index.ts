@@ -9,7 +9,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { exists, listFolder, readBytes, readTextFile, removeFile, writeBytesIn } from "../files.ts";
-import { git, gitBytes, gitFailureReason } from "../git.ts";
+import { AS_COURTYARD, git, gitBytes, gitFailureReason } from "../git.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
@@ -72,13 +72,6 @@ export const workspaceChange = (title: string, id: WorkspaceId): ChangeNote => (
   title,
   places: [{ kind: "workspace", id }],
 });
-
-/** Commits are Courtyard's own, never the owner's git identity or signing. */
-const AS_COURTYARD = [
-  "user.name=Courtyard",
-  "user.email=courtyard@courtyard.invalid",
-  "commit.gpgsign=false",
-];
 
 /** The name the context folder's repository knows its backup by. */
 const REMOTE = "backup";

@@ -683,6 +683,28 @@ export const createGitHub = (options: {
     describeMilestone: (change: { repo: string; number: number; description: string }) =>
       asked((github, token) => github.describeMilestone(token, change)),
 
+    /** The account signed in, by its name on GitHub: where a new repo is made (#391). */
+    account: async (): Promise<Result<string, GitHubProblem>> => {
+      if (api === null) return err({ kind: "not-set-up" });
+      const stored = await read();
+      if (!stored.ok) return err({ kind: "storage" });
+      return stored.value === undefined ? err({ kind: "signed-out" }) : ok(stored.value.account);
+    },
+
+    /**
+     * Makes an empty repo on the account signed in (#391); the list of repos the app reaches is
+     * asked for afresh after.
+     */
+    createRepo: async (repo: { name: string; description: string; private: boolean }) => {
+      const made = await asked((github, token) => github.createRepo(token, repo));
+      repos = undefined;
+      return made;
+    },
+
+    /** Makes a milestone in `repo` (#391): its number. */
+    createMilestone: (milestone: { repo: string; title: string; description: string }) =>
+      asked((github, token) => github.createMilestone(token, milestone)),
+
     /** Files an issue in `repo` (#355): its number and address. */
     createIssue: (issue: {
       repo: string;

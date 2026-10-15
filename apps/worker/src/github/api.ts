@@ -154,6 +154,19 @@ export type GitHubApi = {
       readonly milestone: number | null;
     },
   ) => Promise<Result<{ readonly number: number; readonly url: string }, string>>;
+  /**
+   * Makes a repo on the account signed in (#391), empty, with issues on: the repo as GitHub has
+   * it, or GitHub's reason it wouldn't (a name it has already, say).
+   */
+  readonly createRepo: (
+    accessToken: string,
+    repo: { readonly name: string; readonly description: string; readonly private: boolean },
+  ) => Promise<Result<FoundRepo, string>>;
+  /** Makes a milestone in `repo` (#391): its number. */
+  readonly createMilestone: (
+    accessToken: string,
+    milestone: { readonly repo: string; readonly title: string; readonly description: string },
+  ) => Promise<Result<number, string>>;
   /** Opens a pull request in `repo` from `branch` into `base` (#181): its number and address. */
   readonly openPullRequest: (
     accessToken: string,
@@ -394,6 +407,13 @@ const Comments = z.array(z.object({ body: z.string().nullable().optional() }));
 const PullTexts = z.array(z.object({ title: z.string(), body: z.string().nullable() }));
 /** How many issues' comments are asked for at once. */
 const COMMENTS_AT_ONCE = 8;
+/** A repo just made (#391), as GitHub answers it. */
+const MadeRepo = z.object({
+  full_name: z.string(),
+  description: z.string().nullable().optional(),
+  private: z.boolean(),
+  clone_url: z.url({ protocol: /^https$/ }),
+});
 /** A pull request just opened, or an issue just filed. */
 const Opened = z.object({
   number: z.number().int().positive(),
@@ -1114,6 +1134,60 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         body: { description: change.description },
         fallback: "GitHub couldn't change the milestone.",
       });
+    },
+
+    createRepo: async (accessToken, repo) => {
+      const fallback = `GitHub couldn't make ${repo.name}.`;
+      try {
+        const response = await apiRequest(accessToken, "/user/repos", {
+          method: "POST",
+          body: {
+            name: repo.name,
+            description: repo.description,
+            private: repo.private,
+            has_issues: true,
+            auto_init: false,
+          },
+        });
+        const answer: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          const refused = Refusal.safeParse(answer);
+          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
+        }
+        const made = MadeRepo.safeParse(answer);
+        return made.success
+          ? ok({
+              fullName: made.data.full_name,
+              description: made.data.description ?? null,
+              private: made.data.private,
+              cloneUrl: made.data.clone_url,
+              pushedAt: null,
+            })
+          : err(fallback);
+      } catch {
+        return err(fallback);
+      }
+    },
+
+    createMilestone: async (accessToken, milestone) => {
+      const repo = RepoName.safeParse(milestone.repo);
+      if (!repo.success) return err("That isn't a repository on GitHub.");
+      const fallback = `GitHub couldn't make the milestone ${milestone.title}.`;
+      try {
+        const response = await apiRequest(accessToken, `/repos/${repo.data}/milestones`, {
+          method: "POST",
+          body: { title: milestone.title, description: milestone.description },
+        });
+        const answer: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          const refused = Refusal.safeParse(answer);
+          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
+        }
+        const made = z.object({ number: z.number().int().positive() }).safeParse(answer);
+        return made.success ? ok(made.data.number) : err(fallback);
+      } catch {
+        return err(fallback);
+      }
     },
 
     createIssue: async (accessToken, issue) => {

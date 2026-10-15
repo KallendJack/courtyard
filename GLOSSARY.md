@@ -291,6 +291,12 @@ answers (GitHub issues with the triage labels, `GLOSSARY.md` and `docs/adr/`, `d
 section in its `AGENTS.md` or `CLAUDE.md`), a first milestone with a `Build order:` line, and a Paper file with its
 four pages. Optional: without it, sessions follow the repository's own instructions.
 
+**New repo**:
+New workspace → Code's way to start a project (#391): a GitHub repo made on the owner's account on the house
+standard, its name from what it's for, with a code workspace on it whose Next up offers Grill on its first idea.
+No stack: that grill picks it.
+_Avoid_: template, scaffold
+
 **Setup check**:
 What a code workspace's page offers, once, when its repository isn't on the house standard: a row of Needs you that
 opens the **setup card**, one line for each thing it found (its own tracker: Keep or Move to GitHub issues; its

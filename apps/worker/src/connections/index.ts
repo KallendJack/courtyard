@@ -1,4 +1,9 @@
-import type { PaperConnecting, PaperFile, WorkspaceConnections } from "@courtyard/contract";
+import type {
+  PaperConnecting,
+  PaperFile,
+  SetupPaper,
+  WorkspaceConnections,
+} from "@courtyard/contract";
 import type { Code } from "../code/index.ts";
 import { type ContextFolder, workspaceChange } from "../context-folder/index.ts";
 import type { GitHub } from "../github/index.ts";
@@ -105,6 +110,10 @@ export const createConnections = (options: {
       );
     },
 
+    /** Whether Courtyard knows where Paper is, so it can make a new workspace a file (#391). */
+    canMakeNewPaper: async (): Promise<boolean> =>
+      (options.paperCommand ?? (await paperCommandInUse(contextDir))) !== undefined,
+
     /** The owner's Paper files, for the Connections sheet to pick from. */
     paperFiles: async (
       rawId: string,
@@ -149,6 +158,23 @@ export const createConnections = (options: {
       if (!connected.ok) return err({ kind: "workspace", error: connected.error });
       return ok(await of(connected.value));
     },
+  };
+};
+
+/**
+ * Makes a code workspace a new Paper file named `name` and connects it (#323, #391), saying what
+ * happened in the owner's words: it's optional, so a Paper that can't be reached fails only it.
+ */
+export const makePaperFile = async (
+  connections: Pick<Connections, "connectPaper">,
+  workspaceId: string,
+  name: string,
+): Promise<SetupPaper> => {
+  const made = await connections.connectPaper(workspaceId, { kind: "new", name });
+  if (made.ok) return { kind: "made", name };
+  return {
+    kind: "failed",
+    reason: made.error.kind === "paper" ? made.error.message : "Paper couldn't be reached.",
   };
 };
 

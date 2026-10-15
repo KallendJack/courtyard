@@ -14,7 +14,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { Code } from "../code/index.ts";
-import type { Connections } from "../connections/index.ts";
+import { type Connections, makePaperFile } from "../connections/index.ts";
 import { readJsonFile, removeFolder, writeJsonFile, writeTextFileIn } from "../files.ts";
 import { git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { GitHub } from "../github/index.ts";
@@ -83,6 +83,11 @@ const LABELS = [
   { name: "ready-for-human", color: "c5def5", description: "Requires human implementation" },
   { name: "wontfix", color: "ffffff", description: "Will not be actioned" },
 ] as const;
+/** A new repo's first milestone (#391). */
+const FIRST_MILESTONE = "1 · Start";
+/** A new repo's first idea's labels: something to build, that needs grilling first (#391). */
+const FIRST_IDEA_LABELS = ["enhancement", "needs-triage"];
+
 /** The label an item moved to GitHub issues carries: it was never triaged there. */
 const MOVED_LABEL = "needs-triage";
 
@@ -122,7 +127,13 @@ export const createMattSetup = (options: {
   readonly code: Pick<Code, "freshDefault" | "onGitHub" | "commandEnv">;
   readonly github: Pick<
     GitHub,
-    "labels" | "createLabel" | "openPullRequest" | "createIssue" | "openIssues"
+    | "labels"
+    | "createLabel"
+    | "openPullRequest"
+    | "createIssue"
+    | "openIssues"
+    | "createMilestone"
+    | "describeMilestone"
   >;
   readonly connections: Pick<Connections, "canMakePaper" | "connectPaper">;
 }) => {
@@ -290,20 +301,12 @@ export const createMattSetup = (options: {
         }
       }
     }
-    const template = (name: string) => readFile(join(checked.templates, name), "utf8");
     const kept = card.tracker !== null && !choices.moveTracker ? card.tracker : null;
     for (const path of card.files) {
-      const text =
-        path === ISSUE_TRACKER
-          ? kept === null
-            ? await template("issue-tracker-github.md")
-            : kept.path === SCRATCH
-              ? await template("issue-tracker-local.md")
-              : keptTracker(kept)
-          : path === TRIAGE_LABELS
-            ? await template("triage-labels.md")
-            : (await template("domain.md")).split(CONTEXT).join(choices.glossary);
-      changes.set(path, text);
+      changes.set(
+        path,
+        await mattFile(checked.templates, { path, kept, glossary: choices.glossary }),
+      );
     }
     if (card.section !== null) {
       const section = agentSkills(kept, choices.glossary);
@@ -377,6 +380,69 @@ export const createMattSetup = (options: {
   };
 
   return {
+    /**
+     * The house standard's files for a new repo (#391): Matt's files from his templates (when his
+     * skills are loaded), its AGENTS.md with the house rules and the Agent skills section, its
+     * glossary and its decisions folder, by path.
+     */
+    filesForNew: async (repo: { name: string; intro: string }): Promise<Map<string, string>> => {
+      const copy = await options.matt?.copy();
+      const setupSkill = copy?.ok
+        ? copy.value.skills.find((s) => s.name === SETUP_SKILL)
+        : undefined;
+      const files = new Map<string, string>();
+      if (setupSkill !== undefined) {
+        for (const path of FILES) {
+          files.set(
+            path,
+            await mattFile(setupSkill.folder, { path, kept: null, glossary: GLOSSARY }),
+          );
+        }
+      }
+      files.set("AGENTS.md", houseAgents(repo));
+      files.set(GLOSSARY, houseGlossary(repo.name));
+      files.set("docs/adr/README.md", HOUSE_DECISIONS);
+      return files;
+    },
+
+    /**
+     * A new repo's GitHub side of the house standard (#391): the labels it hasn't got, its first
+     * milestone, and what it's for filed there as its first idea, needing a grill, on the
+     * milestone's Build order line, so its Next up offers Grill on it.
+     */
+    startNew: async (repo: {
+      fullName: string;
+      name: string;
+      intro: string;
+    }): Promise<Result<null, string>> => {
+      const has = await options.github.labels({ repo: repo.fullName });
+      if (!has.ok) return err(problemWords(has.error));
+      for (const label of LABELS.filter((each) => !has.value.includes(each.name))) {
+        const made = await options.github.createLabel({ repo: repo.fullName, ...label });
+        if (!made.ok) return err(problemWords(made.error));
+      }
+      const milestone = await options.github.createMilestone({
+        repo: repo.fullName,
+        title: FIRST_MILESTONE,
+        description: "",
+      });
+      if (!milestone.ok) return err(problemWords(milestone.error));
+      const issue = await options.github.createIssue({
+        repo: repo.fullName,
+        title: repo.intro === "" ? "Pick the stack and what to build first" : repo.intro,
+        body: `The first idea for ${repo.name}, as it was said when its repo was made. Grill it: what it's for, the stack it's built with, and what to build first.`,
+        labels: FIRST_IDEA_LABELS,
+        milestone: milestone.value,
+      });
+      if (!issue.ok) return err(problemWords(issue.error));
+      const ordered = await options.github.describeMilestone({
+        repo: repo.fullName,
+        number: milestone.value,
+        description: `Build order: #${issue.value.number}.`,
+      });
+      return ordered.ok ? ok(null) : err(problemWords(ordered.error));
+    },
+
     /** The setup card for a workspace's page: what to offer, if anything. */
     offer: async (id: WorkspaceId): Promise<MattSetup> => {
       if ((await answers())[id] !== undefined) return { state: "none" };
@@ -432,20 +498,10 @@ export const createMattSetup = (options: {
       );
       if (!opened.ok) return err({ kind: "failed", reason: opened.error });
       await remember(id, "allowed");
-      let paper: SetupPaper = { kind: "skipped" };
-      if (card.paper !== null && choices.makePaper) {
-        const made = await options.connections.connectPaper(id, {
-          kind: "new",
-          name: card.paper.name,
-        });
-        paper = made.ok
-          ? { kind: "made", name: card.paper.name }
-          : {
-              kind: "failed",
-              reason:
-                made.error.kind === "paper" ? made.error.message : "Paper couldn't be reached.",
-            };
-      }
+      const paper: SetupPaper =
+        card.paper !== null && choices.makePaper
+          ? await makePaperFile(options.connections, id, card.paper.name)
+          : { kind: "skipped" };
       return ok({
         state: "opened",
         pullRequest: opened.value,
@@ -593,6 +649,60 @@ const pointedTo = (text: string, moved: readonly Moved[], scratch: boolean) => {
   lines.splice(heading + 1, 0, ...(heading === -1 ? [note, ""] : ["", note]));
   return `${lines.join("\n").trimEnd()}\n`;
 };
+
+/**
+ * One of Matt's files under `docs/agents/`, from his template in `templates`, for where the work
+ * lives (GitHub issues, unless a tracker was `kept`) and the glossary's name.
+ */
+const mattFile = async (
+  templates: string,
+  file: { path: string; kept: SetupTracker | null; glossary: string },
+) => {
+  const template = (name: string) => readFile(join(templates, name), "utf8");
+  if (file.path === ISSUE_TRACKER) {
+    if (file.kept === null) return template("issue-tracker-github.md");
+    return file.kept.path === SCRATCH ? template("issue-tracker-local.md") : keptTracker(file.kept);
+  }
+  if (file.path === TRIAGE_LABELS) return template("triage-labels.md");
+  return (await template("domain.md")).split(CONTEXT).join(file.glossary);
+};
+
+/**
+ * A new repo's AGENTS.md (#391): its name, what it's for, the house rules (no stack yet, so the
+ * first session picks it and adds CI with it), and the Agent skills section.
+ */
+const houseAgents = (repo: { name: string; intro: string }) =>
+  [
+    `# ${repo.name}`,
+    "",
+    ...(repo.intro === "" ? [] : [repo.intro, ""]),
+    "## House rules",
+    "",
+    "- **No stack yet.** The first session (Grill on Next up) picks it with the owner and sets it up, and adds CI with it: checks, unit tests, and browser tests if there are any.",
+    "- **Every change works from an issue** in this repo's GitHub issues, in a milestone, with a category label (`bug` or `enhancement`) and one triage label. Its pull request closes it.",
+    "- **The order of work is the milestones:** each one's description has a `Build order:` line.",
+    "- **Anything the owner sees is designed in this repo's Paper file first,** when it has one: its pages are `1 · Live`, `2 · Agreed`, `3 · Drafts` and `4 · Archive`.",
+    "- **Its words are in `GLOSSARY.md`,** and why it's built the way it is in `docs/adr/`.",
+    "",
+    agentSkills(null, GLOSSARY),
+  ].join("\n");
+
+/** A new repo's glossary (#391): empty until its words are settled. */
+const houseGlossary = (name: string) =>
+  [
+    "# Glossary",
+    "",
+    `The words ${name} uses, each with what it means and the words to avoid for it. The domain-modeling skill adds them as they're settled.`,
+    "",
+  ].join("\n");
+
+/** A new repo's decisions folder (#391), with what goes in it. */
+const HOUSE_DECISIONS = [
+  "# Decisions",
+  "",
+  "One file per decision, numbered (`0001-…md`): what was decided and why. The domain-modeling skill writes them.",
+  "",
+].join("\n");
 
 /** `docs/agents/issue-tracker.md` for a tracker the owner kept: where the work lives (#323). */
 const keptTracker = (tracker: SetupTracker) =>

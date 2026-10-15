@@ -2,8 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { GitHubRepo } from "@courtyard/contract";
 import type { Code } from "../code/index.ts";
-import { isFolder, removeFolder } from "../files.ts";
-import { git, gitFailureReason } from "../git.ts";
+import { isFolder, removeFolder, writeTextFileIn } from "../files.ts";
+import { AS_COURTYARD, git, gitFailureReason } from "../git.ts";
 import type { FoundRepo, GitHub, GitHubProblem } from "../github/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -33,7 +33,11 @@ export type RepoProblem =
   /** The workspaces couldn't be read to tell. */
   | { readonly kind: "workspaces"; readonly error: WorkspaceError }
   /** Git couldn't get it, in git's own words. */
-  | { readonly kind: "clone"; readonly repo: string; readonly reason: string };
+  | { readonly kind: "clone"; readonly repo: string; readonly reason: string }
+  /** The owner has a repo by that name already (#391). */
+  | { readonly kind: "taken"; readonly repo: string }
+  /** A new repo was made on GitHub, but its first commit couldn't be pushed (#391). */
+  | { readonly kind: "unstarted"; readonly repo: string; readonly reason: string };
 
 /** A repo's name compared as GitHub does, case aside. */
 const keyOf = (fullName: string) => fullName.toLowerCase();
@@ -45,7 +49,7 @@ const byShown = (a: GitHubRepo & FoundRepo, b: GitHubRepo & FoundRepo) =>
 export const createRepos = (options: {
   dataDir: string;
   contextDir: string;
-  github: Pick<GitHub, "repos" | "commandEnv">;
+  github: Pick<GitHub, "repos" | "commandEnv" | "account" | "createRepo">;
   code: Pick<Code, "onGitHub">;
 }) => {
   const { github } = options;
@@ -128,7 +132,81 @@ export const createRepos = (options: {
     }
   };
 
+  /**
+   * Makes the repo's folder here a clone of an empty repo just made on GitHub, its first commit
+   * the files given, pushed to `main`, as Courtyard's own commit.
+   */
+  const start = async (
+    repo: FoundRepo,
+    files: ReadonlyMap<string, string>,
+  ): Promise<Result<string, RepoProblem>> => {
+    const folder = folderOf(repo.fullName);
+    try {
+      await mkdir(folder, { recursive: true });
+      await git(folder, ["init", "--quiet", "--initial-branch=main"]);
+      for (const [path, text] of files) {
+        if (!(await writeTextFileIn(join(folder, path), text))) {
+          await removeFolder(folder);
+          return err({
+            kind: "unstarted",
+            repo: repo.fullName,
+            reason: `${path} couldn't be written`,
+          });
+        }
+      }
+      await git(folder, ["add", "--all"]);
+      await git(folder, ["commit", "--quiet", "-m", "Start on the house standard"], {
+        config: AS_COURTYARD,
+      });
+      await git(folder, ["remote", "add", "origin", repo.cloneUrl]);
+      await git(folder, ["push", "--quiet", "--set-upstream", "origin", "main"], {
+        timeoutMs: CLONE_TIMEOUT_MS,
+        env: await github.commandEnv(),
+      });
+      return ok(folder);
+    } catch (error) {
+      await removeFolder(folder);
+      return err({ kind: "unstarted", repo: repo.fullName, reason: gitFailureReason(error) });
+    }
+  };
+
   return {
+    /**
+     * Makes a new repo on the account signed in (#391), empty on GitHub, then its first commit
+     * from `files` here, pushed: the folder it's in. Refuses a name the owner has a repo by
+     * already.
+     */
+    create: (repo: {
+      name: string;
+      description: string;
+      private: boolean;
+      files: ReadonlyMap<string, string>;
+    }): Promise<Result<{ fullName: string; folder: string }, RepoProblem>> =>
+      oneAtATime(async () => {
+        const account = await github.account();
+        if (!account.ok) return account;
+        const fullName = `${account.value}/${repo.name}`;
+        const known = await github.repos();
+        if (!known.ok) return known;
+        if (known.value.some((each) => keyOf(each.fullName) === keyOf(fullName))) {
+          return err({ kind: "taken", repo: repo.name });
+        }
+        const made = await github.createRepo({
+          name: repo.name,
+          description: repo.description,
+          private: repo.private,
+        });
+        if (!made.ok) {
+          // One the GitHub App doesn't reach can still have the name.
+          return made.error.kind === "github" &&
+            /already exists|creation failed/i.test(made.error.message)
+            ? err({ kind: "taken", repo: repo.name })
+            : made;
+        }
+        const started = await start(made.value, repo.files);
+        return started.ok ? ok({ fullName: made.value.fullName, folder: started.value }) : started;
+      }),
+
     /** The repos New workspace → Code offers, as the browser shows them. */
     list: async (): Promise<Result<GitHubRepo[], RepoProblem>> => {
       const repos = await listed();

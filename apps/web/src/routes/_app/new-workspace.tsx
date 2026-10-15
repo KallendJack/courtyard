@@ -18,7 +18,7 @@ function NewWorkspace() {
         <>
           <PageTitle>New workspace</PageTitle>
           <p className="mt-2 text-body text-muted-foreground">
-            Say what it's for. For code, pick a repo.
+            Say what it's for. For code, pick a repo or start a new one.
           </p>
         </>
       }

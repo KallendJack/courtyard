@@ -84,7 +84,17 @@ export {
 } from "./lib/fresh-start.ts";
 export { GitHubConnection } from "./lib/github.ts";
 export { GitHubRepoName } from "./lib/github-repo-name.ts";
-export { GitHubRepo, GitHubRepoList } from "./lib/github-repos.ts";
+export {
+  GitHubRepo,
+  GitHubRepoList,
+  NewRepo,
+  NewRepoMade,
+  NewRepoName,
+  NewRepoOffer,
+  REPO_NAME_MAX_LENGTH,
+  repoNameFrom,
+  workspaceNameFrom,
+} from "./lib/github-repos.ts";
 export { Health } from "./lib/health.ts";
 export {
   BuildJob,

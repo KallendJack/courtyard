@@ -3,6 +3,16 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
+/**
+ * Commits Courtyard makes itself (the context folder's, a new repo's first, #391) are its own,
+ * never the owner's git identity or signing.
+ */
+export const AS_COURTYARD = [
+  "user.name=Courtyard",
+  "user.email=courtyard@courtyard.invalid",
+  "commit.gpgsign=false",
+];
+
 /** Variables a command gets on top of the worker's environment: an `undefined` is unset. */
 export type CommandEnv = Readonly<Record<string, string | undefined>>;
 

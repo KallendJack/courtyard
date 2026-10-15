@@ -1004,6 +1004,73 @@ test.describe("on the unfolded Fold", () => {
   });
 });
 
+// New repo (#391; Paper, "Tablet · New workspace, Code: New repo"): it heads the repo list, and its
+// card fills in what it can: the repo's name from what it's for, private, the owner's account and
+// a Paper file, then what it starts with. Only the tablet's makes one, so the rest stay as they are.
+for (const [device, viewport] of [
+  ["tablet", { width: 950, height: 712 }],
+  ["cover", { width: 400, height: 900 }],
+  ["desktop", { width: 1440, height: 900 }],
+] as const) {
+  test.describe(`New repo on the ${device}`, () => {
+    test.use({ viewport, ...(device === "desktop" ? {} : { hasTouch: true, isMobile: true }) });
+
+    test(
+      device === "tablet"
+        ? "fills in what it can from what it's for, and Create makes the repo and its workspace"
+        : "fills in what it can from what it's for, all of it shown before Create",
+      async ({ page, request }) => {
+        await signIn(request);
+        await page.goto("/new-workspace");
+        const kind = page.getByRole("group", { name: "Kind" });
+        await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+        const repos = page.getByRole("group", { name: "Repo" });
+        const newRepo = repos.locator("label").first();
+        await expect(newRepo).toContainText("New repo");
+        await expect(newRepo).toContainText("On the house standard");
+        await newRepo.click();
+
+        await page
+          .getByRole("textbox", { name: "What's it for?" })
+          .fill("Track servicing for both bikes: parts, intervals and shop visits");
+        const name = page.getByRole("textbox", { name: "Repo name" });
+        await expect(name).toHaveValue("servicing-bikes-parts");
+        await name.fill("bike-servicing");
+        const card = page.getByRole("region", { name: "New repo" });
+        await expect(card.getByRole("button", { name: "Private" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(card).toContainText("octo-owner");
+        await expect(card.getByRole("button", { name: "Paper file · 4 pages" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(card).toContainText("No stack yet: Grill on Next up picks it");
+        const create = page.getByRole("button", { name: "Create bike-servicing" });
+        await expect(create).toBeVisible();
+        await shot(page, `${device}-new-repo`);
+        expect(await pageScrollsSideways(page)).toBe(false);
+
+        if (device === "tablet") {
+          await create.click();
+          await expect(page).toHaveURL(/\/workspaces\/bike-servicing$/);
+          await expect(
+            page.getByRole("heading", { level: 1, name: "Bike Servicing" }),
+          ).toBeVisible();
+          // Its Paper file was made and connected with it.
+          await expect(page.getByRole("button", { name: /Paper · Bike Servicing/ })).toBeVisible();
+          await page.goto("/new-workspace");
+          await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+          await expect(repos.getByRole("radio", { name: /^bike-servicing/ })).toBeDisabled();
+        }
+
+        await request.post("/api/github/sign-out", { data: {} });
+      },
+    );
+  });
+}
+
 test.describe("on the cover screen", () => {
   test.use({ viewport: { width: 400, height: 900 }, hasTouch: true, isMobile: true });
 
