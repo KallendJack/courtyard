@@ -675,6 +675,35 @@ describe("a code session's downloads of a run's artifacts (#202)", () => {
     expect(asked).toEqual([{ kind: "command", command, reason }]);
     expect(ran).toEqual([]);
   });
+
+  // What a download brings is never run without asking (#219): pnpm's scripts from a folder git
+  // ignores, or a script there run with node.
+  it.each([
+    "pnpm -C test-results/ci test",
+    "pnpm --dir test-results/ci build",
+    "pnpm --dir=test-results/ci test",
+    "pnpm -C test-results/not-yet check",
+    "pnpm -C test-results test",
+    "node test-results/ci/run.js",
+    "node --test test-results/ci/a.test.ts",
+  ])("ask the owner before running what's in a folder git ignores: %s", async (command) => {
+    const { asked, ran } = await askAbout([command]);
+
+    expect(asked).toEqual([{ kind: "command", command, reason: "ignored-folder" }]);
+    expect(ran).toEqual([]);
+  });
+
+  it.each([
+    "pnpm -C apps/web test",
+    "pnpm --dir=apps/web build",
+    "node scripts/check.ts",
+    "node --test apps/a.test.ts",
+  ])("run without asking in a folder git doesn't ignore: %s", async (command) => {
+    const { answers, ran } = await askAbout([command]);
+
+    expect(answers).toEqual([{ ok: true, value: null }]);
+    expect(ran).toEqual([{ kind: "ran-command", command }]);
+  });
 });
 
 describe("a code session's commands, through the fake", () => {

@@ -20,9 +20,14 @@ const question = (ask: ApprovalAsk) => {
   if (ask.kind === "edit") return "Change a file outside the worktree?";
   if (ask.kind === "setup") return "Change how commands run?";
   if (ask.kind === "tool") return `Delete something in ${ask.connection} this session didn't make?`;
-  return ask.reason === "off-allowlist"
-    ? "Run a command? It isn't on the allowlist."
-    : "Run a command? It names a path outside the worktree.";
+  switch (ask.reason) {
+    case "off-allowlist":
+      return "Run a command? It isn't on the allowlist.";
+    case "reaches-out":
+      return "Run a command? It names a path outside the worktree.";
+    case "ignored-folder":
+      return "Run a command? It runs in a folder git ignores (downloaded or built files).";
+  }
 };
 
 /** Exactly what would happen: the command, the file, or the tool connection's action and input. */

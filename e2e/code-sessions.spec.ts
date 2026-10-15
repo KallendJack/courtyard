@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { type APIRequestContext, expect, type Locator, type Page, test } from "@playwright/test";
 import { chooseModel } from "./frame.ts";
@@ -129,6 +130,32 @@ test("Allow always for this workspace runs it, the workspace's sessions don't as
   await startOnPage(page, ["run command: git stash list"]);
   await expect(approvalOn(page)).toBeVisible();
   await approvalOn(page).getByRole("button", { name: "Deny" }).click();
+});
+
+test("running what's in a folder git ignores asks first, saying why (#219)", async ({ page }) => {
+  await startOnPage(page, [
+    "edit file .gitignore: test-results/",
+    "run command: pnpm -C test-results/ci test (for: To run the downloaded checks)",
+  ]);
+  const card = approvalOn(page);
+  await expect(card).toContainText(
+    "Run a command? It runs in a folder git ignores (downloaded or built files).",
+  );
+  await expect(card.getByRole("code").first()).toHaveText("pnpm -C test-results/ci test");
+  for (const [name, size] of [
+    ["tablet", { width: 950, height: 712 }],
+    ["cover", { width: 400, height: 900 }],
+    ["desktop", { width: 1440, height: 900 }],
+  ] as const) {
+    await page.setViewportSize(size);
+    await card.scrollIntoViewIfNeeded();
+    const folder = process.env.COURTYARD_E2E_SHOTS;
+    if (folder !== undefined) {
+      await page.screenshot({ path: join(folder, `${name}-approval-ignored-folder.png`) });
+    }
+  }
+  await card.getByRole("button", { name: "Deny" }).click();
+  await expect(approvalOn(page)).toHaveCount(0);
 });
 
 /** Whether an element's text takes one line: no taller than its line height. */

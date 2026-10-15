@@ -148,7 +148,7 @@ export type CodeRefusal =
  */
 export type CommandApproval = {
   readonly kind: "needs-approval";
-  readonly reason: "off-allowlist" | "reaches-out";
+  readonly reason: "off-allowlist" | "reaches-out" | "ignored-folder";
   /** What Allow always would allow (#185), when it may be offered: never for one reaching out. */
   readonly always?: AlwaysAllow;
   /** Allow all for this task would cover it (#428): it runs without asking while that's on. */
@@ -191,6 +191,12 @@ export const commandAllowed = async (
   }
   if (reachesOut(session.worktree, rule, words.value)) {
     return err({ kind: "needs-approval", reason: "reaches-out" });
+  }
+  // Code a download can bring is run only with the owner's OK (#219).
+  for (const from of rule.runsFrom?.(words.value.slice(rule.words.length)) ?? []) {
+    if (await ignoredByGit(session.worktree, from)) {
+      return err({ kind: "needs-approval", reason: "ignored-folder" });
+    }
   }
   if (rule.unpacksInto !== undefined) {
     const folder = rule.unpacksInto(words.value.slice(rule.words.length));
@@ -305,6 +311,13 @@ export const editPlaceIn = async (worktree: string, path: string): Promise<EditP
     ? { kind: "setup", shown, all: allowsAllSetup(shown) }
     : { kind: "inside", shown };
 };
+
+/**
+ * Whether git ignores a path in the worktree (#219), as named, whether or not it's there yet: a
+ * folder (ending in `/`) or a file, or one inside an ignored folder.
+ */
+const ignoredByGit = async (worktree: string, path: string) =>
+  (await gitOrNothing(worktree, ["check-ignore", "--quiet", "--", path])) !== undefined;
 
 /**
  * Whether a command may unpack files into a folder of the worktree without asking (`gh run

@@ -41,6 +41,13 @@ export type CommandRule = {
    * file that decides what allowed commands run.
    */
   readonly unpacksInto?: (rest: readonly string[]) => string | undefined;
+  /**
+   * For a command that runs code from where it's told (#219): the folders and files it runs from
+   * (pnpm's `-C`/`--dir` folder, the script node runs), which the code module allows only when git
+   * doesn't ignore them, since a download (`gh run download`) can bring code there. A folder ends
+   * in `/`.
+   */
+  readonly runsFrom?: (rest: readonly string[]) => readonly string[];
 };
 
 /** A session's own branch, and its pull request's number once it has one. */
@@ -103,6 +110,27 @@ const pickedCommand = (rest: readonly string[]) => {
   }
   return at === 0 || at === rest.length ? undefined : ["pnpm", ...rest.slice(at)];
 };
+
+/**
+ * The folders pnpm's workspace options say a command runs in (`-C <dir>`, `--dir <dir>`,
+ * `--dir=<dir>`), each ending in `/` (#219).
+ */
+const pickedFolders = (rest: readonly string[]) => {
+  const folders: string[] = [];
+  for (let at = 0; at < rest.length; at += 1) {
+    const word = rest[at] ?? "";
+    const value = rest[at + 1];
+    if (word.startsWith("--dir=")) folders.push(word.slice("--dir=".length));
+    else if (PNPM_PICKS.has(word) && value !== undefined) {
+      if (word === "-C" || word === "--dir") folders.push(value);
+      at += 1;
+    } else if (!PNPM_EVERY.has(word) && !word.startsWith("--filter=")) break;
+  }
+  return folders.map((folder) => (folder.endsWith("/") ? folder : `${folder}/`));
+};
+
+/** The files `node --test` is given to run (#219): every word that isn't an option. */
+const testFiles = (rest: readonly string[]) => rest.filter((word) => !word.startsWith("-"));
 
 /**
  * The package scripts that build or test, which wait their turn in the builds queue (#281). The
@@ -481,7 +509,7 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   ...TEST_TOOLS.flatMap(({ words, never }) =>
     TOOL_RUNNERS.map((runner) => ({ words: [...runner, ...words], more: true, never })),
   ),
-  { words: ["pnpm"], more: true, runs: pickedCommand },
+  { words: ["pnpm"], more: true, runs: pickedCommand, runsFrom: pickedFolders },
   ...GIT_LOOKS.map((look) => ({ words: ["git", look], more: true, never: GIT_NEVER })),
   { words: ["git", "branch"], more: false },
   { words: ["git", "branch", "--show-current"], more: false },
@@ -543,8 +571,14 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     texts: ["-m", "--message"],
   },
   // The repository's own scripts and tests, run directly (#388).
-  { words: ["node", "--test"], more: true, never: NODE_NEVER },
-  { words: ["node"], more: true, never: NODE_NEVER, own: runsScript },
+  { words: ["node", "--test"], more: true, never: NODE_NEVER, runsFrom: testFiles },
+  {
+    words: ["node"],
+    more: true,
+    never: NODE_NEVER,
+    own: runsScript,
+    runsFrom: (rest) => rest.slice(0, 1),
+  },
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
