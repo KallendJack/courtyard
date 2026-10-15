@@ -75,7 +75,10 @@
   border-top: 0;
 }
 
-/* The Talk key's sound bars move while it listens (talk-strip.tsx, #206), unless the device asks for less motion. */
+/*
+ * Sound bars move: the Talk key's while it listens (talk-strip.tsx, #206), and step by step's while
+ * it reads a step aloud (#241), unless the device asks for less motion.
+ */
 @media (prefers-reduced-motion: no-preference) {
   [data-talk-bars] rect {
     transform-box: fill-box;

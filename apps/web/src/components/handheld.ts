@@ -54,6 +54,11 @@ export type TalkTarget = {
    * listening stops.
    */
   dictate: (listener: Listener) => Dictation;
+  /**
+   * What the talk strip and the Talk key say to say, in place of where the owner is or how to
+   * talk: step by step's Say “next” (#241).
+   */
+  hint?: string;
 };
 
 /** What a page's message box offers the Handheld frame's buttons. */
@@ -98,6 +103,12 @@ export type Dock = {
    * the Talk key until the returned function is called. The page's message box comes first.
    */
   offerField: (field: TalkTarget) => () => void;
+  /**
+   * What a page listens for while it's in a mode the owner steers by voice (step by step's "next",
+   * "back" and "repeat", #241), offered to the talk strip and the Talk key ahead of the message box
+   * until the returned function is called.
+   */
+  offerCommands: (commands: TalkTarget) => () => void;
   open: () => void;
   close: () => void;
   /**

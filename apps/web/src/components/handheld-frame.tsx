@@ -54,6 +54,8 @@ export default function HandheldFrame(props: {
   box: MessageBox | undefined;
   /** A field to talk into, on a page without a message box (#264). */
   field: TalkTarget | undefined;
+  /** What the page listens for while the owner steers it by voice (step by step, #241). */
+  commands: TalkTarget | undefined;
   boxOpen: boolean;
   setBoxOpen: (open: boolean) => void;
   /** Where the Talk key or strip puts its tap, for the box's mic (#251). */
@@ -113,8 +115,11 @@ export default function HandheldFrame(props: {
     setSheet(undefined);
   }, [pathname, setBoxOpen]);
 
-  /** Where talking goes: the page's message box, or else the field it offers (#264). */
-  const talkTo = box ?? props.field;
+  /**
+   * Where talking goes: what the page listens for while the owner steers it by voice (#241), else
+   * the page's message box, or else the field it offers (#264).
+   */
+  const talkTo = props.commands ?? box ?? props.field;
   /**
    * Opens the box with the keyboard in it, while the tap is still the browser's to act on; or puts
    * the keyboard in the page's field.

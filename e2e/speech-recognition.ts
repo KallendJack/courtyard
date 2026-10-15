@@ -215,3 +215,64 @@ export const vibrations = (page: Page) =>
 
 /** How many times the page has asked the phone to vibrate. */
 export const buzzes = async (page: Page) => (await vibrations(page)).length;
+
+/**
+ * A stand-in for the browser's speech synthesis, which Chromium as Playwright runs it has no voice
+ * for (step by step reads each step aloud, #241). What the page asks to be read is kept in the
+ * page's storage for the test to read (`spokenAloud`), and it finishes when the test says so
+ * (`finishSpeaking`); cancelled, it ends as Chrome's does.
+ */
+export const standInSpeechSynthesis = (page: Page) =>
+  page.addInitScript(() => {
+    type Handler = ((event: unknown) => void) | null;
+    class Utterance {
+      lang = "";
+      onend: Handler = null;
+      onerror: Handler = null;
+      text: string;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    let speaking: Utterance | undefined;
+    const spoken = () => {
+      const kept: unknown = JSON.parse(localStorage.getItem("stand-in-spoken") ?? "[]");
+      return Array.isArray(kept) ? kept : [];
+    };
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: Utterance,
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        speak: (utterance: Utterance) => {
+          speaking = utterance;
+          localStorage.setItem("stand-in-spoken", JSON.stringify([...spoken(), utterance.text]));
+        },
+        cancel: () => {
+          const cancelled = speaking;
+          speaking = undefined;
+          cancelled?.onerror?.({ error: "canceled" });
+        },
+        pause: () => {},
+        resume: () => {},
+      },
+    });
+    addEventListener("stand-in-finish-speaking", () => {
+      const finished = speaking;
+      speaking = undefined;
+      finished?.onend?.({});
+    });
+  });
+
+/** Everything the page has asked to be read aloud, in order. */
+export const spokenAloud = (page: Page) =>
+  page.evaluate((): unknown[] => {
+    const kept: unknown = JSON.parse(localStorage.getItem("stand-in-spoken") ?? "[]");
+    return Array.isArray(kept) ? kept : [];
+  });
+
+/** What's being read aloud finishes. */
+export const finishSpeaking = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-finish-speaking")));

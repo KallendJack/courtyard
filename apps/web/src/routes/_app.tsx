@@ -64,6 +64,12 @@ function LoggedIn() {
     setField(offered);
     return () => setField((now) => (now === offered ? undefined : now));
   }, []);
+  /** What the page listens for while the owner steers it by voice (step by step, #241). */
+  const [commands, setCommands] = useState<TalkTarget>();
+  const offerCommands = useCallback((offered: TalkTarget) => {
+    setCommands(offered);
+    return () => setCommands((now) => (now === offered ? undefined : now));
+  }, []);
   const open = useCallback(() => setBoxOpen(true), []);
   const close = useCallback(() => setBoxOpen(false), []);
   /** The frame's Talk, for the box's mic: set by the Talk key or strip once the frame is there. */
@@ -73,8 +79,8 @@ function LoggedIn() {
     () =>
       dockElement === null
         ? undefined
-        : { element: dockElement, offer, offerField, open, close, talk },
-    [dockElement, offer, offerField, open, close, talk],
+        : { element: dockElement, offer, offerField, offerCommands, open, close, talk },
+    [dockElement, offer, offerField, offerCommands, open, close, talk],
   );
 
   return (
@@ -92,6 +98,7 @@ function LoggedIn() {
               dockRef={setDockElement}
               box={box}
               field={field}
+              commands={commands}
               boxOpen={boxOpen}
               setBoxOpen={setBoxOpen}
               talker={talker}

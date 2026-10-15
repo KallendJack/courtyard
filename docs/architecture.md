@@ -454,6 +454,13 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
     first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
   - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
+  - **`step-by-step/`:** step by step (#241; Paper, "Tablet · Step by step"): in a planning workspace, an answer
+    with numbered steps (`sessions/steps.ts` finds them) offers them one at a time in place of the conversation,
+    loaded only then, with a stylesheet of its own (`step-by-step.css`, holding the thumb buttons' classes too).
+    Each step is read aloud in the browser's own voice (`read-aloud.ts`), and the reading line stands in for the
+    Reply box (`Composer`'s `standIn`) until Type a reply. While it's open, the page offers the dock its commands
+    (`offerCommands`), which the talk strip and the Talk key talk to ahead of the box: "next", "back" and "repeat",
+    only when the owner talks.
   - **`planning-home/`:** a planning workspace's page under its name (#300; Paper, "Tablet · Planning workspace
     Home" and its Sessions, Things and Docs tabs), loaded only for one, with a stylesheet of its own
     (`planning-home.css`, holding the tabs' and Home's blocks' classes too), like `code-home/`. Its tabs, Home ·
