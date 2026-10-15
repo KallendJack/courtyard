@@ -19,6 +19,7 @@ import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";
 import { clockWords } from "../when.ts";
 import { continueTurn } from "../worker.ts";
+import { useMergeInOrder } from "./merge-in-order.ts";
 import { agoWords, type Need } from "./needs.ts";
 
 // Home reads what waits on the owner the same way (#102, #334).
@@ -38,13 +39,17 @@ const askedWords = (ask: ApprovalAsk) => {
   }
 };
 
+/** How many pull requests are ready: "1 PR ready", "3 PRs ready". */
+const readyWords = (count: number) => `${count} ${count === 1 ? "PR" : "PRs"} ready`;
+
 /** A pull request's name on a row: its number and title. */
 const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
  * Needs you (#301; Paper, "Code workspace Home"): every approval, turn cut off by a restart
- * (#186), failing check, new reply, pull request ready to merge, conflict, and Matt's setup offer,
+ * (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
+ * Merge in order, #423), conflict, and Matt's setup offer,
  * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
  * scrolling inside when there are more than fit (#335); with nothing waiting it says so.
  */
@@ -115,6 +120,8 @@ const keyOf = (need: Need) => {
       return `${need.kind}-${need.session.id}`;
     case "setup":
       return "setup";
+    case "merge-in-order":
+      return "merge-in-order";
     default:
       return `${need.kind}-${need.pull.pullRequest.number}`;
   }
@@ -222,6 +229,33 @@ function NeedRow(props: {
           action={<Merge workspaceId={workspaceId} pull={need.pull} onChanged={props.onChanged} />}
         />
       );
+    case "merge-in-order": {
+      const order = need.pulls.map((pull) => `#${pull.pullRequest.number}`).join(" → ");
+      const { merge } = need;
+      return (
+        <BlockRow
+          label={`${readyWords(need.pulls.length)}, in build order`}
+          title={`${readyWords(need.pulls.length)}, in build order`}
+          sub={
+            merge?.kind === "merging"
+              ? `Merging #${merge.pullRequest} · ${order}`
+              : merge?.kind === "stopped"
+                ? `Stopped at #${merge.pullRequest} · ${merge.why}`
+                : `${order} · all passed`
+          }
+          tone={merge?.kind === "stopped" ? "needs" : "passed"}
+          action={
+            merge?.kind === "merging" ? undefined : (
+              <MergeInOrder
+                workspaceId={workspaceId}
+                pulls={need.pulls}
+                onChanged={props.onChanged}
+              />
+            )
+          }
+        />
+      );
+    }
     case "conflict":
       return (
         <BlockRow
@@ -367,6 +401,36 @@ function Merge(props: { workspaceId: WorkspaceId; pull: OpenPullRequest; onChang
         onClick={() => void merge.run()}
       >
         Merge
+      </ThumbButton>
+      <FormError message={merge.error} />
+    </>
+  );
+}
+
+/**
+ * Merge in order, in one tap (#423): the owner's OK for the Lead to merge its builders' pull
+ * requests ready now, in the build order's order.
+ */
+function MergeInOrder(props: {
+  workspaceId: WorkspaceId;
+  pulls: readonly OpenPullRequest[];
+  onChanged: () => void;
+}) {
+  const merge = useMergeInOrder({
+    workspaceId: props.workspaceId,
+    pullRequests: props.pulls.map((pull) => pull.pullRequest.number),
+    onMerging: props.onChanged,
+  });
+  return (
+    <>
+      <ThumbButton
+        look="primary"
+        row
+        busy={merge.busy}
+        busyLabel="Merging…"
+        onClick={() => void merge.run()}
+      >
+        Merge in order
       </ThumbButton>
       <FormError message={merge.error} />
     </>

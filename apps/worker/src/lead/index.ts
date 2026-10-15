@@ -5,6 +5,9 @@ import {
   type CodeSessionList,
   LEAD_BUILDERS,
   type LeadBuilder,
+  LeadHeldBack,
+  type LeadMerge,
+  type LeadMergeRequest,
   type LeadReady,
   type LeadRun,
   type LeadStatus,
@@ -54,7 +57,31 @@ const LEAD_TITLE = "Lead";
 /** A builder's title starts with this when it fixes a red main (#355's issue). */
 const MAIN_FIX = /^Main fails:/;
 
-const Builder = z.object({ session: SessionId, issue: z.number().int().positive() });
+/** A builder the Lead started, and the code files its issue named then (#423). */
+const Builder = z.object({
+  session: SessionId,
+  issue: z.number().int().positive(),
+  files: z.array(z.string()).default([]),
+});
+
+/**
+ * Merge in order (#423), as kept: merging the builders' pull requests in this order, first first,
+ * with the heads it has asked a session to bring up to date; or stopped at one, and why.
+ */
+const Merge = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("merging"),
+    queue: z.array(SessionId),
+    /** The heads it has seen conflict, waiting for the worker to bring them up to date (#382). */
+    conflicting: z.array(z.string()),
+  }),
+  z.object({
+    kind: z.literal("stopped"),
+    pullRequest: z.number().int().positive(),
+    why: z.string(),
+  }),
+]);
+type Merge = z.infer<typeof Merge>;
 
 /** One code workspace's Lead, as kept. */
 const Kept = z.object({
@@ -76,6 +103,10 @@ const Kept = z.object({
    * all for builders: each allows all until its pull request opens, until then at most.
    */
   allowAllUntil: z.iso.datetime().optional(),
+  /** Merge in order (#423), while it's merging or stopped. */
+  merge: Merge.optional(),
+  /** The ready issues it held back last time round (#423). */
+  heldBack: z.array(LeadHeldBack).optional(),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -86,7 +117,9 @@ export type LeadProblem =
   | { readonly kind: "workspace"; readonly error: WorkspaceError }
   | { readonly kind: "not-code" }
   | { readonly kind: "session"; readonly error: SessionError }
-  | { readonly kind: "storage" };
+  | { readonly kind: "storage" }
+  /** Merge in order was tapped with no builder's pull request ready to merge (#423). */
+  | { readonly kind: "nothing-to-merge" };
 
 type Listed = CodeSessionList["sessions"][number];
 
@@ -107,6 +140,32 @@ const nameOf = (listed: Listed | undefined, issue: number) =>
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/**
+ * Whether two files are the same (#423), as an issue names one and git lists the other: by path,
+ * or one by its name or the end of its path, at the end of the other's.
+ */
+const sameFile = (a: string, b: string) =>
+  !COMMON_NAMES.test(a) &&
+  !COMMON_NAMES.test(b) &&
+  (a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`));
+
+/**
+ * File names many folders have (#423), which name no one file on their own: one named only by its
+ * name clashes with nothing.
+ */
+const COMMON_NAMES =
+  /^(?:index|routes|types|api|utils?|helpers?|main|app|config|constants)\.[\w.]+$|^(?:package|tsconfig)\.json$/;
+
+/** Names in a sentence: "e2e", "check and e2e", "check, verify and e2e". */
+const namesOf = (names: readonly string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** Why Merge in order couldn't merge a pull request (#423), as its stop says it. */
+const mergeRefused = (error: SessionError) =>
+  error.kind === "pull-request-refused"
+    ? `GitHub wouldn't merge it (${error.reason})`
+    : "GitHub couldn't merge it just now";
+
 export const createLead = (options: {
   contextDir: string;
   dataDir: string;
@@ -120,8 +179,11 @@ export const createLead = (options: {
     | "note"
     | "tellMerged"
     | "stopBuilding"
+    | "mergePullRequest"
   >;
-  nextUp: Pick<NextUp, "list" | "fresh" | "build">;
+  nextUp: Pick<NextUp, "list" | "fresh" | "build" | "filesNamed">;
+  /** The files a builder's worktree changes (#423), by its workspace and session. */
+  changedFiles: (workspaceId: WorkspaceId, session: SessionId) => Promise<readonly string[]>;
   /** Whether a code workspace's main is red now (#355), by its id. */
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
   /** Whether an Update waits to run (#186): meanwhile no builder starts. */
@@ -197,9 +259,103 @@ export const createLead = (options: {
     issues.filter(
       (issue) =>
         buildable(issue) &&
+        !(kept?.heldBack ?? []).some((held) => held.issue === issue.number) &&
         !(kept?.skipped ?? []).includes(issue.number) &&
         !(kept?.built ?? []).some((builder) => builder.issue === issue.number),
     );
+
+  /** Whether Merge in order still stands stopped (#423): its pull request still open. */
+  const stillStopped = (
+    merge: Extract<Merge, { kind: "stopped" }>,
+    listed: ReadonlyMap<SessionId, Listed>,
+  ) =>
+    [...listed.values()].some(
+      (each) => each.pullRequest?.number === merge.pullRequest && each.pullRequest.state === "open",
+    );
+
+  /** Merge in order as the owner sees it (#423): the pull request it's on, or where it stopped. */
+  const mergeOf = (
+    merge: Merge | undefined,
+    listed: ReadonlyMap<SessionId, Listed>,
+  ): LeadMerge | undefined => {
+    if (merge?.kind === "stopped") return stillStopped(merge, listed) ? merge : undefined;
+    if (merge?.kind !== "merging") return merge;
+    const on = merge.queue
+      .map((session) => listed.get(session)?.pullRequest)
+      .find((pull) => pull?.state === "open");
+    return on === undefined ? undefined : { kind: "merging", pullRequest: on.number };
+  };
+
+  /**
+   * One step of Merge in order (#423), each time round and as the owner taps it: the first pull
+   * request still open is merged once its checks pass and its session's turn is done, and the next
+   * is seen afresh next time round, since GitHub works out again whether it conflicts. One that
+   * conflicts is brought up to date by its session, once for each head; a failing check, a conflict
+   * its session left, or GitHub's refusal stops it, saying which and why. Merged and closed ones
+   * leave the queue; once it's empty, it says so.
+   */
+  const mergeStep = async (was: Kept, listed: ReadonlyMap<SessionId, Listed>): Promise<Kept> => {
+    let kept = was;
+    if (kept.merge?.kind === "stopped" && !stillStopped(kept.merge, listed)) {
+      const { merge: _, ...forgotten } = kept;
+      kept = forgotten;
+    }
+    for (;;) {
+      const merge = kept.merge;
+      if (merge?.kind !== "merging") return kept;
+      const [first, ...rest] = merge.queue;
+      const { merge: _, ...done } = kept;
+      if (first === undefined) return noted(done, "Merged them all, in order.");
+      const each = listed.get(first);
+      const pull = each?.pullRequest;
+      if (pull?.state !== "open") {
+        kept = { ...kept, merge: { ...merge, queue: rest } };
+        continue;
+      }
+      const waiting = rest.flatMap((session) => {
+        const number = listed.get(session)?.pullRequest?.number;
+        return number === undefined ? [] : [`#${number}`];
+      });
+      const stop = (stopping: { why: string; fixing: boolean }) =>
+        noted(
+          { ...done, merge: { kind: "stopped", pullRequest: pull.number, why: stopping.why } },
+          [
+            `Stopped at #${pull.number}: ${stopping.why}.`,
+            ...(stopping.fixing ? ["Its session is looking at it."] : []),
+            ...(waiting.length === 0
+              ? []
+              : [`${waiting.join(" and ")} ${waiting.length === 1 ? "waits" : "wait"}.`]),
+            `Once it's ${stopping.fixing ? "green" : "sorted"}, tap Merge in order again.`,
+          ].join(" "),
+        );
+      const { checks } = pull;
+      if (checks.kind === "failed") {
+        const word = checks.failed.length === 1 ? "check" : "checks";
+        return stop({ why: `its ${namesOf(checks.failed)} ${word} failed`, fixing: true });
+      }
+      // The worker brings one that conflicts up to date through its session, once for each head
+      // (#382): the merge waits for that, and stops if the session left it conflicting.
+      if (pull.conflicts === true) {
+        if (!merge.conflicting.includes(pull.head)) {
+          return noted(
+            { ...kept, merge: { ...merge, conflicting: [...merge.conflicting, pull.head] } },
+            `Bringing #${pull.number} up to date first.`,
+          );
+        }
+        return each?.busy === true
+          ? kept
+          : stop({
+              why: "it still conflicts with main after its session tried to bring it up to date",
+              fixing: false,
+            });
+      }
+      if (checks.kind === "running" || each?.busy === true) return kept;
+      const merged = await sessions.mergePullRequest(first, pull.head);
+      if (!merged.ok) return stop({ why: mergeRefused(merged.error), fixing: false });
+      kept = { ...kept, merge: { ...merge, queue: rest } };
+      if (rest.length > 0) return kept;
+    }
+  };
 
   const statusOf = async (
     workspaceId: WorkspaceId,
@@ -208,6 +364,7 @@ export const createLead = (options: {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
     const { building, ready } = buildersOf(kept, listed);
     const allowing = allowAllUntilOf(kept);
+    const merge = mergeOf(kept?.merge, listed);
     return {
       state: kept?.state ?? "not-started",
       ...(kept === undefined ? {} : { session: kept.session }),
@@ -217,6 +374,10 @@ export const createLead = (options: {
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
+      ...(merge === undefined ? {} : { merge }),
+      ...(kept?.heldBack === undefined || kept.state !== "running"
+        ? {}
+        : { heldBack: kept.heldBack }),
     };
   };
 
@@ -270,7 +431,7 @@ export const createLead = (options: {
    */
   const look = async (workspaceId: WorkspaceId, was: Kept): Promise<Kept> => {
     const listed = await listedIn(workspaceId);
-    let kept = await watchBuilders(was, listed);
+    let kept = await mergeStep(await watchBuilders(was, listed), listed);
     if (kept.state !== "running") return kept;
     const { building } = buildersOf(kept, listed);
     const deciding = building.find(
@@ -289,11 +450,48 @@ export const createLead = (options: {
     let started = 0;
     let free = kept.builders - building.length;
     if (deciding === undefined && !updating && free > 0) {
+      // What's held back is worked out afresh each time a builder could start.
+      const { heldBack: _held, ...unheld } = kept;
+      kept = unheld;
       const issues = await nextUp.fresh(workspaceId);
       if (!issues.ok) return kept;
       const next = nextOf(kept, issues.value).filter((issue) => !red || MAIN_FIX.test(issue.title));
+      const named = await nextUp.filesNamed(workspaceId);
+      // Each builder still at work, by its issue, with the files its issue named and its
+      // worktree changes; those it starts now join it.
+      const changing = await Promise.all(
+        kept.built
+          .filter((builder) => standingOf(listed.get(builder.session)) !== "ended")
+          .map(async (builder) => ({
+            issue: builder.issue,
+            files: [
+              ...builder.files,
+              ...(await options.changedFiles(workspaceId, builder.session)),
+            ],
+          })),
+      );
+      const heldBack: LeadHeldBack[] = [];
       for (const issue of next) {
         if (free === 0) break;
+        const files = [...(named.get(issue.number) ?? [])];
+        // Main's fix is never held back: nothing goes green while main is red.
+        const clash = (MAIN_FIX.test(issue.title) ? [] : changing)
+          .flatMap((builder) => {
+            const shared = files.find((file) => builder.files.some((each) => sameFile(file, each)));
+            return shared === undefined ? [] : [{ behind: builder.issue, shared }];
+          })
+          .at(0);
+        if (clash !== undefined) {
+          heldBack.push({ issue: issue.number, behind: clash.behind });
+          const about = `held:${issue.number}:${clash.behind}`;
+          if (!kept.told.includes(about)) {
+            kept = await noted(
+              { ...kept, told: [...kept.told, about] },
+              `Holding back #${issue.number} ${issue.title}: it changes the same files as #${clash.behind} (${clash.shared}). It starts once #${clash.behind} merges.`,
+            );
+          }
+          continue;
+        }
         // One place always stays free for the owner's own sessions.
         if (sessions.codeRunning() >= CODE_SESSIONS_AT_ONCE - 1) {
           why ??= "your own sessions are using the machine, so the next builder waits.";
@@ -314,13 +512,24 @@ export const createLead = (options: {
           break;
         }
         kept = await noted(
-          { ...kept, built: [...kept.built, { session: built.value.id, issue: issue.number }] },
+          {
+            ...kept,
+            built: [...kept.built, { session: built.value.id, issue: issue.number, files }],
+          },
           `Started building ${issue.title} (#${issue.number}).`,
         );
+        changing.push({ issue: issue.number, files });
         started += 1;
         free -= 1;
       }
-      if (!red && building.length === 0 && started === 0 && why === undefined) {
+      if (heldBack.length > 0) kept = { ...kept, heldBack };
+      if (
+        !red &&
+        building.length === 0 &&
+        started === 0 &&
+        heldBack.length === 0 &&
+        why === undefined
+      ) {
         const unready = issues.value.filter((issue) => !issue.ready).length;
         const waiting = issues.value.filter((issue) => issue.ready && !buildable(issue)).length;
         const rest = `Nothing ready to build.${
@@ -484,6 +693,31 @@ export const createLead = (options: {
         const recorded = await keep(workspaceId, started);
         if (!recorded.ok) return recorded;
         return ok(await look(workspaceId, started));
+      }),
+
+    /**
+     * Merge in order (#423): the owner's tap is their OK to merge the builders' pull requests
+     * their screen showed ready, those still ready now, in the build order's order, and no
+     * others. It starts at once, and goes on each
+     * time round.
+     */
+    mergeInOrder: (rawId: string, request: LeadMergeRequest) =>
+      changing(rawId, async (workspaceId, kept) => {
+        if (kept === undefined) return err({ kind: "session", error: { kind: "not-found" } });
+        const listed = await listedIn(workspaceId);
+        const ready = buildersOf(kept, listed).ready.filter((each) =>
+          request.pullRequests.includes(each.pullRequest),
+        );
+        if (ready.length === 0) return err({ kind: "nothing-to-merge" });
+        const order = ready.map((each) => `#${each.pullRequest}`).join(" → ");
+        const merging = await noted(
+          {
+            ...kept,
+            merge: { kind: "merging", queue: ready.map((each) => each.session), conflicting: [] },
+          },
+          `Merging in order: ${order}.`,
+        );
+        return ok(await mergeStep(merging, listed));
       }),
 
     /** Pause (#347): builders already running carry on, and nothing new starts. */
