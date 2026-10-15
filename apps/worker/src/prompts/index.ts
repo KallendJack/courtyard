@@ -988,6 +988,11 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   const saves = new Map<number, SaidSave>();
   const documents = new Map<number, SaidDocument>();
   const things = new Map<number, SaidThing>();
+  /**
+   * What the turn under way did before it wrote or ended (#186): an answer is only made once it
+   * has, so a turn that has only done things yet still ends with the owner's message.
+   */
+  let didFirst: Activity[] = [];
   const answer = (change: (answer: ModelSaid) => Partial<ModelSaid>) => {
     const last = said.at(-1);
     const current: ModelSaid =
@@ -997,7 +1002,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
             speaker: "model",
             text: "",
             ended: "running",
-            did: [],
+            did: didFirst,
             saves: [],
             documents: [],
             things: [],
@@ -1008,6 +1013,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   for (const event of events) {
     switch (event.type) {
       case "owner-message":
+        didFirst = [];
         said.push({
           speaker: "owner",
           text: event.text,
@@ -1028,9 +1034,13 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         answer(() => ({ ended: event.reason.kind === "interrupted" ? "cut-off" : "failed" }));
         break;
       // What a turn did, its helpers' too (#186): told once a restart cut it off.
-      case "activity":
-        answer((current) => ({ did: [...current.did, event.activity] }));
+      case "activity": {
+        const last = said.at(-1);
+        if (last?.speaker === "model")
+          answer((current) => ({ did: [...current.did, event.activity] }));
+        else didFirst = [...didFirst, event.activity];
         break;
+      }
       case "context-saved": {
         const saved: SaidSave = { save: event.save, outcome: { kind: "kept" } };
         saves.set(event.seq, saved);

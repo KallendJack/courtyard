@@ -469,6 +469,48 @@ describe("Continue, after a restart cut a turn off (#186)", () => {
   });
 });
 
+describe("a cut-off turn that wrote nothing (#186)", () => {
+  it("is still told with everything it did", async () => {
+    const { provider: recording, turns } = recorder(READS_FILES);
+    let cutOff: () => void = () => {};
+    const working: Provider = {
+      ...recording,
+      runTurn: async (input) => {
+        await input.report({ kind: "ran-command", command: "pnpm test" });
+        await new Promise<void>((resolve) => {
+          cutOff = resolve;
+          input.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return ok(null);
+      },
+    };
+    const first = testWorker({ root, providers: [working] });
+    const cookie = await setUpOwner(first);
+    const before = requesterFor(first, cookie);
+    const started = await postJson(before, "/api/workspaces/garage-gym/sessions", {
+      text: "Run the tests",
+      model: MODEL,
+    });
+    const { id } = SessionSummary.parse(await started.json());
+    await followSession(before, { sessionId: id, until: "activity" });
+
+    const after = requesterFor(testWorker({ root, providers: [recording] }), cookie);
+    await followSession(after, { sessionId: id, until: "turn-failed" });
+    await postJson(after, `/api/sessions/${id}/continue`, {});
+    await followSession(after, { sessionId: id, until: "turn-completed", after: 3 });
+
+    expect(turns[0]?.framing.message).toContain(
+      [
+        "You: (Courtyard restarted and cut this turn off before you wrote anything)",
+        "",
+        "What you did in this turn before it was cut off:",
+        '- Ran "pnpm test"',
+      ].join("\n"),
+    );
+    cutOff();
+  });
+});
+
 describe("switching model mid-session", () => {
   it("after Carry on, gives the new model the failed turn as failed and earlier answers as its own", async () => {
     const { provider: recording, turns } = recorder(READS_FILES);
