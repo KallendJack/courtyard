@@ -8,6 +8,8 @@ agent's memory. Inside a spec, order comes from GitHub's blocked-by links, as Ma
   order. `Later` holds parked ideas, in no order.
 - **Its description gives the build order inside it:** `Build order: #A → #B → #C.`, with a note when something waits
   on the owner. A code workspace's Next up reads this line: it ends at the first full stop, so notes go after it.
+  Issues on it that edit the same files are each marked blocked by the one before (GitHub's blocked by): Next up
+  keeps a blocked one in its place, "After …", with no Build until its blocker closes (#377).
 - **Every open issue is in exactly one milestone.**
 
 ## What comes first
