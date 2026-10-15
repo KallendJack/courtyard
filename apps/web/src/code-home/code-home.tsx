@@ -162,7 +162,7 @@ export default function CodeHome(props: {
   };
 
   const pulls = open?.pullRequests ?? [];
-  const needs = needsOf({ sessions: list.sessions, pulls, setup });
+  const needs = needsOf({ sessions: list.sessions, pulls, setup, lead });
   /** Whether what Needs you shows is still to come, on a first visit. */
   const needsPending = open === undefined;
   const tabs: WorkspaceTab[] = [

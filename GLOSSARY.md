@@ -204,6 +204,17 @@ replies, pull requests ready to merge, conflicts, and the setup check's offer, e
 (Approve, Review, Open, Merge, Bring up to date).
 _Avoid_: inbox, notifications, to-do, alerts
 
+**Merge in order**:
+The Lead's one tap for its builders' pull requests ready to merge (#423): it merges them one at a time in the
+build order's order, bringing one up to date through its session when it conflicts and waiting for its checks,
+and stops at a failing check or a refusal, saying which and why. The tap covers only the ones ready then.
+_Avoid_: merge queue, merge all, auto-merge
+
+**Held back**:
+A ready issue the Lead doesn't start yet because a builder still at work is changing the code files it names
+(#423); it starts once that builder's pull request merges.
+_Avoid_: queued, paused, deferred
+
 **Next up**:
 The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
 claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the

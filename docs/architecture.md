@@ -261,7 +261,17 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
   message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
   and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
-  `next-up/:number/grill`.
+  `next-up/:number/grill`. It also keeps the code files each ready issue names in its description or comments
+  (`filesNamed`, #423), for the Lead.
+- **`lead/`:** a code workspace's Lead (#347), kept in the data folder's `leads.json`, one look each time the
+  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`) is the owner's OK to merge its builders'
+  pull requests ready then, in the build order's order: each look merges the first still open through `sessions/`
+  once its checks pass and its session's turn is done, asks its session once per head to bring one that conflicts
+  up to date, and stops, saying which and why in its chat, at a failing check, a conflict its session left or
+  GitHub's refusal (`LeadStatus.merge`). It holds back a ready issue naming a code file that a builder still at
+  work changes (`code/`'s `changedFiles`: committed since the default branch, changed and new in its worktree) or
+  whose issue named it, starting it once that builder's pull request merges (`LeadStatus.heldBack`; Next up says
+  "Held back").
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
   (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a

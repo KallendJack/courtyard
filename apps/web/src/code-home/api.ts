@@ -48,6 +48,17 @@ export const loadLead = (workspaceId: WorkspaceId) =>
 export const runLead = (workspaceId: WorkspaceId, model: LeadRun) =>
   sendJson({ path: `${workspacePath(workspaceId)}/lead/run`, body: model, schema: LeadStatus });
 
+/**
+ * Merge in order (#423): the Lead merges its builders' pull requests ready now, in the build
+ * order's order.
+ */
+export const mergeInOrder = (workspaceId: WorkspaceId) =>
+  sendJson({
+    path: `${workspacePath(workspaceId)}/lead/merge-in-order`,
+    body: {},
+    schema: LeadStatus,
+  });
+
 /** Pause the Lead (#347): its builders carry on, and nothing new starts. */
 export const pauseLead = (workspaceId: WorkspaceId) =>
   sendJson({ path: `${workspacePath(workspaceId)}/lead/pause`, body: {}, schema: LeadStatus });

@@ -1,4 +1,10 @@
-import type { CodeSessionList, MattSetup, OpenPullRequest } from "@courtyard/contract";
+import type {
+  CodeSessionList,
+  LeadMerge,
+  LeadStatus,
+  MattSetup,
+  OpenPullRequest,
+} from "@courtyard/contract";
 import { describeWhen } from "../when.ts";
 
 // What waits on the owner in a workspace (#301, #334), as the worker decided it for each of its
@@ -26,18 +32,30 @@ export type Need =
   | { readonly kind: "reply"; readonly session: Listed }
   /** Its session, when one opened it: a Lead's builder says so (#347). */
   | { readonly kind: "merge"; readonly pull: OpenPullRequest; readonly session?: Listed }
+  /**
+   * The Lead's builders' pull requests ready to merge, in the build order's order, as one row with
+   * Merge in order (#423), and how Merge in order stands, when it's merging or stopped.
+   */
+  | {
+      readonly kind: "merge-in-order";
+      readonly pulls: readonly OpenPullRequest[];
+      readonly merge: LeadMerge | undefined;
+    }
   | { readonly kind: "conflict"; readonly pull: OpenPullRequest; readonly session?: Listed }
   | { readonly kind: "setup"; readonly missing: number };
 
 /**
  * What waits on the owner, as the worker says, in the order the grill set (#301): approvals,
  * turns cut off by a restart (#186), failing checks, new replies, pull requests ready to merge,
- * conflicts, then Matt's setup.
+ * conflicts, then Matt's setup. The Lead's builders' ready pull requests, once two or more are,
+ * or while Merge in order is merging or stopped, are one row with Merge in order (#423).
  */
 export const needsOf = (given: {
   sessions: readonly Listed[];
   pulls: readonly OpenPullRequest[];
   setup: MattSetup;
+  /** The workspace's Lead (#347), once known. */
+  lead?: LeadStatus | undefined;
 }): Need[] => {
   const sessionOf = ({ from }: OpenPullRequest) =>
     from.kind === "session"
@@ -61,10 +79,23 @@ export const needsOf = (given: {
     count: pull.pullRequest.checks.kind === "failed" ? pull.pullRequest.checks.failed.length : 0,
   }));
   const replies: Need[] = sessionsWaiting("reply").map((session) => ({ kind: "reply", session }));
-  const merges: Need[] = pullsWaiting("merge").map((pull) => {
-    const session = sessionOf(pull);
-    return session === undefined ? { kind: "merge", pull } : { kind: "merge", pull, session };
+  const ready = (given.lead?.ready ?? []).flatMap((each) => {
+    const pull = given.pulls.find(
+      (open) => open.waiting === "merge" && open.pullRequest.number === each.pullRequest,
+    );
+    return pull === undefined ? [] : [pull];
   });
+  const merge = given.lead?.merge;
+  const inOrder = ready.length >= 2 || (merge !== undefined && ready.length > 0);
+  const merges: Need[] = [
+    ...(inOrder ? [{ kind: "merge-in-order" as const, pulls: ready, merge }] : []),
+    ...pullsWaiting("merge")
+      .filter((pull) => !inOrder || !ready.includes(pull))
+      .map((pull): Need => {
+        const session = sessionOf(pull);
+        return session === undefined ? { kind: "merge", pull } : { kind: "merge", pull, session };
+      }),
+  ];
   const conflicts: Need[] = pullsWaiting("conflict").map((pull) => {
     const session = sessionOf(pull);
     return session === undefined ? { kind: "conflict", pull } : { kind: "conflict", pull, session };
