@@ -116,3 +116,38 @@ test("a helper's approval names it, its line waits on the owner, and Deny lets i
   );
   await expect(card).toHaveCount(0);
 });
+
+test("a helper that writes code shows its own branch, then Merged, and one that clashed says the session is sorting it (#395)", async ({
+  page,
+  request,
+}) => {
+  await openCoding(page, request, [
+    "helper Build the API (own branch): edit file README.md: # The API | report: Built it.",
+    "helper Build the sheet (own branch): pause 1500 | edit file README.md: # The sheet | report: Built it. It and the API helper both changed README.md.",
+    "helper Write the e2e test (own branch): edit file e2e.spec.ts: test | hold",
+    "helper Review against the spec: read file: docs/spec.md | report: Matches the spec.",
+  ]);
+  const api = helperLine(page, "Build the API");
+  const sheet = helperLine(page, "Build the sheet");
+  const e2e = helperLine(page, "Write the e2e test");
+  const review = helperLine(page, "Review against the spec");
+
+  for (const reloaded of [false, true]) {
+    if (reloaded) await page.reload();
+    await expect(api).toContainText("Merged");
+    await expect(api).toContainText("Done · 1 step");
+    await expect(sheet).toContainText("Own branch");
+    await expect(sheet).toContainText("Didn't merge cleanly · the session is sorting it");
+    await expect(e2e).toContainText("Own branch");
+    await expect(e2e).toContainText("Edited e2e.spec.ts");
+    // A helper sharing the session's folder has no tag.
+    await expect(review).toContainText("Done · 1 step");
+    await expect(review).not.toContainText(/Own branch|Merged/);
+  }
+  await sheet.getByRole("button").click();
+  await expect(sheet).toContainText("It and the API helper both changed README.md.");
+  await shot(page, "helpers-own-branch-fold");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(sheet).toContainText("Didn't merge cleanly");
+  await shot(page, "helpers-own-branch-desktop");
+});
