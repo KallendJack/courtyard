@@ -1,5 +1,5 @@
 import type { GitHubRepo } from "@courtyard/contract";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import { classes } from "@/lib/classes";
 import { Scroller } from "./scroller.tsx";
 
@@ -60,96 +60,100 @@ export function RepoPicker(props: {
       <legend className="sr-only">Repo</legend>
       <Scroller className="flex min-h-0 flex-col gap-0.5 p-1.5">
         {newRepo !== undefined && (
-          <label
-            className={classes(
-              "flex h-13 shrink-0 cursor-pointer items-center gap-3 rounded-row border-stroke px-3 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-              newRepo.chosen
-                ? "border-primary bg-primary/8"
-                : "border-transparent active:bg-accent",
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value=""
-              checked={newRepo.chosen}
-              onChange={newRepo.onChoose}
-              className="sr-only"
-            />
-            <span
-              aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground/90"
-            >
-              <PlusMark className="size-4.5" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-base/5 font-bold text-foreground">
-              New repo
-            </span>
-            <span className="shrink-0 text-right text-meta/4 font-medium text-primary-text">
-              On the house standard
-            </span>
-          </label>
+          <Row
+            name={name}
+            value=""
+            look={newRepo.chosen ? "chosen" : "open"}
+            onChoose={newRepo.onChoose}
+            mark={<PlusMark className="size-4.5" />}
+            title="New repo"
+            aside={<span className="text-primary-text">On the house standard</span>}
+          />
         )}
-        {props.repos.map((repo) => {
-          const chosen = repo.repo === props.value;
-          return (
-            <label
-              key={repo.repo}
-              className={classes(
-                "flex h-13 shrink-0 items-center gap-3 rounded-row border-stroke px-3 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-                chosen
-                  ? "border-primary bg-primary/8"
-                  : repo.added
-                    ? "border-transparent"
-                    : "cursor-pointer border-transparent active:bg-accent",
-              )}
-            >
-              <input
-                type="radio"
-                name={name}
-                value={repo.repo}
-                checked={chosen}
-                disabled={repo.added}
-                onChange={() => props.onChange(repo)}
-                className="sr-only"
-              />
-              <span
-                aria-hidden
-                className={classes(
-                  "flex size-8 shrink-0 items-center justify-center rounded-md bg-muted",
-                  chosen
-                    ? "text-foreground/90"
-                    : repo.added
-                      ? "text-placeholder"
-                      : "text-muted-foreground",
-                )}
-              >
-                <CodeMark className="size-4.5" />
-              </span>
-              <span
-                className={classes(
-                  "min-w-0 flex-1 truncate text-base/5",
-                  chosen
-                    ? "font-bold text-foreground"
-                    : repo.added
-                      ? "font-semibold text-placeholder"
-                      : "font-semibold text-foreground/85",
-                )}
-              >
-                {repo.name}
-              </span>
-              <span
-                className={classes(
-                  "w-22 shrink-0 text-right text-meta/4 font-medium",
-                  repo.added ? "text-placeholder" : "text-muted-foreground",
-                )}
-              >
-                {repo.added ? "Added" : repo.private ? "Private" : "Public"}
-              </span>
-            </label>
-          );
-        })}
+        {props.repos.map((repo) => (
+          <Row
+            key={repo.repo}
+            name={name}
+            value={repo.repo}
+            look={repo.repo === props.value ? "chosen" : repo.added ? "added" : "open"}
+            onChoose={() => props.onChange(repo)}
+            mark={<CodeMark className="size-4.5" />}
+            title={repo.name}
+            aside={repo.added ? "Added" : repo.private ? "Private" : "Public"}
+          />
+        ))}
       </Scroller>
     </fieldset>
+  );
+}
+
+/**
+ * One row to pick: its mark, its name and a word on the right, ringed in violet when it's the one
+ * picked. One a code workspace works on already is greyed and can't be picked.
+ */
+function Row(props: {
+  name: string;
+  value: string;
+  look: "chosen" | "open" | "added";
+  onChoose: () => void;
+  mark: ReactNode;
+  title: string;
+  aside: ReactNode;
+}) {
+  const { look } = props;
+  return (
+    <label
+      className={classes(
+        "flex h-13 shrink-0 items-center gap-3 rounded-row border-stroke px-3 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+        look === "chosen"
+          ? "border-primary bg-primary/8"
+          : look === "added"
+            ? "border-transparent"
+            : "cursor-pointer border-transparent active:bg-accent",
+      )}
+    >
+      <input
+        type="radio"
+        name={props.name}
+        value={props.value}
+        checked={look === "chosen"}
+        disabled={look === "added"}
+        onChange={props.onChoose}
+        className="sr-only"
+      />
+      <span
+        aria-hidden
+        className={classes(
+          "flex size-8 shrink-0 items-center justify-center rounded-md bg-muted",
+          look === "chosen"
+            ? "text-foreground/90"
+            : look === "added"
+              ? "text-placeholder"
+              : "text-muted-foreground",
+        )}
+      >
+        {props.mark}
+      </span>
+      <span
+        className={classes(
+          "min-w-0 flex-1 truncate text-base/5",
+          look === "chosen"
+            ? "font-bold text-foreground"
+            : look === "added"
+              ? "font-semibold text-placeholder"
+              : "font-semibold text-foreground/85",
+        )}
+      >
+        {props.title}
+      </span>
+      <span
+        className={classes(
+          "shrink-0 text-right text-meta/4 font-medium",
+          look === "added" ? "text-placeholder" : "text-muted-foreground",
+        )}
+      >
+        {props.aside}
+      </span>
+    </label>
   );
 }

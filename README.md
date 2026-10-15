@@ -368,8 +368,8 @@ or open a pull request.
    `.github/workflows`, still behind an approval), and **Checks** and **Commit statuses** read-only;
    **Metadata** read-only is always on. For New repo (New workspace → Code makes the repo, #391),
    also **Administration** read and write: GitHub's permission for "repository creation", which also
-   covers a repo's settings and deleting it, so leave it off if you'll only add repos you already
-   have. Leave **Secrets** off. Nothing under account permissions.
+   covers a repo's settings and deleting it (sessions still ask before any of that: ADR 0028), so
+   leave it off if you'll only add repos you already have. Leave **Secrets** off. Nothing under account permissions.
 6. Choose **Only on this account**, then **Create GitHub App**.
 7. On the app's page, copy its **Client ID** (not the App ID), and set it in the worker's `.env`:
    `COURTYARD_GITHUB_CLIENT_ID=<client ID>`. It needs no client secret or private key. Restart the

@@ -381,28 +381,30 @@ export const createMattSetup = (options: {
 
   return {
     /**
-     * The house standard's files for a new repo (#391): Matt's files from his templates (when his
-     * skills are loaded), its AGENTS.md with the house rules and the Agent skills section, its
+     * The house standard's files for a new repo (#391): Matt's files from his templates, its
+     * AGENTS.md with the house rules and the Agent skills section, its
      * glossary and its decisions folder, by path.
      */
-    filesForNew: async (repo: { name: string; intro: string }): Promise<Map<string, string>> => {
+    filesForNew: async (repo: {
+      name: string;
+      intro: string;
+    }): Promise<Result<Map<string, string>, "no-matt-skills">> => {
       const copy = await options.matt?.copy();
       const setupSkill = copy?.ok
         ? copy.value.skills.find((s) => s.name === SETUP_SKILL)
         : undefined;
+      if (setupSkill === undefined) return err("no-matt-skills");
       const files = new Map<string, string>();
-      if (setupSkill !== undefined) {
-        for (const path of FILES) {
-          files.set(
-            path,
-            await mattFile(setupSkill.folder, { path, kept: null, glossary: GLOSSARY }),
-          );
-        }
+      for (const path of FILES) {
+        files.set(
+          path,
+          await mattFile(setupSkill.folder, { path, kept: null, glossary: GLOSSARY }),
+        );
       }
       files.set("AGENTS.md", houseAgents(repo));
       files.set(GLOSSARY, houseGlossary(repo.name));
       files.set("docs/adr/README.md", HOUSE_DECISIONS);
-      return files;
+      return ok(files);
     },
 
     /**

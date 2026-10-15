@@ -550,7 +550,9 @@ export const createFakeGitHub = (
       if (refused !== undefined) return refused;
       const fullName = `${account}/${repo.name}`;
       if (repos.some((each) => each.fullName.toLowerCase() === fullName.toLowerCase())) {
-        return err("GitHub said: Repository creation failed.");
+        return err(
+          "GitHub said: Repository creation failed. (name already exists on this account)",
+        );
       }
       if (options.makesReposIn === undefined) return err("GitHub said: Not Found");
       const bare = join(options.makesReposIn, account, `${repo.name}.git`);

@@ -27,7 +27,7 @@ export const repoProblem = (c: Context, why: RepoProblem) => {
     case "taken":
       return apiError(c, {
         status: 409,
-        error: `There's a repo called ${why.repo} on your account already.`,
+        error: `There's a repo called ${why.repo} on your account, or on this machine, already.`,
       });
     case "unstarted":
       return apiError(c, {

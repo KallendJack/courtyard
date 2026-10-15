@@ -77,8 +77,9 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
   useEffect(() => {
     if (picked !== "new") return;
     const next = repoNameFrom(intro);
-    setRepoName((was) => (was.trim() === "" || was === filledRepoName.current ? next : was));
+    const before = filledRepoName.current;
     filledRepoName.current = next;
+    setRepoName((was) => (was.trim() === "" || was === before ? next : was));
   }, [intro, picked]);
 
   // The Talk key and the talk strip fill in what it's for (#264), after anything typed.
@@ -108,10 +109,15 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
     filled.current = next;
   };
 
-  /** New repo picked: what it's for clears what a picked repo filled in. */
+  /**
+   * New repo picked: what it's for clears what a picked repo filled in; the name it filled stays
+   * known, so picking a repo again replaces it.
+   */
   const pickNew = () => {
-    if (intro === filled.current.intro) setIntro("");
-    filled.current = { name: "", intro: "" };
+    if (intro === filled.current.intro) {
+      setIntro("");
+      filled.current = { ...filled.current, intro: "" };
+    }
     setPicked("new");
   };
 
@@ -119,7 +125,7 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
   const making = code && picked === "new";
   const add = useAction(async () => {
     if (code && picked === undefined) return "Pick a repo first.";
-    if (picked === "new") {
+    if (making) {
       const made = await createRepo({
         name: repoName.trim(),
         intro: intro.trim(),
@@ -138,7 +144,7 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
     const workspace = await addWorkspace({
       name,
       intro,
-      ...(code && picked !== undefined ? { repo: picked.repo } : {}),
+      ...(code && picked !== undefined && picked !== "new" ? { repo: picked.repo } : {}),
     });
     if (workspace.kind !== "loaded") return describeProblem(workspace).body;
     // Every list of workspaces now includes it.
@@ -260,6 +266,7 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
                     {introField(talks ? "From what you said, or hold Talk." : "One line.")}
                   </div>
                   <NewRepoCard
+                    workspace={workspaceNameFrom(repoName.trim())}
                     offer={offer}
                     hidden={hidden}
                     onHidden={setHidden}
@@ -294,6 +301,8 @@ export function NewWorkspaceForm(props: { header: ReactNode }) {
  * Courtyard can make one; then what it starts with.
  */
 function NewRepoCard(props: {
+  /** The workspace made on it, named from the repo. */
+  workspace: string;
   offer: FromWorker<NewRepoOffer> | undefined;
   hidden: boolean;
   onHidden: (hidden: boolean) => void;
@@ -331,7 +340,10 @@ function NewRepoCard(props: {
           </Button>
         )}
       </div>
-      <p className="text-meta text-muted-foreground">{NEW_REPO_STARTS}</p>
+      <p className="text-meta text-muted-foreground">
+        {props.workspace === "" ? "" : `Its workspace: ${props.workspace}. `}
+        {NEW_REPO_STARTS}
+      </p>
     </section>
   );
 }

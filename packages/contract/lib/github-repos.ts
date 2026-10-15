@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { GitHubRepoName } from "./github-repo-name.ts";
 import { SetupPaper } from "./matt-setup.ts";
-import { CONTEXT_LINE_MAX_CHARACTERS, WorkspaceSummary } from "./workspace.ts";
+import {
+  CONTEXT_LINE_MAX_CHARACTERS,
+  WORKSPACE_NAME_MAX_LENGTH,
+  WorkspaceSummary,
+} from "./workspace.ts";
 
 // In a file of their own, so only New workspace, which loads with its page, carries them: the
 // first load has a budget.
@@ -34,8 +38,8 @@ export type GitHubRepoList = z.infer<typeof GitHubRepoList>;
 export const NewRepoOffer = z.object({ account: z.string(), paper: z.boolean() });
 export type NewRepoOffer = z.infer<typeof NewRepoOffer>;
 
-/** The longest repo name GitHub takes. */
-export const REPO_NAME_MAX_LENGTH = 100;
+/** The longest new repo name: a workspace's longest, since its workspace is named from it. */
+export const REPO_NAME_MAX_LENGTH = WORKSPACE_NAME_MAX_LENGTH;
 
 /** A new repo's name as GitHub takes one: letters, digits, `.`, `-` and `_`, never `.` or `..`. */
 export const NewRepoName = z
@@ -78,12 +82,12 @@ const SMALL_WORDS = new Set(
 );
 
 /**
- * A repo's name from what was said it's for (#391), for the owner to change: its first few words
- * that carry meaning, in lower case, joined by dashes ("Track servicing for both bikes: parts" →
- * "servicing-bikes-parts").
+ * A repo's name from what was said it's for (#391), for the owner to change: the words of its
+ * first part (up to a colon, comma or full stop) that carry meaning, three at most, in lower case,
+ * joined by dashes ("Track servicing for both bikes: parts…" → "servicing-bikes").
  */
 export const repoNameFrom = (words: string) =>
-  words
+  (words.split(/[:,.;]/)[0] ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)

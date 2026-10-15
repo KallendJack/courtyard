@@ -574,11 +574,19 @@ export const createWorker = (options: {
     // Its workspace's name is known to be free before anything is made on GitHub.
     const free = await checkNewName(contextDir, name);
     if (!free.ok) return contextError(c, free.error);
+    const files = await mattSetup.filesForNew({ name, intro });
+    if (!files.ok) {
+      return apiError(c, {
+        status: 409,
+        error:
+          "Matt Pocock's skills aren't on this worker yet, so a new repo can't start on the house standard. Try again once they've loaded.",
+      });
+    }
     const made = await repos.create({
       name: body.value.name,
       description: intro,
       private: body.value.private,
-      files: await mattSetup.filesForNew({ name, intro }),
+      files: files.value,
     });
     if (!made.ok) return repoProblem(c, made.error);
     const started = await mattSetup.startNew({ fullName: made.value.fullName, name, intro });

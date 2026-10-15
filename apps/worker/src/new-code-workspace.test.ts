@@ -389,6 +389,43 @@ describe("New repo (#391)", () => {
     expect(github.repoMade("octo-owner/bike-servicing")).toMatchObject({ private: false });
   });
 
+  it("refuses a name whose folder is in the data folder already, leaving it as it is", async () => {
+    const { github, request } = await owner();
+    const folder = join(root, "data", "repos", "octo-owner", "bike-servicing");
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "work.txt"), "Not pushed yet\n");
+
+    const response = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(response.status).toBe(409);
+    expect(await readFile(join(folder, "work.txt"), "utf8")).toBe("Not pushed yet\n");
+    expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();
+  });
+
+  it("refuses a new repo while Matt's skills aren't on the worker, making nothing", async () => {
+    const github = createFakeGitHub({ makesReposIn: join(root, "github") });
+    const request = await asOwner(testWorker({ root, github: github.api }));
+    await signIn(request, github);
+
+    const response = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toMatch(/Matt Pocock's skills/);
+    expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();
+  });
+
+  it("refuses a repo name longer than a workspace's", async () => {
+    const { github, request } = await owner();
+
+    const response = await postJson(request, "/api/github/repos/new", {
+      ...BIKES,
+      name: "b".repeat(61),
+    });
+
+    expect(response.status).toBe(400);
+    expect(github.repoMade(`octo-owner/${"b".repeat(61)}`)).toBeUndefined();
+  });
+
   it("refuses a name the owner has a repo by already, and one a workspace has, making nothing", async () => {
     const { github, request } = await owner();
     await mkdir(join(root, "context", "bike-servicing"), { recursive: true });
@@ -402,7 +439,7 @@ describe("New repo (#391)", () => {
 
     expect(taken.status).toBe(409);
     expect(await errorOf(taken)).toBe(
-      "There's a repo called side-project on your account already.",
+      "There's a repo called side-project on your account, or on this machine, already.",
     );
     expect(workspace.status).toBe(409);
     expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();

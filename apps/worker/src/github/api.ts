@@ -384,7 +384,11 @@ const PullFiles = z.array(
     patch: z.string().optional(),
   }),
 );
-const Refusal = z.object({ message: z.string() });
+/** Why GitHub refused, and, for something it wouldn't make, each thing it says was wrong. */
+const Refusal = z.object({
+  message: z.string(),
+  errors: z.array(z.looseObject({ message: z.string().optional() })).optional(),
+});
 const Labels = z.array(z.object({ name: z.string() }));
 /** A repository's issues: a pull request is listed among them too, with `pull_request`. */
 const Issues = z.array(
@@ -415,10 +419,8 @@ const MadeRepo = z.object({
   clone_url: z.url({ protocol: /^https$/ }),
 });
 /** A pull request just opened, or an issue just filed. */
-const Opened = z.object({
-  number: z.number().int().positive(),
-  html_url: z.url({ protocol: /^https$/ }),
-});
+const Numbered = z.object({ number: z.number().int().positive() });
+const Opened = Numbered.extend({ html_url: z.url({ protocol: /^https$/ }) });
 
 /** GitHub's file statuses as Courtyard shows them: a copied file is added, say. */
 const statusOf = (status: string): FoundFile["status"] => {
@@ -579,6 +581,36 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       return blockers.filter((blocker) => blocker.state === "open").map(({ title }) => title);
     } catch {
       return [];
+    }
+  };
+
+  /**
+   * Makes something on GitHub (an issue, a milestone, a repo): what it answers, read with
+   * `schema`, or GitHub's reason in its own words when it won't, with each thing it says was wrong
+   * (`fallback` when it gives none, or can't be reached).
+   */
+  const apiMake = async <T>(
+    token: string,
+    path: string,
+    making: { body: Record<string, unknown>; schema: z.ZodType<T>; fallback: string },
+  ): Promise<Result<T, string>> => {
+    try {
+      const response = await apiRequest(token, path, { method: "POST", body: making.body });
+      const answer: unknown = await response.json().catch(() => undefined);
+      if (!response.ok) {
+        const refused = Refusal.safeParse(answer);
+        if (!refused.success) return err(making.fallback);
+        const why = (refused.data.errors ?? []).flatMap((each) =>
+          each.message === undefined ? [] : [each.message],
+        );
+        return err(
+          `GitHub said: ${refused.data.message}${why.length === 0 ? "" : ` (${why.join("; ")})`}`,
+        );
+      }
+      const made = making.schema.safeParse(answer);
+      return made.success ? ok(made.data) : err(making.fallback);
+    } catch {
+      return err(making.fallback);
     }
   };
 
@@ -1137,85 +1169,53 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     },
 
     createRepo: async (accessToken, repo) => {
-      const fallback = `GitHub couldn't make ${repo.name}.`;
-      try {
-        const response = await apiRequest(accessToken, "/user/repos", {
-          method: "POST",
-          body: {
-            name: repo.name,
-            description: repo.description,
-            private: repo.private,
-            has_issues: true,
-            auto_init: false,
-          },
-        });
-        const answer: unknown = await response.json().catch(() => undefined);
-        if (!response.ok) {
-          const refused = Refusal.safeParse(answer);
-          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
-        }
-        const made = MadeRepo.safeParse(answer);
-        return made.success
-          ? ok({
-              fullName: made.data.full_name,
-              description: made.data.description ?? null,
-              private: made.data.private,
-              cloneUrl: made.data.clone_url,
-              pushedAt: null,
-            })
-          : err(fallback);
-      } catch {
-        return err(fallback);
-      }
+      const made = await apiMake(accessToken, "/user/repos", {
+        body: {
+          name: repo.name,
+          description: repo.description,
+          private: repo.private,
+          has_issues: true,
+          auto_init: false,
+        },
+        schema: MadeRepo,
+        fallback: `GitHub couldn't make ${repo.name}.`,
+      });
+      return made.ok
+        ? ok({
+            fullName: made.value.full_name,
+            description: made.value.description ?? null,
+            private: made.value.private,
+            cloneUrl: made.value.clone_url,
+            pushedAt: null,
+          })
+        : made;
     },
 
     createMilestone: async (accessToken, milestone) => {
       const repo = RepoName.safeParse(milestone.repo);
       if (!repo.success) return err("That isn't a repository on GitHub.");
-      const fallback = `GitHub couldn't make the milestone ${milestone.title}.`;
-      try {
-        const response = await apiRequest(accessToken, `/repos/${repo.data}/milestones`, {
-          method: "POST",
-          body: { title: milestone.title, description: milestone.description },
-        });
-        const answer: unknown = await response.json().catch(() => undefined);
-        if (!response.ok) {
-          const refused = Refusal.safeParse(answer);
-          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
-        }
-        const made = z.object({ number: z.number().int().positive() }).safeParse(answer);
-        return made.success ? ok(made.data.number) : err(fallback);
-      } catch {
-        return err(fallback);
-      }
+      const made = await apiMake(accessToken, `/repos/${repo.data}/milestones`, {
+        body: { title: milestone.title, description: milestone.description },
+        schema: Numbered,
+        fallback: `GitHub couldn't make the milestone ${milestone.title}.`,
+      });
+      return made.ok ? ok(made.value.number) : made;
     },
 
     createIssue: async (accessToken, issue) => {
       const repo = RepoName.safeParse(issue.repo);
       if (!repo.success) return err("That isn't a repository on GitHub.");
-      const fallback = "GitHub couldn't file the issue.";
-      try {
-        const response = await apiRequest(accessToken, `/repos/${repo.data}/issues`, {
-          method: "POST",
-          body: {
-            title: issue.title,
-            body: issue.body,
-            labels: issue.labels,
-            ...(issue.milestone === null ? {} : { milestone: issue.milestone }),
-          },
-        });
-        const answer: unknown = await response.json().catch(() => undefined);
-        if (!response.ok) {
-          const refused = Refusal.safeParse(answer);
-          return err(refused.success ? `GitHub said: ${refused.data.message}` : fallback);
-        }
-        const filed = Opened.safeParse(answer);
-        return filed.success
-          ? ok({ number: filed.data.number, url: filed.data.html_url })
-          : err(fallback);
-      } catch {
-        return err(fallback);
-      }
+      const filed = await apiMake(accessToken, `/repos/${repo.data}/issues`, {
+        body: {
+          title: issue.title,
+          body: issue.body,
+          labels: issue.labels,
+          ...(issue.milestone === null ? {} : { milestone: issue.milestone }),
+        },
+        schema: Opened,
+        fallback: "GitHub couldn't file the issue.",
+      });
+      return filed.ok ? ok({ number: filed.value.number, url: filed.value.html_url }) : filed;
     },
   };
 };

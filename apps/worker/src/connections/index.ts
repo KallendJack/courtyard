@@ -82,10 +82,10 @@ export const createConnections = (options: {
    * workspace names; or why there's none.
    */
   const paperCommandFor = async (
-    workspace: Workspace,
+    workspace: Workspace | undefined,
   ): Promise<Result<string, ConnectionsProblem>> => {
     const command =
-      workspace.paper?.command ?? options.paperCommand ?? (await paperCommandInUse(contextDir));
+      workspace?.paper?.command ?? options.paperCommand ?? (await paperCommandInUse(contextDir));
     return command === undefined ? err({ kind: "no-paper-command" }) : ok(command);
   };
 
@@ -111,8 +111,7 @@ export const createConnections = (options: {
     },
 
     /** Whether Courtyard knows where Paper is, so it can make a new workspace a file (#391). */
-    canMakeNewPaper: async (): Promise<boolean> =>
-      (options.paperCommand ?? (await paperCommandInUse(contextDir))) !== undefined,
+    canMakeNewPaper: async (): Promise<boolean> => (await paperCommandFor(undefined)).ok,
 
     /** The owner's Paper files, for the Connections sheet to pick from. */
     paperFiles: async (

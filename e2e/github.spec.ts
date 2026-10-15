@@ -1034,7 +1034,7 @@ for (const [device, viewport] of [
           .getByRole("textbox", { name: "What's it for?" })
           .fill("Track servicing for both bikes: parts, intervals and shop visits");
         const name = page.getByRole("textbox", { name: "Repo name" });
-        await expect(name).toHaveValue("servicing-bikes-parts");
+        await expect(name).toHaveValue("servicing-bikes");
         await name.fill("bike-servicing");
         const card = page.getByRole("region", { name: "New repo" });
         await expect(card.getByRole("button", { name: "Private" })).toHaveAttribute(

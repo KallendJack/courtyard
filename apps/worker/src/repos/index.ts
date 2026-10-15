@@ -191,6 +191,10 @@ export const createRepos = (options: {
         if (known.value.some((each) => keyOf(each.fullName) === keyOf(fullName))) {
           return err({ kind: "taken", repo: repo.name });
         }
+        // A folder by that name here is a repo's already, perhaps with work not pushed: never
+        // started over.
+        const there = await isFolder(folderOf(fullName));
+        if (!there.ok || there.value) return err({ kind: "taken", repo: repo.name });
         const made = await github.createRepo({
           name: repo.name,
           description: repo.description,
@@ -198,8 +202,7 @@ export const createRepos = (options: {
         });
         if (!made.ok) {
           // One the GitHub App doesn't reach can still have the name.
-          return made.error.kind === "github" &&
-            /already exists|creation failed/i.test(made.error.message)
+          return made.error.kind === "github" && /already exists/i.test(made.error.message)
             ? err({ kind: "taken", repo: repo.name })
             : made;
         }
