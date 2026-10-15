@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { z } from "zod";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS } from "./long-session.ts";
 import { fromTheEnd, pageScroll, pageScrollsSideways, scrollPageTo } from "./page-scroll.ts";
@@ -49,6 +49,21 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
 
 /** On the cover screen's frame, a phone's or a narrow window's (#197), the box opens with Type. */
 const typeIn = (page: Page) => page.getByRole("button", { name: "Type" }).click();
+
+const Busy = z.object({ busy: z.boolean() });
+
+/**
+ * Until the long session has no turn running. The test before can leave its answer still
+ * streaming, and a message sent mid-answer goes into that answer (#252) rather than a turn of its
+ * own (#458).
+ */
+const untilIdle = (request: APIRequestContext) =>
+  expect
+    .poll(async () => {
+      const session = await request.get(`/api/sessions/${LONG_SESSION_ID}`);
+      return Busy.parse(await session.json()).busy;
+    })
+    .toBe(false);
 
 test.describe("on the cover screen", () => {
   test.use({ viewport: COVER_SCREEN });
@@ -168,7 +183,8 @@ test.describe("at the end of a long session", () => {
 
   // Reading back while it answers, and Jump to latest, are in chat-flow.spec.ts (#168).
 
-  test("scrolls a failed turn's reason into view", async ({ page }) => {
+  test("scrolls a failed turn's reason into view", async ({ page, request }) => {
+    await untilIdle(request);
     await page.goto(LONG_SESSION);
     await typeIn(page);
     await page.getByLabel("Message", { exact: true }).fill("please fail");
