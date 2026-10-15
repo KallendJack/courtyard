@@ -57,7 +57,7 @@ seedLongSession(READING_SESSION_ID, "A long read");
   const at = new Date().toISOString();
   const session = SessionSummary.omit({ busy: true }).parse({
     id: CUT_OFF_SESSION_ID,
-    workspaceId: "office",
+    workspaceId: "reading-list",
     title: CUT_OFF_SESSION_TITLE,
     createdAt: at,
     updatedAt: at,
@@ -65,9 +65,9 @@ seedLongSession(READING_SESSION_ID, "A long read");
   writeFileSync(join(folder, "session.json"), JSON.stringify(session));
   const model = { provider: "fake", model: "echo" };
   const events = [
-    { seq: 1, at, type: "owner-message", text: "Sort the notes into this week and later", model },
-    { seq: 2, at, type: "text-delta", text: "I'll read the notes first." },
-    { seq: 3, at, type: "activity", activity: { kind: "read-file", path: "notes.md" } },
+    { seq: 1, at, type: "owner-message", text: "Sort the list into this month and later", model },
+    { seq: 2, at, type: "text-delta", text: "I'll read the list first." },
+    { seq: 3, at, type: "activity", activity: { kind: "read-file", path: "CONTEXT.md" } },
   ];
   const lines = events.map((event) => JSON.stringify(SessionEvent.parse(event)));
   writeFileSync(join(folder, "events.jsonl"), `${lines.join("\n")}\n`);

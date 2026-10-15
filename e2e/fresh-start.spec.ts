@@ -24,8 +24,8 @@ test("a fresh start from Settings clears every workspace, once the words are typ
   await page.getByRole("link", { name: "Fresh start…" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Fresh start" })).toBeVisible();
-  // The fixtures' long sessions.
-  await expect(page.getByText("Every session (2)")).toBeVisible();
+  // The fixtures' long sessions, and the one a restart cut off (#186).
+  await expect(page.getByText("Every session (3)")).toBeVisible();
   const startFresh = page.getByRole("button", { name: "Start fresh" });
   const words = page.getByLabel("Type “start fresh” to confirm");
   await expect(startFresh).toBeDisabled();

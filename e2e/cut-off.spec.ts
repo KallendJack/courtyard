@@ -13,15 +13,15 @@ const shot = async (page: Page, name: string) => {
   if (folder !== undefined) await page.screenshot({ path: join(folder, `${name}.png`) });
 };
 
-const SESSION = `/workspaces/office/sessions/${CUT_OFF_SESSION_ID}`;
+const SESSION = `/workspaces/reading-list/sessions/${CUT_OFF_SESSION_ID}`;
 
 test("a cut-off turn says when and what it was doing, and Continue carries it on", async ({
   page,
 }) => {
   // Its workspace's Next up offers it to pick up again.
   await page.setViewportSize({ width: 950, height: 712 });
-  await page.goto("/workspaces/office");
-  await expect(page.getByRole("link", { name: /^Pick up: Sort the notes/ })).toContainText(
+  await page.goto("/workspaces/reading-list");
+  await expect(page.getByRole("link", { name: /^Pick up: Sort the reading list/ })).toContainText(
     "Cut off ·",
   );
 
@@ -29,7 +29,7 @@ test("a cut-off turn says when and what it was doing, and Continue carries it on
   const card = page.getByRole("region", { name: "Cut off" });
   await expect(card).toContainText(/^Cut off · Courtyard restarted at \d{1,2}:\d\d/);
   await expect(card).toContainText(
-    "It stopped while reading notes.md. Continue picks up from there and checks what already happened.",
+    "It stopped while reading CONTEXT.md. Continue picks up from there and checks what already happened.",
   );
   await shot(page, "tablet-session-cut-off");
 
@@ -58,21 +58,18 @@ test("a cut-off turn says when and what it was doing, and Continue carries it on
   );
   // The cut-off turn is no longer the last: it says so, and offers nothing.
   await expect(card.getByRole("button")).toHaveCount(0);
-  await expect(page.getByText("Sort the notes into this week and later")).toBeVisible();
+  await expect(page.getByText("Sort the list into this month and later")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: CUT_OFF_SESSION_TITLE })).toBeVisible();
 });
 
 test("Needs you offers Continue for a session a restart cut off", async ({ page }) => {
   const id = "7c2e9a10-4b3d-4e8f-a1c5-9d0b6e2f3a47";
   const at = new Date(Date.now() - 5 * 60_000).toISOString();
-  // Toolshed's sessions as the worker gives them, with one cut off.
-  await page.route("**/api/workspaces/toolshed/sessions", async (route) => {
-    const response = await route.fetch();
-    const list = (await response.json()) as { sessions: unknown[] };
-    await route.fulfill({
-      response,
+  // Toolshed's sessions as the worker gives them: one, cut off.
+  await page.route("**/api/workspaces/toolshed/sessions", (route) =>
+    route.fulfill({
       json: {
-        ...list,
+        running: 0,
         sessions: [
           {
             id,
@@ -85,11 +82,10 @@ test("Needs you offers Continue for a session a restart cut off", async ({ page 
             waiting: "cut-off",
             queued: false,
           },
-          ...list.sessions,
         ],
       },
-    });
-  });
+    }),
+  );
   let continued: unknown;
   await page.route(`**/api/sessions/${id}/continue`, async (route) => {
     continued = route.request().postDataJSON();
