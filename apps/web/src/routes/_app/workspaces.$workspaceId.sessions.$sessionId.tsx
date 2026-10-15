@@ -133,6 +133,7 @@ function Session(props: {
     },
     [session.id],
   );
+  const draftTaken = useCallback(() => setDraft(undefined), []);
   /** Its pull request was merged or closed, so it takes no more messages (#172). */
   const ended =
     pullRequest !== undefined && pullRequest.state !== "open" ? pullRequest.state : undefined;
@@ -493,7 +494,7 @@ function Session(props: {
         disabled={problem !== undefined || session.workspaceArchived || ended !== undefined}
         {...(running ? { stop } : {})}
         steers={steers}
-        {...(draft === undefined ? {} : { draft })}
+        {...(draft === undefined ? {} : { draft, onDrafted: draftTaken })}
         placeholder={
           running
             ? steers

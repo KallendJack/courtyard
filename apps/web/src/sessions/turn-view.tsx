@@ -306,10 +306,6 @@ function TurnNote(props: { children: ReactNode }) {
   return <p className="border-l-2 pl-3 text-sm text-muted-foreground">{props.children}</p>;
 }
 
-/**
- * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
- * and PDFs as chips that open in a new tab (#78).
- */
 /** How the owner's words look in the conversation: their own bubble, on the right. */
 const OWNER_BUBBLE =
   "ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground";
@@ -317,14 +313,15 @@ const OWNER_BUBBLE =
 /**
  * A message the owner added while it answered (#252), where they sent it, the answer carrying on
  * below it, with one muted line: added while answering; going in after the approval waiting
- * now; or, once the turn ended before the model read it, not read.
+ * now; or, once the turn ended before the model read it, not read, and going next unless the
+ * owner stopped it.
  */
 function AddedMessage(props: { added: Extract<AnswerPart, { kind: "added" }>; turn: Turn }) {
   const { added, turn } = props;
   const note = added.unread
     ? turn.state.kind === "stopped"
       ? "Not read: stopped first"
-      : "Not read"
+      : "Not read: goes next"
     : added.afterApproval && turn.state.kind === "running" && turn.approval !== undefined
       ? "Goes in after your OK"
       : "Added while answering";
@@ -340,6 +337,10 @@ function AddedMessage(props: { added: Extract<AnswerPart, { kind: "added" }>; tu
   );
 }
 
+/**
+ * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
+ * and PDFs as chips that open in a new tab (#78).
+ */
 function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
   const { sessionId, turn } = props;
   const [viewing, setViewing] = useState<number>();

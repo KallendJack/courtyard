@@ -898,11 +898,13 @@ Where the rest fits:
   a message sent while a turn runs (words only, on the turn's own model, starting no skill) is recorded as
   `message-added` where it was sent, marked `afterApproval` when an approval waits, and put in the turn's inbox
   (`sessions/added.ts`), which the provider takes from through `TurnInput.added` (`AddedMessages`: `next`,
-  `waiting`, `read`, `done`). Claude's adapter keeps Claude Code's input open for the turn and sends each one with
-  `priority: "next"`, so Claude Code folds it in at Claude's next step; it says one was read when Claude's next
-  message starts, and is done once a `result` says nothing more is queued (`queued_turn_count`). The fake notes
-  each ("noted: …"), and "wait for more" waits for one. Once the provider is done, or the turn ends or is stopped,
-  the inbox takes no more: a later message is queued, and each the model never read is marked `added-not-read`.
+  `waiting`, `read`, `done`). A message's place in the inbox is reserved before it's recorded, and `done` waits
+  for any reserved, so one sent as the answer finishes still goes in. Claude's adapter keeps Claude Code's input
+  open for the turn and sends each one with `priority: "next"`, so Claude Code folds it in at Claude's next step;
+  it says one was read when Claude's next message starts, and is done once a `result` says nothing more is queued
+  (`queued_turn_count`). The fake notes each ("noted: …"), and "wait for more" waits for one. Once the provider is
+  done, or the turn ends or is stopped, the inbox takes no more: a later message is queued. Each the model never
+  read is marked `added-not-read` before the turn's end, and, unless the owner stopped it, queued to go next.
   `prompts/` tells the next turn's model each where it was sent, and a provider that steers is told once that the
   owner may add while it answers. Anything else sent mid-turn (attachments, another model, a skill) is queued.
 - **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,

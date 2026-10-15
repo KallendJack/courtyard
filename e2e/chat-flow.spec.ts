@@ -165,6 +165,15 @@ test.describe("messages sent while it answers, on a model that steers (#252)", (
       }
     }
   });
+
+  test("Stop still ends the answer", async ({ page }) => {
+    await startSession(page, "wait for more");
+    await expect(sessionOn(page).getByText("Working", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Stop" }).click();
+
+    await expect(sessionOn(page)).toContainText(/Your turn · stopped/);
+  });
 });
 
 /** The Fold's cover screen, folded, in CSS pixels. */

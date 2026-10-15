@@ -521,7 +521,7 @@ const KEY_SAYS: Says = {
  * Talking is `useTalk`'s, as the cover screen's strip has it; while it listens the Reply box
  * shows its ✕, ■ and ↑ (or Escape drops what was said).
  * While it listens it lights up and its tile shows sound bars; while an answer comes it goes
- * quiet, and what's said queues.
+ * quiet, and what's said goes into the answer (#252), or queues where the model can't take it.
  */
 export function TalkKey(props: {
   box: TalkTarget | undefined;

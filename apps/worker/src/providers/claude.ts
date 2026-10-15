@@ -101,11 +101,12 @@ export type ClaudeCode = {
  * Claude Code to fold in at Claude's next step (`priority: "next"`), told to `sent`, until the
  * turn takes no more.
  */
-async function* turnPrompt(
-  framing: TurnInput["framing"],
-  added: AddedMessages | null,
-  sent: (added: AddedMessage) => void,
-): AsyncIterable<SDKUserMessage> {
+async function* turnPrompt(turn: {
+  framing: TurnInput["framing"];
+  added: AddedMessages | null;
+  sent: (added: AddedMessage) => void;
+}): AsyncIterable<SDKUserMessage> {
+  const { framing, added, sent } = turn;
   const images = await Promise.all(
     photosOf(framing.attachments).map(async (photo) => {
       const bytes = await readBytes(photo.path);
@@ -1398,7 +1399,11 @@ export const createClaudeProvider = (
       const unread: AddedMessage[] = [];
       try {
         const messages = claudeCode.run({
-          prompt: turnPrompt(input.framing, input.added, (added) => unread.push(added)),
+          prompt: turnPrompt({
+            framing: input.framing,
+            added: input.added,
+            sent: (added) => unread.push(added),
+          }),
           options: {
             ...isolatedOptions(),
             ...(setup === undefined || code === null

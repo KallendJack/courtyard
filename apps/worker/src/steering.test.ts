@@ -142,13 +142,11 @@ describe("a message sent while it answers", () => {
     });
     gated.release();
 
-    expect(typesOf(events)).toEqual([
-      "owner-message",
-      "message-added",
-      "turn-stopped",
-      "added-not-read",
-    ]);
+    expect(typesOf(events)).toEqual(["owner-message", "message-added", "added-not-read"]);
     expect(events.at(-1)).toMatchObject({ type: "added-not-read", added: added?.seq });
+    expect(
+      typesOf(await followSession(request, { sessionId: session.id, until: "turn-stopped" })),
+    ).toContain("turn-stopped");
     // It never went as a turn of its own: the next turn is the owner's next message.
     await send(request, session.id, "Start again");
     const after = await followSession(request, { sessionId: session.id, until: "turn-completed" });
@@ -156,6 +154,87 @@ describe("a message sent while it answers", () => {
       "Take your time",
       "Start again",
     ]);
+  });
+
+  it("one the answer finished without reading still gets answered, next", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding: () => void = () => {};
+    const isHeld = new Promise<void>((resolve) => {
+      holding = resolve;
+    });
+    const fake = createFakeProvider({
+      delayMs: 0,
+      beforeReply: async () => {
+        holding();
+        await held;
+      },
+    });
+    // It takes added messages, but this turn ends without reading one.
+    const deaf: Provider = {
+      ...fake,
+      capabilities: { ...fake.capabilities, steers: true },
+      runTurn: (input) => fake.runTurn({ ...input, added: null }),
+    };
+    const request = await startWorker([deaf]);
+    const session = await startSession(request, "Take your time");
+    await isHeld;
+    await send(request, session.id, "Did you get this?");
+    await followSession(request, { sessionId: session.id, until: "message-added" });
+
+    release();
+    let completed = 0;
+    const events = await followSession(request, {
+      sessionId: session.id,
+      until: (event) => event.type === "turn-completed" && ++completed === 2,
+    });
+
+    expect(typesOf(events).filter((type) => type !== "session-titled")).toEqual([
+      "owner-message",
+      "message-added",
+      "added-not-read",
+      "turn-completed",
+      "message-queued",
+      "owner-message",
+      "turn-completed",
+    ]);
+    expect(answerOf(events)).toContain("You said: Did you get this?");
+  });
+
+  it("one the model never read is told to the next turn's model as not read", async () => {
+    const told: string[] = [];
+    const request = await startWorker([
+      createFakeProvider({
+        delayMs: 0,
+        framed: (framing) => told.push(framing.message),
+        // The first turn is held until it's stopped; the next answers at once.
+        beforeReply: (signal) =>
+          told.length > 1
+            ? Promise.resolve()
+            : new Promise<void>((resolve) => {
+                signal.addEventListener("abort", () => resolve(), { once: true });
+              }),
+      }),
+    ]);
+    const session = await startSession(request, "Take your time");
+    await followSession(request, { sessionId: session.id, until: "owner-message" });
+    await send(request, session.id, "Actually, the other one");
+    await followSession(request, { sessionId: session.id, until: "message-added" });
+    await postJson(request, `/api/sessions/${session.id}/stop`, { turn: 1 });
+    await followSession(request, { sessionId: session.id, until: "turn-stopped" });
+
+    await send(request, session.id, "Start again");
+    let completed = 0;
+    await followSession(request, {
+      sessionId: session.id,
+      until: (event) => event.type === "turn-completed" && ++completed === 1,
+    });
+
+    expect(told.at(-1)).toContain(
+      "Owner (while you answered, though the turn ended before you read it): Actually, the other one",
+    );
   });
 
   it("is in the conversation the next turn's model is told, where it was sent", async () => {

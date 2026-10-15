@@ -585,14 +585,14 @@ const scriptedPaper = async (paper: ToolConnection, message: string) => {
  * What the owner added while it answered (#252), each noted where it reads it: "noted: …", as a
  * model taking it on board would, and said to be read.
  */
-const noted = async (
-  added: AddedMessages,
-  taken: readonly AddedMessage[],
-  emit: TurnInput["emit"],
-) => {
-  for (const each of taken) {
-    added.read(each);
-    await emit(`noted: ${each.text}\n\n`);
+const noted = async (noting: {
+  added: AddedMessages;
+  taken: readonly AddedMessage[];
+  emit: TurnInput["emit"];
+}) => {
+  for (const each of noting.taken) {
+    noting.added.read(each);
+    await noting.emit(`noted: ${each.text}\n\n`);
   }
 };
 
@@ -730,7 +730,7 @@ export const createFakeProvider = (
       // "wait for more" waits for what the owner adds while it answers (#252).
       if (added !== null && /^wait for more$/im.test(last)) {
         const more = await added.next();
-        if (more !== undefined) await noted(added, [more], emit);
+        if (more !== undefined) await noted({ added, taken: [more], emit });
       }
       const saw = /please look/i.test(last) || last === "" ? seen(framing.attachments) : "";
       // A message of only attachments has nothing to echo (#164).
@@ -738,12 +738,12 @@ export const createFakeProvider = (
       for (const word of `${coded}${drew}${saw}${said}`.trimEnd().split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
-        if (added !== null) await noted(added, added.waiting(), emit);
+        if (added !== null) await noted({ added, taken: added.waiting(), emit });
         await emit(word);
       }
       // One added as it finishes is still answered, in this reply.
       if (added !== null) {
-        await noted(added, added.waiting(), emit);
+        await noted({ added, taken: added.waiting(), emit });
         added.done();
       }
       if (web !== undefined && web.sources.length > 0) await cite(web.sources);

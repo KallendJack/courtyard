@@ -1612,8 +1612,12 @@ export const createSessions = (options: {
     // it can't turn a completed or failed turn into a stopped one.
     const stopped = stopper.signal.aborted;
     session.turn = { kind: "ending" };
-    // What the owner added that its model never read, stopped first say, is marked so (#252).
+    // What the owner added that its model never read, stopped first say, is marked so (#252),
+    // before the turn's end.
     const unread = turn.added?.close() ?? [];
+    for (const added of unread) {
+      await append(turn.id, { type: "added-not-read", added: added.seq });
+    }
 
     // The session is idle and up to date before anyone hears the turn ended. Freeing it and
     // queueing the last event happen together, so a new message can't land between them.
@@ -1625,8 +1629,17 @@ export const createSessions = (options: {
         ? { type: "turn-failed", reason: failure }
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
-    for (const added of unread) {
-      await append(turn.id, { type: "added-not-read", added: added.seq });
+    // One the answer ended without reading still gets answered, next, unless the owner stopped.
+    for (const added of stopped ? [] : unread) {
+      await queueMessage({
+        id: turn.id,
+        message: {
+          text: added.text,
+          model: { provider: turn.provider.id, model: turn.model },
+          ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        },
+        attachments: [],
+      });
     }
     // Only once it's ended, so the next code session waiting starts after it.
     options.code.slots.release(turn.id);
@@ -1908,8 +1921,12 @@ export const createSessions = (options: {
     attachments: readonly PreparedAttachment[];
   }): Promise<Result<null, SessionError> | undefined> => {
     const { id, message } = steer;
-    const { turn } = runningSession(id);
-    if (turn.kind !== "running" || turn.added === undefined || !turn.added.open()) return undefined;
+    const session = runningSession(id);
+    const { turn } = session;
+    // Only once the turn's own message is recorded, so it's always added after it.
+    if (turn.kind !== "running" || turn.turn === undefined || turn.added === undefined) {
+      return undefined;
+    }
     if (steer.attachments.length > 0 || message.skill !== undefined) return undefined;
     if (
       turn.model.provider !== message.model.provider ||
@@ -1917,17 +1934,19 @@ export const createSessions = (options: {
     ) {
       return undefined;
     }
-    const events = await readEvents(id);
-    if (!events.ok) return events;
-    const afterApproval = turnNowIn(events.value).kind === "needs-you";
+    // Its place is kept before anything is awaited, so the answer can't finish without it.
+    if (!turn.added.reserve()) return undefined;
     const recorded = await append(id, {
       type: "message-added",
       text: message.text,
-      ...(afterApproval ? { afterApproval: true } : {}),
+      ...(session.approvals.size > 0 ? { afterApproval: true } : {}),
     });
-    if (!recorded.ok) return recorded;
+    if (!recorded.ok) {
+      turn.added.release();
+      return recorded;
+    }
     if (turn.added.add({ seq: recorded.value.seq, text: message.text })) return ok(null);
-    // The answer took no more meanwhile, so it's queued for the next turn instead.
+    // The turn ended meanwhile: it's marked not read, and queued for the next turn instead.
     await append(id, { type: "added-not-read", added: recorded.value.seq });
     return undefined;
   };

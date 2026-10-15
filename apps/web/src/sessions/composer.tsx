@@ -102,9 +102,10 @@ export const Composer = memo(function Composer(props: {
   steers?: boolean;
   /**
    * Words to put back in the box, after anything typed, such as a queued message taken back to
-   * edit (#252): each time `key` changes.
+   * edit (#252): once for each `key`, then `onDrafted` says they're in.
    */
   draft?: { readonly text: string; readonly key: number };
+  onDrafted?: () => void;
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
   submitLabel?: string;
@@ -299,14 +300,17 @@ export const Composer = memo(function Composer(props: {
   const hasSkills = skills !== undefined;
   const answering = props.stop !== undefined;
   const steers = answering && props.steers === true;
-  // Words taken back to edit go in the box, which opens to them (#252).
-  const draft = props.draft;
+  // Words taken back to edit go in the box, once each, and it opens to them (#252).
+  const { draft, onDrafted } = props;
+  const drafted = useRef<number>(undefined);
   useEffect(() => {
-    if (draft === undefined) return;
+    if (draft === undefined || drafted.current === draft.key) return;
+    drafted.current = draft.key;
     setText((typed) => (typed.trim() === "" ? draft.text : `${typed.trimEnd()}\n${draft.text}`));
     dock?.open();
     box.current?.focus();
-  }, [draft, dock]);
+    onDrafted?.();
+  }, [draft, dock, onDrafted]);
   useEffect(
     () =>
       dock?.offer({
