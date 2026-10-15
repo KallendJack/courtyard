@@ -41,6 +41,7 @@ const needsWords = (needs: readonly Need[], short: boolean) => {
   const of = (kind: Need["kind"]) => needs.filter((need) => need.kind === kind).length;
   return [
     [of("approval"), "to approve", "to approve"],
+    [of("cut-off"), "cut off", "cut off"],
     [of("failed"), "failing", "failing"],
     [of("reply"), "new reply", "new replies"],
     [of("merge"), short ? "to merge" : "PR to merge", short ? "to merge" : "PRs to merge"],
@@ -48,12 +49,20 @@ const needsWords = (needs: readonly Need[], short: boolean) => {
   ] as const;
 };
 
+/** How a tile names what a session waits on the owner for. */
+const NAMED: Readonly<Record<SessionNeed["kind"], string>> = {
+  approval: "Approve",
+  "cut-off": "Cut off",
+  reply: "New reply",
+};
+
 /**
  * The newest session waiting on the owner, by name (#345): "New reply · Brake pads", "Approve ·
- * Build #285", and "and 1 more" for everything else that waits.
+ * Build #285", "Cut off · Slim new-session screen" (#186), and "and 1 more" for everything else
+ * that waits.
  */
 const namedWords = (named: SessionNeed, needs: readonly Need[]) => {
-  const what = `${named.kind === "approval" ? "Approve" : "New reply"} · ${named.session.title}`;
+  const what = `${NAMED[named.kind]} · ${named.session.title}`;
   return needs.length > 1 ? `${what} and ${needs.length - 1} more` : what;
 };
 

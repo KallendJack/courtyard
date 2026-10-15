@@ -162,21 +162,21 @@ export const createNotifications = (options: {
     });
 
   /**
-   * Sends a notification of what a session needs to every device logged in that turned them on.
-   * A device whose subscription has gone, or that logged out, is forgotten.
+   * Sends a notification to every device logged in that turned them on, its title asked for once
+   * there's a device to send to. A device whose subscription has gone, or that logged out, is
+   * forgotten.
    */
-  const notice = async (session: SessionId, need: string) => {
+  const send = async (pushed: PushNotice | (() => Promise<PushNotice | undefined>)) => {
     // No device has them on: nothing to send, nor keys to make.
     const devices = await readDevices();
     if (!devices.ok || devices.value.length === 0) return;
-    const [own, loggedIn, title] = await Promise.all([
+    const [own, loggedIn, notice] = await Promise.all([
       ownKeys(),
       options.devicesLoggedIn(),
-      options.titleOf(session),
+      typeof pushed === "function" ? pushed() : pushed,
     ]);
-    if (!own.ok || !loggedIn.ok || title === undefined) return;
-    const pushed: PushNotice = { title, body: need, session };
-    const payload = JSON.stringify(pushed);
+    if (!own.ok || !loggedIn.ok || notice === undefined) return;
+    const payload = JSON.stringify(notice);
     const sending = devices.value.filter(({ device }) => loggedIn.value.has(device));
     const loggedOut = devices.value.filter(({ device }) => !loggedIn.value.has(device));
     const sent = await Promise.all(
@@ -201,6 +201,13 @@ export const createNotifications = (options: {
       ),
     );
   };
+
+  /** Sends a notification of what a session needs, with its title. */
+  const notice = (session: SessionId, need: string) =>
+    send(async () => {
+      const title = await options.titleOf(session);
+      return title === undefined ? undefined : { title, body: need, session };
+    });
 
   return {
     /** The worker's public key, made on its first run. */
@@ -238,6 +245,21 @@ export const createNotifications = (options: {
      * builder's pull request ready to merge (#347).
      */
     notice,
+
+    /**
+     * The one notification after a crash or a restart of the PC (#186): which sessions' turns it
+     * cut off, waiting for Continue. A tap opens the first; the rest wait in Needs you.
+     */
+    restarted: (cutOff: readonly { readonly id: SessionId; readonly title: string }[]) => {
+      const [first] = cutOff;
+      if (first === undefined) return Promise.resolve();
+      const turns = cutOff.length === 1 ? "1 turn" : `${cutOff.length} turns`;
+      return send({
+        title: `Courtyard restarted · ${turns} stopped`,
+        body: `${cutOff.map((session) => session.title).join(", ")}. Tap to continue ${cutOff.length === 1 ? "it" : "them"}.`,
+        session: first.id,
+      });
+    },
   };
 };
 

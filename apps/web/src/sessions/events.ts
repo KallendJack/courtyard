@@ -219,7 +219,7 @@ export type Turn = {
     | { readonly kind: "running" }
     | { readonly kind: "done"; readonly at: string }
     | { readonly kind: "stopped"; readonly at: string }
-    | { readonly kind: "failed"; readonly reason: FailureReason };
+    | { readonly kind: "failed"; readonly reason: FailureReason; readonly at: string };
 };
 
 type Log = {
@@ -504,7 +504,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     case "turn-failed":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, state: { kind: "failed", reason: event.reason } }),
+        change: (turn) => ({
+          ...turn,
+          state: { kind: "failed", reason: event.reason, at: event.at },
+        }),
       });
     case "context-saved":
       return withLastTurn(log, {

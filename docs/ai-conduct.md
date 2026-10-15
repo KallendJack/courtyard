@@ -136,7 +136,18 @@ conversation markers, then the new message. When the session has attachments, th
 
 - **Completed:** the answer as written.
 - **Stopped by the owner:** marked as stopped before it finished, with whatever was written.
-- **Failed or interrupted:** marked as failed, so a retry reads as a retry, not the owner repeating themselves.
+- **Failed:** marked as failed, so a retry reads as a retry, not the owner repeating themselves.
+- **Cut off by a restart (#186):** marked as cut off by Courtyard restarting, with whatever was written, then what
+  the turn did before it was cut off, one line each, in order (a file read or edited, a command run, a search, a tool
+  used), so Continue can carry it on.
+
+**Continue (#186).** After a restart cuts a turn off (an Update, a crash, the PC restarting), the owner's Continue,
+or the worker itself after Update now, sends a new turn on the cut-off turn's model, effort and skill. Its message,
+in the owner's place, is:
+
+> Courtyard restarted while you were working on your last turn and cut it off partway through. Carry on from where
+> you were. First check what already happened, since a command you ran may or may not have finished and a change may
+> or may not have been made, saved or pushed. Then finish what I asked, without doing again what's already done.
 
 ## Attachments
 

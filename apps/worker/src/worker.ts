@@ -5,6 +5,8 @@ import {
   type ContextBackup,
   type Health,
   type LiveStatus,
+  LiveUpdateRequest,
+  type LiveUpdateStarted,
   type MattSetup,
   MattSetupAnswer,
   NewWorkspace,
@@ -161,6 +163,12 @@ const WATCH_MAIN_EVERY_MS = 60_000;
  * as pull requests are followed, so a ready one is told soon after its checks pass.
  */
 const WATCH_LEADS_EVERY_MS = 30_000;
+
+/**
+ * How often a waiting Update looks again at main's build and the sessions mid-turn (#186), so it
+ * runs moments after the last of them is clear.
+ */
+const WATCH_UPDATE_EVERY_MS = 10_000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
@@ -327,6 +335,8 @@ export const createWorker = (options: {
       brief: (session) => lead.brief(session),
       tool: (session, input) => lead.tool(session, input),
     },
+    // While an Update waits, nothing new starts on its own (#186); the live copy is made below.
+    holding: () => live.holding(),
     // Next up is made below, from the sessions: it posts their claims on GitHub (#324).
     claims: {
       named: (workspaceId, text) => nextUp.named(workspaceId, text),
@@ -346,6 +356,8 @@ export const createWorker = (options: {
       const main = await workspaceMain.of(workspaceId);
       return main.ok && main.value.build?.kind === "failed";
     },
+    // While an Update waits, no builder starts (#186).
+    updating: () => live.holding(),
     notify: (session, need) => {
       background(
         notifications
@@ -360,6 +372,12 @@ export const createWorker = (options: {
     dataDir,
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
+    midTurn: sessions.midTurn,
+    released: () => {
+      sessions
+        .releaseHeld()
+        .catch((error: unknown) => console.error("Held messages couldn't be sent", error));
+    },
     // Main's build (#249), on the repository the live copy's remote is on GitHub.
     buildOf: async (find) => {
       const repo = liveCopy === null ? undefined : await code.onGitHub(liveCopy);
@@ -368,10 +386,22 @@ export const createWorker = (options: {
       return build.ok ? (build.value ?? null) : null;
     },
   });
-  // Queued messages a stopped worker left waiting go now (#177).
-  sessions
-    .resumeQueued()
-    .catch((error: unknown) => console.error("Queued messages couldn't be resumed", error));
+  // Every session is checked as the worker starts (#186): queued messages a stopped worker left
+  // waiting go now (#177), and turns it left running are cut off. After an Update the worker
+  // started itself, they continue by themselves; after a crash or a restart of the PC, they wait
+  // for the owner's Continue, with one notification.
+  background(
+    (async () => {
+      const byUpdate = await live.restartedByUpdate();
+      const cutOff = await sessions.recoverAll();
+      if (!byUpdate) return notifications.restarted(cutOff);
+      for (const session of cutOff) {
+        const continued = await sessions.continueLast(session.id);
+        if (!continued.ok)
+          console.error(`Session ${session.id} couldn't continue`, continued.error);
+      }
+    })().catch((error: unknown) => console.error("Sessions couldn't be checked", error)),
+  );
   const repeat = options.repeat ?? repeatForever;
   repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
   repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
@@ -380,6 +410,8 @@ export const createWorker = (options: {
   repeat(WATCH_MAIN_EVERY_MS, createRedMain({ contextDir, dataDir, code, github }).watch);
   // Each code workspace's Lead runs its build order (#347).
   repeat(WATCH_LEADS_EVERY_MS, lead.watch);
+  // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
+  repeat(WATCH_UPDATE_EVERY_MS, live.watch);
 
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
@@ -440,8 +472,10 @@ export const createWorker = (options: {
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));
   api.post("/live/update", async (c) => {
-    const started = await live.update();
-    if (started.ok) return c.body(null, 202);
+    const body = await readBody(c, LiveUpdateRequest);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const started = await live.update(body.value);
+    if (started.ok) return c.json(started.value satisfies LiveUpdateStarted, 202);
     switch (started.error.kind) {
       case "off":
         return apiError(c, { status: 404, error: "Updates from the app are off on this worker." });
@@ -450,6 +484,11 @@ export const createWorker = (options: {
       case "not-started":
         return apiError(c, { status: 500, error: started.error.message });
     }
+  });
+  // Cancel (#186): the Update waiting no longer waits.
+  api.delete("/live/update", async (c) => {
+    await live.cancel();
+    return c.body(null, 204);
   });
 
   api.get("/workspaces", async (c) => {

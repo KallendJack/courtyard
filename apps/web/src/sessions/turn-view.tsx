@@ -24,6 +24,7 @@ import { TurnEndMark, WorkingLine } from "@/components/working-line";
 import { classes } from "@/lib/classes";
 import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
+import { CutOffCard } from "./cut-off-card.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
 import type { Helper, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
@@ -395,6 +396,8 @@ export const TurnView = memo(function TurnView(props: {
   providers: ProviderList["providers"];
   onRetry?: (turn: Turn) => void;
   onCarryOn?: (turn: Turn) => Promise<string | undefined>;
+  /** Continue a turn a restart cut off (#186): an error to show, or nothing once it's on its way. */
+  onContinue?: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply to this turn (the latest only): whether it was sent. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
   /** The session's workspace, where its documents' and Things' notes open. */
@@ -411,7 +414,8 @@ export const TurnView = memo(function TurnView(props: {
     readonly remove: (queued: number) => Promise<string | undefined>;
   };
 }) {
-  const { sessionId, turn, providers, onRetry, onCarryOn, onReply, workspaceId, documents } = props;
+  const { sessionId, turn, providers, onRetry, onCarryOn, onContinue, onReply } = props;
+  const { workspaceId, documents } = props;
   const latest = props.latest === true;
   const { onStepByStep } = props;
   const done = turn.state.kind === "done";
@@ -570,23 +574,34 @@ export const TurnView = memo(function TurnView(props: {
           {...(onCarryOn ? { onCarryOn } : {})}
         />
       )}
-      {turn.state.kind === "failed" && turn.state.reason.kind !== "rate-limited" && (
-        <Notice
-          title="This turn didn't finish"
-          // A retry sends the turn's words again, so one of only attachments has none (#164).
-          {...(onRetry && turn.text !== ""
-            ? {
-                action: (
-                  <Button variant="outline" size="sm" onClick={() => onRetry(turn)}>
-                    Retry
-                  </Button>
-                ),
-              }
-            : {})}
-        >
-          {describeFailure(turn.state.reason)}
-        </Notice>
+      {turn.state.kind === "failed" && turn.state.reason.kind === "interrupted" && (
+        <CutOffCard
+          turn={turn}
+          at={turn.state.at}
+          {...(onContinue ? { onContinue } : {})}
+          // Start again sends the turn's words again, so one of only attachments has none (#164).
+          {...(onRetry && turn.text !== "" ? { onStartAgain: onRetry } : {})}
+        />
       )}
+      {turn.state.kind === "failed" &&
+        turn.state.reason.kind !== "rate-limited" &&
+        turn.state.reason.kind !== "interrupted" && (
+          <Notice
+            title="This turn didn't finish"
+            // A retry sends the turn's words again, so one of only attachments has none (#164).
+            {...(onRetry && turn.text !== ""
+              ? {
+                  action: (
+                    <Button variant="outline" size="sm" onClick={() => onRetry(turn)}>
+                      Retry
+                    </Button>
+                  ),
+                }
+              : {})}
+          >
+            {describeFailure(turn.state.reason)}
+          </Notice>
+        )}
     </div>
   );
 });

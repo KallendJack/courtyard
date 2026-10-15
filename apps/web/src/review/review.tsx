@@ -669,7 +669,8 @@ const whenSaid = (iso: string) => {
 /**
  * A merged or closed pull request, folded to one card (#278; Paper, "PR page: merged, folded"):
  * what happened, how much it changed, and what to do next: Update Courtyard when the worker is a
- * live copy that main has moved on from (quiet while main's build runs, gone if it failed, #249),
+ * live copy that main has moved on from (waiting for main's build when tapped while it runs, #186;
+ * gone if it failed, #249),
  * Start a new session, and Show the changes.
  */
 function Folded(props: {
@@ -681,7 +682,8 @@ function Folded(props: {
   const { review } = props;
   const merged = review.pullRequest.state === "merged";
   const navigate = useNavigate();
-  // Update follows main's build as the home page's does (#249): offered once it has passed.
+  // Update follows main's build as the home page's does (#249): tapped while it runs, it waits
+  // for it, and the home page says so (#186).
   const [live] = useLive(merged);
   const offer = updateOffer(live?.kind === "loaded" ? live.data : undefined);
   const update = useAction(async () => {
@@ -734,8 +736,6 @@ function Folded(props: {
         {offersUpdate && (
           <Button
             size="lg"
-            variant={offer === "ready" ? "primary" : "outline"}
-            disabled={offer !== "ready"}
             busy={update.busy}
             busyLabel="Updating…"
             onClick={() => void update.run()}

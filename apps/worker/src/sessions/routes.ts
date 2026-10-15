@@ -2,6 +2,7 @@ import {
   ApprovalAnswering,
   CarryOnRequest,
   type CodeSessionList,
+  ContinueRequest,
   type DocumentChanged,
   FirstMessage,
   GetToKnowRequest,
@@ -145,6 +146,11 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, {
         status: 409,
         error: "Only the session's last turn can carry on, once it has hit a usage limit.",
+      });
+    case "nothing-to-continue":
+      return apiError(c, {
+        status: 409,
+        error: "Only the session's last turn can continue, once a restart has cut it off.",
       });
     case "no-overflow":
       return apiError(c, { status: 409, error: noOverflow(error.overflow) });
@@ -462,6 +468,15 @@ export const sessionRoutes = (options: {
     if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to carry on" });
     const carried = await sessions.carryOn(c.req.param("id"), request.value);
     if (!carried.ok) return sessionError(c, carried.error);
+    return c.body(null, 202);
+  });
+
+  // Continue (#186): the last turn, cut off by a restart, carries on.
+  routes.post("/sessions/:id/continue", async (c) => {
+    const request = await readBody(c, ContinueRequest);
+    if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to continue" });
+    const continued = await sessions.continue(c.req.param("id"), request.value);
+    if (!continued.ok) return sessionError(c, continued.error);
     return c.body(null, 202);
   });
 

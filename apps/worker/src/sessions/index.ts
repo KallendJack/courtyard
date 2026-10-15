@@ -10,6 +10,7 @@ import {
   type CarryOnRequest,
   type ChangeId,
   type CodeSessionList,
+  type ContinueRequest,
   type Doing,
   type Effort,
   endsTurn,
@@ -91,6 +92,7 @@ import { readOwnerContext } from "../owner-context/index.ts";
 import { paperConnection } from "../paper/index.ts";
 import {
   bringUpToDateMessage,
+  CONTINUE_MESSAGE,
   checksFailedMessage,
   codeRefusalReason,
   DOCUMENT_TOOL_NAME,
@@ -181,6 +183,8 @@ export type SessionError =
   | { readonly kind: "skill-unavailable" }
   /** Carry on named a turn that isn't the last one, or didn't fail on a usage limit. */
   | { readonly kind: "nothing-to-carry-on" }
+  /** Continue named a turn that isn't the last one, or wasn't cut off by a restart (#186). */
+  | { readonly kind: "nothing-to-continue" }
   /** There's no other provider to carry on with right now, and why. */
   | {
       readonly kind: "no-overflow";
@@ -415,6 +419,22 @@ const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
 };
 
 /**
+ * The owner's message numbered `turn`, when it's the session's last and a restart cut its turn off
+ * (#186): the only turn Continue can take on. `undefined` otherwise.
+ */
+const cutOffTurn = (events: readonly SessionEvent[], turn: number) => {
+  const message = events.findLast((event) => event.type === "owner-message");
+  const ending = events.findLast(endsTurn);
+  return message?.type === "owner-message" &&
+    message.seq === turn &&
+    ending?.type === "turn-failed" &&
+    ending.seq > message.seq &&
+    ending.reason.kind === "interrupted"
+    ? message
+    : undefined;
+};
+
+/**
  * Whose turn it is in a session whose turn is running (#179), from its events: the owner's while
  * the turn waits on an approval they haven't answered; otherwise the model's, since the turn's
  * message, doing what its latest activity or text says, or waiting for a place among the code
@@ -516,6 +536,8 @@ type RunningSession = {
   answered: Answered;
   /** The event number the owner has seen it up to, on any device (#334), once read from its folder. */
   seen: number | undefined;
+  /** Its recovery found a turn a restart cut off, and recorded it (#186). */
+  cutOffByRestart: boolean;
 };
 
 /**
@@ -584,7 +606,13 @@ export const createSessions = (options: {
   lead?: LeadHooks;
   /** The claim on the issue a code session was started on (#324). */
   claims?: ClaimHooks;
+  /**
+   * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
+   * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
+   */
+  holding?: () => boolean;
 }) => {
+  const holding = () => options.holding?.() === true;
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
   /**
@@ -613,8 +641,9 @@ export const createSessions = (options: {
       queues: false,
       ended: Promise.resolve(),
       paperMade: new Set(),
-      answered: { answer: undefined, reporting: false },
+      answered: { answer: undefined, reporting: false, cutOff: false },
       seen: undefined,
+      cutOffByRestart: false,
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -708,7 +737,7 @@ export const createSessions = (options: {
    * Puts right what a stopped worker left behind, the first time this worker touches a session.
    * A crash mid-write leaves a last line with no newline: it's cut off. A turn the log shows as
    * still open belonged to the stopped worker (this one hasn't started any), so it's recorded as
-   * interrupted and the session is usable again.
+   * interrupted (cut off, #186) and the session is usable again.
    */
   const recover = async (id: SessionId, session: RunningSession) => {
     const read = await readTextFile(eventsPath(id));
@@ -744,7 +773,17 @@ export const createSessions = (options: {
       session,
       event: { type: "turn-failed", reason: { kind: "interrupted" } },
     });
-    if (!ended.ok) console.error(`Session ${id}: an interrupted turn couldn't be recorded`);
+    if (!ended.ok) {
+      console.error(`Session ${id}: an interrupted turn couldn't be recorded`);
+      return;
+    }
+    session.cutOffByRestart = true;
+    // It waits on the owner now (#186), so it's listed as just active. Written here, in the
+    // session's queue already, rather than through `updateFile`, which queues behind it.
+    const file = await readJsonFile(sessionFilePath(id), SessionFile);
+    if (file.ok && file.value !== undefined) {
+      await writeJsonFile(sessionFilePath(id), { ...file.value, updatedAt: ended.value.at });
+    }
   };
 
   /**
@@ -1591,6 +1630,11 @@ export const createSessions = (options: {
     merged?: { pullRequest: number };
     /** The owner's tap on Run the build order, starting a code workspace's Lead (#347). */
     runsBuildOrder?: boolean;
+    /**
+     * Continue (#186) the turn with this number, cut off by a restart: checked again once the
+     * session is this turn's, in case a newer one ran meanwhile.
+     */
+    continues?: { turn: number };
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -1612,6 +1656,13 @@ export const createSessions = (options: {
       }
     }
 
+    if (start.continues) {
+      const events = await readEvents(start.id);
+      if (!events.ok || cutOffTurn(events.value, start.continues.turn) === undefined) {
+        session.turn = { kind: "idle" };
+        return err(events.ok ? { kind: "nothing-to-continue" } : events.error);
+      }
+    }
     if (start.carryingOn) {
       const events = await readEvents(start.id);
       const stillLimited = events.ok && limitedTurn(events.value, start.carryingOn.turn);
@@ -1644,6 +1695,7 @@ export const createSessions = (options: {
       ...(start.fromQueue === undefined ? {} : { queued: start.fromQueue }),
       ...(start.merged === undefined ? {} : { merged: start.merged }),
       ...(start.runsBuildOrder === true ? { runsBuildOrder: true } : {}),
+      ...(start.continues === undefined ? {} : { continues: start.continues }),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the
@@ -1695,6 +1747,8 @@ export const createSessions = (options: {
   const sendNextQueued = async (id: SessionId): Promise<boolean> => {
     const since = freshStarts;
     for (;;) {
+      // While an Update waits, they hold (#186); they go once it has run, or is dropped.
+      if (holding()) return false;
       const session = running.get(id);
       if (session === undefined || !session.queues || session.turn.kind !== "idle") return false;
       const [events, file] = await Promise.all([
@@ -1920,6 +1974,7 @@ export const createSessions = (options: {
           queued,
           pullRequest,
           answer: session.answered.answer,
+          cutOff: session.answered.cutOff,
           seen: seen.value,
           clock: options.now(),
         }),
@@ -2124,6 +2179,8 @@ export const createSessions = (options: {
         }
         return;
       }
+      // While an Update waits, no fixing turn starts (#186): it's looked at again next time.
+      if (holding()) return;
       // A conflict first: its checks may not run again until it's brought up to date (#382).
       if (pullRequest.conflicts === true) {
         await bringUpToDateOnce({ id, workspaceId, repoPath, events: events.value, pullRequest });
@@ -2175,6 +2232,47 @@ export const createSessions = (options: {
       since: freshStarts,
       coding: true,
       conflicted: { pullRequest: pullRequest.number, head: pullRequest.head },
+    });
+  };
+
+  /**
+   * Continue (#186): the cut-off turn `turn`, or the session's last turn when left out, carries
+   * on, told so, on its model.
+   */
+  const continueTurn = async (
+    rawId: string,
+    asked: number | undefined,
+  ): Promise<Result<null, SessionError>> => {
+    const since = freshStarts;
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const { id, workspaceId } = found.value;
+    if (await isArchived(options.contextDir, workspaceId)) {
+      return err({ kind: "workspace-archived" });
+    }
+    await settled(id);
+    const events = await readEvents(id);
+    if (!events.ok) return events;
+    const turn = asked ?? events.value.findLast((event) => event.type === "owner-message")?.seq;
+    const cut = turn === undefined ? undefined : cutOffTurn(events.value, turn);
+    if (cut === undefined) return err({ kind: "nothing-to-continue" });
+    const message: NewMessage = {
+      text: CONTINUE_MESSAGE,
+      model: cut.model,
+      ...(cut.effort === undefined ? {} : { effort: cut.effort }),
+      ...(cut.skill === undefined ? {} : { skill: cut.skill }),
+    };
+    const provider = await providerIn(workspaceId, message);
+    if (!provider.ok) return provider;
+    return startTurn({
+      id,
+      workspaceId,
+      provider: provider.value.provider,
+      message,
+      since,
+      coding: found.value.branch !== undefined,
+      placeless: found.value.placeless === true,
+      continues: { turn: cut.seq },
     });
   };
 
@@ -2681,6 +2779,73 @@ export const createSessions = (options: {
       });
     },
 
+    /**
+     * Continue (#186): after a restart cut off the session's last turn, sends the worker's words
+     * telling its model so, to carry on from where it was and check what already happened, on the
+     * turn's model, effort and skill. The owner's tap, or the worker's after an Update now.
+     */
+    continue: (rawId: string, request: ContinueRequest) => continueTurn(rawId, request.turn),
+
+    /**
+     * Continue the session's last turn, cut off by an update the worker started itself (#186):
+     * after Update now, cut-off turns carry on by themselves.
+     */
+    continueLast: (id: SessionId) => continueTurn(id, undefined),
+
+    /**
+     * Checks every session as the worker starts (#186), not only once touched: a turn the stopped
+     * worker left running is recorded as cut off, and a queued message it left waiting goes (#177).
+     * Gives back the sessions whose turns were cut off, most recently active first.
+     */
+    recoverAll: async (): Promise<SessionSummary[]> => {
+      const folders = await listFolder(sessionsDir);
+      if (!folders.ok) return [];
+      const cutOff: SessionSummary[] = [];
+      for (const folder of folders.value) {
+        const id = SessionId.safeParse(folder);
+        if (!id.success) continue;
+        const session = runningSession(id.data);
+        await settled(id.data);
+        if (!session.cutOffByRestart) continue;
+        const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
+        if (file.ok && file.value !== undefined) cutOff.push(summaryOf(file.value));
+      }
+      return cutOff.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    /**
+     * The sessions with a turn running now, in any workspace (#186), each with whether it waits
+     * on the owner's OK.
+     */
+    midTurn: async (): Promise<
+      { readonly session: SessionSummary; readonly needsYou: boolean }[]
+    > => {
+      const found: { session: SessionSummary; needsYou: boolean }[] = [];
+      for (const [id, session] of running) {
+        if (session.turn.kind === "idle" || session.turn.kind === "deleting") continue;
+        const [file, now] = await Promise.all([
+          readJsonFile(sessionFilePath(id), SessionFile),
+          turnNowOf(id),
+        ]);
+        if (!file.ok || file.value === undefined) continue;
+        found.push({
+          session: summaryOf(file.value),
+          needsYou: now.ok && now.value.kind === "needs-you",
+        });
+      }
+      return found;
+    },
+
+    /**
+     * Once an Update no longer waits (#186), what held meanwhile goes: each session's next queued
+     * message. Pull requests are looked at again on their own.
+     */
+    releaseHeld: async () => {
+      for (const [id, session] of running) {
+        if (session.queues) await sendNextQueued(id);
+      }
+    },
+
     /** Stops the session's running turn. Whatever it wrote so far stays. */
     stop: async (rawId: string, request: StopRequest): Promise<Result<null, SessionError>> => {
       const session = await findSession(rawId);
@@ -2879,6 +3044,8 @@ export const createSessions = (options: {
       id: SessionId,
       merged: { pullRequest: number; text: string },
     ): Promise<Result<null, SessionError>> => {
+      // While an Update waits, the Lead is told later (#186): it asks again next time round.
+      if (holding()) return err({ kind: "busy" });
       const found = await findSession(id);
       if (!found.ok) return found;
       const events = await readEvents(id);

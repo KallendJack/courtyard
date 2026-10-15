@@ -26,7 +26,7 @@ import { removeQueued, sendMessage } from "../../sessions/messages.ts";
 import { useSeen } from "../../sessions/seen.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import type { Steps } from "../../sessions/steps.ts";
-import { carryOn, deleteSession, stopTurn } from "../../worker.ts";
+import { carryOn, continueTurn, deleteSession, stopTurn } from "../../worker.ts";
 import { renameSession } from "../../worker-calls.ts";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
@@ -199,6 +199,15 @@ function Session(props: {
     async (turn: Turn) => {
       const carried = await carryOn(session.id, turn.seq);
       return carried.kind === "loaded" ? undefined : describeProblem(carried).body;
+    },
+    [session.id],
+  );
+
+  // Continue (#186): the turn a restart cut off carries on, told so.
+  const continueFrom = useCallback(
+    async (turn: Turn) => {
+      const continued = await continueTurn(session.id, turn.seq);
+      return continued.kind === "loaded" ? undefined : describeProblem(continued).body;
     },
     [session.id],
   );
@@ -417,6 +426,7 @@ function Session(props: {
           providers={props.providers}
           onRetry={retry}
           onCarryOn={carryOnFrom}
+          onContinue={continueFrom}
           {...(session.workspaceArchived ? {} : { onReply: reply })}
           workspaceId={session.workspaceId}
           {...(props.documents === undefined ? {} : { documents: props.documents })}

@@ -66,6 +66,7 @@ const signedInWith = async (
     providers?: readonly Provider[];
     milestones?: Readonly<Record<string, string>>;
     sendPush?: FakePush["send"];
+    env?: Record<string, string>;
   } = {},
 ): Promise<{ github: FakeGitHub; request: Requester }> => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project" });
@@ -79,6 +80,7 @@ const signedInWith = async (
       github: github.api,
       providers: more.providers ?? [createFakeProvider({ delayMs: 0 })],
       ...(more.sendPush === undefined ? {} : { sendPush: more.sendPush }),
+      ...(more.env === undefined ? {} : { env: more.env }),
       repeat: (_everyMs, job) => {
         jobs.push(job);
       },
@@ -391,6 +393,34 @@ describe("watching its builders (#347)", () => {
     expect(lead.building.map((each) => each.issue)).toEqual([40]);
     expect(lead.why).toBe("main is red, so only its fix starts.");
     expect(await notesIn(request)).toContain("Holding back: main is red, so only its fix starts.");
+  });
+});
+
+describe("while Courtyard waits to update (#186)", () => {
+  it("starts no builder until the Update has run", async () => {
+    // Courtyard's live copy is this repository, a version behind main, whose build still runs.
+    const { github, request } = await signedInWith(ISSUES, { env: { COURTYARD_LIVE_COPY: repo } });
+    await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const newest = await gitIn(repo, "rev-parse", "HEAD");
+    await gitIn(repo, "reset", "--quiet", "--hard", "HEAD~1");
+    github.setCommitChecks(newest, [
+      {
+        id: 1,
+        name: "Checks",
+        outcome: "running",
+        url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
+        startedAt: "2026-10-12T09:00:00Z",
+        completedAt: null,
+      },
+    ]);
+    expect((await postJson(request, "/api/live/update", {})).status).toBe(202);
+
+    await run(request);
+
+    const lead = await leadOf(request);
+    expect(lead.building).toEqual([]);
+    expect(lead.why).toBe("Courtyard waits to update, so the next builder starts after it.");
   });
 });
 
