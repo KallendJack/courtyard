@@ -12,6 +12,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
+import { buildersAllowAllUntil } from "../allow-all/index.ts";
 import { readJsonFile, writeJsonFile } from "../files.ts";
 import type { NextUp } from "../next-up/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
@@ -69,6 +70,11 @@ const Kept = z.object({
   told: z.array(z.string()),
   /** The worker's latest notes in its chat, oldest first. */
   notes: z.array(z.string()),
+  /**
+   * Until when the builders it starts allow all (#428), when the owner ran the order with Allow
+   * all for builders: each allows all until its pull request opens, until then at most.
+   */
+  allowAllUntil: z.iso.datetime().optional(),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -121,6 +127,7 @@ export const createLead = (options: {
   updating?: () => boolean;
   /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
   notify: (session: SessionId, need: string) => void;
+  now: () => number;
 }) => {
   const { sessions, nextUp } = options;
   const keptPath = join(options.dataDir, FILE);
@@ -178,6 +185,12 @@ export const createLead = (options: {
     return { building, ready };
   };
 
+  /** Until when the builders the Lead starts now allow all (#428), while that's still ahead. */
+  const allowAllUntilOf = (kept: Kept | undefined) => {
+    const until = kept?.allowAllUntil;
+    return until !== undefined && Date.parse(until) > options.now() ? until : undefined;
+  };
+
   /** The next ready issues the Lead would start, leaving out what it builds and what's skipped. */
   const nextOf = (kept: Kept | undefined, issues: readonly NextUpIssue[]) =>
     issues.filter(
@@ -201,6 +214,7 @@ export const createLead = (options: {
       building,
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
+      ...(allowAllUntilOf(kept) === undefined ? {} : { buildersAllowedAll: allowAllUntilOf(kept) }),
     };
   };
 
@@ -285,7 +299,12 @@ export const createLead = (options: {
         }
         const model = await sessions.lastModelOf(kept.session);
         if (model === undefined) break;
-        const built = await nextUp.build(workspaceId, issue.number, { ...model, byLead: true });
+        const allowAllUntil = allowAllUntilOf(kept);
+        const built = await nextUp.build(workspaceId, issue.number, {
+          ...model,
+          byLead: true,
+          ...(allowAllUntil === undefined ? {} : { allowAllUntil }),
+        });
         if (!built.ok) {
           // Claimed by someone else meanwhile: the next one, then.
           if (built.error.kind === "claimed" || built.error.kind === "no-such-issue") continue;
@@ -419,7 +438,12 @@ export const createLead = (options: {
      * message, or wakes, and it looks at once.
      */
     run: (rawId: string, run: LeadRun) =>
-      changing(rawId, async (workspaceId, kept) => {
+      changing(rawId, async (workspaceId, was) => {
+        // Allow all for builders (#428), from this tap: on for the next 12 hours, or off.
+        const allowing = run.allowAll === true ? buildersAllowAllUntil(options.now()) : undefined;
+        const allowingFrom = ({ allowAllUntil: _, ...rest }: Kept): Kept =>
+          allowing === undefined ? rest : { ...rest, allowAllUntil: allowing };
+        const kept = was === undefined ? undefined : allowingFrom(was);
         const there = kept === undefined ? undefined : await sessions.get(kept.session);
         if (kept !== undefined && there?.ok === true) return ok(await runAgain(workspaceId, kept));
         const created = await sessions.create({
@@ -441,6 +465,7 @@ export const createLead = (options: {
           skipped: [],
           told: kept?.told ?? [],
           notes: [],
+          ...(allowing === undefined ? {} : { allowAllUntil: allowing }),
         };
         // Kept at once, so its first turn is told it's the Lead.
         const recorded = await keep(workspaceId, started);

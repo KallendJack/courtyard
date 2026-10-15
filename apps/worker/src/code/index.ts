@@ -14,6 +14,7 @@ import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
+  allowsAll,
   alwaysOffer,
   type CommandRule,
   type IssueGap,
@@ -150,6 +151,8 @@ export type CommandApproval = {
   readonly reason: "off-allowlist" | "reaches-out";
   /** What Allow always would allow (#185), when it may be offered: never for one reaching out. */
   readonly always?: AlwaysAllow;
+  /** Allow all for this task would cover it (#428): it runs without asking while that's on. */
+  readonly all?: true;
 };
 
 /**
@@ -183,6 +186,7 @@ export const commandAllowed = async (
       kind: "needs-approval",
       reason: "off-allowlist",
       ...(always === undefined ? {} : { always }),
+      ...(allowsAll(session.worktree, words.value) ? { all: true } : {}),
     });
   }
   if (reachesOut(session.worktree, rule, words.value)) {

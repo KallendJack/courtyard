@@ -1,5 +1,8 @@
 export { ApiError } from "./lib/api-error.ts";
 export {
+  ALLOW_ALL_MOST_HOURS,
+  AllowAllLasts,
+  AllowAllRequest,
   AllowedCommand,
   AllowedCommandRemoval,
   AllowedCommands,
@@ -124,6 +127,7 @@ export {
   QuickQuestions,
 } from "./lib/pull-request.ts";
 export {
+  AllowingAll,
   Capabilities,
   CarryOnRequest,
   ContinueRequest,

@@ -98,9 +98,11 @@ export type BuildIssue = z.infer<typeof BuildIssue>;
 
 /**
  * Run the build order (#347): the Lead starts, or wakes, on this model, and its builders start on
- * the model its own conversation last used.
+ * the model its own conversation last used. With Allow all for builders (#428), off unless the
+ * owner turns it on, each builder it starts for the next `ALLOW_ALL_MOST_HOURS` allows all until
+ * its pull request opens.
  */
-export const LeadRun = BuildIssue;
+export const LeadRun = BuildIssue.extend({ allowAll: z.boolean().optional() });
 export type LeadRun = z.infer<typeof LeadRun>;
 
 /** How many builders the Lead runs at once (#347): 2 unless the owner says, 1 to 3. */
@@ -133,5 +135,7 @@ export const LeadStatus = z.object({
   building: z.array(LeadBuilder),
   next: z.array(NextUpIssue),
   ready: z.array(LeadReady),
+  /** Until when the builders it starts allow all (#428), while that's still ahead. */
+  buildersAllowedAll: z.iso.datetime().optional(),
 });
 export type LeadStatus = z.infer<typeof LeadStatus>;

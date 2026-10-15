@@ -88,3 +88,18 @@ export type AllowedCommands = z.infer<typeof AllowedCommands>;
 /** Removing one of a code workspace's Allowed commands (#185), by what it allows. */
 export const AllowedCommandRemoval = z.object({ allows: AlwaysAllow });
 export type AllowedCommandRemoval = z.infer<typeof AllowedCommandRemoval>;
+
+/**
+ * How long Allow all for this task (#428) lasts, as the owner picks it: an hour, four, twelve, or
+ * until the task is done (the session opens its pull request, or ends), never more than
+ * `ALLOW_ALL_MOST_HOURS` even then.
+ */
+export const AllowAllLasts = z.enum(["1h", "4h", "12h", "task"]);
+export type AllowAllLasts = z.infer<typeof AllowAllLasts>;
+
+/** The longest Allow all for this task lasts (#428), whatever was picked. */
+export const ALLOW_ALL_MOST_HOURS = 12;
+
+/** Turning on Allow all for this task (#428), for one session: how long it lasts. */
+export const AllowAllRequest = z.object({ lasts: AllowAllLasts });
+export type AllowAllRequest = z.infer<typeof AllowAllRequest>;
