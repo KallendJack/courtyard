@@ -167,6 +167,8 @@ describe("what every turn tells a model", () => {
     );
     for (const line of [
       "gh issue create",
+      // Work is filed where the repository's own tracker is, GitHub issues when it says nothing (#323).
+      "where the repository's docs/agents/issue-tracker.md says its work lives",
       "the tdd skill",
       "diagnosing-bugs",
       "the narrowest check",

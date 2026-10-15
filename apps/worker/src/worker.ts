@@ -321,7 +321,6 @@ export const createWorker = (options: {
       live.forget();
     },
   });
-  const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github });
   const connections = createConnections({
     contextDir,
     contextFolder,
@@ -330,6 +329,7 @@ export const createWorker = (options: {
     paperFiles: options.paperFiles ?? createPaperFiles(),
     paperCommand,
   });
+  const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github, connections });
   const sessions = createSessions({
     dataDir,
     providers,
@@ -659,7 +659,7 @@ export const createWorker = (options: {
     if (!id.success) return contextError(c, { kind: "not-found" });
     const body = await readBody(c, MattSetupAnswer);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const answered = await mattSetup.answer(id.data, body.value.answer);
+    const answered = await mattSetup.answer(id.data, body.value);
     if (answered.ok) return c.json(answered.value satisfies MattSetup);
     return answered.error.kind === "not-found"
       ? apiError(c, {

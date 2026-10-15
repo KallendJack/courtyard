@@ -1,9 +1,10 @@
-import type {
-  CodeSessionList,
-  LeadMerge,
-  LeadStatus,
-  MattSetup,
-  OpenPullRequest,
+import {
+  type CodeSessionList,
+  type LeadMerge,
+  type LeadStatus,
+  type MattSetup,
+  type OpenPullRequest,
+  setupLines,
 } from "@courtyard/contract";
 import { describeWhen } from "../when.ts";
 
@@ -101,7 +102,9 @@ export const needsOf = (given: {
     return session === undefined ? { kind: "conflict", pull } : { kind: "conflict", pull, session };
   });
   const setup: Need[] =
-    given.setup.state === "offered" ? [{ kind: "setup", missing: given.setup.missing.length }] : [];
+    given.setup.state === "offered"
+      ? [{ kind: "setup", missing: setupLines(given.setup.card) }]
+      : [];
   return [...approvals, ...cutOff, ...failed, ...replies, ...merges, ...conflicts, ...setup];
 };
 
