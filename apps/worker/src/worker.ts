@@ -327,6 +327,12 @@ export const createWorker = (options: {
       brief: (session) => lead.brief(session),
       tool: (session, input) => lead.tool(session, input),
     },
+    // Next up is made below, from the sessions: it posts their claims on GitHub (#324).
+    claims: {
+      named: (workspaceId, text) => nextUp.named(workspaceId, text),
+      claim: (workspaceId, issue, claim) => nextUp.claim(workspaceId, issue, claim),
+      release: (workspaceId, issue, why) => nextUp.release(workspaceId, issue, why),
+    },
   });
   const nextUp = createNextUp({ contextDir, code, github, sessions, now });
   // A code workspace's main and its build, for its Home's Main row (#301, #249) and its Lead.

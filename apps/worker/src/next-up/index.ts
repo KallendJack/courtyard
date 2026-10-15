@@ -17,7 +17,8 @@ import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
  * A code workspace's Next up (#301): its repository's `ready-for-agent` issues nobody has claimed,
  * in milestone order, read through Courtyard's GitHub sign-in (#99) only when a page asks, and
  * kept a little while. Build (#298) starts a code session on the first, with the issue as its
- * first message, and claims the issue on GitHub as AGENTS.md says a builder does.
+ * first message, and claims the issue on GitHub as AGENTS.md says a builder does. Every session
+ * started on an issue has its claim posted and released here, as `sessions/` asks (#324).
  */
 
 /** The label an issue ready for a model to build carries (Matt Pocock's triage labels). */
@@ -62,11 +63,16 @@ const claimedIn = (comments: readonly string[]) => {
 };
 
 /**
- * The claim Build posts on the issue (AGENTS.md, claim rule): who, the session's branch, and why,
- * which is always that it's next in order, as Build is on Next up's first issue.
+ * The claim posted on an issue for a session (AGENTS.md, claim rule): who, the session's branch,
+ * and why: "next in order" for Build, which is on Next up's first issue, else "the owner asked".
  */
-const claimComment = (branch: string) =>
-  `Building this: Courtyard session (${branch}), next in order`;
+const claimComment = (branch: string, why: string) =>
+  `Building this: Courtyard session (${branch}), ${why}`;
+
+/** The issues a message names, as `#<number>`, each once. */
+const issuesNamedIn = (text: string) => [
+  ...new Set([...text.matchAll(/#(\d+)\b/g)].map((match) => Number(match[1]))),
+];
 
 /** Whether a pull request's title or description closes issue `number` when it merges. */
 const closes = (number: number, text: string) =>
@@ -127,7 +133,7 @@ export const createNextUp = (options: {
   contextDir: string;
   code: Pick<Code, "onGitHub">;
   github: Pick<GitHub, "openIssues" | "openPullRequestTexts" | "commentOnIssue">;
-  sessions: Pick<Sessions, "create" | "list">;
+  sessions: Pick<Sessions, "create">;
   now: () => number;
 }) => {
   const { code, github, sessions, now } = options;
@@ -210,8 +216,7 @@ export const createNextUp = (options: {
 
     /**
      * Build (#298): a new code session on `build.model` whose first message is the issue, once
-     * GitHub says nobody has claimed it meanwhile; then the claim on the issue, naming the
-     * session's branch. A claim GitHub refuses is only logged: the session is building it already.
+     * GitHub says nobody has claimed it meanwhile, started on the issue, so it's claimed for it.
      */
     build: async (
       rawId: string,
@@ -238,40 +243,52 @@ export const createNextUp = (options: {
           ...(build.effort === undefined ? {} : { effort: build.effort }),
         },
         title: titleFor("Build", issue),
+        issue: number,
         ...(build.byLead === true ? { lead: "builder" as const } : {}),
       });
-      if (!created.ok) return err({ kind: "session", error: created.error });
-      const listed = await sessions.list(workspaceId);
-      const branch = listed.ok
-        ? listed.value.find((session) => session.id === created.value.id)?.branch
-        : undefined;
-      if (branch !== undefined) {
-        const claimed = await github.commentOnIssue({
-          repo,
-          number,
-          body: claimComment(branch),
-        });
-        if (!claimed.ok) console.error(`#${number} couldn't be claimed on GitHub`, claimed.error);
-      }
-      kept.delete(repo);
-      return created;
+      return created.ok ? created : err({ kind: "session", error: created.error });
     },
 
     /**
-     * Releases a claim on an issue (AGENTS.md, claim rule): a comment starting "Stopped", saying
-     * why, so Next up offers it again (the Lead's skip, #347).
+     * The issue a session's first message names (#324), when it names just one and Next up
+     * offers it to build now: ready, and nobody has claimed it.
      */
-    release: async (
-      rawId: string,
-      number: number,
-      why: string,
-    ): Promise<Result<null, NextUpProblem>> => {
+    named: async (rawId: string, text: string): Promise<number | undefined> => {
+      const [number, ...more] = issuesNamedIn(text);
+      if (number === undefined || more.length > 0) return undefined;
       const found = await repoOf(rawId);
-      if (!found.ok) return found;
+      if (!found.ok) return undefined;
+      const fresh = await read(found.value.repo);
+      return fresh.ok && fresh.value.some((each) => each.number === number && each.ready)
+        ? number
+        : undefined;
+    },
+
+    /**
+     * Claims an issue for a session (AGENTS.md, claim rule; #324), naming its branch. One GitHub
+     * refuses is only logged: the session is building it already.
+     */
+    claim: async (rawId: string, number: number, claim: { branch: string; why: string }) => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return;
       const { repo } = found.value;
-      const commented = await github.commentOnIssue({ repo, number, body: `Stopped: ${why}` });
+      const body = claimComment(claim.branch, claim.why);
+      const claimed = await github.commentOnIssue({ repo, number, body });
+      if (!claimed.ok) console.error(`#${number} couldn't be claimed on GitHub`, claimed.error);
       kept.delete(repo);
-      return commented.ok ? ok(null) : err({ kind: "github", problem: commented.error });
+    },
+
+    /**
+     * Releases a session's claim on an issue (AGENTS.md, claim rule; #324): a comment starting
+     * "Stopped", saying why, so Next up offers it again. One GitHub refuses is only logged.
+     */
+    release: async (rawId: string, number: number, why: string) => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return;
+      const { repo } = found.value;
+      const released = await github.commentOnIssue({ repo, number, body: `Stopped: ${why}` });
+      if (!released.ok) console.error(`#${number}'s claim couldn't be released`, released.error);
+      kept.delete(repo);
     },
 
     /**

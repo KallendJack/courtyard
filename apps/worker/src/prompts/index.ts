@@ -25,7 +25,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { TurnAttachment } from "../attachments/index.ts";
-import type { CodeRefusal } from "../code/index.ts";
+import type { CodeRefusal, IssueGap } from "../code/index.ts";
 import { answersWithLabels, type ReadOwnerContext, withLabels } from "../context-file/index.ts";
 import { type DocumentToolRefusal, documentPath } from "../documents/index.ts";
 import type {
@@ -134,7 +134,7 @@ const CODING_ACCESS =
  * written for any repository, never only Courtyard's.
  */
 const HOUSE_PROCESS =
-  "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few words (\"the PR page refreshes itself\"), with its number after it only where a link helps; never a bare list of numbers.";
+  "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue create, in a milestone, with a category label and one triage label (the repository's docs/agents/ say which), and have the pull request close it. When a claim on an issue names your session branch, it was made for you, and it's released for you if the session stops before its pull request, so don't claim that issue again or say Stopped on it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few words (\"the PR page refreshes itself\"), with its number after it only where a link helps; never a bare list of numbers.";
 
 /** What a model may do with the workspace, and in a code session how it works there too. */
 const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
@@ -1446,6 +1446,14 @@ export const leadToolReply = (done: Result<LeadToolDone, LeadToolRefusal>): Tool
   }
 };
 
+/** What an issue a model tried to file lacks (#324), as its refusal says it. */
+const ISSUE_GAPS: Readonly<Record<IssueGap, string>> = {
+  "no-milestone": "no milestone",
+  "no-category": "no category label",
+  "no-triage": "no triage label",
+  triages: "more than one triage label",
+};
+
 /**
  * Why a code session's edit or command didn't happen, as its model is told (ADR 0007). One only
  * the owner can allow waits for their approval instead (#171), and is told only if they deny it.
@@ -1460,6 +1468,12 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
       return "That command couldn't be read: check its quotes close.";
     case "off-branch":
       return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
+    case "unfiled": {
+      const lacks = refusal.gaps.map((gap) => ISSUE_GAPS[gap]);
+      const last = lacks.pop();
+      const list = lacks.length === 0 ? last : `${lacks.join(", ")} and ${last}`;
+      return `That issue wasn't filed: every issue goes in a milestone (--milestone), with a category label (bug or enhancement) and one triage label (needs-triage, needs-info, ready-for-agent, ready-for-human or wontfix). It has ${list}. Add what's missing and file it again.`;
+    }
     case "denied":
       switch (refusal.what) {
         case "command":

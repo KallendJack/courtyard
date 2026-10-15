@@ -291,8 +291,8 @@ describe("a code workspace's command allowlist", () => {
     "pwd",
     "diff notes.md README.md",
     // What Matt Pocock's skills run on the repository's issues and pull requests (#181).
-    'gh issue create --title "Add the rack" --body "Why it helps" --label needs-triage',
-    "gh issue create --parent 79 --title Rack --body-file notes.md",
+    'gh issue create --title "Add the rack" --body "Why it helps" --label needs-triage --label enhancement --milestone Later',
+    "gh issue create --parent 79 --title Rack --body-file notes.md -l bug,needs-triage -m Later",
     "gh issue edit 79 --add-label ready-for-agent --remove-label needs-triage",
     'gh issue comment 79 --body "Done"',
     'gh issue close 79 --comment "Fixed in #80"',
@@ -318,7 +318,7 @@ describe("a code workspace's command allowlist", () => {
     "gh repo list octo-owner --limit 50",
     // A title, body, comment or message is text, never a path (#202).
     'gh issue comment 79 --body "Fixed: see https://courtyard.example/pull/80"',
-    'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down"',
+    'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down" --label=bug --label=needs-triage --milestone=Later',
     'git commit -m "Link the docs: https://courtyard.example/docs"',
   ])("runs %s without asking, shown in the activity", async (command) => {
     const { answers, ran } = await askAbout([command]);
@@ -347,6 +347,39 @@ describe("a code workspace's command allowlist", () => {
     const { answers, asked, ran } = await askAbout([command]);
 
     expect(answers).toEqual([{ ok: false, error: expect.stringMatching(why) }]);
+    expect(asked).toEqual([]);
+    expect(ran).toEqual([]);
+  });
+
+  // Every issue filed goes in a milestone with a category and one triage label (#324).
+  it.each([
+    ["gh issue create --title Rack --body Why --label enhancement -l needs-triage", "no milestone"],
+    [
+      "gh issue create --title Rack --body Why --milestone Later --label needs-triage",
+      "no category label",
+    ],
+    [
+      'gh issue create --title Rack --body Why -m Later --label "bug,needs-triage,ready-for-agent"',
+      "more than one triage label",
+    ],
+    [
+      "gh issue create --title Rack --body Why",
+      "no milestone, no category label and no triage label",
+    ],
+    // Refused before the owner is asked, where it would ask (#347's Lead, another repository).
+    [
+      "gh issue create --repo someone/else --title Rack --body Why --label bug",
+      "no milestone and no triage label",
+    ],
+  ])("refuses to file %s, saying it has %s", async (command, lacks) => {
+    const { answers, asked, ran } = await askAbout([command]);
+
+    expect(answers).toEqual([
+      {
+        ok: false,
+        error: `That issue wasn't filed: every issue goes in a milestone (--milestone), with a category label (bug or enhancement) and one triage label (needs-triage, needs-info, ready-for-agent, ready-for-human or wontfix). It has ${lacks}. Add what's missing and file it again.`,
+      },
+    ]);
     expect(asked).toEqual([]);
     expect(ran).toEqual([]);
   });
@@ -409,7 +442,10 @@ describe("a code workspace's command allowlist", () => {
     ["gh repo delete octo-owner/side-project --yes", "off-allowlist"],
     ["gh issue transfer 79 octo-owner/other", "off-allowlist"],
     ["gh issue delete 79 --yes", "off-allowlist"],
-    ["gh issue create --repo someone/else --title Rack --body Why", "off-allowlist"],
+    [
+      "gh issue create --repo someone/else --title Rack --body Why --label bug,needs-triage --milestone Later",
+      "off-allowlist",
+    ],
     ["gh issue edit 79 -R someone/else --add-label bug", "off-allowlist"],
     ["gh issue comment 79 --web", "off-allowlist"],
     ["gh issue comment 79 --editor", "off-allowlist"],
@@ -434,7 +470,10 @@ describe("a code workspace's command allowlist", () => {
     ["gh run cancel 123", "off-allowlist"],
     ["gh run view 123 --web", "off-allowlist"],
     // A body read from a file is still a path (#202).
-    ["gh issue create --title Rack --body-file ../secret.md", "reaches-out"],
+    [
+      "gh issue create --title Rack --body-file ../secret.md --label bug,needs-triage --milestone Later",
+      "reaches-out",
+    ],
     ["git commit -m Rack -F ../secret.md", "reaches-out"],
     // Looking around stays inside the worktree, and runs nothing else (#178).
     ["cat ../../x", "reaches-out"],

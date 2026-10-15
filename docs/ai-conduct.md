@@ -265,8 +265,11 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 
 > Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than
 > this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue
-> create (with the labels and milestone the repository's docs/agents/ ask for, if it has them), and have the pull
-> request close it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know
+> create, in a milestone, with a category label and one triage label (the repository's docs/agents/ say which), and
+> have the pull request close it. When a claim on an issue names your session branch, it was made for you, and it's
+> released for you if the session stops before its pull request, so don't claim that issue again or say Stopped on
+> it.
+> Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know
 > yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and
 > before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you
 > changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once
@@ -315,6 +318,11 @@ until they answer. Allow lets it happen. Deny, and anything else refused, tells 
   opening your pull request work only on your session branch, <branch>, and the worktree isn't on it now, so that
   didn't run."
 - A command whose quotes don't close: "That command couldn't be read: check its quotes close."
+- `gh issue create` filing an issue with no milestone, no category label, or not exactly one triage label (#324),
+  refused before the owner is asked where it would ask: "That issue wasn't filed: every issue goes in a milestone
+  (--milestone), with a category label (bug or enhancement) and one triage label (needs-triage, needs-info,
+  ready-for-agent, ready-for-human or wontfix). It has <what it lacks: no milestone, no category label, no triage
+  label or more than one triage label>. Add what's missing and file it again."
 - Anything asked after the owner stopped the turn, or waiting on an approval when they stopped it: "The owner stopped
   this turn, so nothing more is done."
 
@@ -374,6 +382,12 @@ not to:
 > are what to build, and where a later comment settles something the description left open, the comment wins. It's
 > claimed for you on GitHub already, so don't claim it again. Build it the way this repository does, and open a pull
 > request that closes it.
+
+A session the owner starts whose first message names one issue Next up offers (ready, and claimed by nobody) is
+claimed the same way as it starts ("Building this: Courtyard session (<branch>), the owner asked", #324), which the
+house process tells the model about. One started on an issue that stops, fails or is deleted before its pull request
+has its claim released ("Stopped: <why>"), and claimed again if it carries on; a pull request needs no comment, since
+it links the issue.
 
 Next up also offers the issues on a milestone's Build order line that aren't ready yet (`needs-triage` or
 `needs-info`, #363), in their place in the order. When the next in order is one, Grill takes Build's place on top, and
