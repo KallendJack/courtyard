@@ -76,6 +76,21 @@ export const gitOrNothing = async (folder: string, args: readonly string[]) => {
 };
 
 /**
+ * Whether git ignores a path in `folder`, as named, whether or not it's there yet: a folder
+ * (ending in `/`) or a file, or one inside an ignored folder (#202, #219). `undefined` when git
+ * can't say, such as for a path past a symbolic link.
+ */
+export const gitIgnores = async (folder: string, path: string) => {
+  try {
+    await git(folder, ["check-ignore", "--quiet", "--", path]);
+    return true;
+  } catch (error) {
+    // Git says 1 for a path it doesn't ignore, and more when it fails.
+    return error instanceof Error && "code" in error && error.code === 1 ? false : undefined;
+  }
+};
+
+/**
  * A commit's title as pages show it, its short hash first ("7d518cd Rail and Talk key"): a pull
  * request's merge commit by the title it merged, the first line of its message's body (#335).
  */

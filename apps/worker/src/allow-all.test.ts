@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -232,6 +232,27 @@ describe("Allow all for this task", () => {
 
     expect(askedAbout(asked)).toEqual(STILL_ASKS.map(([, about]) => about));
     expect(asked.map((each) => each.all)).toEqual(STILL_ASKS.map(() => undefined));
+  });
+
+  it("still asks before running what's in a folder git ignores (#219), never offering itself or Allow always", async () => {
+    await writeFile(join(repo, ".gitignore"), "test-results/\n");
+    await gitIn(repo, "add", ".gitignore");
+    await gitIn(repo, "commit", "--quiet", "-m", "Ignore test results");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const commands = ["pnpm -C test-results/ci test", "node test-results/ci/run.js"];
+    const { provider } = codingProvider(commands.map((run) => ({ run })));
+    const request = await start(provider);
+    const id = await startSession(request);
+    const first = await denyingEach(request, id);
+    expect((await allowAll(request, id, "4h")).status).toBe(200);
+
+    await sendAgain(request, id);
+    const { asked } = await denyingEach(request, id, first.last);
+
+    expect(askedAbout(asked)).toEqual(commands);
+    expect(asked.map(({ all, always }) => ({ all, always }))).toEqual(
+      commands.map(() => ({ all: undefined, always: undefined })),
+    );
   });
 
   it("from the menu between turns: the next turn runs without asking, and the session and its row in Running say so", async () => {

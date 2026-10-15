@@ -41,6 +41,13 @@ export type CommandRule = {
    * file that decides what allowed commands run.
    */
   readonly unpacksInto?: (rest: readonly string[]) => string | undefined;
+  /**
+   * For a command that runs code from where it's told (#219): the folders and files it runs from
+   * (pnpm's `-C`/`--dir` folder, npm's `--prefix`, a test tool's config or root, the script node
+   * runs), which the code module allows only when git doesn't ignore them, since a download (`gh
+   * run download`) can bring code there. A folder ends in `/`.
+   */
+  readonly runsFrom?: (rest: readonly string[]) => readonly string[];
 };
 
 /** A session's own branch, and its pull request's number once it has one. */
@@ -75,9 +82,17 @@ const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify",
  * the same code the scripts do; `biome check --write` formats only files in the worktree, since a
  * path it's given outside it asks.
  */
-const TEST_TOOLS: readonly { readonly words: readonly string[]; readonly never: RegExp[] }[] = [
-  { words: ["vitest", "run"], never: [/^--watch/, /^-w$/, /^--ui/] },
-  { words: ["playwright", "test"], never: [/^--ui/, /^--debug/] },
+const TEST_TOOLS: readonly Pick<CommandRule, "words" | "never" | "runsFrom">[] = [
+  {
+    words: ["vitest", "run"],
+    never: [/^--watch/, /^-w$/, /^--ui/],
+    runsFrom: optionPaths({ folders: ["--root", "-r", "--dir"], files: ["--config", "-c"] }),
+  },
+  {
+    words: ["playwright", "test"],
+    never: [/^--ui/, /^--debug/],
+    runsFrom: optionPaths({ files: ["--config", "-c"] }),
+  },
   { words: ["tsc", "--noEmit"], never: [/^--watch/, /^-w$/] },
   { words: ["biome", "check"], never: [] },
 ];
@@ -86,23 +101,88 @@ const TOOL_RUNNERS = [["pnpm"], ["pnpm", "exec"]];
 
 /** Pnpm's options that pick the workspace packages a command runs in, with a value. */
 const PNPM_PICKS = new Set(["--filter", "-F", "--dir", "-C"]);
+/** Of those, the ones that pick a folder. */
+const PNPM_FOLDER = new Set(["--dir", "-C"]);
 /** And those without one: every package. */
 const PNPM_EVERY = new Set(["-r", "--recursive"]);
 
+/** A path read as a folder, ending in `/`, as git reads it even before it's there (#219). */
+const asFolder = (path: string) => (path.endsWith("/") ? path : `${path}/`);
+
 /**
- * The pnpm command that pnpm's workspace options pick packages for (`pnpm --filter <name>
- * <script>`, `-F`, `-C <dir>`, `--dir`, `-r`, `--recursive`), or `undefined` without any (#202).
+ * What pnpm's workspace options (`pnpm --filter <name> <script>`, `-F`, `-C <dir>`, `--dir`, `-r`,
+ * `--recursive`) pick: the pnpm command they pick packages for, `undefined` without any (#202),
+ * and the folders they name (#219).
  */
-const pickedCommand = (rest: readonly string[]) => {
+const pnpmPicks = (rest: readonly string[]) => {
+  const folders: string[] = [];
   let at = 0;
   for (;;) {
     const word = rest[at] ?? "";
-    if (PNPM_EVERY.has(word) || /^--(filter|dir)=./.test(word)) at += 1;
-    else if (PNPM_PICKS.has(word) && rest[at + 1] !== undefined) at += 2;
-    else break;
+    const value = rest[at + 1];
+    if (PNPM_EVERY.has(word) || /^--filter=./.test(word)) at += 1;
+    else if (/^--dir=./.test(word)) {
+      folders.push(word.slice("--dir=".length));
+      at += 1;
+    } else if (PNPM_PICKS.has(word) && value !== undefined) {
+      if (PNPM_FOLDER.has(word)) folders.push(value);
+      at += 2;
+    } else break;
   }
-  return at === 0 || at === rest.length ? undefined : ["pnpm", ...rest.slice(at)];
+  return {
+    command: at === 0 || at === rest.length ? undefined : ["pnpm", ...rest.slice(at)],
+    folders: folders.map(asFolder),
+  };
 };
+
+/** The pnpm command that pnpm's workspace options pick packages for (#202). */
+const pickedCommand = (rest: readonly string[]) => pnpmPicks(rest).command;
+
+/**
+ * The paths a command's options name for what it runs (#219): the values of `folders` (a folder
+ * it runs in) and `files` (a file it loads), written `--option value` or `--option=value`, before
+ * any `--`.
+ */
+function optionPaths(named: {
+  readonly folders?: readonly string[];
+  readonly files?: readonly string[];
+}) {
+  return (rest: readonly string[]) => {
+    const paths: string[] = [];
+    for (let at = 0; at < rest.length && rest[at] !== "--"; at += 1) {
+      const word = rest[at] ?? "";
+      const equals = word.indexOf("=");
+      const option = equals === -1 ? word : word.slice(0, equals);
+      const folder = named.folders?.includes(option) === true;
+      if (!folder && named.files?.includes(option) !== true) continue;
+      if (equals === -1) at += 1;
+      const value = equals === -1 ? rest[at] : word.slice(equals + 1);
+      if (value !== undefined && value !== "") paths.push(folder ? asFolder(value) : value);
+    }
+    return paths;
+  };
+}
+
+/** Where npm runs a package script: the folder `--prefix` (or `-C`) names (#219). */
+const npmFolders = optionPaths({ folders: ["--prefix", "-C"] });
+
+/** A script file of the repository's, as node runs it (#388): `scripts/x.ts`. */
+const SCRIPT = /^[^-].*\.(?:[cm]?js|[cm]?ts)$/;
+
+/**
+ * Whether `node --test` names the test files it runs (#219), with no pattern for node to find
+ * more by: tests node finds for itself could be in a folder git ignores.
+ */
+const namesTests = (rest: readonly string[]) => {
+  const named = rest.filter((word) => !word.startsWith("-"));
+  return named.some((word) => SCRIPT.test(word)) && !named.some((word) => /[*?[{]/.test(word));
+};
+
+/** The files `node --test` runs (#219): every word that isn't an option, and its reporters. */
+const testFiles = (rest: readonly string[]) => [
+  ...rest.filter((word) => !word.startsWith("-")),
+  ...optionPaths({ files: ["--test-reporter"] })(rest),
+];
 
 /**
  * The package scripts that build or test, which wait their turn in the builds queue (#281). The
@@ -251,10 +331,10 @@ const NODE_NEVER = [
 ];
 
 /** Whether node runs a script file of the repository's, named first (#388): `node scripts/x.ts`. */
-const runsScript = (rest: readonly string[]) => {
-  const [script] = rest;
-  return script !== undefined && /^[^-].*\.(?:[cm]?js|[cm]?ts)$/.test(script);
-};
+const runsScript = (rest: readonly string[]) => SCRIPT.test(rest[0] ?? "");
+
+/** The script node runs (#219): its first word, as `runsScript` reads it. */
+const theScript = (rest: readonly string[]) => rest.slice(0, 1);
 
 /** A gh command's flags: those that take a value, and those that stand alone. */
 type GhFlags = { readonly withValue: ReadonlySet<string>; readonly alone: ReadonlySet<string> };
@@ -475,13 +555,13 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   ...PACKAGE_SCRIPTS.flatMap((script) => [
     { words: ["pnpm", script], more: true },
     { words: ["pnpm", "run", script], more: true },
-    { words: ["npm", "run", script], more: true },
+    { words: ["npm", "run", script], more: true, runsFrom: npmFolders },
   ]),
-  { words: ["npm", "test"], more: true },
-  ...TEST_TOOLS.flatMap(({ words, never }) =>
-    TOOL_RUNNERS.map((runner) => ({ words: [...runner, ...words], more: true, never })),
+  { words: ["npm", "test"], more: true, runsFrom: npmFolders },
+  ...TEST_TOOLS.flatMap((tool) =>
+    TOOL_RUNNERS.map((runner) => ({ ...tool, words: [...runner, ...tool.words], more: true })),
   ),
-  { words: ["pnpm"], more: true, runs: pickedCommand },
+  { words: ["pnpm"], more: true, runs: pickedCommand, runsFrom: (rest) => pnpmPicks(rest).folders },
   ...GIT_LOOKS.map((look) => ({ words: ["git", look], more: true, never: GIT_NEVER })),
   { words: ["git", "branch"], more: false },
   { words: ["git", "branch", "--show-current"], more: false },
@@ -543,8 +623,14 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     texts: ["-m", "--message"],
   },
   // The repository's own scripts and tests, run directly (#388).
-  { words: ["node", "--test"], more: true, never: NODE_NEVER },
-  { words: ["node"], more: true, never: NODE_NEVER, own: runsScript },
+  {
+    words: ["node", "--test"],
+    more: true,
+    never: NODE_NEVER,
+    own: namesTests,
+    runsFrom: testFiles,
+  },
+  { words: ["node"], more: true, never: NODE_NEVER, own: runsScript, runsFrom: theScript },
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
@@ -775,6 +861,25 @@ export const ruleFor = (
     }
     return !rest.some((argument) => rule.never?.some((never) => never.test(argument)));
   });
+
+/**
+ * Everywhere a command runs code from (#219): its rule's `runsFrom` and, for one that runs another
+ * (pnpm's workspace options), that other's too. Nothing for a command off the allowlist.
+ */
+export const runsFromOf = (
+  allowlist: readonly CommandRule[],
+  words: readonly string[],
+  work: OwnWork,
+): readonly string[] => {
+  const rule = ruleFor(allowlist, words, work);
+  if (rule === undefined) return [];
+  const rest = words.slice(rule.words.length);
+  const runs = rule.runs?.(rest);
+  return [
+    ...(rule.runsFrom?.(rest) ?? []),
+    ...(runs === undefined ? [] : runsFromOf(allowlist, runs, work)),
+  ];
+};
 
 /**
  * The paths an argument could name: itself; whatever follows an `=` or a `:` in it

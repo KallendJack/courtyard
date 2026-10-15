@@ -11,8 +11,11 @@ export const ApprovalAsk = z.discriminatedUnion("kind", [
     kind: z.literal("command"),
     /** The command, exactly as it would run. */
     command: z.string(),
-    /** Why it needs an approval: it isn't on the allowlist, or it names a path outside the worktree. */
-    reason: z.enum(["off-allowlist", "reaches-out"]),
+    /**
+     * Why it needs an approval: it isn't on the allowlist, it names a path outside the worktree,
+     * or it runs code from a folder git ignores, where a download can bring it (#219).
+     */
+    reason: z.enum(["off-allowlist", "reaches-out", "ignored-folder"]),
   }),
   /** A change to a file outside the session branch's worktree, by its full path. */
   z.object({ kind: z.literal("edit"), path: z.string() }),
