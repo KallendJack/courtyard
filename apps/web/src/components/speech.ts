@@ -35,9 +35,12 @@ const PROBLEMS: Partial<Record<SpeechRecognitionErrorCode, string>> = {
   "not-allowed": "The microphone isn't allowed. Allow it in the browser's site settings",
   "service-not-allowed": "The browser's speech service isn't allowed. Check its settings",
   "audio-capture": "No microphone to listen with",
+  /** The connection dropped after words were heard. */
   network: "Speech recognition needs a connection",
   "language-not-supported": "This browser can't listen in British English",
 };
+/** A "network" error before anything was heard: the browser has no speech service to reach. */
+const CANT_REACH_SERVICE = "This browser can't listen. Chrome or Edge can";
 
 /** How soon, and how many times running, a recogniser can end on its own before listening gives up. */
 const QUICK_END_MS = 1000;
@@ -108,7 +111,10 @@ export const listen = (on: {
       on.heard(words());
     };
     recognition.onerror = (event) => {
-      const problem = PROBLEMS[event.error];
+      // Vivaldi, Brave and Opera have Chrome's recogniser but not Google's speech service, so
+      // every listen ends at once in "network" (#422): with nothing heard, it's the browser.
+      const problem =
+        event.error === "network" && words() === "" ? CANT_REACH_SERVICE : PROBLEMS[event.error];
       // A pause with nothing said ends it like any other, and "aborted" is a cancel.
       if (problem === undefined || state === "done") return;
       fail(problem);

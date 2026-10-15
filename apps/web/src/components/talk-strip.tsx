@@ -254,7 +254,8 @@ function useTalk(props: {
     };
     const end = (how: "send" | "drop" | "keep") => {
       holding = undefined;
-      latest.current.stop(how);
+      // Listening already ended while held (the browser can't listen, #422): what it said stays.
+      if (!latest.current.idle) latest.current.stop(how);
     };
     const keyDown = (event: globalThis.KeyboardEvent) => {
       if (holding !== undefined && event.key === "Escape") {
