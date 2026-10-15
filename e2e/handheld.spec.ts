@@ -85,6 +85,7 @@ const CAN = {
   usesTools: true,
   savesContext: true,
   searchesWeb: true,
+  steers: true,
 };
 const CLAUDE_EFFORTS = effortsOf(["low", "medium", "high", "xhigh", "max"]);
 const CODEX_EFFORTS = effortsOf(["low", "medium", "high", "xhigh"]);
@@ -547,6 +548,7 @@ test.describe("unfolded", () => {
       usesTools: true,
       savesContext: true,
       searchesWeb: true,
+      steers: true,
     };
     const model = (id: string, name: string, more: object = {}) => ({
       id,
