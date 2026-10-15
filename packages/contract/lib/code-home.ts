@@ -58,7 +58,9 @@ export type PaperConnecting = z.infer<typeof PaperConnecting>;
 /**
  * One issue Next up offers (#301), by its number, title and address on GitHub, with its
  * milestone's title when it's in one: a `ready-for-agent` issue nobody has claimed (`ready`), or
- * one on its milestone's Build order line that needs grilling first (#363), not `ready`.
+ * one on its milestone's Build order line that needs grilling first (#363), not `ready`. A ready
+ * one blocked by an open issue (#377) has its title as `after` (Next up says "After …"; it may be in
+ * another repository, so only its title), and isn't built until that closes.
  */
 export const NextUpIssue = z.object({
   number: z.number().int().positive(),
@@ -66,8 +68,15 @@ export const NextUpIssue = z.object({
   url: z.url({ protocol: /^https$/ }),
   milestone: z.string().nullable(),
   ready: z.boolean(),
+  after: z.string().nullable(),
 });
 export type NextUpIssue = z.infer<typeof NextUpIssue>;
+
+/**
+ * Whether Next up offers an issue to build now (#377): ready, and blocked by no open issue. Decided
+ * here once, for the worker's Build and Lead and the page's Build alike.
+ */
+export const buildable = (issue: NextUpIssue) => issue.ready && issue.after === null;
 
 /**
  * A code workspace's Next up (#301): its unclaimed ready issues and those on a Build order line

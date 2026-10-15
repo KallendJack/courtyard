@@ -67,11 +67,12 @@ export type GitHubApi = {
   ) => Promise<Result<readonly FoundFile[], string>>;
   /**
    * The open issues in `repo` with `label` (#301's Next up), each with its milestone and, asked
-   * `withComments`, its comments' text, which say whether someone has claimed it (none otherwise).
+   * `forBuild`, what says whether it can be built now: its comments' text, which say whether
+   * someone has claimed it, and the open issues it's blocked by (#377) (none of either otherwise).
    */
   readonly openIssues: (
     accessToken: string,
-    find: { readonly repo: string; readonly label: string; readonly withComments: boolean },
+    find: { readonly repo: string; readonly label: string; readonly forBuild: boolean },
   ) => Promise<Result<readonly FoundIssue[], string>>;
   /**
    * The title and description of each open pull request in `repo` (#301): what says which issues
@@ -217,6 +218,8 @@ export type FoundIssue = {
   readonly milestoneDescription: string | null;
   /** The text of each comment on it, oldest first. */
   readonly comments: readonly string[];
+  /** The titles of the open issues it's blocked by (#377), as GitHub lists them. */
+  readonly blockedBy: readonly string[];
 };
 
 /** An open milestone as GitHub has it (#355). */
@@ -381,8 +384,12 @@ const Issues = z.array(
       .nullable(),
     comments: z.number().int().nonnegative(),
     pull_request: z.unknown().optional(),
+    /** How many open issues it's blocked by (#377); a GitHub without dependencies leaves it out. */
+    issue_dependencies_summary: z.object({ blocked_by: z.number().int() }).optional(),
   }),
 );
+/** The issues one is blocked by (#377), open and closed, in any repository. */
+const Blockers = z.array(z.object({ title: z.string(), state: z.string() }));
 const Comments = z.array(z.object({ body: z.string().nullable().optional() }));
 const PullTexts = z.array(z.object({ title: z.string(), body: z.string().nullable() }));
 /** How many issues' comments are asked for at once. */
@@ -536,6 +543,23 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     const response = await apiRequest(token, path);
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
     return schema.parse(await response.json());
+  };
+
+  /**
+   * The titles of the open issues `issue` (`owner/name/issues/<number>`) is blocked by (#377).
+   * Ones GitHub won't list leave it unblocked, rather than Next up unread.
+   */
+  const openBlockersOf = async (token: string, issue: string) => {
+    try {
+      const blockers = await apiGet(
+        token,
+        `/repos/${issue}/dependencies/blocked_by?per_page=${PAGE}`,
+        Blockers,
+      );
+      return blockers.filter((blocker) => blocker.state === "open").map(({ title }) => title);
+    } catch {
+      return [];
+    }
   };
 
   /**
@@ -871,7 +895,8 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           listed.push(...issues.filter((issue) => issue.pull_request === undefined));
           if (issues.length < PAGE) break;
         }
-        // Only an issue with comments is asked for them, a few at a time.
+        // Only an issue with comments is asked for them, and one blocked for its blockers, a few
+        // at a time.
         const found: FoundIssue[] = [];
         for (let at = 0; at < listed.length; at += COMMENTS_AT_ONCE) {
           const some = await Promise.all(
@@ -882,7 +907,7 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
               milestone: issue.milestone?.title ?? null,
               milestoneDescription: issue.milestone?.description ?? null,
               comments:
-                issue.comments === 0 || !find.withComments
+                issue.comments === 0 || !find.forBuild
                   ? []
                   : (
                       await apiGet(
@@ -891,6 +916,10 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
                         Comments,
                       )
                     ).map((comment) => comment.body ?? ""),
+              blockedBy:
+                (issue.issue_dependencies_summary?.blocked_by ?? 0) === 0 || !find.forBuild
+                  ? []
+                  : await openBlockersOf(accessToken, `${repo.data}/issues/${issue.number}`),
             })),
           );
           found.push(...some);

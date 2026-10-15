@@ -30,6 +30,11 @@ const nextUpProblem = (c: Context, problem: NextUpProblem) => {
         status: 409,
         error: "Someone has claimed that issue since: it's being built already.",
       });
+    case "blocked":
+      return apiError(c, {
+        status: 409,
+        error: `That issue waits on ${problem.after}: it's offered to build once that closes.`,
+      });
     case "nothing-to-grill":
       return apiError(c, { status: 404, error: "That issue doesn't need grilling any more." });
     case "session":

@@ -32,6 +32,14 @@ export type FakeIssue = {
   /** Its comments' text, oldest first. */
   readonly comments?: readonly string[];
   readonly state?: "open" | "closed";
+  /** The numbers of the issues in its repository it's blocked by (#377). */
+  readonly blockedBy?: readonly number[];
+};
+
+/** An issue as the fake holds it: its comments added to, and closed when a test says (#377). */
+type HeldIssue = Omit<FakeIssue, "comments" | "state"> & {
+  readonly comments: string[];
+  state: "open" | "closed";
 };
 
 /** How long the fake's tokens last, as GitHub's do: 8 hours. */
@@ -156,9 +164,13 @@ export const createFakeGitHub = (
   );
   /** Each repository's issues, each with its comments as they're added (#301). */
   const issues = new Map(
-    Object.entries(options.issues ?? {}).map(([repo, list]) => [
+    Object.entries(options.issues ?? {}).map(([repo, list]): [string, HeldIssue[]] => [
       repo,
-      list.map((issue) => ({ ...issue, comments: [...(issue.comments ?? [])] })),
+      list.map((issue) => ({
+        ...issue,
+        comments: [...(issue.comments ?? [])],
+        state: issue.state ?? "open",
+      })),
     ]),
   );
   /** Each repository's milestones, numbered from 1 in the order given, by title (#336, #355). */
@@ -409,7 +421,7 @@ export const createFakeGitHub = (
       refusedToken(accessToken) ?? ok(commitWorkflows.get(commit) ?? []),
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
-    openIssues: async (accessToken, { repo, label, withComments }) => {
+    openIssues: async (accessToken, { repo, label, forBuild }) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       issuesAsked += 1;
@@ -417,8 +429,7 @@ export const createFakeGitHub = (
         (issues.get(repo) ?? [])
           .filter(
             (issue) =>
-              (issue.state ?? "open") === "open" &&
-              (issue.labels ?? ["ready-for-agent"]).includes(label),
+              issue.state === "open" && (issue.labels ?? ["ready-for-agent"]).includes(label),
           )
           .map((issue) => ({
             number: issue.number,
@@ -429,7 +440,13 @@ export const createFakeGitHub = (
               issue.milestone === undefined
                 ? null
                 : (milestoneIn(repo, issue.milestone)?.description ?? null),
-            comments: withComments ? [...issue.comments] : [],
+            comments: forBuild ? [...issue.comments] : [],
+            blockedBy: forBuild
+              ? (issue.blockedBy ?? []).flatMap((number) => {
+                  const blocker = issueIn(repo, number);
+                  return blocker?.state === "open" ? [blocker.title] : [];
+                })
+              : [],
           })),
       );
     },
@@ -545,6 +562,7 @@ export const createFakeGitHub = (
           title: issue.title,
           labels: [...issue.labels],
           comments: [],
+          state: "open",
           ...(milestone === null ? {} : { milestone }),
         },
       ]);
@@ -627,6 +645,11 @@ export const createFakeGitHub = (
     /** Someone comments on issue `number` in `repo` (a claim, say). */
     comment: (repo: string, number: number, body: string) => {
       issueIn(repo, number)?.comments.push(body);
+    },
+    /** Issue `number` in `repo` was closed (#377): one it blocked waits no more. */
+    closeIssue: (repo: string, number: number) => {
+      const closed = issueIn(repo, number);
+      if (closed !== undefined) closed.state = "closed";
     },
     /** How many times the repositories' issues were asked for. */
     issuesAsked: () => issuesAsked,
