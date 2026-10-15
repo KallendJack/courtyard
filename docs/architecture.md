@@ -202,8 +202,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   worker's say on every edit and command, which records each one allowed as an activity and words each refusal
   through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
   module's own fetch from the remote uses it too). `slots.ts` keeps up to six code sessions running at once across the worker (#174, #364), each
-  turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, which
-  this repository's Playwright config picks its ports from, so side-by-side checks never share them. A turn beyond
+  turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, with
+  the worktree it's for as `COURTYARD_SESSION_WORKTREE`, which this repository's Playwright config picks its ports
+  from (in that worktree only: a helper's own worktree picks them from its folder, #395), so side-by-side checks
+  never share them. A turn beyond
   three waits, first come first served, until one ends. `builds.ts` is the builds queue (#281): the heavy checks
   `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
   pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
@@ -785,6 +787,18 @@ Where the rest fits:
   `task_started` message), and hands back its report from the `Agent` call's result; Claude Code puts every helper
   on the session's model. The fake starts one for each line a message scripts. The browser shows one line per
   helper where the model started it, which opens on what it did and its report.
+  A helper that writes code works on a branch of its own (#395). `code/`'s `branchOff` makes its worktree beside
+  the session's (`<session worktree>-helper-<n>`, on `courtyard/<session branch>-helper-<n>`, from the session
+  branch's last commit; `code/branches.ts` names them), the `HelperTurn`'s `workIn` moves its say there
+  (`helper-branched`), outside the session's slot so its folder picks its test ports, and with pushing and pull
+  requests asking first. As it finishes, `mergeBack` commits whatever it left and merges its branch into the
+  session branch in the session's worktree, one merge at a time; merged, its worktree and branch go, and a clash
+  aborts the merge and keeps the branch, which the allowlist lets the session's model merge itself.
+  `helper-finished` carries `merged`, and the model is told how it went beside the helper's report. A session's
+  helpers' worktrees and branches all go when it's cleared away or deleted (`clearHelpers`). With Claude, the model
+  asks with the `Agent` tool's `isolation: "worktree"`, and the adapter's `WorktreeCreate` hook makes the worktree
+  through `CodeTurn.branchOff` (so Claude Code never makes one in the repository), keyed by the helper id in the
+  name Claude Code gives it, and hands it to that helper before its first tool call.
 - **Tool connections.** A code workspace that names Paper hands each turn on a provider that uses tools a
   `ToolConnection` from `paper/` (ADR 0023). Claude's adapter passes its MCP server to Claude Code (a command it
   starts, `paper mcp`), its hook asks the connection about each of the server's tools, and its `PostToolUse` and

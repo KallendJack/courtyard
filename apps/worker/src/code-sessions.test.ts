@@ -792,7 +792,11 @@ describe("several code sessions at once (#174)", () => {
 
     await followSession(request, { sessionId: fourth, until: "turn-dequeued", after: 2 });
     await vi.waitFor(() => expect(turns).toHaveLength(CODE_SESSIONS_AT_ONCE + 1));
-    expect(turns[CODE_SESSIONS_AT_ONCE]?.env).toEqual(first?.env);
+    // The slot the first one freed, for its own worktree (#395).
+    expect(turns[CODE_SESSIONS_AT_ONCE]?.env).toMatchObject({
+      COURTYARD_SESSION_SLOT: first?.env.COURTYARD_SESSION_SLOT,
+      COURTYARD_SESSION_WORKTREE: join(root, "data", "worktrees", fourth),
+    });
     turns[CODE_SESSIONS_AT_ONCE]?.finish();
     await followSession(request, { sessionId: fourth, until: "turn-completed", after: 3 });
     for (const turn of turns) turn.finish();

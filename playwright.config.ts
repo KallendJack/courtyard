@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { OWNER_LOGIN } from "./e2e/owner.ts";
 
@@ -8,11 +8,17 @@ import { OWNER_LOGIN } from "./e2e/owner.ts";
  * `.git` is a file) can run their browser tests at the same time. The main checkout keeps 8799
  * and 8798; a worktree moves both by a multiple of ten picked from its folder's name, so the same
  * folder always gets the same ports. In a Courtyard code session, its slot among the code sessions
- * running (#174), which no other running one has, picks them instead, past every folder's own.
+ * running (#174), which no other running one has, picks them instead, past every folder's own;
+ * a session's helper on a branch of its own (#395) runs in another folder than the one that slot
+ * is for, so its folder picks them.
  */
 const portShift = (() => {
   const slot = Number(process.env.COURTYARD_SESSION_SLOT);
-  if (Number.isInteger(slot) && slot > 0) return 1000 + 10 * slot;
+  const slotted = process.env.COURTYARD_SESSION_WORKTREE;
+  const here = (path: string) => resolve(path).toLowerCase() === import.meta.dirname.toLowerCase();
+  if (Number.isInteger(slot) && slot > 0 && (slotted === undefined || here(slotted))) {
+    return 1000 + 10 * slot;
+  }
   const dotGit = statSync(join(import.meta.dirname, ".git"), { throwIfNoEntry: false });
   if (!dotGit?.isFile()) return 0;
   let hash = 0;

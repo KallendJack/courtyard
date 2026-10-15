@@ -59,6 +59,7 @@ import {
   type CommandRule,
   commandAllowed,
   editPlaceIn,
+  type HelperBranch,
   isBuild,
   type PullRequestProblem,
   type SessionBranch,
@@ -96,6 +97,7 @@ import {
   documentReply,
   type FramingWorkspace,
   framingFor,
+  helperBranchNote,
   LEAD_TOOL_NAME,
   type LeadBrief,
   notOfferedReply,
@@ -114,8 +116,8 @@ import {
 } from "../prompts/index.ts";
 import {
   type CodePlugin,
-  type CodeTurn,
   firstWithRoom,
+  type HelperCode,
   type HelperTurn,
   modelsOnOffer,
   offerFor,
@@ -459,6 +461,12 @@ const turnNowIn = (events: readonly SessionEvent[]): TurnNow => {
  * one of them finishes.
  */
 const HELPERS_AT_ONCE = 3;
+
+/**
+ * The allowlisted commands a helper on a branch of its own runs only with the owner's OK (#395):
+ * pushing and its pull request, since its work reaches the session branch by being merged back.
+ */
+const OWN_BRANCH_ASKS = ["git push", "gh pr create", "gh pr edit"];
 
 /**
  * Where a session's current turn stands in this worker. A stop handle exists from the moment the
@@ -1213,7 +1221,10 @@ export const createSessions = (options: {
         const connections = connectionsFor(undefined);
         /**
          * A code session's say on each edit and command the model asks for, or one of its helpers
-         * (#117), decided the same way (ADR 0007).
+         * (#117), decided the same way (ADR 0007). A helper on a branch of its own (#395, `own`)
+         * works in its own worktree, outside the session's slot so its folder picks its test
+         * ports, and pushes and opens a pull request only with the owner's OK: its work reaches
+         * the session branch by being merged back.
          */
         const codeTurn = (code: {
           worktree: string;
@@ -1221,15 +1232,20 @@ export const createSessions = (options: {
           env: CommandEnv;
           plugin: CodePlugin | null;
           helper: HelperId | undefined;
-        }): Omit<CodeTurn, "helper"> => {
-          const { worktree, branch, helper } = code;
+          own?: true;
+        }): HelperCode => {
+          const { worktree, branch, helper, own } = code;
           return {
             worktree,
             plugin: code.plugin,
             // Its slot, Courtyard's GitHub sign-in for its git and gh (#99), and word that its
             // builds hold a place in the machine's builds lock (#306): each runs only once the
             // builds queue has given it one, so the repo's scripts don't wait for another.
-            env: { ...code.env, ...(slot === undefined ? {} : slotEnv(slot)), ...BUILD_HELD_ENV },
+            env: {
+              ...code.env,
+              ...(slot === undefined || own ? {} : slotEnv({ slot, worktree })),
+              ...BUILD_HELD_ENV,
+            },
             edit: async (path) => {
               const place = await editPlaceIn(worktree, path);
               if (place.kind === "inside") {
@@ -1257,12 +1273,13 @@ export const createSessions = (options: {
                   worktree,
                   branch,
                   pullRequest: pullRequestIn(events.value)?.number,
-                  // The Lead files an issue only with the owner's OK (#347).
-                  allowlist: lead
-                    ? workspace.value.allowlist.filter(
-                        (rule) => rule.words.join(" ") !== "gh issue create",
-                      )
-                    : workspace.value.allowlist,
+                  // The Lead files an issue only with the owner's OK (#347), and a helper on its
+                  // own branch pushes and opens a pull request only with it (#395).
+                  allowlist: workspace.value.allowlist.filter((rule) => {
+                    const words = rule.words.join(" ");
+                    if (lead && words === "gh issue create") return false;
+                    return own !== true || !OWN_BRANCH_ASKS.includes(words);
+                  }),
                 },
                 command,
               );
@@ -1321,23 +1338,72 @@ export const createSessions = (options: {
             if (!placed || stopper.signal.aborted || !(await record(false))) return undefined;
           }
           if (stopper.signal.aborted) return undefined;
+          const shared = codeTurn({ ...code, helper: started.id });
+          /** Its own branch (#395), once it has one, and the say on its work there. */
+          let own: { branch: HelperBranch; code: HelperCode } | undefined;
+          const now = () => own?.code ?? shared;
           let finished = false;
           return {
             report: reportAs(started.id),
-            code: codeTurn({ ...code, helper: started.id }),
+            code: {
+              get worktree() {
+                return now().worktree;
+              },
+              get env() {
+                return now().env;
+              },
+              plugin: shared.plugin,
+              edit: (path) => now().edit(path),
+              run: (command, why) => now().run(command, why),
+              ran: (command) => now().ran(command),
+            },
             connections: connectionsFor(started.id),
+            workIn: async (branch) => {
+              if (own !== undefined || finished) return;
+              own = {
+                branch,
+                code: codeTurn({
+                  ...code,
+                  worktree: branch.worktree,
+                  branch: branch.branch,
+                  helper: started.id,
+                  own: true,
+                }),
+              };
+              if (stopper.signal.aborted || recordingLost) return;
+              const recorded = await append(turn.id, {
+                type: "helper-branched",
+                helper: started.id,
+                branch: branch.branch,
+              });
+              if (!recorded.ok) recordingLost = true;
+            },
             finished: async (said) => {
-              if (finished) return;
+              if (finished) return undefined;
               finished = true;
+              // Its branch merges back before its place goes to another, so one started next
+              // branches from the session branch with its work in (#395). Stopped, it's kept.
+              const merged =
+                own === undefined || stopper.signal.aborted
+                  ? undefined
+                  : await options.code.mergeBack({
+                      session: { branch: code.branch, worktree: code.worktree },
+                      helper: own.branch,
+                      message: started.name,
+                    });
               helpers.running -= 1;
               helpers.waiting.shift()?.();
-              if (stopper.signal.aborted || recordingLost) return;
+              if (stopper.signal.aborted || recordingLost) return undefined;
               const done = await append(turn.id, {
                 type: "helper-finished",
                 helper: started.id,
                 report: said,
+                ...(merged === undefined ? {} : { merged: merged === "merged" }),
               });
               if (!done.ok) recordingLost = true;
+              return merged === undefined || own === undefined
+                ? undefined
+                : helperBranchNote({ merged: merged === "merged", branch: own.branch.branch });
             },
           };
         };
@@ -1362,6 +1428,7 @@ export const createSessions = (options: {
                 : {
                     ...codeTurn({ ...where, helper: undefined }),
                     helper: (started) => startHelper(started, where),
+                    branchOff: () => options.code.branchOff(where),
                   },
             connections,
             framing,
@@ -2746,12 +2813,11 @@ export const createSessions = (options: {
         running.delete(id);
         const workspace = await getWorkspace(options.contextDir, workspaceId);
         const repoPath = workspace.ok ? workspace.value.repoPath : null;
-        if (neverRan && branch !== undefined && typeof repoPath === "string") {
-          await options.code.clearBranch({
-            repoPath,
-            sessionBranch: sessionBranchOf({ ...found.value, branch }),
-            pushed: false,
-          });
+        if (branch !== undefined && typeof repoPath === "string") {
+          const sessionBranch = sessionBranchOf({ ...found.value, branch });
+          // Its helpers' branches go with it, whatever happens to its own (#395).
+          if (neverRan) await options.code.clearBranch({ repoPath, sessionBranch, pushed: false });
+          else await options.code.clearHelpers({ repoPath, sessionBranch });
         }
         return ok(null);
       });

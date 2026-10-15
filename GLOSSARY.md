@@ -384,7 +384,9 @@ _Avoid_: tool call, step, trace
 
 **Helper**:
 One of a provider's own sub-agents that a code session's model hands part of its job to, working in the session's
-worktree under its rules and reporting back before the turn ends, shown as a line of its own (ADR 0027).
+worktree under its rules and reporting back before the turn ends, shown as a line of its own (ADR 0027). One that
+writes code works on its **own branch** (#395), in a worktree of its own beside the session's, merged back into the
+session branch when it finishes ("Merged"), or kept for the session's model to sort when the merge clashes.
 _Avoid_: sub-agent, agent, worker (that's Courtyard's other part)
 
 **Web search**:

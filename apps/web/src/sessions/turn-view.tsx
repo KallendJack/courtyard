@@ -177,6 +177,9 @@ const standingOf = (
   turn: Turn,
 ): { readonly standing: HelperStanding; readonly status: string } => {
   const steps = helper.activities.filter((activity) => !isWaiting(activity)).length;
+  if (helper.branch === "clashed") {
+    return { standing: "clashed", status: "Didn't merge cleanly · the session is sorting it" };
+  }
   if (helper.report !== undefined) {
     return { standing: "done", status: `Done · ${steps} ${steps === 1 ? "step" : "steps"}` };
   }
@@ -193,6 +196,22 @@ const standingOf = (
     standing: "working",
     status: latest === undefined ? "Working" : describeActivity(latest),
   };
+};
+
+/**
+ * The tag after a helper's name (#395): "Own branch" while its branch is its own (kept too, when
+ * it didn't merge cleanly), "Merged" once it's merged back; none when it shares the session's.
+ */
+const tagOf = (helper: Helper): { readonly tag?: "own" | "merged" } => {
+  switch (helper.branch) {
+    case "shared":
+      return {};
+    case "merged":
+      return { tag: "merged" };
+    case "own":
+    case "clashed":
+      return { tag: "own" };
+  }
 };
 
 /**
@@ -220,6 +239,7 @@ function HelperLines(props: { turn: Turn; helpers: readonly HelperId[] }) {
             <HelperLine
               name={helper.name}
               {...standingOf(helper, turn)}
+              {...tagOf(helper)}
               open={open.has(helper.id)}
               onToggle={() => toggle(helper.id)}
               steps={helper.activities.filter((each) => !isWaiting(each)).map(describeActivity)}

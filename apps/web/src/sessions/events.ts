@@ -88,9 +88,17 @@ export type Helper = {
   readonly id: HelperId;
   readonly name: string;
   readonly waiting: boolean;
+  /**
+   * Where its work goes (#395): the session's own worktree, which it shares; a branch of its own;
+   * that branch merged back into the session's; or kept, as it clashed, for the session to sort.
+   */
+  readonly branch: HelperBranch;
   readonly activities: readonly Activity[];
   readonly report: string | undefined;
 };
+
+/** Where a helper's work goes (#395), as its line shows it. */
+export type HelperBranch = "shared" | "own" | "merged" | "clashed";
 
 /** A helper started after a turn's parts so far: with the ones just before it, or after the rest. */
 const withHelper = (parts: readonly AnswerPart[], helper: HelperId): readonly AnswerPart[] => {
@@ -403,6 +411,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
                     id: event.helper,
                     name: event.name,
                     waiting,
+                    branch: "shared",
                     activities: [],
                     report: undefined,
                   },
@@ -410,7 +419,16 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               },
       });
     }
-    case "helper-finished":
+    case "helper-branched":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({
+          ...turn,
+          helpers: changeHelper(turn.helpers, event.helper, (each) => ({ ...each, branch: "own" })),
+        }),
+      });
+    case "helper-finished": {
+      const { merged } = event;
       return withLastTurn(log, {
         seq,
         change: (turn) => ({
@@ -418,9 +436,11 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
           helpers: changeHelper(turn.helpers, event.helper, (each) => ({
             ...each,
             report: event.report,
+            ...(merged === undefined ? {} : { branch: merged ? "merged" : "clashed" }),
           })),
         }),
       });
+    }
     case "suggested-replies":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
     case "sources":

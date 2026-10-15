@@ -27,6 +27,16 @@ inside the session's boundary.** For Claude that's Claude Code's `Agent` tool:
 **Codex follows the same rule when it codes** (#248): its own sub-agents, inside the same boundary, shown the same way.
 A worktree and branch of its own for a helper that writes code is #395.
 
+**#395 (2026-10-15): a helper that writes code works on a branch of its own.** When the model asks for one (Claude's
+`isolation: "worktree"`), Courtyard makes the worktree itself, through Claude Code's `WorktreeCreate` hook, beside the
+session's and never in the repository's `.claude/worktrees`, from the session branch's last commit; reviewers and
+explorers keep sharing the session's folder. It's held to its own worktree as the model is to the session's, takes
+its test ports from its folder rather than the session's slot, still runs one heavy check at a time with the
+session's, counts toward the three, and pushes or opens a pull request only with the owner's OK. As it finishes the
+worker commits whatever it left (without the repository's hooks) and merges its branch into the session branch; a
+clash aborts the merge, keeps the branch, and tells the model to merge it itself, which the allowlist allows. A
+merged branch goes at once; a kept one when the session is cleared away or deleted.
+
 ## Considered options
 
 - **Courtyard's own helper tool, the same on every provider** (as skills are, ADR 0016). Rejected: each provider

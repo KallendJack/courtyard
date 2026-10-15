@@ -26,6 +26,7 @@ import type {
   Activity,
   CodeTurn,
   FramedAttachment,
+  HelperCode,
   Provider,
   SignIn,
   ToolConnection,
@@ -387,7 +388,7 @@ const firstLine = (output: string) =>
  * Runs a command the worker allowed in the worktree, with what the session gives its commands (its
  * slot, and Courtyard's GitHub sign-in), as a shell would, and says how it went.
  */
-const runIn = (code: CodeTurn, command: string) =>
+const runIn = (code: HelperCode, command: string) =>
   new Promise<string>((resolve) => {
     exec(
       command,
@@ -442,6 +443,8 @@ const scriptedCoding = async (code: CodeTurn, message: string, report: TurnInput
 const HELPER = /^helper (.+?): (.+)$/i;
 const HELPER_REPORT = /^report: (.*)$/i;
 const HOLD_COMMAND = /^hold command: (.+)$/i;
+const PAUSE = /^pause (\d+)$/i;
+const OWN_BRANCH = /^(.+?) \(own branch\)$/i;
 
 /** Waits until the turn is stopped. */
 const untilStopped = (signal: AbortSignal) =>
@@ -456,15 +459,24 @@ const untilStopped = (signal: AbortSignal) =>
  * name once the worker gives it a place, then each step in turn, as the model's own lines do
  * ("read file: …", "edit file …: …", "run command: … (for: …)"). "hold command: pnpm test" asks to
  * run a command and keeps it running (a build's place taken) until the turn is stopped, and
- * "hold" waits until then. "report: …" is its final report, given as it finishes.
+ * "hold" waits until then; "pause 500" waits that many milliseconds. "report: …" is its final
+ * report, given as it finishes. A name ending "(own branch)" asks for a worktree and branch of
+ * its own (#395), as a helper that writes code does: it works there, and its branch is merged
+ * back as it finishes.
  */
 const scriptedHelper = async (
   code: CodeTurn,
   helper: { id: number; name: string; steps: readonly string[] },
   signal: AbortSignal,
 ) => {
-  const turn = await code.helper({ id: HelperId.parse(`helper-${helper.id}`), name: helper.name });
+  const [, ownName] = OWN_BRANCH.exec(helper.name) ?? [];
+  const name = ownName ?? helper.name;
+  const turn = await code.helper({ id: HelperId.parse(`helper-${helper.id}`), name });
   if (turn === undefined) return;
+  if (ownName !== undefined) {
+    const made = await code.branchOff();
+    if (made.ok) await turn.workIn(made.value);
+  }
   let report = "";
   for (const step of helper.steps) {
     if (signal.aborted) return;
@@ -472,16 +484,17 @@ const scriptedHelper = async (
     const [, path, text] = EDIT_FILE.exec(step) ?? [];
     const [, command, why] = RUN_COMMAND.exec(step) ?? [];
     const [, held] = HOLD_COMMAND.exec(step) ?? [];
+    const [, paused] = PAUSE.exec(step) ?? [];
     const [, said] = HELPER_REPORT.exec(step) ?? [];
     if (read !== undefined) await turn.report({ kind: "read-file", path: read });
     else if (path !== undefined && text !== undefined) {
       const allowed = await turn.code.edit(path);
-      if (allowed.ok) await writeTextFileIn(resolve(code.worktree, path), `${text}\n`);
+      if (allowed.ok) await writeTextFileIn(resolve(turn.code.worktree, path), `${text}\n`);
       else report += `Couldn't edit ${path}: ${allowed.error} `;
     } else if (command !== undefined) {
       const allowed = await turn.code.run(command, why);
       if (allowed.ok) {
-        report += await runIn(code, command);
+        report += await runIn(turn.code, command);
         turn.code.ran(command);
       } else {
         report += `Couldn't run ${command}: ${allowed.error} `;
@@ -489,6 +502,7 @@ const scriptedHelper = async (
     } else if (held !== undefined) {
       if ((await turn.code.run(held)).ok) await untilStopped(signal);
     } else if (/^hold$/i.test(step)) await untilStopped(signal);
+    else if (paused !== undefined) await pause(Number(paused), signal);
     else if (said !== undefined) report += said;
   }
   if (!signal.aborted) await turn.finished(report.trim());

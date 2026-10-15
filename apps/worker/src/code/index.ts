@@ -1,4 +1,4 @@
-import { isAbsolute, join, normalize } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
 import {
   CODE_SESSIONS_AT_ONCE,
@@ -6,12 +6,14 @@ import {
   type SessionId,
   wordsOf,
 } from "@courtyard/contract";
-import { isFolder, removeFolder } from "../files.ts";
+import { exists, isFolder, listFolder, removeFolder } from "../files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
 import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../github/index.ts";
+import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import { type CommandRule, type IssueGap, issueGapsIn, reachesOut, ruleFor } from "./allowlist.ts";
+import { BRANCH_PREFIX, helperBranchStem, isHelperBranchOf } from "./branches.ts";
 import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
@@ -39,6 +41,15 @@ export type SessionBranch = {
   readonly kept?: true;
 };
 
+/**
+ * A helper's own branch (#395) and the folder it's checked out in: branched from its session's
+ * branch, in a folder beside the session's worktree, so its folder gives it test ports of its own.
+ */
+export type HelperBranch = { readonly branch: string; readonly worktree: string };
+
+/** How a helper's branch merging back into its session branch went (#395). */
+export type MergeBack = "merged" | "clash";
+
 /** Why a session branch couldn't be started, for the owner. */
 export type BranchRefusal =
   | { readonly kind: "repo-missing"; readonly repoPath: string }
@@ -55,8 +66,6 @@ export type BranchRefusal =
 const REMOTE = "origin";
 /** How long reaching the remote may take before it counts as unreachable. */
 const REMOTE_TIMEOUT_MS = 60_000;
-/** Where session branches' names start, so the owner can tell Courtyard's from their own. */
-const BRANCH_PREFIX = "courtyard/";
 
 /** The default branch on the remote, as the remote says (`main`), or why it couldn't be told. */
 const defaultBranchOf = async (
@@ -261,9 +270,15 @@ const unpacksSafely = async (worktree: string, folder: string) => {
 /**
  * What a code session's commands get in their environment: its slot among the code sessions
  * running, 1 to `CODE_SESSIONS_AT_ONCE`, which no other running one has, for a repository's checks
- * to pick their test servers' ports from (this repository's Playwright config does).
+ * to pick their test servers' ports from (this repository's Playwright config does), and the
+ * worktree that slot is for (#395): a helper on a branch of its own runs in another folder, under
+ * the same slot when its provider shares one environment with the session (Claude Code), and
+ * picks its ports from its folder instead.
  */
-export const slotEnv = (slot: number) => ({ COURTYARD_SESSION_SLOT: String(slot) });
+export const slotEnv = (held: { slot: number; worktree: string }) => ({
+  COURTYARD_SESSION_SLOT: String(held.slot),
+  COURTYARD_SESSION_WORKTREE: held.worktree,
+});
 
 /** A repository on GitHub as `owner/name`, from its remote's address in any of git's forms. */
 const GITHUB_REMOTE =
@@ -336,9 +351,140 @@ export const createCode = (options: {
     return ok({ branch: main.value, tracking });
   };
 
+  /** Helpers' branches made and merged one at a time, so two never pick the same name (#395). */
+  const helperGit = createOneAtATime();
+
+  /**
+   * Clears a helper's worktree and branch away (#395): the folder first, by Node, then git forgets
+   * it, as for a session's (`clearBranch`). Anything left behind is only logged.
+   */
+  const removeHelper = async (gitFolder: string, helper: HelperBranch) => {
+    if (!(await removeFolder(helper.worktree))) {
+      console.error("A helper's worktree couldn't be cleared away:", helper.worktree);
+    }
+    try {
+      await git(gitFolder, ["worktree", "prune"]);
+      const there = await git(gitFolder, ["branch", "--list", helper.branch]);
+      if (there.trim() !== "") await git(gitFolder, ["branch", "-D", helper.branch]);
+    } catch (error) {
+      console.error("A helper's branch couldn't be cleared away:", gitFailureReason(error));
+    }
+  };
+
+  /**
+   * Clears every one of a session's helpers' worktrees and branches away (#395), when the session
+   * ends or is deleted: the folders beside its worktree, and the branches named after its own.
+   */
+  const clearHelpers = async (clear: { repoPath: string; sessionBranch: SessionBranch }) => {
+    const { repoPath, sessionBranch } = clear;
+    const beside = dirname(sessionBranch.worktree);
+    const stem = `${basename(sessionBranch.worktree)}-helper-`;
+    const folders = await listFolder(beside);
+    for (const name of folders.ok ? folders.value : []) {
+      if (name.startsWith(stem)) await removeFolder(join(beside, name));
+    }
+    try {
+      await git(repoPath, ["worktree", "prune"]);
+      const listed = await git(repoPath, [
+        "branch",
+        "--list",
+        "--format=%(refname:short)",
+        `${helperBranchStem(sessionBranch.branch)}*`,
+      ]);
+      for (const branch of listed.split(/\r?\n/).map((line) => line.trim())) {
+        if (isHelperBranchOf(sessionBranch.branch, branch)) {
+          await git(repoPath, ["branch", "-D", branch]);
+        }
+      }
+    } catch (error) {
+      console.error(
+        "A session's helpers' branches couldn't be cleared away:",
+        gitFailureReason(error),
+      );
+    }
+  };
+
   return {
     /** The folder a session's branch is checked out in. */
     worktreeOf,
+
+    /**
+     * Gives a helper that writes code a branch of its own (#395): from the session branch's last
+     * commit, checked out in a folder beside the session's worktree, numbered after the session's
+     * helpers' so far. Or git's reason it couldn't be.
+     */
+    branchOff: (session: SessionBranch): Promise<Result<HelperBranch, string>> =>
+      helperGit(async () => {
+        for (let number = 1; ; number += 1) {
+          const branch = `${helperBranchStem(session.branch)}${number}`;
+          const worktree = `${session.worktree}-helper-${number}`;
+          const taken = await exists(worktree);
+          if (!taken.ok) return err(`${worktree} couldn't be checked`);
+          if (taken.value) continue;
+          if ((await gitOrNothing(session.worktree, ["branch", "--list", branch])) !== "") continue;
+          try {
+            await git(session.worktree, [
+              "worktree",
+              "add",
+              "--quiet",
+              "--no-track",
+              "-b",
+              branch,
+              worktree,
+              "HEAD",
+            ]);
+            return ok({ branch, worktree });
+          } catch (error) {
+            return err(gitFailureReason(error));
+          }
+        }
+      }),
+
+    /**
+     * Merges a helper's branch back into its session branch when it finishes (#395): anything it
+     * left uncommitted is committed on its branch first, as `message`, so none of its work is
+     * lost; then the session's worktree merges it, as long as it's on the session branch. Merged,
+     * the helper's worktree and branch are cleared away. A clash stops the merge, leaving the
+     * session's worktree as it was, and keeps the helper's branch for the session's model to
+     * merge itself. Neither runs the repository's own hooks: the worker commits and merges.
+     */
+    mergeBack: (merge: {
+      session: SessionBranch;
+      helper: HelperBranch;
+      message: string;
+    }): Promise<MergeBack> =>
+      helperGit(async () => {
+        const { session, helper } = merge;
+        const env = await options.commandEnv();
+        try {
+          const left = await git(helper.worktree, ["status", "--porcelain"]);
+          if (left !== "") {
+            await git(helper.worktree, ["add", "--all"], { env });
+            await git(helper.worktree, ["commit", "--quiet", "--no-verify", "-m", merge.message], {
+              env,
+            });
+          }
+          const on = await git(session.worktree, ["branch", "--show-current"]);
+          if (on !== session.branch) return "clash";
+        } catch {
+          return "clash";
+        }
+        try {
+          await git(
+            session.worktree,
+            ["merge", "--quiet", "--no-edit", "--no-verify", helper.branch],
+            { env },
+          );
+        } catch {
+          await gitOrNothing(session.worktree, ["merge", "--abort"]);
+          return "clash";
+        }
+        await removeHelper(session.worktree, helper);
+        return "merged";
+      }),
+
+    /** Clears a session's helpers' worktrees and branches away (#395). */
+    clearHelpers,
 
     /** The repository's default branch on its remote, freshly fetched (the setup check, #181). */
     freshDefault,
@@ -536,6 +682,7 @@ export const createCode = (options: {
       pushed: boolean;
     }) => {
       const { repoPath, sessionBranch } = clear;
+      await clearHelpers({ repoPath, sessionBranch });
       // The folder goes first, by Node, then git forgets it: `git worktree remove` can't delete a
       // package install nested past Windows' path limit, and once it has half-removed a worktree
       // it refuses to touch it again ("is not a working tree").

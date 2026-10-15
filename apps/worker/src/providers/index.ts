@@ -15,10 +15,11 @@ import type {
   Source,
 } from "@courtyard/contract";
 import { z } from "zod";
+import type { HelperBranch } from "../code/index.ts";
 import type { CommandEnv } from "../git.ts";
 import type { Result } from "../result.ts";
 
-export type { Activity };
+export type { Activity, HelperBranch };
 
 /** What a model is told for one turn, built by the prompts module (docs/ai-conduct.md). */
 export type Framing = {
@@ -161,7 +162,16 @@ export type CodeTurn = {
     readonly id: HelperId;
     readonly name: string;
   }) => Promise<HelperTurn | undefined>;
+  /**
+   * Makes a worktree and branch of its own for a helper that writes code (#395): branched from
+   * the session branch's last commit, in a folder beside the session's worktree, never inside the
+   * repository. Given to the helper with its `workIn`; or git's reason it couldn't be made.
+   */
+  readonly branchOff: () => Promise<Result<HelperBranch, string>>;
 };
+
+/** The worker's say on a helper's edits and commands (#117), as on the model's. */
+export type HelperCode = Omit<CodeTurn, "helper" | "branchOff">;
 
 /**
  * A helper at work inside its code turn (#117): its own copies of the turn's say on edits and
@@ -171,12 +181,25 @@ export type CodeTurn = {
 export type HelperTurn = {
   /** Says what the helper is doing, as `TurnInput.report` does for the model. */
   readonly report: (activity: Activity) => Promise<void>;
-  /** The worker's say on the helper's edits and commands, as on the model's. */
-  readonly code: Omit<CodeTurn, "helper">;
+  /**
+   * The worker's say on the helper's edits and commands, as on the model's: in the session's
+   * worktree, or, once it works on a branch of its own (`workIn`), in that one's.
+   */
+  readonly code: HelperCode;
   /** The turn's tool connections, each call the helper makes asked of the worker as its own. */
   readonly connections: readonly ToolConnection[];
-  /** Says the helper has finished, with its final report, freeing its place. */
-  readonly finished: (report: string) => Promise<void>;
+  /**
+   * Gives the helper the worktree and branch `CodeTurn.branchOff` made (#395): its edits and
+   * commands are then decided there, with test ports of its own, and its branch is merged back
+   * into the session branch when it finishes.
+   */
+  readonly workIn: (own: HelperBranch) => Promise<void>;
+  /**
+   * Says the helper has finished, with its final report, freeing its place. One on its own
+   * branch has it merged back first (#395): answers what the model is to be told of that, merged
+   * or kept for it to sort, or nothing for a helper that shared the session's worktree.
+   */
+  readonly finished: (report: string) => Promise<string | undefined>;
 };
 
 /** A call to one of a tool connection's tools: the tool by its own name, its input as the model sent it. */

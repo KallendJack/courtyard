@@ -221,7 +221,9 @@ there is used as it is), then makes the workspace on it and opens it.
   ```
 - **Up to six sessions run at once** across the worker; a seventh waits, saying so, and starts
   when one ends. Each running session's commands get `COURTYARD_SESSION_SLOT` (1 to 6), no two
-  the same, for the repository's checks to pick their test servers' ports from.
+  the same, for the repository's checks to pick their test servers' ports from, and
+  `COURTYARD_SESSION_WORKTREE`, the folder that slot is for: a helper working in a worktree of its
+  own picks its ports from its folder instead.
 - **One heavy check at a time** across the worker, so sessions building together can't lock the
   machine up: a session's `pnpm verify`, `test`, `e2e` or `build` (in any package), `vitest run`
   or `playwright test` waits its turn, first come first served, its activity saying "Waiting for
