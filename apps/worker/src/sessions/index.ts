@@ -174,6 +174,7 @@ import {
   type WorkspaceError,
   withoutStarterHint,
 } from "../workspaces/index.ts";
+import { type AddedInbox, createAddedInbox } from "./added.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
 const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
@@ -528,6 +529,10 @@ type TurnState =
       readonly stopper: AbortController;
       /** The owner message's event number, once recorded: what a stop request must name. */
       turn: number | undefined;
+      /** The model it answers with, which a message added to it must name (#252). */
+      readonly model: ModelRef;
+      /** What the owner adds while it runs, when its provider steers (#252). */
+      readonly added: AddedInbox | undefined;
     }
   | { readonly kind: "ending" }
   /** Its folder is being deleted, so nothing new can start in it. */
@@ -981,6 +986,8 @@ export const createSessions = (options: {
   const runTurn = async (turn: {
     id: SessionId;
     stopper: AbortController;
+    /** What the owner adds while it runs, when its provider steers (#252). */
+    added: AddedInbox | undefined;
     workspaceId: WorkspaceId;
     provider: Provider;
     model: ModelRef["model"];
@@ -1575,6 +1582,7 @@ export const createSessions = (options: {
             report,
             cite,
             signal: stopper.signal,
+            added: turn.added?.messages ?? null,
           }),
           stoppedByOwner,
         ]);
@@ -1604,6 +1612,12 @@ export const createSessions = (options: {
     // it can't turn a completed or failed turn into a stopped one.
     const stopped = stopper.signal.aborted;
     session.turn = { kind: "ending" };
+    // What the owner added that its model never read, stopped first say, is marked so (#252),
+    // before the turn's end.
+    const unread = turn.added?.close() ?? [];
+    for (const added of unread) {
+      await append(turn.id, { type: "added-not-read", added: added.seq });
+    }
 
     // The session is idle and up to date before anyone hears the turn ended. Freeing it and
     // queueing the last event happen together, so a new message can't land between them.
@@ -1615,6 +1629,18 @@ export const createSessions = (options: {
         ? { type: "turn-failed", reason: failure }
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
+    // One the answer ended without reading still gets answered, next, unless the owner stopped.
+    for (const added of stopped ? [] : unread) {
+      await queueMessage({
+        id: turn.id,
+        message: {
+          text: added.text,
+          model: { provider: turn.provider.id, model: turn.model },
+          ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        },
+        attachments: [],
+      });
+    }
     // Only once it's ended, so the next code session waiting starts after it.
     options.code.slots.release(turn.id);
     // The owner's next queued message goes at once (#177), before a fixing turn could (#172).
@@ -1735,10 +1761,13 @@ export const createSessions = (options: {
     if (session.turn.kind === "deleting") return err({ kind: "not-found" });
     if (session.turn.kind !== "idle") return err({ kind: "busy" });
     // Stoppable from the very start, so a Stop pressed the moment it appears is never lost.
+    const stopper = new AbortController();
     const starting: TurnState = {
       kind: "running",
-      stopper: new AbortController(),
+      stopper,
       turn: undefined,
+      model: start.message.model,
+      added: start.provider.capabilities.steers ? createAddedInbox(stopper.signal) : undefined,
     };
     session.turn = starting;
 
@@ -1820,6 +1849,7 @@ export const createSessions = (options: {
     session.ended = runTurn({
       id: start.id,
       stopper: starting.stopper,
+      added: starting.added,
       workspaceId: start.workspaceId,
       provider: start.provider,
       model: start.message.model.model,
@@ -1877,6 +1907,48 @@ export const createSessions = (options: {
       // Removed meanwhile, so the one after it goes instead.
       if (started.error.kind !== "queued-not-found") return false;
     }
+  };
+
+  /**
+   * Adds a message the owner sent while a turn runs to that answer (#252), when its provider
+   * steers and the message is one it can take: words only, on the turn's own model, starting no
+   * skill. Recorded where it was sent, marked when an approval waits, since it goes in once that's
+   * answered. `undefined` when it can't go in, so it's queued instead (#177).
+   */
+  const steerInto = async (steer: {
+    id: SessionId;
+    message: NewMessage;
+    attachments: readonly PreparedAttachment[];
+  }): Promise<Result<null, SessionError> | undefined> => {
+    const { id, message } = steer;
+    const session = runningSession(id);
+    const { turn } = session;
+    // Only once the turn's own message is recorded, so it's always added after it.
+    if (turn.kind !== "running" || turn.turn === undefined || turn.added === undefined) {
+      return undefined;
+    }
+    if (steer.attachments.length > 0 || message.skill !== undefined) return undefined;
+    if (
+      turn.model.provider !== message.model.provider ||
+      turn.model.model !== message.model.model
+    ) {
+      return undefined;
+    }
+    // Its place is kept before anything is awaited, so the answer can't finish without it.
+    if (!turn.added.reserve()) return undefined;
+    const recorded = await append(id, {
+      type: "message-added",
+      text: message.text,
+      ...(session.approvals.size > 0 ? { afterApproval: true } : {}),
+    });
+    if (!recorded.ok) {
+      turn.added.release();
+      return recorded;
+    }
+    if (turn.added.add({ seq: recorded.value.seq, text: message.text })) return ok(null);
+    // The turn ended meanwhile: it's marked not read, and queued for the next turn instead.
+    await append(id, { type: "added-not-read", added: recorded.value.seq });
+    return undefined;
   };
 
   /**
@@ -2795,9 +2867,10 @@ export const createSessions = (options: {
         placeless: session.value.placeless === true,
         attachments,
       });
-      // A turn is running, so it waits its turn (#177).
+      // A turn is running: it goes into that answer (#252), or waits its turn (#177).
       if (!started.ok && started.error.kind === "busy") {
-        return queueMessage({ id, message: message.value, attachments });
+        const steered = await steerInto({ id, message: message.value, attachments });
+        return steered ?? queueMessage({ id, message: message.value, attachments });
       }
       return started;
     },

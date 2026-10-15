@@ -323,6 +323,7 @@ const runTurn = async (
     effort: undefined,
     folder,
     code: null,
+    added: null,
     connections: [],
     framing: {
       instructions: "The turn's instructions.",
@@ -368,6 +369,7 @@ describe("Codex's status", () => {
         usesTools: false,
         savesContext: true,
         searchesWeb: true,
+        steers: false,
       },
       models: [
         {

@@ -170,6 +170,7 @@ const scripted = (answer: unknown) => {
     usesTools: false,
     savesContext: true,
     searchesWeb: false,
+    steers: false,
   };
   const provider: Provider = {
     ...createFakeProvider({ delayMs: 0 }),

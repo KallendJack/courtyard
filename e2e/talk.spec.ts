@@ -189,24 +189,25 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
     });
 
-    test("while it answers, what's said and sent is queued until the turn ends", async ({
-      page,
-    }) => {
+    test("while it answers, what's said and sent goes into the answer (#252)", async ({ page }) => {
       await page.goto("/workspaces/garage-gym");
       await typeIn(page);
-      await message(page).fill(words(150));
+      // The fake waits for what the owner adds.
+      await message(page).fill("wait for more");
       await page.getByRole("button", { name: "Start" }).click();
 
       const answering = talking(page, says.answering);
-      if (says.strip) await expect(answering).toContainText("What you say now queues");
+      if (says.strip) {
+        await expect(answering).toContainText("What you say now goes into this answer");
+      }
       await answering.click();
       await hear(page, "Also the cover screen");
       await talking(page, says.listening).click();
       await page.getByRole("button", { name: "Send" }).click();
 
-      await expect(page.getByRole("list", { name: "Queued messages" })).toContainText(
-        "Also the cover screen",
-      );
+      const session = page.getByRole("list", { name: "Session" });
+      await expect(session).toContainText(/Also the cover screen\s*Added while answering/);
+      await expect(session).toContainText("noted: Also the cover screen");
     });
 
     test("it keeps listening through a pause, when the browser stops on its own", async ({

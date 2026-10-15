@@ -62,6 +62,8 @@ export function SessionTurns(props: {
   queuedMessages: readonly QueuedMessage[];
   /** Removes a queued message: what went wrong, or nothing once it's removed. */
   onRemoveQueued: (queued: number) => Promise<string | undefined>;
+  /** Takes a queued message back into the Reply box (#252): what went wrong, or nothing. */
+  onEditQueued?: (queued: QueuedMessage) => Promise<string | undefined>;
   /** Told when the owner scrolls away from the end to read back, and when they're back (#168). */
   onAway?: (away: boolean) => void;
   /** Set to what goes to the end and follows again: Jump to latest, or the owner sending (#168). */
@@ -70,10 +72,14 @@ export function SessionTurns(props: {
   const { sessionId, turns, providers, onRetry, onCarryOn, onContinue, onReply } = props;
   const { workspaceId, documents } = props;
   const { onStepByStep, onAllowAll } = props;
-  const { queuedMessages, onRemoveQueued } = props;
+  const { queuedMessages, onRemoveQueued, onEditQueued } = props;
   const queued = useMemo(
-    () => ({ messages: queuedMessages, remove: onRemoveQueued }),
-    [queuedMessages, onRemoveQueued],
+    () => ({
+      messages: queuedMessages,
+      remove: onRemoveQueued,
+      ...(onEditQueued === undefined ? {} : { edit: onEditQueued }),
+    }),
+    [queuedMessages, onRemoveQueued, onEditQueued],
   );
   const list = useRef<HTMLOListElement>(null);
   const following = useRef(true);

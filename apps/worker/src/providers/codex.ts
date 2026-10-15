@@ -45,6 +45,7 @@ const CAPABILITIES: Capabilities = {
   usesTools: false,
   savesContext: true,
   searchesWeb: true,
+  steers: false,
 };
 const LABEL = "Codex";
 

@@ -269,6 +269,34 @@ export type TurnInput = {
   }) => Promise<ToolReply>;
   /** Aborted when the owner stops the turn: the provider stops working as soon as it can. */
   readonly signal: AbortSignal;
+  /**
+   * What the owner adds while the turn runs (#252), for a provider that steers
+   * (`Capabilities.steers`); `null` for one that doesn't.
+   */
+  readonly added: AddedMessages | null;
+};
+
+/** A message the owner added while the turn ran (#252): its words as written, by its event number. */
+export type AddedMessage = { readonly seq: number; readonly text: string };
+
+/**
+ * The messages the owner adds while a turn runs (#252), in the order they're sent, for its
+ * provider to give its model at the model's next step. The worker records each as it's sent; a
+ * provider takes each, says once its model has read it, and says when it takes no more, from when
+ * any the owner sends waits in the queue for the next turn instead.
+ */
+export type AddedMessages = {
+  /**
+   * The next one the owner adds, waiting for it if none is waiting; `undefined` once the provider
+   * takes no more (`done`), or the turn is stopped.
+   */
+  readonly next: () => Promise<AddedMessage | undefined>;
+  /** Those added and not yet taken, taken now, without waiting. */
+  readonly waiting: () => readonly AddedMessage[];
+  /** Says the model has read this one. */
+  readonly read: (added: AddedMessage) => void;
+  /** Says the provider takes no more. */
+  readonly done: () => void;
 };
 
 /**

@@ -89,6 +89,8 @@ test("a model's update shows what changed in its note", async ({ page }) => {
   await newWorkspace(page, name);
   await startSaving(page, "save document\n# Packing list\n\n- Two rackets");
   await expect(page.getByRole("list", { name: "Documents saved" })).toContainText("Saved document");
+  // A turn of its own, once the first answer is done: sent sooner, it would go into that answer.
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(/Your turn · finished/);
 
   await page
     .getByLabel("Message", { exact: true })

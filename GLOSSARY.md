@@ -355,7 +355,7 @@ One ongoing conversation in a workspace. It keeps running on the worker whether 
 _Avoid_: chat, thread, job, conversation
 
 **Turn**:
-One message from the owner and everything the model does in response to it.
+One message from the owner, with any they add while it answers, and everything the model does in response to them.
 _Avoid_: request, run, completion
 
 **Event**:
@@ -384,11 +384,18 @@ The owner ending a running turn early. Whatever the model wrote so far stays, an
 recorded as stopped, apart from failures.
 _Avoid_: cancel, abort, interrupt (that's the worker stopping mid-turn)
 
+**Added message**:
+A message the owner sends while a turn runs, on a model that takes one mid-answer (it *steers*): it goes into that
+answer where it was sent, and the model reads it at its next step. One the model never read, because the turn was
+stopped first say, is marked so.
+_Avoid_: interjection, interruption, follow-up
+
 **Queued message**:
-A message the owner sends while a turn runs. It waits under that turn, in order, and goes as its own turn as soon as
-the session can take one; the owner can remove it from any device until then. Not a code session's turn waiting for
-one of the others to end, which is a waiting turn.
-_Avoid_: pending message, draft, steering
+A message the owner sends while a turn runs that can't go into it: on a model that doesn't steer, or one carrying
+files, a skill or another model. It waits under that turn, in order, and goes as its own turn as soon as the session
+can take one; the owner can remove it, or take it back into the Reply box to edit, from any device until then. Not a
+code session's turn waiting for one of the others to end, which is a waiting turn.
+_Avoid_: pending message, draft
 
 **Whose turn it is**:
 What a session shows at a glance: **Working** (the model, on what and for how long), **Needs you** (an approval

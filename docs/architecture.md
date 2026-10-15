@@ -168,8 +168,9 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
   turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
-  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. It queues a message
-  sent while a turn runs and sends it once the turn ends (#177), and its list of a workspace's sessions says whose
+  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. A message sent while
+  a turn runs goes into that answer on a provider that steers (#252), or is queued and sent once the turn ends
+  (#177), and its list of a workspace's sessions says whose
   turn it is in each (#179). Its routes include the event stream, the
   list of models, Get to know (a session started with its house skill), Grill this plan, each attachment
   (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), Undo
@@ -891,7 +892,21 @@ Where the rest fits:
   goes; after a usage limit they wait for the owner's next turn (Carry on, say). A queued message going first means
   no fixing turn for failed checks starts then (#172), and no "Turn finished" notification goes. One a stopped
   worker left waiting goes once the next worker starts (`recoverAll`). While an Update waits (#186), they hold,
-  and go once it has run or no longer waits.
+  and go once it has run or no longer waits. The web app's Edit on one removes it and puts its words back in the
+  Reply box (#252).
+- **Steering** (#252). On a provider whose capabilities say it `steers` (Claude, the fake; not Codex or Fake two),
+  a message sent while a turn runs (words only, on the turn's own model, starting no skill) is recorded as
+  `message-added` where it was sent, marked `afterApproval` when an approval waits, and put in the turn's inbox
+  (`sessions/added.ts`), which the provider takes from through `TurnInput.added` (`AddedMessages`: `next`,
+  `waiting`, `read`, `done`). A message's place in the inbox is reserved before it's recorded, and `done` waits
+  for any reserved, so one sent as the answer finishes still goes in. Claude's adapter keeps Claude Code's input
+  open for the turn and sends each one with `priority: "next"`, so Claude Code folds it in at Claude's next step;
+  it says one was read when Claude's next message starts, and is done once a `result` says nothing more is queued
+  (`queued_turn_count`). The fake notes each ("noted: …"), and "wait for more" waits for one. Once the provider is
+  done, or the turn ends or is stopped, the inbox takes no more: a later message is queued. Each the model never
+  read is marked `added-not-read` before the turn's end, and, unless the owner stopped it, queued to go next.
+  `prompts/` tells the next turn's model each where it was sent, and a provider that steers is told once that the
+  owner may add while it answers. Anything else sent mid-turn (attachments, another model, a skill) is queued.
 - **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,
   on the latest activity or the answer), an approval waiting, or the turn's end, marked Your turn. A workspace's
   list of sessions has the worker's say for each (`now`: working, needs-you or your-turn), which the workspace page

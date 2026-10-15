@@ -45,6 +45,8 @@ import { err, ok, type Result } from "../result.ts";
 import { pageKey, pageRead, type SearchHit, turnSources } from "../sources/index.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
 import {
+  type AddedMessage,
+  type AddedMessages,
   type CodePlugin,
   type CodeTurn,
   type CourtyardTool,
@@ -71,6 +73,7 @@ const CAPABILITIES: Capabilities = {
   usesTools: true,
   savesContext: true,
   searchesWeb: true,
+  steers: true,
 };
 const LABEL = "Claude";
 
@@ -93,9 +96,17 @@ export type ClaudeCode = {
 
 /**
  * A turn's message as Claude Code's streaming input (#78): one message from the owner, its text
- * then each photo the turn carries as an image, in the order the text numbers them.
+ * then each photo the turn carries as an image, in the order the text numbers them. On a turn the
+ * owner can add to (#252), the input stays open: each message they add follows as it's sent, for
+ * Claude Code to fold in at Claude's next step (`priority: "next"`), told to `sent`, until the
+ * turn takes no more.
  */
-async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUserMessage> {
+async function* turnPrompt(turn: {
+  framing: TurnInput["framing"];
+  added: AddedMessages | null;
+  sent: (added: AddedMessage) => void;
+}): AsyncIterable<SDKUserMessage> {
+  const { framing, added, sent } = turn;
   const images = await Promise.all(
     photosOf(framing.attachments).map(async (photo) => {
       const bytes = await readBytes(photo.path);
@@ -121,6 +132,18 @@ async function* turnPrompt(framing: TurnInput["framing"]): AsyncIterable<SDKUser
     },
     parent_tool_use_id: null,
   };
+  if (added === null) return;
+  for (;;) {
+    const more = await added.next();
+    if (more === undefined) return;
+    sent(more);
+    yield {
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text: more.text }] },
+      parent_tool_use_id: null,
+      priority: "next",
+    };
+  }
 }
 
 /** The tools a planning workspace gets: looking at its files, never changing them (ADR 0003). */
@@ -583,6 +606,11 @@ const AssistantError = z.object({
 });
 const ResultMessage = z.object({
   type: z.literal("result"),
+  /**
+   * The owner's messages Claude Code still has to answer (#252): more than none means another
+   * answer, and result, follows.
+   */
+  queued_turn_count: z.number().optional().catch(undefined),
   is_error: z.boolean().optional(),
   /** The HTTP status Claude's API answered with, when a turn ended on an error from it. */
   api_error_status: z.number().nullable().optional().catch(undefined),
@@ -1367,9 +1395,15 @@ export const createClaudeProvider = (
         setup === undefined
           ? null
           : { running: new Map(), callOf: new Map(), types: setup.helperTypes, made: new Map() };
+      // What the owner added that's gone to Claude Code, read once Claude's next message starts.
+      const unread: AddedMessage[] = [];
       try {
         const messages = claudeCode.run({
-          prompt: turnPrompt(input.framing),
+          prompt: turnPrompt({
+            framing: input.framing,
+            added: input.added,
+            sent: (added) => unread.push(added),
+          }),
           options: {
             ...isolatedOptions(),
             ...(setup === undefined || code === null
@@ -1478,9 +1512,16 @@ export const createClaudeProvider = (
           }
           const started = MessageStart.safeParse(message);
           if (started.success) {
-            if (!started.data.parent_tool_use_id) newMessage = true;
+            if (!started.data.parent_tool_use_id) {
+              newMessage = true;
+              for (const added of unread.splice(0)) input.added?.read(added);
+            }
             continue;
           }
+          // The answer's end, with nothing more of the owner's to answer: the turn takes no more,
+          // so Claude Code's input ends and it finishes (#252).
+          const ended = ResultMessage.safeParse(message);
+          if (ended.success && (ended.data.queued_turn_count ?? 0) === 0) input.added?.done();
           // Which helper is which, so each of its tool calls is told as its own (#117).
           const task = TaskStarted.safeParse(message);
           if (task.success) {
