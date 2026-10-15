@@ -236,3 +236,10 @@ export type StopRequest = z.infer<typeof StopRequest>;
 /** What Carry on names: the turn that hit the usage limit, by its owner message's event number. */
 export const CarryOnRequest = z.object({ turn: z.number().int().positive() });
 export type CarryOnRequest = z.infer<typeof CarryOnRequest>;
+
+/**
+ * What Continue names (#186): the turn a restart cut off, by its owner message's event number; or
+ * nothing, from a list (Needs you), for the session's last turn, once a restart cut it off.
+ */
+export const ContinueRequest = z.object({ turn: z.number().int().positive().optional() });
+export type ContinueRequest = z.infer<typeof ContinueRequest>;

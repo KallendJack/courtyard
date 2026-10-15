@@ -175,7 +175,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
   request,
 }) => {
   await signIn(request);
-  // Main's build, once it's merged: still running, so Update Courtyard waits for it (#249).
+  // Main's build, once it's merged: still running, so Update Courtyard would wait for it (#186).
   await page.route("**/api/live", (route) =>
     route.fulfill({
       json: {
@@ -184,6 +184,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
         newest: { commit: "b".repeat(40), title: "bbbbbbb Hold to talk" },
         newerOnMain: true,
         lastUpdate: null,
+        waiting: null,
         build: {
           kind: "running",
           stages: [
@@ -242,7 +243,7 @@ test("the owner reviews a session's pull request file by file, asks for a change
   await expect(merged).toContainText("Merged into main");
   await expect(merged).toContainText("1 file · +1 · its session has ended");
   await expect(merged.getByRole("link", { name: "Start a new session" })).toBeVisible();
-  await expect(merged.getByRole("button", { name: "Update Courtyard" })).toBeDisabled();
+  await expect(merged.getByRole("button", { name: "Update Courtyard" })).toBeEnabled();
   await expect(merge).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Ask about this PR" })).toHaveCount(0);
   await expect(diff).toHaveCount(0);

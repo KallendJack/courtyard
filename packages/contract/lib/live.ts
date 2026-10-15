@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { SessionId } from "./session.ts";
+import { WorkspaceId } from "./workspace-summary.ts";
 
 /** A version of the live copy: its full commit, and how people read it (short commit, first line). */
 export const LiveVersion = z.object({ commit: z.string(), title: z.string() });
@@ -70,6 +72,37 @@ export const MainBuild = z.discriminatedUnion("kind", [
 ]);
 export type MainBuild = z.infer<typeof MainBuild>;
 
+/**
+ * An Update tapped before it could run (#186), which the worker runs itself once main's build has
+ * passed and no session is mid-turn: one at a time, kept across a restart. It waits for main's
+ * build (`ci`); then for the sessions mid-turn (`sessions`), how many of them wait on the owner's
+ * OK, and the first of those, which a tap opens; or it was dropped, as main's build failed while
+ * it waited, with that build's log (`dropped`), until main moves on.
+ */
+export const UpdateWaiting = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("ci") }),
+  z.object({
+    kind: z.literal("sessions"),
+    count: z.number().int().positive(),
+    needYou: z.number().int().nonnegative(),
+    open: z.object({ workspaceId: WorkspaceId, sessionId: SessionId }).nullable(),
+  }),
+  z.object({ kind: z.literal("dropped"), details: z.url({ protocol: /^https$/ }) }),
+]);
+export type UpdateWaiting = z.infer<typeof UpdateWaiting>;
+
+/**
+ * Update (#186): when ready, the worker runs it once main's build has passed and no session is
+ * mid-turn, waiting till then; `now` runs it at once, cutting off the turns running, which carry
+ * on by themselves after the restart.
+ */
+export const LiveUpdateRequest = z.object({ now: z.boolean().optional() });
+export type LiveUpdateRequest = z.infer<typeof LiveUpdateRequest>;
+
+/** What Update did (#186): started, or waits to run itself. */
+export const LiveUpdateStarted = z.object({ waits: z.boolean() });
+export type LiveUpdateStarted = z.infer<typeof LiveUpdateStarted>;
+
 /** Whether this worker can update itself from the app, and if so, what it runs and what's newer. */
 export const LiveStatus = z.discriminatedUnion("kind", [
   /** Not a live copy: development, tests, or a worker set up by hand. */
@@ -87,6 +120,8 @@ export const LiveStatus = z.discriminatedUnion("kind", [
      * asked (no one signed in, or the live copy's remote isn't on GitHub).
      */
     build: MainBuild.nullable(),
+    /** The Update waiting to run (#186), or `null` when none waits. */
+    waiting: UpdateWaiting.nullable(),
   }),
 ]);
 export type LiveStatus = z.infer<typeof LiveStatus>;

@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { SessionEvent, SessionSummary } from "../packages/contract/index.ts";
+import { CUT_OFF_SESSION_ID, CUT_OFF_SESSION_TITLE } from "./cut-off-session.ts";
 import { LONG_SESSION_ID, LONG_SESSION_TURNS, READING_SESSION_ID } from "./long-session.ts";
 
 const dataDir = process.env.COURTYARD_DATA_DIR;
@@ -47,6 +48,30 @@ const seedLongSession = (id, title) => {
 };
 seedLongSession(LONG_SESSION_ID, "A long session");
 seedLongSession(READING_SESSION_ID, "A long read");
+
+// A session whose turn was still running when its worker stopped (#186): this worker cuts it off
+// as it starts, and it waits for Continue.
+{
+  const folder = join(dataDir, "sessions", CUT_OFF_SESSION_ID);
+  mkdirSync(folder, { recursive: true });
+  const at = new Date().toISOString();
+  const session = SessionSummary.omit({ busy: true }).parse({
+    id: CUT_OFF_SESSION_ID,
+    workspaceId: "reading-list",
+    title: CUT_OFF_SESSION_TITLE,
+    createdAt: at,
+    updatedAt: at,
+  });
+  writeFileSync(join(folder, "session.json"), JSON.stringify(session));
+  const model = { provider: "fake", model: "echo" };
+  const events = [
+    { seq: 1, at, type: "owner-message", text: "Sort the list into this month and later", model },
+    { seq: 2, at, type: "text-delta", text: "I'll read the list first." },
+    { seq: 3, at, type: "activity", activity: { kind: "read-file", path: "CONTEXT.md" } },
+  ];
+  const lines = events.map((event) => JSON.stringify(SessionEvent.parse(event)));
+  writeFileSync(join(folder, "events.jsonl"), `${lines.join("\n")}\n`);
+}
 
 // A live copy one commit behind its remote's main, as if a PR had just been merged.
 const liveDir = join(dataDir, "..", "live");

@@ -65,6 +65,7 @@ export function NextUp(props: {
             <span className="truncate text-sm/4.5 font-bold">Pick up: {pickUp.title}</span>
             <span className="truncate text-meta font-medium text-primary-text">
               {pickUp.waiting === "reply" && "New reply · "}
+              {pickUp.waiting === "cut-off" && "Cut off · "}
               {describeWhen(pickUp.updatedAt)}
             </span>
           </span>

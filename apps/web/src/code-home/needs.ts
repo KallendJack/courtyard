@@ -20,6 +20,8 @@ export const agoWords = (iso: string, now = Date.now()) => {
 /** One thing waiting on the owner (AGENTS.md): each a row of Needs you. */
 export type Need =
   | { readonly kind: "approval"; readonly session: Listed }
+  /** Its last turn, cut off by a restart, waits for Continue (#186). */
+  | { readonly kind: "cut-off"; readonly session: Listed }
   | { readonly kind: "failed"; readonly pull: OpenPullRequest; readonly count: number }
   | { readonly kind: "reply"; readonly session: Listed }
   /** Its session, when one opened it: a Lead's builder says so (#347). */
@@ -29,7 +31,8 @@ export type Need =
 
 /**
  * What waits on the owner, as the worker says, in the order the grill set (#301): approvals,
- * failing checks, new replies, pull requests ready to merge, conflicts, then Matt's setup.
+ * turns cut off by a restart (#186), failing checks, new replies, pull requests ready to merge,
+ * conflicts, then Matt's setup.
  */
 export const needsOf = (given: {
   sessions: readonly Listed[];
@@ -48,6 +51,10 @@ export const needsOf = (given: {
     kind: "approval",
     session,
   }));
+  const cutOff: Need[] = sessionsWaiting("cut-off").map((session) => ({
+    kind: "cut-off",
+    session,
+  }));
   const failed: Need[] = pullsWaiting("failed").map((pull) => ({
     kind: "failed",
     pull,
@@ -64,17 +71,17 @@ export const needsOf = (given: {
   });
   const setup: Need[] =
     given.setup.state === "offered" ? [{ kind: "setup", missing: given.setup.missing.length }] : [];
-  return [...approvals, ...failed, ...replies, ...merges, ...conflicts, ...setup];
+  return [...approvals, ...cutOff, ...failed, ...replies, ...merges, ...conflicts, ...setup];
 };
 
-/** A session waiting on the owner: an approval or a new reply. */
-export type SessionNeed = Extract<Need, { kind: "approval" | "reply" }>;
+/** A session waiting on the owner: an approval, a turn cut off, or a new reply. */
+export type SessionNeed = Extract<Need, { kind: "approval" | "cut-off" | "reply" }>;
 
 /** The newest session waiting on the owner, which a workspace's tile names (#345). */
 export const newestSessionNeed = (needs: readonly Need[]) =>
   needs.reduce<SessionNeed | undefined>(
     (newest, need) =>
-      (need.kind === "approval" || need.kind === "reply") &&
+      (need.kind === "approval" || need.kind === "cut-off" || need.kind === "reply") &&
       (newest === undefined || need.session.updatedAt > newest.session.updatedAt)
         ? need
         : newest,

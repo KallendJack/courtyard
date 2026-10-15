@@ -16,7 +16,10 @@ export const FailureReason = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("rate-limited"), resetAt: z.iso.datetime().optional() }),
   z.object({ kind: z.literal("provider-unavailable"), message: z.string() }),
   z.object({ kind: z.literal("unknown"), message: z.string() }),
-  /** The worker stopped while the turn was running. */
+  /**
+   * The worker stopped while the turn was running: cut off by a restart (an Update, a crash, the
+   * PC restarting). Continue carries it on (#186).
+   */
   z.object({ kind: z.literal("interrupted") }),
 ]);
 export type FailureReason = z.infer<typeof FailureReason>;
@@ -149,6 +152,12 @@ export const SessionEvent = z.discriminatedUnion("type", [
     merged: z.object({ pullRequest: z.number().int().positive() }).optional(),
     /** The owner's tap on Run the build order, which started a code workspace's Lead (#347). */
     runsBuildOrder: z.literal(true).optional(),
+    /**
+     * Continue (#186): the turn numbered `turn` was cut off by a restart, and the message, the
+     * worker's words, tells the model to carry on from where it was. Sent by the owner's tap, or
+     * by the worker after an Update now.
+     */
+    continues: z.object({ turn: z.number().int().positive() }).optional(),
   }),
   /**
    * What the worker did for a code workspace's Lead as it ran the build order (#347), in its

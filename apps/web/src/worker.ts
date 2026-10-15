@@ -1,6 +1,7 @@
 import {
   ApiError,
   type CarryOnRequest,
+  type ContinueRequest,
   type NewWorkspace,
   type PasswordForm,
   type SaveEdit,
@@ -215,6 +216,17 @@ export const carryOn = (sessionId: SessionId, turn: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/carry-on`,
     body: { turn } satisfies CarryOnRequest,
+    schema: z.unknown(),
+  });
+
+/**
+ * Continue (#186): the turn a restart cut off carries on, named by its owner message's event
+ * number; from a list (Needs you), the session's last turn.
+ */
+export const continueTurn = (sessionId: SessionId, turn?: number) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/continue`,
+    body: (turn === undefined ? {} : { turn }) satisfies ContinueRequest,
     schema: z.unknown(),
   });
 

@@ -70,6 +70,7 @@ const newVersion = (page: Page) =>
         newest: { commit: "8d57986".padEnd(40, "0"), title: "8d57986 Builds take turns" },
         newerOnMain: true,
         lastUpdate: null,
+        waiting: null,
         build: {
           kind: "passed",
           // Courtyard's CI: three jobs side by side, the browser tests in two shards (#337).

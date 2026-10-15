@@ -1,4 +1,5 @@
 import {
+  type Activity,
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
   DOCUMENT_MAX_CHARACTERS,
@@ -965,7 +966,9 @@ type Said =
   | {
       readonly speaker: "model";
       readonly text: string;
-      readonly ended: "completed" | "stopped" | "failed" | "running";
+      readonly ended: "completed" | "stopped" | "failed" | "cut-off" | "running";
+      /** What it did (#186), told only once a restart cut it off. */
+      readonly did: readonly Activity[];
       readonly saves: readonly SaidSave[];
       readonly documents: readonly SaidDocument[];
       readonly things: readonly SaidThing[];
@@ -985,18 +988,32 @@ const conversationOf = (events: readonly SessionEvent[]) => {
   const saves = new Map<number, SaidSave>();
   const documents = new Map<number, SaidDocument>();
   const things = new Map<number, SaidThing>();
+  /**
+   * What the turn under way did before it wrote or ended (#186): an answer is only made once it
+   * has, so a turn that has only done things yet still ends with the owner's message.
+   */
+  let didFirst: Activity[] = [];
   const answer = (change: (answer: ModelSaid) => Partial<ModelSaid>) => {
     const last = said.at(-1);
     const current: ModelSaid =
       last?.speaker === "model"
         ? last
-        : { speaker: "model", text: "", ended: "running", saves: [], documents: [], things: [] };
+        : {
+            speaker: "model",
+            text: "",
+            ended: "running",
+            did: didFirst,
+            saves: [],
+            documents: [],
+            things: [],
+          };
     if (last?.speaker === "model") said.pop();
     said.push({ ...current, ...change(current) });
   };
   for (const event of events) {
     switch (event.type) {
       case "owner-message":
+        didFirst = [];
         said.push({
           speaker: "owner",
           text: event.text,
@@ -1014,8 +1031,16 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         answer(() => ({ ended: "stopped" }));
         break;
       case "turn-failed":
-        answer(() => ({ ended: "failed" }));
+        answer(() => ({ ended: event.reason.kind === "interrupted" ? "cut-off" : "failed" }));
         break;
+      // What a turn did, its helpers' too (#186): told once a restart cut it off.
+      case "activity": {
+        const last = said.at(-1);
+        if (last?.speaker === "model")
+          answer((current) => ({ did: [...current.did, event.activity] }));
+        else didFirst = [...didFirst, event.activity];
+        break;
+      }
       case "context-saved": {
         const saved: SaidSave = { save: event.save, outcome: { kind: "kept" } };
         saves.set(event.seq, saved);
@@ -1056,7 +1081,6 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         if (saved) saved.undone = true;
         break;
       }
-      case "activity":
       case "session-titled":
       // The owner's reply follows, as written (docs/ai-conduct.md, Suggested replies).
       case "suggested-replies":
@@ -1111,8 +1135,49 @@ const answerLine = (said: ModelSaid) => {
       return said.text === ""
         ? "You: (this turn failed before you answered)"
         : `You (this turn failed partway through): ${said.text}`;
+    case "cut-off":
+      return said.text === ""
+        ? "You: (Courtyard restarted and cut this turn off before you wrote anything)"
+        : `You (Courtyard restarted and cut this turn off partway through): ${said.text}`;
   }
 };
+
+/** One thing a turn did, as a model reads it (#186): "Ran `pnpm test`". */
+const didLine = (activity: Activity) => {
+  switch (activity.kind) {
+    case "read-file":
+      return `Read ${activity.path}`;
+    case "skill-loaded":
+      return `Loaded the ${activity.name} skill`;
+    case "skill-file-read":
+      return `Read ${activity.path} in the ${activity.name} skill`;
+    case "web-searched":
+      return `Searched the web for ${quoted(activity.query)}`;
+    case "page-read":
+      return `Read ${activity.url}`;
+    case "edited-file":
+      return `Edited ${activity.path}`;
+    case "ran-command":
+      return `Ran ${quoted(activity.command)}`;
+    case "waiting-for-build":
+      return "Waited for the machine's builds queue";
+    case "updated-tasks":
+      return "Updated your task list";
+    case "check-failed":
+      return `Was told the check ${quoted(activity.name)} failed`;
+    case "used-tool":
+      return `Used ${activity.action} in ${activity.connection}`;
+  }
+};
+
+/** What a cut-off turn did, in order, a waiting place in the builds queue said once (#186). */
+const didLines = (did: readonly Activity[]) =>
+  did
+    .filter(
+      (activity, index) =>
+        activity.kind !== "waiting-for-build" || did[index - 1]?.kind !== "waiting-for-build",
+    )
+    .map((activity) => `- ${didLine(activity)}`);
 
 /** The files an owner message attached, as a model reads it: `attached "a.jpg", "b.pdf"`. */
 const attachedNote = (names: readonly string[]) =>
@@ -1133,8 +1198,14 @@ const lineFor = (said: Said) => {
     ...said.documents.map(documentLine),
     ...said.things.map(thingSaveLine),
   ];
-  if (saves.length === 0) return answerLine(said);
-  return `${answerLine(said)}\n\nYour saves in this answer:\n${saves.join("\n")}`;
+  const did = said.ended === "cut-off" && said.did.length > 0 ? didLines(said.did) : [];
+  return [
+    answerLine(said),
+    ...(did.length === 0
+      ? []
+      : [`What you did in this turn before it was cut off:\n${did.join("\n")}`]),
+    ...(saves.length === 0 ? [] : [`Your saves in this answer:\n${saves.join("\n")}`]),
+  ].join("\n\n");
 };
 
 /** The longest a PDF's text goes to a model, so ten of them still leave room for the rest (#78). */
@@ -1343,6 +1414,13 @@ export const buildIssueMessage = (issue: { number: number; title: string }) =>
  */
 export const grillIssueMessage = (issue: { number: number; title: string }) =>
   `Grill issue #${issue.number}, ${quoted(issue.title)}, so it can be built. Read it first with gh issue view ${issue.number} --comments, then grill the owner on it until it's clear enough to build. Once you agree, put the decisions on the issue as a comment, and label it ready-for-agent in place of needs-triage or needs-info; when it changes what the owner sees, draw it on the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next up offers Build once it's ready.`;
+
+/**
+ * What Continue sends (#186; docs/ai-conduct.md, Every turn): the turn before was cut off by a
+ * restart, and the model carries on from where it was, checking what already happened first.
+ */
+export const CONTINUE_MESSAGE =
+  "Courtyard restarted while you were working on your last turn and cut it off partway through. Carry on from where you were. First check what already happened, since a command you ran may or may not have finished and a change may or may not have been made, saved or pushed. Then finish what I asked, without doing again what's already done.";
 
 /**
  * The first message of a code workspace's Lead (#347; docs/ai-conduct.md, The Lead): the owner's

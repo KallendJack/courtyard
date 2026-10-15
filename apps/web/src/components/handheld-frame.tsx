@@ -406,7 +406,8 @@ export default function HandheldFrame(props: {
  * told apart by its icon, never by colour (#237). A tap always goes to the workspace's page, even
  * from one of its sessions (#276); holding the open one shows its recent sessions (on a tablet, once let go
  * where it was: held and dragged, it moves, #321). In its corner, how many of its sessions wait on
- * the owner, as the worker says (#345): violet for new replies, gold once one needs an approval.
+ * the owner, as the worker says (#345): violet for new replies, gold once one needs an approval or
+ * a Continue after a restart (#186).
  * Asked again on every move to another page.
  */
 function Tile(props: {
@@ -426,7 +427,9 @@ function Tile(props: {
   const { pathname } = useLocation();
   const sessions = useKeptSessions(workspace.id, pathname)?.sessions ?? [];
   const waiting = sessions.filter((session) => session.waiting !== "nothing");
-  const approval = waiting.some((session) => session.waiting === "approval");
+  const needsYou = waiting.some(
+    (session) => session.waiting === "approval" || session.waiting === "cut-off",
+  );
   const held = (event: { preventDefault: () => void }) => {
     if (!open) return;
     event.preventDefault();
@@ -459,7 +462,7 @@ function Tile(props: {
           aria-hidden
           className={classes(
             "absolute top-1.5 right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-label/3 font-bold text-card",
-            approval ? "bg-warning" : "bg-primary-text",
+            needsYou ? "bg-warning" : "bg-primary-text",
           )}
         >
           {waiting.length}

@@ -111,7 +111,7 @@ function WaitingMark(props: { on: Exclude<Listed["waiting"], "nothing"> }) {
   return (
     <span
       role="img"
-      aria-label={reply ? "New reply" : "Needs you"}
+      aria-label={reply ? "New reply" : props.on === "cut-off" ? "Cut off" : "Needs you"}
       className={classes(
         "flex h-7.5 w-11.5 shrink-0 items-center justify-center self-center rounded-row",
         reply ? "bg-primary-text" : "bg-warning",

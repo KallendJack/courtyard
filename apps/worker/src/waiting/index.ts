@@ -33,39 +33,54 @@ export const answerOf = (event: SessionEvent): Answer | undefined =>
  * order or by the worker when a builder's pull request merged: its answer is a report on Home's
  * Running row, not a reply the owner waits for.
  */
-export type Answered = { readonly answer: Answer | undefined; readonly reporting: boolean };
+export type Answered = {
+  readonly answer: Answer | undefined;
+  readonly reporting: boolean;
+  /** Its latest answer is a turn cut off by a restart (#186), which waits for Continue. */
+  readonly cutOff: boolean;
+};
 
 export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
   if (event.type === "owner-message") {
-    return { ...was, reporting: event.merged !== undefined || event.runsBuildOrder === true };
+    return {
+      ...was,
+      reporting: event.merged !== undefined || event.runsBuildOrder === true,
+      cutOff: false,
+    };
   }
   const answer = was.reporting ? undefined : answerOf(event);
-  return answer === undefined ? was : { ...was, answer };
+  if (answer === undefined) return was;
+  const cutOff = event.type === "turn-failed" && event.reason.kind === "interrupted";
+  return { ...was, answer, cutOff };
 };
 
 /**
- * What a session waits on the owner for: the approval its turn waits on; else its latest answer,
- * while the owner hasn't seen it (`seen`, the event number its page last showed up to, on any
- * device), it's under a day old, no turn runs or waits for a slot, and it has no pull request
- * (whose own rows say what waits); else nothing.
+ * What a session waits on the owner for: the approval its turn waits on; else its last turn, cut
+ * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else its
+ * latest answer, while the owner hasn't seen it (`seen`, the event number its page last showed up
+ * to, on any device), it's under a day old, no turn runs or waits for a slot, and it has no pull
+ * request (whose own rows say what waits); else nothing.
  */
 export const sessionWaiting = (session: {
   now: TurnNow;
   queued: boolean;
   pullRequest: PullRequest | undefined;
   answer: Answer | undefined;
+  cutOff: boolean;
   seen: number;
   clock: number;
 }): SessionWaiting => {
   if (session.now.kind === "needs-you") return "approval";
   const { answer } = session;
+  const recent = answer !== undefined && session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
+  const free = session.now.kind === "your-turn" && !session.queued;
+  if (free && recent && session.cutOff) return "cut-off";
   const newReply =
-    session.now.kind === "your-turn" &&
-    !session.queued &&
+    free &&
+    recent &&
     session.pullRequest === undefined &&
     answer !== undefined &&
-    answer.seq > session.seen &&
-    session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
+    answer.seq > session.seen;
   return newReply ? "reply" : "nothing";
 };
 

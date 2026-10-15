@@ -117,6 +117,8 @@ export const createLead = (options: {
   nextUp: Pick<NextUp, "list" | "fresh" | "build">;
   /** Whether a code workspace's main is red now (#355), by its id. */
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
+  /** Whether an Update waits to run (#186): meanwhile no builder starts. */
+  updating?: () => boolean;
   /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
   notify: (session: SessionId, need: string) => void;
 }) => {
@@ -259,15 +261,18 @@ export const createLead = (options: {
       (builder) => listed.get(builder.session)?.waiting === "approval",
     );
     const red = deciding === undefined && (await options.mainRed(workspaceId));
+    const updating = options.updating?.() === true;
     let why =
       deciding !== undefined
         ? `${nameOf(listed.get(deciding.session), deciding.issue)} waits on your decision.`
-        : red
-          ? "main is red, so only its fix starts."
-          : undefined;
+        : updating
+          ? "Courtyard waits to update, so the next builder starts after it."
+          : red
+            ? "main is red, so only its fix starts."
+            : undefined;
     let started = 0;
     let free = kept.builders - building.length;
-    if (deciding === undefined && free > 0) {
+    if (deciding === undefined && !updating && free > 0) {
       const issues = await nextUp.fresh(workspaceId);
       if (!issues.ok) return kept;
       const next = nextOf(kept, issues.value).filter((issue) => !red || MAIN_FIX.test(issue.title));

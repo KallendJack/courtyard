@@ -1,5 +1,8 @@
 const time = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+/** The time of day something happened, as a clock shows it: "10:42". */
+export const clockWords = (iso: string) => time(new Date(iso));
+
 /** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
 export const elapsedWords = (ms: number) => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
