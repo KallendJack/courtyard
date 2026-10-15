@@ -55,7 +55,7 @@ export function Block(props: {
           {props.count !== undefined && ` · ${props.count}`}
         </CapsLabel>
         {props.aside !== undefined && (
-          <span className="truncate text-meta font-semibold text-placeholder">{props.aside}</span>
+          <span className="truncate text-label font-semibold text-placeholder">{props.aside}</span>
         )}
       </div>
       {props.children}

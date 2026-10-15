@@ -312,7 +312,7 @@ function StartOnIssue(props: {
     >
       {props.small ? (
         <div className="flex items-center gap-2.5">
-          <div className="flex min-w-0 grow flex-col gap-0.5">
+          <div className="flex min-w-0 grow flex-col">
             {title}
             <p className={classes("text-meta font-medium", look.status)}>Ready</p>
           </div>
@@ -324,7 +324,7 @@ function StartOnIssue(props: {
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col">
           {title}
           <p className={classes("text-meta font-medium", look.status)}>{status}</p>
         </div>

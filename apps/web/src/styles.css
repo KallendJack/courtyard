@@ -103,8 +103,9 @@
   --text-interface--line-height: 20px;
   --text-meta: 13px; /* a detail line: a row's second line, a status, a note */
   --text-meta--line-height: 18px;
-  /* A section's label in capitals, CapsLabel alone (600, tracking-label); and what has fixed
-     room: a tab's count, a badge, a rail tile's name, a chart's axis. */
+  /* A section's label in capitals, CapsLabel alone (600, tracking-label), and what sits beside it
+     on its row ("0 of 6"); and what has fixed room: a tab's count, a badge, a rail tile's name, a
+     chart's axis. */
   --text-label: 12px;
   --text-label--line-height: 16px;
   --text-body: 15px; /* a page's intro, a paragraph */
