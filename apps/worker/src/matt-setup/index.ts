@@ -1,13 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type {
-  MattSetup,
-  MattSetupAnswer,
-  SetupCard,
-  SetupPaper,
-  SetupTracker,
-  WorkspaceId,
+import {
+  type MattSetup,
+  type MattSetupAnswer,
+  makesLabels,
+  opensPullRequest,
+  recommendedChoices,
+  type SetupCard,
+  type SetupPaper,
+  type SetupTracker,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { Code } from "../code/index.ts";
@@ -44,6 +47,8 @@ const FILES = [ISSUE_TRACKER, TRIAGE_LABELS, DOMAIN] as const;
 /** The house glossary, and the name his templates give it. */
 const GLOSSARY = "GLOSSARY.md";
 const CONTEXT = "CONTEXT.md";
+/** The glossary's old name where it's named as that file: not in a longer name, or another folder's. */
+const NAMED_CONTEXT = /(?<![\w./-])CONTEXT\.md/g;
 
 /** Where a repository may keep its own list of work, in the order they're looked for. */
 const TRACKER_FILES = [
@@ -61,8 +66,13 @@ const SCRATCH = ".scratch/";
 /** How a file is known to have the section already. */
 const HAS_SECTION = /^## Agent skills\s*$/m;
 
-/** The five default triage labels, with Courtyard's own colours and his meanings. */
+/**
+ * The house standard's labels: GitHub's two categories, and the five default triage labels, with
+ * Courtyard's own colours and his meanings.
+ */
 const LABELS = [
+  { name: "bug", color: "d73a4a", description: "Something isn't working" },
+  { name: "enhancement", color: "a2eeef", description: "New feature or request" },
   { name: "needs-triage", color: "fbca04", description: "Maintainer needs to evaluate this issue" },
   { name: "needs-info", color: "d4c5f9", description: "Waiting on reporter for more information" },
   {
@@ -110,7 +120,10 @@ export const createMattSetup = (options: {
   readonly contextDir: string;
   readonly matt: MattSkills | undefined;
   readonly code: Pick<Code, "freshDefault" | "onGitHub" | "commandEnv">;
-  readonly github: Pick<GitHub, "labels" | "createLabel" | "openPullRequest" | "createIssue">;
+  readonly github: Pick<
+    GitHub,
+    "labels" | "createLabel" | "openPullRequest" | "createIssue" | "openIssues"
+  >;
   readonly connections: Pick<Connections, "canMakePaper" | "connectPaper">;
 }) => {
   const answersFile = join(options.dataDir, ANSWERS_FILE);
@@ -159,8 +172,9 @@ export const createMattSetup = (options: {
       (await at(CONTEXT)) !== undefined
         ? { path: CONTEXT }
         : null;
-    // Labels matter only where its work lives on GitHub (or will).
-    const onGitHub = tracked === undefined || /github/i.test(tracked);
+    // Labels matter only where its work lives on GitHub (or will): his GitHub tracker says so.
+    const onGitHub =
+      tracked === undefined || /^#\s*Issue tracker:\s*GitHub\b|\bgh issue\b/im.test(tracked);
     const lacking = onGitHub
       ? LABELS.map((label) => label.name).filter((name) => !labels.value.includes(name))
       : [];
@@ -187,12 +201,22 @@ export const createMattSetup = (options: {
     };
   };
 
-  /** Each open item of a tracker moved to GitHub issues, filed as one; the files that point to them. */
+  /**
+   * Each open item of a tracker moved to GitHub issues, filed as one, unless it's an open issue
+   * already (a Set up that failed part way, tried again); the files that point to them.
+   */
   const moveTracker = async (
     checked: Checked,
     tracker: SetupTracker,
   ): Promise<Result<{ filed: number; files: Map<string, string> }, string>> => {
     const at = onDefault(checked.repoPath, checked.tracking);
+    const open = await options.github.openIssues({
+      repo: checked.repo,
+      label: MOVED_LABEL,
+      forBuild: false,
+    });
+    if (!open.ok) return err(problemWords(open.error));
+    const already = new Map(open.value.map((issue) => [issue.title, issue.number]));
     const sources =
       tracker.path === SCRATCH
         ? await scratchTickets(checked.repoPath, checked.tracking)
@@ -203,8 +227,13 @@ export const createMattSetup = (options: {
       const text = await at(path);
       if (text === undefined) continue;
       const items = tracker.path === SCRATCH ? scratchItem(path, text) : openItems(text);
-      const moved: number[] = [];
+      const moved: Moved[] = [];
       for (const item of items) {
+        const there = already.get(item.title);
+        if (there !== undefined) {
+          moved.push({ item, issue: there });
+          continue;
+        }
         const issue = await options.github.createIssue({
           repo: checked.repo,
           title: item.title,
@@ -213,11 +242,10 @@ export const createMattSetup = (options: {
           milestone: null,
         });
         if (!issue.ok) return err(problemWords(issue.error));
-        moved.push(issue.value.number);
+        moved.push({ item, issue: issue.value.number });
         filed += 1;
       }
-      if (moved.length > 0)
-        files.set(path, pointedTo(text, items, moved, tracker.path === SCRATCH));
+      if (moved.length > 0) files.set(path, pointedTo(text, moved, tracker.path === SCRATCH));
     }
     return ok({ filed, files });
   };
@@ -239,44 +267,46 @@ export const createMattSetup = (options: {
       return changed === undefined ? at(path) : (changed ?? undefined);
     };
     if (card.glossary !== null && choices.glossary === GLOSSARY) {
-      // The rename, and every file on the default branch that names it by its old name.
+      // The rename, and every Markdown file on the default branch that names it by its old name.
       const text = await at(card.glossary.path);
       changes.set(card.glossary.path, null);
       changes.set(GLOSSARY, `${(text ?? "").trimEnd()}\n`);
       const naming = await gitOrNothing(checked.repoPath, [
         "grep",
         "-l",
-        "-F",
-        card.glossary.path,
+        "-z",
+        "-P",
+        NAMED_CONTEXT.source,
         checked.tracking,
         "--",
+        "*.md",
       ]);
-      for (const line of (naming ?? "").split("\n")) {
-        const path = line.slice(checked.tracking.length + 1);
+      for (const found of (naming ?? "").split("\0")) {
+        const path = found.slice(checked.tracking.length + 1);
         if (path === "" || path === card.glossary.path) continue;
         const named = await now(path);
         if (named !== undefined) {
-          changes.set(path, `${named.split(card.glossary.path).join(GLOSSARY).trimEnd()}\n`);
+          changes.set(path, `${named.replace(NAMED_CONTEXT, GLOSSARY).trimEnd()}\n`);
         }
       }
     }
     const template = (name: string) => readFile(join(checked.templates, name), "utf8");
-    const tracker = card.tracker !== null && !choices.moveTracker ? card.tracker : null;
+    const kept = card.tracker !== null && !choices.moveTracker ? card.tracker : null;
     for (const path of card.files) {
       const text =
         path === ISSUE_TRACKER
-          ? tracker === null
+          ? kept === null
             ? await template("issue-tracker-github.md")
-            : tracker.path === SCRATCH
+            : kept.path === SCRATCH
               ? await template("issue-tracker-local.md")
-              : keptTracker(tracker)
+              : keptTracker(kept)
           : path === TRIAGE_LABELS
             ? await template("triage-labels.md")
             : (await template("domain.md")).split(CONTEXT).join(choices.glossary);
       changes.set(path, text);
     }
     if (card.section !== null) {
-      const section = agentSkills(tracker, choices.glossary);
+      const section = agentSkills(kept, choices.glossary);
       const text = await now(card.section.path);
       changes.set(
         card.section.path,
@@ -371,18 +401,18 @@ export const createMattSetup = (options: {
       const checked = await check(id);
       if (checked === undefined) return err({ kind: "not-found" });
       const { card } = checked;
+      const recommended = recommendedChoices(card);
+      const tracker = given.tracker ?? recommended.tracker;
       const choices: Choices = {
-        moveTracker:
-          card.tracker !== null && (given.tracker ?? card.tracker.recommended) === "move",
+        moveTracker: card.tracker !== null && tracker === "move",
         glossary:
-          card.glossary === null || (given.glossary ?? "rename") === "rename"
+          card.glossary === null || (given.glossary ?? recommended.glossary) === "rename"
             ? GLOSSARY
             : card.glossary.path,
-        makePaper: card.paper !== null && (given.paper ?? "create") === "create",
+        makePaper: card.paper !== null && (given.paper ?? recommended.paper) === "create",
       };
-      const onGitHub = card.tracker === null || choices.moveTracker;
       const labelsMade: string[] = [];
-      if (onGitHub) {
+      if (makesLabels(card, tracker)) {
         for (const label of LABELS.filter((each) => card.labels.includes(each.name))) {
           const made = await options.github.createLabel({ repo: checked.repo, ...label });
           if (!made.ok) return err({ kind: "failed", reason: problemWords(made.error) });
@@ -430,12 +460,7 @@ export const createMattSetup = (options: {
 export type MattSetupCheck = ReturnType<typeof createMattSetup>;
 
 /** Whether a card moves the repository anywhere: its Paper line alone doesn't. */
-const offersAnything = (card: SetupCard) =>
-  card.tracker !== null ||
-  card.glossary !== null ||
-  card.files.length > 0 ||
-  card.section !== null ||
-  card.labels.length > 0;
+const offersAnything = (card: SetupCard) => opensPullRequest(card) || card.labels.length > 0;
 
 /** A file's text on the default branch (`tracking`), or `undefined` when it isn't there. */
 const onDefault = (repoPath: string, tracking: string) => (path: string) =>
@@ -498,27 +523,43 @@ const scratchTickets = async (repoPath: string, tracking: string) => {
   return (listed ?? "").split("\n").filter((path) => /\/issues\/[^/]+\.md$/.test(path));
 };
 
-/** An open item of a tracker: its title, the line it's on, and anything more about it. */
-type Item = { readonly title: string; readonly line: number; readonly body?: string };
+/**
+ * An open item of a tracker: its words, its title as an issue's (cut to a title's length), the
+ * line it's on, and anything more about it.
+ */
+type Item = {
+  readonly words: string;
+  readonly title: string;
+  readonly line: number;
+  readonly body?: string;
+};
+/** An item moved, and the issue it's now. */
+type Moved = { readonly item: Item; readonly issue: number };
+
+/** A heading that says the items under it are done. */
+const DONE = /^(done|closed|finished|shipped|completed)\b/i;
 
 /**
  * A list file's open items: its unticked boxes, or with no boxes at all, its top-level list items;
- * never under a heading that says they're done.
+ * never under a heading that says they're done, or one inside it.
  */
 const openItems = (text: string): Item[] => {
   const boxes = /^\s*[-*+] \[[ xX]\] /m.test(text);
-  const item = boxes ? /^[-*+] \[ \] (.+)$/ : /^[-*+] (.+)$/;
+  const item = boxes ? /^\s*[-*+] \[ \] (.+)$/ : /^[-*+] (.+)$/;
   const items: Item[] = [];
-  let done = false;
+  /** The level of the heading whose items are done, while under it. */
+  let doneAt: number | undefined;
   for (const [line, each] of text.split("\n").entries()) {
-    const heading = /^#{1,6}\s+(.*)$/.exec(each)?.[1];
-    if (heading !== undefined) {
-      done = /\b(done|closed|finished|shipped|completed)\b/i.test(heading);
+    const heading = /^(#{1,6})\s+(.*)$/.exec(each);
+    if (heading !== null) {
+      const level = heading[1]?.length ?? 1;
+      if (doneAt !== undefined && level > doneAt) continue;
+      doneAt = DONE.test(heading[2] ?? "") ? level : undefined;
       continue;
     }
-    const title = item.exec(each)?.[1]?.trim();
-    if (!done && title !== undefined && title !== "") {
-      items.push({ title: title.slice(0, 200), line });
+    const words = item.exec(each)?.[1]?.trim();
+    if (doneAt === undefined && words !== undefined && words !== "") {
+      items.push({ words, title: words.slice(0, 200), line });
     }
   }
   return items;
@@ -527,8 +568,8 @@ const openItems = (text: string): Item[] => {
 /** A `.scratch/` ticket, unless its Status says it's resolved: titled by its first heading. */
 const scratchItem = (path: string, text: string): Item[] => {
   if (/^Status:\s*(resolved|closed|done|wontfix)\b/im.test(text)) return [];
-  const title = /^#\s+(.+)$/m.exec(text)?.[1]?.trim() ?? basename(path, ".md");
-  return [{ title: title.slice(0, 200), line: -1, body: text.trim() }];
+  const words = /^#\s+(.+)$/m.exec(text)?.[1]?.trim() ?? basename(path, ".md");
+  return [{ words, title: words.slice(0, 200), line: -1, body: text.trim() }];
 };
 
 /**
@@ -536,17 +577,15 @@ const scratchItem = (path: string, text: string): Item[] => {
  * (under its first heading) says where its work lives now. A `.scratch/` ticket gets a line at
  * its end.
  */
-const pointedTo = (
-  text: string,
-  items: readonly Item[],
-  issues: readonly number[],
-  scratch: boolean,
-) => {
-  if (scratch) return `${text.trimEnd()}\n\nMoved to GitHub issue #${issues[0] ?? ""}.\n`;
+const pointedTo = (text: string, moved: readonly Moved[], scratch: boolean) => {
+  if (scratch) {
+    const issues = moved.map(({ issue }) => `#${issue}`).join(", ");
+    return `${text.trimEnd()}\n\nMoved to GitHub issue ${issues}.\n`;
+  }
   const lines = text.split("\n");
-  for (const [at, item] of items.entries()) {
-    const bullet = lines[item.line]?.match(/^[-*+]/)?.[0] ?? "-";
-    lines[item.line] = `${bullet} ${item.title}: moved to #${issues[at] ?? ""}`;
+  for (const { item, issue } of moved) {
+    const bullet = lines[item.line]?.match(/^\s*[-*+]/)?.[0] ?? "-";
+    lines[item.line] = `${bullet} ${item.words}: moved to #${issue}`;
   }
   const note =
     "Work for this repo is in GitHub issues now: each open item here moved to one, named on its line.";
@@ -563,7 +602,7 @@ const keptTracker = (tracker: SetupTracker) =>
     `Work for this repo lives in \`${tracker.path}\`, not in GitHub issues.`,
     "",
     `- **To see what's open, or fetch a ticket**: read \`${tracker.path}\`.`,
-    tracker.why === undefined
+    tracker.recommended === "move"
       ? `- **To file an issue**: add it to \`${tracker.path}\`. To close one, mark it done there.`
       : `- **To file an issue**: this repo's instructions say another tool or agent writes \`${tracker.path}\`, so file work the way they say, not by editing it yourself.`,
     "",

@@ -1,14 +1,14 @@
 import type { PaperFile, WorkspaceConnections, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { Button, IconButton } from "@/components/button";
+import { Button } from "@/components/button";
+import { CardDialog } from "@/components/card-dialog";
 import { GitHubMark, PaperMark } from "@/components/connections-line";
 import { FormError } from "@/components/form-error";
 import { placeUnder } from "@/components/place-under";
 import { RadioRow } from "@/components/radio-row";
 import { Scroller } from "@/components/scroller";
-import { useDialog } from "@/components/use-dialog";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { connectPaper, loadPaperFiles } from "./api.ts";
@@ -40,16 +40,16 @@ export function ConnectionsSheet(props: {
   /** The connections line's anchor name (place-under.ts). */
   anchor: string;
 }) {
-  const dialog = useDialog(props.open, props.onClose);
   return (
-    <dialog
-      {...dialog}
-      aria-label="Connections"
+    <CardDialog
+      title="Connections"
+      note="What this workspace's sessions can use"
+      open={props.open}
+      onClose={props.onClose}
       style={placeUnder(props.anchor, UNDER)}
-      className="fixed m-0 overflow-hidden rounded-box border border-input bg-popover p-0 text-popover-foreground shadow-raised backdrop:bg-card/60 open:flex open:flex-col"
     >
-      {props.open && <SheetBody {...props} />}
-    </dialog>
+      <SheetBody {...props} />
+    </CardDialog>
   );
 }
 
@@ -101,17 +101,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
   const { github } = connections;
   return (
     // Its title and Connect stay put; only what's between them scrolls (#339).
-    <div className="flex min-h-0 flex-col gap-3 p-5">
-      <div className="flex shrink-0 items-start justify-between gap-3 pb-1">
-        <div className="flex flex-col gap-1">
-          <h2 className="display-section text-sheet-title">Connections</h2>
-          <p className="text-meta font-medium text-muted-foreground">
-            What this workspace's sessions can use
-          </p>
-        </div>
-        <IconButton label="Close" icon={<X />} onClick={props.onClose} />
-      </div>
-
+    <>
       <Scroller data-dialog-body="" className="flex min-h-0 flex-col gap-3">
         <section
           aria-label="GitHub"
@@ -207,6 +197,6 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
         </Button>
         <FormError message={connect.error} />
       </div>
-    </div>
+    </>
   );
 }

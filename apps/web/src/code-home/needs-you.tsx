@@ -13,7 +13,7 @@ import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/home-block"
 import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
 import { useAction } from "@/lib/use-action";
-import { MattSetupDone, SetupSheet } from "../matt-setup/matt-setup-offer.tsx";
+import { MattSetupDone, SetupSheet } from "../matt-setup/setup-card.tsx";
 import { describeProblem } from "../problems.tsx";
 import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";

@@ -1,23 +1,24 @@
-import type { MattSetup, MattSetupAnswer, SetupCard, WorkspaceId } from "@courtyard/contract";
-import { X } from "lucide-react";
+import {
+  type MattSetup,
+  type MattSetupAnswer,
+  makesLabels,
+  opensPullRequest,
+  recommendedChoices,
+  type SetupCard,
+  type SetupChoices,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { type ReactNode, useState } from "react";
-import { Button, IconButton } from "@/components/button";
+import { Button } from "@/components/button";
+import { CardDialog } from "@/components/card-dialog";
 import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
 import { Scroller } from "@/components/scroller";
 import { SegmentedChoice } from "@/components/segmented-choice";
-import { useDialog } from "@/components/use-dialog";
 import { WebLink } from "@/components/web-link";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { answerMattSetup } from "./api.ts";
-
-/** The owner's choices on a card's lines, each what it recommends until tapped. */
-type Choices = {
-  tracker: "keep" | "move";
-  glossary: "rename" | "keep";
-  paper: "create" | "skip";
-};
 
 /**
  * What setting up did (#181, #323), under Needs you on a code workspace's Home (#301): where the
@@ -61,33 +62,22 @@ export function SetupSheet(props: {
   /** The card as the owner's answer leaves it. */
   onAnswered: (setup: MattSetup) => void;
 }) {
-  const dialog = useDialog(props.open, props.onClose);
   return (
-    <dialog
-      {...dialog}
-      aria-label="Set up Matt Pocock's skills"
-      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(calc(100%-2rem),27.5rem)] overflow-hidden rounded-box border border-input bg-popover p-0 text-popover-foreground shadow-raised backdrop:bg-card/60 open:flex open:flex-col"
+    <CardDialog
+      title="Set up Matt Pocock's skills"
+      note="What this repo has, and what moves it to the house standard. One pull request."
+      open={props.open}
+      onClose={props.onClose}
     >
-      {props.open && <SheetBody {...props} />}
-    </dialog>
+      <SheetBody {...props} />
+    </CardDialog>
   );
 }
 
 function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
   const { card } = props;
-  const [choices, setChoices] = useState<Choices>({
-    tracker: card.tracker?.recommended ?? "move",
-    glossary: "rename",
-    paper: "create",
-  });
-  const choose = (change: Partial<Choices>) => setChoices((was) => ({ ...was, ...change }));
-  /** Its work lives on GitHub (or will), so the labels are made there. */
-  const onGitHub = card.tracker === null || choices.tracker === "move";
-  const changesFiles =
-    card.tracker !== null ||
-    card.glossary !== null ||
-    card.files.length > 0 ||
-    card.section !== null;
+  const [choices, setChoices] = useState<SetupChoices>(() => recommendedChoices(card));
+  const choose = (change: Partial<SetupChoices>) => setChoices((was) => ({ ...was, ...change }));
 
   const send = useAction(async (answer: MattSetupAnswer) => {
     const answered = await answerMattSetup(props.workspaceId, answer);
@@ -105,17 +95,7 @@ function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
 
   return (
     // Its title and Set up stay put; only the lines between them scroll (#339).
-    <div className="flex min-h-0 flex-col gap-3 p-5">
-      <div className="flex shrink-0 items-start justify-between gap-3 pb-1">
-        <div className="flex flex-col gap-1">
-          <h2 className="display-section text-sheet-title">Set up Matt Pocock's skills</h2>
-          <p className="text-meta font-medium text-muted-foreground">
-            What this repo has, and what moves it to the house standard. One pull request.
-          </p>
-        </div>
-        <IconButton label="Close" icon={<X />} onClick={props.onClose} />
-      </div>
-
+    <>
       <Scroller data-dialog-body="" className="flex min-h-0 flex-col gap-2">
         {card.tracker !== null && (
           <Line title="Where work lives" found={<Path>{card.tracker.path}</Path>}>
@@ -136,7 +116,7 @@ function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
                     ]
               }
             />
-            {card.tracker.why !== undefined && (
+            {card.tracker.recommended === "keep" && (
               <p className="text-meta font-medium text-primary-text">
                 Recommended: {card.tracker.why}
               </p>
@@ -167,7 +147,7 @@ function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
         {card.section !== null && (
           <Line title="Agent skills section" found={<Added>Added to {card.section.path}</Added>} />
         )}
-        {card.labels.length > 0 && onGitHub && (
+        {makesLabels(card, choices.tracker) && (
           <Line
             title="Triage labels"
             found={<Added>Made on GitHub</Added>}
@@ -202,7 +182,7 @@ function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
           waiting={send.running?.[0].answer === "not-now"}
           onClick={() => void setUp()}
         >
-          {changesFiles ? "Set up · opens a pull request" : "Set up"}
+          {opensPullRequest(card) ? "Set up · opens a pull request" : "Set up"}
         </Button>
         <Button
           variant="quiet"
@@ -214,7 +194,7 @@ function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
         </Button>
         <FormError message={send.error} />
       </div>
-    </div>
+    </>
   );
 }
 

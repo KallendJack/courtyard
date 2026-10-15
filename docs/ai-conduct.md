@@ -278,9 +278,9 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > this. Every change works from an issue: when the owner asks for one without an issue, file it first where the
 > repository's docs/agents/issue-tracker.md says its work lives; where it says nothing, with gh issue create, in a
 > milestone, with a category label and one triage label (the repository's docs/agents/ say which). Have the pull
-> request close it, or mark it done in that tracker. When a claim on an issue names your session branch, it was made for you, and it's
-> released for you if the session stops before its pull request, so don't claim that issue again or say Stopped on
-> it.
+> request close it, or mark it done in that tracker. When a claim on an issue names your session branch, it was made
+> for you, and it's released for you if the session stops before its pull request, so don't claim that issue again
+> or say Stopped on it.
 > Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know
 > yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and
 > before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you

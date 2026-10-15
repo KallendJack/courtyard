@@ -8,11 +8,10 @@ import { z } from "zod";
  * or TODO file, or `.scratch/`. Move to GitHub issues is recommended, unless the repository's own
  * instructions say another tool or agent writes it (`why` says so), when Keep is.
  */
-export const SetupTracker = z.object({
-  path: z.string(),
-  recommended: z.enum(["keep", "move"]),
-  why: z.string().optional(),
-});
+export const SetupTracker = z.discriminatedUnion("recommended", [
+  z.object({ path: z.string(), recommended: z.literal("move") }),
+  z.object({ path: z.string(), recommended: z.literal("keep"), why: z.string() }),
+]);
 export type SetupTracker = z.infer<typeof SetupTracker>;
 
 /** A setup card: every line of it, each with what Courtyard found and what it recommends. */
@@ -76,8 +75,33 @@ export const MattSetupAnswer = z.discriminatedUnion("answer", [
 ]);
 export type MattSetupAnswer = z.infer<typeof MattSetupAnswer>;
 
-/** How many lines a setup card has, as Needs you counts them ("4 things to set up"). */
+/** The owner's choice on each line of a setup card. */
+export type SetupChoices = {
+  readonly [Line in "tracker" | "glossary" | "paper"]-?: NonNullable<
+    Extract<MattSetupAnswer, { answer: "allow" }>[Line]
+  >;
+};
+
+/** What a card recommends on each line, the house standard unless it says why not. */
+export const recommendedChoices = (card: SetupCard): SetupChoices => ({
+  tracker: card.tracker?.recommended ?? "move",
+  glossary: "rename",
+  paper: "create",
+});
+
+/** Whether setting up makes the labels: only when the repository's work lives on GitHub (#323). */
+export const makesLabels = (card: SetupCard, tracker: SetupChoices["tracker"]) =>
+  card.labels.length > 0 && (card.tracker === null || tracker === "move");
+
+/** Whether setting up changes the repository's files, so it opens a pull request. */
+export const opensPullRequest = (card: SetupCard) =>
+  card.tracker !== null || card.glossary !== null || card.files.length > 0 || card.section !== null;
+
+/**
+ * How many lines a setup card shows as it opens, its recommendations taken, as Needs you counts
+ * them ("4 things to set up").
+ */
 export const setupLines = (card: SetupCard) =>
   [card.tracker, card.glossary, card.section, card.paper].filter((line) => line !== null).length +
   (card.files.length > 0 ? 1 : 0) +
-  (card.labels.length > 0 ? 1 : 0);
+  (makesLabels(card, recommendedChoices(card).tracker) ? 1 : 0);

@@ -636,7 +636,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
   first load (`arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one
-  (`arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it.
+  (`arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it. A card over
+  the page for one task (`card-dialog.tsx`: its title, a line under it and Close) holds Connections, under the line
+  that opens it, and the setup card (#323), in the middle of the screen.
   **`lib/`:** small
   helpers shared by pages. **`styles.css`:** the theme: Handheld, dark whatever the device's setting (#210).
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that

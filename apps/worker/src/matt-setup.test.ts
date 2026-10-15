@@ -15,6 +15,7 @@ import {
   codeWorkspace,
   createFakeGitHub,
   type FakeGitHub,
+  type FakeIssue,
   gitIn,
   MATT_TEST_SKILLS,
   mattSkillsIn,
@@ -61,7 +62,9 @@ const AGENT_SKILLS = [
   "",
 ].join("\n");
 
+/** The house standard's labels: GitHub's two categories, then the five triage labels. */
 const TRIAGE_LABELS = [
+  "enhancement",
   "needs-triage",
   "needs-info",
   "ready-for-agent",
@@ -93,8 +96,12 @@ afterEach(async () => {
 const owner = async (
   labels: readonly string[] = ["bug", "needs-triage"],
   paper?: FakePaperFiles,
+  issues: readonly FakeIssue[] = [],
 ) => {
-  github = createFakeGitHub({ labels: { "octo-owner/side-project": labels } });
+  github = createFakeGitHub({
+    labels: { "octo-owner/side-project": labels },
+    issues: { "octo-owner/side-project": issues },
+  });
   const request = await asOwner(
     testWorker({
       root,
@@ -188,7 +195,7 @@ describe("the setup card", () => {
       state: "offered",
       card: card({
         files: ["docs/agents/issue-tracker.md", "docs/agents/triage-labels.md"],
-        labels: ["needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
+        labels: ["enhancement", "needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
       }),
     });
   });
@@ -221,7 +228,7 @@ describe("the setup card", () => {
           "docs/agents/domain.md",
         ],
         section: { path: "AGENTS.md" },
-        labels: ["needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
+        labels: ["enhancement", "needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
       }),
     });
 
@@ -230,11 +237,13 @@ describe("the setup card", () => {
     expect(opened).toEqual({
       state: "opened",
       pullRequest: { number: 1, url: "https://github.com/octo-owner/side-project/pull/1" },
-      labelsMade: ["needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
+      labelsMade: ["enhancement", "needs-info", "ready-for-agent", "ready-for-human", "wontfix"],
       issuesFiled: 0,
       paper: { kind: "skipped" },
     });
-    expect(github.labelsOf("octo-owner/side-project")).toEqual(["bug", ...TRIAGE_LABELS]);
+    expect(new Set(github.labelsOf("octo-owner/side-project"))).toEqual(
+      new Set(["bug", ...TRIAGE_LABELS]),
+    );
     expect(github.pullRequestFrom(await setupBranch())).toBe(1);
     // His templates for the house answers, the glossary named GLOSSARY.md, and the Agent skills
     // section.
@@ -324,7 +333,51 @@ describe("the setup card", () => {
     );
     expect(await onBranch("docs/agents/issue-tracker.md")).toBe("# Issue tracker: GitHub");
     // Its work lives on GitHub now, so the triage labels are made.
-    expect(github.labelsOf("octo-owner/side-project")).toEqual(["bug", ...TRIAGE_LABELS]);
+    expect(new Set(github.labelsOf("octo-owner/side-project"))).toEqual(
+      new Set(["bug", ...TRIAGE_LABELS]),
+    );
+  });
+
+  it("files no item again that's an open issue already, as after a Set up that failed part way", async () => {
+    await onMain({ "docs/backlog.md": BACKLOG });
+    const request = await owner([...TRIAGE_LABELS, "bug"], undefined, [
+      { number: 7, title: "Pin the fan curve", labels: ["needs-triage"] },
+    ]);
+
+    const opened = await answer(request, "allow", { tracker: "move" });
+
+    expect(opened).toMatchObject({ state: "opened", issuesFiled: 1 });
+    expect(github.issuesFiled().map((issue) => issue.title)).toEqual(["Back up the router"]);
+    expect(await onBranch("docs/backlog.md")).toContain("Pin the fan curve: moved to #7");
+  });
+
+  it("renames only the glossary's own name in the files that point to it, never a longer name or a file that isn't text", async () => {
+    await onMain({
+      "CONTEXT.md": "# Glossary\n",
+      "AGENTS.md": "# Stacks\n\nWords are in CONTEXT.md. Shared ones in SHARED-CONTEXT.md.\n",
+      "src/names.ts": 'export const glossary = "CONTEXT.md";\n',
+    });
+    const request = await owner([...TRIAGE_LABELS, "bug"]);
+
+    await answer(request, "allow", { glossary: "rename" });
+
+    expect(await onBranch("AGENTS.md")).toContain(
+      "Words are in GLOSSARY.md. Shared ones in SHARED-CONTEXT.md.",
+    );
+    expect(await onBranch("src/names.ts")).toBe('export const glossary = "CONTEXT.md";');
+  });
+
+  it("makes no labels for a repository whose docs/agents/ say its work lives elsewhere", async () => {
+    await onMain({
+      "docs/agents/issue-tracker.md":
+        "# Issue tracker: docs/backlog.md\n\nWork for this repo lives in `docs/backlog.md`, not in GitHub issues.\n",
+      "docs/agents/triage-labels.md": "Ours.\n",
+      "docs/agents/domain.md": "Ours.\n",
+      "AGENTS.md": `# Side project\n\n${AGENT_SKILLS}`,
+    });
+    const request = await owner(["bug"]);
+
+    expect(await setupOf(request)).toEqual({ state: "none" });
   });
 
   it("on Keep, never moves or renames the file the owner kept, and records where its work lives", async () => {

@@ -96,7 +96,11 @@ export {
 export {
   MattSetup,
   MattSetupAnswer,
+  makesLabels,
+  opensPullRequest,
+  recommendedChoices,
   SetupCard,
+  type SetupChoices,
   SetupPaper,
   SetupTracker,
   setupLines,
