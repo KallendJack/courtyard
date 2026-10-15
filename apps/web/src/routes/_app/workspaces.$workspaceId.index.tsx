@@ -122,6 +122,7 @@ function Workspace() {
   const code = workspace.mode === "code";
   const actions = code ? (
     <WorkspaceMenu
+      workspaceId={workspace.id}
       workspaceName={workspace.name}
       icon={workspace.icon}
       choose={(icon) => change({ icon })}

@@ -1,6 +1,7 @@
 import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
 import {
+  type AlwaysAllow,
   CODE_SESSIONS_AT_ONCE,
   type PullRequestReview,
   type SessionId,
@@ -12,12 +13,27 @@ import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../gith
 import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
 import { shownPath, staysInside } from "../workspace-files/index.ts";
-import { type CommandRule, type IssueGap, issueGapsIn, reachesOut, ruleFor } from "./allowlist.ts";
+import {
+  alwaysOffer,
+  type CommandRule,
+  type IssueGap,
+  issueGapsIn,
+  reachesOut,
+  ruleFor,
+} from "./allowlist.ts";
 import { BRANCH_PREFIX, helperBranchStem, isHelperBranchOf } from "./branches.ts";
 import { createBuildsQueue } from "./builds.ts";
 import { createCodeSlots } from "./slots.ts";
 
-export { allowlistFor, type CommandRule, type IssueGap, isBuild } from "./allowlist.ts";
+export {
+  allowlistFor,
+  allowsOf,
+  alwaysRule,
+  type CommandRule,
+  type IssueGap,
+  isBuild,
+  namedAs,
+} from "./allowlist.ts";
 export { BUILD_HELD_ENV } from "./builds.ts";
 
 /**
@@ -132,6 +148,8 @@ export type CodeRefusal =
 export type CommandApproval = {
   readonly kind: "needs-approval";
   readonly reason: "off-allowlist" | "reaches-out";
+  /** What Allow always would allow (#185), when it may be offered: never for one reaching out. */
+  readonly always?: AlwaysAllow;
 };
 
 /**
@@ -159,7 +177,14 @@ export const commandAllowed = async (
     branch: session.branch,
     pullRequest: session.pullRequest,
   });
-  if (rule === undefined) return err({ kind: "needs-approval", reason: "off-allowlist" });
+  if (rule === undefined) {
+    const always = alwaysOffer(words.value);
+    return err({
+      kind: "needs-approval",
+      reason: "off-allowlist",
+      ...(always === undefined ? {} : { always }),
+    });
+  }
   if (reachesOut(session.worktree, rule, words.value)) {
     return err({ kind: "needs-approval", reason: "reaches-out" });
   }

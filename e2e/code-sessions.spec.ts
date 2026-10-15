@@ -89,6 +89,48 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
   }
 });
 
+test("Allow always for this workspace runs it, the workspace's sessions don't ask again, and Allowed commands removes it (#185)", async ({
+  page,
+  request,
+}) => {
+  await startOnPage(page, ["run command: git stash list (for: To see what's stashed)"]);
+  const card = approvalOn(page);
+  // Exactly what it would allow, before the tap: the command's leading words.
+  const always = card.getByRole("group", { name: "Always allow git stash …" });
+  await expect(always).toContainText("Always allow git stash …");
+
+  await always.getByRole("button", { name: "This workspace" }).click();
+
+  await expect(approvalOn(page)).toHaveCount(0);
+  await expect(
+    page.getByRole("list", { name: "What the model did" }).getByRole("listitem"),
+  ).toHaveText(["Ran git stash list"]);
+  // Another session in the workspace runs it, with other words after them, without asking.
+  const other = await startCoding(request, "run command: git stash show --stat");
+  await page.goto(`/workspaces/side-project/sessions/${other}`);
+  await expect(
+    page.getByRole("list", { name: "What the model did" }).getByRole("listitem"),
+  ).toHaveText(["Ran git stash show --stat"]);
+  await expect(approvalOn(page)).toHaveCount(0);
+
+  // Workspace ⋯ → Allowed commands lists it, from the session it was allowed in, to Remove.
+  await page.goto("/workspaces/side-project");
+  await page.getByRole("button", { name: "Workspace options" }).click();
+  await page.getByRole("button", { name: /^Allowed commands/ }).click();
+  const sheet = page.getByRole("dialog", { name: "Allowed commands · Side project" });
+  const listed = sheet.getByRole("list", { name: "Allowed commands" }).getByRole("listitem");
+  await expect(listed).toHaveCount(1);
+  await expect(listed).toContainText("git stash …");
+  await expect(listed).toContainText("from ");
+  await sheet.getByRole("button", { name: "Remove git stash …" }).click();
+  await expect(sheet).toContainText("Nothing yet.");
+
+  // Removed, it asks again.
+  await startOnPage(page, ["run command: git stash list"]);
+  await expect(approvalOn(page)).toBeVisible();
+  await approvalOn(page).getByRole("button", { name: "Deny" }).click();
+});
+
 /** Whether an element's text takes one line: no taller than its line height. */
 const takesOneLine = (each: Locator) =>
   each.evaluate(

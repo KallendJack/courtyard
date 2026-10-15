@@ -28,9 +28,15 @@ export function OptionsMenu(props: {
   square?: boolean;
   /** How wide the sheet is where there's room. */
   width?: number;
+  /**
+   * The ⋯'s anchor name (`useAnchorName`), when a sheet one of its choices opens goes under the ⋯
+   * too (Allowed commands, #185). Its own otherwise.
+   */
+  anchor?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const anchor = useAnchorName();
+  const own = useAnchorName();
+  const anchor = props.anchor ?? own;
   const dialog = useDialog(open, () => setOpen(false));
   return (
     <>

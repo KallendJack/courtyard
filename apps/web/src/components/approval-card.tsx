@@ -1,5 +1,6 @@
-import type { ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
+import type { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
 import { useEffect, useRef, useState } from "react";
+import { alwaysWords } from "@/lib/always-words";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { Waiting } from "../patience.ts";
 import { describeProblem } from "../problems.tsx";
@@ -46,6 +47,9 @@ const whyLine = (why: string | undefined, helper: string | undefined) => {
   return `${said}${/[.!?]$/.test(said) ? "" : "."} ${deny}`;
 };
 
+/** The answer on its way: Deny, Allow, or Allow always for the session or the workspace. */
+type Sending = ApprovalAnswer | AlwaysFor;
+
 /**
  * What an approval a code session's turn waits on says (#171): its title, the exact command, file
  * or tool connection's action, and why. One a helper asks for names it (#117).
@@ -80,16 +84,23 @@ export function ApprovalCard(props: {
   /** What Deny is called here: "Deny" unless it says. */
   denyLabel?: string;
   /**
-   * Sends the owner's answer: what went wrong, or nothing once it's sent. One that waits for a
-   * slow worker says so through `onWaiting`, and stops when `signal` says the card has gone (#204).
+   * What Allow always would allow (#185), when the approval offers it: a row under Deny and Allow
+   * saying exactly that, with This session and This workspace.
+   */
+  always?: AlwaysAllow | undefined;
+  /**
+   * Sends the owner's answer, allowed always for the session or the workspace when they tapped
+   * one of those: what went wrong, or nothing once it's sent. One that waits for a slow worker
+   * says so through `onWaiting`, and stops when `signal` says the card has gone (#204).
    */
   onAnswer: (
     answer: ApprovalAnswer,
     waiting: { onWaiting: (waiting: Waiting) => void; signal: AbortSignal },
+    always?: AlwaysFor,
   ) => Promise<string | undefined>;
 }) {
-  /** The answer on its way: its button shows it's working, the other waits (#330). */
-  const [sending, setSending] = useState<ApprovalAnswer>();
+  /** The answer on its way: its button shows it's working, the others wait (#330). */
+  const [sending, setSending] = useState<Sending>();
   const [problem, setProblem] = useState<string>();
   const [waiting, setWaiting] = useState<Waiting>();
   // Stops a kept answer's tries once the card has gone (answered on another device, say).
@@ -99,11 +110,15 @@ export function ApprovalCard(props: {
     gone.current = card;
     return () => card.abort();
   }, []);
-  const answer = async (given: ApprovalAnswer) => {
+  const answer = async (given: Sending) => {
     setSending(given);
     setProblem(undefined);
     const { signal } = gone.current ?? new AbortController();
-    const failed = await props.onAnswer(given, { onWaiting: setWaiting, signal });
+    const waiting = { onWaiting: setWaiting, signal };
+    const failed =
+      given === "allow" || given === "deny"
+        ? await props.onAnswer(given, waiting)
+        : await props.onAnswer("allow", waiting, given);
     if (signal.aborted) return;
     setWaiting(undefined);
     setProblem(failed);
@@ -144,7 +159,7 @@ export function ApprovalCard(props: {
             tall
             busy={sending === "deny"}
             busyLabel="Sending…"
-            waiting={sending === "allow"}
+            waiting={sending !== undefined && sending !== "deny"}
             onClick={() => void answer("deny")}
           >
             {props.denyLabel ?? "Deny"}
@@ -155,13 +170,63 @@ export function ApprovalCard(props: {
             tall
             busy={sending === "allow"}
             busyLabel="Allowing…"
-            waiting={sending === "deny"}
+            waiting={sending !== undefined && sending !== "allow"}
             onClick={() => void answer("allow")}
           >
             Allow
           </ThumbButton>
         </div>
+        {props.always !== undefined && (
+          <AllowAlways
+            words={alwaysWords(props.always)}
+            sending={sending}
+            onAnswer={(always) => void answer(always)}
+          />
+        )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Allow always (#185; Paper, "Tablet · Approval with Allow always"): under Deny and Allow, a line
+ * saying exactly what it would allow, "Always allow `pnpm add …`", between two gold rules, and This
+ * session and This workspace, one tap each.
+ */
+function AllowAlways(props: {
+  words: string;
+  sending: Sending | undefined;
+  onAnswer: (always: AlwaysFor) => void;
+}) {
+  const choices = [
+    { always: "session", label: "This session" },
+    { always: "workspace", label: "This workspace" },
+  ] as const;
+  return (
+    <fieldset aria-label={`Always allow ${props.words}`} className="flex min-w-0 flex-col gap-3">
+      <p className="flex items-center gap-2.5 text-meta text-muted-foreground before:h-px before:min-w-4 before:grow before:bg-warning/25 after:h-px after:min-w-4 after:grow after:bg-warning/25">
+        <span className="flex min-w-0 flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
+          Always allow{" "}
+          <code className="rounded-sm bg-card px-1.5 py-0.5 font-mono text-meta font-bold wrap-anywhere text-foreground">
+            {props.words}
+          </code>
+        </span>
+      </p>
+      <div className="flex gap-2.5">
+        {choices.map(({ always, label }) => (
+          <ThumbButton
+            key={always}
+            look="ringed"
+            low
+            busy={props.sending === always}
+            busyLabel="Allowing…"
+            waiting={props.sending !== undefined && props.sending !== always}
+            onClick={() => props.onAnswer(always)}
+          >
+            {label}
+          </ThumbButton>
+        ))}
+      </div>
+    </fieldset>
   );
 }

@@ -186,6 +186,13 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "This approval's turn has ended, so nothing is waiting on it now.",
       });
+    case "always-not-offered":
+      return apiError(c, {
+        status: 409,
+        error: "This approval always asks, so it can't be allowed always. Allow it once instead.",
+      });
+    case "workspace":
+      return contextError(c, error.error);
     case "queued-not-found":
       return apiError(c, { status: 404, error: "No such queued message in this session." });
     case "queued-sent":
@@ -508,9 +515,10 @@ export const sessionRoutes = (options: {
       // An event number, as a save's is; anything else names no approval.
       approval: SaveNumber.parse(c.req.param("approval")),
       answer: body.value.answer,
+      always: body.value.always,
     });
     if (!answered.ok) return sessionError(c, answered.error);
-    return c.json({ answer: answered.value } satisfies ApprovalAnswering);
+    return c.json(answered.value satisfies ApprovalAnswering);
   });
 
   // Reviewing a code session's pull request (#160): what it changes, then Merge or Close.
