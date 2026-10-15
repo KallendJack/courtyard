@@ -13,6 +13,7 @@ import {
   codingProvider,
   createFakeGitHub,
   createFakePush,
+  errorOf,
   FAKE_MODEL,
   type FakeGitHub,
   type FakeIssue,
@@ -690,5 +691,141 @@ describe("Pause (#347)", () => {
     await run(request);
 
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23, 24]);
+  });
+});
+
+describe("Merge in order (#423)", () => {
+  /**
+   * Runs the build order, then opens a pull request from each builder (#22's, then #23's), with
+   * these checks and conflicts, and lets the Lead see them: their numbers, in build order.
+   */
+  const readyToMerge = async (
+    pulls: readonly { checks: "passed" | "failed"; conflicts?: boolean }[],
+  ) => {
+    const { github, request } = await signedInWith(ISSUES);
+    await run(request);
+    const numbers: number[] = [];
+    for (const [at, pull] of pulls.entries()) {
+      const builder = await builderOf(request, 22 + at);
+      const number = github.openPullRequest({
+        repo: onGitHub,
+        branch: builder.branch ?? "",
+        head: `c0ffee${at}`,
+        title: builder.title,
+      });
+      github.setChecks(number, [{ name: "Checks", outcome: pull.checks }]);
+      if (pull.conflicts === true) github.setConflicts(number, true);
+      numbers.push(number);
+    }
+    await runJobs();
+    await runJobs();
+    return { github, request, numbers };
+  };
+
+  const mergeInOrder = (request: Requester) =>
+    postJson(request, "/api/workspaces/side-project/lead/merge-in-order", {});
+
+  /** Runs the worker's jobs until `done` holds, as time passing would. */
+  const until = async (done: () => boolean | Promise<boolean>) =>
+    expect
+      .poll(async () => {
+        await runJobs();
+        return done();
+      })
+      .toBe(true);
+
+  it("merges the ready pull requests one at a time, in the build order's order, then says so", async () => {
+    const { github, request, numbers } = await readyToMerge([
+      { checks: "passed" },
+      { checks: "passed" },
+    ]);
+    const [first, second] = numbers;
+    expect((await leadOf(request)).ready.map((each) => each.pullRequest)).toEqual(numbers);
+
+    const response = await mergeInOrder(request);
+
+    expect(response.status).toBe(200);
+    // The first merges at once; the next waits its turn, as the worker's jobs come round.
+    expect(github.stateOf(first ?? 0)).toBe("merged");
+    expect(github.stateOf(second ?? 0)).toBe("open");
+    expect(LeadStatus.parse(await response.json()).merge).toEqual({
+      kind: "merging",
+      pullRequest: second,
+    });
+    await until(() => github.stateOf(second ?? 0) === "merged");
+    expect((await leadOf(request)).merge).toBeUndefined();
+    const notes = await notesIn(request);
+    expect(notes).toContain(`Merging in order: #${first} → #${second}.`);
+    expect(notes).toContain("Merged them all, in order.");
+  });
+
+  it("stops at a failing check, saying which and why, and carries on when tapped again", async () => {
+    const { github, request, numbers } = await readyToMerge([
+      { checks: "passed" },
+      { checks: "passed" },
+    ]);
+    const [first, second] = numbers;
+    // The second's checks fail once the first has merged.
+    github.setChecks(second ?? 0, [{ name: "e2e", outcome: "failed" }], "c0ffee9");
+
+    await mergeInOrder(request);
+    await until(async () => (await leadOf(request)).merge?.kind === "stopped");
+
+    expect(github.stateOf(first ?? 0)).toBe("merged");
+    expect(github.stateOf(second ?? 0)).toBe("open");
+    expect((await leadOf(request)).merge).toEqual({
+      kind: "stopped",
+      pullRequest: second,
+      why: "its e2e check failed",
+    });
+    expect(await notesIn(request)).toContain(
+      `Stopped at #${second}: its e2e check failed. Its session is looking at it. Once it's green, tap Merge in order again.`,
+    );
+
+    github.setChecks(second ?? 0, [{ name: "e2e", outcome: "passed" }], "c0ffeea");
+    await until(async () => (await leadOf(request)).ready.length === 1);
+    await mergeInOrder(request);
+
+    await until(() => github.stateOf(second ?? 0) === "merged");
+    expect((await leadOf(request)).merge).toBeUndefined();
+  });
+
+  it("brings the next up to date through its session when merging the one before made it conflict, then merges it once it's green", async () => {
+    const { github, request, numbers } = await readyToMerge([
+      { checks: "passed" },
+      { checks: "passed" },
+    ]);
+    const [first, second] = numbers;
+    const builder = await builderOf(request, 23);
+
+    await mergeInOrder(request);
+    expect(github.stateOf(first ?? 0)).toBe("merged");
+    // Merging the first made the second conflict with main.
+    github.setConflicts(second ?? 0, true);
+
+    // Its session is asked to bring it up to date, once, and the merge waits for it.
+    await until(async () =>
+      (await eventsSoFar(request, builder.id)).some(
+        (event) => event.type === "owner-message" && event.text.includes("up to date"),
+      ),
+    );
+    expect(github.stateOf(second ?? 0)).toBe("open");
+    expect((await leadOf(request)).merge).toEqual({ kind: "merging", pullRequest: second });
+    expect(await notesIn(request)).toContain(`Bringing #${second} up to date first.`);
+
+    github.setConflicts(second ?? 0, false);
+    github.setChecks(second ?? 0, [{ name: "Checks", outcome: "passed" }], "c0ffeeb");
+
+    await until(() => github.stateOf(second ?? 0) === "merged");
+  });
+
+  it("is refused while nothing is ready to merge", async () => {
+    const { request } = await signedInWith(ISSUES);
+    await run(request);
+
+    const response = await mergeInOrder(request);
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toBe("Nothing is ready to merge yet.");
   });
 });

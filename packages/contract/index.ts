@@ -48,6 +48,7 @@ export {
   GitHubLink,
   LEAD_BUILDERS,
   LeadBuilder,
+  LeadMerge,
   LeadReady,
   LeadRun,
   LeadStatus,

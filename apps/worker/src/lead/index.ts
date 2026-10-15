@@ -5,6 +5,7 @@ import {
   type CodeSessionList,
   LEAD_BUILDERS,
   type LeadBuilder,
+  type LeadMerge,
   type LeadReady,
   type LeadRun,
   type LeadStatus,
@@ -56,6 +57,24 @@ const MAIN_FIX = /^Main fails:/;
 
 const Builder = z.object({ session: SessionId, issue: z.number().int().positive() });
 
+/**
+ * Merge in order (#423), as kept: merging the builders' pull requests in this order, first first,
+ * with the heads it has asked a session to bring up to date; or stopped at one, and why.
+ */
+const Merge = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("merging"),
+    queue: z.array(SessionId),
+    broughtUp: z.array(z.string()),
+  }),
+  z.object({
+    kind: z.literal("stopped"),
+    pullRequest: z.number().int().positive(),
+    why: z.string(),
+  }),
+]);
+type Merge = z.infer<typeof Merge>;
+
 /** One code workspace's Lead, as kept. */
 const Kept = z.object({
   session: SessionId,
@@ -76,6 +95,8 @@ const Kept = z.object({
    * all for builders: each allows all until its pull request opens, until then at most.
    */
   allowAllUntil: z.iso.datetime().optional(),
+  /** Merge in order (#423), while it's merging or stopped. */
+  merge: Merge.optional(),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -86,7 +107,9 @@ export type LeadProblem =
   | { readonly kind: "workspace"; readonly error: WorkspaceError }
   | { readonly kind: "not-code" }
   | { readonly kind: "session"; readonly error: SessionError }
-  | { readonly kind: "storage" };
+  | { readonly kind: "storage" }
+  /** Merge in order was tapped with no builder's pull request ready to merge (#423). */
+  | { readonly kind: "nothing-to-merge" };
 
 type Listed = CodeSessionList["sessions"][number];
 
@@ -107,6 +130,16 @@ const nameOf = (listed: Listed | undefined, issue: number) =>
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/** Names in a sentence: "e2e", "check and e2e", "check, verify and e2e". */
+const namesOf = (names: readonly string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** Why Merge in order couldn't merge a pull request (#423), as its stop says it. */
+const mergeRefused = (error: SessionError) =>
+  error.kind === "pull-request-refused"
+    ? `GitHub wouldn't merge it (${error.reason})`
+    : "GitHub couldn't merge it just now";
+
 export const createLead = (options: {
   contextDir: string;
   dataDir: string;
@@ -120,6 +153,8 @@ export const createLead = (options: {
     | "note"
     | "tellMerged"
     | "stopBuilding"
+    | "mergePullRequest"
+    | "bringUpToDate"
   >;
   nextUp: Pick<NextUp, "list" | "fresh" | "build">;
   /** Whether a code workspace's main is red now (#355), by its id. */
@@ -201,6 +236,91 @@ export const createLead = (options: {
         !(kept?.built ?? []).some((builder) => builder.issue === issue.number),
     );
 
+  /** Merge in order as the owner sees it (#423): the pull request it's on, or where it stopped. */
+  const mergeOf = (
+    merge: Merge | undefined,
+    listed: ReadonlyMap<SessionId, Listed>,
+  ): LeadMerge | undefined => {
+    if (merge?.kind !== "merging") return merge;
+    const on = merge.queue
+      .map((session) => listed.get(session)?.pullRequest)
+      .find((pull) => pull?.state === "open");
+    return on === undefined ? undefined : { kind: "merging", pullRequest: on.number };
+  };
+
+  /**
+   * One step of Merge in order (#423), each time round and as the owner taps it: the first pull
+   * request still open is merged once its checks pass and its session's turn is done, and the next
+   * is seen afresh next time round, since GitHub works out again whether it conflicts. One that
+   * conflicts is brought up to date by its session, once for each head; a failing check, a conflict
+   * its session left, or GitHub's refusal stops it, saying which and why. Merged and closed ones
+   * leave the queue; once it's empty, it says so.
+   */
+  const mergeStep = async (was: Kept, listed: ReadonlyMap<SessionId, Listed>): Promise<Kept> => {
+    let kept = was;
+    for (;;) {
+      const merge = kept.merge;
+      if (merge?.kind !== "merging") return kept;
+      const [first, ...rest] = merge.queue;
+      const { merge: _, ...done } = kept;
+      if (first === undefined) return noted(done, "Merged them all, in order.");
+      const each = listed.get(first);
+      const pull = each?.pullRequest;
+      if (pull?.state !== "open") {
+        kept = { ...kept, merge: { ...merge, queue: rest } };
+        continue;
+      }
+      const waiting = rest.flatMap((session) => {
+        const number = listed.get(session)?.pullRequest?.number;
+        return number === undefined ? [] : [`#${number}`];
+      });
+      const stop = (why: string, fixing: boolean) =>
+        noted(
+          { ...done, merge: { kind: "stopped", pullRequest: pull.number, why } },
+          [
+            `Stopped at #${pull.number}: ${why}.`,
+            ...(fixing ? ["Its session is looking at it."] : []),
+            ...(waiting.length === 0
+              ? []
+              : [`${waiting.join(" and ")} ${waiting.length === 1 ? "waits" : "wait"}.`]),
+            `Once it's ${fixing ? "green" : "sorted"}, tap Merge in order again.`,
+          ].join(" "),
+        );
+      const { checks } = pull;
+      if (checks.kind === "failed") {
+        return stop(
+          `its ${namesOf(checks.failed)} ${checks.failed.length === 1 ? "check" : "checks"} failed`,
+          true,
+        );
+      }
+      if (pull.conflicts === true) {
+        if (merge.broughtUp.includes(pull.head)) {
+          return each?.busy === true
+            ? kept
+            : stop(
+                "it still conflicts with main after its session tried to bring it up to date",
+                false,
+              );
+        }
+        const asked = await sessions.bringUpToDate(first);
+        if (!asked.ok)
+          return stop(
+            "it conflicts with main, and its session couldn't be asked to bring it up to date",
+            false,
+          );
+        return noted(
+          { ...kept, merge: { ...merge, broughtUp: [...merge.broughtUp, pull.head] } },
+          `Bringing #${pull.number} up to date first.`,
+        );
+      }
+      if (checks.kind === "running" || each?.busy === true) return kept;
+      const merged = await sessions.mergePullRequest(first, pull.head);
+      if (!merged.ok) return stop(mergeRefused(merged.error), false);
+      kept = { ...kept, merge: { ...merge, queue: rest } };
+      if (rest.length > 0) return kept;
+    }
+  };
+
   const statusOf = async (
     workspaceId: WorkspaceId,
     kept: Kept | undefined,
@@ -208,6 +328,7 @@ export const createLead = (options: {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
     const { building, ready } = buildersOf(kept, listed);
     const allowing = allowAllUntilOf(kept);
+    const merge = mergeOf(kept?.merge, listed);
     return {
       state: kept?.state ?? "not-started",
       ...(kept === undefined ? {} : { session: kept.session }),
@@ -217,6 +338,7 @@ export const createLead = (options: {
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
+      ...(merge === undefined ? {} : { merge }),
     };
   };
 
@@ -270,7 +392,7 @@ export const createLead = (options: {
    */
   const look = async (workspaceId: WorkspaceId, was: Kept): Promise<Kept> => {
     const listed = await listedIn(workspaceId);
-    let kept = await watchBuilders(was, listed);
+    let kept = await mergeStep(await watchBuilders(was, listed), listed);
     if (kept.state !== "running") return kept;
     const { building } = buildersOf(kept, listed);
     const deciding = building.find(
@@ -484,6 +606,28 @@ export const createLead = (options: {
         const recorded = await keep(workspaceId, started);
         if (!recorded.ok) return recorded;
         return ok(await look(workspaceId, started));
+      }),
+
+    /**
+     * Merge in order (#423): the owner's tap is their OK to merge the builders' pull requests
+     * ready now, in the build order's order, and no others. It starts at once, and goes on each
+     * time round.
+     */
+    mergeInOrder: (rawId: string) =>
+      changing(rawId, async (workspaceId, kept) => {
+        if (kept === undefined) return err({ kind: "session", error: { kind: "not-found" } });
+        const listed = await listedIn(workspaceId);
+        const { ready } = buildersOf(kept, listed);
+        if (ready.length === 0) return err({ kind: "nothing-to-merge" });
+        const order = ready.map((each) => `#${each.pullRequest}`).join(" → ");
+        const merging = await noted(
+          {
+            ...kept,
+            merge: { kind: "merging", queue: ready.map((each) => each.session), broughtUp: [] },
+          },
+          `Merging in order: ${order}.`,
+        );
+        return ok(await mergeStep(merging, listed));
       }),
 
     /** Pause (#347): builders already running carry on, and nothing new starts. */

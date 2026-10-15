@@ -20,10 +20,12 @@ const leadProblem = (c: Context, problem: LeadProblem) => {
         status: 500,
         error: "The Lead's record in Courtyard's data folder can't be read or written.",
       });
+    case "nothing-to-merge":
+      return apiError(c, { status: 409, error: "Nothing is ready to merge yet." });
   }
 };
 
-/** A code workspace's Lead (#347): where it stands, Run the build order, and Pause. */
+/** A code workspace's Lead (#347): where it stands, Run the build order, Merge in order (#423) and Pause. */
 export const leadRoutes = (lead: Lead) => {
   const routes = new Hono();
 
@@ -39,6 +41,12 @@ export const leadRoutes = (lead: Lead) => {
     const run = await lead.run(c.req.param("id"), body.value);
     if (!run.ok) return leadProblem(c, run.error);
     return c.json(run.value satisfies LeadStatus);
+  });
+
+  routes.post("/workspaces/:id/lead/merge-in-order", async (c) => {
+    const merging = await lead.mergeInOrder(c.req.param("id"));
+    if (!merging.ok) return leadProblem(c, merging.error);
+    return c.json(merging.value satisfies LeadStatus);
   });
 
   routes.post("/workspaces/:id/lead/pause", async (c) => {
