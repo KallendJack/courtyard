@@ -52,8 +52,9 @@ flowchart LR
 
 ## The parts
 
-The worker is split into modules, one folder each: `index.ts` is what the module does and `routes.ts`, when it has
-one, is its part of the API. `worker.ts` builds every module from the settings and wires them together. The web app is
+The worker's modules are grouped into seven areas, as in the [overview](overview.md), one folder each at
+`apps/worker/src/<area>/<module>/`; `pnpm check` fails a module outside an area or missing from here. `index.ts` is
+what the module does and `routes.ts`, when it has one, is its part of the API. `worker.ts` builds every module from the settings and wires them together. The web app is
 pages (`routes/`) built from feature folders and shared pieces. The contract package sits between them.
 
 ### The worker: `apps/worker/src`
@@ -68,102 +69,8 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the
   owner context, backup status and live updates, and serves the web app's files.
 
-**The owner**
+**🤖 agent: talking to the models** (`agent/`)
 
-- **`owner/`:** the owner's password, each device login, and slowing down wrong guesses. Its routes are setup, login,
-  logout, and the login check every other request goes through. Keeps its files in the data folder.
-
-**Context**
-
-- **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
-  model, and adds, changes or removes one line. It also picks out the plans that name a day from today to 7 days on
-  (`plansDue`: `2026-10-18`, `18 Oct` or `Oct 18th`, a day without its year being the next to come), which a
-  planning workspace's answer (`GET /api/workspaces/:id`) gives as `duePlans` for its Home's Next up (#300), today
-  being the worker's clock's. Text in, text out: it never touches the disk.
-- **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
-  one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
-  a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
-  A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
-  `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
-  A new planning workspace's starter context file has no intro line unless the owner gave one, and the hint older
-  starters wrote there is read as none and left out of what models read (`withoutStarterHint`, #300).
-  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308). It lists
-  the workspaces planning ones first, then code ones, each group in the owner's order (#321): one list of ids in
-  `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces` (`PUT /api/workspaces/order`), which
-  refuses an order that mixes the groups. A workspace the order doesn't name goes at the end of its group, by name.
-- **`owner-context/`:** reads `OWNER.md` and starts a new one.
-- **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
-  that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
-  changes and Fresh start. Every module that changes the context folder goes through it. A change made file by file
-  rather than line by line (a document's or a Thing's) names its files in `Courtyard-File` trailers, so
-  `wholeFilesOf`, `stillAsLeft` and `undoWholeFiles` can read it back and undo it (as bytes, so a photo goes back as
-  it was); `WHOLE_FILE_FOLDERS` are the workspace folders Recent changes looks in besides `CONTEXT.md`.
-- **`documents/`:** a planning workspace's documents (ADR 0020): lists, reads, saves, renames and deletes them, each
-  write one change through `context-folder/`; Save as document's text from an answer; and one turn's document tool,
-  which keeps what the model has read so an update to a document it hasn't read, or one changed since, is refused.
-  Its routes are a workspace's documents and each document (`/api/workspaces/:id/documents/:slug`).
-- **`things/`:** a planning workspace's Things (ADR 0020): reads each `things/<slug>.md` against the contract's
-  schema (listing a file that fails with its problem), lists them with each part after its Thing, adds, changes and
-  removes one as one change through `context-folder/` (its photo with it), keeps a photo resized with `sharp`
-  (`keptPhoto`), and one turn's Things tool, which labels the Things as the turn showed them and refuses a change to
-  one changed since. Its routes are a workspace's Things, each Thing, and its photo
-  (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
-  with the fields, as one multipart form, so both are one change with one Undo; these and the
-  photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
-- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
-  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
-  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
-  for the refusals they share.
-- **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
-  `context-file/` and `context-folder/`.
-- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and
-  Things', and undoes one from that page (a model's document or Thing save through its session, as a save is).
-- **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
-  changes as one change.
-
-**Models and sessions**
-
-- **`providers/`:** the provider seam. `index.ts` says what every provider does (its status, its models, one turn,
-  one-off questions, a sign-in when it has one). Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`.
-  Claude and Codex keep their status with `createStatusKeeper` (#282): a good answer for a minute, one saying they
-  can't be used for a few seconds, the last good one through a check that gets no answer in time, and a finished
-  turn counts as a good check.
-- **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
-  provider's models.
-- **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
-  (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
-  far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
-  tools, and the text for Tidy, titling a session and a pull request's quick questions.
-- **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
-  workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
-  one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
-  house skills for its kind of workspace from `packages/skills`. It keeps each
-  skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
-  skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
-- **`matt-skills/`:** Matt Pocock's skills for code workspaces
-  ([ADR 0024](adr/0024-code-workspaces-load-matt-pococks-skills-as-a-plugin-from-a-pinned-copy.md)): fetches the
-  release `packages/skills/matt.json` names from his plugin list into the data folder, keeping only his `plugin.json`,
-  licence and the skills it lists, and gives the copy (`copy()`) only when it matches the pin's checksum
-  (`mattChecksum`), or why not; a failure is tried again after five minutes. Fetching is a dependency passed in
-  (`fetchFromGitHub`, git at his release's tag, the one real one). `sessions/` hands a code turn the copy as its
-  `CodePlugin`, with the skills of it the workspace can use, and leaves them out of Courtyard's own skills list.
-- **`matt-setup/`:** the setup check (#181, #323): what a code workspace's repository has of the house standard
-  (Matt's `setup-matt-pocock-skills` with the house answers), worked out for any repository from its default branch
-  on its remote through `code/`: its `docs/agents/` files and the Agent skills section, where its work lives (a
-  backlog or TODO file, or `.scratch/`, and whether its instructions say another agent writes it), its glossary's
-  name, the triage labels through `github/`, and whether `connections/` can make it a Paper file. Offered once, as
-  one card with the standard recommended on each line. Set up as the owner chose, it makes the labels (only when its
-  work lives on GitHub), files a moved tracker's open items as issues, puts the files (from his templates in the
-  pinned copy and the house's own) on a branch of their own in a worktree in the data folder, pushes it and opens
-  its pull request, then makes and connects the Paper file. Its routes are a workspace's `matt-setup`.
-- **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
-  three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
-  writes after them apart from lines it repeats.
-- **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
-  links to and the pages the model read, each with its site's name and title; when it used none, the search results
-  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
-  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
-  results that Claude may read.
 - **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
   Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
   is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
@@ -177,6 +84,98 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
   (`POST /api/sessions/:id/things/:save/undo`), and removing a queued message
   (`DELETE /api/sessions/:id/queued/:queued`).
+- **`providers/`:** the provider seam. `index.ts` says what every provider does (its status, its models, one turn,
+  one-off questions, a sign-in when it has one). Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`.
+  Claude and Codex keep their status with `createStatusKeeper` (#282): a good answer for a minute, one saying they
+  can't be used for a few seconds, the last good one through a check that gets no answer in time, and a finished
+  turn counts as a good check.
+- **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
+  (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
+  far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
+  tools, and the text for Tidy, titling a session and a pull request's quick questions.
+- **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
+  `context-file/` and `context-folder/`.
+- **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
+  three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
+  writes after them apart from lines it repeats.
+- **`quick-questions/`:** quick questions about a pull request (#327): a small read-only conversation on its page,
+  whoever opened it. Each question is a one-off question (`answerOnce`, no tools, no files) worded by `prompts/`, with
+  the pull request's review from `pull-requests/`, so its model reads the pull request and changes nothing, and no
+  session, branch or worktree is involved. It keeps the lines an answer points at only where the diff shows them, and
+  keeps each pull request's conversation in the worker's memory (the latest 50), one question at a time. Fix it in a
+  session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
+  branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
+  `pull-requests/:number/fix`.
+- **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
+  links to and the pages the model read, each with its site's name and title; when it used none, the search results
+  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
+  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
+  results that Claude may read.
+- **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
+  provider's models.
+- **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
+  I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
+  answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
+  pull request, and the owner hasn't **seen** it: the session page tells the worker the last event it showed once
+  no turn runs and it's in view (`POST /api/sessions/:id/seen`), kept as `seen.json` in the session's folder, never
+  going back; Mark all read sees every session in a workspace up to its latest answer
+  (`POST /api/workspaces/:id/seen`, #345). An open pull request waits for its conflict, its failing checks (unless its session is working on
+  them, #172), or a merge once its checks pass. `sessions/` puts a session's on each listed session (`waiting`),
+  keeping its latest answer in memory (from its event log once recovered, then as each is written), and
+  `pull-requests/` puts a pull request's on each open one; the web app reads only those (a Home tile names the
+  newest session waiting, and every session list marks those waiting and puts them first, #345).
+
+**🗂️ context: what Courtyard knows** (`context/`)
+
+- **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
+  that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
+  changes and Fresh start. Every module that changes the context folder goes through it. A change made file by file
+  rather than line by line (a document's or a Thing's) names its files in `Courtyard-File` trailers, so
+  `wholeFilesOf`, `stillAsLeft` and `undoWholeFiles` can read it back and undo it (as bytes, so a photo goes back as
+  it was); `WHOLE_FILE_FOLDERS` are the workspace folders Recent changes looks in besides `CONTEXT.md`.
+- **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
+  model, and adds, changes or removes one line. It also picks out the plans that name a day from today to 7 days on
+  (`plansDue`: `2026-10-18`, `18 Oct` or `Oct 18th`, a day without its year being the next to come), which a
+  planning workspace's answer (`GET /api/workspaces/:id`) gives as `duePlans` for its Home's Next up (#300), today
+  being the worker's clock's. Text in, text out: it never touches the disk.
+- **`owner-context/`:** reads `OWNER.md` and starts a new one.
+- **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
+  one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
+  a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
+  A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
+  `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
+  A new planning workspace's starter context file has no intro line unless the owner gave one, and the hint older
+  starters wrote there is read as none and left out of what models read (`withoutStarterHint`, #300).
+  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308). It lists
+  the workspaces planning ones first, then code ones, each group in the owner's order (#321): one list of ids in
+  `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces` (`PUT /api/workspaces/order`), which
+  refuses an order that mixes the groups. A workspace the order doesn't name goes at the end of its group, by name.
+- **`things/`:** a planning workspace's Things (ADR 0020): reads each `things/<slug>.md` against the contract's
+  schema (listing a file that fails with its problem), lists them with each part after its Thing, adds, changes and
+  removes one as one change through `context-folder/` (its photo with it), keeps a photo resized with `sharp`
+  (`keptPhoto`), and one turn's Things tool, which labels the Things as the turn showed them and refuses a change to
+  one changed since. Its routes are a workspace's Things, each Thing, and its photo
+  (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
+  with the fields, as one multipart form, so both are one change with one Undo; these and the
+  photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
+- **`documents/`:** a planning workspace's documents (ADR 0020): lists, reads, saves, renames and deletes them, each
+  write one change through `context-folder/`; Save as document's text from an answer; and one turn's document tool,
+  which keeps what the model has read so an update to a document it hasn't read, or one changed since, is refused.
+  Its routes are a workspace's documents and each document (`/api/workspaces/:id/documents/:slug`).
+- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
+  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
+  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
+  for the refusals they share.
+- **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
+  changes as one change.
+- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and
+  Things', and undoes one from that page (a model's document or Thing save through its session, as a save is).
+- **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
+  its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
+  refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
+
+**🛠️ devflow: building code** (`devflow/`)
+
 - **`code/`:** code sessions' git and what they may do
   ([ADR 0007](adr/0007-code-sessions-work-on-a-session-branch-in-its-own-worktree.md)). Starts a session's session
   branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
@@ -239,61 +238,38 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
   clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
   (only a `courtyard/…` one).
-- **`paper/`:** Paper in code workspaces, the first tool connection
-  ([ADR 0023](adr/0023-paper-is-the-first-tool-connection-in-code-workspaces.md)). Builds the turn's
-  `ToolConnection` (`providers/`) from the workspace's Paper settings (`connections.paper` in `workspace.json`,
-  read by `workspaces/`): Paper's MCP server as a command, and the worker's say on each call. Reading and drawing in
-  the workspace's one Paper file run, each an activity (`used-tool`); another file, or making a file, is refused;
-  deleting a node the session didn't make is an approval. It notes the nodes each call says it made (kept on the
-  running session), hands each screenshot to `sessions/` to keep and show, and words a failed call through
-  `prompts/`. `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's
-  page (#308), by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real
-  one; `fake.ts` holds files in memory for the tests and the browser tests).
-- **`connections/`:** a code workspace's connections (#308): GitHub (its repository on GitHub and whether
-  Courtyard is signed in) and its Paper file, as its page's connections line and Connections sheet show them and as
-  each of its turns is told them (`sessions/` gets `of`). Lists the owner's Paper files and connects one, or makes
-  one named after the workspace, as one change through `context-folder/`. Paper's command is the workspace's own,
-  else the `COURTYARD_PAPER_COMMAND` setting, else the one another code workspace names. Its routes are a
-  workspace's `connections`, `connections/paper/files` and `connections/paper`.
-- **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
-  `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
-  pull request that closes it), in
-  milestone order (the number a milestone's title leads with, then Later, then none) and, inside a milestone, the
-  order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
-  page asks and kept two minutes. Build (#298) asks again and starts a code session through `sessions/` on the
-  issue, whose first message is the issue (`buildIssueMessage`, worded by `prompts/`). Every session started on an
-  issue has its claim posted here (#324): `sessions/` is handed `named`, `claim` and `release`, and keeps the claim
-  in the session's file. It claims as the session starts (Build's issue, else the one ready issue nobody has claimed
-  that its first message names as `#<number>`), naming its branch; it releases the claim ("Stopped: <why>") when a
-  turn is stopped or fails, or the session is deleted, before it has a pull request, and claims again when it
-  carries on. The Lead's skip releases through `sessions/`'s `stopBuilding`. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
-  `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
-  message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
-  and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
-  `next-up/:number/grill`. It also keeps the code files each ready issue names in its description or comments
-  (`filesNamed`, #423), for the Lead.
-- **`lead/`:** a code workspace's Lead (#347), kept in the data folder's `leads.json`, one look each time the
-  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`, given the pull requests the owner's screen
-  showed) is the owner's OK to merge those still ready, in the build order's order: each look merges the first
-  still open through `sessions/` once its checks pass and its session's turn is done, waits while the worker brings
-  one that conflicts up to date (#382), and stops, saying which and why in its chat, at a failing check, a conflict
-  its session left or GitHub's refusal (`LeadStatus.merge`; forgotten once that pull request is merged or closed
-  some other way). It holds back a ready issue naming a code file (by path, or by a name few folders share) that a
-  builder still at
-  work changes (`code/`'s `changedFiles`: committed since the default branch, changed and new in its worktree) or
-  whose issue named it, never main's fix, starting it once that builder's pull request merges, and doesn't rest
-  while one is held back (`LeadStatus.heldBack`; Next up says "Held back").
-- **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
-  commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
-  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
-  workspace's `main`.
-- **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
-  workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
-  Failed, the worker re-runs the failed jobs once, by itself; failed again (or GitHub refused the re-run), it files a
-  `bug`, `ready-for-agent` issue named after the failing test (the first failure annotation on the job, which the
-  test reporters write on CI, else the job's name) with the job's link, in the lowest-numbered open milestone, and
-  puts it first in that milestone's `Build order:` line (next-up's order rules). What it did for each repository's
-  newest commit is kept in the data folder, so a restart never re-runs or files twice. No session waits on main.
+- **`github/`:** the only place that knows GitHub (#99). Courtyard signs in through a GitHub App the owner registered
+  and installed on the repos they chose: a device code from Connections, then the token kept in the data folder,
+  refreshed by a repeating job before it runs out, and forgotten when GitHub stops taking it. GitHub itself is a
+  dependency passed in (`api.ts`, the one real one; `fake.ts` holds it in memory for the tests and the browser
+  tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
+  Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
+  HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
+  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
+  latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
+  merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
+  one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
+  check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
+  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
+  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
+  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
+  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
+  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
+  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
+  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
+  annotations name, lists and describes milestones, and files an issue (#355). Its routes are
+  `/api/github` and its `sign-in`, `cancel` and `sign-out`.
+- **`pull-requests/`:** a code workspace's pull requests, whoever opened them (#278). Lists every open one on its
+  repository through `code/` and `github/`, latest first, each with who it's from: the session on its branch
+  (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
+  author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
+  is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
+  usual), and Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s
+  `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
+  repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
+  the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
+  the start is refused, saying which. Its
+  routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
 - **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
   every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
   as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
@@ -319,70 +295,41 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   closed on GitHub does. `pull-request/bring-up-to-date` (#278) fetches the PR's base through `code/` and sends
   the session the worker's message to merge it in (`bringUpToDateMessage`, worded by `prompts/`), on the model the
   owner last used there, or queues it while a turn runs.
-- **`pull-requests/`:** a code workspace's pull requests, whoever opened them (#278). Lists every open one on its
-  repository through `code/` and `github/`, latest first, each with who it's from: the session on its branch
-  (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
-  author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
-  is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
-  usual), and Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s
-  `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
-  repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
-  the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
-  the start is refused, saying which. Its
-  routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
-- **`quick-questions/`:** quick questions about a pull request (#327): a small read-only conversation on its page,
-  whoever opened it. Each question is a one-off question (`answerOnce`, no tools, no files) worded by `prompts/`, with
-  the pull request's review from `pull-requests/`, so its model reads the pull request and changes nothing, and no
-  session, branch or worktree is involved. It keeps the lines an answer points at only where the diff shows them, and
-  keeps each pull request's conversation in the worker's memory (the latest 50), one question at a time. Fix it in a
-  session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
-  branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
-  `pull-requests/:number/fix`.
-- **`allow-all/`:** whether a code session allows all for this task (#428), decided here from its events with no
-  I/O of its own, so it survives a restart and every screen reads the same: on from `allow-all-started` (the owner's
-  `POST /api/sessions/:id/allow-all`, for `1h`, `4h`, `12h` or `task`, or a Lead's builder started with it), which
-  stores its end time, until that time, `allow-all-ended` (Turn off, `…/allow-all/off`), its pull request merging
-  or closing, or, for `task`, a pull request opening. `sessions/` keeps each session's as its events are written and
-  puts it on the session's summary (`allowingAll`), for its strip and its row in Running. It's never extended while
-  on. The Lead keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
-  order with it on) and starts each builder with it until then.
-- **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
-  I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
-  answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
-  pull request, and the owner hasn't **seen** it: the session page tells the worker the last event it showed once
-  no turn runs and it's in view (`POST /api/sessions/:id/seen`), kept as `seen.json` in the session's folder, never
-  going back; Mark all read sees every session in a workspace up to its latest answer
-  (`POST /api/workspaces/:id/seen`, #345). An open pull request waits for its conflict, its failing checks (unless its session is working on
-  them, #172), or a merge once its checks pass. `sessions/` puts a session's on each listed session (`waiting`),
-  keeping its latest answer in memory (from its event log once recovered, then as each is written), and
-  `pull-requests/` puts a pull request's on each open one; the web app reads only those (a Home tile names the
-  newest session waiting, and every session list marks those waiting and puts them first, #345).
-- **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
-  its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
-  refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
-- **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
-  Not now.
-- **`github/`:** the only place that knows GitHub (#99). Courtyard signs in through a GitHub App the owner registered
-  and installed on the repos they chose: a device code from Connections, then the token kept in the data folder,
-  refreshed by a repeating job before it runs out, and forgotten when GitHub stops taking it. GitHub itself is a
-  dependency passed in (`api.ts`, the one real one; `fake.ts` holds it in memory for the tests and the browser
-  tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
-  Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
-  HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
-  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
-  latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
-  merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
-  one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
-  check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
-  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
-  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
-  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
-  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
-  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
-  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
-  annotations name, lists and describes milestones, and files an issue (#355). Its routes are
-  `/api/github` and its `sign-in`, `cancel` and `sign-out`.
+- **`lead/`:** a code workspace's Lead (#347), kept in the data folder's `leads.json`, one look each time the
+  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`, given the pull requests the owner's screen
+  showed) is the owner's OK to merge those still ready, in the build order's order: each look merges the first
+  still open through `sessions/` once its checks pass and its session's turn is done, waits while the worker brings
+  one that conflicts up to date (#382), and stops, saying which and why in its chat, at a failing check, a conflict
+  its session left or GitHub's refusal (`LeadStatus.merge`; forgotten once that pull request is merged or closed
+  some other way). It holds back a ready issue naming a code file (by path, or by a name few folders share) that a
+  builder still at
+  work changes (`code/`'s `changedFiles`: committed since the default branch, changed and new in its worktree) or
+  whose issue named it, never main's fix, starting it once that builder's pull request merges, and doesn't rest
+  while one is held back (`LeadStatus.heldBack`; Next up says "Held back").
+- **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
+  `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
+  pull request that closes it), in
+  milestone order (the number a milestone's title leads with, then Later, then none) and, inside a milestone, the
+  order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
+  page asks and kept two minutes. Build (#298) asks again and starts a code session through `sessions/` on the
+  issue, whose first message is the issue (`buildIssueMessage`, worded by `prompts/`). Every session started on an
+  issue has its claim posted here (#324): `sessions/` is handed `named`, `claim` and `release`, and keeps the claim
+  in the session's file. It claims as the session starts (Build's issue, else the one ready issue nobody has claimed
+  that its first message names as `#<number>`), naming its branch; it releases the claim ("Stopped: <why>") when a
+  turn is stopped or fails, or the session is deleted, before it has a pull request, and claims again when it
+  carries on. The Lead's skip releases through `sessions/`'s `stopBuilding`. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
+  `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
+  message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
+  and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
+  `next-up/:number/grill`. It also keeps the code files each ready issue names in its description or comments
+  (`filesNamed`, #423), for the Lead.
+- **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
+  workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
+  Failed, the worker re-runs the failed jobs once, by itself; failed again (or GitHub refused the re-run), it files a
+  `bug`, `ready-for-agent` issue named after the failing test (the first failure annotation on the job, which the
+  test reporters write on CI, else the job's name) with the job's link, in the lowest-numbered open milestone, and
+  puts it first in that milestone's `Build order:` line (next-up's order rules). What it did for each repository's
+  newest commit is kept in the data folder, so a restart never re-runs or files twice. No session waits on main.
 - **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
   newest pushed first, each marked added when a code workspace works on it already (its repository is
   that repo's folder here, or its `origin` is that repo on GitHub, read through `code/`), the added ones
@@ -399,6 +346,72 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `connections/` (`GET` says the account and whether Paper can be made). Its route is `/api/github/repos`; `POST /api/workspaces` with a `repo`
   checks the name is free, places the repo, then makes the workspace on it (`workspaces/` writes
   `{ mode: "code", repoPath }`).
+- **`matt-setup/`:** the setup check (#181, #323): what a code workspace's repository has of the house standard
+  (Matt's `setup-matt-pocock-skills` with the house answers), worked out for any repository from its default branch
+  on its remote through `code/`: its `docs/agents/` files and the Agent skills section, where its work lives (a
+  backlog or TODO file, or `.scratch/`, and whether its instructions say another agent writes it), its glossary's
+  name, the triage labels through `github/`, and whether `connections/` can make it a Paper file. Offered once, as
+  one card with the standard recommended on each line. Set up as the owner chose, it makes the labels (only when its
+  work lives on GitHub), files a moved tracker's open items as issues, puts the files (from his templates in the
+  pinned copy and the house's own) on a branch of their own in a worktree in the data folder, pushes it and opens
+  its pull request, then makes and connects the Paper file. Its routes are a workspace's `matt-setup`.
+- **`matt-skills/`:** Matt Pocock's skills for code workspaces
+  ([ADR 0024](adr/0024-code-workspaces-load-matt-pococks-skills-as-a-plugin-from-a-pinned-copy.md)): fetches the
+  release `packages/skills/matt.json` names from his plugin list into the data folder, keeping only his `plugin.json`,
+  licence and the skills it lists, and gives the copy (`copy()`) only when it matches the pin's checksum
+  (`mattChecksum`), or why not; a failure is tried again after five minutes. Fetching is a dependency passed in
+  (`fetchFromGitHub`, git at his release's tag, the one real one). `sessions/` hands a code turn the copy as its
+  `CodePlugin`, with the skills of it the workspace can use, and leaves them out of Courtyard's own skills list.
+- **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
+  commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
+  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
+  workspace's `main`.
+- **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
+  workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
+  one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
+  house skills for its kind of workspace from `packages/skills`. It keeps each
+  skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
+  skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
+
+**🔒 security: the edges** (`security/`)
+
+- **`workspace-files/`:** the workspace folder as the edge of what a model may look at (ADRs 0003, 0015): the one
+  check every provider's reads go through, following symlinks to where a path really leads, and Courtyard's own
+  file tools for a provider that has none of its own (Codex, whose shell is off). `prompts/` words what they find.
+- **`allow-all/`:** whether a code session allows all for this task (#428), decided here from its events with no
+  I/O of its own, so it survives a restart and every screen reads the same: on from `allow-all-started` (the owner's
+  `POST /api/sessions/:id/allow-all`, for `1h`, `4h`, `12h` or `task`, or a Lead's builder started with it), which
+  stores its end time, until that time, `allow-all-ended` (Turn off, `…/allow-all/off`), its pull request merging
+  or closing, or, for `task`, a pull request opening. `sessions/` keeps each session's as its events are written and
+  puts it on the session's summary (`allowingAll`), for its strip and its row in Running. It's never extended while
+  on. The Lead keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
+  order with it on) and starts each builder with it until then.
+
+**🔌 integrations: other apps** (`integrations/`)
+
+- **`connections/`:** a code workspace's connections (#308): GitHub (its repository on GitHub and whether
+  Courtyard is signed in) and its Paper file, as its page's connections line and Connections sheet show them and as
+  each of its turns is told them (`sessions/` gets `of`). Lists the owner's Paper files and connects one, or makes
+  one named after the workspace, as one change through `context-folder/`. Paper's command is the workspace's own,
+  else the `COURTYARD_PAPER_COMMAND` setting, else the one another code workspace names. Its routes are a
+  workspace's `connections`, `connections/paper/files` and `connections/paper`.
+- **`paper/`:** Paper in code workspaces, the first tool connection
+  ([ADR 0023](adr/0023-paper-is-the-first-tool-connection-in-code-workspaces.md)). Builds the turn's
+  `ToolConnection` (`providers/`) from the workspace's Paper settings (`connections.paper` in `workspace.json`,
+  read by `workspaces/`): Paper's MCP server as a command, and the worker's say on each call. Reading and drawing in
+  the workspace's one Paper file run, each an activity (`used-tool`); another file, or making a file, is refused;
+  deleting a node the session didn't make is an approval. It notes the nodes each call says it made (kept on the
+  running session), hands each screenshot to `sessions/` to keep and show, and words a failed call through
+  `prompts/`. `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's
+  page (#308), by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real
+  one; `fake.ts` holds files in memory for the tests and the browser tests).
+
+**⚙️ ops: running Courtyard** (`ops/`)
+
+- **`owner/`:** the owner's password, each device login, and slowing down wrong guesses. Its routes are setup, login,
+  logout, and the login check every other request goes through. Keeps its files in the data folder.
+- **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
+  Not now.
 - **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
   (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
   out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
@@ -407,10 +420,6 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   notification, carrying only the session's title, what it needs and the session's id. The sender is a dependency
   passed in (`web-push.ts`, the one real one, through the `web-push` package; `fake.ts` keeps what was sent for the
   tests and the browser tests). Its routes are `/api/notifications` (the public key) and its `on` and `off`.
-
-**Running Courtyard**
-
-- **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
   ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). Update when ready (#186):
   tapped while main's build runs or a session is mid-turn (`sessions/`'s `midTurn`, an approval waiting counted),
@@ -422,6 +431,7 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
   the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
   seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
+- **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
 
 **Helpers**, to reuse before writing a new one (AGENTS.md):
 
@@ -1058,7 +1068,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
-- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
+- **`apps/worker/src/agent/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
   titling. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
 - **Each provider passes it on unchanged:**
@@ -1089,7 +1099,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,
   never in CI (`pnpm eval:context`; ai-conduct.md, The eval set).
 - **Skills for Courtyard's models** (ADR 0016): the house skills in `packages/skills` and the owner's in the context
-  folder, found by `apps/worker/src/skills/`, listed on every turn and loaded through the use skill tool, or started
+  folder, found by `apps/worker/src/devflow/skills/`, listed on every turn and loaded through the use skill tool, or started
   by the owner, the same on every provider (ai-conduct.md, Skills).
 
 ## Where to read more

@@ -308,9 +308,9 @@ const { startWorker } = await import("../apps/worker/src/start.ts");
 // and so does any other branch there once the PRs list is asked for (#278). Its checks are on each
 // commit pushed: verify passes, and e2e fails, unless the commit's subject says "[e2e running]" or
 // "[e2e passes]".
-const { createFakeGitHub } = await import("../apps/worker/src/github/fake.ts");
+const { createFakeGitHub } = await import("../apps/worker/src/devflow/github/fake.ts");
 // A push service in memory (#173), so a device turned on in a test is never sent to for real.
-const { createFakePush } = await import("../apps/worker/src/notifications/fake.ts");
+const { createFakePush } = await import("../apps/worker/src/ops/notifications/fake.ts");
 // A context backup that isn't there, so the home page and Settings say the backup is behind and why.
 const missingBackup = join(dataDir, "..", "missing-backup.git");
 rmSync(missingBackup, { recursive: true, force: true });
@@ -339,7 +339,7 @@ await writeMattPlugin(mattPlugin, {
 const { pin, fetch } = await mattSkillsIn(mattPlugin);
 
 // The owner's Paper files in memory (#308), so connecting Paper never starts Paper.
-const { createFakePaperFiles } = await import("../apps/worker/src/paper/fake.ts");
+const { createFakePaperFiles } = await import("../apps/worker/src/integrations/paper/fake.ts");
 const paper = createFakePaperFiles({
   files: [
     { id: "file-courtyard", name: "Courtyard" },

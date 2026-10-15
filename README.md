@@ -460,7 +460,8 @@ data folder as it is, and sign in to Claude Code on the new machine.
 ## Working on it
 
 - **Start with [AGENTS.md](AGENTS.md).** The process is [Matt Pocock's skills](https://github.com/mattpocock/skills),
-  set up as `docs/agents/` says. How the parts connect is in [`docs/architecture.md`](docs/architecture.md).
+  set up as `docs/agents/` says. How the parts connect is in [`docs/overview.md`](docs/overview.md) (short) and
+  [`docs/architecture.md`](docs/architecture.md) (in full).
 - **`pnpm verify`** runs every check: lint and format, types, tests, the build (with the first-load budget) and the
   browser tests. Each git worktree's browser tests use their own ports, so copies can test side by side. It, `pnpm
   test`, `e2e` and `build` wait their turn in the machine's builds lock, behind Courtyard's sessions and each other.

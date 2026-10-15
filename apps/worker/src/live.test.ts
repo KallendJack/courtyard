@@ -11,8 +11,8 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { FoundCheckRun } from "./github/api.ts";
-import { createFakeProvider, type Provider } from "./providers/index.ts";
+import { createFakeProvider, type Provider } from "./agent/providers/index.ts";
+import type { FoundCheckRun } from "./devflow/github/api.ts";
 import {
   asOwner,
   CODING_MODEL,

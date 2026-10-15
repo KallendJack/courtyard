@@ -40,7 +40,7 @@ it sits in the workspace's config; Paper's sign-in stays in Paper.
 ## Consequences
 
 - Only the Claude adapter knows how Paper's server is started and its tools named; the rules are the worker's
-  (`apps/worker/src/paper/`), so the fake can play Paper in tests and the real app never runs there.
+  (`apps/worker/src/integrations/paper/`), so the fake can play Paper in tests and the real app never runs there.
 - Paper doesn't document what its answers look like, so the worker reads made nodes from them carefully: an id it
   misses only means deleting that node asks. Deleting a node inside a board the session made, whose id no answer
   named, asks too.

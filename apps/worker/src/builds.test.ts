@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { takePlace } from "@courtyard/builds";
 import type { SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Provider } from "./providers/index.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import {
   asOwner,
   BUILDING_MODEL,

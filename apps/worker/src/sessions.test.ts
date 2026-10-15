@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProviderList, SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import {
   asOwner,
   FAKE_MODEL,

@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodeSessionList, GitHubConnection, LeadStatus, SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import {
   asOwner,
   CODING_MODEL,
@@ -956,7 +956,7 @@ describe("holding back builders that would clash (#423)", () => {
         number: 22,
         title: "One loading state",
         milestone: "4 · Code workspaces",
-        body: "Change `apps/worker/src/lead/index.ts` and its package.json.",
+        body: "Change `apps/worker/src/devflow/lead/index.ts` and its package.json.",
       },
       {
         number: 23,

@@ -25,6 +25,12 @@ The part that does all the work: it holds the context folder, runs sessions, tal
 login.
 _Avoid_: backend, server, API, compute node
 
+**Area**:
+One of the seven groups the worker's modules are kept in, by the job they do: agent, context, devflow, security,
+integrations and ops, each a folder in `apps/worker/src`, with the contract as its own package (#445).
+`docs/overview.md` lists each area's modules.
+_Avoid_: domain, layer, feature folder (the web app's word)
+
 **Live copy**:
 The clone of `main` the everyday Courtyard runs from, separate from any copy it's developed in, and
 updated only when the owner chooses (ADR 0011).

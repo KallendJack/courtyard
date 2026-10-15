@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AllowedCommands, ApprovalAnswering, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Provider } from "./providers/index.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import {
   asOwner,
   CODING_MODEL,

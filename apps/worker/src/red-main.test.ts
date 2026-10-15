@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitHubConnection } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { FoundCheckRun } from "./github/api.ts";
+import type { FoundCheckRun } from "./devflow/github/api.ts";
 import {
   asOwner,
   codeRepo,

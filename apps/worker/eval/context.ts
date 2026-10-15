@@ -21,13 +21,15 @@ import {
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
-import { DOCS_FOLDER, documentPath } from "../src/documents/index.ts";
-import { OWNER_FILE } from "../src/owner-context/index.ts";
 import {
   createClaudeProvider,
   createCodexProvider,
   type Provider,
-} from "../src/providers/index.ts";
+} from "../src/agent/providers/index.ts";
+import { DOCS_FOLDER, documentPath } from "../src/context/documents/index.ts";
+import { OWNER_FILE } from "../src/context/owner-context/index.ts";
+import { readThingText, thingPath } from "../src/context/things/index.ts";
+import { CONTEXT_FILE } from "../src/context/workspaces/index.ts";
 import {
   asOwner,
   followSession,
@@ -38,8 +40,6 @@ import {
   testWorker,
   writeSkill,
 } from "../src/testing.ts";
-import { readThingText, thingPath } from "../src/things/index.ts";
-import { CONTEXT_FILE } from "../src/workspaces/index.ts";
 import {
   contextFileFor,
   type ExpectedDocument,

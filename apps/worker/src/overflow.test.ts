@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProviderList, type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import { err } from "./result.ts";
 import {
   asOwner,

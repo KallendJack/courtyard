@@ -10,7 +10,7 @@ before any change to Codex's pinned version, and whenever the adapter's isolatio
 2. List its features with Courtyard's Codex home:
    `CODEX_HOME=/path/to/data/codex pnpm --filter @courtyard/worker exec codex features list`.
    Compare every feature that is on (`true`) against `FEATURES_OFF` and `SETTINGS` in
-   `apps/worker/src/providers/codex.ts`. Anything that reaches outside the workspace (a shell, files, the network,
+   `apps/worker/src/agent/providers/codex.ts`. Anything that reaches outside the workspace (a shell, files, the network,
    connectors, the browser or the computer) or does Courtyard's job (memories, skills, `AGENTS.md`) is switched off.
 3. Start the worker. Codex starts with `--strict-config`, so a setting the new version renamed or removed stops it
    starting, and the model picker says Codex couldn't start, rather than the setting being quietly ignored.
