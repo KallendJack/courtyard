@@ -288,7 +288,7 @@ export const createLive = (options: {
 
   /**
    * When the worker last started an update, until it has finished without a restart (refused,
-   * say): meanwhile nothing new starts on its own, as while it waited (#186).
+   * say), when its note that the worker started it goes (#186).
    */
   let startedAt: number | undefined;
 
@@ -302,7 +302,6 @@ export const createLive = (options: {
     } catch {
       startedAt = undefined;
       await removeFile(restartFile);
-      options.released?.();
       return err({
         kind: "not-started",
         message: `The update couldn't be started. Run install-task.ps1 again to set up the '${updateTask}' task.`,
@@ -340,10 +339,7 @@ export const createLive = (options: {
         }
       }
       await loaded;
-      if (waiting !== undefined) {
-        waiting = undefined;
-        await removeFile(waitingFile);
-      }
+      if (waiting !== undefined) await keepWaiting(undefined);
       const started = await start();
       return started.ok ? ok({ waits: false }) : started;
     },
@@ -365,9 +361,7 @@ export const createLive = (options: {
           startedAt = undefined;
           // A crash after this isn't the update's: its turns wait for Continue.
           await removeFile(restartFile);
-          options.released?.();
         }
-        return;
       }
       if (waiting === undefined) return;
       const main = await mainNow();
@@ -388,12 +382,11 @@ export const createLive = (options: {
       if ((await waitingNow(main)) !== null) return;
       const last = await lastUpdate();
       if (last.ok && last.value?.outcome === "running") return keepWaiting(undefined);
-      waiting = undefined;
-      await removeFile(waitingFile);
+      await keepWaiting(undefined);
       const started = await start();
       if (!started.ok) console.error("The waiting Update couldn't be started", started.error);
     },
-    holding: () => waiting?.kind === "waiting" || startedAt !== undefined,
+    holding: () => waiting?.kind === "waiting",
     restartedByUpdate: async () => {
       const read = await readJsonFile(restartFile, RestartFile);
       await removeFile(restartFile);
