@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -686,6 +686,16 @@ describe("a code session's downloads of a run's artifacts (#202)", () => {
     "pnpm -C test-results test",
     "node test-results/ci/run.js",
     "node --test test-results/ci/a.test.ts",
+    "node --test --test-reporter=./test-results/ci/r.mjs apps/a.test.ts",
+    // However the command is told where to run from, or what to load.
+    "npm run test --prefix test-results/ci",
+    "npm test --prefix=test-results/ci",
+    "npm test -C test-results/ci",
+    "pnpm exec vitest run --root test-results/ci",
+    "pnpm vitest run --dir=test-results/ci",
+    "pnpm vitest run -c test-results/ci/vitest.config.ts",
+    "pnpm exec playwright test --config=test-results/ci/playwright.config.ts",
+    "pnpm --filter @courtyard/web exec vitest run --config test-results/ci/v.ts",
   ])("ask the owner before running what's in a folder git ignores: %s", async (command) => {
     const { asked, ran } = await askAbout([command]);
 
@@ -698,11 +708,37 @@ describe("a code session's downloads of a run's artifacts (#202)", () => {
     "pnpm --dir=apps/web build",
     "node scripts/check.ts",
     "node --test apps/a.test.ts",
+    "node --test --test-reporter=spec apps/a.test.ts",
+    "npm test --prefix apps/web",
+    "pnpm exec vitest run --root apps/web",
+    "pnpm exec playwright test -c playwright.config.ts",
   ])("run without asking in a folder git doesn't ignore: %s", async (command) => {
     const { answers, ran } = await askAbout([command]);
 
     expect(answers).toEqual([{ ok: true, value: null }]);
     expect(ran).toEqual([{ kind: "ran-command", command }]);
+  });
+
+  // Tests node finds for itself could be in such a folder too, so they're named.
+  it.each(["node --test", "node --test '**/*.test.js'", "node --test --test-name-pattern checks"])(
+    "ask the owner when node --test isn't told which files: %s",
+    async (command) => {
+      const { asked } = await askAbout([command]);
+
+      expect(asked).toEqual([{ kind: "command", command, reason: "off-allowlist" }]);
+    },
+  );
+
+  it("asks when git can't say whether it ignores a path: one past a symbolic link", async () => {
+    await symlink("apps", join(repo, "linked"));
+    await gitIn(repo, "add", "linked");
+    await gitIn(repo, "commit", "--quiet", "-m", "Link the apps");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const command = "node linked/run.js";
+
+    const { asked } = await askAbout([command]);
+
+    expect(asked).toEqual([{ kind: "command", command, reason: "ignored-folder" }]);
   });
 });
 

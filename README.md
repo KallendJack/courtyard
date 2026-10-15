@@ -192,7 +192,10 @@ there is used as it is), then makes the workspace on it and opens it.
   create|edit|comment|close`, `gh label create|list`), and reading through `gh api` (GET only).
   Any other command, an edit outside its worktree, or an edit to a file that decides what those
   commands run (a `package.json`, git hooks, `.claude`) waits for you: the session shows the
-  exact command or file with Allow and Deny, and waits as long as you take.
+  exact command or file with Allow and Deny, and waits as long as you take. So does running
+  what's in a folder git ignores, where a download puts it (`pnpm -C test-results/ci test`,
+  `node test-results/ci/run.js`, a test tool's `--config` there), and `node --test` without
+  naming its test files.
 - **Every command runs in the foreground,** inside the turn: a session can't leave one running in
   the background, since it would stop when the turn ended with nothing to pick it up.
 - **To change a workspace's command allowlist,** add an `allowlist` to its `workspace.json`: the

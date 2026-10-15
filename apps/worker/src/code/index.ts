@@ -2,13 +2,14 @@ import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
 import {
   type AlwaysAllow,
+  type ApprovalAsk,
   CODE_SESSIONS_AT_ONCE,
   type PullRequestReview,
   type SessionId,
   wordsOf,
 } from "@courtyard/contract";
 import { exists, isFolder, listFolder, removeFolder } from "../files.ts";
-import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../git.ts";
+import { type CommandEnv, git, gitFailureReason, gitIgnores, gitOrNothing } from "../git.ts";
 import type { FoundPullRequest, GitHub, GitHubProblem, OpenFound } from "../github/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -21,6 +22,7 @@ import {
   issueGapsIn,
   reachesOut,
   ruleFor,
+  runsFromOf,
 } from "./allowlist.ts";
 import { BRANCH_PREFIX, helperBranchStem, isHelperBranchOf } from "./branches.ts";
 import { createBuildsQueue } from "./builds.ts";
@@ -143,12 +145,12 @@ export type CodeRefusal =
   | { readonly kind: "unfiled"; readonly gaps: readonly [IssueGap, ...IssueGap[]] };
 
 /**
- * A command only the owner can allow (#171): one off the command allowlist, or one naming a path
- * outside the worktree.
+ * A command only the owner can allow (#171): one off the command allowlist, one naming a path
+ * outside the worktree, or one running code from a folder git ignores (#219).
  */
 export type CommandApproval = {
   readonly kind: "needs-approval";
-  readonly reason: "off-allowlist" | "reaches-out" | "ignored-folder";
+  readonly reason: Extract<ApprovalAsk, { kind: "command" }>["reason"];
   /** What Allow always would allow (#185), when it may be offered: never for one reaching out. */
   readonly always?: AlwaysAllow;
   /** Allow all for this task would cover it (#428): it runs without asking while that's on. */
@@ -176,10 +178,8 @@ export const commandAllowed = async (
   if (!words.ok) return err({ kind: words.error });
   const [gap, ...gaps] = issueGapsIn(words.value);
   if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
-  const rule = ruleFor(session.allowlist, words.value, {
-    branch: session.branch,
-    pullRequest: session.pullRequest,
-  });
+  const work = { branch: session.branch, pullRequest: session.pullRequest };
+  const rule = ruleFor(session.allowlist, words.value, work);
   if (rule === undefined) {
     const always = alwaysOffer(words.value);
     return err({
@@ -192,9 +192,10 @@ export const commandAllowed = async (
   if (reachesOut(session.worktree, rule, words.value)) {
     return err({ kind: "needs-approval", reason: "reaches-out" });
   }
-  // Code a download can bring is run only with the owner's OK (#219).
-  for (const from of rule.runsFrom?.(words.value.slice(rule.words.length)) ?? []) {
-    if (await ignoredByGit(session.worktree, from)) {
+  // Code a download can bring is run only with the owner's OK (#219), and so is code where git
+  // can't say.
+  for (const from of runsFromOf(session.allowlist, words.value, work)) {
+    if ((await gitIgnores(session.worktree, from)) !== false) {
       return err({ kind: "needs-approval", reason: "ignored-folder" });
     }
   }
@@ -313,13 +314,6 @@ export const editPlaceIn = async (worktree: string, path: string): Promise<EditP
 };
 
 /**
- * Whether git ignores a path in the worktree (#219), as named, whether or not it's there yet: a
- * folder (ending in `/`) or a file, or one inside an ignored folder.
- */
-const ignoredByGit = async (worktree: string, path: string) =>
-  (await gitOrNothing(worktree, ["check-ignore", "--quiet", "--", path])) !== undefined;
-
-/**
  * Whether a command may unpack files into a folder of the worktree without asking (`gh run
  * download -D`, #202): one git ignores, that's neither the worktree itself nor a file that decides
  * what allowed commands run (`editPlaceIn`). Anywhere else, what it unpacks could replace one of
@@ -329,13 +323,7 @@ const unpacksSafely = async (worktree: string, folder: string) => {
   const place = await editPlaceIn(worktree, folder);
   if (place.kind !== "inside") return false;
   // With a trailing slash, git reads it as a folder even before the download makes it.
-  const ignored = await gitOrNothing(worktree, [
-    "check-ignore",
-    "--quiet",
-    "--",
-    `${place.shown}/`,
-  ]);
-  return ignored !== undefined;
+  return (await gitIgnores(worktree, `${place.shown}/`)) === true;
 };
 
 /**

@@ -197,8 +197,10 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   another repository (an issue filed with no milestone, no `bug` or `enhancement` label or not exactly one triage
   label is refused before anyone is asked, `issueGapsIn`, #324), and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
   download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202);
-  what such a download brings is never run without asking: a package script in a folder git ignores (`pnpm -C`
-  or `--dir`) or a script there run with `node` asks, saying so (`ignored-folder`, the rule's `runsFrom`, #219).
+  what such a download brings is never run without asking: a package script in a folder git ignores (pnpm's `-C`
+  or `--dir`, npm's `--prefix`), a test tool's config or root there, or a script or test there run with `node`
+  asks, saying so (`ignored-folder`; each rule's `runsFrom`, read with `runsFromOf`, #219), as does one where git
+  can't say (`gitIgnores`), and `node --test` names its files, never leaving node to find them.
   For a flake that isn't its PR's, it comments on its own PR with `gh pr comment` and re-runs one run's failed jobs
   with `gh run rerun <run> --failed`, and nothing more of a run (#356). A backslash at a line's end joins the next
   line on, and a title, body, message or jq filter is checked as a path only as a whole, so a link in it doesn't ask
