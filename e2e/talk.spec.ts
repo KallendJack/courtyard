@@ -189,9 +189,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
     });
 
-    test("while it answers, what's said and sent goes into the answer (#252)", async ({
-      page,
-    }) => {
+    test("while it answers, what's said and sent goes into the answer (#252)", async ({ page }) => {
       await page.goto("/workspaces/garage-gym");
       await typeIn(page);
       // The fake waits for what the owner adds.
