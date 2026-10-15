@@ -268,14 +268,16 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   `next-up/:number/grill`. It also keeps the code files each ready issue names in its description or comments
   (`filesNamed`, #423), for the Lead.
 - **`lead/`:** a code workspace's Lead (#347), kept in the data folder's `leads.json`, one look each time the
-  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`) is the owner's OK to merge its builders'
-  pull requests ready then, in the build order's order: each look merges the first still open through `sessions/`
-  once its checks pass and its session's turn is done, asks its session once per head to bring one that conflicts
-  up to date, and stops, saying which and why in its chat, at a failing check, a conflict its session left or
-  GitHub's refusal (`LeadStatus.merge`). It holds back a ready issue naming a code file that a builder still at
+  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`, given the pull requests the owner's screen
+  showed) is the owner's OK to merge those still ready, in the build order's order: each look merges the first
+  still open through `sessions/` once its checks pass and its session's turn is done, waits while the worker brings
+  one that conflicts up to date (#382), and stops, saying which and why in its chat, at a failing check, a conflict
+  its session left or GitHub's refusal (`LeadStatus.merge`; forgotten once that pull request is merged or closed
+  some other way). It holds back a ready issue naming a code file (by path, or by a name few folders share) that a
+  builder still at
   work changes (`code/`'s `changedFiles`: committed since the default branch, changed and new in its worktree) or
-  whose issue named it, starting it once that builder's pull request merges (`LeadStatus.heldBack`; Next up says
-  "Held back").
+  whose issue named it, never main's fix, starting it once that builder's pull request merges, and doesn't rest
+  while one is held back (`LeadStatus.heldBack`; Next up says "Held back").
 - **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
   commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
   (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a

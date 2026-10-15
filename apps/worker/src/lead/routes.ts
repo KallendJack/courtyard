@@ -1,4 +1,4 @@
-import { LeadRun, type LeadStatus } from "@courtyard/contract";
+import { LeadMergeRequest, LeadRun, type LeadStatus } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody } from "../http.ts";
 import { sessionError } from "../sessions/routes.ts";
@@ -44,7 +44,9 @@ export const leadRoutes = (lead: Lead) => {
   });
 
   routes.post("/workspaces/:id/lead/merge-in-order", async (c) => {
-    const merging = await lead.mergeInOrder(c.req.param("id"));
+    const body = await readBody(c, LeadMergeRequest);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const merging = await lead.mergeInOrder(c.req.param("id"), body.value);
     if (!merging.ok) return leadProblem(c, merging.error);
     return c.json(merging.value satisfies LeadStatus);
   });

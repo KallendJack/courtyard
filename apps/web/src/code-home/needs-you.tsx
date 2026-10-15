@@ -19,7 +19,7 @@ import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";
 import { clockWords } from "../when.ts";
 import { continueTurn } from "../worker.ts";
-import { mergeInOrder } from "./api.ts";
+import { useMergeInOrder } from "./merge-in-order.ts";
 import { agoWords, type Need } from "./needs.ts";
 
 // Home reads what waits on the owner the same way (#102, #334).
@@ -38,6 +38,9 @@ const askedWords = (ask: ApprovalAsk) => {
       return `Change ${ask.path}?`;
   }
 };
+
+/** How many pull requests are ready: "1 PR ready", "3 PRs ready". */
+const readyWords = (count: number) => `${count} ${count === 1 ? "PR" : "PRs"} ready`;
 
 /** A pull request's name on a row: its number and title. */
 const pullTitle = (pull: OpenPullRequest) =>
@@ -231,8 +234,8 @@ function NeedRow(props: {
       const { merge } = need;
       return (
         <BlockRow
-          label={`${need.pulls.length} PRs ready, in build order`}
-          title={`${need.pulls.length} PRs ready, in build order`}
+          label={`${readyWords(need.pulls.length)}, in build order`}
+          title={`${readyWords(need.pulls.length)}, in build order`}
           sub={
             merge?.kind === "merging"
               ? `Merging #${merge.pullRequest} · ${order}`
@@ -243,7 +246,11 @@ function NeedRow(props: {
           tone={merge?.kind === "stopped" ? "needs" : "passed"}
           action={
             merge?.kind === "merging" ? undefined : (
-              <MergeInOrder workspaceId={workspaceId} onChanged={props.onChanged} />
+              <MergeInOrder
+                workspaceId={workspaceId}
+                pulls={need.pulls}
+                onChanged={props.onChanged}
+              />
             )
           }
         />
@@ -404,12 +411,15 @@ function Merge(props: { workspaceId: WorkspaceId; pull: OpenPullRequest; onChang
  * Merge in order, in one tap (#423): the owner's OK for the Lead to merge its builders' pull
  * requests ready now, in the build order's order.
  */
-function MergeInOrder(props: { workspaceId: WorkspaceId; onChanged: () => void }) {
-  const merge = useAction(async () => {
-    const merging = await mergeInOrder(props.workspaceId);
-    if (merging.kind !== "loaded") return describeProblem(merging).body;
-    props.onChanged();
-    return undefined;
+function MergeInOrder(props: {
+  workspaceId: WorkspaceId;
+  pulls: readonly OpenPullRequest[];
+  onChanged: () => void;
+}) {
+  const merge = useMergeInOrder({
+    workspaceId: props.workspaceId,
+    pullRequests: props.pulls.map((pull) => pull.pullRequest.number),
+    onMerging: props.onChanged,
   });
   return (
     <>

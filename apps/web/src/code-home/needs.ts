@@ -48,8 +48,9 @@ export type Need =
 /**
  * What waits on the owner, as the worker says, in the order the grill set (#301): approvals,
  * turns cut off by a restart (#186), failing checks, new replies, pull requests ready to merge,
- * conflicts, then Matt's setup. The Lead's builders' ready pull requests, once two or more are,
- * or while Merge in order is merging or stopped, are one row with Merge in order (#423).
+ * conflicts, then Matt's setup. The Lead's builders' pull requests it says are ready (#347) are
+ * one row with Merge in order (#423), as the Lead's chat offers it, saying how it stands while
+ * it's merging or stopped.
  */
 export const needsOf = (given: {
   sessions: readonly Listed[];
@@ -87,7 +88,7 @@ export const needsOf = (given: {
     return pull === undefined ? [] : [pull];
   });
   const merge = given.lead?.merge;
-  const inOrder = ready.length >= 2 || (merge !== undefined && ready.length > 0);
+  const inOrder = ready.length > 0;
   const merges: Need[] = [
     ...(inOrder ? [{ kind: "merge-in-order" as const, pulls: ready, merge }] : []),
     ...pullsWaiting("merge")

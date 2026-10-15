@@ -384,7 +384,7 @@ export const createCode = (options: {
   const worktreeOf = (id: SessionId) => join(options.dataDir, "worktrees", id);
 
   /** Each repository's default branch, as its remote said it once (#423). */
-  const defaults = new Map<string, string>();
+  const defaultBranches = new Map<string, string>();
 
   /**
    * The files a session's worktree changes (#423), from the repository: committed since it left
@@ -394,12 +394,12 @@ export const createCode = (options: {
     repoPath: string;
     worktree: string;
   }): Promise<readonly string[]> => {
-    let main = defaults.get(change.repoPath);
+    let main = defaultBranches.get(change.repoPath);
     if (main === undefined) {
       const told = await defaultBranchOf(change.repoPath, await options.commandEnv());
       if (!told.ok) return [];
       main = told.value;
-      defaults.set(change.repoPath, main);
+      defaultBranches.set(change.repoPath, main);
     }
     const listed = async (args: readonly string[]) =>
       ((await gitOrNothing(change.worktree, args)) ?? "")

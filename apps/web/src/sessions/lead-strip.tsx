@@ -5,9 +5,8 @@ import { CapsLabel } from "@/components/caps-label";
 import { FormError } from "@/components/form-error";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { classes } from "@/lib/classes";
-import { useAction } from "@/lib/use-action";
-import { loadLead, mergeInOrder } from "../code-home/api.ts";
-import { describeProblem } from "../problems.tsx";
+import { loadLead } from "../code-home/api.ts";
+import { useMergeInOrder } from "../code-home/merge-in-order.ts";
 
 /** Each workspace's Lead as last shown, for the tab's lifetime. */
 const KEPT_LEAD = createKept<LeadStatus>();
@@ -111,11 +110,10 @@ const PILL = "rounded-full px-3 py-1 text-meta font-bold whitespace-nowrap";
  */
 function MergeState(props: { lead: LeadStatus; workspaceId: WorkspaceId }) {
   const { merge, ready } = props.lead;
-  const tap = useAction(async () => {
-    const merging = await mergeInOrder(props.workspaceId);
-    if (merging.kind !== "loaded") return describeProblem(merging).body;
-    KEPT_LEAD.set(props.workspaceId, merging.data);
-    return undefined;
+  const tap = useMergeInOrder({
+    workspaceId: props.workspaceId,
+    pullRequests: ready.map((each) => each.pullRequest),
+    onMerging: (lead) => KEPT_LEAD.set(props.workspaceId, lead),
   });
   if (merge?.kind === "stopped") {
     return (

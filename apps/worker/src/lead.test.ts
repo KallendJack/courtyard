@@ -722,8 +722,9 @@ describe("Merge in order (#423)", () => {
     return { github, request, numbers };
   };
 
-  const mergeInOrder = (request: Requester) =>
-    postJson(request, "/api/workspaces/side-project/lead/merge-in-order", {});
+  /** Merge in order, tapped on a screen showing these pull requests ready. */
+  const mergeInOrder = (request: Requester, pullRequests: readonly (number | undefined)[]) =>
+    postJson(request, "/api/workspaces/side-project/lead/merge-in-order", { pullRequests });
 
   /** Runs the worker's jobs until `done` holds, as time passing would. */
   const until = async (done: () => boolean | Promise<boolean>) =>
@@ -742,7 +743,7 @@ describe("Merge in order (#423)", () => {
     const [first, second] = numbers;
     expect((await leadOf(request)).ready.map((each) => each.pullRequest)).toEqual(numbers);
 
-    const response = await mergeInOrder(request);
+    const response = await mergeInOrder(request, numbers);
 
     expect(response.status).toBe(200);
     // The first merges at once; the next waits its turn, as the worker's jobs come round.
@@ -768,7 +769,7 @@ describe("Merge in order (#423)", () => {
     // The second's checks fail once the first has merged.
     github.setChecks(second ?? 0, [{ name: "e2e", outcome: "failed" }], "c0ffee9");
 
-    await mergeInOrder(request);
+    await mergeInOrder(request, numbers);
     await until(async () => (await leadOf(request)).merge?.kind === "stopped");
 
     expect(github.stateOf(first ?? 0)).toBe("merged");
@@ -784,7 +785,7 @@ describe("Merge in order (#423)", () => {
 
     github.setChecks(second ?? 0, [{ name: "e2e", outcome: "passed" }], "c0ffeea");
     await until(async () => (await leadOf(request)).ready.length === 1);
-    await mergeInOrder(request);
+    await mergeInOrder(request, numbers);
 
     await until(() => github.stateOf(second ?? 0) === "merged");
     expect((await leadOf(request)).merge).toBeUndefined();
@@ -798,7 +799,7 @@ describe("Merge in order (#423)", () => {
     const [first, second] = numbers;
     const builder = await builderOf(request, 23);
 
-    await mergeInOrder(request);
+    await mergeInOrder(request, numbers);
     expect(github.stateOf(first ?? 0)).toBe("merged");
     // Merging the first made the second conflict with main.
     github.setConflicts(second ?? 0, true);
@@ -819,11 +820,42 @@ describe("Merge in order (#423)", () => {
     await until(() => github.stateOf(second ?? 0) === "merged");
   });
 
+  it("merges only the pull requests the owner's screen showed ready", async () => {
+    const { github, request, numbers } = await readyToMerge([
+      { checks: "passed" },
+      { checks: "passed" },
+    ]);
+    const [first, second] = numbers;
+
+    await mergeInOrder(request, [first]);
+
+    expect(github.stateOf(first ?? 0)).toBe("merged");
+    await runJobs();
+    await runJobs();
+    expect(github.stateOf(second ?? 0)).toBe("open");
+    expect((await leadOf(request)).merge).toBeUndefined();
+  });
+
+  it("forgets where it stopped once that pull request is merged or closed some other way", async () => {
+    const { github, request, numbers } = await readyToMerge([
+      { checks: "passed" },
+      { checks: "passed" },
+    ]);
+    const [, second] = numbers;
+    github.setChecks(second ?? 0, [{ name: "e2e", outcome: "failed" }], "c0ffee9");
+    await mergeInOrder(request, numbers);
+    await until(async () => (await leadOf(request)).merge?.kind === "stopped");
+
+    github.close(second ?? 0);
+
+    await until(async () => (await leadOf(request)).merge === undefined);
+  });
+
   it("is refused while nothing is ready to merge", async () => {
     const { request } = await signedInWith(ISSUES);
     await run(request);
 
-    const response = await mergeInOrder(request);
+    const response = await mergeInOrder(request, [41]);
 
     expect(response.status).toBe(409);
     expect(await errorOf(response)).toBe("Nothing is ready to merge yet.");
@@ -879,6 +911,65 @@ describe("holding back builders that would clash (#423)", () => {
     const after = await leadOf(request);
     expect(after.building.map((each) => each.issue)).toEqual([24, 23]);
     expect(after.heldBack).toBeUndefined();
+  });
+
+  it("keeps a held-back issue waiting while the builder it waits on has only its pull request left to merge", async () => {
+    const { github, request } = await signedInWith([
+      {
+        number: 22,
+        title: "One loading state",
+        milestone: "4 · Code workspaces",
+        body: "Every block uses `apps/web/src/components/kept.tsx`.",
+      },
+      {
+        number: 23,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        body: "Blocks keep their size: kept.tsx holds their place.",
+      },
+    ]);
+    await run(request);
+    const builder = await builderOf(request, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    await runJobs();
+    await runJobs();
+
+    // Ready to merge, it builds nothing: the Lead still waits for it, rather than resting.
+    const waiting = await leadOf(request);
+    expect(waiting.state).toBe("running");
+    expect(waiting.heldBack).toEqual([{ issue: 23, behind: 22 }]);
+
+    github.merge(number);
+    await runJobs();
+    await runJobs();
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23]);
+  });
+
+  it("doesn't hold back for a file named only by a name many folders have", async () => {
+    const { request } = await signedInWith([
+      {
+        number: 22,
+        title: "One loading state",
+        milestone: "4 · Code workspaces",
+        body: "Change `apps/worker/src/lead/index.ts` and its package.json.",
+      },
+      {
+        number: 23,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        body: "Its index.ts and package.json need a line each.",
+      },
+    ]);
+
+    const lead = await run(request);
+
+    expect(lead.building.map((each) => each.issue)).toEqual([22, 23]);
+    expect(lead.heldBack).toBeUndefined();
   });
 
   it("holds back an issue naming a file a running builder has changed in its worktree", async () => {

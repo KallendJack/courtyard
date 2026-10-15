@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { LeadStatus } from "../packages/contract/index.ts";
 
 // A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, Lead
 // running, the Lead's chat, Lead resting), on start-worker.mjs's Toolshed: three ready issues on
@@ -113,11 +114,7 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   page,
   request,
 }) => {
-  const real = (await (await request.get(`/api${HOME}/lead`)).json()) as {
-    building: { session: string; title: string; issue: number }[];
-    next: { number: number }[];
-    session: string;
-  };
+  const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
   const [first, second] = real.building;
   if (first === undefined || second === undefined) throw new Error("two builders expected");
   const builders = [first, second, first];
@@ -179,7 +176,7 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   await page.setViewportSize({ width: 950, height: 712 });
 
   // The Lead's chat: To merge with Merge in order.
-  await page.goto(`${HOME}/sessions/${real.session}`);
+  await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
   const strip = page.getByRole("region", { name: "Build order" });
   await expect(strip).toContainText("To merge3Merge in order");
   await shot(page, "tablet-lead-chat-merging-in-order");
@@ -191,7 +188,7 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
 
   // Stopped at a check: the chat's To merge says where, in gold.
   merge = { kind: "stopped", pullRequest: 340, why: "its e2e check failed" };
-  await page.goto(`${HOME}/sessions/${real.session}`);
+  await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
   await expect(strip).toContainText("Stopped · #340");
   await shot(page, "tablet-lead-chat-merge-stopped-at-a-check");
   await page.unrouteAll({ behavior: "ignoreErrors" });
