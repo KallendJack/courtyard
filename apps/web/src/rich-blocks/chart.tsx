@@ -1,5 +1,6 @@
 import { Chart } from "@courtyard/contract";
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Scroller } from "@/components/scroller";
 import { formatValue, type Scale, scaleFor } from "./chart-scale.ts";
 import type { DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";
@@ -83,7 +84,7 @@ const BAR_MIN = 18;
 
 /** How wide the element is, as the page lays it out. */
 const useWidth = () => {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLElement>(null);
   const [width, setWidth] = useState<number>();
   useLayoutEffect(() => {
     const element = ref.current;
@@ -135,7 +136,7 @@ function Plot(props: { chart: Plotted }) {
   const base = y(Math.min(Math.max(0, scale.low), scale.high));
   const height = ABOVE + PLOT_HEIGHT + BELOW;
   return (
-    <div ref={ref} className="overflow-x-auto">
+    <Scroller axis="x" ref={ref}>
       {width === undefined ? (
         <div style={{ height }} />
       ) : (
@@ -172,7 +173,7 @@ function Plot(props: { chart: Plotted }) {
           />
         </svg>
       )}
-    </div>
+    </Scroller>
   );
 }
 

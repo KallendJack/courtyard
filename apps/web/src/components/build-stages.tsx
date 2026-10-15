@@ -3,6 +3,7 @@ import { Check, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { elapsedWords } from "../when.ts";
+import { Scroller } from "./scroller.tsx";
 
 // A CI build in stages (#337; Paper, "Component · Main's build as a pipeline, live"): jobs that
 // start together stacked in one column, a job that waits on others after them, joined by lines
@@ -164,7 +165,7 @@ export function BuildGraph(props: {
   const last = stages.at(-1);
   return (
     // Its rows narrower where it has little room (Settings), so Update stays in sight.
-    <div className="@container -mx-1 overflow-x-auto px-1">
+    <Scroller axis="x" className="@container -mx-1 px-1">
       {/* biome-ignore lint/a11y/useSemanticElements: one list of every job, stage by stage, for screen readers, while each stage's column (no list item itself) draws them: an <ol> can't hold the columns. */}
       <div role="list" aria-label="Main's build" className="flex w-max items-center">
         {stages.map((stage, at) => (
@@ -206,7 +207,7 @@ export function BuildGraph(props: {
           </div>
         )}
       </div>
-    </div>
+    </Scroller>
   );
 }
 

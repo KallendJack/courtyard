@@ -2,6 +2,7 @@ import type { QuickAnswer, QuickLine } from "@courtyard/contract";
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { Button, IconButton } from "@/components/button";
+import { Scroller } from "@/components/scroller";
 import { classes } from "@/lib/classes";
 import { Answer } from "../sessions/answer.tsx";
 
@@ -28,7 +29,7 @@ export function QuickQuestionsPanel(props: {
   foot?: ReactNode;
 }) {
   /** What scrolls: the questions and their answers. */
-  const conversation = useRef<HTMLDivElement>(null);
+  const conversation = useRef<HTMLElement>(null);
   const count = props.asked.length;
   const { pending } = props;
 
@@ -67,10 +68,7 @@ export function QuickQuestionsPanel(props: {
           onClick={props.onClose}
         />
       </header>
-      <div
-        ref={conversation}
-        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5"
-      >
+      <Scroller ref={conversation} className="flex min-h-0 flex-1 flex-col gap-3.5 px-4 py-3.5">
         {props.asked.map((one, index) => (
           // A conversation only grows, so each keeps its place.
           // biome-ignore lint/suspicious/noArrayIndexKey: asked in this order, never moved
@@ -102,7 +100,7 @@ export function QuickQuestionsPanel(props: {
             <p className="text-interface text-muted-foreground">Reading the PR…</p>
           </div>
         )}
-      </div>
+      </Scroller>
       {props.foot !== undefined && (
         <div className="shrink-0 border-t px-4 pt-2.5 pb-3">{props.foot}</div>
       )}

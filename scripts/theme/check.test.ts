@@ -106,6 +106,45 @@ export const Save = () => (
   assert.doesNotMatch(said, /thing-form\.tsx:6/);
 });
 
+test("fails anything that scrolls by itself, outside the shared scroller (#420)", async () => {
+  await source({
+    "styles.css": THEME,
+    "components/scroller.tsx": `const AXES = { y: "overflow-y-auto", tablet: "md:overflow-auto" };`,
+    "review/diff.tsx": `// Scrolls with overflow-y-auto (#278).
+export const Lines = () => (
+  <>
+    <div className="flex md:overflow-y-auto" />
+    <pre className="overflow-x-scroll p-3" />
+    <div style={{ overflowY: "auto" }} />
+    <Scroller axis="x" className="overflow-hidden truncate" />
+  </>
+);`,
+    "sessions/maths.css": `/* overflow: auto would scroll. */
+.formula { overflow-x: auto; overflow-y: hidden; }`,
+  });
+  const { passed, said } = await check();
+  assert.equal(passed, false);
+  assert.match(said, /Scroller/);
+  for (const value of [
+    "review/diff.tsx:4: md:overflow-y-auto",
+    "review/diff.tsx:5: overflow-x-scroll",
+    'review/diff.tsx:6: overflowY: "auto"',
+    "sessions/maths.css:2: overflow-x: auto",
+  ])
+    assert.match(said, new RegExp(value.replace(/[[\]()]/g, "\\$&")));
+  assert.doesNotMatch(
+    said,
+    /scroller\.tsx:|diff\.tsx:[17]|maths\.css:1|overflow-hidden|overflow-y: hidden/,
+  );
+
+  // What can't be the shared scroller, an element a library makes, is allowed with its reason.
+  await rm(join(root, "src", "review"), { recursive: true });
+  const allowed = await check([
+    { file: "sessions/maths.css", value: "overflow-x: auto", reason: "KaTeX makes the element." },
+  ]);
+  assert.deepEqual(allowed, { passed: true, said: "" });
+});
+
 test("passes a one-off on the allowlist, which has to say why", async () => {
   await source({ "styles.css": THEME, "photo.ts": `context.fillStyle = "#ffffff";` });
   const entry = { file: "photo.ts", value: "#ffffff" };

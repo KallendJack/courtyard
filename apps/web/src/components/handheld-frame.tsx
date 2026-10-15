@@ -25,6 +25,7 @@ import { type Layout, type MessageBox, type TalkTarget, typingIn } from "./handh
 import css from "./handheld-frame.css?inline";
 import { HandheldSheet } from "./handheld-sheet.tsx";
 import { RecentSessions } from "./recent-sessions.tsx";
+import { Scroller } from "./scroller.tsx";
 import { TalkBar, TalkKey } from "./talk-strip.tsx";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 
@@ -268,10 +269,11 @@ export default function HandheldFrame(props: {
       <div data-handheld="" className="contents">
         {tablet ? (
           <>
-            <nav
+            <Scroller
+              as="nav"
               ref={left}
               aria-label="Workspaces"
-              className="fixed top-0 bottom-(--frame-bar) left-0 z-20 flex w-[calc(--spacing(28)+env(safe-area-inset-left))] flex-col items-center gap-2.5 overflow-y-auto bg-background pt-4.5 pb-5 pl-[env(safe-area-inset-left)]"
+              className="fixed top-0 bottom-(--frame-bar) left-0 z-20 flex w-[calc(--spacing(28)+env(safe-area-inset-left))] flex-col items-center gap-2.5 bg-background pt-4.5 pb-5 pl-[env(safe-area-inset-left)]"
             >
               {home}
               <ul
@@ -297,24 +299,27 @@ export default function HandheldFrame(props: {
                   ))}
                 </ul>
               )}
-              {held && arrange.held && <HeldTile workspace={held} held={arrange.held} />}
-            </nav>
-            <div
+            </Scroller>
+            {/* Outside the rail, so the rail's fade never takes the tile being moved. */}
+            {held && arrange.held && <HeldTile workspace={held} held={arrange.held} />}
+            <Scroller
               ref={right}
-              className="fixed inset-y-0 right-0 z-20 flex w-[calc(--spacing(37.5)+env(safe-area-inset-right))] flex-col gap-3 overflow-y-auto bg-background pt-6 pr-[calc(--spacing(2.5)+env(safe-area-inset-right))] pb-[calc(--spacing(3.75)+env(safe-area-inset-bottom))] pl-2.5"
+              className="fixed inset-y-0 right-0 z-20 flex w-[calc(--spacing(37.5)+env(safe-area-inset-right))] flex-col gap-3 bg-background pt-6 pr-[calc(--spacing(2.5)+env(safe-area-inset-right))] pb-[calc(--spacing(3.75)+env(safe-area-inset-bottom))] pl-2.5"
             >
               {model}
               {skills}
               {settings}
               <div className="flex-1" />
               <TalkKey box={talkTo} type={type} talker={props.talker} />
-            </div>
+            </Scroller>
           </>
         ) : (
           <header className="flex items-center gap-2 bg-background pt-4 pr-3 pb-3 pl-3">
-            <nav
+            <Scroller
+              as="nav"
+              axis="x"
               aria-label="Workspaces"
-              className="-my-1 flex min-w-0 flex-1 gap-2 overflow-x-auto py-1 pl-0.5"
+              className="-my-1 flex min-w-0 flex-1 gap-2 py-1 pl-0.5"
             >
               {home}
               {planning.map(tile)}
@@ -323,7 +328,7 @@ export default function HandheldFrame(props: {
                 <span aria-hidden className="mx-0.5 w-px shrink-0 self-stretch bg-border" />
               )}
               {code.map(tile)}
-            </nav>
+            </Scroller>
             {settings}
           </header>
         )}

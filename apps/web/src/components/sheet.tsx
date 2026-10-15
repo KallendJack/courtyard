@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "./button.tsx";
+import { Scroller } from "./scroller.tsx";
 import { useDialog } from "./use-dialog.ts";
 
 /**
@@ -32,9 +33,9 @@ export function Sheet(props: {
             <span aria-hidden className="h-1 w-9 self-center rounded-full bg-border" />
             <h2 className="display-section text-lg/tight">{props.title}</h2>
           </div>
-          <div data-dialog-body="" className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4">
+          <Scroller data-dialog-body="" className="flex min-h-0 flex-col gap-3 px-4">
             {props.children}
-          </div>
+          </Scroller>
           <div className="flex shrink-0 justify-end px-4">
             <Button onClick={props.onClose}>Done</Button>
           </div>

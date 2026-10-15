@@ -2,12 +2,14 @@ import { type ReactNode, useState } from "react";
 import { classes } from "@/lib/classes";
 import { useLayout } from "./handheld.ts";
 import { PAGE_SCROLL, PageScrollContext } from "./page-scroll.ts";
+import { Scroller } from "./scroller.tsx";
 
 /**
  * A screen (#339): a pinned header, one scrolling middle and a pinned footer, filling the raised
  * panel, so nothing scrolls the title or the main action away. Only the middle scrolls, and no
  * other box on the screen scrolls it: what follows the scroll (a session's turns) finds it through
- * `usePageScroll`. The cover screen is too short to pin a header too, so there the header scrolls
+ * `usePageScroll`. Scrolled down, its top fades under the header, never a line cut in half (#420).
+ * The cover screen is too short to pin a header too, so there the header scrolls
  * with the middle as one column, and only the footer stays put.
  */
 export function Page(props: {
@@ -40,10 +42,10 @@ export function Page(props: {
   return (
     <main className="flex h-full min-h-0 flex-col">
       {!oneColumn && header}
-      <div
+      <Scroller
         ref={setScroller}
         data-scroll-restoration-id={PAGE_SCROLL}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        className="flex min-h-0 flex-1 flex-col"
       >
         {oneColumn && header}
         <div
@@ -57,7 +59,7 @@ export function Page(props: {
         >
           <PageScrollContext value={scroller}>{props.children}</PageScrollContext>
         </div>
-      </div>
+      </Scroller>
       {props.footer !== undefined && (
         // Where Jump to latest floats from, just above the message box.
         <div className={classes(column, "relative shrink-0")}>{props.footer}</div>

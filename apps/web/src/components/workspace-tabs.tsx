@@ -1,6 +1,7 @@
 import type { WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { classes } from "@/lib/classes";
+import { Scroller } from "./scroller.tsx";
 
 /** One of a workspace's tabs: its place in the address's hash (none for Home), name and count. */
 export type WorkspaceTab = {
@@ -24,9 +25,11 @@ export function WorkspaceTabs(props: {
   chosen: string;
 }) {
   return (
-    <nav
+    <Scroller
+      as="nav"
+      axis="x"
       aria-label="Workspace tabs"
-      className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0"
+      className="-mx-4 flex gap-2 px-4 md:mx-0 md:px-0"
     >
       {props.tabs.map((tab) => {
         const chosen = tab.hash === props.chosen;
@@ -51,6 +54,6 @@ export function WorkspaceTabs(props: {
           </Link>
         );
       })}
-    </nav>
+    </Scroller>
   );
 }

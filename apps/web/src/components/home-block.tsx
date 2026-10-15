@@ -1,5 +1,6 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
+import { Scroller } from "./scroller.tsx";
 
 // The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
 // style guide "Workspace Home blocks"): a card with its label in capitals, and rows inside it.
@@ -69,50 +70,10 @@ export function Block(props: {
  * fade at the top says there's more above (#408). One per block: everything that scrolls in it.
  */
 export function BlockRows(props: { children: ReactNode }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const rows = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ overflows: false, atStart: true, atEnd: true });
-  const measure = useCallback(() => {
-    const box = scroller.current;
-    if (box === null) return;
-    const overflows = box.scrollHeight > box.clientHeight + 1;
-    const atStart = box.scrollTop <= 1;
-    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
-    setFit((was) =>
-      was.overflows === overflows && was.atStart === atStart && was.atEnd === atEnd
-        ? was
-        : { overflows, atStart, atEnd },
-    );
-  }, []);
-  useEffect(() => {
-    const observer = new ResizeObserver(measure);
-    for (const each of [scroller.current, rows.current]) if (each !== null) observer.observe(each);
-    return () => observer.disconnect();
-  }, [measure]);
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div
-        ref={scroller}
-        onScroll={measure}
-        className={classes("scroll-thin min-h-0 flex-1 overflow-y-auto", fit.overflows && "pr-2")}
-      >
-        <div ref={rows} className="flex flex-col gap-1.5">
-          {props.children}
-        </div>
-      </div>
-      {fit.overflows && !fit.atStart && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-linear-to-t from-transparent to-surface"
-        />
-      )}
-      {fit.overflows && !fit.atEnd && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-linear-to-b from-transparent to-surface"
-        />
-      )}
-    </div>
+    <Scroller fadeEnd className="min-h-0 flex-1 data-overflows:pr-2">
+      <div className="flex flex-col gap-1.5">{props.children}</div>
+    </Scroller>
   );
 }
 

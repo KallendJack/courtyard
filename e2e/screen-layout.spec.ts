@@ -26,6 +26,17 @@ const scrollToEnd = async (box: Locator) => {
   await expect.poll(() => box.evaluate((element) => element.scrollTop)).toBeGreaterThan(1000);
 };
 
+/**
+ * What scrolls looks the same everywhere (#420): a thin thumb, never the system's wide one, and
+ * once scrolled down its top fades under what's pinned above it rather than cutting a line in half.
+ */
+const scrollsTheSharedWay = async (box: Locator) => {
+  expect(await box.evaluate((element) => getComputedStyle(element).scrollbarWidth)).toBe("thin");
+  await expect(box).toHaveAttribute("data-fade", "top");
+  await box.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(box).not.toHaveAttribute("data-fade");
+};
+
 /** Whether each of `pinned` is in view and stays where it is while `scroll` runs. */
 const staysPut = async (pinned: readonly Locator[], scroll: () => Promise<void>) => {
   for (const each of pinned) await expect(each).toBeInViewport({ ratio: 1 });
@@ -108,6 +119,7 @@ const keepsPinned = async (page: Page, pinned: readonly Locator[]) => {
       };
     }),
   ).toEqual({ panel: 0, window: 0 });
+  await scrollsTheSharedWay(middle(page));
 };
 
 const title = (page: Page) => page.getByRole("heading", { level: 1 });
@@ -230,6 +242,7 @@ test.describe("on a desktop", () => {
     await staysPut([dialog.getByRole("heading", { name: "Connections" }), connect], () =>
       scrollToEnd(body),
     );
+    await scrollsTheSharedWay(body);
   });
 });
 

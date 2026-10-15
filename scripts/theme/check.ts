@@ -4,7 +4,8 @@
 // `shadow-[0_0_8px_red]`, `text-sm/[18px]`), and on a colour's hex outside styles.css. A real
 // one-off goes on the allowlist, allowed.json, with the reason it can't be the theme's; an entry
 // nothing needs any more fails too, so the list stays short. It also fails a button greyed out
-// while it works (`disabled={save.busy}`), which shows it's busy instead (#330).
+// while it works (`disabled={save.busy}`), which shows it's busy instead (#330), and anything that
+// scrolls by itself rather than as the shared scroller, components/scroller.tsx (#420).
 //
 //   node scripts/theme/check.ts [<web app's src folder> <allowlist>]
 
@@ -89,12 +90,39 @@ const allowed = parsed.data;
 const isAllowed = (problem: Problem) =>
   allowed.some((entry) => entry.file === problem.file && entry.value === problem.value);
 
-const found = (
-  await Promise.all(
-    files.map(async (file) => problemsIn(file, await readFile(join(src, file), "utf8"))),
-  )
-).flat();
+/**
+ * What scrolls by itself (#420): everything that scrolls is the shared scroller, with its thin
+ * thumb and its fade, so nothing else sets an overflow that scrolls: a class
+ * (`md:overflow-y-auto`), a style (`overflowY: "auto"`) or a stylesheet's rule.
+ */
+const SCROLLER = "components/scroller.tsx";
+const SCROLLS_CLASS = /^overflow(?:-[xy])?-(?:auto|scroll)$/;
+const SCROLLS_STYLE = /\boverflow[XY]?\s*:\s*["'](?:auto|scroll)["']/g;
+const SCROLLS_RULE = /\boverflow(?:-[xy])?\s*:\s*(?:auto|scroll)\b/g;
+
+const scrollsIn = (file: string, text: string): Problem[] => {
+  if (file === SCROLLER) return [];
+  const css = file.endsWith(".css");
+  return withoutComments(text, css)
+    .split("\n")
+    .flatMap((line, index) => {
+      const values = css
+        ? [...line.matchAll(SCROLLS_RULE)].map(([value]) => value)
+        : [
+            ...line.split(/[\s"'`]+/).filter((token) => SCROLLS_CLASS.test(utilityOf(token))),
+            ...[...line.matchAll(SCROLLS_STYLE)].map(([value]) => value),
+          ];
+      return values.map((value) => ({ file, line: index + 1, value }));
+    });
+};
+
+const texts = await Promise.all(
+  files.map(async (file) => ({ file, text: await readFile(join(src, file), "utf8") })),
+);
+const found = texts.flatMap(({ file, text }) => problemsIn(file, text));
 const problems = found.filter((problem) => !isAllowed(problem));
+const scrollsFound = texts.flatMap(({ file, text }) => scrollsIn(file, text));
+const scrolls = scrollsFound.filter((problem) => !isAllowed(problem));
 
 /**
  * A button greyed out while what the owner tapped runs (#330): greyed out means it can't right
@@ -118,7 +146,10 @@ const greyedWhileBusy = (
   )
 ).flat();
 const unused = allowed.filter(
-  (entry) => !found.some((problem) => problem.file === entry.file && problem.value === entry.value),
+  (entry) =>
+    ![...found, ...scrollsFound].some(
+      (problem) => problem.file === entry.file && problem.value === entry.value,
+    ),
 );
 
 if (problems.length > 0) {
@@ -139,4 +170,11 @@ if (greyedWhileBusy.length > 0) {
   );
   for (const { file, line, value } of greyedWhileBusy) console.error(`  ${file}:${line}: ${value}`);
 }
-if (problems.length > 0 || unused.length > 0 || greyedWhileBusy.length > 0) process.exit(1);
+if (scrolls.length > 0) {
+  console.error(
+    "Scrolls by itself: everything that scrolls is the shared Scroller (components/scroller.tsx), with its thin thumb and fade (#420). Use it, or allow what can't (an element a library makes) in scripts/theme/allowed.json with its reason:",
+  );
+  for (const { file, line, value } of scrolls) console.error(`  ${file}:${line}: ${value}`);
+}
+if (problems.length > 0 || unused.length > 0 || greyedWhileBusy.length > 0 || scrolls.length > 0)
+  process.exit(1);

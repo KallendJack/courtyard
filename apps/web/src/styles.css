@@ -261,10 +261,30 @@
   font-weight: 800;
 }
 
-/* A thin scroll thumb, for rows that scroll inside a card (#335). */
+/* A thin scroll thumb, for everything that scrolls (#335, #420): components/scroller.tsx. */
 @utility scroll-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--input) transparent;
+}
+
+/*
+ * A scroller's fades (components/scroller.tsx, #408, #420): with more above, its top fades out,
+ * so a line scrolled under a pinned header is never cut in half; with more below, where it says
+ * so, its foot too. A mask, so it fades into whatever is behind it.
+ */
+[data-fade="top"] {
+  mask-image: linear-gradient(to bottom, transparent, black --spacing(9));
+}
+[data-fade="end"] {
+  mask-image: linear-gradient(to top, transparent, black --spacing(9));
+}
+[data-fade="both"] {
+  mask-image: linear-gradient(
+    transparent,
+    black --spacing(9),
+    black calc(100% - --spacing(9)),
+    transparent
+  );
 }
 
 /* The 1.5px stroke: a card that needs the owner, a chosen row, a queued message, a tick box. */

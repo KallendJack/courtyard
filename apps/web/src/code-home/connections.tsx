@@ -7,6 +7,7 @@ import { GitHubMark, PaperMark } from "@/components/connections-line";
 import { FormError } from "@/components/form-error";
 import { placeUnder } from "@/components/place-under";
 import { RadioRow } from "@/components/radio-row";
+import { Scroller } from "@/components/scroller";
 import { useDialog } from "@/components/use-dialog";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
@@ -111,7 +112,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
         <IconButton label="Close" icon={<X />} onClick={props.onClose} />
       </div>
 
-      <div data-dialog-body="" className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+      <Scroller data-dialog-body="" className="flex min-h-0 flex-col gap-3">
         <section
           aria-label="GitHub"
           className="flex items-center gap-3 rounded-bubble bg-secondary px-3.5 py-3"
@@ -163,7 +164,7 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
           ) : files === undefined ? (
             <p className="text-meta text-muted-foreground">Asking Paper for your files…</p>
           ) : (
-            <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
+            <Scroller className="flex max-h-60 flex-col gap-1.5">
               {files.map((file) => (
                 <RadioRow
                   key={file.id}
@@ -182,10 +183,10 @@ function SheetBody(props: Parameters<typeof ConnectionsSheet>[0]) {
                 icon={<Plus />}
                 onChoose={() => setChoice({ kind: "new" })}
               />
-            </div>
+            </Scroller>
           )}
         </fieldset>
-      </div>
+      </Scroller>
 
       <div className="flex shrink-0 flex-col gap-3">
         <Button
