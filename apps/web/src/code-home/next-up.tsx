@@ -7,12 +7,14 @@ import {
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { Flame, Play, Zap } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
+import { DialogCard } from "@/components/dialog-card";
 import { FormError } from "@/components/form-error";
 import { useBlocksFill } from "@/components/handheld";
 import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
+import { Switch } from "@/components/switch";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
@@ -271,14 +273,17 @@ function StartOnIssue(props: {
   const Icon = look.icon;
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
-  /** Run the build order, tapped: what starts shows first, with Start the order. */
+  /** Run the build order, tapped: what starts shows first, in a dialog, with Run the build order. */
   const [running, setRunning] = useState(false);
+  /** Allow all for builders (#428), off unless the owner turns it on. */
+  const [allowAll, setAllowAll] = useState(false);
+  const allowAllName = useId();
   const leading = props.lead?.status.state === "running";
   /** Start and Cancel, brought into view when they open in a column too short for them (#335). */
   const choices = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (confirming || running) choices.current?.scrollIntoView({ block: "nearest" });
-  }, [confirming, running]);
+    if (confirming) choices.current?.scrollIntoView({ block: "nearest" });
+  }, [confirming]);
   const model = codingModelIn(props.providers);
   const start = useAction(async () => {
     if (model === undefined) return "No model that codes is available right now.";
@@ -297,7 +302,7 @@ function StartOnIssue(props: {
   });
   const runOrder = useAction(async () => {
     if (model === undefined) return "No model that codes is available right now.";
-    const started = await runLead(props.workspaceId, { model: model.ref });
+    const started = await runLead(props.workspaceId, { model: model.ref, allowAll });
     if (started.kind !== "loaded") return describeProblem(started).body;
     setRunning(false);
     props.lead?.onLead(started.data);
@@ -379,31 +384,6 @@ function StartOnIssue(props: {
           </div>
           <FormError message={start.error} />
         </>
-      ) : running ? (
-        <>
-          <p className="text-meta text-foreground/90">
-            {model === undefined
-              ? "No model that codes is available right now."
-              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead?.status.builders ?? 2} at a time, each in a session of its own that claims its issue, and tells you what's ready to merge. Merging stays yours.`}
-          </p>
-          <div ref={choices} className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="primary"
-              grow
-              disabled={model === undefined}
-              busy={runOrder.busy}
-              busyLabel="Starting…"
-              onClick={() => void runOrder.run()}
-            >
-              <Play aria-hidden />
-              Start the order
-            </Button>
-            <Button variant="outline" waiting={runOrder.busy} onClick={() => setRunning(false)}>
-              Cancel
-            </Button>
-          </div>
-          <FormError message={runOrder.error} />
-        </>
       ) : leading ? (
         // While the Lead runs, it starts this one: there's no Build to tap (Paper, "Lead running").
         <p className="flex h-9 items-center justify-center gap-2 rounded-full border border-primary/35 bg-secondary text-meta font-bold text-primary-text">
@@ -425,6 +405,62 @@ function StartOnIssue(props: {
             )}
           </>
         )
+      )}
+      {props.lead !== undefined && (
+        // Run the build order, tapped: what starts, and Allow all for builders (#428; Paper, "Run
+        // the build order: Allow all for builders"), off unless the owner turns it on.
+        <DialogCard
+          title="Run the build order"
+          says={
+            model === undefined
+              ? "No model that codes is available right now."
+              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}, each in a session of its own that claims its issue, and tells you what's ready to merge. Merging stays yours.`
+          }
+          open={running}
+          onClose={() => setRunning(false)}
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="lg"
+                waiting={runOrder.busy}
+                onClick={() => setRunning(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                grow
+                disabled={model === undefined}
+                busy={runOrder.busy}
+                busyLabel="Starting…"
+                onClick={() => void runOrder.run()}
+              >
+                Run the build order
+              </Button>
+            </>
+          }
+        >
+          <div className="flex items-center gap-3 rounded-row bg-secondary px-4 py-3">
+            <div className="flex min-w-0 grow flex-col gap-0.5">
+              <p id={`${allowAllName}-name`} className="text-interface font-bold text-foreground">
+                Allow all for builders
+              </p>
+              <p id={`${allowAllName}-more`} className="text-meta text-muted-foreground">
+                For 12 hours, or until each builder's PR opens. Each one still asks before anything
+                outside its own branch.
+              </p>
+            </div>
+            <Switch
+              on={allowAll}
+              onChange={setAllowAll}
+              labelledBy={`${allowAllName}-name`}
+              describedBy={`${allowAllName}-more`}
+            />
+          </div>
+          <FormError message={runOrder.error} />
+        </DialogCard>
       )}
     </section>
   );

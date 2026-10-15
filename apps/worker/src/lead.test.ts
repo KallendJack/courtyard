@@ -186,6 +186,51 @@ describe("Run the build order (#347)", () => {
     expect(github.commentsOn(onGitHub, 24)).toEqual([]);
   });
 
+  it("starts its builders allowing all until each one's pull request opens, 12 hours at most, only when the owner says (#428)", async () => {
+    const { request } = await signedInWith(ISSUES);
+
+    const response = await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      allowAll: true,
+    });
+
+    expect(response.status).toBe(200);
+    const until = LeadStatus.parse(await response.json()).buildersAllowedAll;
+    if (until === undefined) throw new Error("builders aren't allowed all");
+    expect(Date.parse(until) - Date.now()).toBeGreaterThan(11.9 * 60 * 60 * 1000);
+    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
+    for (const issue of [22, 23]) {
+      expect((await builderOf(request, issue)).allowingAll).toEqual({ until, task: true });
+    }
+    // The Lead itself doesn't allow all, only its builders.
+    const listed = await sessionsOf(request);
+    expect(listed.find((session) => session.lead === true)?.allowingAll).toBeUndefined();
+    const leadId = listed.find((each) => each.lead === true)?.id ?? "";
+    const lead = await eventsSoFar(request, leadId);
+    expect(lead.filter((event) => event.type === "allow-all-started")).toEqual([]);
+    // Nor can it be turned on for the Lead's own session.
+    const refused = await postJson(request, `/api/sessions/${leadId}/allow-all`, { lasts: "1h" });
+    expect(refused.status).toBe(409);
+
+    // Woken without saying, it keeps it; Run the build order with it off ends it.
+    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
+    expect((await run(request)).buildersAllowedAll).toBe(until);
+    const off = await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      allowAll: false,
+    });
+    expect(LeadStatus.parse(await off.json()).buildersAllowedAll).toBeUndefined();
+  });
+
+  it("starts its builders asking as usual unless the owner turns on Allow all for builders", async () => {
+    const { request } = await signedInWith(ISSUES);
+
+    const lead = await run(request);
+
+    expect(lead.buildersAllowedAll).toBeUndefined();
+    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
+  });
+
   it("rests when what's left waits on an open issue, saying how many (#377)", async () => {
     const { github, request } = await signedInWith([
       { number: 22, title: "One loading state", milestone: "4 · Code workspaces" },

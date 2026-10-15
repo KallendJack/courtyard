@@ -225,8 +225,11 @@ export const createNextUp = (options: {
     build: async (
       rawId: string,
       number: number,
-      /** The model, and whether the workspace's Lead starts it as one of its builders (#347). */
-      build: BuildIssue & { readonly byLead?: boolean },
+      /**
+       * The model, whether the workspace's Lead starts it as one of its builders (#347), and until
+       * when it allows all from the start, with the Lead's Allow all for builders (#428).
+       */
+      build: BuildIssue & { readonly byLead?: boolean; readonly allowAllUntil?: string },
     ): Promise<Result<SessionSummary, NextUpProblem>> => {
       const found = await repoOf(rawId);
       if (!found.ok) return found;
@@ -252,6 +255,7 @@ export const createNextUp = (options: {
         title: titleFor("Build", issue),
         issue: number,
         ...(build.byLead === true ? { lead: "builder" as const } : {}),
+        ...(build.allowAllUntil === undefined ? {} : { allowAllUntil: build.allowAllUntil }),
       });
       return created.ok ? created : err({ kind: "session", error: created.error });
     },

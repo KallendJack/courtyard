@@ -1,4 +1,5 @@
 import {
+  AllowAllRequest,
   ApprovalAnswering,
   CarryOnRequest,
   type CodeSessionList,
@@ -193,6 +194,17 @@ export const sessionError = (c: Context, error: SessionError) => {
       });
     case "workspace":
       return contextError(c, error.error);
+    case "not-code-session":
+      return apiError(c, {
+        status: 409,
+        error:
+          "Only a code session can allow all, never the Lead: its builders can, from Run the build order.",
+      });
+    case "allowing-all":
+      return apiError(c, {
+        status: 409,
+        error: "This session is allowing all already. Turn it off first, then pick again.",
+      });
     case "queued-not-found":
       return apiError(c, { status: 404, error: "No such queued message in this session." });
     case "queued-sent":
@@ -519,6 +531,20 @@ export const sessionRoutes = (options: {
     });
     if (!answered.ok) return sessionError(c, answered.error);
     return c.json(answered.value satisfies ApprovalAnswering);
+  });
+
+  // Allow all for this task (#428): on for as long as the owner picks, and off.
+  routes.post("/sessions/:id/allow-all", async (c) => {
+    const body = await readBody(c, AllowAllRequest);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const allowing = await sessions.allowAll(c.req.param("id"), body.value.lasts);
+    if (!allowing.ok) return sessionError(c, allowing.error);
+    return c.json(allowing.value satisfies SessionSummary);
+  });
+  routes.post("/sessions/:id/allow-all/off", async (c) => {
+    const off = await sessions.allowAllOff(c.req.param("id"));
+    if (!off.ok) return sessionError(c, off.error);
+    return c.json(off.value satisfies SessionSummary);
   });
 
   // Reviewing a code session's pull request (#160): what it changes, then Merge or Close.

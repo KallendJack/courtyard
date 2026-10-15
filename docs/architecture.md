@@ -209,7 +209,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   of a default rule that failed its checks (or whose words could cover one, such as pushing), merging a PR, deleting
   a repository, release or ref, git's and gh's settings and sign-in, a program that runs another, or anything
   naming a credential. The worker's `GET /workspaces/:id/allowed-commands` and `…/remove` are Workspace ⋯ →
-  Allowed commands. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
+  Allowed commands. `allowsAll` works out whether Allow all for this task (#428) covers a command off the
+  allowlist: never one Allow always could never offer for the same reasons, nor gh's other commands (they act on
+  GitHub, outside the session branch), publishing or signing in to a package registry, the machine's services and
+  processes, code given on the line (`python -c`), options before git's or a package manager's command (`git -c …
+  push`), or a runner's (`pnpm exec`, `npx`) whose own command isn't covered. Of the setup files, it covers package
+  scripts and git hooks, never git's own, `.github`, Claude Code's settings or a package manager's settings
+  (`editPlaceIn`'s `all`). It checks commands as they're asked for: a script the session wrote and runs is its own
+  code, as it is without Allow all. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
   worker's say on every edit and command, which records each one allowed as an activity and words each refusal
   through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
   module's own fetch from the remote uses it too). `slots.ts` keeps up to six code sessions running at once across the worker (#174, #364), each
@@ -314,6 +321,14 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
   branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
   `pull-requests/:number/fix`.
+- **`allow-all/`:** whether a code session allows all for this task (#428), decided here from its events with no
+  I/O of its own, so it survives a restart and every screen reads the same: on from `allow-all-started` (the owner's
+  `POST /api/sessions/:id/allow-all`, for `1h`, `4h`, `12h` or `task`, or a Lead's builder started with it), which
+  stores its end time, until that time, `allow-all-ended` (Turn off, `…/allow-all/off`), its pull request merging
+  or closing, or, for `task`, a pull request opening. `sessions/` keeps each session's as its events are written and
+  puts it on the session's summary (`allowingAll`), for its strip and its row in Running. It's never extended while
+  on. The Lead keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
+  order with it on) and starts each builder with it until then.
 - **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
   I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
   answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
@@ -784,7 +799,10 @@ Where the rest fits:
   what Allow always would allow, when it's offered (`always`, #185), and Allow can answer with it, for the session
   (recorded on `approval-answered`, so the session's later turns read it from its events, and it ends with the
   session) or for the workspace (kept in `workspace.json` as a change to the context folder before the answer is
-  recorded); either way the rest of the turn runs it without asking. A stop ends the wait, and a
+  recorded); either way the rest of the turn runs it without asking. While the session allows all (#428), a
+  command `allowsAll` covers, and an edit to a setup file, runs without asking, its activity marked `allowedAll`;
+  an approval it would cover carries `all`, so the card offers turning it on, and turning it on allows each one
+  waiting. A stop ends the wait, and a
   denial tells the model why. With six code sessions' turns running, a seventh records `turn-queued` and waits, `turn-dequeued`
   once it starts; `turn-queued` carries how many turns wait ahead of it, recorded again each time it moves up
   (#362), so its `now` is `waiting-for-place` with that count on every screen until it starts. The workspace's

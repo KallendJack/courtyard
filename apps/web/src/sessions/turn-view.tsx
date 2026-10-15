@@ -10,6 +10,7 @@ import {
 } from "@courtyard/contract";
 import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useMemo, useState } from "react";
+import { AllowAllMark } from "@/components/allowing-all";
 import { ApprovalCard, approvalWords } from "@/components/approval-card";
 import { PdfChip, PhotoThumb } from "@/components/attachment";
 import { Button } from "@/components/button";
@@ -26,7 +27,7 @@ import { describeProblem } from "../problems.tsx";
 import { Answer } from "./answer.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "./documents.tsx";
-import type { Helper, ShownImage, Turn } from "./events.ts";
+import type { Helper, MarkedActivity, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
 import { answerApproval, attachmentUrl } from "./messages.ts";
 import { answeringWith, availableModels } from "./models.ts";
@@ -149,7 +150,7 @@ function ShownImages(props: { sessionId: SessionId; images: readonly ShownImage[
  * What a model did between two pieces of what it wrote, one line each, however long (#285): a line
  * too long for the screen ends in "…".
  */
-function Activities(props: { activities: readonly Activity[] }) {
+function Activities(props: { activities: readonly MarkedActivity[] }) {
   return (
     <ul aria-label="What the model did" className="space-y-0.5 text-meta text-muted-foreground">
       {props.activities.map((activity, index) => (
@@ -163,6 +164,7 @@ function Activities(props: { activities: readonly Activity[] }) {
         >
           {activity.kind === "check-failed" && <X aria-hidden className="size-3.5 shrink-0" />}
           <span className="truncate">{describeActivity(activity)}</span>
+          {activity.allowedAll === true && <AllowAllMark>ran under Allow all</AllowAllMark>}
         </li>
       ))}
     </ul>
@@ -400,6 +402,8 @@ export const TurnView = memo(function TurnView(props: {
   onContinue?: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply to this turn (the latest only): whether it was sent. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
+  /** Opens Allow all for this task's choice of how long (#428), from an approval it would cover. */
+  onAllowAll?: () => void;
   /** The session's workspace, where its documents' and Things' notes open. */
   workspaceId?: WorkspaceId;
   /** Where Save as document saves, in a planning workspace that isn't archived; none otherwise. */
@@ -486,6 +490,7 @@ export const TurnView = memo(function TurnView(props: {
             helper: turn.helpers.find((each) => each.id === turn.approval?.helper)?.name,
           })}
           always={turn.approval.always}
+          onAllowAll={turn.approval.all ? props.onAllowAll : undefined}
           onAnswer={async (answer, waiting, always) => {
             if (turn.approval === undefined) return undefined;
             const answered = await answerApproval({

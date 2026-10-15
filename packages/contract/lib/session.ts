@@ -137,6 +137,14 @@ export type FirstMessage = z.infer<typeof FirstMessage>;
 export const GetToKnowRequest = z.object({ model: ModelRef.optional() });
 export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 
+/**
+ * A code session allowing all (#428), as the worker decides it now: until when at most, and
+ * whether it ends sooner, once the task is done. While it's on, the session runs commands off the
+ * allowlist and edits setup files without asking; what must always ask still does.
+ */
+export const AllowingAll = z.object({ until: z.iso.datetime(), task: z.boolean() });
+export type AllowingAll = z.infer<typeof AllowingAll>;
+
 /** Grill this plan: a new session grilling one of a workspace's plans, answered as Get to know is. */
 export const GrillRequest = GetToKnowRequest.extend({
   plan: MessageWords.min(1, "Write something first"),
@@ -159,6 +167,8 @@ export const SessionSummary = z.object({
   lead: z.literal(true).optional(),
   /** The Lead started it, to build an issue (#347): marked "by Lead". */
   byLead: z.literal(true).optional(),
+  /** It's allowing all now (#428): its strip, and the gold mark on its row in Running. */
+  allowingAll: AllowingAll.optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 

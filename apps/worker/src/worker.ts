@@ -376,6 +376,7 @@ export const createWorker = (options: {
     },
     // While an Update waits, no builder starts (#186).
     updating: () => live.holding(),
+    now,
     notify: (session, need) => {
       background(
         notifications
