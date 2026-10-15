@@ -366,14 +366,24 @@ or open a pull request.
    and write (file, label and comment on the issues a session works from), **Actions** read and write
    (follow a run's steps and re-run a failed check), **Workflows** read and write (change the repo's
    `.github/workflows`, still behind an approval), and **Checks** and **Commit statuses** read-only;
-   **Metadata** read-only is always on. Leave **Administration** and **Secrets** off. Nothing under account permissions.
+   **Metadata** read-only is always on. For New repo (New workspace → Code makes the repo, #391),
+   also **Administration** read and write: GitHub's permission for "repository creation", which also
+   covers a repo's settings and deleting it (sessions still ask before any of that: ADR 0028), so
+   leave it off if you'll only add repos you already have. Leave **Secrets** off. Nothing under account permissions.
 6. Choose **Only on this account**, then **Create GitHub App**.
 7. On the app's page, copy its **Client ID** (not the App ID), and set it in the worker's `.env`:
    `COURTYARD_GITHUB_CLIENT_ID=<client ID>`. It needs no client secret or private key. Restart the
    worker (or run an Update) to pick it up.
 
 **Install it on the repos sessions may use:** on the app's page, **Install App**, pick your
-account, choose **Only select repositories**, pick them, and **Install**. To change them later:
+account, choose **Only select repositories**, pick them, and **Install**. A repo New repo makes
+is added to them by itself.
+
+**Already registered it, and want New repo?** On the app's page, **Permissions & events →
+Repository permissions → Administration → Read and write**, then **Save changes**. GitHub asks you
+to accept the new permission: **Settings → Applications → Installed GitHub Apps →** the app **→
+Review request → Accept new permissions**. If New repo still says GitHub refused, sign in again
+from Connections (**Switch**). To change them later:
 **Settings → Applications → Installed GitHub Apps → Configure**. Connections lists the repos it
 reaches, and New workspace → Code offers them.
 

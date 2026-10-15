@@ -385,7 +385,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   into the data folder's `repos/<owner>/<name>` with the environment `github/` gives code sessions, so
   git asks Courtyard's sign-in through `gh` and no token is kept in the address or git's settings; a
   copy already there is used as it is. It refuses a repo the GitHub App doesn't reach or that a code
-  workspace works on already. Its route is `/api/github/repos`; `POST /api/workspaces` with a `repo`
+  workspace works on already. New repo (#391) makes one on the account signed in through `github/`
+  (empty, private unless asked), then its folder here with its first commit, the house standard's
+  files `matt-setup/` gives, as Courtyard's own commit, pushed to `main`; it refuses a name the owner
+  has a repo by already. `matt-setup/` then gives it the labels, its first milestone and its first
+  idea as an issue needing a grill on that milestone's Build order line, and `POST
+  /api/github/repos/new` makes the workspace on it and, when asked, its Paper file through
+  `connections/` (`GET` says the account and whether Paper can be made). Its route is `/api/github/repos`; `POST /api/workspaces` with a `repo`
   checks the name is free, places the repo, then makes the workspace on it (`workspaces/` writes
   `{ mode: "code", repoPath }`).
 - **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
@@ -597,7 +603,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     `components/repo-picker.tsx`), like `review/`. A switch picks Planning (the form as it was) or Code,
     which lists the owner's repos to pick one from; picking one fills in the name (title-cased from the
     repo's) and What's it for? (its description on GitHub), shown in full (`WrappingTextField`) before
-    Create. Name is focused on a desktop only, so a touch screen's keyboard waits for a tap. The page
+    Create. New repo (#391) heads the list: its name follows What's it for? (said or typed) until
+    typed over, and its card's chips (private, the account, a Paper file) change with a tap. Name is focused on a desktop only, so a touch screen's keyboard waits for a tap. The page
     offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
     put what's said there as they would in a message box. A code workspace just made opens with its
     Connections sheet (`#connections`), offering Paper, which Close skips (#308).

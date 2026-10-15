@@ -24,6 +24,16 @@ export const repoProblem = (c: Context, why: RepoProblem) => {
         status: 502,
         error: `${why.repo} couldn't be got onto this machine: ${why.reason}`,
       });
+    case "taken":
+      return apiError(c, {
+        status: 409,
+        error: `There's a repo called ${why.repo} on your account, or on this machine, already.`,
+      });
+    case "unstarted":
+      return apiError(c, {
+        status: 502,
+        error: `${why.repo} was made on GitHub, but its first files couldn't be pushed: ${why.reason}. Pick it from the list to add it.`,
+      });
     default:
       return gitHubProblem(c, why);
   }

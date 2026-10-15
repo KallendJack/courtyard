@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { gitOrNothing } from "../git.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import { err, ok } from "../result.ts";
@@ -110,6 +112,11 @@ export const createFakeGitHub = (
     issues?: Readonly<Record<string, readonly FakeIssue[]>>;
     /** Each repository's milestones' descriptions, by title (#336). */
     milestones?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+    /**
+     * Where a repo made from Courtyard (#391) goes: a bare repository on disk at
+     * `<makesReposIn>/<owner>/<name>.git`, standing in for GitHub's copy.
+     */
+    makesReposIn?: string;
     opensOnPush?: {
       readonly remote: string;
       /** The repository it is GitHub's copy of, as `owner/name`; every one unless it says. */
@@ -130,18 +137,18 @@ export const createFakeGitHub = (
   } = {},
 ) => {
   const account = options.account ?? "octo-owner";
-  const repos: readonly FoundRepo[] = (
-    options.repos ?? [`${account}/courtyard`, `${account}/stacks`]
-  ).map((repo) => {
-    const given = typeof repo === "string" ? { fullName: repo } : repo;
-    return {
-      fullName: given.fullName,
-      description: given.description ?? null,
-      private: given.private ?? true,
-      cloneUrl: given.cloneUrl ?? `https://github.com/${given.fullName}.git`,
-      pushedAt: given.pushedAt ?? null,
-    };
-  });
+  const repos: FoundRepo[] = (options.repos ?? [`${account}/courtyard`, `${account}/stacks`]).map(
+    (repo) => {
+      const given = typeof repo === "string" ? { fullName: repo } : repo;
+      return {
+        fullName: given.fullName,
+        description: given.description ?? null,
+        private: given.private ?? true,
+        cloneUrl: given.cloneUrl ?? `https://github.com/${given.fullName}.git`,
+        pushedAt: given.pushedAt ?? null,
+      };
+    },
+  );
   let issued = 0;
   let codes = 0;
   /** The access token that works now, and its refresh token. */
@@ -186,6 +193,8 @@ export const createFakeGitHub = (
       })),
     ]),
   );
+  /** What each repo made from Courtyard was made with (#391). */
+  const made = new Map<string, { description: string; private: boolean }>();
   const milestoneIn = (repo: string, title: string) =>
     milestones.get(repo)?.find((milestone) => milestone.title === title);
   /** Each issue Courtyard filed, in order (#355). */
@@ -539,6 +548,43 @@ export const createFakeGitHub = (
       milestone.description = description;
       return ok(null);
     },
+    createRepo: async (accessToken, repo) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const fullName = `${account}/${repo.name}`;
+      if (repos.some((each) => each.fullName.toLowerCase() === fullName.toLowerCase())) {
+        return err(
+          "GitHub said: Repository creation failed. (name already exists on this account)",
+        );
+      }
+      if (options.makesReposIn === undefined) return err("GitHub said: Not Found");
+      const bare = join(options.makesReposIn, account, `${repo.name}.git`);
+      await mkdir(bare, { recursive: true });
+      await gitOrNothing(bare, ["init", "--quiet", "--bare", "--initial-branch=main"]);
+      const found = {
+        fullName,
+        description: repo.description === "" ? null : repo.description,
+        private: repo.private,
+        cloneUrl: bare,
+        pushedAt: null,
+      };
+      repos.unshift(found);
+      made.set(fullName, { description: repo.description, private: repo.private });
+      // GitHub gives a new repo its default labels, the categories among them.
+      labels.set(fullName, ["bug", "documentation", "enhancement"]);
+      return ok(found);
+    },
+    createMilestone: async (accessToken, milestone) => {
+      const refused = refusedToken(accessToken);
+      if (refused !== undefined) return refused;
+      const listed = milestones.get(milestone.repo) ?? [];
+      const number = listed.length + 1;
+      milestones.set(milestone.repo, [
+        ...listed,
+        { number, title: milestone.title, description: milestone.description },
+      ]);
+      return ok(number);
+    },
     createIssue: async (accessToken, issue) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
@@ -633,6 +679,8 @@ export const createFakeGitHub = (
     },
     /** Each time Courtyard re-ran a commit's failed jobs, in order (#355). */
     reruns: () => [...reruns],
+    /** What a repo made from Courtyard was made with, if it was (#391). */
+    repoMade: (fullName: string) => made.get(fullName),
     /** Each issue Courtyard filed, in order, with its milestone's title (#355). */
     issuesFiled: () => [...filed],
     /** Milestone `title`'s description in `repo` now (#355). */

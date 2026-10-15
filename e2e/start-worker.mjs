@@ -350,6 +350,8 @@ const paper = createFakePaperFiles({
 
 const github = createFakeGitHub({
   finishAfterMs: 2000,
+  // New repo (#391) makes each as a bare repository on disk, standing in for GitHub's copy.
+  makesReposIn: join(codeDir, "made"),
   // The repos its GitHub App reaches: Side project's, already a code workspace's, and one that
   // isn't yet, newest pushed first, then enough more to make 62, as many as the owner's (#286).
   repos: [

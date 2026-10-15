@@ -12,8 +12,12 @@ import {
   type LiveUpdateStarted,
   type MattSetup,
   MattSetupAnswer,
+  NewRepo,
+  type NewRepoMade,
+  type NewRepoOffer,
   NewWorkspace,
   type OwnerContextDetail,
+  type SetupPaper,
   type SkillList,
   WorkspaceChange,
   type WorkspaceDetail,
@@ -22,6 +26,7 @@ import {
   type WorkspaceMain,
   WorkspaceOrder,
   type WorkspaceSummary,
+  workspaceNameFrom,
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -29,7 +34,7 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { changeRoutes } from "./changes/routes.ts";
 import { allowsOf, createCode, namedAs } from "./code/index.ts";
-import { createConnections } from "./connections/index.ts";
+import { createConnections, makePaperFile } from "./connections/index.ts";
 import { connectionRoutes } from "./connections/routes.ts";
 import { plansDue } from "./context-file/index.ts";
 import {
@@ -42,7 +47,7 @@ import { createFreshStart } from "./fresh-start/index.ts";
 import { freshStartRoutes } from "./fresh-start/routes.ts";
 import { createGitHubApi, type GitHubApi } from "./github/api.ts";
 import { createGitHub, KEEP_FRESH_EVERY_MS } from "./github/index.ts";
-import { gitHubRoutes } from "./github/routes.ts";
+import { gitHubProblem, gitHubRoutes } from "./github/routes.ts";
 import { apiError, contextError, readBody } from "./http.ts";
 import { createLead } from "./lead/index.ts";
 import { leadRoutes } from "./lead/routes.ts";
@@ -560,6 +565,56 @@ export const createWorker = (options: {
     );
     if (!workspace.ok) return contextError(c, workspace.error);
     return c.json(workspace.value satisfies WorkspaceSummary, 201);
+  });
+  // New repo (#391): what New workspace → Code needs to offer it, and making one.
+  api.get("/github/repos/new", async (c) => {
+    const account = await github.account();
+    if (!account.ok) return gitHubProblem(c, account.error);
+    return c.json({
+      account: account.value,
+      paper: await connections.canMakeNewPaper(),
+    } satisfies NewRepoOffer);
+  });
+  api.post("/github/repos/new", async (c) => {
+    const body = await readBody(c, NewRepo);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const { intro } = body.value;
+    const name = workspaceNameFrom(body.value.name);
+    // Its workspace's name is known to be free before anything is made on GitHub.
+    const free = await checkNewName(contextDir, name);
+    if (!free.ok) return contextError(c, free.error);
+    const files = await mattSetup.filesForNew({ name, intro });
+    if (!files.ok) {
+      return apiError(c, {
+        status: 409,
+        error:
+          "Matt Pocock's skills aren't on this worker yet, so a new repo can't start on the house standard. Try again once they've loaded.",
+      });
+    }
+    const made = await repos.create({
+      name: body.value.name,
+      description: intro,
+      private: body.value.private,
+      files: files.value,
+    });
+    if (!made.ok) return repoProblem(c, made.error);
+    const started = await mattSetup.startNew({ fullName: made.value.fullName, name, intro });
+    if (!started.ok) {
+      return apiError(c, {
+        status: 502,
+        error: `${made.value.fullName} was made, but its first milestone and issue weren't: ${started.error} Pick it from the list to add it.`,
+      });
+    }
+    const workspace = await contextFolder.change(
+      () => createWorkspace(contextDir, { name, intro, repoPath: made.value.folder }),
+      (summary) => workspaceChange(`New workspace: ${summary.name}`, summary.id),
+    );
+    if (!workspace.ok) return contextError(c, workspace.error);
+    const paper: SetupPaper =
+      body.value.paper && (await connections.canMakeNewPaper())
+        ? await makePaperFile(connections, workspace.value.id, name)
+        : { kind: "skipped" };
+    return c.json({ workspace: workspace.value, paper } satisfies NewRepoMade, 201);
   });
   api.patch("/workspaces/:id", async (c) => {
     const body = await readBody(c, WorkspaceChange);

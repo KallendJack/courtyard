@@ -2,8 +2,15 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { GitHubRepoList, WorkspaceDetail, WorkspaceSummary } from "@courtyard/contract";
+import {
+  GitHubRepoList,
+  NewRepoMade,
+  NewRepoOffer,
+  WorkspaceDetail,
+  WorkspaceSummary,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createFakePaperFiles, type FakePaperFiles } from "./paper/fake.ts";
 import {
   asOwner,
   codeRepo,
@@ -12,10 +19,13 @@ import {
   errorOf,
   type FakeGitHub,
   gitIn,
+  MATT_TEST_SKILLS,
+  mattSkillsIn,
   postJson,
   type Requester,
   removeTestFolder,
   testWorker,
+  writeMattPlugin,
 } from "./testing.ts";
 
 // A code workspace made from the app (#258): New workspace → Code lists the owner's GitHub repos
@@ -231,5 +241,207 @@ describe("a code workspace made from a picked repo", () => {
     expect((await (await request("/api/workspaces/gone")).json()) as unknown).toMatchObject({
       error: expect.any(String),
     });
+  });
+});
+
+describe("New repo (#391)", () => {
+  /** What his setup skill writes from, in a stand-in for his plugin: the house answers' templates. */
+  const TEMPLATES = {
+    "issue-tracker-github.md": "# Issue tracker: GitHub\n",
+    "issue-tracker-local.md": "# Issue tracker: Local Markdown\n",
+    "triage-labels.md": "# Triage Labels\n",
+    "domain.md": "# Domain Docs\n\nRead `CONTEXT.md` at the root.\n",
+  };
+
+  /**
+   * A worker with Matt's skills, signed in to a fake GitHub that makes each new repo as a bare
+   * repository on disk; with Paper on the worker machine when a test gives it.
+   */
+  const owner = async (more: { paper?: FakePaperFiles } = {}) => {
+    const plugin = join(root, "matt-plugin");
+    await writeMattPlugin(plugin, {
+      skills: [
+        ...MATT_TEST_SKILLS,
+        { name: "setup-matt-pocock-skills", ownerStarts: true, files: TEMPLATES },
+      ],
+    });
+    const github = createFakeGitHub({
+      repos: [{ fullName: "octo-owner/side-project", private: false }],
+      makesReposIn: join(root, "github"),
+    });
+    const request = await asOwner(
+      testWorker({
+        root,
+        github: github.api,
+        mattSkills: await mattSkillsIn(plugin),
+        ...(more.paper === undefined ? {} : { paperFiles: more.paper.paper }),
+        ...(more.paper === undefined ? {} : { env: { COURTYARD_PAPER_COMMAND: "/path/to/paper" } }),
+      }),
+    );
+    await signIn(request, github);
+    return { github, request };
+  };
+
+  const BIKES = {
+    name: "bike-servicing",
+    intro: "Track servicing for both bikes: parts, intervals and shop visits",
+    private: true,
+    paper: true,
+  };
+
+  it("says which account a new repo goes on, and whether Courtyard can make it a Paper file", async () => {
+    const { request } = await owner({ paper: createFakePaperFiles() });
+
+    const response = await request("/api/github/repos/new");
+
+    expect(response.status).toBe(200);
+    expect(NewRepoOffer.parse(await response.json())).toEqual({
+      account: "octo-owner",
+      paper: true,
+    });
+  });
+
+  it("makes the repo on the owner's account on the house standard, a code workspace on it, and its Paper file", async () => {
+    const paper = createFakePaperFiles();
+    const { github, request } = await owner({ paper });
+
+    const response = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(response.status).toBe(201);
+    const made = NewRepoMade.parse(await response.json());
+    expect(made.workspace).toMatchObject({ name: "Bike Servicing", mode: "code" });
+    expect(made.paper).toEqual({ kind: "made", name: "Bike Servicing" });
+    expect(paper.files().map((file) => file.name)).toEqual(["Bike Servicing"]);
+
+    // On GitHub: private, described, its labels and first milestone, and its first idea, needing
+    // a grill, on the milestone's Build order line: what Next up offers Grill on (#363).
+    const remote = join(root, "github", "octo-owner", "bike-servicing.git");
+    const onMain = (path: string) => gitIn(remote, "show", `main:${path}`);
+    const agents = await onMain("AGENTS.md");
+    expect(agents).toContain("# Bike Servicing");
+    expect(agents).toContain(BIKES.intro);
+    expect(agents).toContain("## House rules");
+    expect(agents).toContain("adds CI");
+    expect(agents).toContain("## Agent skills");
+    expect(await onMain("docs/agents/issue-tracker.md")).toBe("# Issue tracker: GitHub");
+    expect(await onMain("docs/agents/triage-labels.md")).toBe("# Triage Labels");
+    expect(await onMain("docs/agents/domain.md")).toBe(
+      "# Domain Docs\n\nRead `GLOSSARY.md` at the root.",
+    );
+    expect(await onMain("GLOSSARY.md")).toContain("# Glossary");
+    expect(await onMain("docs/adr/README.md")).toContain("# Decisions");
+    expect(new Set(github.labelsOf("octo-owner/bike-servicing"))).toEqual(
+      // GitHub's own default labels stay, and the triage labels join them.
+      new Set([
+        "bug",
+        "documentation",
+        "enhancement",
+        "needs-triage",
+        "needs-info",
+        "ready-for-agent",
+        "ready-for-human",
+        "wontfix",
+      ]),
+    );
+    expect(github.issuesFiled()).toEqual([
+      {
+        number: 1,
+        title: BIKES.intro,
+        body: expect.stringContaining("Grill it"),
+        labels: ["enhancement", "needs-triage"],
+        milestone: "1 · Start",
+      },
+    ]);
+    expect(github.milestoneDescription("octo-owner/bike-servicing", "1 · Start")).toBe(
+      "Build order: #1.",
+    );
+    expect(github.repoMade("octo-owner/bike-servicing")).toEqual({
+      description: BIKES.intro,
+      private: true,
+    });
+
+    // On the worker machine: in the data folder, a clone of it, and it's added.
+    const folder = resolve(root, "data", "repos", "octo-owner", "bike-servicing");
+    expect(await gitIn(folder, "log", "--format=%s")).toBe("Start on the house standard");
+    expect(await gitIn(folder, "status", "--porcelain", "--branch")).toBe("## main...origin/main");
+    const detail = WorkspaceDetail.parse(
+      await (await request(`/api/workspaces/${made.workspace.id}`)).json(),
+    );
+    expect(detail.workspace.name).toBe("Bike Servicing");
+    expect((await reposOf(request)).find((repo) => repo.name === "bike-servicing")).toMatchObject({
+      added: true,
+    });
+  });
+
+  it("makes no Paper file when the owner turns it off, and a public repo when asked", async () => {
+    const paper = createFakePaperFiles();
+    const { github, request } = await owner({ paper });
+
+    const response = await postJson(request, "/api/github/repos/new", {
+      ...BIKES,
+      private: false,
+      paper: false,
+    });
+
+    expect(response.status).toBe(201);
+    expect(NewRepoMade.parse(await response.json()).paper).toEqual({ kind: "skipped" });
+    expect(paper.files()).toEqual([]);
+    expect(github.repoMade("octo-owner/bike-servicing")).toMatchObject({ private: false });
+  });
+
+  it("refuses a name whose folder is in the data folder already, leaving it as it is", async () => {
+    const { github, request } = await owner();
+    const folder = join(root, "data", "repos", "octo-owner", "bike-servicing");
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "work.txt"), "Not pushed yet\n");
+
+    const response = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(response.status).toBe(409);
+    expect(await readFile(join(folder, "work.txt"), "utf8")).toBe("Not pushed yet\n");
+    expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();
+  });
+
+  it("refuses a new repo while Matt's skills aren't on the worker, making nothing", async () => {
+    const github = createFakeGitHub({ makesReposIn: join(root, "github") });
+    const request = await asOwner(testWorker({ root, github: github.api }));
+    await signIn(request, github);
+
+    const response = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toMatch(/Matt Pocock's skills/);
+    expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();
+  });
+
+  it("refuses a repo name longer than a workspace's", async () => {
+    const { github, request } = await owner();
+
+    const response = await postJson(request, "/api/github/repos/new", {
+      ...BIKES,
+      name: "b".repeat(61),
+    });
+
+    expect(response.status).toBe(400);
+    expect(github.repoMade(`octo-owner/${"b".repeat(61)}`)).toBeUndefined();
+  });
+
+  it("refuses a name the owner has a repo by already, and one a workspace has, making nothing", async () => {
+    const { github, request } = await owner();
+    await mkdir(join(root, "context", "bike-servicing"), { recursive: true });
+    await writeFile(join(root, "context", "bike-servicing", "workspace.json"), "{}");
+
+    const taken = await postJson(request, "/api/github/repos/new", {
+      ...BIKES,
+      name: "side-project",
+    });
+    const workspace = await postJson(request, "/api/github/repos/new", BIKES);
+
+    expect(taken.status).toBe(409);
+    expect(await errorOf(taken)).toBe(
+      "There's a repo called side-project on your account, or on this machine, already.",
+    );
+    expect(workspace.status).toBe(409);
+    expect(github.repoMade("octo-owner/bike-servicing")).toBeUndefined();
   });
 });
