@@ -1,19 +1,37 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ApiError, GitHubConnection, LiveStatus, type LiveUpdateResult } from "@courtyard/contract";
+import {
+  ApiError,
+  GitHubConnection,
+  LiveStatus,
+  type LiveUpdateResult,
+  SessionSummary,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FoundCheckRun } from "./github/api.ts";
+import { createFakeProvider, type Provider } from "./providers/index.ts";
 import {
   asOwner,
+  CODING_MODEL,
+  codeRepo,
+  codeWorkspace,
+  codingProvider,
   createFakeGitHub,
   errorOf,
+  FAKE_MODEL,
   type FakeGitHub,
+  followSession,
+  gatedProvider,
   postJson,
   type Requester,
   removeTestFolder,
+  requesterFor,
+  sendJson,
+  setUpOwner,
+  startSession,
   testWorker,
 } from "./testing.ts";
 import type { UpdateCommand } from "./worker.ts";
@@ -631,5 +649,241 @@ describe("asking the remote", () => {
     const statuses = await Promise.all([statusOf(request), statusOf(request), statusOf(request)]);
 
     for (const status of statuses) expect(status).toMatchObject({ newerOnMain: true });
+  });
+});
+
+describe("Update when ready (#186)", () => {
+  const ON_GITHUB = "https://github.com/octo-owner/courtyard.git";
+  const DETAILS = "https://github.com/octo-owner/courtyard/actions/runs/1/job/11";
+  let github: FakeGitHub;
+  let cookie: string | undefined;
+  /** The worker's repeating job that runs a waiting Update, run when a test wants it. */
+  let watchUpdate: () => Promise<void>;
+  let newest: string;
+
+  /** CI on main's newest, as GitHub's check runs give it: Checks passed, Unit tests `outcome`. */
+  const ciIs = (outcome: FoundCheckRun["outcome"]) =>
+    github.setCommitChecks(newest, [
+      {
+        id: 10,
+        name: "Checks",
+        outcome: "passed",
+        url: "https://github.com/octo-owner/courtyard/actions/runs/1/job/10",
+        startedAt: "2026-10-06T11:58:00Z",
+        completedAt: "2026-10-06T11:59:00Z",
+      },
+      {
+        id: 11,
+        name: "Unit tests",
+        outcome,
+        url: DETAILS,
+        startedAt: "2026-10-06T11:58:00Z",
+        completedAt: outcome === "running" ? null : "2026-10-06T12:01:00Z",
+      },
+    ]);
+
+  /** A worker on the live copy, signed in to GitHub; a second call is a restart. */
+  const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) => {
+    const app = testWorker({
+      root,
+      env: { COURTYARD_LIVE_COPY: liveCopy },
+      now: () => now,
+      startUpdate: (command) => {
+        started.push(command);
+      },
+      github: github.api,
+      providers,
+      // Only the waiting Update's job, every 10 seconds; the test runs it when it wants.
+      repeat: (everyMs, job) => {
+        if (everyMs === 10 * SECONDS) watchUpdate = job;
+      },
+    });
+    const first = cookie === undefined;
+    cookie ??= await setUpOwner(app);
+    const request = requesterFor(app, cookie);
+    if (first) {
+      await postJson(request, "/api/github/sign-in", {});
+      github.approve();
+      await expect
+        .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+        .toBe("signed-in");
+    }
+    return request;
+  };
+
+  const waitingOf = async (request: Requester) => {
+    const status = await statusOf(request);
+    return status.kind === "live" ? status.waiting : undefined;
+  };
+  /** Moves the clock past how long an answer about a running build is reused. */
+  const later = () => {
+    now += 10 * SECONDS;
+  };
+  const cancel = (request: Requester) => sendJson(request, "/api/live/update", "DELETE", {});
+
+  beforeEach(async () => {
+    await git(liveCopy, "remote", "set-url", "origin", ON_GITHUB);
+    await git(liveCopy, "config", `url.${remote.replaceAll("\\", "/")}.insteadOf`, ON_GITHUB);
+    await mkdir(join(root, "context", "garage-gym"), { recursive: true });
+    github = createFakeGitHub();
+    cookie = undefined;
+    newest = await merge("Rail and Talk key");
+  });
+
+  it("tapped while main's build runs, waits for it, then updates by itself once it passes", async () => {
+    ciIs("running");
+    const request = await start();
+
+    const tapped = await startUpdate(request);
+
+    expect(tapped.status).toBe(202);
+    expect(started).toEqual([]);
+    expect(await waitingOf(request)).toEqual({ kind: "ci" });
+    ciIs("passed");
+    later();
+    await watchUpdate();
+    expect(started).toEqual([{ task: "Courtyard update" }]);
+    expect(await waitingOf(request)).toBeNull();
+  });
+
+  it("waits for each session mid-turn to finish, saying how many", async () => {
+    ciIs("passed");
+    const gated = gatedProvider();
+    const request = await start([gated.provider]);
+    const session = await startSession(request, "Build the quick questions");
+    await gated.held;
+
+    await startUpdate(request);
+    await watchUpdate();
+
+    expect(started).toEqual([]);
+    expect(await waitingOf(request)).toEqual({
+      kind: "sessions",
+      count: 1,
+      needYou: 0,
+      open: null,
+    });
+    gated.release();
+    await followSession(request, { sessionId: session.id, until: "turn-completed" });
+    await watchUpdate();
+    expect(started).toHaveLength(1);
+  });
+
+  it("counts a session waiting on the owner's OK as busy, and names it", async () => {
+    ciIs("passed");
+    const { repo } = await codeRepo(root);
+    await codeWorkspace(root, "side-project", repo);
+    const request = await start([codingProvider([{ run: "pnpm add left-pad" }]).provider]);
+    const asked = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: "Add left-pad",
+      model: CODING_MODEL,
+    });
+    const { id } = SessionSummary.parse(await asked.json());
+    await followSession(request, { sessionId: id, until: "approval-requested" });
+
+    await startUpdate(request);
+
+    expect(await waitingOf(request)).toEqual({
+      kind: "sessions",
+      count: 1,
+      needYou: 1,
+      open: { workspaceId: "side-project", sessionId: id },
+    });
+    await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
+    await followSession(request, { sessionId: id, until: "turn-stopped" });
+  });
+
+  it("runs at once with Update now, and the turns it cuts off carry on by themselves", async () => {
+    ciIs("running");
+    const gated = gatedProvider();
+    const request = await start([gated.provider]);
+    const session = await startSession(request, "Build the quick questions");
+    await gated.held;
+
+    const now = await postJson(request, "/api/live/update", { now: true });
+    expect(now.status).toBe(202);
+    expect(started).toHaveLength(1);
+
+    // The update restarts the worker.
+    const restarted = await start();
+    const events = await followSession(restarted, {
+      sessionId: session.id,
+      until: "turn-completed",
+    });
+    expect(events.flatMap((event) => (event.type === "text-delta" ? [] : [event.type]))).toEqual([
+      "owner-message",
+      "turn-failed",
+      "owner-message",
+      "turn-completed",
+    ]);
+    expect(events[2]).toMatchObject({ continues: { turn: 1 } });
+    gated.release();
+  });
+
+  it("is kept across a crash, and Cancel drops it", async () => {
+    ciIs("running");
+    await startUpdate(await start());
+
+    const restarted = await start();
+    expect(await waitingOf(restarted)).toEqual({ kind: "ci" });
+    expect((await cancel(restarted)).status).toBe(204);
+    expect(await waitingOf(restarted)).toBeNull();
+    ciIs("passed");
+    later();
+    await watchUpdate();
+    expect(started).toEqual([]);
+  });
+
+  it("is dropped when main's build fails while it waits, saying so with the log", async () => {
+    ciIs("running");
+    const request = await start();
+    await startUpdate(request);
+
+    ciIs("failed");
+    later();
+    await watchUpdate();
+
+    expect(await waitingOf(request)).toEqual({ kind: "dropped", details: DETAILS });
+    expect(started).toEqual([]);
+    // Main moves on: nothing more to say.
+    newest = await merge("Fix the unit tests");
+    ciIs("running");
+    now += 2 * MINUTES;
+    await watchUpdate();
+    expect(await waitingOf(request)).toBeNull();
+  });
+
+  it("while it waits, queued messages hold and the owner's own still start, until it's cancelled", async () => {
+    ciIs("running");
+    const gated = gatedProvider();
+    const request = await start([gated.provider, createFakeProvider({ delayMs: 0, second: true })]);
+    const session = await startSession(request, "Build the quick questions");
+    await gated.held;
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "Then the tests",
+      model: FAKE_MODEL,
+    });
+    await startUpdate(request);
+
+    gated.release();
+    await followSession(request, { sessionId: session.id, until: "turn-completed" });
+    const own = await startSession(request, "Something else", {
+      provider: "fake-two",
+      model: "echo",
+    });
+    await followSession(request, { sessionId: own.id, until: "turn-completed" });
+    const log = await readFile(join(dataDir, "sessions", session.id, "events.jsonl"), "utf8");
+    expect(log).not.toContain('"queued":');
+
+    await cancel(request);
+    const sent = await followSession(request, {
+      sessionId: session.id,
+      until: (event) => event.type === "owner-message" && event.queued !== undefined,
+    });
+    expect(sent.at(-1)).toMatchObject({ text: "Then the tests" });
+    await followSession(request, {
+      sessionId: session.id,
+      until: (event) => event.type === "turn-completed" && event.seq > 4,
+    });
   });
 });

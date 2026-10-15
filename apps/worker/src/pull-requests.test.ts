@@ -251,6 +251,9 @@ describe("a failing check", () => {
       event.type === "activity" ? [event.activity] : [],
     );
     expect(activities[0]).toEqual({ kind: "check-failed", name: "e2e" });
+    // Its model is given that message, the failed check before it notwithstanding.
+    const answer = events.flatMap((event) => (event.type === "text-delta" ? [event.text] : []));
+    expect(answer.join("")).toMatch(/^You said: The checks on your pull request/);
     expect(pullRequestsIn(events).at(-1)?.checks).toEqual({ kind: "failed", failed: ["e2e"] });
   });
 

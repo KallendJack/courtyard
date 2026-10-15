@@ -6,8 +6,8 @@ import { FormError } from "@/components/form-error";
 import { PlaceholderRows } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
 import { describeProblem } from "../problems.tsx";
-import { loadLive, startLiveUpdate } from "./api.ts";
-import { MainBuildCard, titleOf, useLive } from "./main-build.tsx";
+import { cancelLiveUpdate, loadLive, startLiveUpdate } from "./api.ts";
+import { MainBuildCard, titleOf, type UpdateTaps, useLive, Waiting } from "./main-build.tsx";
 
 /** How often the page asks how an update is going. The worker is down for part of it. */
 const FOLLOW_EVERY_MS = 3000;
@@ -94,9 +94,19 @@ export function LiveUpdate(props: { label?: string; short?: boolean; keepsPlace?
   if (status?.kind !== "loaded" || status.data.kind !== "live") return null;
   const live = status.data;
 
-  const update = async () => {
+  /** The status again, at once, so what's waiting shows (#186). */
+  const reload = async () => {
+    const next = await loadLive();
+    if (next.kind === "loaded") setStatus(next);
+  };
+  /**
+   * Update (#186): at once, when it can run, and this page follows it; else it waits, and the
+   * row says what for. `now` runs it at once whatever it waits for.
+   */
+  const update = async (now: boolean) => {
     const since = live.lastUpdate?.startedAt ?? null;
-    const started = await startLiveUpdate();
+    const started = await startLiveUpdate(now);
+    if (started.kind === "loaded" && started.data.waits) return reload();
     // Already running (started on another device, say): this page follows that one.
     const alreadyRunning = started.kind === "failed" && started.status === 409;
     setFollowing(
@@ -104,6 +114,13 @@ export function LiveUpdate(props: { label?: string; short?: boolean; keepsPlace?
         ? { kind: "updating", since, at: Date.now() }
         : { kind: "problem", message: describeProblem(started).body },
     );
+  };
+  const taps: UpdateTaps = {
+    onUpdate: () => void update(false),
+    onUpdateNow: () => void update(true),
+    onCancel: () => {
+      void cancelLiveUpdate().then(reload);
+    },
   };
 
   let content: ReactNode = null;
@@ -120,21 +137,36 @@ export function LiveUpdate(props: { label?: string; short?: boolean; keepsPlace?
       <MainBuildCard
         newest={live.newest}
         build={live.build}
-        onUpdate={update}
+        taps={taps}
+        waiting={live.waiting}
         {...(props.label === undefined ? {} : { label: props.label })}
         {...(props.short === undefined ? {} : { short: props.short })}
       />
     );
   } else if (live.newerOnMain && live.newest) {
-    // No build to go by (GitHub can't be asked): Update as it was before main's build showed.
-    content = (
-      <>
-        <span>A new version is ready: {live.newest.title}</span>
-        <Button size="sm" onClick={update}>
-          Update
-        </Button>
-      </>
-    );
+    // No build to go by (GitHub can't be asked): Update as it was before main's build showed,
+    // and while it waits for sessions mid-turn, what for (#186).
+    content =
+      live.waiting === null ? (
+        <>
+          <span>A new version is ready: {live.newest.title}</span>
+          <Button size="sm" onClick={taps.onUpdate}>
+            Update
+          </Button>
+        </>
+      ) : (
+        <>
+          <span>
+            <Waiting waiting={live.waiting} />
+          </span>
+          <Button size="sm" variant="quiet" onClick={taps.onCancel}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="outline" onClick={taps.onUpdateNow}>
+            Update now
+          </Button>
+        </>
+      );
   } else if (
     live.lastUpdate &&
     isRecent(live.lastUpdate) &&

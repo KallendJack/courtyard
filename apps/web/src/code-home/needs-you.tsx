@@ -17,6 +17,8 @@ import { MattSetupOffer } from "../matt-setup/matt-setup-offer.tsx";
 import { describeProblem } from "../problems.tsx";
 import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";
+import { clockWords } from "../when.ts";
+import { continueTurn } from "../worker.ts";
 import { agoWords, type Need } from "./needs.ts";
 
 // Home reads what waits on the owner the same way (#102, #334).
@@ -41,9 +43,9 @@ const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
- * Needs you (#301; Paper, "Code workspace Home"): every approval, failing check, new reply, pull
- * request ready to merge, conflict, and Matt's setup offer, each a row with its one-tap action:
- * Approve, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
+ * Needs you (#301; Paper, "Code workspace Home"): every approval, turn cut off by a restart
+ * (#186), failing check, new reply, pull request ready to merge, conflict, and Matt's setup offer,
+ * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
  * scrolling inside when there are more than fit (#335); with nothing waiting it says so.
  */
 export function NeedsYou(props: {
@@ -106,6 +108,7 @@ export function NeedsYou(props: {
 const keyOf = (need: Need) => {
   switch (need.kind) {
     case "approval":
+    case "cut-off":
     case "reply":
       return `${need.kind}-${need.session.id}`;
     case "setup":
@@ -164,6 +167,16 @@ function NeedRow(props: {
         />
       );
     }
+    case "cut-off":
+      return (
+        <BlockRow
+          label={need.session.title}
+          title={sessionLink(need.session, need.session.title)}
+          sub={`Cut off at ${clockWords(need.session.updatedAt)} · Courtyard restarted`}
+          tone="needs"
+          action={<Continue session={need.session} onChanged={props.onChanged} />}
+        />
+      );
     case "failed":
       return (
         <BlockRow
@@ -306,6 +319,31 @@ function Approve(props: {
         Approve
       </ThumbButton>
       <FormError message={approve.error} />
+    </>
+  );
+}
+
+/** Continue (#186): the session's last turn, cut off by a restart, carries on, in one tap. */
+function Continue(props: { session: Listed; onChanged: () => void }) {
+  const go = useAction(async () => {
+    const continued = await continueTurn(props.session.id);
+    if (continued.kind !== "loaded") return describeProblem(continued).body;
+    props.onChanged();
+    return undefined;
+  });
+  return (
+    <>
+      <ThumbButton
+        look="primary"
+        row
+        aria-label={`Continue ${props.session.title}`}
+        busy={go.busy}
+        busyLabel="Continuing…"
+        onClick={() => void go.run()}
+      >
+        Continue
+      </ThumbButton>
+      <FormError message={go.error} />
     </>
   );
 }

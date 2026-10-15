@@ -42,10 +42,11 @@ export type TurnNow = z.infer<typeof TurnNow>;
 
 /**
  * What a session waits on the owner for (#334; AGENTS.md), decided once, by the worker, so every
- * screen and device agrees: the approval its turn asked for; a new reply, an answer from the last
- * day that the owner hasn't seen; or nothing.
+ * screen and device agrees: the approval its turn asked for; its last turn, cut off by a restart in
+ * the last day, for Continue (#186); a new reply, an answer from the last day that the owner hasn't
+ * seen; or nothing.
  */
-export const SessionWaiting = z.enum(["approval", "reply", "nothing"]);
+export const SessionWaiting = z.enum(["approval", "cut-off", "reply", "nothing"]);
 export type SessionWaiting = z.infer<typeof SessionWaiting>;
 
 /**

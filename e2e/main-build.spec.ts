@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { themeColour } from "./theme.ts";
 
@@ -86,8 +87,27 @@ const buildOf = (state: "running" | "late" | "passed" | "failed" | "waits") => {
 
 type State = Parameters<typeof buildOf>[0];
 
-/** The live copy's status, a version behind main, with main's build in `state` each time it's asked. */
-const withMainBuild = async (page: Page, state: State | (() => State)) => {
+/** What a waiting Update waits for (#186), as the worker gives it. */
+type Waiting =
+  | { kind: "ci" }
+  | {
+      kind: "sessions";
+      count: number;
+      needYou: number;
+      open: { workspaceId: string; sessionId: string } | null;
+    }
+  | { kind: "dropped"; details: string }
+  | null;
+
+/**
+ * The live copy's status, a version behind main, with main's build in `state` and the Update
+ * waiting (#186) as `waiting` says, each time it's asked.
+ */
+const withMainBuild = async (
+  page: Page,
+  state: State | (() => State),
+  waiting: () => Waiting = () => null,
+) => {
   // The time stands at NOW until a test moves it on; timers still run.
   await page.clock.setFixedTime(NOW);
   await page.route("**/api/live", (route) =>
@@ -98,6 +118,7 @@ const withMainBuild = async (page: Page, state: State | (() => State)) => {
         newest: { commit: "7d518cd".padEnd(40, "0"), title: "7d518cd Rail and Talk key" },
         newerOnMain: true,
         lastUpdate: null,
+        waiting: waiting(),
         build: buildOf(typeof state === "function" ? state() : state),
       },
     }),
@@ -105,8 +126,8 @@ const withMainBuild = async (page: Page, state: State | (() => State)) => {
 };
 
 /** Home's row for main's build, and the full graph it opens. */
-const homeRow = async (page: Page, state: State | (() => State)) => {
-  await withMainBuild(page, state);
+const homeRow = async (page: Page, state: State | (() => State), waiting?: () => Waiting) => {
+  await withMainBuild(page, state, waiting);
   await page.goto("/");
   return page.getByRole("region", { name: "New version" });
 };
@@ -121,7 +142,7 @@ const jobsOf = (graph: ReturnType<Page["getByRole"]>) =>
 /** Each job's name, with how it's going for screen readers, then whatever follows. */
 const said = (...jobs: string[]) => jobs.map((each) => new RegExp(`^${each}(?![a-z])`));
 
-test("while main's build runs, its row says for how long, counting, and Update waits", async ({
+test("while main's build runs, its row says for how long, counting, and Update can be tapped", async ({
   page,
 }) => {
   const row = await homeRow(page, "running");
@@ -130,7 +151,7 @@ test("while main's build runs, its row says for how long, counting, and Update w
   await expect(row.getByRole("status")).toHaveText("Running · 1:24");
   await page.clock.setFixedTime(NOW + 2_000);
   await expect(row.getByRole("status")).toHaveText("Running · 1:26");
-  await expect(row.getByRole("button", { name: "Update" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Update" })).toBeEnabled();
 });
 
 test("tapping the row opens the full graph: each job in the workflow's order, its time counting", async ({
@@ -198,7 +219,7 @@ test("the page asks again every 10 seconds while main's build runs, and offers U
   await page.clock.install({ time: NOW });
   let state: State = "running";
   const row = await homeRow(page, () => state);
-  await expect(row.getByRole("button", { name: "Update" })).toBeDisabled();
+  await expect(row.getByRole("status")).toHaveText("Running · 1:24");
 
   state = "passed";
   await page.clock.runFor(11_000);
@@ -222,6 +243,132 @@ test.describe("on a tablet", () => {
     await expect(jobsOf(card)).toHaveText(
       said("Checks: passed", "Unit tests: running", "E2E: running"),
     );
-    await expect(card.getByRole("button", { name: "Update" })).toBeDisabled();
+    await expect(card.getByRole("button", { name: "Update" })).toBeEnabled();
+  });
+});
+
+/** Where the boards' screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
+const shot = async (page: Page, name: string) => {
+  const folder = process.env.COURTYARD_E2E_SHOTS;
+  if (folder !== undefined) await page.screenshot({ path: join(folder, `${name}.png`) });
+};
+
+test.describe("Update when ready (#186)", () => {
+  /** Each Update request the page sent: its method and body. */
+  const updatesSent = async (page: Page, answer: () => { waits: boolean }) => {
+    const sent: { method: string; body: unknown }[] = [];
+    await page.route("**/api/live/update", async (route) => {
+      const request = route.request();
+      sent.push({ method: request.method(), body: request.postDataJSON() });
+      await (request.method() === "DELETE"
+        ? route.fulfill({ status: 204, body: "" })
+        : route.fulfill({ status: 202, json: answer() }));
+    });
+    return sent;
+  };
+
+  for (const viewport of [
+    { name: "tablet", width: 950, height: 712 },
+    { name: "cover", width: 400, height: 900 },
+    { name: "desktop", width: 1440, height: 900 },
+  ]) {
+    test(`tapped while main's build runs, it waits for CI, with Cancel and Update now (${viewport.name})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      let waiting: Waiting = null;
+      const sent = await updatesSent(page, () => {
+        waiting = { kind: "ci" };
+        return { waits: true };
+      });
+      const row = await homeRow(page, "running", () => waiting);
+      await shot(page, `${viewport.name}-home-update-running`);
+
+      await row.getByRole("button", { name: "Update" }).click();
+
+      await expect(row.getByRole("status")).toHaveText("Waiting for CI · updates when it passes");
+      await expect(row.getByRole("button", { name: "Cancel" })).toBeVisible();
+      await expect(row.getByRole("button", { name: "Update now" })).toBeVisible();
+      await shot(page, `${viewport.name}-home-update-waiting-ci`);
+      expect(sent).toEqual([{ method: "POST", body: {} }]);
+    });
+  }
+
+  test("Update now runs it at once, and Cancel drops it", async ({ page }) => {
+    let waiting: Waiting = { kind: "ci" };
+    const sent = await updatesSent(page, () => ({ waits: false }));
+    const row = await homeRow(page, "running", () => waiting);
+
+    await row.getByRole("button", { name: "Update now" }).click();
+    await expect.poll(() => sent).toEqual([{ method: "POST", body: { now: true } }]);
+
+    await page.goto("/");
+    waiting = { kind: "ci" };
+    const cancelled = page.waitForRequest(
+      (request) => request.url().endsWith("/api/live/update") && request.method() === "DELETE",
+    );
+    await row.getByRole("button", { name: "Cancel" }).click();
+    await cancelled;
+    waiting = null;
+    await expect(row.getByRole("button", { name: "Update" })).toBeVisible();
+  });
+
+  test("waiting for sessions mid-turn, the one that needs the owner's OK opens from the row", async ({
+    page,
+  }) => {
+    const open = { workspaceId: "garage-gym", sessionId: "6f1c2b0e-3d4a-4c5b-9e7f-8a9b0c1d2e3f" };
+    for (const viewport of [
+      { name: "tablet", width: 950, height: 712 },
+      { name: "cover", width: 400, height: 900 },
+      { name: "desktop", width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const row = await homeRow(page, "passed", () => ({
+        kind: "sessions",
+        count: 2,
+        needYou: 1,
+        open,
+      }));
+      await expect(
+        row.getByRole("link", { name: "Waiting for 2 sessions · 1 needs your OK ›" }),
+      ).toBeVisible();
+      await shot(page, `${viewport.name}-home-update-waiting-sessions`);
+      await page.unrouteAll();
+    }
+    const row = await homeRow(page, "passed", () => ({
+      kind: "sessions",
+      count: 2,
+      needYou: 1,
+      open,
+    }));
+    await row.getByRole("link", { name: "Waiting for 2 sessions · 1 needs your OK ›" }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${open.sessionId}$`));
+  });
+
+  test("waiting for sessions with none waiting on the owner says how many must finish", async ({
+    page,
+  }) => {
+    const row = await homeRow(page, "passed", () => ({
+      kind: "sessions",
+      count: 1,
+      needYou: 0,
+      open: null,
+    }));
+    await expect(row.getByRole("status")).toHaveText("Waiting for 1 session to finish");
+  });
+
+  test("dropped when main failed, it says so, with Details", async ({ page }) => {
+    for (const viewport of [
+      { name: "tablet", width: 950, height: 712 },
+      { name: "cover", width: 400, height: 900 },
+      { name: "desktop", width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const row = await homeRow(page, "failed", () => ({ kind: "dropped", details: DETAILS }));
+      await expect(row.getByRole("status")).toHaveText("Main failed · Update dropped");
+      await expect(row.getByRole("link", { name: "Details" })).toHaveAttribute("href", DETAILS);
+      await shot(page, `${viewport.name}-home-update-dropped`);
+      await page.unrouteAll();
+    }
   });
 });

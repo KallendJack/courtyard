@@ -1,5 +1,12 @@
-import type { BuildJob, LiveStatus, LiveVersion, MainBuild } from "@courtyard/contract";
-import { useEffect, useState } from "react";
+import type {
+  BuildJob,
+  LiveStatus,
+  LiveVersion,
+  MainBuild,
+  UpdateWaiting,
+} from "@courtyard/contract";
+import { Link } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useState } from "react";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/build-stages";
 import { Button } from "@/components/button";
 import { CapsLabel } from "@/components/caps-label";
@@ -56,9 +63,9 @@ export const useLive = (when = true, again?: unknown) => {
 };
 
 /**
- * What Update can do now (#249): offered only once the newest main has passed and is newer than
- * the live copy; waiting while its build runs; not offered once it has failed. With no build to
- * go by (GitHub can't be asked), it's offered, as it was before main's build showed.
+ * What Update can do now (#249, #186): offered once the newest main is newer than the live copy,
+ * and while its build runs, when it waits for it (`waiting`); not offered once it has failed. With
+ * no build to go by (GitHub can't be asked), it's offered, as it was before main's build showed.
  */
 export const updateOffer = (live: LiveStatus | undefined) => {
   if (live?.kind !== "live" || !live.newerOnMain) return "none";
@@ -115,33 +122,125 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
   failed: "text-destructive",
 };
 
+/** "1 session", "2 sessions". */
+const sessionsSaid = (count: number) => `${count} ${count === 1 ? "session" : "sessions"}`;
+
+/**
+ * What a waiting Update waits for (#186; Paper, "Component · Update when ready"), in place of
+ * where the build stands: main's build; the sessions mid-turn, opening the first that needs the
+ * owner's OK; or that it was dropped as main failed.
+ */
+export function Waiting(props: { waiting: UpdateWaiting }) {
+  const { waiting } = props;
+  switch (waiting.kind) {
+    case "ci":
+      return <span className="text-primary-text">Waiting for CI · updates when it passes</span>;
+    case "dropped":
+      return <span className="text-destructive">Main failed · Update dropped</span>;
+    case "sessions": {
+      const { open } = waiting;
+      if (waiting.needYou === 0 || open === null) {
+        return (
+          <span className="text-primary-text">
+            Waiting for {sessionsSaid(waiting.count)} to finish
+          </span>
+        );
+      }
+      return (
+        <Link
+          to="/workspaces/$workspaceId/sessions/$sessionId"
+          params={open}
+          className="text-warning hover:underline"
+        >
+          Waiting for {sessionsSaid(waiting.count)} · {waiting.needYou} needs your OK ›
+        </Link>
+      );
+    }
+  }
+}
+
+/** Update's taps (#186): Update, when ready; and while it waits, Update now and Cancel. */
+export type UpdateTaps = {
+  readonly onUpdate: () => void;
+  readonly onUpdateNow: () => void;
+  readonly onCancel: () => void;
+};
+
 /** The newest main's title and short commit: "7d518cd Rail and Talk key" reads "Rail and Talk key 7d518cd". */
 export const titleOf = (newest: LiveVersion) => {
   const [commit = "", ...words] = newest.title.split(" ");
   return { commit, words: words.join(" ") };
 };
 
-/** Update, offered once the build has passed; quiet while it runs; Details once it has failed. */
-function Actions(props: { build: MainBuild; onUpdate?: () => void; size: "md" | "lg" }) {
-  const { build } = props;
-  if (build.kind === "failed") {
+/**
+ * Update, offered whenever main is newer and hasn't failed (#186): tapped while its build runs,
+ * it waits for it. While it waits, Cancel and Update now; Details once the build has failed.
+ */
+function Actions(props: {
+  build: MainBuild;
+  taps: UpdateTaps | undefined;
+  waiting: UpdateWaiting | null;
+  size: "md" | "lg";
+}) {
+  const { build, taps, waiting } = props;
+  const details =
+    waiting?.kind === "dropped"
+      ? waiting.details
+      : build.kind === "failed"
+        ? build.details
+        : undefined;
+  if (details !== undefined) {
     return (
-      <WebButton variant="outline" size={props.size} href={build.details}>
+      <WebButton variant="outline" size={props.size} href={details}>
         Details
       </WebButton>
     );
   }
+  if (taps === undefined) return null;
+  if (waiting !== null) {
+    return (
+      <span className="flex shrink-0 items-center gap-1">
+        <Button size={props.size} variant="quiet" onClick={taps.onCancel}>
+          Cancel
+        </Button>
+        <Button size={props.size} variant="outline" onClick={taps.onUpdateNow}>
+          Update now
+        </Button>
+      </span>
+    );
+  }
   return (
-    props.onUpdate !== undefined && (
-      <Button
-        size={props.size}
-        variant={build.kind === "running" ? "outline" : "primary"}
-        disabled={build.kind === "running"}
-        onClick={props.onUpdate}
-      >
-        Update
-      </Button>
-    )
+    <Button size={props.size} onClick={taps.onUpdate}>
+      Update
+    </Button>
+  );
+}
+
+/** Where the build stands, or what a waiting Update waits for (#186). */
+function Standing(props: {
+  build: MainBuild;
+  now: number;
+  waiting: UpdateWaiting | null;
+  full: boolean;
+  updates: boolean;
+  className?: string;
+}): ReactNode {
+  const { build, waiting } = props;
+  return (
+    <p
+      role="status"
+      className={classes(
+        "text-meta font-semibold",
+        waiting === null && STANDING_LOOKS[build.kind],
+        props.className,
+      )}
+    >
+      {waiting === null ? (
+        standing(build, props.now, { full: props.full, updates: props.updates })
+      ) : (
+        <Waiting waiting={waiting} />
+      )}
+    </p>
   );
 }
 
@@ -153,30 +252,29 @@ function FullBuild(props: {
   newest: LiveVersion;
   build: MainBuild;
   now: number;
-  onUpdate?: () => void;
+  taps: UpdateTaps | undefined;
+  waiting: UpdateWaiting | null;
 }) {
-  const { build, now } = props;
+  const { build, now, taps, waiting } = props;
   const { commit, words } = titleOf(props.newest);
-  const updates = props.onUpdate !== undefined;
-  const actions = (
-    <Actions build={build} size="lg" {...(updates ? { onUpdate: props.onUpdate } : {})} />
-  );
+  const updates = taps !== undefined;
+  const actions = <Actions build={build} size="lg" taps={taps} waiting={waiting} />;
+  // Beside the graph, Update alone; under it, Details, and Cancel with Update now.
+  const under = build.kind === "failed" || waiting !== null;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="min-w-0 text-interface font-bold wrap-anywhere">
           {words} · {commit}
         </p>
-        <p role="status" className={classes("text-meta font-semibold", STANDING_LOOKS[build.kind])}>
-          {standing(build, now, { full: true, updates })}
-        </p>
+        <Standing build={build} now={now} waiting={waiting} full updates={updates} />
       </div>
       <BuildGraph
         stages={build.stages}
         now={now}
-        {...(build.kind === "failed" || !updates ? {} : { end: actions })}
+        {...(under || !updates ? {} : { end: actions })}
       />
-      {build.kind === "failed" && <div className="flex justify-end">{actions}</div>}
+      {under && <div className="flex justify-end">{actions}</div>}
     </div>
   );
 }
@@ -190,8 +288,10 @@ function FullBuild(props: {
 export function MainBuildCard(props: {
   newest: LiveVersion;
   build: MainBuild;
-  /** Update, on the live copy; without it, the build alone (another repository's main, #301). */
-  onUpdate?: () => void;
+  /** Update's taps, on the live copy; without them, the build alone (another repository's main, #301). */
+  taps?: UpdateTaps;
+  /** The Update waiting to run (#186), said in place of where the build stands. */
+  waiting?: UpdateWaiting | null;
   /**
    * As a row, with a label in capitals before it that names it too ("Main" on a code workspace's
    * Home, #301; "New version" on Home, #102): its title, small graph and where it stands on one
@@ -204,51 +304,89 @@ export function MainBuildCard(props: {
    */
   short?: boolean;
 }) {
-  const { build } = props;
+  const { build, taps } = props;
+  const waiting = props.waiting ?? null;
   const now = useTicking(build.kind === "running");
   const [open, setOpen] = useState(false);
-  const updates = props.onUpdate === undefined ? {} : { onUpdate: props.onUpdate };
 
   if (props.label === undefined) {
     return (
       <section aria-label="Updates" className="mt-4 rounded-card border bg-surface p-4">
-        <FullBuild newest={props.newest} build={build} now={now} {...updates} />
+        <FullBuild newest={props.newest} build={build} now={now} taps={taps} waiting={waiting} />
       </section>
     );
   }
 
   const short = props.short === true;
   const { commit, words } = titleOf(props.newest);
+  const sheet = (
+    <Sheet title="Main's build" open={open} onClose={() => setOpen(false)}>
+      <FullBuild newest={props.newest} build={build} now={now} taps={taps} waiting={waiting} />
+    </Sheet>
+  );
+  const title = (
+    <OpenRow label="Main's build" onOpen={() => setOpen(true)}>
+      <CapsLabel tone="muted" inline className={classes("shrink-0", short && "max-sm:hidden")}>
+        {props.label}
+      </CapsLabel>
+      <span className="min-w-0 flex-1 truncate text-meta font-bold">
+        {short && <span className="sm:hidden">{props.label} · </span>}
+        <span className={short ? "max-sm:hidden" : undefined}>{words} </span>
+        {commit}
+      </span>
+      <BuildMiniGraph stages={build.stages} />
+    </OpenRow>
+  );
+
+  // While an Update waits (#186), what for goes under the title, where it has room; on the cover
+  // screen, Cancel and Update now go under it too.
+  if (waiting !== null) {
+    return (
+      <section
+        aria-label={props.label}
+        className={classes(
+          "flex items-center gap-x-3.5 gap-y-2.5 rounded-bubble border bg-surface py-2.5 pr-2.5 pl-3.5",
+          short && "max-sm:flex-col",
+        )}
+      >
+        <div
+          className={classes("flex min-w-0 flex-1 flex-col gap-1", short && "max-sm:self-stretch")}
+        >
+          {title}
+          <Standing
+            build={build}
+            now={now}
+            waiting={waiting}
+            full={false}
+            updates={false}
+            className="truncate"
+          />
+        </div>
+        <div
+          className={classes("flex shrink-0", short && "max-sm:self-stretch max-sm:justify-end")}
+        >
+          <Actions build={build} size="md" taps={taps} waiting={waiting} />
+        </div>
+        {sheet}
+      </section>
+    );
+  }
   return (
     <section
       aria-label={props.label}
       className="flex items-center gap-3.5 rounded-bubble border bg-surface py-2.5 pr-2.5 pl-3.5"
     >
-      <OpenRow label="Main's build" onOpen={() => setOpen(true)}>
-        <CapsLabel tone="muted" inline className={classes("shrink-0", short && "max-sm:hidden")}>
-          {props.label}
-        </CapsLabel>
-        <span className="min-w-0 flex-1 truncate text-meta font-bold">
-          {short && <span className="sm:hidden">{props.label} · </span>}
-          <span className={short ? "max-sm:hidden" : undefined}>{words} </span>
-          {commit}
-        </span>
-        <BuildMiniGraph stages={build.stages} />
-      </OpenRow>
-      <p
-        role="status"
-        className={classes(
-          "shrink-0 text-meta font-semibold tabular-nums",
-          STANDING_LOOKS[build.kind],
-          short && "max-sm:sr-only",
-        )}
-      >
-        {standing(build, now, { full: false, updates: false })}
-      </p>
-      <Actions build={build} size="md" {...updates} />
-      <Sheet title="Main's build" open={open} onClose={() => setOpen(false)}>
-        <FullBuild newest={props.newest} build={build} now={now} {...updates} />
-      </Sheet>
+      {title}
+      <Standing
+        build={build}
+        now={now}
+        waiting={waiting}
+        full={false}
+        updates={false}
+        className={classes("shrink-0 tabular-nums", short && "max-sm:sr-only")}
+      />
+      <Actions build={build} size="md" taps={taps} waiting={waiting} />
+      {sheet}
     </section>
   );
 }

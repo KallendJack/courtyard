@@ -107,6 +107,7 @@ test("Home's New version shows a merge while nothing was running", async ({ page
           : { commit: "a".repeat(40), title: "a1b2c3d The running version" },
         newerOnMain: merged,
         lastUpdate: null,
+        waiting: null,
         build: merged ? PASSED : null,
       },
     });

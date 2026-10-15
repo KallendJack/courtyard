@@ -1,4 +1,4 @@
-import { LiveStatus } from "@courtyard/contract";
+import { LiveStatus, type LiveUpdateRequest, LiveUpdateStarted } from "@courtyard/contract";
 import { z } from "zod";
 import { fromWorker, sendJson } from "../worker.ts";
 
@@ -8,6 +8,18 @@ import { fromWorker, sendJson } from "../worker.ts";
 /** Whether this worker can update itself from the app, what's newer, and main's build. */
 export const loadLive = () => fromWorker("/live", LiveStatus);
 
-/** Starts updating the live copy; the worker restarts partway through. */
-export const startLiveUpdate = () =>
-  sendJson({ path: "/live/update", body: {}, schema: z.unknown() });
+/**
+ * Update (#186): starts updating the live copy, the worker restarting partway through; or, while
+ * main's build runs or a session is mid-turn, waits, and the worker runs it once both are clear.
+ * `now` runs it at once.
+ */
+export const startLiveUpdate = (now = false) =>
+  sendJson({
+    path: "/live/update",
+    body: (now ? { now } : {}) satisfies LiveUpdateRequest,
+    schema: LiveUpdateStarted,
+  });
+
+/** Cancel (#186): the Update waiting no longer waits. */
+export const cancelLiveUpdate = () =>
+  sendJson({ path: "/live/update", method: "DELETE", body: {}, schema: z.unknown() });

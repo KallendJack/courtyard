@@ -304,6 +304,18 @@ The flame button beside each Plan line on a planning workspace's page. It starts
 the first message is the plan line with the Grilling tag, and the session is titled after it.
 _Avoid_: challenge, stress test (as a button name)
 
+**Continue**:
+Carrying on a turn a restart cut off (an Update, a crash, the PC restarting): a new turn on the same model, told it was
+cut off and what it did, to carry on from there and check what already happened. The owner taps it on the cut-off
+turn or in Needs you; after Update now, cut-off turns continue by themselves. Start again sends the message again
+from scratch instead.
+_Avoid_: resume, retry (for Continue)
+
+**Update when ready**:
+Update tapped while main's build runs or a session is mid-turn: it waits, and the worker runs it once both are clear.
+Update now runs it at once; Cancel drops it; it's dropped if main fails meanwhile.
+_Avoid_: scheduled update, queued update
+
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on
 the failed turn; it never happens by itself, and the session stays on the new model until the owner switches back.

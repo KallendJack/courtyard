@@ -1,13 +1,18 @@
 import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   type LiveStatus,
+  type LiveUpdateRequest,
   LiveUpdateResult,
   type LiveVersion,
   type MainBuild,
+  type SessionSummary,
+  type UpdateWaiting,
 } from "@courtyard/contract";
-import { readTextFile } from "../files.ts";
+import { z } from "zod";
+import { readJsonFile, readTextFile, removeFile, writeJsonFile } from "../files.ts";
 import { commitTitle, gitOrNothing } from "../git.ts";
 import { err, ok, type Result } from "../result.ts";
 
@@ -46,11 +51,41 @@ export type LiveError =
   | { readonly kind: "running" }
   | { readonly kind: "not-started"; readonly message: string };
 
+/**
+ * The Update waiting to run (#186), kept in the data folder so it outlives a crash: waiting, or
+ * dropped because main's build on `commit` failed meanwhile, with that build's log.
+ */
+const WaitingFile = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("waiting"), since: z.iso.datetime() }),
+  z.object({ kind: z.literal("dropped"), commit: z.string(), details: z.string() }),
+]);
+type WaitingFile = z.infer<typeof WaitingFile>;
+
+/** The worker started an update itself (#186), at this time: the turns it cuts off carry on. */
+const RestartFile = z.object({ at: z.iso.datetime() });
+
+/** A session with a turn running, and whether it waits on the owner's OK (#186). */
+export type MidTurn = { readonly session: SessionSummary; readonly needsYou: boolean };
+
 export type Live = {
-  /** What the live copy runs, whether main is newer, and how the last update went. */
+  /** What the live copy runs, whether main is newer, how the last update went, and what waits. */
   status(): Promise<LiveStatus>;
-  /** Starts an update on its own; how it went shows in a later status. */
-  update(): Promise<Result<null, LiveError>>;
+  /**
+   * Update (#186): at once when main's build has passed and no session is mid-turn, or with
+   * `now`; otherwise it waits, and `watch` runs it once both are clear. Says whether it waits.
+   */
+  update(request?: LiveUpdateRequest): Promise<Result<{ waits: boolean }, LiveError>>;
+  /** Drops the Update waiting (#186), if one is. */
+  cancel(): Promise<void>;
+  /** For the worker's repeating jobs (#186): runs the waiting Update once it can, or drops it. */
+  watch(): Promise<void>;
+  /** Whether an Update waits to run (#186): meanwhile nothing new starts on its own. */
+  holding(): boolean;
+  /**
+   * Whether this worker's start follows an update the worker started itself (#186), so the turns
+   * it cut off carry on. Asked once, as the worker starts.
+   */
+  restartedByUpdate(): Promise<boolean>;
   /** Drops the answers reused from the remote and GitHub, once main has moved on (#387). */
   forget(): void;
 };
@@ -75,6 +110,10 @@ export const createLive = (options: {
   dataDir: string;
   now: () => number;
   startUpdate: (command: UpdateCommand) => void | Promise<void>;
+  /** The sessions with a turn running now (#186), which a waiting Update waits for. */
+  midTurn?: () => Promise<readonly MidTurn[]>;
+  /** An Update no longer waits without having run (#186): what held meanwhile can go. */
+  released?: () => void;
   /**
    * Main's build on `commit` (#249), with main's commits before it, newest first, to judge how
    * long each job takes (#337); `null` when GitHub can't be asked.
@@ -86,12 +125,35 @@ export const createLive = (options: {
     return {
       status: async () => ({ kind: "off" }),
       update: async () => err({ kind: "off" }),
+      cancel: async () => {},
+      watch: async () => {},
+      holding: () => false,
+      restartedByUpdate: async () => false,
       forget: () => {},
     };
   }
 
   const git = (...args: string[]) => gitOrNothing(liveCopy, args);
   const resultFile = join(dataDir, "live-update.json");
+  const waitingFile = join(dataDir, "live-update-waiting.json");
+  const restartFile = join(dataDir, "live-update-restart.json");
+  /** The Update waiting, as last read or written; read from its file as the worker starts. */
+  let waiting: WaitingFile | undefined;
+  const loaded = readJsonFile(waitingFile, WaitingFile).then((read) => {
+    waiting = read.ok ? read.value : undefined;
+  });
+  const keepWaiting = async (now: WaitingFile | undefined) => {
+    const was = waiting?.kind === "waiting";
+    waiting = now;
+    if (now === undefined) {
+      await removeFile(waitingFile);
+    } else {
+      await mkdir(dataDir, { recursive: true });
+      const written = await writeJsonFile(waitingFile, now);
+      if (!written.ok) console.error("The waiting Update couldn't be kept in the data folder");
+    }
+    if (was && now?.kind !== "waiting") options.released?.();
+  };
   /** The last answer from the remote, and when to ask again. */
   let check: { readonly newest: Promise<string | undefined>; readonly until: number } | undefined;
 
@@ -184,39 +246,155 @@ export const createLive = (options: {
     });
   };
 
+  /** Main's newest, whether the live copy is behind it, and its build while it is. */
+  const mainNow = async () => {
+    const [running, newestCommit] = await Promise.all([versionOf("HEAD"), newestOnMain()]);
+    const newest = newestCommit === undefined ? null : await versionOf(newestCommit);
+    const newerOnMain = running !== null && newest !== null && newest.commit !== running.commit;
+    // Only asked while there's something to update to.
+    const build = newerOnMain ? await buildOn(newest.commit) : null;
+    return { running, newest, newerOnMain, build };
+  };
+
+  /** The sessions mid-turn, as the waiting Update says them (#186). */
+  const sessionsWaitedFor = async (): Promise<UpdateWaiting | null> => {
+    const busy = (await options.midTurn?.()) ?? [];
+    if (busy.length === 0) return null;
+    const needYou = busy.filter((each) => each.needsYou);
+    const first = needYou[0]?.session;
+    return {
+      kind: "sessions",
+      count: busy.length,
+      needYou: needYou.length,
+      open: first === undefined ? null : { workspaceId: first.workspaceId, sessionId: first.id },
+    };
+  };
+
+  /** What the Update waiting waits for now (#186), or `null` when it can run, or none waits. */
+  const waitingNow = async (main: {
+    newest: LiveVersion | null;
+    build: MainBuild | null;
+  }): Promise<UpdateWaiting | null> => {
+    await loaded;
+    if (waiting?.kind === "dropped") {
+      return main.newest?.commit === waiting.commit && main.build?.kind === "failed"
+        ? { kind: "dropped", details: waiting.details }
+        : null;
+    }
+    if (waiting === undefined) return null;
+    if (main.build?.kind === "running") return { kind: "ci" };
+    return sessionsWaitedFor();
+  };
+
+  /**
+   * When the worker last started an update, until it has finished without a restart (refused,
+   * say), when its note that the worker started it goes (#186).
+   */
+  let startedAt: number | undefined;
+
+  /** Starts the update task, noting that the worker started it, so cut-off turns carry on. */
+  const start = async (): Promise<Result<null, LiveError>> => {
+    await mkdir(dataDir, { recursive: true });
+    await writeJsonFile(restartFile, { at: new Date(now()).toISOString() });
+    startedAt = now();
+    try {
+      await options.startUpdate({ task: updateTask });
+    } catch {
+      startedAt = undefined;
+      await removeFile(restartFile);
+      return err({
+        kind: "not-started",
+        message: `The update couldn't be started. Run install-task.ps1 again to set up the '${updateTask}' task.`,
+      });
+    }
+    return ok(null);
+  };
+
   return {
     status: async () => {
-      const [running, newestCommit, last] = await Promise.all([
-        versionOf("HEAD"),
-        newestOnMain(),
-        lastUpdate(),
-      ]);
+      const [main, last] = await Promise.all([mainNow(), lastUpdate()]);
+      const { running, newest, newerOnMain, build } = main;
       if (running === null) return { kind: "off" };
-      const newest = newestCommit === undefined ? null : await versionOf(newestCommit);
-      const newerOnMain = newest !== null && newest.commit !== running.commit;
       return {
         kind: "live",
         running,
         newest,
         newerOnMain,
         lastUpdate: last.ok ? last.value : null,
-        // Only asked while there's something to update to.
-        build: newerOnMain ? await buildOn(newest.commit) : null,
+        build,
+        waiting: await waitingNow(main),
       };
     },
-    update: async () => {
+    update: async (request = {}) => {
       const last = await lastUpdate();
       if (!last.ok) return last;
       if (last.value?.outcome === "running") return err({ kind: "running" });
-      try {
-        await options.startUpdate({ task: updateTask });
-      } catch {
-        return err({
-          kind: "not-started",
-          message: `The update couldn't be started. Run install-task.ps1 again to set up the '${updateTask}' task.`,
+      if (request.now !== true) {
+        const main = await mainNow();
+        // Main's build still runs, or a session is mid-turn: it waits, and runs itself (#186).
+        const waits = main.build?.kind === "running" || (await sessionsWaitedFor()) !== null;
+        if (waits) {
+          await keepWaiting({ kind: "waiting", since: new Date(now()).toISOString() });
+          return ok({ waits: true });
+        }
+      }
+      await loaded;
+      if (waiting !== undefined) await keepWaiting(undefined);
+      const started = await start();
+      return started.ok ? ok({ waits: false }) : started;
+    },
+    cancel: async () => {
+      await loaded;
+      if (waiting?.kind === "waiting") await keepWaiting(undefined);
+    },
+    watch: async () => {
+      await loaded;
+      if (startedAt !== undefined) {
+        // Still here once it has finished, or given up: the worker wasn't restarted.
+        const last = await lastUpdate();
+        const finished =
+          last.ok &&
+          last.value !== null &&
+          last.value.finishedAt !== null &&
+          Date.parse(last.value.finishedAt) >= startedAt;
+        if (finished || now() - startedAt > UPDATE_GIVES_UP_MS) {
+          startedAt = undefined;
+          // A crash after this isn't the update's: its turns wait for Continue.
+          await removeFile(restartFile);
+        }
+      }
+      if (waiting === undefined) return;
+      const main = await mainNow();
+      if (waiting.kind === "dropped") {
+        // Main has moved on from the build that failed: nothing more to say.
+        if (main.newest?.commit !== waiting.commit) await keepWaiting(undefined);
+        return;
+      }
+      // Updated meanwhile (from the PC, say): nothing left to wait for.
+      if (!main.newerOnMain) return keepWaiting(undefined);
+      if (main.build?.kind === "failed" && main.newest !== null) {
+        return keepWaiting({
+          kind: "dropped",
+          commit: main.newest.commit,
+          details: main.build.details,
         });
       }
-      return ok(null);
+      if ((await waitingNow(main)) !== null) return;
+      const last = await lastUpdate();
+      if (last.ok && last.value?.outcome === "running") return keepWaiting(undefined);
+      await keepWaiting(undefined);
+      const started = await start();
+      if (!started.ok) console.error("The waiting Update couldn't be started", started.error);
+    },
+    holding: () => waiting?.kind === "waiting",
+    restartedByUpdate: async () => {
+      const read = await readJsonFile(restartFile, RestartFile);
+      await removeFile(restartFile);
+      return (
+        read.ok &&
+        read.value !== undefined &&
+        now() - Date.parse(read.value.at) < UPDATE_GIVES_UP_MS
+      );
     },
     forget: () => {
       check = undefined;

@@ -28,8 +28,10 @@ import {
   quotedInGuide,
   type Requester,
   removeTestFolder,
+  requesterFor,
   SAVING_MODEL,
   savingProvider,
+  setUpOwner,
   type TestFile,
   testWorker,
   writeHouseSkills,
@@ -413,6 +415,99 @@ describe("the conversation a later turn gets", () => {
     await say("Where should the rack go?");
 
     expect(turns[1]?.framing.message).toContain("You: (this turn failed before you answered)");
+  });
+});
+
+describe("Continue, after a restart cut a turn off (#186)", () => {
+  it("tells the model the turn was cut off, what it did, and to carry on from there", async () => {
+    const { provider: recording, turns } = recorder(READS_FILES);
+    // The first turn reads, runs, writes a little, then is cut off by a restart.
+    let cutOff: () => void = () => {};
+    const working: Provider = {
+      ...recording,
+      runTurn: async (input) => {
+        await input.report({ kind: "read-file", path: "review.tsx" });
+        await input.report({ kind: "ran-command", command: "pnpm test" });
+        await input.emit("Running the tests now.");
+        await new Promise<void>((resolve) => {
+          cutOff = resolve;
+          input.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return ok(null);
+      },
+    };
+    const first = testWorker({ root, providers: [working] });
+    const cookie = await setUpOwner(first);
+    const before = requesterFor(first, cookie);
+    const started = await postJson(before, "/api/workspaces/garage-gym/sessions", {
+      text: "Build the quick questions",
+      model: MODEL,
+    });
+    const { id } = SessionSummary.parse(await started.json());
+    await followSession(before, { sessionId: id, until: "text-delta" });
+
+    // The restarted worker, on the same folders.
+    const after = requesterFor(testWorker({ root, providers: [recording] }), cookie);
+    await followSession(after, { sessionId: id, until: "turn-failed" });
+    await postJson(after, `/api/sessions/${id}/continue`, { turn: 1 });
+    await followSession(after, { sessionId: id, until: "turn-completed", after: 5 });
+
+    const framing = turns[0]?.framing;
+    expect(framing?.message).toContain(
+      [
+        "You (Courtyard restarted and cut this turn off partway through): Running the tests now.",
+        "",
+        "What you did in this turn before it was cut off:",
+        "- Read review.tsx",
+        '- Ran "pnpm test"',
+      ].join("\n"),
+    );
+    expect(framing?.newMessage).toBe(
+      await quotedInGuide("Courtyard restarted while you were working"),
+    );
+    cutOff();
+  });
+});
+
+describe("a cut-off turn that wrote nothing (#186)", () => {
+  it("is still told with everything it did", async () => {
+    const { provider: recording, turns } = recorder(READS_FILES);
+    let cutOff: () => void = () => {};
+    const working: Provider = {
+      ...recording,
+      runTurn: async (input) => {
+        await input.report({ kind: "ran-command", command: "pnpm test" });
+        await new Promise<void>((resolve) => {
+          cutOff = resolve;
+          input.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return ok(null);
+      },
+    };
+    const first = testWorker({ root, providers: [working] });
+    const cookie = await setUpOwner(first);
+    const before = requesterFor(first, cookie);
+    const started = await postJson(before, "/api/workspaces/garage-gym/sessions", {
+      text: "Run the tests",
+      model: MODEL,
+    });
+    const { id } = SessionSummary.parse(await started.json());
+    await followSession(before, { sessionId: id, until: "activity" });
+
+    const after = requesterFor(testWorker({ root, providers: [recording] }), cookie);
+    await followSession(after, { sessionId: id, until: "turn-failed" });
+    await postJson(after, `/api/sessions/${id}/continue`, {});
+    await followSession(after, { sessionId: id, until: "turn-completed", after: 3 });
+
+    expect(turns[0]?.framing.message).toContain(
+      [
+        "You: (Courtyard restarted and cut this turn off before you wrote anything)",
+        "",
+        "What you did in this turn before it was cut off:",
+        '- Ran "pnpm test"',
+      ].join("\n"),
+    );
+    cutOff();
   });
 });
 

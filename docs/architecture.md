@@ -370,7 +370,13 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
 
 - **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
 - **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
-  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). While main has moved on, it
+  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). Update when ready (#186):
+  tapped while main's build runs or a session is mid-turn (`sessions/`'s `midTurn`, an approval waiting counted),
+  it waits, kept in the data folder (`live-update-waiting.json`) so a crash keeps it, and a repeating job runs it
+  once both are clear, or drops it when main's build fails meanwhile; Update now runs it at once, Cancel drops it.
+  While one waits, `holding()` tells `sessions/` and `lead/` that nothing new starts on its own (queued messages
+  hold, no fixing turn, no new builder), the owner's own messages still starting. An update the worker starts
+  itself leaves a note (`live-update-restart.json`), so the next worker continues the turns it cut off. While main has moved on, it
   also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
   the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
   seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
@@ -529,8 +535,8 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     reach on a tablet. A Merge that can't merge yet is greyed out but still takes a tap, which says why beside it
     (#329). A session's PR is asked for again as its session's events change it; one no session opened, every 15
     seconds while it's open (#329). Merged or closed, it folds to one card with
-    what's next: Update Courtyard (when the worker is a live copy main has moved on from, offered once main's
-    build has passed, by `live/`'s rule), Start a new session and
+    what's next: Update Courtyard (when the worker is a live copy main has moved on from, unless main's build
+    failed, by `live/`'s rule; tapped while it runs, it waits for it, #186), Start a new session and
     Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
     stylesheet of its own (`review.css`, holding the ask line's classes too), like `things/`.
   - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
@@ -538,8 +544,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     (`live-update.tsx`), and main's build beside Update
     (`main-build.tsx`, #249): the newest main's title, its jobs in stages (#337, drawn by the shared
     `components/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey waiting, its
-    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered only
-    once it has passed; quiet while it runs; Details, the failed job's page on GitHub, once it has failed. Its
+    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered unless it
+    has failed; tapped before it has passed or while a session is mid-turn, the Update waits, and the row says
+    what for, with Cancel and Update now (#186); Details, the failed job's page on GitHub, once it has failed. Its
     hook asks again every 10 seconds while the build runs
     and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
     follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
@@ -836,7 +843,8 @@ Where the rest fits:
   naming it (`queued`), checked in the session's queue so one removed meanwhile (`queued-message-removed`) never
   goes; after a usage limit they wait for the owner's next turn (Carry on, say). A queued message going first means
   no fixing turn for failed checks starts then (#172), and no "Turn finished" notification goes. One a stopped
-  worker left waiting goes once the next worker starts (`resumeQueued`).
+  worker left waiting goes once the next worker starts (`recoverAll`). While an Update waits (#186), they hold,
+  and go once it has run or no longer waits.
 - **Whose turn it is** (#179). The session page works it out from the events: Working (since the owner's message,
   on the latest activity or the answer), an approval waiting, or the turn's end, marked Your turn. A workspace's
   list of sessions has the worker's say for each (`now`: working, needs-you or your-turn), which the workspace page
@@ -854,11 +862,16 @@ Where the rest fits:
   Overflow).
 - **Titles.** After the first turn completes, a model gives the session a short title, unless the owner renamed it
   first or Get to know named it.
-- **A worker that stopped mid-turn.** The first time the new worker touches a session, a turn its log still shows as
-  running is recorded as interrupted, so the session can carry on, and its next queued message, if any, goes.
+- **A worker that stopped mid-turn** (#186). As the new worker starts it checks every session (`recoverAll`): a turn
+  its log still shows as running is recorded as interrupted (cut off), so the session can carry on, and its next
+  queued message, if any, goes. After an update the worker started itself (`live/`'s note), each cut-off turn
+  continues by itself; after a crash or the PC restarting, one notification names them ("Courtyard restarted · 2
+  turns stopped"), and each waits on the owner (`waiting`: `cut-off`, in Needs you) for Continue: a new turn on the
+  same model, told the turn was cut off and what it did, to carry on and check what already happened
+  (docs/ai-conduct.md, Every turn). Start again, the old Retry, sends the message again from scratch.
 - **Notifications.** Once an `approval-requested`, `turn-completed` or `turn-failed` is recorded, `sessions/` tells
   `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
-  interrupted one found by the next worker, send none). A code turn's end waits for its PR to be followed, so one
+  interrupted one found by the next worker, send none of their own: one "Courtyard restarted" names them all, #186). A code turn's end waits for its PR to be followed, so one
   ending with the PR's checks still failing says "Checks still failing: e2e", not "Turn finished" (story 31). The
   service worker shows it and opens the session on a tap.
 

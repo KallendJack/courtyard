@@ -43,6 +43,8 @@ export function SessionTurns(props: {
   providers: ProviderList["providers"];
   onRetry: (turn: Turn) => void;
   onCarryOn: (turn: Turn) => Promise<string | undefined>;
+  /** Continue a turn a restart cut off (#186). */
+  onContinue: (turn: Turn) => Promise<string | undefined>;
   /** Sends a suggested reply; left out when the session can't be carried on. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
   /** The session's workspace, where its documents' notes open. */
@@ -60,8 +62,8 @@ export function SessionTurns(props: {
   /** Set to what goes to the end and follows again: Jump to latest, or the owner sending (#168). */
   follow?: Ref<() => void>;
 }) {
-  const { sessionId, turns, providers, onRetry, onCarryOn, onReply, workspaceId, documents } =
-    props;
+  const { sessionId, turns, providers, onRetry, onCarryOn, onContinue, onReply } = props;
+  const { workspaceId, documents } = props;
   const { onStepByStep } = props;
   const { queuedMessages, onRemoveQueued } = props;
   const queued = useMemo(
@@ -226,10 +228,17 @@ export function SessionTurns(props: {
               workspaceId={workspaceId}
               {...(documents === undefined ? {} : { documents })}
               {...(onStepByStep === undefined ? {} : { onStepByStep })}
-              // Only the last turn can be retried, carried on or replied to, so only it gets the
-              // handlers.
+              // Only the last turn can be retried, carried on, continued or replied to, so only it
+              // gets the handlers.
               {...(turn === last
-                ? { onRetry, onCarryOn, ...(onReply ? { onReply } : {}), latest: true, queued }
+                ? {
+                    onRetry,
+                    onCarryOn,
+                    onContinue,
+                    ...(onReply ? { onReply } : {}),
+                    latest: true,
+                    queued,
+                  }
                 : {})}
             />
           </li>

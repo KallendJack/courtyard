@@ -273,6 +273,11 @@ test("the home page shows straight away, and offers the update once the worker h
 });
 
 test("the owner updates the live app from the app, and sees how it went", async ({ page }) => {
+  // Other tests' sessions run on this worker, so Update would wait for them (#186): this one goes
+  // at once, as Update now does. Main-build.spec has the waiting.
+  await page.route("**/api/live/update", (route) =>
+    route.continue({ postData: JSON.stringify({ now: true }) }),
+  );
   await page.goto("/");
   const updates = page.getByRole("region", { name: "Updates" });
 
