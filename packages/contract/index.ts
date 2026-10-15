@@ -39,6 +39,7 @@ export {
   LeadRun,
   LeadStatus,
   NextUp,
+  NextUpBlocker,
   NextUpIssue,
   PaperConnecting,
   PaperFile,

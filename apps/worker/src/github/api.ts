@@ -67,7 +67,8 @@ export type GitHubApi = {
   ) => Promise<Result<readonly FoundFile[], string>>;
   /**
    * The open issues in `repo` with `label` (#301's Next up), each with its milestone and, asked
-   * `withComments`, its comments' text, which say whether someone has claimed it (none otherwise).
+   * `withComments`, its comments' text, which say whether someone has claimed it, and the open
+   * issues it's blocked by (#377), which say it waits (none of either otherwise).
    */
   readonly openIssues: (
     accessToken: string,
@@ -217,6 +218,8 @@ export type FoundIssue = {
   readonly milestoneDescription: string | null;
   /** The text of each comment on it, oldest first. */
   readonly comments: readonly string[];
+  /** The open issues it's blocked by (#377), as GitHub lists them. */
+  readonly blockedBy: readonly { readonly number: number; readonly title: string }[];
 };
 
 /** An open milestone as GitHub has it (#355). */
@@ -381,7 +384,13 @@ const Issues = z.array(
       .nullable(),
     comments: z.number().int().nonnegative(),
     pull_request: z.unknown().optional(),
+    /** How many open issues it's blocked by (#377); a GitHub without dependencies leaves it out. */
+    issue_dependencies_summary: z.object({ blocked_by: z.number().int() }).optional(),
   }),
+);
+/** The issues one is blocked by (#377), open and closed. */
+const Blockers = z.array(
+  z.object({ number: z.number().int().positive(), title: z.string(), state: z.string() }),
 );
 const Comments = z.array(z.object({ body: z.string().nullable().optional() }));
 const PullTexts = z.array(z.object({ title: z.string(), body: z.string().nullable() }));
@@ -871,7 +880,8 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           listed.push(...issues.filter((issue) => issue.pull_request === undefined));
           if (issues.length < PAGE) break;
         }
-        // Only an issue with comments is asked for them, a few at a time.
+        // Only an issue with comments is asked for them, and one blocked for its blockers, a few
+        // at a time.
         const found: FoundIssue[] = [];
         for (let at = 0; at < listed.length; at += COMMENTS_AT_ONCE) {
           const some = await Promise.all(
@@ -891,6 +901,18 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
                         Comments,
                       )
                     ).map((comment) => comment.body ?? ""),
+              blockedBy:
+                (issue.issue_dependencies_summary?.blocked_by ?? 0) === 0 || !find.withComments
+                  ? []
+                  : (
+                      await apiGet(
+                        accessToken,
+                        `/repos/${repo.data}/issues/${issue.number}/dependencies/blocked_by?per_page=${PAGE}`,
+                        Blockers,
+                      )
+                    )
+                      .filter((blocker) => blocker.state === "open")
+                      .map(({ number, title }) => ({ number, title })),
             })),
           );
           found.push(...some);

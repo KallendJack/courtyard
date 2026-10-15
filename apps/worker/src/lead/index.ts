@@ -13,7 +13,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../files.ts";
-import type { NextUp } from "../next-up/index.ts";
+import { buildable, type NextUp } from "../next-up/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import {
   type LeadBrief,
@@ -182,7 +182,7 @@ export const createLead = (options: {
   const nextOf = (kept: Kept | undefined, issues: readonly NextUpIssue[]) =>
     issues.filter(
       (issue) =>
-        issue.ready &&
+        buildable(issue) &&
         !(kept?.skipped ?? []).includes(issue.number) &&
         !(kept?.built ?? []).some((builder) => builder.issue === issue.number),
     );
@@ -288,7 +288,7 @@ export const createLead = (options: {
         const built = await nextUp.build(workspaceId, issue.number, { ...model, byLead: true });
         if (!built.ok) {
           // Claimed by someone else meanwhile: the next one, then.
-          if (built.error.kind === "claimed" || built.error.kind === "no-such-issue") continue;
+          if (["claimed", "no-such-issue", "blocked"].includes(built.error.kind)) continue;
           console.error(`The Lead couldn't start #${issue.number}`, built.error);
           break;
         }
@@ -301,10 +301,15 @@ export const createLead = (options: {
       }
       if (!red && building.length === 0 && started === 0 && why === undefined) {
         const unready = issues.value.filter((issue) => !issue.ready).length;
+        const waiting = issues.value.filter((issue) => issue.ready && issue.after !== null).length;
         const rest = `Nothing ready to build.${
           unready === 0
             ? ""
             : ` ${plural(unready, "issue needs", "issues need")} a board or a grill.`
+        }${
+          waiting === 0
+            ? ""
+            : ` ${plural(waiting, "issue waits", "issues wait")} on another still open.`
         }`;
         return noted({ ...kept, state: "resting", why: rest }, rest);
       }

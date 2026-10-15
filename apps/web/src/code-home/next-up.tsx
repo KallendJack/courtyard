@@ -27,6 +27,8 @@ const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
  * session, which the worker claims the issue for. When the next in order on its Build order line
  * needs grilling first, Grill takes the top in gold (#363; Paper, "Next up offers Grill"), and the
  * first ready issue sits under it with a small Build; on a phone the rest wait for More.
+ * An issue blocked by an open one (#377; Paper, "Next up: blocked rows say After …") keeps its
+ * place among the rows, with no Build, saying what it comes after; Build is on the first that isn't.
  * More opens the rest inside its card, which keeps its height, and becomes Fewer (#335). Under
  * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
  * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
@@ -48,8 +50,7 @@ export function NextUp(
       </div>
     );
   }
-  const [first] = props.issues;
-  if (first === undefined) {
+  if (props.issues.length === 0) {
     return (
       <div className={COLUMN}>
         <Block label="Next up" fill>
@@ -58,7 +59,7 @@ export function NextUp(
       </div>
     );
   }
-  return <Offering {...props} issues={props.issues} first={first} />;
+  return <Offering {...props} issues={props.issues} />;
 }
 
 /** What Next up is given, besides its issues. */
@@ -72,13 +73,17 @@ type Offered = {
 };
 
 /** Next up with at least one issue to offer. */
-function Offering(props: Offered & { issues: readonly NextUpIssue[]; first: NextUpIssue }) {
-  const { first } = props;
+function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   const [more, setMore] = useState(false);
-  const ready = props.issues.filter((issue) => issue.ready);
-  /** The first ready issue, under Grill when the next in order needs grilling. */
-  const under = first.ready ? undefined : ready[0];
-  const rest = ready.filter((issue) => issue !== first && issue !== under);
+  const [next] = props.issues;
+  /** The next in order, when it needs grilling: Grill takes the top. */
+  const grill = next?.ready === false ? next : undefined;
+  /** The first ready issue blocked by no open one: Build's, under Grill when there is one. */
+  const build = props.issues.find((issue) => issue.ready && issue.after === null);
+  const first = grill ?? build;
+  const under = grill === undefined ? undefined : build;
+  /** The other ready issues in order, blocked ones in their place. */
+  const rest = props.issues.filter((issue) => issue.ready && issue !== build);
   const room = useRoomFor(rest.length);
   const closed =
     room.fits !== undefined
@@ -92,26 +97,31 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[]; first: Next
   const on = { workspaceId: props.workspaceId, providers: props.providers };
   return (
     <div className={COLUMN}>
-      <Block label="Next up" aside={first.milestone ?? undefined} fill>
+      <Block label="Next up" aside={next?.milestone ?? undefined} fill>
         {/* The rows and More, in the room the layout gives them. */}
         <div ref={room.room} className="flex min-h-0 flex-1 flex-col gap-1.5">
           {/* Grill, a Build under it, an open Start and More's rows scroll together, as one (#408). */}
           <BlockRows>
             <div ref={room.head} className="flex flex-col gap-1.5">
-              <StartOnIssue
-                {...on}
-                issue={first}
-                does={first.ready ? "build" : "grill"}
-                {...(first.ready && props.lead !== undefined
-                  ? { lead: { status: props.lead, onLead: props.onLead } }
-                  : {})}
-              />
+              {first !== undefined && (
+                <StartOnIssue
+                  {...on}
+                  issue={first}
+                  does={first.ready ? "build" : "grill"}
+                  {...(first.ready && props.lead !== undefined
+                    ? { lead: { status: props.lead, onLead: props.onLead } }
+                    : {})}
+                />
+              )}
               {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
             </div>
             {shown.length > 0 && (
               <ul ref={room.list} className="flex flex-col gap-0.5 pt-1">
                 {shown.map((issue) => (
-                  <li key={issue.number} aria-label={`#${issue.number} ${issue.title}`}>
+                  <li
+                    key={issue.number}
+                    aria-label={`#${issue.number} ${issue.title}${issue.after === null ? "" : `, after ${issue.after.title}`}`}
+                  >
                     <a
                       href={issue.url}
                       target="_blank"
@@ -121,9 +131,22 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[]; first: Next
                       <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
                         #{issue.number}
                       </span>
-                      <span className="min-w-0 grow truncate text-meta font-semibold text-foreground/90">
-                        {issue.title}
-                      </span>
+                      {issue.after === null ? (
+                        <span className="min-w-0 grow truncate text-meta font-semibold text-foreground/90">
+                          {issue.title}
+                        </span>
+                      ) : (
+                        // Blocked by an open issue (#377): no Build, and what it comes after, as
+                        // tall in two lines as a row in one.
+                        <span className="flex min-w-0 grow flex-col">
+                          <span className="truncate text-meta font-semibold text-foreground/90">
+                            {issue.title}
+                          </span>
+                          <span className="truncate text-label font-medium text-muted-foreground">
+                            After {issue.after.title}
+                          </span>
+                        </span>
+                      )}
                     </a>
                   </li>
                 ))}

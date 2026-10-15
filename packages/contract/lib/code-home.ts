@@ -55,10 +55,15 @@ export const PaperConnecting = z.discriminatedUnion("kind", [
 ]);
 export type PaperConnecting = z.infer<typeof PaperConnecting>;
 
+/** The open issue a ready one is blocked by on GitHub (#377), which Next up names: "After …". */
+export const NextUpBlocker = z.object({ number: z.number().int().positive(), title: z.string() });
+export type NextUpBlocker = z.infer<typeof NextUpBlocker>;
+
 /**
  * One issue Next up offers (#301), by its number, title and address on GitHub, with its
  * milestone's title when it's in one: a `ready-for-agent` issue nobody has claimed (`ready`), or
- * one on its milestone's Build order line that needs grilling first (#363), not `ready`.
+ * one on its milestone's Build order line that needs grilling first (#363), not `ready`. A ready
+ * one blocked by an open issue (#377) names it as `after`, and isn't built until that closes.
  */
 export const NextUpIssue = z.object({
   number: z.number().int().positive(),
@@ -66,6 +71,7 @@ export const NextUpIssue = z.object({
   url: z.url({ protocol: /^https$/ }),
   milestone: z.string().nullable(),
   ready: z.boolean(),
+  after: NextUpBlocker.nullable(),
 });
 export type NextUpIssue = z.infer<typeof NextUpIssue>;
 

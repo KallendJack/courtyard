@@ -269,6 +269,33 @@ describe("Next up (#301)", () => {
     ]);
   });
 
+  it("says which open issue a ready one is blocked by, keeping it in its place, and ignores a closed blocker (#377)", async () => {
+    const { request } = await signedInWith(
+      [
+        { number: 2, title: "One loading state", milestone: "4 · Code workspaces" },
+        {
+          number: 3,
+          title: "Nothing moves once drawn",
+          milestone: "4 · Code workspaces",
+          blockedBy: [2],
+        },
+        { number: 4, title: "Buttons working", milestone: "4 · Code workspaces", blockedBy: [9] },
+        { number: 9, title: "Done already", state: "closed" },
+      ],
+      { milestones: { "4 · Code workspaces": "Build order: #3 → #2 → #4." } },
+    );
+
+    const response = await request("/api/workspaces/side-project/next-up");
+
+    expect(
+      NextUp.parse(await response.json()).issues.map((issue) => [issue.number, issue.after]),
+    ).toEqual([
+      [3, { number: 2, title: "One loading state" }],
+      [2, null],
+      [4, null],
+    ]);
+  });
+
   it("asks GitHub only when a page asks, then keeps the answer a couple of minutes", async () => {
     const { github, request } = await signedInWith([{ number: 3, title: "Three" }]);
     expect(github.issuesAsked()).toBe(0);
@@ -342,6 +369,37 @@ describe("Build (#298)", () => {
     expect(await errorOf(response)).toMatch(/claimed/);
     const listed = await request("/api/workspaces/side-project/sessions");
     expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+  });
+});
+
+describe("Build on an issue blocked by an open one (#377)", () => {
+  it("is refused, starting and claiming nothing, until its blocker closes", async () => {
+    const { github, request } = await signedInWith([
+      { number: 2, title: "One loading state" },
+      { number: 3, title: "Nothing moves once drawn", blockedBy: [2] },
+    ]);
+
+    const refused = await postJson(request, "/api/workspaces/side-project/next-up/3/build", {
+      model: FAKE_MODEL,
+    });
+
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toBe(
+      "That issue waits on #2 One loading state: it's offered to build once that closes.",
+    );
+    expect(github.commentsOn(onGitHub, 3)).toEqual([]);
+    const listed = await request("/api/workspaces/side-project/sessions");
+    expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+
+    github.closeIssue(onGitHub, 2);
+    const built = await postJson(request, "/api/workspaces/side-project/next-up/3/build", {
+      model: FAKE_MODEL,
+    });
+
+    expect(built.status).toBe(201);
+    expect(github.commentsOn(onGitHub, 3)).toEqual([
+      expect.stringMatching(/^Building this: Courtyard session/),
+    ]);
   });
 });
 

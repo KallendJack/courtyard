@@ -1047,7 +1047,8 @@ const showsHome = async (page: Page) => {
     "The rail on desktop",
   );
   await expect(nextUp).not.toContainText("Claimed by a helper");
-  await nextUpFills(page, 11);
+  await expect(nextUp.getByRole("region", { name: "Build #283" })).toHaveCount(0);
+  await nextUpFills(page, 12);
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -1072,6 +1073,26 @@ const showsHome = async (page: Page) => {
   await expect(page.getByRole("region", { name: "Context file" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Skills" })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
+};
+
+/**
+ * An issue blocked by an open one keeps its place in Next up's order, with no Build: its row says
+ * what it comes after (#377; Paper, "Next up: blocked rows say After …").
+ */
+const blockedRowSaysAfter = async (page: Page) => {
+  const blocked = blocks(page).nextUp.getByRole("listitem", { name: /^#283 / });
+  await expect(blocked).toHaveAccessibleName(
+    "#283 Nothing moves once drawn, after One Reply box everywhere",
+  );
+  await expect(blocked).toHaveText(
+    /^#283\s*Nothing moves once drawn\s*After One Reply box everywhere$/,
+  );
+  // As tall as a row in one line, so as many fit (#418).
+  const [row, after] = await Promise.all([
+    blocks(page).nextUp.getByRole("listitem").first().boundingBox(),
+    blocked.boundingBox(),
+  ]);
+  expect(Math.round(after?.height ?? 0)).toBe(Math.round(row?.height ?? 0));
 };
 
 /** The page doesn't scroll at all: everything on Home is on one screen. */
@@ -1171,6 +1192,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await signIn(request);
       await showsHome(page);
       await homeFitsOneScreen(page);
+      await blockedRowSaysAfter(page);
       // Next up sits beside Needs you, not under it.
       const [needsBox, nextBox] = [
         await blocks(page).needsYou.boundingBox(),
@@ -1257,16 +1279,21 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // and the first issue with Build stay put, and More becomes Fewer.
       const { nextUp } = blocks(page);
       const before = await nextUp.boundingBox();
-      const shown = await nextUpFills(page, 11);
-      await nextUp.getByRole("button", { name: `More · ${11 - shown}` }).click();
+      const shown = await nextUpFills(page, 12);
+      await nextUp.getByRole("button", { name: `More · ${12 - shown}` }).click();
       await expect(nextUp.getByRole("listitem")).toHaveText([
         /#251\s*One Reply box everywhere/,
+        /#283\s*Nothing moves once drawn\s*After One Reply box everywhere/,
         /#255\s*Paste images on the Fold/,
         ...Array.from({ length: 9 }, () => /A later idea/),
       ]);
       expect(Math.round((await nextUp.boundingBox())?.height ?? 0)).toBe(
         Math.round(before?.height ?? 0),
       );
+      await blockedRowSaysAfter(page);
+      await nextUp.getByRole("listitem", { name: /^#283 / }).scrollIntoViewIfNeeded();
+      await shot(page, "tablet-home-more");
+      await nextUp.getByRole("region").first().scrollIntoViewIfNeeded();
       await expect(nextUp.getByRole("heading", { name: "Next up" })).toBeInViewport();
       // One scroller for the card and the rows (#408): the first issue shows whole, at the top,
       // and scrolled to the end, so does the last row.

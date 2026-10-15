@@ -1,5 +1,6 @@
 import {
   type BuildIssue,
+  type NextUpBlocker,
   type NextUpIssue,
   SESSION_TITLE_MAX_LENGTH,
   type SessionSummary,
@@ -47,6 +48,8 @@ export type NextUpProblem =
   | { readonly kind: "no-such-issue" }
   /** Someone claimed the issue since the page showed it. */
   | { readonly kind: "claimed" }
+  /** The issue is blocked by an open one (#377): it's built once that closes. */
+  | { readonly kind: "blocked"; readonly after: NextUpBlocker }
   /** The issue isn't one Next up offers Grill on: ready, closed, or off its Build order line. */
   | { readonly kind: "nothing-to-grill" }
   | { readonly kind: "session"; readonly error: SessionError };
@@ -121,6 +124,12 @@ const inOrder = (a: FoundIssue, b: FoundIssue) => {
   );
 };
 
+/**
+ * Whether Next up offers an issue to build now (#377): ready, and blocked by no open issue. One
+ * blocked keeps its place in the order, saying what it comes after.
+ */
+export const buildable = (issue: NextUpIssue) => issue.ready && issue.after === null;
+
 /** A session's title from what it does (Build, Grill) and its issue, kept to a title's length. */
 const titleFor = (does: "Build" | "Grill", issue: NextUpIssue) => {
   const title = `${does} #${issue.number}: ${issue.title}`;
@@ -187,12 +196,13 @@ export const createNextUp = (options: {
       ...toGrill.map((issue) => ({ issue, ready: false })),
     ]
       .sort((a, b) => inOrder(a.issue, b.issue))
-      .map(({ issue: { number, title, url, milestone }, ready }) => ({
+      .map(({ issue: { number, title, url, milestone, blockedBy }, ready }) => ({
         number,
         title,
         url,
         milestone,
         ready,
+        after: ready ? (blockedBy[0] ?? null) : null,
       }));
     kept.set(repo, { at: now(), issues: offered });
     return ok(offered);
@@ -230,6 +240,7 @@ export const createNextUp = (options: {
       const fresh = await read(repo);
       if (!fresh.ok) return fresh;
       const issue = fresh.value.find((each) => each.number === number && each.ready);
+      if (issue?.after) return err({ kind: "blocked", after: issue.after });
       if (issue === undefined) {
         const any = await github.openIssues({ repo, label: READY_LABEL, withComments: false });
         const there = any.ok && any.value.some((each) => each.number === number);
@@ -259,7 +270,7 @@ export const createNextUp = (options: {
       const found = await repoOf(rawId);
       if (!found.ok) return undefined;
       const fresh = await read(found.value.repo);
-      return fresh.ok && fresh.value.some((each) => each.number === number && each.ready)
+      return fresh.ok && fresh.value.some((each) => each.number === number && buildable(each))
         ? number
         : undefined;
     },
