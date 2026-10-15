@@ -32,6 +32,8 @@ const addKit = async (page: Page) => {
   await expect(page.getByRole("list", { name: "Things saved" }).getByRole("listitem")).toHaveCount(
     4,
   );
+  // Done answering, so what's sent next is a turn of its own, not added to this one (#252).
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(/Your turn · finished/);
 };
 
 test("the Things section appears with the first Thing, parts under their parent, filtered by status", async ({
