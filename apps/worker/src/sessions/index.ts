@@ -3,6 +3,7 @@ import { appendFile, mkdir, rm, truncate } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   type Activity,
+  type AllowAllLasts,
   type AlwaysAllow,
   type AlwaysFor,
   type ApprovalAnswer,
@@ -44,6 +45,13 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
+import {
+  type AllowAll,
+  allowAllAfter,
+  allowAllUntil,
+  allowingAllAt,
+  NO_ALLOW_ALL,
+} from "../allow-all/index.ts";
 import {
   attachmentPath,
   attachmentsOf,
@@ -220,6 +228,10 @@ export type SessionError =
   | { readonly kind: "always-not-offered" }
   /** The workspace couldn't keep a command allowed always (#185). */
   | { readonly kind: "workspace"; readonly error: WorkspaceError }
+  /** Allow all for this task was asked for a session that doesn't code (#428). */
+  | { readonly kind: "not-code-session" }
+  /** Allow all for this task was asked for while it's on: it isn't extended (#428). */
+  | { readonly kind: "allowing-all" }
   /** No message waiting in the session's queue has that event number (#177). */
   | { readonly kind: "queued-not-found" }
   /** The queued message has gone already, as a turn of its own. */
@@ -521,8 +533,15 @@ type TurnState =
   /** Its folder is being deleted, so nothing new can start in it. */
   | { readonly kind: "deleting" };
 
-/** The owner's answer to an approval (#171), and whether they allowed it always (#185). */
-type GivenAnswer = { readonly answer: ApprovalAnswer; readonly always?: AlwaysFor };
+/**
+ * The owner's answer to an approval (#171), and whether they allowed it always (#185), or allowed
+ * it by turning on Allow all for this task while it waited (#428).
+ */
+type GivenAnswer = {
+  readonly answer: ApprovalAnswer;
+  readonly always?: AlwaysFor;
+  readonly allowedAll?: true;
+};
 
 /**
  * What a session's owner allowed always for the session (#185), from its events: each approval's
@@ -570,6 +589,8 @@ type RunningSession = {
   seen: number | undefined;
   /** Its recovery found a turn a restart cut off, and recorded it (#186). */
   cutOffByRestart: boolean;
+  /** Its Allow all for this task (#428), from its event log once recovered, then as each is written. */
+  allowAll: AllowAll;
 };
 
 /**
@@ -676,6 +697,7 @@ export const createSessions = (options: {
       answered: { answer: undefined, reporting: false, cutOff: false },
       seen: undefined,
       cutOffByRestart: false,
+      allowAll: NO_ALLOW_ALL,
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -756,6 +778,7 @@ export const createSessions = (options: {
     session.nextSeq += 1;
     if (numbered.data.type === "pull-request") pullRequests.set(id, numbered.data.pullRequest);
     session.answered = answeredAfter(session.answered, numbered.data);
+    session.allowAll = allowAllAfter(session.allowAll, numbered.data);
     for (const listener of session.listeners) listener(numbered.data);
     return ok(numbered.data);
   };
@@ -793,7 +816,10 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     session.queues = events.value.some((event) => event.type === "message-queued");
-    for (const event of events.value) session.answered = answeredAfter(session.answered, event);
+    for (const event of events.value) {
+      session.answered = answeredAfter(session.answered, event);
+      session.allowAll = allowAllAfter(session.allowAll, event);
+    }
     // The owner's Undo and Edit can come after a turn ends, so it's the last turn's own events
     // that say whether it was left open.
     const last = events.value.findLast(
@@ -1034,17 +1060,19 @@ export const createSessions = (options: {
         });
         const turnDocuments = createTurnDocuments(targetOf(turn));
         /** Records what the model is doing, or one of its helpers (#117), tagged with it. */
-        const reportAs = (helper: HelperId | undefined) => async (activity: Activity) => {
-          if (recordingLost || stopper.signal.aborted) return;
-          // A document read is what the model has seen of it, before anyone hears of the read.
-          if (activity.kind === "read-file") await turnDocuments.read(activity.path);
-          const recorded = await append(turn.id, {
-            type: "activity",
-            activity,
-            ...(helper === undefined ? {} : { helper }),
-          });
-          if (!recorded.ok) recordingLost = true;
-        };
+        const reportAs =
+          (helper: HelperId | undefined) => async (activity: Activity, allowedAll?: boolean) => {
+            if (recordingLost || stopper.signal.aborted) return;
+            // A document read is what the model has seen of it, before anyone hears of the read.
+            if (activity.kind === "read-file") await turnDocuments.read(activity.path);
+            const recorded = await append(turn.id, {
+              type: "activity",
+              activity,
+              ...(helper === undefined ? {} : { helper }),
+              ...(allowedAll === true ? { allowedAll } : {}),
+            });
+            if (!recorded.ok) recordingLost = true;
+          };
         const report = reportAs(undefined);
         /** Records the answer's sources (ADR 0019), once, unless the turn was stopped. */
         let cited = false;
@@ -1176,8 +1204,13 @@ export const createSessions = (options: {
          */
         const decide = async (
           decided: Result<Activity, CodeRefusal>,
-          helper: HelperId | undefined,
+          by: {
+            readonly helper: HelperId | undefined;
+            /** It's allowed because the session is allowing all (#428), so it's marked so. */
+            readonly allowedAll?: boolean | undefined;
+          },
         ): Promise<Result<null, string>> => {
+          const { helper, allowedAll } = by;
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
           }
@@ -1193,9 +1226,11 @@ export const createSessions = (options: {
             });
             if (!started) return err(codeRefusalReason({ kind: "stopped" }));
           }
-          await told(activity);
+          await told(activity, allowedAll);
           return ok(null);
         };
+        /** Whether the session is allowing all now (#428): read at each step, so it can change mid-turn. */
+        const allowingAll = () => allowingAllAt(session.allowAll, options.now()) !== undefined;
         /**
          * The commands allowed always (#185) beyond the workspace's allowlist as the turn read it:
          * those allowed for the session in its earlier turns, then each allowed always while the
@@ -1213,6 +1248,8 @@ export const createSessions = (options: {
           helper: HelperId | undefined;
           /** What Allow always would allow (#185), when it's offered. */
           always?: AlwaysAllow | undefined;
+          /** Allow all for this task would cover it (#428), so the card offers turning it on. */
+          all?: true | undefined;
         }): Promise<Result<null, string>> => {
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
@@ -1234,6 +1271,7 @@ export const createSessions = (options: {
                 ...(asking.why === undefined ? {} : { why: asking.why }),
                 ...(asking.helper === undefined ? {} : { helper: asking.helper }),
                 ...(asking.always === undefined ? {} : { always: asking.always }),
+                ...(asking.all === undefined ? {} : { all: asking.all }),
               },
             });
             if (recorded.ok) {
@@ -1258,7 +1296,7 @@ export const createSessions = (options: {
             given.answer === "allow"
               ? ok(asking.allowed)
               : err({ kind: "denied", what: deniedWhat(asking.ask) }),
-            asking.helper,
+            { helper: asking.helper, allowedAll: given.allowedAll },
           );
         };
         /**
@@ -1333,14 +1371,19 @@ export const createSessions = (options: {
             edit: async (path) => {
               const place = await editPlaceIn(worktree, path);
               if (place.kind === "inside") {
-                return decide(ok({ kind: "edited-file", path: place.shown }), helper);
+                return decide(ok({ kind: "edited-file", path: place.shown }), { helper });
               }
               if (place.kind === "setup") {
+                const allowed: Activity = { kind: "edited-file", path: place.shown };
+                // Allowing all, a setup file's edit it covers runs without asking (#428).
+                if (place.all && allowingAll())
+                  return decide(ok(allowed), { helper, allowedAll: true });
                 return approval({
                   ask: { kind: "setup", path: place.shown },
                   why: undefined,
-                  allowed: { kind: "edited-file", path: place.shown },
+                  allowed,
                   helper,
+                  ...(place.all ? { all: true } : {}),
                 });
               }
               const outside = resolve(worktree, path);
@@ -1367,15 +1410,20 @@ export const createSessions = (options: {
                 },
                 command,
               );
-              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), helper);
+              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), { helper });
               const refused = allowed.error;
-              if (refused.kind !== "needs-approval") return decide(err(refused), helper);
+              if (refused.kind !== "needs-approval") return decide(err(refused), { helper });
+              // Allowing all, what it covers runs without asking (#428).
+              if (refused.all === true && allowingAll()) {
+                return decide(ok({ kind: "ran-command", command }), { helper, allowedAll: true });
+              }
               return approval({
                 ask: { kind: "command", command, reason: refused.reason },
                 why,
                 allowed: { kind: "ran-command", command },
                 helper,
                 always: refused.always,
+                all: refused.all,
               });
             },
             ran: (command) => options.code.builds.ended(turn.id, command),
@@ -1937,10 +1985,20 @@ export const createSessions = (options: {
       : err({ kind: "model-unavailable" });
   };
 
-  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => ({
-    ...file,
-    busy: (running.get(file.id)?.turn.kind ?? "idle") !== "idle",
-  });
+  /** Whether a session is allowing all now (#428), once its events have been read. */
+  const allowingAllOf = (id: SessionId) => {
+    const session = running.get(id);
+    return session === undefined ? undefined : allowingAllAt(session.allowAll, options.now());
+  };
+
+  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => {
+    const allowingAll = allowingAllOf(file.id);
+    return {
+      ...file,
+      busy: (running.get(file.id)?.turn.kind ?? "idle") !== "idle",
+      ...(allowingAll === undefined ? {} : { allowingAll }),
+    };
+  };
 
   const findSession = async (rawId: string): Promise<Result<SessionFile, SessionError>> => {
     const id = SessionId.safeParse(rawId);
@@ -2595,6 +2653,11 @@ export const createSessions = (options: {
       lead?: "lead" | "builder";
       /** In a code workspace, the issue it builds, next in order (Build, #298): claimed for it. */
       issue?: number;
+      /**
+       * A builder the Lead starts with Allow all for builders (#428): it allows all from the start,
+       * until its pull request opens, until this at most.
+       */
+      allowAllUntil?: string;
     }): Promise<Result<SessionSummary, SessionError>> => {
       const since = freshStarts;
       if (settingAside) return err({ kind: "starting-fresh" });
@@ -2660,20 +2723,30 @@ export const createSessions = (options: {
         return err(STORAGE_ERROR);
       }
       const written = await writeJsonFile(sessionFilePath(id), file);
-      const started = written.ok
-        ? await startTurn({
-            id,
-            workspaceId: start.workspaceId,
-            provider: provider.value.provider,
-            message: message.value,
-            since,
-            coding: sessionBranch !== undefined,
-            placeless: file.placeless === true,
-            firstTurn: true,
-            runsBuildOrder: file.lead === true,
-            ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
-          })
-        : err(STORAGE_ERROR);
+      // Allowing all from the start (#428), recorded before its first turn reads it.
+      const allowing =
+        written.ok && sessionBranch !== undefined && start.allowAllUntil !== undefined
+          ? await append(id, {
+              type: "allow-all-started",
+              until: start.allowAllUntil,
+              task: true,
+            })
+          : written;
+      const started =
+        written.ok && allowing.ok
+          ? await startTurn({
+              id,
+              workspaceId: start.workspaceId,
+              provider: provider.value.provider,
+              message: message.value,
+              since,
+              coding: sessionBranch !== undefined,
+              placeless: file.placeless === true,
+              firstTurn: true,
+              runsBuildOrder: file.lead === true,
+              ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
+            })
+          : err(STORAGE_ERROR);
       if (!started.ok) {
         // Never leave a session behind without its first message.
         await rm(folderOf(id), { recursive: true, force: true });
@@ -2970,6 +3043,86 @@ export const createSessions = (options: {
         waiting(given);
         return ok(given);
       });
+    },
+
+    /**
+     * Turns on Allow all for this task (#428) for a code session, for as long as the owner picked:
+     * recorded, so it survives a restart, and each approval its turn waits on that it covers is
+     * allowed at once. It isn't extended while it's on: Turn off first.
+     */
+    allowAll: async (
+      rawId: string,
+      lasts: AllowAllLasts,
+    ): Promise<Result<SessionSummary, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id, workspaceId } = found.value;
+      // A code session's own: never the Lead's, whose builders are allowed all by its order.
+      if (found.value.branch === undefined || found.value.lead === true) {
+        return err({ kind: "not-code-session" });
+      }
+      if (await isArchived(options.contextDir, workspaceId)) {
+        return err({ kind: "workspace-archived" });
+      }
+      const session = runningSession(id);
+      const started = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
+        const pullRequest = await lastPullRequestOf(found.value);
+        if (pullRequestEnded(pullRequest)) {
+          return err({ kind: "pull-request-ended", state: pullRequest.state });
+        }
+        if (allowingAllAt(session.allowAll, options.now()) !== undefined) {
+          return err({ kind: "allowing-all" });
+        }
+        const recorded = await writeEvent({
+          id,
+          session,
+          event: {
+            type: "allow-all-started",
+            until: allowAllUntil(lasts, options.now()),
+            task: lasts === "task",
+          },
+        });
+        if (!recorded.ok) return recorded;
+        const events = await readEvents(id);
+        if (!events.ok) return events;
+        const answered = new Set(
+          events.value.flatMap((event) =>
+            event.type === "approval-answered" ? [event.approval] : [],
+          ),
+        );
+        for (const event of events.value) {
+          if (event.type !== "approval-requested" || event.all !== true) continue;
+          const waiting = session.approvals.get(event.seq);
+          if (waiting === undefined || answered.has(event.seq)) continue;
+          const given: GivenAnswer = { answer: "allow", allowedAll: true };
+          const allowed = await writeEvent({
+            id,
+            session,
+            event: { type: "approval-answered", approval: event.seq, ...given },
+          });
+          if (!allowed.ok) return allowed;
+          session.approvals.delete(event.seq);
+          waiting(given);
+        }
+        return ok(null);
+      });
+      if (!started.ok) return started;
+      return ok(summaryOf(found.value));
+    },
+
+    /** Turns Allow all for this task off (#428), at once. One that's off already stays off. */
+    allowAllOff: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const session = runningSession(id);
+      const ended = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
+        if (allowingAllAt(session.allowAll, options.now()) === undefined) return ok(null);
+        const recorded = await writeEvent({ id, session, event: { type: "allow-all-ended" } });
+        return recorded.ok ? ok(null) : recorded;
+      });
+      if (!ended.ok) return ended;
+      return ok(summaryOf(found.value));
     },
 
     /** One of the session's attachments (#78) and its bytes, by its id. */

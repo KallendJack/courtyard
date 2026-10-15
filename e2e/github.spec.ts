@@ -308,7 +308,7 @@ test("the setup check offers what the repository is missing of Matt's setup, and
   await expect(card.getByRole("code")).toContainText("docs/agents/issue-tracker.md");
   await expect(card.getByRole("code")).toContainText("The Agent skills section in AGENTS.md");
   await expect(card.getByRole("code")).toContainText("Labels on GitHub: needs-triage");
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   const done = page.getByRole("region", { name: "Matt's setup" });
   await expect(done.getByRole("link", { name: /^pull request #\d+$/ })).toBeVisible();

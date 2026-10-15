@@ -1,4 +1,6 @@
 import {
+  type AllowAllLasts,
+  type AllowAllRequest,
   type AlwaysFor,
   type ApprovalAnswer,
   ApprovalAnswering,
@@ -103,3 +105,19 @@ export const removeQueued = (remove: { sessionId: SessionId; queued: number }) =
 /** Where one of a session's attachments is served from: for a thumbnail, or a PDF in a new tab. */
 export const attachmentUrl = (sessionId: SessionId, id: AttachmentId) =>
   `/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(id)}`;
+
+/** Turns on Allow all for this task for a code session (#428), for as long as the owner picked. */
+export const allowAll = (sessionId: SessionId, lasts: AllowAllLasts) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/allow-all`,
+    body: { lasts } satisfies AllowAllRequest,
+    schema: SessionSummary,
+  });
+
+/** Turns Allow all for this task off (#428), at once. */
+export const allowAllOff = (sessionId: SessionId) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/allow-all/off`,
+    body: {},
+    schema: SessionSummary,
+  });

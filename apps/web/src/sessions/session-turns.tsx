@@ -45,6 +45,11 @@ export function SessionTurns(props: {
   onCarryOn: (turn: Turn) => Promise<string | undefined>;
   /** Continue a turn a restart cut off (#186). */
   onContinue: (turn: Turn) => Promise<string | undefined>;
+  /**
+   * Opens Allow all for this task's choice of how long (#428), from an approval it would cover;
+   * left out where the session can't allow all.
+   */
+  onAllowAll?: () => void;
   /** Sends a suggested reply; left out when the session can't be carried on. */
   onReply?: (turn: Turn, reply: string) => Promise<boolean>;
   /** The session's workspace, where its documents' notes open. */
@@ -64,7 +69,7 @@ export function SessionTurns(props: {
 }) {
   const { sessionId, turns, providers, onRetry, onCarryOn, onContinue, onReply } = props;
   const { workspaceId, documents } = props;
-  const { onStepByStep } = props;
+  const { onStepByStep, onAllowAll } = props;
   const { queuedMessages, onRemoveQueued } = props;
   const queued = useMemo(
     () => ({ messages: queuedMessages, remove: onRemoveQueued }),
@@ -236,6 +241,7 @@ export function SessionTurns(props: {
                     onCarryOn,
                     onContinue,
                     ...(onReply ? { onReply } : {}),
+                    ...(onAllowAll ? { onAllowAll } : {}),
                     latest: true,
                     queued,
                   }

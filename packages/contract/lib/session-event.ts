@@ -192,6 +192,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     activity: Activity,
     /** The helper doing it (#117), or none for the model itself. */
     helper: HelperId.optional(),
+    /** It ran without asking because the session was allowing all (#428): "ran under Allow all". */
+    allowedAll: z.literal(true).optional(),
   }),
   /**
    * The model started a helper (#117, ADR 0027), named by the description the model gave it, or
@@ -314,6 +316,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     helper: HelperId.optional(),
     /** What Allow always would allow (#185), when it's offered: never for what must always ask. */
     always: AlwaysAllow.optional(),
+    /** Allow all for this task (#428) would cover it, so the card offers turning it on. */
+    all: z.literal(true).optional(),
   }),
   /** The session's pull request as it is now on GitHub, each time it changes (#172). */
   z.object({ ...eventBase, type: z.literal("pull-request"), pullRequest: PullRequest }),
@@ -337,7 +341,22 @@ export const SessionEvent = z.discriminatedUnion("type", [
     answer: ApprovalAnswer,
     /** Allowed always (#185): until the session ends, or in the workspace. */
     always: AlwaysFor.optional(),
+    /** Allowed because the owner turned on Allow all for this task while it waited (#428). */
+    allowedAll: z.literal(true).optional(),
   }),
+  /**
+   * The owner turned on Allow all for this task (#428), from an approval or the session's menu, or
+   * the Lead started the session with it: until `until` at most, and with `task`, until the
+   * session opens its pull request or ends. Whether it's on now is decided from these events.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("allow-all-started"),
+    until: z.iso.datetime(),
+    task: z.boolean(),
+  }),
+  /** The owner turned Allow all for this task off (#428) before it ran out. */
+  z.object({ ...eventBase, type: z.literal("allow-all-ended") }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 

@@ -1,10 +1,12 @@
 import type { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
+import { Clock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { alwaysWords } from "@/lib/always-words";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { Waiting } from "../patience.ts";
 import { describeProblem } from "../problems.tsx";
 import css from "./approval-card.css?inline";
+import { Button } from "./button.tsx";
 import { CapsLabel } from "./caps-label.tsx";
 import { FormError } from "./form-error.tsx";
 import { StatusPill } from "./notice.tsx";
@@ -88,6 +90,11 @@ export function ApprovalCard(props: {
    * saying exactly that, with This session and This workspace.
    */
   always?: AlwaysAllow | undefined;
+  /**
+   * Opens Allow all for this task's choice of how long (#428), when Allow all would cover this
+   * approval: a quiet line at the card's foot.
+   */
+  onAllowAll?: (() => void) | undefined;
   /**
    * Sends the owner's answer, allowed always for the session or the workspace when they tapped
    * one of those: what went wrong, or nothing once it's sent. One that waits for a slow worker
@@ -182,6 +189,19 @@ export function ApprovalCard(props: {
             sending={sending}
             onAnswer={(always) => void answer(always)}
           />
+        )}
+        {props.onAllowAll !== undefined && (
+          <div className="self-center">
+            <Button
+              variant="quiet"
+              size="xs"
+              disabled={sending !== undefined}
+              onClick={props.onAllowAll}
+            >
+              <Clock aria-hidden />
+              Allow all for this task…
+            </Button>
+          </div>
         )}
       </section>
     </div>
