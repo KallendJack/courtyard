@@ -16,6 +16,7 @@ import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
 import { Page } from "@/components/page";
 import { useAnchorName } from "@/components/place-under";
+import { Scroller } from "@/components/scroller";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace-tabs";
 import { addStylesheet } from "@/lib/stylesheet";
 import { loadMattSetup } from "../matt-setup/api.ts";
@@ -255,13 +256,13 @@ export default function CodeHome(props: {
     <Page wide fill header={header} footer={footer}>
       <div data-code-home="">
         {chosen === "sessions" ? (
-          <div className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+          <Scroller from="tablet" className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1">
             <SessionLinks list={list} mode="code" />
-          </div>
+          </Scroller>
         ) : chosen === "prs" ? (
-          <div className="mt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+          <Scroller from="tablet" className="mt-4 md:min-h-0 md:flex-1">
             <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
-          </div>
+          </Scroller>
         ) : (
           // On Home the blocks share the height above Main, each keeping its place; one with more
           // rows than fit scrolls inside its card (#335, #283).

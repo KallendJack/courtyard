@@ -1,6 +1,7 @@
 import { type ReactNode, type TouchEvent, useRef } from "react";
 import { classes } from "@/lib/classes";
 import { useLayout } from "./handheld.ts";
+import { Scroller } from "./scroller.tsx";
 import { useDialog } from "./use-dialog.ts";
 
 /** How far a swipe goes, in pixels, before it closes a sheet. */
@@ -39,7 +40,7 @@ export function HandheldSheet(props: {
   const dialog = useDialog(props.open, () => {
     if (props.open) props.onClose();
   });
-  const body = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLElement>(null);
   /** Where a touch on the sheet started, and whether what scrolls was at its top then. */
   const touch = useRef<{ x: number; y: number; atTop: boolean }>(undefined);
 
@@ -107,9 +108,9 @@ export function HandheldSheet(props: {
             </header>
           </div>
           {props.children !== undefined && (
-            <div ref={body} data-sheet-body="">
+            <Scroller ref={body} data-sheet-body="">
               {props.children}
-            </div>
+            </Scroller>
           )}
           {props.foot !== undefined && <div data-sheet-foot="">{props.foot}</div>}
         </>

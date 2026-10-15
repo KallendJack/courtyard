@@ -1,5 +1,6 @@
 import type { ChangedFile } from "@courtyard/contract";
 import { type ReactNode, useEffect, useRef } from "react";
+import { Scroller } from "@/components/scroller";
 import { classes } from "@/lib/classes";
 
 /** A row of a hunk, and its line in the file as it is now (none for a removed one). */
@@ -83,8 +84,15 @@ export function Diff(props: {
             : "GitHub shows no diff for this file: it's binary, or too large to show."}
         </p>
       ) : (
-        // From a tablet up, the lines scroll here, both ways, under the file's name.
-        <div data-diff-lines="" className="md:min-h-0 md:flex-1 md:overflow-auto">
+        // From a tablet up, the lines scroll here, both ways, under the file's name. What a screen
+        // reader hears of each line (its sr-only "Added:") is placed in it too, never past the
+        // window's foot, where it would scroll the window (#420).
+        <Scroller
+          data-diff-lines=""
+          axis="both"
+          from="tablet"
+          className="relative md:min-h-0 md:flex-1"
+        >
           <div className="md:w-max md:min-w-full">
             {hunks.map((hunk) => (
               // Each hunk shows different lines of the file.
@@ -120,7 +128,7 @@ export function Diff(props: {
               </div>
             ))}
           </div>
-        </div>
+        </Scroller>
       )}
     </section>
   );

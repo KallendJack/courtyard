@@ -1,6 +1,7 @@
 import type { GitHubRepo } from "@courtyard/contract";
 import { useId } from "react";
 import { classes } from "@/lib/classes";
+import { Scroller } from "./scroller.tsx";
 
 /**
  * Code's mark, as the board draws it: a pair of angle brackets. Drawn here rather than taken from
@@ -37,67 +38,69 @@ export function RepoPicker(props: {
 }) {
   const name = useId();
   return (
-    <fieldset className="flex max-h-60 min-w-0 flex-col gap-0.5 overflow-y-auto rounded-card border bg-surface p-1.5">
+    <fieldset className="flex max-h-60 min-w-0 flex-col rounded-card border bg-surface">
       <legend className="sr-only">Repo</legend>
-      {props.repos.map((repo) => {
-        const chosen = repo.repo === props.value;
-        return (
-          <label
-            key={repo.repo}
-            className={classes(
-              "flex h-13 shrink-0 items-center gap-3 rounded-row border-stroke px-3 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-              chosen
-                ? "border-primary bg-primary/8"
-                : repo.added
-                  ? "border-transparent"
-                  : "cursor-pointer border-transparent active:bg-accent",
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={repo.repo}
-              checked={chosen}
-              disabled={repo.added}
-              onChange={() => props.onChange(repo)}
-              className="sr-only"
-            />
-            <span
-              aria-hidden
+      <Scroller className="flex min-h-0 flex-col gap-0.5 p-1.5">
+        {props.repos.map((repo) => {
+          const chosen = repo.repo === props.value;
+          return (
+            <label
+              key={repo.repo}
               className={classes(
-                "flex size-8 shrink-0 items-center justify-center rounded-md bg-muted",
+                "flex h-13 shrink-0 items-center gap-3 rounded-row border-stroke px-3 select-none has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
                 chosen
-                  ? "text-foreground/90"
+                  ? "border-primary bg-primary/8"
                   : repo.added
-                    ? "text-placeholder"
-                    : "text-muted-foreground",
+                    ? "border-transparent"
+                    : "cursor-pointer border-transparent active:bg-accent",
               )}
             >
-              <CodeMark className="size-4.5" />
-            </span>
-            <span
-              className={classes(
-                "min-w-0 flex-1 truncate text-base/5",
-                chosen
-                  ? "font-bold text-foreground"
-                  : repo.added
-                    ? "font-semibold text-placeholder"
-                    : "font-semibold text-foreground/85",
-              )}
-            >
-              {repo.name}
-            </span>
-            <span
-              className={classes(
-                "w-22 shrink-0 text-right text-meta/4 font-medium",
-                repo.added ? "text-placeholder" : "text-muted-foreground",
-              )}
-            >
-              {repo.added ? "Added" : repo.private ? "Private" : "Public"}
-            </span>
-          </label>
-        );
-      })}
+              <input
+                type="radio"
+                name={name}
+                value={repo.repo}
+                checked={chosen}
+                disabled={repo.added}
+                onChange={() => props.onChange(repo)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden
+                className={classes(
+                  "flex size-8 shrink-0 items-center justify-center rounded-md bg-muted",
+                  chosen
+                    ? "text-foreground/90"
+                    : repo.added
+                      ? "text-placeholder"
+                      : "text-muted-foreground",
+                )}
+              >
+                <CodeMark className="size-4.5" />
+              </span>
+              <span
+                className={classes(
+                  "min-w-0 flex-1 truncate text-base/5",
+                  chosen
+                    ? "font-bold text-foreground"
+                    : repo.added
+                      ? "font-semibold text-placeholder"
+                      : "font-semibold text-foreground/85",
+                )}
+              >
+                {repo.name}
+              </span>
+              <span
+                className={classes(
+                  "w-22 shrink-0 text-right text-meta/4 font-medium",
+                  repo.added ? "text-placeholder" : "text-muted-foreground",
+                )}
+              >
+                {repo.added ? "Added" : repo.private ? "Private" : "Public"}
+              </span>
+            </label>
+          );
+        })}
+      </Scroller>
     </fieldset>
   );
 }

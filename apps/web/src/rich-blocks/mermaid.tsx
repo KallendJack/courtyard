@@ -1,5 +1,6 @@
 import mermaid from "mermaid";
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import { Scroller } from "@/components/scroller";
 import { classes } from "@/lib/classes";
 import { cleanDiagram } from "./diagram-svg.ts";
 import { DrawingPlace, type DrawingProps } from "./fenced.tsx";
@@ -128,16 +129,15 @@ export default function Diagram({ source, arriving, fallback }: DrawingProps) {
   return (
     <RichBlock>
       {drawn !== source && <DrawingPlace />}
-      <figure
+      <Scroller
+        as="figure"
+        axis="x"
         aria-label="Diagram"
         aria-busy={drawn !== source}
-        className={classes(
-          "overflow-x-auto rounded-md border bg-field px-5 py-6",
-          drawn !== source && "hidden",
-        )}
+        className={classes("rounded-md border bg-field px-5 py-6", drawn !== source && "hidden")}
       >
         <div ref={holder} className="mx-auto w-fit" />
-      </figure>
+      </Scroller>
     </RichBlock>
   );
 }

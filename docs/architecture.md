@@ -394,7 +394,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
   title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
   PR page (`review/`) lays itself out, fitting the screen. `components/page-scroll.ts` hands the scrolling middle
   to whatever follows the scroll (a session's turns), and names it to the router, which keeps its scroll per page.
-  A workspace's page loads its Home's code (code or planning) with its data (`workspace-page.ts`), so the page
+  That middle, and everything else that scrolls (a sheet, the frame's rails, a diff, a wide table), is
+  `components/scroller.tsx`'s `Scroller` (#420): a thin thumb, and a fade at its top once scrolled, never a line
+  cut in half under what's pinned; the theme check fails anything that scrolls without it. A workspace's page loads its Home's code (code or planning) with its data (`workspace-page.ts`), so the page
   shows whole.
 - **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
   offline worker or a refusal comes back as a value to show. A page load waits for a slow worker (`untilAnswered`):

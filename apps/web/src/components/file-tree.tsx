@@ -1,5 +1,6 @@
 import { classes } from "@/lib/classes";
 import { CapsLabel } from "./caps-label.tsx";
+import { Scroller } from "./scroller.tsx";
 
 /** A file in the tree: where it is, and the lines it adds and removes. */
 export type TreeFile = { path: string; additions: number; deletions: number };
@@ -37,44 +38,49 @@ export function FileTree(props: {
   return (
     <nav
       aria-label="Changed files"
-      className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card border bg-surface p-2 md:h-full md:max-h-none"
+      className="flex max-h-80 flex-col rounded-card border bg-surface md:h-full md:max-h-none"
     >
-      <CapsLabel tone="muted" inList>
-        {count === 1 ? "1 file" : `${count} files`}
-      </CapsLabel>
-      {byFolder(props.files).map(([folder, files]) => (
-        <div key={folder} className="flex flex-col gap-0.5">
-          {folder !== "" && (
-            <p className="truncate px-2.5 pt-1.5 pb-1 font-mono text-meta/4 text-placeholder">
-              {folder}
-            </p>
-          )}
-          {files.map(({ name, file }) => {
-            const chosen = file.path === props.chosen;
-            return (
-              <button
-                key={file.path}
-                type="button"
-                aria-current={chosen ? "true" : undefined}
-                title={file.path}
-                onClick={() => props.onChoose(file.path)}
-                className={classes(
-                  "flex h-11 shrink-0 items-center justify-between gap-3 rounded-row pr-3 text-left font-mono text-meta/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  folder === "" ? "pl-2.5" : "pl-5.5",
-                  chosen ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
-                )}
-              >
-                <span className="min-w-0 truncate">{name}</span>
-                <span
-                  className={classes("shrink-0", chosen ? "text-code-string" : "text-placeholder")}
+      <Scroller className="flex min-h-0 flex-col gap-0.5 p-2">
+        <CapsLabel tone="muted" inList>
+          {count === 1 ? "1 file" : `${count} files`}
+        </CapsLabel>
+        {byFolder(props.files).map(([folder, files]) => (
+          <div key={folder} className="flex flex-col gap-0.5">
+            {folder !== "" && (
+              <p className="truncate px-2.5 pt-1.5 pb-1 font-mono text-meta/4 text-placeholder">
+                {folder}
+              </p>
+            )}
+            {files.map(({ name, file }) => {
+              const chosen = file.path === props.chosen;
+              return (
+                <button
+                  key={file.path}
+                  type="button"
+                  aria-current={chosen ? "true" : undefined}
+                  title={file.path}
+                  onClick={() => props.onChoose(file.path)}
+                  className={classes(
+                    "flex h-11 shrink-0 items-center justify-between gap-3 rounded-row pr-3 text-left font-mono text-meta/4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    folder === "" ? "pl-2.5" : "pl-5.5",
+                    chosen ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
+                  )}
                 >
-                  {lineCounts(file)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
+                  <span className="min-w-0 truncate">{name}</span>
+                  <span
+                    className={classes(
+                      "shrink-0",
+                      chosen ? "text-code-string" : "text-placeholder",
+                    )}
+                  >
+                    {lineCounts(file)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </Scroller>
     </nav>
   );
 }

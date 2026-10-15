@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/button";
 import { CapsLabel } from "@/components/caps-label";
+import { Scroller } from "@/components/scroller";
 import { classes } from "@/lib/classes";
 import { Answer } from "../sessions/answer.tsx";
 import { readDescription } from "./description.ts";
@@ -50,7 +51,7 @@ export function WhatChanged(props: {
             <CapsLabel tone="muted">What changed</CapsLabel>
             {toggle}
           </div>
-          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pb-1">
+          <Scroller className="flex min-h-0 flex-col gap-4 pb-1">
             <Written text={description.summary} />
             {description.others.map((part) => (
               <div key={part.heading} className="flex flex-col gap-1">
@@ -74,7 +75,7 @@ export function WhatChanged(props: {
                 )}
               </div>
             )}
-          </div>
+          </Scroller>
         </>
       ) : (
         <div className="flex items-center gap-3.5">

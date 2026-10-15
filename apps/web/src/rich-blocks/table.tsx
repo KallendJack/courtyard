@@ -1,5 +1,6 @@
 import { Children, type ComponentProps, createContext, use, useState } from "react";
 import type { ExtraProps } from "react-markdown";
+import { Scroller } from "@/components/scroller";
 import { SortButton } from "@/components/sort-button";
 import { classes } from "@/lib/classes";
 import { childrenNamed, type MarkdownElement, textOf } from "./hast.ts";
@@ -48,13 +49,13 @@ export function MarkdownTable({ node, children }: ComponentProps<"table"> & Extr
   };
   return (
     <RichBlock>
-      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <Scroller axis="x" className="-mx-4 px-4 md:mx-0 md:px-0">
         <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
           <table className="w-full border-collapse text-sm/5.5">
             <SortingContext value={sorting}>{children}</SortingContext>
           </table>
         </div>
-      </div>
+      </Scroller>
     </RichBlock>
   );
 }

@@ -1,6 +1,7 @@
 import { TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { Scroller } from "@/components/scroller";
 import { type CodeLanguage, codeLanguage } from "./code-languages.ts";
 
 type Highlighter = typeof import("./highlight.tsx");
@@ -73,9 +74,9 @@ export function CodeBlock(props: {
           {props.problem}
         </figcaption>
       )}
-      <pre className="overflow-x-auto p-3 font-mono text-meta/5.25 md:text-sm/5.5">
+      <Scroller as="pre" axis="x" className="p-3 font-mono text-meta/5.25 md:text-sm/5.5">
         <code>{coloured ?? props.code}</code>
-      </pre>
+      </Scroller>
     </figure>
   );
 }

@@ -414,6 +414,15 @@ const fitsOneScreen = async (page: Page) => {
 
   await lines.evaluate((box) => box.scrollTo({ top: box.scrollHeight }));
   await expect(review.getByText("export const line320 = 320;")).toBeInViewport();
+  // Its thumb is the thin one, scrolled down its top fades under the file's name, and nothing in
+  // it scrolls the window, which would show the window's own wide scrollbar (#420).
+  expect(await lines.evaluate((box) => getComputedStyle(box).scrollbarWidth)).toBe("thin");
+  await expect(lines).toHaveAttribute("data-fade", "top");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    ),
+  ).toBe(0);
   await expect(files).toBeInViewport({ ratio: 1 });
   await expect(merge).toBeInViewport({ ratio: 1 });
   expect((await pageScroll(page)).scrolls).toBe(false);

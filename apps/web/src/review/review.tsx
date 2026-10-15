@@ -23,6 +23,7 @@ import { useLayout, useWide } from "@/components/handheld";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { Notice } from "@/components/notice";
 import { PAGE_SCROLL } from "@/components/page-scroll";
+import { Scroller } from "@/components/scroller";
 import { Select } from "@/components/select";
 import { ThumbButton } from "@/components/thumb-button";
 import { classes } from "@/lib/classes";
@@ -146,9 +147,10 @@ export default function Review(props: {
     // Where the review's own classes apply (review.css): inside it, so not on itself.
     <div data-review="" className="contents">
       {/* On a phone it scrolls as one column, by itself: the panel it sits on never does (#339). */}
-      <main
+      <Scroller
+        as="main"
         data-scroll-restoration-id={PAGE_SCROLL}
-        className="mx-auto flex h-full min-h-0 w-full flex-col overflow-y-auto px-4 pt-6 pb-6 md:px-4.5 md:pt-5 md:pb-4 xl:px-7"
+        className="mx-auto flex h-full min-h-0 w-full flex-col px-4 pt-6 pb-6 md:px-4.5 md:pt-5 md:pb-4 xl:px-7"
       >
         {loaded === undefined ? (
           <div className="flex flex-col gap-3.5 md:min-h-0 md:flex-1">
@@ -178,7 +180,7 @@ export default function Review(props: {
             onChanged={() => setChanges((was) => was + 1)}
           />
         )}
-      </main>
+      </Scroller>
     </div>
   );
 }

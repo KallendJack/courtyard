@@ -27,7 +27,9 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
   failed. Components join classes with `lib/classes.ts`, which merges nothing, so no class-merging code reaches the
   first load.
 - **Every screen is a pinned header, one scrolling middle and a pinned footer** (the shared page layout,
-  `components/page.tsx`, #339); nothing scrolls the title or the main action away.
+  `components/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is the
+  shared `Scroller` (`components/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard cut;
+  `scripts/theme/check.ts` fails an `overflow-*-auto` anywhere else.
 - **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/kept.tsx`,
   #269): the last answer at once on a revisit, faint rows in its place the first time, never a spinner.
 - **Nothing moves once drawn** (#283, #398): what loads later holds its space from the first frame, at its final size.
