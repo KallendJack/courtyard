@@ -55,7 +55,18 @@ const LEAD_TITLE = "Lead";
 /** A builder's title starts with this when it fixes a red main (#355's issue). */
 const MAIN_FIX = /^Main fails:/;
 
-const Builder = z.object({ session: SessionId, issue: z.number().int().positive() });
+/** A builder the Lead started, and the code files its issue named then (#423). */
+const Builder = z.object({
+  session: SessionId,
+  issue: z.number().int().positive(),
+  files: z.array(z.string()).default([]),
+});
+
+/** A ready issue the Lead holds back (#423), behind the builder's issue that changes its files. */
+const HeldBack = z.object({
+  issue: z.number().int().positive(),
+  behind: z.number().int().positive(),
+});
 
 /**
  * Merge in order (#423), as kept: merging the builders' pull requests in this order, first first,
@@ -97,6 +108,8 @@ const Kept = z.object({
   allowAllUntil: z.iso.datetime().optional(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: Merge.optional(),
+  /** The ready issues it held back last time round (#423). */
+  heldBack: z.array(HeldBack).optional(),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -130,6 +143,12 @@ const nameOf = (listed: Listed | undefined, issue: number) =>
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/**
+ * Whether two files are the same (#423), as an issue names one and git lists the other: by path,
+ * or one by its name or the end of its path, at the end of the other's.
+ */
+const sameFile = (a: string, b: string) => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+
 /** Names in a sentence: "e2e", "check and e2e", "check, verify and e2e". */
 const namesOf = (names: readonly string[]) =>
   names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
@@ -156,7 +175,9 @@ export const createLead = (options: {
     | "mergePullRequest"
     | "bringUpToDate"
   >;
-  nextUp: Pick<NextUp, "list" | "fresh" | "build">;
+  nextUp: Pick<NextUp, "list" | "fresh" | "build" | "filesNamed">;
+  /** The files a builder's worktree changes (#423), by its workspace and session. */
+  changedFiles: (workspaceId: WorkspaceId, session: SessionId) => Promise<readonly string[]>;
   /** Whether a code workspace's main is red now (#355), by its id. */
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
   /** Whether an Update waits to run (#186): meanwhile no builder starts. */
@@ -232,6 +253,7 @@ export const createLead = (options: {
     issues.filter(
       (issue) =>
         buildable(issue) &&
+        !(kept?.heldBack ?? []).some((held) => held.issue === issue.number) &&
         !(kept?.skipped ?? []).includes(issue.number) &&
         !(kept?.built ?? []).some((builder) => builder.issue === issue.number),
     );
@@ -339,6 +361,9 @@ export const createLead = (options: {
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
       ...(merge === undefined ? {} : { merge }),
+      ...(kept?.heldBack === undefined || kept.state !== "running"
+        ? {}
+        : { heldBack: kept.heldBack }),
     };
   };
 
@@ -410,12 +435,48 @@ export const createLead = (options: {
             : undefined;
     let started = 0;
     let free = kept.builders - building.length;
+    // What's held back is worked out afresh each time a builder could start.
+    const { heldBack: _held, ...unheld } = kept;
+    kept = unheld;
     if (deciding === undefined && !updating && free > 0) {
       const issues = await nextUp.fresh(workspaceId);
       if (!issues.ok) return kept;
       const next = nextOf(kept, issues.value).filter((issue) => !red || MAIN_FIX.test(issue.title));
+      const named = await nextUp.filesNamed(workspaceId);
+      // Each builder still at work, by its issue, with the files its issue named and its
+      // worktree changes; those it starts now join it.
+      const changing = await Promise.all(
+        kept.built
+          .filter((builder) => standingOf(listed.get(builder.session)) !== "ended")
+          .map(async (builder) => ({
+            issue: builder.issue,
+            files: [
+              ...builder.files,
+              ...(await options.changedFiles(workspaceId, builder.session)),
+            ],
+          })),
+      );
+      const heldBack: z.infer<typeof HeldBack>[] = [];
       for (const issue of next) {
         if (free === 0) break;
+        const files = [...(named.get(issue.number) ?? [])];
+        const clash = changing
+          .flatMap((builder) => {
+            const shared = files.find((file) => builder.files.some((each) => sameFile(file, each)));
+            return shared === undefined ? [] : [{ behind: builder.issue, shared }];
+          })
+          .at(0);
+        if (clash !== undefined) {
+          heldBack.push({ issue: issue.number, behind: clash.behind });
+          const about = `held:${issue.number}:${clash.behind}`;
+          if (!kept.told.includes(about)) {
+            kept = await noted(
+              { ...kept, told: [...kept.told, about] },
+              `Holding back #${issue.number} ${issue.title}: it changes the same files as #${clash.behind} (${clash.shared}). It starts once #${clash.behind} merges.`,
+            );
+          }
+          continue;
+        }
         // One place always stays free for the owner's own sessions.
         if (sessions.codeRunning() >= CODE_SESSIONS_AT_ONCE - 1) {
           why ??= "your own sessions are using the machine, so the next builder waits.";
@@ -436,12 +497,17 @@ export const createLead = (options: {
           break;
         }
         kept = await noted(
-          { ...kept, built: [...kept.built, { session: built.value.id, issue: issue.number }] },
+          {
+            ...kept,
+            built: [...kept.built, { session: built.value.id, issue: issue.number, files }],
+          },
           `Started building ${issue.title} (#${issue.number}).`,
         );
+        changing.push({ issue: issue.number, files });
         started += 1;
         free -= 1;
       }
+      if (heldBack.length > 0) kept = { ...kept, heldBack };
       if (!red && building.length === 0 && started === 0 && why === undefined) {
         const unready = issues.value.filter((issue) => !issue.ready).length;
         const waiting = issues.value.filter((issue) => issue.ready && !buildable(issue)).length;

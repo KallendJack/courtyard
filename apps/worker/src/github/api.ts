@@ -216,6 +216,8 @@ export type FoundIssue = {
   readonly milestone: string | null;
   /** Its milestone's description, which may hold its `Build order:` line (#336); `null` if none. */
   readonly milestoneDescription: string | null;
+  /** Its description, which may name the files it changes (#423); empty when it has none. */
+  readonly body: string;
   /** The text of each comment on it, oldest first. */
   readonly comments: readonly string[];
   /** The titles of the open issues it's blocked by (#377), as GitHub lists them. */
@@ -382,6 +384,7 @@ const Issues = z.array(
     milestone: z
       .object({ title: z.string(), description: z.string().nullable().optional() })
       .nullable(),
+    body: z.string().nullable().optional(),
     comments: z.number().int().nonnegative(),
     pull_request: z.unknown().optional(),
     /** How many open issues it's blocked by (#377); a GitHub without dependencies leaves it out. */
@@ -906,6 +909,7 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
               url: issue.html_url,
               milestone: issue.milestone?.title ?? null,
               milestoneDescription: issue.milestone?.description ?? null,
+              body: issue.body ?? "",
               comments:
                 issue.comments === 0 || !find.forBuild
                   ? []

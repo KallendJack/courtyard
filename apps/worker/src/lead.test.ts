@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodeSessionList, GitHubConnection, LeadStatus, SessionEvent } from "@courtyard/contract";
@@ -827,5 +827,81 @@ describe("Merge in order (#423)", () => {
 
     expect(response.status).toBe(409);
     expect(await errorOf(response)).toBe("Nothing is ready to merge yet.");
+  });
+});
+
+describe("holding back builders that would clash (#423)", () => {
+  /** The folder a builder's session branch is checked out in, from the repository's worktrees. */
+  const worktreeOf = async (branch: string | undefined) => {
+    const listed = await gitIn(repo, "worktree", "list", "--porcelain");
+    const entry = listed.split("\n\n").find((each) => each.includes(`refs/heads/${branch}`));
+    const path = /^worktree (.+)$/m.exec(entry ?? "")?.[1];
+    if (path === undefined) throw new Error(`No worktree for ${branch}`);
+    return path;
+  };
+
+  it("holds back an issue naming files a running builder's issue names, and starts it once that one merges", async () => {
+    const { github, request } = await signedInWith([
+      {
+        number: 22,
+        title: "One loading state",
+        milestone: "4 · Code workspaces",
+        body: "Every block uses `apps/web/src/components/kept.tsx`.",
+      },
+      {
+        number: 23,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        body: "Blocks keep their size: kept.tsx holds their place.",
+      },
+      { number: 24, title: "Buttons working", milestone: "4 · Code workspaces" },
+    ]);
+
+    const lead = await run(request);
+
+    expect(lead.building.map((each) => each.issue)).toEqual([22, 24]);
+    expect(lead.heldBack).toEqual([{ issue: 23, behind: 22 }]);
+    expect(github.commentsOn(onGitHub, 23)).toEqual([]);
+    expect(await notesIn(request)).toContain(
+      "Holding back #23 Nothing moves once drawn: it changes the same files as #22 (kept.tsx). It starts once #22 merges.",
+    );
+
+    const builder = await builderOf(request, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.merge(number);
+    await runJobs();
+    await runJobs();
+
+    const after = await leadOf(request);
+    expect(after.building.map((each) => each.issue)).toEqual([24, 23]);
+    expect(after.heldBack).toBeUndefined();
+  });
+
+  it("holds back an issue naming a file a running builder has changed in its worktree", async () => {
+    const { github, request } = await signedInWith([
+      { number: 22, title: "Which session waits", milestone: "4 · Code workspaces" },
+      {
+        number: 23,
+        title: "Start on a branch",
+        milestone: "4 · Code workspaces",
+        body: "Change notes.ts so it says how.",
+        blockedBy: [30],
+      },
+      { number: 30, title: "Not ready", milestone: "4 · Code workspaces", labels: ["needs-info"] },
+    ]);
+    await run(request);
+    const builder = await builderOf(request, 22);
+    await writeFile(join(await worktreeOf(builder.branch), "notes.ts"), "export const rack = 1;\n");
+
+    github.closeIssue(onGitHub, 30);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.building.map((each) => each.issue)).toEqual([22]);
+    expect(lead.heldBack).toEqual([{ issue: 23, behind: 22 }]);
   });
 });

@@ -376,6 +376,15 @@ export const createWorker = (options: {
     },
     // While an Update waits, no builder starts (#186).
     updating: () => live.holding(),
+    // What a builder changes, so the Lead holds back an issue that would clash (#423).
+    changedFiles: async (workspaceId, session) => {
+      const workspace = await getWorkspace(contextDir, workspaceId);
+      if (!workspace.ok || workspace.value.repoPath === null) return [];
+      return code.changedFiles({
+        repoPath: workspace.value.repoPath,
+        worktree: code.worktreeOf(session),
+      });
+    },
     now,
     notify: (session, need) => {
       background(

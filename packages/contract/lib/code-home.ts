@@ -162,5 +162,12 @@ export const LeadStatus = z.object({
   buildersAllowedAll: z.iso.datetime().optional(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: LeadMerge.optional(),
+  /**
+   * Ready issues it holds back (#423), each behind the builder's issue that changes the same
+   * files: it starts once that one merges.
+   */
+  heldBack: z
+    .array(z.object({ issue: z.number().int().positive(), behind: z.number().int().positive() }))
+    .optional(),
 });
 export type LeadStatus = z.infer<typeof LeadStatus>;
