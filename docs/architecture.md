@@ -147,11 +147,15 @@ pages (`routes/`) built from feature folders and shared pieces. The contract pac
   (`mattChecksum`), or why not; a failure is tried again after five minutes. Fetching is a dependency passed in
   (`fetchFromGitHub`, git at his release's tag, the one real one). `sessions/` hands a code turn the copy as its
   `CodePlugin`, with the skills of it the workspace can use, and leaves them out of Courtyard's own skills list.
-- **`matt-setup/`:** the setup check (#181): what a code workspace's repository is missing of what Matt's
-  `setup-matt-pocock-skills` writes for the house answers (`docs/agents/` files and the Agent skills section, read
-  from the default branch on its remote through `code/`, and the triage labels through `github/`), offered once.
-  Allowed, it makes the labels and puts the files, from his templates in the pinned copy, on a branch of their own
-  in a worktree in the data folder, pushes it and opens its pull request. Its routes are a workspace's `matt-setup`.
+- **`matt-setup/`:** the setup check (#181, #323): what a code workspace's repository has of the house standard
+  (Matt's `setup-matt-pocock-skills` with the house answers), worked out for any repository from its default branch
+  on its remote through `code/`: its `docs/agents/` files and the Agent skills section, where its work lives (a
+  backlog or TODO file, or `.scratch/`, and whether its instructions say another agent writes it), its glossary's
+  name, the triage labels through `github/`, and whether `connections/` can make it a Paper file. Offered once, as
+  one card with the standard recommended on each line. Set up as the owner chose, it makes the labels (only when its
+  work lives on GitHub), files a moved tracker's open items as issues, puts the files (from his templates in the
+  pinned copy and the house's own) on a branch of their own in a worktree in the data folder, pushes it and opens
+  its pull request, then makes and connects the Paper file. Its routes are a workspace's `matt-setup`.
 - **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
   three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
   writes after them apart from lines it repeats.
@@ -555,9 +559,9 @@ Beside `src/`, **`apps/worker/eval/`** is the context eval (see [The AI setup](#
     account and repos, Switch and Sign out); one lazy load. Where they stand is kept for the tab's lifetime, and
     until it's first known Connections keeps its place with faint rows.
   - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
-  - **`matt-setup/`:** the setup check's offer (#181), opened from its row in a code workspace's Needs you (#301):
-    an approval card (`components/approval-card.tsx`, which a session's approvals use too) saying what's missing,
-    then where its pull request is, with its calls (`api.ts`).
+  - **`matt-setup/`:** the setup card (#181, #323), a dialog opened from its row in a code workspace's Needs you
+    (#301): each line with what was found and its choice (Keep or Move, Rename or Keep, Create or Skip), one Set
+    up, then where its pull request is, with its calls (`api.ts`).
   - **`notifications/`:** Settings' notifications toggle for this device, beside Connections (#173): it
     subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
     opens (so it follows the device's login), and unsubscribes on off; its own lazy load.

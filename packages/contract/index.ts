@@ -93,7 +93,14 @@ export {
   MainBuild,
   UpdateWaiting,
 } from "./lib/live.ts";
-export { MattSetup, MattSetupAnswer, MattSetupPiece } from "./lib/matt-setup.ts";
+export {
+  MattSetup,
+  MattSetupAnswer,
+  SetupCard,
+  SetupPaper,
+  SetupTracker,
+  setupLines,
+} from "./lib/matt-setup.ts";
 export {
   NotificationSubscription,
   NotificationsOff,

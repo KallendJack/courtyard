@@ -13,7 +13,7 @@ import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/home-block"
 import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
 import { useAction } from "@/lib/use-action";
-import { MattSetupOffer } from "../matt-setup/matt-setup-offer.tsx";
+import { MattSetupDone, SetupSheet } from "../matt-setup/matt-setup-offer.tsx";
 import { describeProblem } from "../problems.tsx";
 import { bringUpToDate, endPullRequest } from "../review/api.ts";
 import { answerApproval } from "../sessions/messages.ts";
@@ -84,16 +84,18 @@ export function NeedsYou(props: {
               key={keyOf(need)}
               workspaceId={props.workspaceId}
               need={need}
-              settingUp={settingUp}
-              onSettingUp={() => setSettingUp((was) => !was)}
+              onSettingUp={() => setSettingUp(true)}
               onChanged={props.onChanged}
             />
           ))}
         </ul>
-        {(settingUp || opened) && (
-          <MattSetupOffer
+        {props.setup.state === "opened" && <MattSetupDone setup={props.setup} />}
+        {props.setup.state === "offered" && (
+          <SetupSheet
+            open={settingUp}
+            onClose={() => setSettingUp(false)}
             workspaceId={props.workspaceId}
-            setup={props.setup}
+            card={props.setup.card}
             onAnswered={(setup) => {
               setSettingUp(false);
               props.onSetup(setup);
@@ -121,7 +123,6 @@ const keyOf = (need: Need) => {
 function NeedRow(props: {
   workspaceId: WorkspaceId;
   need: Need;
-  settingUp: boolean;
   onSettingUp: () => void;
   onChanged: () => void;
 }) {
@@ -247,16 +248,11 @@ function NeedRow(props: {
         <BlockRow
           label="Add Matt's setup to this repo?"
           title="Add Matt's setup to this repo?"
-          sub={`${need.missing} ${need.missing === 1 ? "thing" : "things"} missing · Matt's skills read them`}
+          sub={`${need.missing} ${need.missing === 1 ? "thing" : "things"} to set up · Matt's skills read them`}
           tone="needs"
           action={
-            <ThumbButton
-              look="needs"
-              row
-              aria-expanded={props.settingUp}
-              onClick={props.onSettingUp}
-            >
-              {props.settingUp ? "Hide" : "Review"}
+            <ThumbButton look="needs" row aria-haspopup="dialog" onClick={props.onSettingUp}>
+              Review
             </ThumbButton>
           }
         />

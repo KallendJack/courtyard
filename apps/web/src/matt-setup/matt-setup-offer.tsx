@@ -1,65 +1,250 @@
-import type { MattSetup, MattSetupPiece, WorkspaceId } from "@courtyard/contract";
-import { ApprovalCard } from "@/components/approval-card";
+import type { MattSetup, MattSetupAnswer, SetupCard, WorkspaceId } from "@courtyard/contract";
+import { X } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { Button, IconButton } from "@/components/button";
+import { FormError } from "@/components/form-error";
 import { InfoBox } from "@/components/notice";
+import { Scroller } from "@/components/scroller";
+import { SegmentedChoice } from "@/components/segmented-choice";
+import { useDialog } from "@/components/use-dialog";
 import { WebLink } from "@/components/web-link";
+import { useAction } from "@/lib/use-action";
 import { describeProblem } from "../problems.tsx";
 import { answerMattSetup } from "./api.ts";
 
-/** One missing piece as a line of the offer. */
-const lineOf = (piece: MattSetupPiece) => {
-  switch (piece.kind) {
-    case "file":
-      return piece.path;
-    case "section":
-      return `The Agent skills section in ${piece.path}`;
-    case "labels":
-      return `Labels on GitHub: ${piece.names.join(", ")}`;
-  }
+/** The owner's choices on a card's lines, each what it recommends until tapped. */
+type Choices = {
+  tracker: "keep" | "move";
+  glossary: "rename" | "keep";
+  paper: "create" | "skip";
 };
 
 /**
- * The setup check's offer (#181): what a code workspace's repository is missing of Matt Pocock's
- * setup, as one approval card, opened from its row in Needs you on the workspace's Home (#301).
- * Allowed, it says where the pull request is. Nothing shows when there's nothing to offer.
+ * What setting up did (#181, #323), under Needs you on a code workspace's Home (#301): where the
+ * pull request is, the issues moved from its old tracker, and its Paper file.
  */
-export function MattSetupOffer(props: {
+export function MattSetupDone(props: { setup: Extract<MattSetup, { state: "opened" }> }) {
+  const { pullRequest, issuesFiled, paper } = props.setup;
+  return (
+    <InfoBox label="Matt's setup">
+      <span>
+        {pullRequest === null ? (
+          "The labels are made. Nothing else was missing."
+        ) : (
+          <>
+            Matt's setup is in{" "}
+            <WebLink href={pullRequest.url}>pull request #{pullRequest.number}</WebLink>, for you to
+            review and merge.
+          </>
+        )}
+        {issuesFiled > 0 &&
+          ` ${issuesFiled} open ${issuesFiled === 1 ? "item is a GitHub issue" : "items are GitHub issues"} now.`}
+        {paper.kind === "made" && ` Its Paper file, ${paper.name}, is connected.`}
+        {paper.kind === "failed" && ` Its Paper file wasn't made: ${paper.reason}`}
+      </span>
+    </InfoBox>
+  );
+}
+
+/**
+ * The setup card (#323; Paper, "Tablet · Setup card with Paper file line"): what a code
+ * workspace's repository has, and what moves it to the house standard, one line each, every line
+ * filled in and the standard recommended (Keep where the repository says another agent writes its
+ * tracker, saying why). A tap changes a line; one more sets it all up, in one pull request (AGENTS.md,
+ * Tap or talk). Not now leaves it, and it isn't offered again. Opened from its row in Needs you.
+ */
+export function SetupSheet(props: {
+  open: boolean;
+  onClose: () => void;
   workspaceId: WorkspaceId;
-  setup: MattSetup;
-  /** The offer as the owner's answer leaves it. */
+  card: SetupCard;
+  /** The card as the owner's answer leaves it. */
   onAnswered: (setup: MattSetup) => void;
 }) {
-  const { workspaceId, setup } = props;
-  if (setup.state === "none") return null;
-  if (setup.state === "opened") {
-    return (
-      <InfoBox label="Matt's setup">
-        {setup.pullRequest === null ? (
-          <span>The labels are made. Nothing else was missing.</span>
-        ) : (
-          <span>
-            Matt's setup is in{" "}
-            <WebLink href={setup.pullRequest.url}>pull request #{setup.pullRequest.number}</WebLink>
-            , for you to review and merge.
-          </span>
-        )}
-      </InfoBox>
-    );
-  }
+  const dialog = useDialog(props.open, props.onClose);
   return (
-    <ApprovalCard
-      title="Add Matt's setup to this repo?"
-      exact={setup.missing.map(lineOf).join("\n")}
-      note="Matt Pocock's skills read these. They go on a branch of their own with a pull request for you to review; labels are made on GitHub. Not now and it won't ask again."
-      denyLabel="Not now"
-      onAnswer={async (answer) => {
-        const answered = await answerMattSetup(
-          workspaceId,
-          answer === "allow" ? "allow" : "not-now",
-        );
-        if (answered.kind !== "loaded") return describeProblem(answered).body;
-        props.onAnswered(answered.data);
-        return undefined;
-      }}
-    />
+    <dialog
+      {...dialog}
+      aria-label="Set up Matt Pocock's skills"
+      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(calc(100%-2rem),27.5rem)] overflow-hidden rounded-box border border-input bg-popover p-0 text-popover-foreground shadow-raised backdrop:bg-card/60 open:flex open:flex-col"
+    >
+      {props.open && <SheetBody {...props} />}
+    </dialog>
   );
+}
+
+function SheetBody(props: Parameters<typeof SetupSheet>[0]) {
+  const { card } = props;
+  const [choices, setChoices] = useState<Choices>({
+    tracker: card.tracker?.recommended ?? "move",
+    glossary: "rename",
+    paper: "create",
+  });
+  const choose = (change: Partial<Choices>) => setChoices((was) => ({ ...was, ...change }));
+  /** Its work lives on GitHub (or will), so the labels are made there. */
+  const onGitHub = card.tracker === null || choices.tracker === "move";
+  const changesFiles =
+    card.tracker !== null ||
+    card.glossary !== null ||
+    card.files.length > 0 ||
+    card.section !== null;
+
+  const send = useAction(async (answer: MattSetupAnswer) => {
+    const answered = await answerMattSetup(props.workspaceId, answer);
+    if (answered.kind !== "loaded") return describeProblem(answered).body;
+    props.onAnswered(answered.data);
+    return undefined;
+  });
+  const setUp = () =>
+    send.run({
+      answer: "allow",
+      ...(card.tracker === null ? {} : { tracker: choices.tracker }),
+      ...(card.glossary === null ? {} : { glossary: choices.glossary }),
+      ...(card.paper === null ? {} : { paper: choices.paper }),
+    });
+
+  return (
+    // Its title and Set up stay put; only the lines between them scroll (#339).
+    <div className="flex min-h-0 flex-col gap-3 p-5">
+      <div className="flex shrink-0 items-start justify-between gap-3 pb-1">
+        <div className="flex flex-col gap-1">
+          <h2 className="display-section text-sheet-title">Set up Matt Pocock's skills</h2>
+          <p className="text-meta font-medium text-muted-foreground">
+            What this repo has, and what moves it to the house standard. One pull request.
+          </p>
+        </div>
+        <IconButton label="Close" icon={<X />} onClick={props.onClose} />
+      </div>
+
+      <Scroller data-dialog-body="" className="flex min-h-0 flex-col gap-2">
+        {card.tracker !== null && (
+          <Line title="Where work lives" found={<Path>{card.tracker.path}</Path>}>
+            <SegmentedChoice
+              label="Where work lives"
+              look="apart"
+              value={choices.tracker}
+              onChange={(tracker) => choose({ tracker })}
+              options={
+                card.tracker.recommended === "keep"
+                  ? [
+                      { value: "keep", label: "Keep" },
+                      { value: "move", label: "Move to GitHub issues" },
+                    ]
+                  : [
+                      { value: "move", label: "Move to GitHub issues" },
+                      { value: "keep", label: "Keep" },
+                    ]
+              }
+            />
+            {card.tracker.why !== undefined && (
+              <p className="text-meta font-medium text-primary-text">
+                Recommended: {card.tracker.why}
+              </p>
+            )}
+          </Line>
+        )}
+        {card.glossary !== null && (
+          <Line title="Glossary" found={<Path>{card.glossary.path}</Path>}>
+            <SegmentedChoice
+              label="Glossary"
+              look="apart"
+              value={choices.glossary}
+              onChange={(glossary) => choose({ glossary })}
+              options={[
+                { value: "rename", label: "Rename to GLOSSARY.md" },
+                { value: "keep", label: "Keep" },
+              ]}
+            />
+          </Line>
+        )}
+        {card.files.length > 0 && (
+          <Line
+            title="Matt's files"
+            found={<Added>Added to docs/agents/</Added>}
+            detail={card.files.map((path) => path.replace("docs/agents/", "")).join(" · ")}
+          />
+        )}
+        {card.section !== null && (
+          <Line title="Agent skills section" found={<Added>Added to {card.section.path}</Added>} />
+        )}
+        {card.labels.length > 0 && onGitHub && (
+          <Line
+            title="Triage labels"
+            found={<Added>Made on GitHub</Added>}
+            detail={card.labels.join(" · ")}
+          />
+        )}
+        {card.paper !== null && (
+          <Line
+            title="Paper file"
+            found={<span className="text-meta text-muted-foreground">None yet · optional</span>}
+          >
+            <SegmentedChoice
+              label="Paper file"
+              look="apart"
+              value={choices.paper}
+              onChange={(paper) => choose({ paper })}
+              options={[
+                { value: "create", label: `Create · ${card.paper.name}, 4 pages` },
+                { value: "skip", label: "Skip" },
+              ]}
+            />
+          </Line>
+        )}
+      </Scroller>
+
+      <div className="flex shrink-0 flex-col gap-2 pt-1">
+        <Button
+          size="lg"
+          fullWidth
+          busy={send.running?.[0].answer === "allow"}
+          busyLabel="Setting up…"
+          waiting={send.running?.[0].answer === "not-now"}
+          onClick={() => void setUp()}
+        >
+          {changesFiles ? "Set up · opens a pull request" : "Set up"}
+        </Button>
+        <Button
+          variant="quiet"
+          fullWidth
+          waiting={send.busy}
+          onClick={() => void send.run({ answer: "not-now" })}
+        >
+          Not now
+        </Button>
+        <FormError message={send.error} />
+      </div>
+    </div>
+  );
+}
+
+/** One line of the card: what it's about, what Courtyard found, and its choice if it has one. */
+function Line(props: { title: string; found: ReactNode; detail?: string; children?: ReactNode }) {
+  return (
+    <section
+      aria-label={props.title}
+      className="flex flex-col gap-2.5 rounded-bubble bg-secondary px-3.5 py-3"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-interface font-bold">{props.title}</h3>
+        {props.found}
+      </div>
+      {props.detail !== undefined && (
+        <p className="-mt-1.5 text-meta text-muted-foreground">{props.detail}</p>
+      )}
+      {props.children}
+    </section>
+  );
+}
+
+/** A file or folder Courtyard found, as its path. */
+function Path(props: { children: string }) {
+  return (
+    <span className="truncate font-mono text-caption text-muted-foreground">{props.children}</span>
+  );
+}
+
+/** What setting up adds, in moss: it's done for the owner. */
+function Added(props: { children: ReactNode }) {
+  return <span className="text-meta font-medium text-success">{props.children}</span>;
 }

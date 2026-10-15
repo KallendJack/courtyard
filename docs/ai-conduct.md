@@ -275,9 +275,10 @@ Then how to work, the house process (#205), right after the access line. It's wr
 only Courtyard's, so every code workspace gets it whatever it's on:
 
 > Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than
-> this. Every change works from an issue: when the owner asks for one without an issue, file it first with gh issue
-> create, in a milestone, with a category label and one triage label (the repository's docs/agents/ say which), and
-> have the pull request close it. When a claim on an issue names your session branch, it was made for you, and it's
+> this. Every change works from an issue: when the owner asks for one without an issue, file it first where the
+> repository's docs/agents/issue-tracker.md says its work lives; where it says nothing, with gh issue create, in a
+> milestone, with a category label and one triage label (the repository's docs/agents/ say which). Have the pull
+> request close it, or mark it done in that tracker. When a claim on an issue names your session branch, it was made for you, and it's
 > released for you if the session stops before its pull request, so don't claim that issue again or say Stopped on
 > it.
 > Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know

@@ -92,6 +92,19 @@ export const createConnections = (options: {
       return workspace.ok ? ok(await of(workspace.value)) : workspace;
     },
 
+    /**
+     * Whether Courtyard can make a code workspace its Paper file (#323's setup card): it has none
+     * yet, and Courtyard knows where Paper is.
+     */
+    canMakePaper: async (rawId: string): Promise<boolean> => {
+      const workspace = await codeWorkspace(rawId);
+      return (
+        workspace.ok &&
+        workspace.value.paper === null &&
+        (await paperCommandFor(workspace.value)).ok
+      );
+    },
+
     /** The owner's Paper files, for the Connections sheet to pick from. */
     paperFiles: async (
       rawId: string,

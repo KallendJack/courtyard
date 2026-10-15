@@ -289,10 +289,10 @@ test("the owner closes a session's pull request without merging it, once they've
   await request.post("/api/github/sign-out", { data: {} });
 });
 
-// The setup check (#181): Side project's repository has none of what Matt Pocock's setup skill
-// writes, so its Home offers it, once signed in, as a row of Needs you that opens one approval
-// (#301).
-test("the setup check offers what the repository is missing of Matt's setup, and Allow opens a pull request", async ({
+// The setup card (#181, #323): Side project's repository has none of what Matt Pocock's setup
+// skill writes, so its Home offers it, once signed in, as a row of Needs you that opens one card,
+// every line filled in, and Set up opens a pull request (#301).
+test("the setup card says what moves the repository to the house standard, and Set up opens a pull request", async ({
   page,
   request,
 }) => {
@@ -302,22 +302,91 @@ test("the setup check offers what the repository is missing of Matt's setup, and
   const offer = page
     .getByRole("region", { name: "Needs you" })
     .getByRole("listitem", { name: "Add Matt's setup to this repo?" });
+  await expect(offer).toContainText("things to set up");
   await offer.getByRole("button", { name: "Review" }).click();
-  const card = page.getByRole("region", { name: "Needs your OK" });
-  await expect(card).toContainText("Add Matt's setup to this repo?");
-  await expect(card.getByRole("code")).toContainText("docs/agents/issue-tracker.md");
-  await expect(card.getByRole("code")).toContainText("The Agent skills section in AGENTS.md");
-  await expect(card.getByRole("code")).toContainText("Labels on GitHub: needs-triage");
-  await card.getByRole("button", { name: "Allow" }).click();
+  const card = page.getByRole("dialog", { name: "Set up Matt Pocock's skills" });
+  await expect(card.getByRole("region", { name: "Matt's files" })).toContainText(
+    "issue-tracker.md · triage-labels.md · domain.md",
+  );
+  await expect(card.getByRole("region", { name: "Agent skills section" })).toContainText(
+    "Added to AGENTS.md",
+  );
+  await expect(card.getByRole("region", { name: "Triage labels" })).toContainText("needs-triage");
+  // Side project has its Paper file, and no tracker or glossary of its own: no line for them.
+  await expect(card.getByRole("region", { name: "Paper file" })).toHaveCount(0);
+  await expect(card.getByRole("region", { name: "Where work lives" })).toHaveCount(0);
+  await card.getByRole("button", { name: "Set up · opens a pull request" }).click();
 
+  await expect(card).toBeHidden();
   const done = page.getByRole("region", { name: "Matt's setup" });
   await expect(done.getByRole("link", { name: /^pull request #\d+$/ })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
-  await expect(card).toHaveCount(0);
+  await expect(offer).toHaveCount(0);
 
   await request.post("/api/github/sign-out", { data: {} });
 });
+
+// The setup card on Workbench (#323; Paper, "Tablet · Setup card with Paper file line"): its own
+// tracker, which its instructions say another agent writes, so Keep is recommended with why; its
+// glossary as CONTEXT.md, Rename recommended; the Agent skills section; and a Paper file to make.
+// It's only opened and closed here, so Workbench's Home stays as the tests below expect.
+for (const [device, viewport] of [
+  ["tablet", { width: 950, height: 712 }],
+  ["cover", { width: 400, height: 900 }],
+  ["desktop", { width: 1440, height: 900 }],
+] as const) {
+  test.describe(`the setup card on the ${device}`, () => {
+    test.use({ viewport, ...(device === "desktop" ? {} : { hasTouch: true, isMobile: true }) });
+
+    test("shows every line filled in, the house standard recommended, and a tap changes one", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto("/workspaces/workbench");
+      await page
+        .getByRole("region", { name: "Needs you" })
+        .getByRole("listitem", { name: "Add Matt's setup to this repo?" })
+        .getByRole("button", { name: "Review" })
+        .click();
+      const card = page.getByRole("dialog", { name: "Set up Matt Pocock's skills" });
+
+      const tracker = card.getByRole("region", { name: "Where work lives" });
+      await expect(tracker).toContainText("docs/backlog.md");
+      await expect(tracker.getByRole("radio", { name: "Keep" })).toBeChecked();
+      await expect(tracker).toContainText(
+        "Recommended: the repo says another agent writes this file",
+      );
+      const glossary = card.getByRole("region", { name: "Glossary" });
+      await expect(glossary).toContainText("CONTEXT.md");
+      await expect(glossary.getByRole("radio", { name: "Rename to GLOSSARY.md" })).toBeChecked();
+      await expect(card.getByRole("region", { name: "Agent skills section" })).toContainText(
+        "Added to AGENTS.md",
+      );
+      const paperLine = card.getByRole("region", { name: "Paper file" });
+      await expect(paperLine).toContainText("None yet · optional");
+      await expect(
+        paperLine.getByRole("radio", { name: "Create · Workbench, 4 pages" }),
+      ).toBeChecked();
+      // Its work stays in its tracker, so no labels are made on GitHub, until Move is tapped.
+      await expect(card.getByRole("region", { name: "Triage labels" })).toHaveCount(0);
+      await expect(
+        card.getByRole("button", { name: "Set up · opens a pull request" }),
+      ).toBeInViewport();
+      await shot(page, `${device}-setup-card`);
+      expect(await pageScrollsSideways(page)).toBe(false);
+
+      await tracker.getByText("Move to GitHub issues").click();
+      await expect(tracker.getByRole("radio", { name: "Move to GitHub issues" })).toBeChecked();
+      await expect(card.getByRole("region", { name: "Triage labels" })).toBeVisible();
+      await card.getByRole("button", { name: "Close" }).click();
+      await expect(card).toBeHidden();
+
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+  });
+}
 
 /**
  * Starts a code session through the API whose fake model commits with `subject` (its checks as the
