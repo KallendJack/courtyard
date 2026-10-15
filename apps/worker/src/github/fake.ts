@@ -421,7 +421,7 @@ export const createFakeGitHub = (
       refusedToken(accessToken) ?? ok(commitWorkflows.get(commit) ?? []),
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
-    openIssues: async (accessToken, { repo, label, withComments }) => {
+    openIssues: async (accessToken, { repo, label, forBuild }) => {
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       issuesAsked += 1;
@@ -440,11 +440,11 @@ export const createFakeGitHub = (
               issue.milestone === undefined
                 ? null
                 : (milestoneIn(repo, issue.milestone)?.description ?? null),
-            comments: withComments ? [...issue.comments] : [],
-            blockedBy: withComments
+            comments: forBuild ? [...issue.comments] : [],
+            blockedBy: forBuild
               ? (issue.blockedBy ?? []).flatMap((number) => {
                   const blocker = issueIn(repo, number);
-                  return blocker?.state === "open" ? [{ number, title: blocker.title }] : [];
+                  return blocker?.state === "open" ? [blocker.title] : [];
                 })
               : [],
           })),

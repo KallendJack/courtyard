@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  buildable,
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
   LEAD_BUILDERS,
@@ -13,7 +14,7 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../files.ts";
-import { buildable, type NextUp } from "../next-up/index.ts";
+import type { NextUp } from "../next-up/index.ts";
 import { createOneAtATime } from "../one-at-a-time.ts";
 import {
   type LeadBrief,
@@ -287,7 +288,7 @@ export const createLead = (options: {
         if (model === undefined) break;
         const built = await nextUp.build(workspaceId, issue.number, { ...model, byLead: true });
         if (!built.ok) {
-          // Claimed by someone else meanwhile: the next one, then.
+          // Claimed by someone else meanwhile, or blocked by an open issue (#377): the next one, then.
           if (["claimed", "no-such-issue", "blocked"].includes(built.error.kind)) continue;
           console.error(`The Lead couldn't start #${issue.number}`, built.error);
           break;
@@ -301,7 +302,7 @@ export const createLead = (options: {
       }
       if (!red && building.length === 0 && started === 0 && why === undefined) {
         const unready = issues.value.filter((issue) => !issue.ready).length;
-        const waiting = issues.value.filter((issue) => issue.ready && issue.after !== null).length;
+        const waiting = issues.value.filter((issue) => issue.ready && !buildable(issue)).length;
         const rest = `Nothing ready to build.${
           unready === 0
             ? ""

@@ -1,4 +1,10 @@
-import type { LeadStatus, NextUpIssue, ProviderList, WorkspaceId } from "@courtyard/contract";
+import {
+  buildable,
+  type LeadStatus,
+  type NextUpIssue,
+  type ProviderList,
+  type WorkspaceId,
+} from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { Flame, Play, Zap } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -79,7 +85,7 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   /** The next in order, when it needs grilling: Grill takes the top. */
   const grill = next?.ready === false ? next : undefined;
   /** The first ready issue blocked by no open one: Build's, under Grill when there is one. */
-  const build = props.issues.find((issue) => issue.ready && issue.after === null);
+  const build = props.issues.find(buildable);
   const first = grill ?? build;
   const under = grill === undefined ? undefined : build;
   /** The other ready issues in order, blocked ones in their place. */
@@ -120,7 +126,7 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
                 {shown.map((issue) => (
                   <li
                     key={issue.number}
-                    aria-label={`#${issue.number} ${issue.title}${issue.after === null ? "" : `, after ${issue.after.title}`}`}
+                    aria-label={`#${issue.number} ${issue.title}${issue.after === null ? "" : `, after ${issue.after}`}`}
                   >
                     <a
                       href={issue.url}
@@ -131,22 +137,17 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
                       <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
                         #{issue.number}
                       </span>
-                      {issue.after === null ? (
-                        <span className="min-w-0 grow truncate text-meta font-semibold text-foreground/90">
+                      <span className="flex min-w-0 grow flex-col">
+                        <span className="truncate text-meta font-semibold text-foreground/90">
                           {issue.title}
                         </span>
-                      ) : (
-                        // Blocked by an open issue (#377): no Build, and what it comes after, as
-                        // tall in two lines as a row in one.
-                        <span className="flex min-w-0 grow flex-col">
-                          <span className="truncate text-meta font-semibold text-foreground/90">
-                            {issue.title}
-                          </span>
+                        {/* Blocked by an open issue (#377): what it comes after, in a row as tall as one in one line. */}
+                        {issue.after !== null && (
                           <span className="truncate text-label font-medium text-muted-foreground">
-                            After {issue.after.title}
+                            After {issue.after}
                           </span>
-                        </span>
-                      )}
+                        )}
+                      </span>
                     </a>
                   </li>
                 ))}

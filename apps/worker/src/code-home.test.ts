@@ -290,7 +290,7 @@ describe("Next up (#301)", () => {
     expect(
       NextUp.parse(await response.json()).issues.map((issue) => [issue.number, issue.after]),
     ).toEqual([
-      [3, { number: 2, title: "One loading state" }],
+      [3, "One loading state"],
       [2, null],
       [4, null],
     ]);
@@ -385,7 +385,7 @@ describe("Build on an issue blocked by an open one (#377)", () => {
 
     expect(refused.status).toBe(409);
     expect(await errorOf(refused)).toBe(
-      "That issue waits on #2 One loading state: it's offered to build once that closes.",
+      "That issue waits on One loading state: it's offered to build once that closes.",
     );
     expect(github.commentsOn(onGitHub, 3)).toEqual([]);
     const listed = await request("/api/workspaces/side-project/sessions");
