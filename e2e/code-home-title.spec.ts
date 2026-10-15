@@ -74,6 +74,7 @@ const titleAsTheBoards = async (page: Page) => {
   await expect(sheet.getByRole("button")).toHaveText([
     "Rename",
     "Change icon",
+    "Allowed commandsWhat sessions run without asking",
     "ArchiveHidden, never deleted",
   ]);
 
@@ -90,6 +91,13 @@ const titleAsTheBoards = async (page: Page) => {
   await expect(icons.getByRole("radiogroup", { name: "Icon" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(icons).toBeHidden();
+
+  // Allowed commands (#185): what the owner allowed always, under the ⋯ where the menu was.
+  await (await openMenu(page)).getByRole("button", { name: /^Allowed commands/ }).click();
+  const allowed = page.getByRole("dialog", { name: `Allowed commands · ${NAME}` });
+  await expect(allowed.getByRole("heading", { name: "Allowed commands" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(allowed).toBeHidden();
 
   // Archive: the confirm step, as before.
   await (await openMenu(page)).getByRole("button", { name: /^Archive/ }).click();
