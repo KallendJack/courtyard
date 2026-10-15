@@ -1,15 +1,15 @@
 import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, IconButton } from "@/components/button";
-import { CapsLabel } from "@/components/caps-label";
-import { useDock } from "@/components/handheld";
-import { Page } from "@/components/page";
-import { ThumbButton } from "@/components/thumb-button";
-import { useWakeLock } from "@/components/wake-lock";
+import { Button, IconButton } from "@/components/buttons/button";
+import { ThumbButton } from "@/components/buttons/thumb-button";
+import { useDock } from "@/components/frame/handheld";
+import { useWakeLock } from "@/components/frame/wake-lock";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { Page } from "@/components/layout/page";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
-import type { StandIn } from "../sessions/composer.tsx";
-import type { Steps } from "../sessions/steps.ts";
+import type { Steps } from "../sessions/answer/steps.ts";
+import type { StandIn } from "../sessions/composer/composer.tsx";
 import { readAloud } from "./read-aloud.ts";
 import css from "./step-by-step.css?inline";
 

@@ -27,7 +27,7 @@ _Avoid_: backend, server, API, compute node
 
 **Feature folder**:
 One feature's code, in `features/` in either app, named the same in both where both have it (`features/things/`,
-#453). `docs/overview.md` lists them by job.
+#453). `docs/overview.md` lists them by job, and each has a `README.md` saying what it does (#459).
 _Avoid_: area, domain
 
 **Live copy**:

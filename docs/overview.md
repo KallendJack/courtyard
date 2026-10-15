@@ -30,7 +30,7 @@ Both apps use the folder names most React and Node projects use, and a feature h
 
 | Folder | What's in it |
 |---|---|
-| `features/` | One folder per feature: what it does (`index.ts`) and its part of the API (`routes.ts`) |
+| `features/` | One folder per feature: what it does (`index.ts`), its part of the API (`routes.ts`) and its `README.md` |
 | `providers/` | The one seam to the models: Claude, Codex and the fake look the same to everything else |
 | `prompts/` | Everything a model reads, built from [`ai-conduct.md`](ai-conduct.md) |
 | `auth/` | Who's allowed in and what each may do: `owner`, `sign-ins`, `allow-all`, `workspace-files` |
@@ -45,9 +45,9 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 
 | Folder | What's in it |
 |---|---|
-| `features/` | One folder per screen or part of one |
-| `components/` | Shared pieces: buttons, fields, the page layout, error lines, rich blocks |
-| `hooks/` | Shared `use…` functions (a component's own stay beside it, like `useKept` in `components/kept.tsx`) |
+| `features/` | One folder per screen or part of one, each with its `README.md`; a big one in parts (`sessions/answer/`) |
+| `components/` | Shared pieces, in groups by kind: `layout/`, `buttons/`, `forms/`, `sheets/`, `frame/`, `chat/`, `code/`, `workspace/`, `rich-blocks/` |
+| `hooks/` | Shared `use…` functions (a component's own stay beside it, like `useKept` in `components/layout/kept.tsx`) |
 | `api/` | Talking to the worker (each feature's own calls are in its `api.ts`) |
 | `routes/` | One file per page |
 | `lib/` | Small helpers: joining classes, times, words |
@@ -169,11 +169,12 @@ web app ─► the message's schema ─► worker's readBody ─► the same sch
 | Build | Vite (web app) | `pnpm build` |
 | All of it | One build at a time on the machine (`scripts/builds`) | `pnpm verify` |
 
-`scripts/folders` fails `pnpm check` when a folder isn't one of those above or a feature isn't listed here, so this page
-can't drift from the code.
+`scripts/folders` fails `pnpm check` when a folder isn't one of those above, a feature isn't listed here, a feature has
+no README, or a folder holds more than 15 files, so this page can't drift from the code.
 
 ## Zoom in
 
-- **Every feature, in detail:** [`architecture.md`](architecture.md).
+- **Every feature, in detail:** its own `README.md`, which GitHub shows when the folder opens: what it does, one
+  example, what it uses, what uses it, and its API or screens. [`architecture.md`](architecture.md) links them all.
 - **Why it's built this way:** [`adr/`](adr/).
 - **Courtyard's words:** [`GLOSSARY.md`](../GLOSSARY.md).

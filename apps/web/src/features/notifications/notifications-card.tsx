@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { CapsLabel } from "@/components/caps-label";
-import { FormError } from "@/components/form-error";
-import { CARD } from "@/components/page";
-import { Switch } from "@/components/switch";
+import { FormError } from "@/components/forms/form-error";
+import { Switch } from "@/components/forms/switch";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { CARD } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { loadNotifications, turnOffHere, turnOnHere } from "./api.ts";
 
 /** Where notifications stand on this device. */

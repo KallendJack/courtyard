@@ -5,8 +5,8 @@
 // one-off goes on the allowlist, allowed.json, with the reason it can't be the theme's; an entry
 // nothing needs any more fails too, so the list stays short. It also fails a button greyed out
 // while it works (`disabled={save.busy}`), which shows it's busy instead (#330), and anything that
-// scrolls by itself rather than as the shared scroller, components/scroller.tsx (#420), and a
-// label in capitals written by hand rather than as the shared CapsLabel, components/caps-label.tsx
+// scrolls by itself rather than as the shared scroller, components/layout/scroller.tsx (#420), and a
+// label in capitals written by hand rather than as the shared CapsLabel, components/layout/caps-label.tsx
 // (#242).
 //
 //   node scripts/theme/check.ts [<web app's src folder> <allowlist>]
@@ -97,7 +97,7 @@ const isAllowed = (problem: Problem) =>
  * thumb and its fade, so nothing else sets an overflow that scrolls: a class
  * (`md:overflow-y-auto`), a style (`overflowY: "auto"`) or a stylesheet's rule.
  */
-const SCROLLER = "components/scroller.tsx";
+const SCROLLER = "components/layout/scroller.tsx";
 const SCROLLS_CLASS = /^overflow(?:-[xy])?-(?:auto|scroll)$/;
 const SCROLLS_STYLE = /\boverflow[XY]?\s*:\s*["'](?:auto|scroll)["']/g;
 const SCROLLS_RULE = /\boverflow(?:-[xy])?\s*:\s*(?:auto|scroll)\b/g;
@@ -123,7 +123,7 @@ const scrollsIn = (file: string, text: string): Problem[] => {
  * guide's `label` (12/16, 600, +8%), so nothing else sets capitals: a class (`uppercase`) or a
  * stylesheet's rule.
  */
-const CAPS_LABEL = "components/caps-label.tsx";
+const CAPS_LABEL = "components/layout/caps-label.tsx";
 const CAPS_CLASS = /^uppercase$/;
 const CAPS_RULE = /\btext-transform\s*:\s*uppercase\b/g;
 
@@ -198,13 +198,13 @@ if (greyedWhileBusy.length > 0) {
 }
 if (scrolls.length > 0) {
   console.error(
-    "Scrolls by itself: everything that scrolls is the shared Scroller (components/scroller.tsx), with its thin thumb and fade (#420). Use it, or allow what can't (an element a library makes) in scripts/theme/allowed.json with its reason:",
+    "Scrolls by itself: everything that scrolls is the shared Scroller (components/layout/scroller.tsx), with its thin thumb and fade (#420). Use it, or allow what can't (an element a library makes) in scripts/theme/allowed.json with its reason:",
   );
   for (const { file, line, value } of scrolls) console.error(`  ${file}:${line}: ${value}`);
 }
 if (caps.length > 0) {
   console.error(
-    "Capitals by hand: a section's label is the shared CapsLabel (components/caps-label.tsx), the style guide's label (#242). Use it, give it an option, or allow what isn't a label (a mark in a pill) in scripts/theme/allowed.json with its reason:",
+    "Capitals by hand: a section's label is the shared CapsLabel (components/layout/caps-label.tsx), the style guide's label (#242). Use it, give it an option, or allow what isn't a label (a mark in a pill) in scripts/theme/allowed.json with its reason:",
   );
   for (const { file, line, value } of caps) console.error(`  ${file}:${line}: ${value}`);
 }

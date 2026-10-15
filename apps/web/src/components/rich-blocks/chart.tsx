@@ -1,6 +1,6 @@
 import { Chart } from "@courtyard/contract";
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Scroller } from "@/components/scroller";
+import { Scroller } from "@/components/layout/scroller";
 import { formatValue, type Scale, scaleFor } from "./chart-scale.ts";
 import type { DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";

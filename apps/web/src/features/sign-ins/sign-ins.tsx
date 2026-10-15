@@ -1,16 +1,16 @@
 import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
-import { Button } from "@/components/button";
-import { ConnectionCard, type ConnectionState } from "@/components/connection-card";
-import { CopyButton } from "@/components/copy-button";
-import { FormError } from "@/components/form-error";
-import { PlaceholderRows } from "@/components/kept";
-import { InfoBox, Notice, WaitingDot } from "@/components/notice";
-import { SectionTitle } from "@/components/page";
-import { WebButton } from "@/components/web-link";
+import { Button } from "@/components/buttons/button";
+import { CopyButton } from "@/components/buttons/copy-button";
+import { WebButton } from "@/components/buttons/web-link";
+import { ConnectionCard, type ConnectionState } from "@/components/code/connection-card";
+import { FormError } from "@/components/forms/form-error";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { InfoBox, Notice, WaitingDot } from "@/components/layout/notice";
+import { SectionTitle } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
 import { loadProviders } from "../../api/worker-calls.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import {
   changeGitHub,
   changeSignIn,

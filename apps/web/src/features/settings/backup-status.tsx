@@ -1,6 +1,6 @@
 import type { ContextBackup } from "@courtyard/contract";
-import { createKept, useKept } from "@/components/kept";
-import { InfoBox, Notice } from "@/components/notice";
+import { createKept, useKept } from "@/components/layout/kept";
+import { InfoBox, Notice } from "@/components/layout/notice";
 import { loadBackup } from "../../api/worker-calls.ts";
 import { describeWhen } from "../../lib/when.ts";
 

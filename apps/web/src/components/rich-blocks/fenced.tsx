@@ -7,8 +7,8 @@ import {
   useEffect,
   useState,
 } from "react";
-import { PlaceholderRows } from "@/components/kept";
-import { CodeBlock } from "../../features/sessions/code-block.tsx";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { CodeBlock } from "../../features/sessions/answer/code-block.tsx";
 
 /** What a fenced block's drawing is given. */
 export type DrawingProps = {

@@ -1,6 +1,6 @@
 import type { LeadStatus, WorkspaceId } from "@courtyard/contract";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { mergeInOrder } from "./api.ts";
 
 /**

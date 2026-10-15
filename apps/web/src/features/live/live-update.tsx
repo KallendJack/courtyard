@@ -1,11 +1,11 @@
 import type { LiveUpdateResult, LiveVersion } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
-import { Button } from "@/components/button";
-import { CapsLabel } from "@/components/caps-label";
-import { FormError } from "@/components/form-error";
-import { PlaceholderRows } from "@/components/kept";
-import { InfoBox } from "@/components/notice";
-import { describeProblem } from "../../components/problems.tsx";
+import { Button } from "@/components/buttons/button";
+import { FormError } from "@/components/forms/form-error";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { InfoBox } from "@/components/layout/notice";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { cancelLiveUpdate, loadLive, startLiveUpdate } from "./api.ts";
 import { MainBuildCard, titleOf, type UpdateTaps, useLive, Waiting } from "./main-build.tsx";
 

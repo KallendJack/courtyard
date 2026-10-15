@@ -1,7 +1,7 @@
 import type { ChangeId, DocumentSummary, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
-import { CARD, LIST_ROW, SectionTitle } from "@/components/page";
+import { CARD, LIST_ROW, SectionTitle } from "@/components/layout/page";
 import { describeWhen } from "../../lib/when.ts";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 

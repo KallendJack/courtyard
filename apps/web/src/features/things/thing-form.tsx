@@ -6,14 +6,14 @@ import {
   type ThingSummary,
 } from "@courtyard/contract";
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Button } from "@/components/button";
-import { FileField } from "@/components/file-picker";
-import { FormError } from "@/components/form-error";
-import { SegmentedChoice } from "@/components/segmented-choice";
-import { Select } from "@/components/select";
-import { TextField } from "@/components/text-field";
+import { Button } from "@/components/buttons/button";
+import { FileField } from "@/components/forms/file-picker";
+import { FormError } from "@/components/forms/form-error";
+import { SegmentedChoice } from "@/components/forms/segmented-choice";
+import { Select } from "@/components/forms/select";
+import { TextField } from "@/components/forms/text-field";
 import { useAction } from "@/hooks/use-action";
-import { preparePhoto } from "../sessions/attaching.ts";
+import { preparePhoto } from "../sessions/composer/attaching.ts";
 import { boughtFromWords, boughtInWords, STATUS_CHOICES } from "./words.ts";
 
 const DETAIL_LABELS: Readonly<Record<ThingDetailName, string>> = {

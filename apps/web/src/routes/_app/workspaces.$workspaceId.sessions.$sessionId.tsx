@@ -8,42 +8,46 @@ import {
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Clock, Pencil, Trash2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { AllowingAllStrip } from "@/components/allowing-all";
-import { BackLink } from "@/components/back-link";
-import { BranchStrip } from "@/components/branch-strip";
-import { IconButton } from "@/components/button";
-import { ConfirmStep } from "@/components/confirm-step";
-import { FormError } from "@/components/form-error";
-import { JumpToLatest } from "@/components/jump-to-latest";
-import { PlaceholderRows } from "@/components/kept";
-import { Notice, StatusPill } from "@/components/notice";
-import { OptionsMenu } from "@/components/options-menu";
-import { Page, PageTitle } from "@/components/page";
-import { RenameForm } from "@/components/rename-form";
+import { BackLink } from "@/components/buttons/back-link";
+import { IconButton } from "@/components/buttons/button";
+import { OptionsMenu } from "@/components/buttons/options-menu";
+import { JumpToLatest } from "@/components/chat/jump-to-latest";
+import { AllowingAllStrip } from "@/components/code/allowing-all";
+import { BranchStrip } from "@/components/code/branch-strip";
+import { ConfirmStep } from "@/components/forms/confirm-step";
+import { FormError } from "@/components/forms/form-error";
+import { RenameForm } from "@/components/forms/rename-form";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { Notice, StatusPill } from "@/components/layout/notice";
+import { Page, PageTitle } from "@/components/layout/page";
 import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
 import { renameSession } from "../../api/worker-calls.ts";
-import { describeProblem, Problem } from "../../components/problems.tsx";
-import { Composer, type StandIn } from "../../features/sessions/composer.tsx";
-import type { DocumentsHere } from "../../features/sessions/documents.tsx";
-import { type QueuedMessage, type Turn, useSessionTurns } from "../../features/sessions/events.ts";
+import { describeProblem, Problem } from "../../components/layout/problems.tsx";
+import type { Steps } from "../../features/sessions/answer/steps.ts";
+import { Composer, type StandIn } from "../../features/sessions/composer/composer.tsx";
 import {
   allowAll,
   allowAllOff,
   removeQueued,
   sendMessage,
-} from "../../features/sessions/messages.ts";
-import { useSeen } from "../../features/sessions/seen.ts";
-import { SessionTurns } from "../../features/sessions/session-turns.tsx";
-import type { Steps } from "../../features/sessions/steps.ts";
+} from "../../features/sessions/composer/messages.ts";
+import type { DocumentsHere } from "../../features/sessions/notes/documents.tsx";
+import {
+  type QueuedMessage,
+  type Turn,
+  useSessionTurns,
+} from "../../features/sessions/turns/events.ts";
+import { useSeen } from "../../features/sessions/turns/seen.ts";
+import { SessionTurns } from "../../features/sessions/turns/session-turns.tsx";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
 const Review = lazy(() => import("../../features/pull-requests/review.tsx"));
 /** A code workspace's Lead's strip (#347), loaded only on its chat. */
-const LeadStrip = lazy(() => import("../../features/sessions/lead-strip.tsx"));
+const LeadStrip = lazy(() => import("../../features/sessions/turns/lead-strip.tsx"));
 /** An answer's steps one at a time, in place of the conversation (#241): loaded only then. */
 const StepByStep = lazy(() => import("../../features/step-by-step/step-by-step.tsx"));
 /** Allow all for this task's choice of how long (#428): loaded when it first opens. */
-const AllowAllSheet = lazy(() => import("../../components/allow-all-sheet.tsx"));
+const AllowAllSheet = lazy(() => import("../../components/sheets/allow-all-sheet.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   validateSearch: (search: Record<string, unknown>): { view?: "review" } =>

@@ -7,12 +7,12 @@ import {
   type MessageBox,
   type TalkTarget,
   useLayout,
-} from "@/components/handheld";
+} from "@/components/frame/handheld";
 import { fromWorker, logOut as logOutOnWorker } from "../api/worker.ts";
-import { Problem } from "../components/problems.tsx";
+import { Problem } from "../components/layout/problems.tsx";
 
 /** The Handheld frame (#193), on every screen (#197), loaded after the page so it stays off the first load. */
-const HandheldFrame = lazy(() => import("@/components/handheld-frame"));
+const HandheldFrame = lazy(() => import("@/components/frame/handheld-frame"));
 
 /**
  * Until the frame is there, the room it will take (#271), so the page doesn't jump when it

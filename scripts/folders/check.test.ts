@@ -1,4 +1,4 @@
-// The folders guard (#445, #453), run as `pnpm check` runs it, against two apps and docs made up here.
+// The folders guard (#445, #453, #459), run as `pnpm check` runs it, against two apps and docs made up here.
 //
 //   node --test scripts/folders/check.test.ts
 
@@ -31,18 +31,37 @@ const OVERVIEW = `# At a glance
 You ask:
 `;
 
-const ARCHITECTURE =
-  "- **`sessions/`:** … - **`waiting/`:** … - **`owner/`:** … - **`github/`:** …";
+const READMES = [
+  "worker/features/sessions/README.md",
+  "worker/features/waiting/README.md",
+  "worker/auth/owner/README.md",
+  "worker/integrations/github/README.md",
+  "worker/providers/README.md",
+  "worker/prompts/README.md",
+  "web/features/sessions/README.md",
+];
+
+const ARCHITECTURE = READMES.map(
+  (readme) => `- [\`x\`](../apps/${readme.replace("/", "/src/")})`,
+).join("\n");
 
 const WORKER = [
   "worker/features/sessions/index.ts",
   "worker/features/waiting/index.ts",
   "worker/auth/owner/index.ts",
   "worker/integrations/github/index.ts",
+  "worker/providers/index.ts",
+  "worker/prompts/index.ts",
   "worker/lib/files.ts",
   "worker/worker.ts",
+  ...READMES.filter((readme) => readme.startsWith("worker/")),
 ];
-const WEB = ["web/features/sessions/page.tsx", "web/components/button.tsx", "web/main.tsx"];
+const WEB = [
+  "web/features/sessions/page.tsx",
+  "web/features/sessions/README.md",
+  "web/components/button.tsx",
+  "web/main.tsx",
+];
 
 /** Runs the guard on apps made of these files and on these docs; what it says, and whether it passed. */
 const check = async ({
@@ -75,7 +94,7 @@ const check = async ({
   return { passed: run.status === 0, said: `${run.stdout}${run.stderr}` };
 };
 
-test("passes apps in their own folders, each feature listed and described", async () => {
+test("passes apps in their own folders, each feature listed with its README linked", async () => {
   assert.deepEqual(await check(), { passed: true, said: "" });
 });
 
@@ -107,11 +126,50 @@ test("fails a listed feature with no folder", async () => {
   );
 });
 
-test("fails a worker feature, auth or integrations folder the architecture doesn't describe", async () => {
+test("fails a feature, auth, integrations, providers or prompts folder with no README", async () => {
   const { passed, said } = await check({
-    architecture: "- **`sessions/`:** … - **`waiting/`:** …",
+    files: [...WORKER, ...WEB].filter(
+      (file) =>
+        ![
+          "worker/auth/owner/README.md",
+          "worker/prompts/README.md",
+          "web/features/sessions/README.md",
+        ].includes(file),
+    ),
   });
   assert.equal(passed, false);
-  assert.match(said, /Worker: auth\/owner\/ isn't described in docs\/architecture\.md/);
-  assert.match(said, /Worker: integrations\/github\/ isn't described/);
+  assert.match(said, /Worker: auth\/owner\/ has no README\.md/);
+  assert.match(said, /Worker: prompts\/ has no README\.md/);
+  assert.match(said, /Web: features\/sessions\/ has no README\.md/);
+  assert.doesNotMatch(said, /features\/waiting\//);
+});
+
+test("fails a README the architecture doesn't link", async () => {
+  const { passed, said } = await check({
+    architecture: ARCHITECTURE.split("\n")
+      .filter((line) => !line.includes("auth/owner") && !line.includes("web/src"))
+      .join("\n"),
+  });
+  assert.equal(passed, false);
+  assert.match(
+    said,
+    /Worker: docs\/architecture\.md doesn't link auth\/owner\/README\.md \(as \.\.\/apps\/worker\/src\/auth\/owner\/README\.md\)/,
+  );
+  assert.match(said, /Web: docs\/architecture\.md doesn't link features\/sessions\/README\.md/);
+});
+
+test("fails any folder with more than 15 files, at any depth", async () => {
+  const many = (folder: string, count: number) =>
+    Array.from({ length: count }, (_, at) => `${folder}/part-${at}.tsx`);
+  const { passed, said } = await check({
+    files: [
+      ...WORKER,
+      ...WEB,
+      ...many("web/components", 14),
+      ...many("web/features/sessions/answer", 16),
+    ],
+  });
+  assert.equal(passed, false);
+  assert.match(said, /Web: features\/sessions\/answer\/ has 16 files/);
+  assert.doesNotMatch(said, /components\//);
 });

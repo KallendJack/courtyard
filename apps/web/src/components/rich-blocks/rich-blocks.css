@@ -6,9 +6,9 @@
  * (rich-block.tsx): coming after the theme's, they'd otherwise outrank its classes everywhere.
  */
 @reference "../../styles.css";
-@source "./**/*.tsx";
+@source ".//**/*.tsx";
 /* The shared piece only a rich block uses: a table heading's sort button. */
-@source "../sort-button.tsx";
+@source "../buttons/sort-button.tsx";
 
 :where([data-rich-block]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

@@ -10,18 +10,18 @@ import {
 } from "@courtyard/contract";
 import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { FormError } from "@/components/form-error";
-import { useDock, useFinePointer } from "@/components/handheld";
-import { Page } from "@/components/page";
-import { CodeMark, RepoPicker } from "@/components/repo-picker";
-import { SegmentedChoice } from "@/components/segmented-choice";
-import { TextField, WrappingTextField } from "@/components/text-field";
+import { Button } from "@/components/buttons/button";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { CodeMark, RepoPicker } from "@/components/code/repo-picker";
+import { FormError } from "@/components/forms/form-error";
+import { SegmentedChoice } from "@/components/forms/segmented-choice";
+import { TextField, WrappingTextField } from "@/components/forms/text-field";
+import { useDock, useFinePointer } from "@/components/frame/handheld";
+import { Page } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
 import { addStylesheet } from "@/lib/stylesheet";
 import { addWorkspace, type FromWorker } from "../../api/worker.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { createRepo, loadNewRepoOffer, loadRepos } from "./api.ts";
 import css from "./new-workspace.css?inline";
 

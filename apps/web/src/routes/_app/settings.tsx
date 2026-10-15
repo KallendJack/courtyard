@@ -1,6 +1,6 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import { Page, PageTitle } from "@/components/page";
+import { Page, PageTitle } from "@/components/layout/page";
 import { BackupStatus } from "../../features/settings/backup-status.tsx";
 import { LogOutOthers } from "../../features/settings/log-out-others.tsx";
 import { OwnerContextPanel } from "../../features/settings/owner-context-panel.tsx";
