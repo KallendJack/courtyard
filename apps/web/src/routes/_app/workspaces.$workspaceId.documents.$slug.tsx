@@ -6,15 +6,16 @@ import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
-import { useAction } from "@/lib/use-action";
-import { deleteDocument, renameDocument } from "../../documents/api.ts";
-import { describeProblem, Problem } from "../../problems.tsx";
-import { Answer } from "../../sessions/answer.tsx";
-import { describeWhen } from "../../when.ts";
+import { useAction } from "@/hooks/use-action";
+import { describeProblem, Problem } from "../../components/problems.tsx";
+import { deleteDocument, renameDocument } from "../../features/documents/api.ts";
+import { Answer } from "../../features/sessions/answer.tsx";
+import { describeWhen } from "../../lib/when.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/documents/$slug")({
   // The loader stays in the first load, so its schemas load with the page.
-  loader: ({ params }) => import("../../documents/api.ts").then((api) => api.loadDocument(params)),
+  loader: ({ params }) =>
+    import("../../features/documents/api.ts").then((api) => api.loadDocument(params)),
   component: DocumentPage,
 });
 

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageTitle } from "@/components/page";
-import { NewWorkspaceForm } from "../../new-workspace/new-workspace-form.tsx";
+import { NewWorkspaceForm } from "../../features/new-workspace/new-workspace-form.tsx";
 
 export const Route = createFileRoute("/_app/new-workspace")({
   component: NewWorkspace,

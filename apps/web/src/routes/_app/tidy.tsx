@@ -2,7 +2,7 @@ import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { BackLink } from "@/components/back-link";
 import { PageTitle } from "@/components/page";
-import { TidyReview } from "../../tidy/tidy-review.tsx";
+import { TidyReview } from "../../features/tidy/tidy-review.tsx";
 
 export const Route = createFileRoute("/_app/tidy")({
   // Whose file: a workspace's, named in the address, or the owner context without one.

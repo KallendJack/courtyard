@@ -32,30 +32,55 @@ import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { rememberingLimits } from "./agent/limits/index.ts";
-import { sharedOwnerContext } from "./agent/prompts/index.ts";
-import {
-  createClaudeProvider,
-  createCodexProvider,
-  createFakeProvider,
-  type Provider,
-} from "./agent/providers/index.ts";
-import { createQuickQuestions } from "./agent/quick-questions/index.ts";
-import { quickQuestionRoutes } from "./agent/quick-questions/routes.ts";
-import { type Background, createSessions } from "./agent/sessions/index.ts";
-import { MESSAGE_ROUTES, sessionRoutes } from "./agent/sessions/routes.ts";
-import { changeRoutes } from "./context/changes/routes.ts";
-import { plansDue } from "./context/context-file/index.ts";
+import { createOwner } from "./auth/owner/index.ts";
+import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./auth/owner/routes.ts";
+import { createSignIns } from "./auth/sign-ins/index.ts";
+import { signInRoutes } from "./auth/sign-ins/routes.ts";
+import { type Environment, readSettings } from "./config/settings.ts";
+import { changeRoutes } from "./features/changes/routes.ts";
+import { allowsOf, createCode, namedAs } from "./features/code/index.ts";
+import { createConnections, makePaperFile } from "./features/connections/index.ts";
+import { connectionRoutes } from "./features/connections/routes.ts";
+import { plansDue } from "./features/context-file/index.ts";
 import {
   createContextFolder,
   WORKSPACES_ARRANGED,
   workspaceChange,
-} from "./context/context-folder/index.ts";
-import { documentRoutes } from "./context/documents/routes.ts";
-import { readOwnerContext, startOwnerContext } from "./context/owner-context/index.ts";
-import { THING_PHOTO_ROUTES, thingRoutes } from "./context/things/routes.ts";
-import { createTidying } from "./context/tidy/index.ts";
-import { tidyRoutes } from "./context/tidy/routes.ts";
+} from "./features/context-folder/index.ts";
+import { documentRoutes } from "./features/documents/routes.ts";
+import { createFreshStart } from "./features/fresh-start/index.ts";
+import { freshStartRoutes } from "./features/fresh-start/routes.ts";
+import { createLead } from "./features/lead/index.ts";
+import { leadRoutes } from "./features/lead/routes.ts";
+import { rememberingLimits } from "./features/limits/index.ts";
+import { createLive, runUpdateTask, type UpdateCommand } from "./features/live/index.ts";
+import { createMattSetup } from "./features/matt-setup/index.ts";
+import {
+  createMattSkills,
+  type FetchMattSkills,
+  fetchFromGitHub,
+  type MattPin,
+} from "./features/matt-skills/index.ts";
+import { createNextUp } from "./features/next-up/index.ts";
+import { nextUpRoutes } from "./features/next-up/routes.ts";
+import { createNotifications, type SendPush } from "./features/notifications/index.ts";
+import { notificationRoutes } from "./features/notifications/routes.ts";
+import { sendWebPush } from "./features/notifications/web-push.ts";
+import { readOwnerContext, startOwnerContext } from "./features/owner-context/index.ts";
+import { createPullRequests } from "./features/pull-requests/index.ts";
+import { pullRequestRoutes } from "./features/pull-requests/routes.ts";
+import { createQuickQuestions } from "./features/quick-questions/index.ts";
+import { quickQuestionRoutes } from "./features/quick-questions/routes.ts";
+import { createRedMain } from "./features/red-main/index.ts";
+import { createRepos } from "./features/repos/index.ts";
+import { repoProblem, repoRoutes } from "./features/repos/routes.ts";
+import { type Background, createSessions } from "./features/sessions/index.ts";
+import { MESSAGE_ROUTES, sessionRoutes } from "./features/sessions/routes.ts";
+import { skillList, workspaceSkills } from "./features/skills/index.ts";
+import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
+import { createTidying } from "./features/tidy/index.ts";
+import { tidyRoutes } from "./features/tidy/routes.ts";
+import { createWorkspaceMain } from "./features/workspace-main/index.ts";
 import {
   archiveWorkspace,
   arrangeWorkspaces,
@@ -66,45 +91,20 @@ import {
   listWorkspaces,
   removeAllowed,
   type Workspace,
-} from "./context/workspaces/index.ts";
-import { allowsOf, createCode, namedAs } from "./devflow/code/index.ts";
-import { createGitHubApi, type GitHubApi } from "./devflow/github/api.ts";
-import { createGitHub, KEEP_FRESH_EVERY_MS } from "./devflow/github/index.ts";
-import { gitHubProblem, gitHubRoutes } from "./devflow/github/routes.ts";
-import { createLead } from "./devflow/lead/index.ts";
-import { leadRoutes } from "./devflow/lead/routes.ts";
-import { createMattSetup } from "./devflow/matt-setup/index.ts";
-import {
-  createMattSkills,
-  type FetchMattSkills,
-  fetchFromGitHub,
-  type MattPin,
-} from "./devflow/matt-skills/index.ts";
-import { createNextUp } from "./devflow/next-up/index.ts";
-import { nextUpRoutes } from "./devflow/next-up/routes.ts";
-import { createPullRequests } from "./devflow/pull-requests/index.ts";
-import { pullRequestRoutes } from "./devflow/pull-requests/routes.ts";
-import { createRedMain } from "./devflow/red-main/index.ts";
-import { createRepos } from "./devflow/repos/index.ts";
-import { repoProblem, repoRoutes } from "./devflow/repos/routes.ts";
-import { skillList, workspaceSkills } from "./devflow/skills/index.ts";
-import { createWorkspaceMain } from "./devflow/workspace-main/index.ts";
-import { apiError, contextError, readBody } from "./http.ts";
-import { createConnections, makePaperFile } from "./integrations/connections/index.ts";
-import { connectionRoutes } from "./integrations/connections/routes.ts";
+} from "./features/workspaces/index.ts";
+import { createGitHubApi, type GitHubApi } from "./integrations/github/api.ts";
+import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.ts";
+import { gitHubProblem, gitHubRoutes } from "./integrations/github/routes.ts";
 import { createPaperFiles, type PaperFiles } from "./integrations/paper/files.ts";
-import { createFreshStart } from "./ops/fresh-start/index.ts";
-import { freshStartRoutes } from "./ops/fresh-start/routes.ts";
-import { createLive, runUpdateTask, type UpdateCommand } from "./ops/live/index.ts";
-import { createNotifications, type SendPush } from "./ops/notifications/index.ts";
-import { notificationRoutes } from "./ops/notifications/routes.ts";
-import { sendWebPush } from "./ops/notifications/web-push.ts";
-import { createOwner } from "./ops/owner/index.ts";
-import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./ops/owner/routes.ts";
-import { createSignIns } from "./ops/sign-ins/index.ts";
-import { signInRoutes } from "./ops/sign-ins/routes.ts";
-import { ok, type Result } from "./result.ts";
-import { type Environment, readSettings } from "./settings.ts";
+import { apiError, contextError, readBody } from "./lib/http.ts";
+import { ok, type Result } from "./lib/result.ts";
+import { sharedOwnerContext } from "./prompts/index.ts";
+import {
+  createClaudeProvider,
+  createCodexProvider,
+  createFakeProvider,
+  type Provider,
+} from "./providers/index.ts";
 
 export type { Environment, UpdateCommand };
 

@@ -3,13 +3,13 @@ import { Clock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { alwaysWords } from "@/lib/always-words";
 import { addStylesheet } from "@/lib/stylesheet";
-import type { Waiting } from "../patience.ts";
-import { describeProblem } from "../problems.tsx";
+import type { Waiting } from "../lib/patience.ts";
 import css from "./approval-card.css?inline";
 import { Button } from "./button.tsx";
 import { CapsLabel } from "./caps-label.tsx";
 import { FormError } from "./form-error.tsx";
 import { StatusPill } from "./notice.tsx";
+import { describeProblem } from "./problems.tsx";
 import { ThumbButton } from "./thumb-button.tsx";
 
 // The card's own stylesheet (approval-card.css), added once, when a page first shows one.

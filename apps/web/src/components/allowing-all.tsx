@@ -1,6 +1,6 @@
 import type { AllowingAll } from "@courtyard/contract";
 import { useEffect, useState } from "react";
-import { useAction } from "@/lib/use-action";
+import { useAction } from "@/hooks/use-action";
 import { Button } from "./button.tsx";
 import { FormError } from "./form-error.tsx";
 

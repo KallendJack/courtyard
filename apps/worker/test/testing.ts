@@ -1,0 +1,934 @@
+import { spawnSync } from "node:child_process";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import {
+  ApiError,
+  ATTACHMENTS_FIELD,
+  MESSAGE_FIELD,
+  ModelId,
+  ProviderId,
+  SessionEvent,
+  SessionSummary,
+  SkillName,
+} from "@courtyard/contract";
+import { MattPin } from "@courtyard/skills";
+import type { Hono } from "hono";
+import { type FetchMattSkills, fetchMattCopy } from "../src/features/matt-skills/index.ts";
+import type { Background } from "../src/features/sessions/index.ts";
+import { makeTemporaryFolder, removeFolder } from "../src/lib/files.ts";
+import { git } from "../src/lib/git.ts";
+import { err, ok, type Result } from "../src/lib/result.ts";
+import { SAVE_TOOL_NAME } from "../src/prompts/index.ts";
+import {
+  type CodeTurn,
+  createFakeProvider,
+  type Framing,
+  type Provider,
+  type ToolConnection,
+  type ToolContent,
+} from "../src/providers/index.ts";
+import { createWorker, type Environment } from "../src/worker.ts";
+import type { TestFile } from "./test-files.ts";
+
+export { createFakePush, type FakePush } from "../src/features/notifications/fake.ts";
+export {
+  createFakeGitHub,
+  type FakeGitHub,
+  type FakeIssue,
+} from "../src/integrations/github/fake.ts";
+export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
+
+/** The work test workers started that nobody waits for (titling a session, say), until it settles. */
+const background = new Set<Promise<void>>();
+
+const keepHold: Background = (work) => {
+  background.add(work);
+  void work.finally(() => background.delete(work));
+};
+
+/** How long a test's background work may take to settle once the test has ended. */
+const SETTLE_MS = 5000;
+
+/**
+ * For tests: removes a test's folder once the work its workers started in the background (its
+ * turns, titling, notifying) has settled, since that work writes into it (#226). Throws when it
+ * doesn't settle: a test that ends with a turn still running (one held, or waiting on an approval)
+ * must stop it first (#230).
+ */
+export const removeTestFolder = async (root: string) => {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), SETTLE_MS);
+  });
+  while (background.size > 0) {
+    if ((await Promise.race([Promise.all(background), late])) === "late") {
+      background.clear();
+      throw new Error("The test left a turn running: stop what it starts before it ends.");
+    }
+  }
+  clearTimeout(timer);
+  await rm(root, { recursive: true, force: true });
+};
+
+/**
+ * For tests: the builds lock a test worker on `root` takes (#306), in `root` rather than the
+ * machine's own, so tests never wait on a real build on the same machine, nor hold one up.
+ */
+export const testBuildsLock = (root: string, atOnce = 1) => ({ dir: join(root, "builds"), atOnce });
+
+/**
+ * For tests and the context eval: a worker on the `context` and `data` folders in `root`, with any other options and
+ * settings given, and its builds lock there too. Throws if it won't start, since every test that uses it needs one
+ * that does. Remove `root` with `removeTestFolder`.
+ */
+export const testWorker = (
+  options: { root: string; env?: Environment } & Omit<Parameters<typeof createWorker>[0], "env">,
+) => {
+  const { root, env, ...rest } = options;
+  const worker = createWorker({
+    // Nothing runs in the background unless a test asks for the job.
+    repeat: () => {},
+    background: keepHold,
+    // No Matt Pocock's skills, and never the network, unless a test gives them (mattSkillsIn).
+    mattSkills: null,
+    ...rest,
+    env: {
+      COURTYARD_CONTEXT_DIR: join(root, "context"),
+      COURTYARD_DATA_DIR: join(root, "data"),
+      COURTYARD_BUILDS_LOCK_DIR: testBuildsLock(root).dir,
+      ...env,
+    },
+  });
+  if (!worker.ok) throw new Error(worker.error);
+  return worker.value.app;
+};
+
+/** For tests: git in `folder`, as a test person, for setting things up and looking at them. */
+export const gitIn = (folder: string, ...args: string[]) =>
+  git(folder, args, { config: ["user.name=Test", "user.email=test@example.com"] });
+
+/** For tests: the message an error answer carries. */
+export const errorOf = async (response: Response) => ApiError.parse(await response.json()).error;
+
+/** For tests and the context eval: a request function, like `app.request`. */
+export type Requester = (path: string, init?: RequestInit) => Response | Promise<Response>;
+
+/** For tests: the `name=value` part of the login cookie a response set. */
+export const loginCookie = (response: Response) => {
+  const header = response.headers.get("set-cookie") ?? "";
+  const match = /(courtyard_login=[^;]+)/.exec(header);
+  if (!match?.[1]) throw new Error(`no login cookie (status ${response.status}): ${header}`);
+  return match[1];
+};
+
+/** For tests: sets up the owner on a fresh worker and returns this device's login cookie. */
+export const setUpOwner = async (app: Hono) =>
+  loginCookie(
+    await app.request("/api/setup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "test password" }),
+    }),
+  );
+
+/** For tests: makes requests to `app` as a device logged in with `cookie`. */
+export const requesterFor =
+  (app: Hono, cookie: string): Requester =>
+  (path, init = {}) =>
+    app.request(path, { ...init, headers: { ...init.headers, cookie } });
+
+/**
+ * For tests and the context eval: sets up the owner on a fresh worker and returns a way to make requests as the owner.
+ * Goes through the API like a browser would, so tests still only touch the worker's front door.
+ */
+export const asOwner = async (app: Hono) => requesterFor(app, await setUpOwner(app));
+
+/**
+ * For tests and the context eval: reads a session's server-sent events until one of type `until` arrives (or one that
+ * `until` picks out), then hangs up, like a browser tab closing. Starts after `after`, or after
+ * `lastEventId` sent the way a reconnecting browser sends it.
+ */
+export const followSession = async (
+  request: Requester,
+  read: {
+    sessionId: string;
+    until: SessionEvent["type"] | ((event: SessionEvent) => boolean);
+    after?: number;
+    lastEventId?: number;
+    onEvent?: (event: SessionEvent) => void;
+  },
+) => {
+  const response = await request(
+    `/api/sessions/${read.sessionId}/events?after=${read.after ?? 0}`,
+    read.lastEventId === undefined
+      ? {}
+      : { headers: { "last-event-id": String(read.lastEventId) } },
+  );
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    throw new Error(`not an event stream (status ${response.status})`);
+  }
+  const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
+  if (!reader) throw new Error("no event stream");
+  const { until } = read;
+  const isLast =
+    typeof until === "function" ? until : (event: SessionEvent) => event.type === until;
+
+  const events: SessionEvent[] = [];
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error("stream ended before the event it waited for");
+    buffer += value;
+    const messages = buffer.split("\n\n");
+    buffer = messages.pop() ?? "";
+    for (const message of messages) {
+      const data = message.split("\n").find((line) => line.startsWith("data: "));
+      if (!data) continue;
+      const event = SessionEvent.parse(JSON.parse(data.slice("data: ".length)));
+      read.onEvent?.(event);
+      events.push(event);
+      if (isLast(event)) {
+        await reader.cancel();
+        return events;
+      }
+    }
+  }
+};
+
+/** For tests: the scripted fake provider's model. */
+export const FAKE_MODEL = { provider: "fake", model: "echo" };
+
+/** For tests: the second fake's model, which "please hit Fake two's limit" sends to its usage limit. */
+export const FAKE_TWO_MODEL = { provider: "fake-two", model: "echo" };
+
+/** For tests: a provider that's there but not signed in, as Codex is before the owner signs in. */
+export const signedOutProvider = (): Provider => {
+  const id = ProviderId.parse("away");
+  const capabilities = {
+    readsFiles: false,
+    codes: false,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+    steers: false,
+  };
+  const notSignedIn = { kind: "provider-unavailable", message: "Not signed in." } as const;
+  return {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Away",
+      available: false,
+      reason: "Away isn't signed in.",
+      signedOut: true,
+    }),
+    runTurn: async () => err(notSignedIn),
+    answerOnce: async () => err(notSignedIn),
+  };
+};
+
+/** For tests and the context eval: sends JSON, the way the web app does. */
+export const postJson = (request: Requester, path: string, body: unknown) =>
+  request(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** For tests: sends JSON with any method, such as PUT or DELETE. */
+export const sendJson = (request: Requester, path: string, method: string, body: unknown) =>
+  request(path, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** For tests: starts a session in the garage-gym workspace with the owner's first message. */
+export const startSession = async (request: Requester, text: string, model = FAKE_MODEL) => {
+  const response = await postJson(request, "/api/workspaces/garage-gym/sessions", { text, model });
+  if (response.status !== 201) throw new Error(`starting a session failed with ${response.status}`);
+  return SessionSummary.parse(await response.json());
+};
+
+/** For tests: gives a session a new title, the way the web app does. */
+export const renameSession = (request: Requester, id: string, title: unknown) =>
+  request(`/api/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+
+/**
+ * For tests: a fake provider that holds each turn open until the test lets it go, if ever. `held`
+ * resolves once a turn is being held, so the worker has done all it does before the answer.
+ */
+export const gatedProvider = (options: { steers?: boolean } = {}) => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let holding: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    holding = resolve;
+  });
+  // Held until released, or until the turn is stopped.
+  const heldUntilReleased = (signal: AbortSignal) => {
+    holding();
+    return Promise.race([
+      gate,
+      new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true }),
+      ),
+    ]);
+  };
+  return {
+    // It queues what the owner sends while it's held (#177), unless it's to steer (#252).
+    provider: createFakeProvider({
+      delayMs: 0,
+      beforeReply: heldUntilReleased,
+      steers: options.steers ?? false,
+    }),
+    release,
+    held,
+  };
+};
+
+/**
+ * For tests: one step of a scripted turn: a save the model asks for (its input), a call to another
+ * of Courtyard's tools by name (`call`), or something to do mid-turn.
+ */
+export type ScriptedStep =
+  | Readonly<Record<string, unknown>>
+  | { readonly call: string; readonly input: unknown }
+  /** Text the model writes at that point in its answer. */
+  | { readonly write: string }
+  /** A file in the workspace the model reads at that point, by its path there, reported as read. */
+  | { readonly read: string }
+  | (() => Promise<void>);
+
+/** For tests: what the worker told a model about one of its tool calls: whether it did it, and what it said. */
+export type ToolCallReply = { readonly ok: boolean; readonly reply: string };
+
+const isCall = (step: ScriptedStep): step is { call: string; input: unknown } =>
+  typeof step !== "function" && "call" in step && typeof step.call === "string";
+
+const isWrite = (step: ScriptedStep): step is { write: string } =>
+  typeof step !== "function" && "write" in step && typeof step.write === "string";
+
+const isRead = (step: ScriptedStep): step is { read: string } =>
+  typeof step !== "function" && "read" in step && typeof step.read === "string";
+
+/** For tests: the model the saving provider offers. */
+export const SAVING_MODEL = { provider: "saver", model: "one" };
+
+/**
+ * For tests: a provider that, in each turn, hands the worker the saves and tool calls scripted for
+ * that turn in order (running any function steps between them), keeps the worker's replies, and
+ * answers "Done." With `holdAfterSaves`, it then waits until the turn is stopped.
+ */
+export const savingProvider = (
+  turns: readonly (readonly ScriptedStep[])[],
+  options: {
+    holdAfterSaves?: boolean;
+    /** Whether it codes, so it can work in a code workspace (ADR 0007); it never edits anything. */
+    codes?: boolean;
+  } = {},
+) => {
+  const replies: ToolCallReply[][] = [];
+  const framings: Framing[] = [];
+  const id = ProviderId.parse("saver");
+  const capabilities = {
+    readsFiles: false,
+    codes: options.codes ?? false,
+    usesTools: false,
+    savesContext: true,
+    searchesWeb: false,
+    steers: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Saver",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const turnReplies: ToolCallReply[] = [];
+      const steps = turns[replies.length] ?? [];
+      replies.push(turnReplies);
+      framings.push(input.framing);
+      for (const step of steps) {
+        if (typeof step === "function") await step();
+        else if (isWrite(step)) await input.emit(step.write);
+        else if (isRead(step)) await input.report({ kind: "read-file", path: step.read });
+        else {
+          const reply = await input.callTool(
+            isCall(step)
+              ? { name: step.call, input: step.input }
+              : { name: SAVE_TOOL_NAME, input: step },
+          );
+          const text = reply.content
+            .map((part) => (part.kind === "text" ? part.text : ""))
+            .join("");
+          turnReplies.push({ ok: reply.ok, reply: text });
+        }
+      }
+      if (options.holdAfterSaves) {
+        await new Promise((resolve) =>
+          input.signal.addEventListener("abort", resolve, { once: true }),
+        );
+        return ok(null);
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),
+  };
+  return { provider, replies, framings };
+};
+
+/** For tests: the model the coding provider offers. */
+export const CODING_MODEL = { provider: "coder", model: "one" };
+
+/**
+ * For tests: a provider that codes (ADR 0007). In each turn it asks the worker about each edit
+ * (`edit`, a path) and command (`run`) scripted for it, in order, keeps the worker's answers, and
+ * answers "Done." It never edits or runs anything itself, so any command can be asked about. A
+ * `<branch>` in a command stands for the branch its worktree is on, the session branch.
+ */
+export const codingProvider = (
+  steps: readonly (
+    | { readonly edit: string }
+    /** A command, and what the model says it's for (shown on an approval, #171). */
+    | { readonly run: string; readonly why?: string }
+  )[],
+) => {
+  const answers: Result<null, string>[] = [];
+  const id = ProviderId.parse("coder");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+    steers: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Coder",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const branch = await git(code.worktree, ["branch", "--show-current"]);
+      for (const step of steps) {
+        answers.push(
+          "edit" in step
+            ? await code.edit(step.edit)
+            : await code.run(step.run.replaceAll("<branch>", branch), step.why),
+        );
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The coder only codes." }),
+  };
+  return { provider, answers };
+};
+
+/** For tests: the model the drawing provider offers. */
+export const DRAWING_MODEL = { provider: "drawer", model: "one" };
+
+/**
+ * For tests: one call a drawing provider makes to Paper's connection, and what Paper gives back:
+ * text, an image, or a failure with Paper's own words. Paper itself never runs: this stands in.
+ */
+export type PaperStep = {
+  readonly tool: string;
+  readonly input: Record<string, unknown>;
+  readonly output?: readonly ToolContent[];
+  readonly fails?: string;
+};
+
+/**
+ * For tests: a provider that codes and uses tools (ADR 0023). In each turn it calls Paper's
+ * connection for each step, in order, as Claude Code would: it asks the worker, and only for a call
+ * the worker allowed it hands back what Paper gave (the step's output, or its failure). It keeps
+ * the connections each turn was given, the worker's answers, and what the worker added, and answers
+ * "Drawn."
+ */
+export const drawingProvider = (steps: readonly PaperStep[]) => {
+  const turns: (readonly ToolConnection[])[] = [];
+  const answers: Result<null, string>[] = [];
+  const added: (string | undefined)[] = [];
+  const id = ProviderId.parse("drawer");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: true,
+    savesContext: false,
+    searchesWeb: false,
+    steers: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Drawer",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      turns.push(input.connections);
+      const paper = input.connections.find((connection) => connection.name === "paper");
+      for (const step of steps) {
+        if (paper === undefined) break;
+        const call = { tool: step.tool, input: step.input };
+        const answer = await paper.check(call);
+        answers.push(answer);
+        if (!answer.ok) continue;
+        added.push(
+          await paper.done(
+            step.fails === undefined
+              ? { ...call, ok: true, content: step.output ?? [] }
+              : { ...call, ok: false, content: [{ kind: "text", text: step.fails }] },
+          ),
+        );
+      }
+      await input.emit("Drawn.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The drawer only draws." }),
+  };
+  return { provider, turns, answers, added };
+};
+
+/** For tests: the model the running provider offers. */
+export const RUNNING_MODEL = { provider: "runner", model: "one" };
+
+/**
+ * For tests: a provider that codes and, in each turn, runs each of `commands` itself in the
+ * worktree, in the environment the worker gives a code session's commands, as Claude Code runs
+ * its commands (#99). It doesn't ask the worker first, so it can run what no model may (`gh auth
+ * token`) and show what the environment holds. Keeps whether each one worked and what it printed,
+ * and each turn's framing, the environment the worker gave its commands, and its plugin.
+ */
+export const runningProvider = (
+  commands: readonly { readonly command: readonly string[]; readonly input?: string }[],
+) => {
+  const printed: { ok: boolean; output: string }[] = [];
+  const framings: Framing[] = [];
+  const envs: CodeTurn["env"][] = [];
+  const plugins: CodeTurn["plugin"][] = [];
+  const id = ProviderId.parse("runner");
+  const capabilities = {
+    readsFiles: true,
+    codes: true,
+    usesTools: false,
+    savesContext: false,
+    searchesWeb: false,
+    steers: false,
+  };
+  const provider: Provider = {
+    id,
+    capabilities,
+    status: async () => ({
+      id,
+      label: "Runner",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The runner only codes." });
+      framings.push(input.framing);
+      envs.push(code.env);
+      plugins.push(code.plugin);
+      for (const { command, input: stdin } of commands) {
+        const [program = "", ...args] = command;
+        const ran = spawnSync(program, args, {
+          cwd: code.worktree,
+          env: { ...process.env, ...code.env },
+          input: stdin ?? "",
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 30_000,
+        });
+        printed.push({ ok: ran.status === 0, output: `${ran.stdout ?? ""}${ran.stderr ?? ""}` });
+      }
+      await input.emit("Done.");
+      return ok(null);
+    },
+    answerOnce: async () => err({ kind: "unknown", message: "The runner only codes." }),
+  };
+  return { provider, printed, framings, envs, plugins };
+};
+
+/** For tests: one turn the held coder is working on: where, with what, and how to let it end. */
+export type HeldCodeTurn = {
+  readonly worktree: string;
+  /** What its commands run with as well. */
+  readonly env: CodeTurn["env"];
+  /** Lets the turn end, answering "Done.". */
+  readonly finish: () => void;
+};
+
+/**
+ * For tests: a provider that codes (ADR 0007) and holds each turn open until the test finishes it
+ * (or it's stopped), so several code sessions can be running at once. `turns` lists every turn it
+ * has started, in order, as it starts.
+ */
+export const heldCoder = () => {
+  const turns: HeldCodeTurn[] = [];
+  const { provider: coder } = codingProvider([]);
+  const provider: Provider = {
+    ...coder,
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The coder only codes." });
+      const finished = new Promise<void>((finish) => {
+        turns.push({ worktree: code.worktree, env: code.env, finish });
+        input.signal.addEventListener("abort", () => finish(), { once: true });
+      });
+      await finished;
+      if (!input.signal.aborted) await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, turns };
+};
+
+/** For tests: the model the held builder offers. */
+export const BUILDING_MODEL = { provider: "builder", model: "one" };
+
+/** For tests: a build the held builder started (#281): where, and how to let it end. */
+export type HeldBuild = {
+  readonly worktree: string;
+  /** What the turn's commands run with on top of the worker's environment. */
+  readonly env: CodeTurn["env"];
+  /** Lets the build end, and then the turn, answering "Done.". */
+  readonly finish: () => void;
+};
+
+/**
+ * For tests: a provider that codes (ADR 0007) and, in each turn, asks the worker to run one heavy
+ * check, `command`, as Claude Code's hook does, keeping the worker's answer. The build starts once
+ * the worker allows it and runs until the test finishes it; then it tells the worker the command
+ * has ended, as Claude Code's PostToolUse hook does, and the turn answers "Done.". Stopped, it
+ * ends without telling the worker, as a Claude Code that was stopped mid-command may. `builds`
+ * lists every build started, in order, as it starts.
+ */
+export const heldBuilder = (command = "pnpm verify") => {
+  const builds: HeldBuild[] = [];
+  const answers: Result<null, string>[] = [];
+  const { provider: coder } = codingProvider([]);
+  const id = ProviderId.parse("builder");
+  const provider: Provider = {
+    ...coder,
+    id,
+    status: async () => ({
+      id,
+      label: "Builder",
+      available: true,
+      models: [{ id: ModelId.parse("one"), label: "One", name: "One", efforts: [] }],
+      capabilities: coder.capabilities,
+    }),
+    runTurn: async (input) => {
+      const { code } = input;
+      if (code === null) return err({ kind: "unknown", message: "The builder only builds." });
+      const allowed = await code.run(command);
+      answers.push(allowed);
+      if (!allowed.ok) {
+        await input.emit("Refused.");
+        return ok(null);
+      }
+      await new Promise<void>((finish) => {
+        builds.push({ worktree: code.worktree, env: code.env, finish });
+        input.signal.addEventListener("abort", () => finish(), { once: true });
+      });
+      if (input.signal.aborted) return ok(null);
+      code.ran(command);
+      await input.emit("Done.");
+      return ok(null);
+    },
+  };
+  return { provider, builds, answers };
+};
+
+/**
+ * For tests: writes a skill's folder in `skillsDir`: a SKILL.md with its name and description
+ * (none when it's empty) and `body`, any other files given, and a script when it has one.
+ */
+export const writeSkill = async (
+  skillsDir: string,
+  name: string,
+  options: {
+    description?: string;
+    body?: string;
+    files?: Readonly<Record<string, string>>;
+    scripts?: boolean;
+    /** The format's own `metadata` field: its names and values, as text. */
+    metadata?: Readonly<Record<string, string>>;
+  } = {},
+) => {
+  const folder = join(skillsDir, name);
+  await mkdir(folder, { recursive: true });
+  const description = options.description ?? `What ${name} does.`;
+  const metadata = Object.entries(options.metadata ?? {});
+  const fields = [
+    `name: ${name}`,
+    ...(description === "" ? [] : [`description: ${description}`]),
+    ...(metadata.length === 0
+      ? []
+      : ["metadata:", ...metadata.map(([field, value]) => `  ${field}: ${value}`)]),
+  ];
+  const body = options.body ?? "Do it.";
+  await writeFile(join(folder, "SKILL.md"), `---\n${fields.join("\n")}\n---\n\n${body}\n`);
+  for (const [path, text] of Object.entries(options.files ?? {})) {
+    await mkdir(dirname(join(folder, path)), { recursive: true });
+    await writeFile(join(folder, path), text);
+  }
+  if (options.scripts) {
+    await mkdir(join(folder, "scripts"));
+    await writeFile(join(folder, "scripts", "run.sh"), "echo done\n");
+  }
+};
+
+/** For tests: one of Matt Pocock's skills in a stand-in for his plugin. */
+export type MattTestSkill = {
+  readonly name: string;
+  /** His folder it's in: `engineering` unless it says. */
+  readonly category?: string;
+  /** Only the owner starts it (`disable-model-invocation: true`). */
+  readonly ownerStarts?: boolean;
+  readonly body?: string;
+  readonly files?: Readonly<Record<string, string>>;
+};
+
+/** For tests: the skills a stand-in for Matt's plugin has unless a test says. */
+export const MATT_TEST_SKILLS: readonly MattTestSkill[] = [
+  { name: "implement", ownerStarts: true, body: 'Call the Skill tool with "tdd".' },
+  { name: "to-tickets", ownerStarts: true },
+  { name: "tdd", files: { "tests.md": "Good tests.\n" } },
+  { name: "grilling", category: "productivity" },
+];
+
+/**
+ * For tests: a stand-in for Matt Pocock's plugin at `version` in `folder`, laid out as his is:
+ * `.claude-plugin/plugin.json` listing each skill, his licence, and `skills/<category>/<name>/`.
+ */
+export const writeMattPlugin = async (
+  folder: string,
+  options: { version?: string; skills?: readonly MattTestSkill[]; extra?: object } = {},
+) => {
+  const skills = options.skills ?? MATT_TEST_SKILLS;
+  const pathOf = (skill: MattTestSkill) =>
+    `./skills/${skill.category ?? "engineering"}/${skill.name}`;
+  await mkdir(join(folder, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    join(folder, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "mattpocock-skills",
+      version: options.version ?? "1.3.1",
+      license: "MIT",
+      skills: skills.map(pathOf),
+      ...options.extra,
+    }),
+  );
+  await writeFile(join(folder, "LICENSE"), "MIT License\n\nCopyright (c) 2026 Matt Pocock\n");
+  // His repository has more than the plugin keeps.
+  await writeFile(join(folder, "README.md"), "# Skills\n");
+  for (const skill of skills) {
+    const skillFolder = join(folder, ...pathOf(skill).slice(2).split("/"));
+    await mkdir(skillFolder, { recursive: true });
+    const fields = [
+      `name: ${skill.name}`,
+      `description: What ${skill.name} does.`,
+      ...(skill.ownerStarts ? ["disable-model-invocation: true"] : []),
+    ];
+    await writeFile(
+      join(skillFolder, "SKILL.md"),
+      `---\n${fields.join("\n")}\n---\n\n${skill.body ?? "Do it."}\n`,
+    );
+    for (const [path, text] of Object.entries(skill.files ?? {})) {
+      await mkdir(dirname(join(skillFolder, path)), { recursive: true });
+      await writeFile(join(skillFolder, path), text);
+    }
+  }
+};
+
+/**
+ * For tests: Matt's skills as a worker is given them: the stand-in plugin in `folder` at the
+ * version it says, fetched by copying it (never the network), with `matt.json`'s pin for it. The
+ * checksum is the copy's own unless a test gives another; `fetches` lists each version fetched.
+ */
+export const mattSkillsIn = async (
+  folder: string,
+  options: {
+    version?: string;
+    checksum?: string;
+    picker?: readonly string[];
+    icons?: Readonly<Record<string, string>>;
+  } = {},
+) => {
+  const version = options.version ?? "1.3.1";
+  const fetches: string[] = [];
+  const fetch: FetchMattSkills = async (asked) => {
+    fetches.push(asked.version);
+    await cp(folder, asked.into, { recursive: true });
+    return ok(null);
+  };
+  const ownChecksum = async () => {
+    const kept = await makeTemporaryFolder("courtyard-matt-");
+    if (!kept.ok) throw new Error("no temporary folder");
+    const checksum = await fetchMattCopy({ source: folder, version, fetch, into: kept.value });
+    await removeFolder(kept.value);
+    fetches.length = 0;
+    if (!checksum.ok) throw new Error(checksum.error);
+    return checksum.value;
+  };
+  const pin: MattPin = {
+    source: "https://github.com/mattpocock/skills",
+    version,
+    checksum: options.checksum ?? (await ownChecksum()),
+    picker: (options.picker ?? ["implement", "to-tickets"]).map((name) => SkillName.parse(name)),
+    ...(options.icons === undefined ? {} : { icons: MattPin.shape.icons.parse(options.icons) }),
+  };
+  return { pin, fetch, fetches };
+};
+
+/** For tests: a house skills package in `dir`, with `skills.json` and a stand-in for each skill. */
+export const writeHouseSkills = async (
+  dir: string,
+  skills: readonly { name: string; workspaces: readonly string[]; start?: string; icon?: string }[],
+) => {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "skills.json"), JSON.stringify({ skills }));
+  for (const { name } of skills) await writeSkill(dir, name);
+};
+
+/**
+ * For tests: what docs/ai-conduct.md quotes, from the quote starting with `firstWords` (inside a
+ * list item too): the quoted lines, wrapped lines joined back up, list items and paragraphs kept.
+ * Each `<placeholder>` in it is filled in from `filled`, as the model would read it.
+ */
+export const quotedInGuide = async (
+  firstWords: string,
+  filled: Readonly<Record<string, string>> = {},
+) => {
+  const guide = await readFile(join(import.meta.dirname, "../../../docs/ai-conduct.md"), "utf8");
+  const lines = guide
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimStart());
+  const start = lines.findIndex((line) => line.startsWith(`> ${firstWords}`));
+  if (start === -1) throw new Error(`docs/ai-conduct.md quotes nothing starting "${firstWords}"`);
+  const quoted: string[] = [];
+  for (const line of lines.slice(start)) {
+    if (!line.startsWith(">")) break;
+    quoted.push(line.replace(/^> ?/, ""));
+  }
+  const text = quoted
+    .join("\n")
+    .split("\n\n")
+    .map((paragraph) => paragraph.replace(/\n(?!- )\s*/g, " "))
+    .join("\n\n");
+  return Object.entries(filled).reduce(
+    (quote, [name, value]) => quote.replaceAll(`<${name}>`, value),
+    text,
+  );
+};
+
+/**
+ * For tests: a repository a code workspace works on, as on the worker machine: the owner's
+ * checkout (`repo`) of a remote (`origin`, standing in for GitHub) whose default branch is `main`,
+ * with one commit, `README.md`. Commits made in it are by a test person. The remote is named by
+ * its address on GitHub (`github`, as `owner/name`), which git takes to `origin` on disk.
+ */
+export const codeRepo = async (root: string) => {
+  const origin = join(root, "origin.git");
+  const repo = join(root, "repo");
+  const github = "octo-owner/side-project";
+  await mkdir(origin, { recursive: true });
+  await gitIn(origin, "init", "--quiet", "--bare", "--initial-branch=main");
+  await gitIn(root, "clone", "--quiet", origin, repo);
+  await standInForGitHub(repo, { origin, github });
+  await gitIn(repo, "config", "user.name", "Test");
+  await gitIn(repo, "config", "user.email", "test@example.com");
+  await writeFile(join(repo, "README.md"), "# A project\n");
+  await gitIn(repo, "add", ".");
+  await gitIn(repo, "commit", "--quiet", "-m", "Start");
+  await gitIn(repo, "push", "--quiet", "origin", "main");
+  return { origin, repo, github };
+};
+
+/**
+ * For tests: names `repo`'s remote by its address on GitHub (`github`, as `owner/name`), as a
+ * real clone's is, while git reaches the bare repository `origin` on disk in its place.
+ */
+export const standInForGitHub = async (repo: string, where: { origin: string; github: string }) => {
+  const address = `https://github.com/${where.github}.git`;
+  await gitIn(repo, "remote", "set-url", "origin", address);
+  await gitIn(repo, "config", `url.${where.origin.replaceAll("\\", "/")}.insteadOf`, address);
+};
+
+/**
+ * For tests: makes the `id` workspace in `root`'s context folder a code workspace on `repoPath`,
+ * with anything else in `more` in its `workspace.json`.
+ */
+export const codeWorkspace = async (
+  root: string,
+  id: string,
+  repoPath: string,
+  more: Record<string, unknown> = {},
+) => {
+  await mkdir(join(root, "context", id), { recursive: true });
+  await writeFile(
+    join(root, "context", id, "workspace.json"),
+    JSON.stringify({ mode: "code", repoPath, ...more }),
+  );
+};
+
+/** For tests: the context folder's changes, newest first: each one's title and trailers. */
+export const changesIn = async (contextDir: string) => {
+  const log = await gitIn(contextDir, "log", "--format=%s%x1f%b%x1e");
+  return log
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "")
+    .map((entry) => {
+      const [title = "", body = ""] = entry.split("\x1f");
+      return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
+    });
+};
+
+/**
+ * For tests and the eval: sends a message with files attached, the way the web app does: its JSON
+ * in one field of a multipart form and each file in another.
+ */
+export const postWithFiles = (
+  request: Requester,
+  path: string,
+  message: unknown,
+  files: readonly TestFile[],
+) => {
+  const form = new FormData();
+  form.set(MESSAGE_FIELD, JSON.stringify(message));
+  for (const file of files) {
+    form.append(ATTACHMENTS_FIELD, new File([file.bytes], file.name, { type: file.type }));
+  }
+  return request(path, { method: "POST", body: form });
+};

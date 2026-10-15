@@ -6,5 +6,5 @@
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
-  "include": ["src", "eval"]
+  "include": ["src", "test", "eval"]
 }

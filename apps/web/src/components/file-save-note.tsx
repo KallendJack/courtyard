@@ -1,11 +1,11 @@
 import { Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAction } from "@/lib/use-action";
-import { describeProblem } from "../problems.tsx";
-import type { FromWorker } from "../worker.ts";
+import { useAction } from "@/hooks/use-action";
+import type { FromWorker } from "../api/worker.ts";
 import { Button } from "./button";
 import { ButtonLink } from "./button-link";
 import { NoteRow, NoteWords } from "./note-row";
+import { describeProblem } from "./problems.tsx";
 
 /** The page a saved file opens on: a document's, or a Thing's card. */
 type FilePage = {

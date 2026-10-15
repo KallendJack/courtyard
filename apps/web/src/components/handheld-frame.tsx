@@ -14,8 +14,8 @@ import {
 import { flushSync } from "react-dom";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
-import { LiveUpdate } from "../live/live-update.tsx";
-import { useKeptSessions } from "../sessions/kept-sessions.ts";
+import { LiveUpdate } from "../features/live/live-update.tsx";
+import { useKeptSessions } from "../features/sessions/kept-sessions.ts";
 import { ARRANGE_HELD, ARRANGE_SLOT, type Held, useArrange } from "./arrange.ts";
 import { Button } from "./button.tsx";
 import { ButtonLink } from "./button-link.tsx";

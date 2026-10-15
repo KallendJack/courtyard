@@ -13,10 +13,10 @@
  * workspace's Home (planning-home.css), both with Home's blocks, the home page's tile lines and
  * foot rows (home.css), and step by step's (step-by-step.css).
  */
-@source not "./rich-blocks";
-@source not "./things";
-@source not "./step-by-step";
-@source not "./review";
+@source not "./components/rich-blocks";
+@source not "./features/things";
+@source not "./features/step-by-step";
+@source not "./features/pull-requests";
 @source not "./components/sort-button.tsx";
 @source not "./components/approval-card.tsx";
 @source not "./components/thumb-button.tsx";
@@ -32,10 +32,10 @@
 @source not "./components/sheet-choices.tsx";
 @source not "./components/frame-button.tsx";
 @source not "./components/repo-picker.tsx";
-@source not "./new-workspace";
-@source not "./code-home";
-@source not "./planning-home";
-@source not "./home";
+@source not "./features/new-workspace";
+@source not "./features/code-home";
+@source not "./features/planning-home";
+@source not "./features/home";
 @source not "./components/workspace-tabs.tsx";
 @source not "./components/home-block.tsx";
 @source not "./components/connections-line.tsx";

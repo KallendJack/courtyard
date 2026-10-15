@@ -1,0 +1,378 @@
+import {
+  type PlacedLine,
+  placeName,
+  type RecentChange,
+  type RecentChanges as RecentChangesPage,
+  type WorkspaceId,
+} from "@courtyard/contract";
+import { getRouteApi, Link } from "@tanstack/react-router";
+import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/button";
+import { FormError } from "@/components/form-error";
+import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { NoteRow, NoteWords } from "@/components/note-row";
+import { EmptyState } from "@/components/notice";
+import { useAction } from "@/hooks/use-action";
+import type { ContextPlace } from "../../api/worker.ts";
+import { describeProblem } from "../../components/problems.tsx";
+import { describeWhen } from "../../lib/when.ts";
+import { loadChanges, undoChange } from "./api.ts";
+
+const loggedIn = getRouteApi("/_app");
+
+/** Whose changes these are: a workspace's, or the owner context's for `undefined`. */
+type Whose = WorkspaceId | undefined;
+
+const placeOf = (workspace: Whose): ContextPlace =>
+  workspace === undefined ? { kind: "owner" } : { kind: "workspace", id: workspace };
+
+/** A line's place as an entry names it: the owner context's list leaves out "Owner context". */
+const placeIn = (workspace: Whose, line: PlacedLine) =>
+  placeName(line, { withinOwnerContext: workspace === undefined });
+
+/**
+ * A hand edit's or a tidy's lines: each one put in with the line it replaced in that section, if
+ * any, and the lines that went.
+ */
+const pairedLines = (change: RecentChange) => {
+  const removed = [...change.removed];
+  const pairs = change.added.map((now) => {
+    const index = removed.findIndex((was) => was.section === now.section);
+    const was = index === -1 ? undefined : removed.splice(index, 1)[0];
+    return { now, was };
+  });
+  return { pairs, gone: removed };
+};
+
+/** What a save or an edit says: its label, its line, what it replaced, and a note on it. */
+const wordsFor = (workspace: Whose, change: RecentChange) => {
+  const [added] = change.added;
+  const [removed] = change.removed;
+  if (change.undo === "undone") {
+    const what =
+      added === undefined
+        ? `removed from ${removed === undefined ? "" : placeIn(workspace, removed)}`
+        : `saved to ${placeIn(workspace, added)}`;
+    return { label: "Undone", line: (added ?? removed)?.line, note: `${what}, then undone` };
+  }
+  if (change.kind === "edit" && added !== undefined) {
+    return {
+      label: `Edited in ${placeIn(workspace, added)}`,
+      line: added.line,
+      was: removed?.line,
+      note: "edited by you",
+    };
+  }
+  if (added !== undefined && removed !== undefined) {
+    return {
+      label: `Changed in ${placeIn(workspace, added)}`,
+      line: added.line,
+      was: removed.line,
+    };
+  }
+  if (added !== undefined)
+    return { label: `Saved to ${placeIn(workspace, added)}`, line: added.line };
+  if (removed !== undefined) {
+    return {
+      label: `Removed from ${placeIn(workspace, removed)}`,
+      line: removed.line,
+      struck: true,
+    };
+  }
+  return { label: "Changed" };
+};
+
+/** One line of a hand edit: its section, the line, and what it replaced or that it went. */
+function HandEditLine(props: { section: string; line: string; was?: string; gone?: boolean }) {
+  return (
+    <p>
+      <span className="mr-1.5 text-muted-foreground">{props.section}:</span>
+      <span className={props.gone ? "text-muted-foreground line-through" : "text-foreground"}>
+        {props.line}
+      </span>
+      {props.was !== undefined && <span className="text-muted-foreground"> (was {props.was})</span>}
+    </p>
+  );
+}
+
+/** When it was, and where it came from: its session (with its workspace, in the owner's list). */
+function Meta(props: { workspace: Whose; change: RecentChange; note?: string | undefined }) {
+  const { workspace, change } = props;
+  const workspaces = loggedIn.useLoaderData();
+  const { session } = change;
+  const from =
+    workspace === undefined && session !== undefined && workspaces.kind === "loaded"
+      ? workspaces.data.workspaces.find((w) => w.id === session.workspaceId)?.name
+      : undefined;
+  const parts = [
+    describeWhen(change.at),
+    ...(props.note === undefined ? [] : [props.note]),
+    ...(change.kind === "hand-edit"
+      ? [`in ${workspace === undefined ? "OWNER.md" : "CONTEXT.md"}`]
+      : []),
+    ...(from === undefined ? [] : [from]),
+  ];
+  return (
+    <p className="text-meta/5 text-muted-foreground">
+      {parts.join(" · ")}
+      {session !== undefined && (
+        <>
+          {" · "}
+          <Link
+            to="/workspaces/$workspaceId/sessions/$sessionId"
+            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
+            className="text-foreground underline"
+          >
+            {session.title}
+          </Link>
+        </>
+      )}
+    </p>
+  );
+}
+
+const OPEN = "text-meta/5 text-foreground underline";
+
+/** Open, under a document's or a Thing's entry while it's still there: its page. */
+function OpenLink(props: { workspaceId: WorkspaceId; kind: "document" | "thing"; slug: string }) {
+  const params = { workspaceId: props.workspaceId, slug: props.slug };
+  return props.kind === "document" ? (
+    <Link to="/workspaces/$workspaceId/documents/$slug" params={params} className={OPEN}>
+      Open
+    </Link>
+  ) : (
+    <Link to="/workspaces/$workspaceId/things/$slug" params={params} className={OPEN}>
+      Open
+    </Link>
+  );
+}
+
+/** One entry: the change as a note, when and where it came from, and Undo while it can be. */
+function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: () => void }) {
+  const { workspace, change } = props;
+  const undo = useAction(async () => {
+    const undone = await undoChange(change.id);
+    if (undone.kind !== "loaded") return describeProblem(undone).body;
+    props.onUndone();
+    return undefined;
+  });
+  const muted = change.undo === "undone";
+  const actions =
+    change.undo === "available" ? (
+      <Button
+        variant="quiet"
+        size="xs"
+        onClick={() => void undo.run()}
+        busy={undo.busy}
+        busyLabel="Undoing…"
+      >
+        Undo
+      </Button>
+    ) : undefined;
+
+  if (change.document !== undefined) {
+    const { did, name, was, slug } = change.document;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} document`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <FileText />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          was={did === "renamed" ? was : undefined}
+          muted={muted}
+          struck={did === "deleted"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <OpenLink workspaceId={workspace} kind="document" slug={slug} />
+        )}
+      </NoteRow>
+    );
+  }
+
+  if (change.thing !== undefined) {
+    const { did, name, slug } = change.thing;
+    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} Thing`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <Tag />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          muted={muted}
+          struck={did === "removed"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <OpenLink workspaceId={workspace} kind="thing" slug={slug} />
+        )}
+      </NoteRow>
+    );
+  }
+
+  if (change.kind === "hand-edit" || change.kind === "tidy") {
+    const { pairs, gone } = pairedLines(change);
+    const tidy = change.kind === "tidy";
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : tidy ? <ListChecks /> : <Pencil />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords label={muted ? "Undone" : tidy ? "Tidied" : "Edited by hand"} muted={muted} />
+        {pairs.map(({ now, was }) => (
+          <HandEditLine
+            key={`${now.section}:${now.line}`}
+            section={placeIn(workspace, now)}
+            line={now.line}
+            {...(was === undefined ? {} : { was: was.line })}
+          />
+        ))}
+        {gone.map((line) => (
+          <HandEditLine
+            key={`${line.section}:${line.line}`}
+            section={placeIn(workspace, line)}
+            line={line.line}
+            gone
+          />
+        ))}
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? "undone" : tidy ? "ticked by you" : undefined}
+        />
+      </NoteRow>
+    );
+  }
+
+  const words = wordsFor(workspace, change);
+  return (
+    <NoteRow
+      icon={muted ? <Undo2 /> : change.kind === "edit" ? <Pencil /> : <BookmarkCheck />}
+      muted={muted}
+      tall
+      actions={actions}
+      error={undo.error}
+    >
+      <NoteWords
+        label={words.label}
+        line={words.line}
+        was={words.was}
+        muted={muted}
+        struck={words.struck === true}
+      />
+      <Meta workspace={workspace} change={change} note={words.note} />
+    </NoteRow>
+  );
+}
+
+/** The changes shown, undos left out, and where the next page starts, if there's one. */
+type Listed = {
+  readonly changes: readonly RecentChange[];
+  readonly more: RecentChange["id"] | null;
+};
+
+/** Each place's changes as last shown, for the tab's lifetime: the owner context's by "". */
+const KEPT_CHANGES = createKept<Listed>();
+
+/** A page of changes, with the undos left out: an undo shows as its change marked undone. */
+const listedOf = (page: RecentChangesPage) => ({
+  changes: page.changes.filter((change) => change.kind !== "undo"),
+  more: page.more,
+});
+
+/**
+ * Recent changes to a workspace's context file or the owner context (ADR 0013), newest first,
+ * 30 at a time, with Undo, under its page's title. Loaded once the page is showing, so the page
+ * never waits for git: faint rows keep the list's place the first time, and coming back shows the
+ * list as last shown at once, asked for again quietly. An undo shows as its change marked undone,
+ * so undos aren't listed themselves. Its page gives it a key per place, so a new place starts it
+ * afresh.
+ */
+export function RecentChanges(props: { workspace: Whose }) {
+  const { workspace } = props;
+  const key = workspace ?? "";
+  const [problem, setProblem] = useState<string>();
+  const listed = useKept(KEPT_CHANGES, {
+    key,
+    load: async () => {
+      const page = await loadChanges(placeOf(workspace));
+      setProblem(page.kind === "loaded" ? undefined : describeProblem(page).body);
+      return page.kind === "loaded" ? listedOf(page.data) : undefined;
+    },
+  });
+  const changes = listed?.changes ?? [];
+  const more = listed?.more ?? null;
+
+  const showMore = useAction(async () => {
+    if (more === null) return undefined;
+    const page = await loadChanges(placeOf(workspace), more);
+    if (page.kind !== "loaded") return describeProblem(page).body;
+    const next = listedOf(page.data);
+    KEPT_CHANGES.set(key, { changes: [...changes, ...next.changes], more: next.more });
+    return undefined;
+  });
+
+  /** Shows an undone change as undone, where it is, with every page shown kept. */
+  const markUndone = (id: RecentChange["id"]) =>
+    KEPT_CHANGES.set(key, {
+      changes: changes.map((change) => (change.id === id ? { ...change, undo: "undone" } : change)),
+      more,
+    });
+
+  return (
+    <section aria-label="Recent changes">
+      <FormError message={problem} />
+      {listed === undefined && problem === undefined && <PlaceholderRows count={3} size="tall" />}
+      {listed !== undefined && changes.length === 0 && problem === undefined && (
+        <EmptyState>No changes yet.</EmptyState>
+      )}
+      <ul aria-label="Recent changes" className="space-y-3.5">
+        {changes.map((change) => (
+          <ChangeEntry
+            key={change.id}
+            workspace={workspace}
+            change={change}
+            onUndone={() => markUndone(change.id)}
+          />
+        ))}
+      </ul>
+      {more !== null && (
+        <div className="mt-5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void showMore.run()}
+            busy={showMore.busy}
+            busyLabel="Loading more…"
+          >
+            Show more
+          </Button>
+          <FormError message={showMore.error} />
+        </div>
+      )}
+    </section>
+  );
+}

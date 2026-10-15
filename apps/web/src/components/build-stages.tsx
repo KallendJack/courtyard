@@ -2,7 +2,7 @@ import type { BuildJob } from "@courtyard/contract";
 import { Check, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
-import { elapsedWords } from "../when.ts";
+import { elapsedWords } from "../lib/when.ts";
 import { Scroller } from "./scroller.tsx";
 
 // A CI build in stages (#337; Paper, "Component · Main's build as a pipeline, live"): jobs that

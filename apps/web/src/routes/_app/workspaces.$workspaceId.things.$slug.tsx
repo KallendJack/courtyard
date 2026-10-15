@@ -1,12 +1,13 @@
 import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Page, PageTitle } from "@/components/page";
-import { Problem } from "../../problems.tsx";
-import { ThingCard } from "../../things/thing-card.tsx";
+import { Problem } from "../../components/problems.tsx";
+import { ThingCard } from "../../features/things/thing-card.tsx";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/things/$slug")({
   // The loader stays in the first load, so its schemas load with the page.
-  loader: ({ params }) => import("../../things/api.ts").then((api) => api.loadThing(params)),
+  loader: ({ params }) =>
+    import("../../features/things/api.ts").then((api) => api.loadThing(params)),
   component: ThingPage,
 });
 

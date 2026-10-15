@@ -1,6 +1,6 @@
 import { ArrowUp } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useAction } from "@/lib/use-action";
+import { useAction } from "@/hooks/use-action";
 import { Button, IconButton } from "./button.tsx";
 import { FormError } from "./form-error.tsx";
 import { useDock } from "./handheld.ts";

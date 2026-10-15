@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { pdfOf, pngOf } from "../apps/worker/src/test-files.ts";
+import { pdfOf, pngOf } from "../apps/worker/test/test-files.ts";
 import { openBox } from "./frame.ts";
 
 // Photos and PDFs in a message (#78). The fake says what it was given when a message says

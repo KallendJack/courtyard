@@ -1,0 +1,27 @@
+/*
+ * A planning workspace's Home's own classes (#300), with those of the shared pieces it shows that
+ * are off the first load (its tabs, Home's blocks), like code-home.css. The
+ * theme is by reference: its names, nothing of its own. They apply only inside the Home: coming
+ * after the theme's, they'd otherwise outrank its classes everywhere.
+ */
+@reference "../../styles.css";
+@source "./**/*.tsx";
+@source "../../components/workspace-tabs.tsx";
+@source "../../components/home-block.tsx";
+
+/*
+ * Home fills its place in the page; from a tablet up the middle is the room left between the
+ * pinned header and footer (`Page`'s fill), and Next up fills it down to What Courtyard knows
+ * (#398; Paper, "Planning Home, fixed block sizes").
+ */
+[data-planning-home] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:where([data-planning-home]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
+  @tailwind utilities source(none);
+}

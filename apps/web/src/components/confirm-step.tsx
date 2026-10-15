@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useAction } from "@/lib/use-action";
+import { useAction } from "@/hooks/use-action";
 import { Button } from "./button.tsx";
 import { FormError } from "./form-error.tsx";
 import { Notice } from "./notice.tsx";

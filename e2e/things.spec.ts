@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { pngOf } from "../apps/worker/src/test-files.ts";
+import { pngOf } from "../apps/worker/test/test-files.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 

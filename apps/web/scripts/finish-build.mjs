@@ -35,7 +35,7 @@ const reach = (key, found, avoiding) => {
 // Mermaid's files (over a megabyte gzipped) are left off the install list, so a new build doesn't
 // download them on a phone's data before anyone draws a diagram; the service worker keeps them
 // once one does, as it does any file. They're the files only Mermaid's drawing reaches.
-const MERMAID_DRAWING = "src/rich-blocks/mermaid.tsx";
+const MERMAID_DRAWING = "src/components/rich-blocks/mermaid.tsx";
 if (!manifest[MERMAID_DRAWING]) throw new Error(`${MERMAID_DRAWING} isn't in the build manifest`);
 const entry = Object.keys(manifest).find((key) => manifest[key].isEntry);
 if (!entry) throw new Error("No entry in the build manifest: nothing can be measured");

@@ -11,8 +11,8 @@ import { classes } from "@/lib/classes";
 
 // Loaded once the page shows, so the page never waits for them and they stay off the first load:
 // each tile's line, and the foot rows.
-const TileLine = lazy(() => import("../../home/tile-line.tsx"));
-const HomeFoot = lazy(() => import("../../home/foot.tsx"));
+const TileLine = lazy(() => import("../../features/home/tile-line.tsx"));
+const HomeFoot = lazy(() => import("../../features/home/foot.tsx"));
 
 const loggedIn = getRouteApi("/_app");
 

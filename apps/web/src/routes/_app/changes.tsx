@@ -2,7 +2,7 @@ import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { BackLink } from "@/components/back-link";
 import { Page, PageTitle } from "@/components/page";
-import { RecentChanges } from "../../changes/recent-changes.tsx";
+import { RecentChanges } from "../../features/changes/recent-changes.tsx";
 
 export const Route = createFileRoute("/_app/changes")({
   // Whose changes: a workspace's, named in the address, or the owner context's without one.

@@ -11,7 +11,10 @@ import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fetchFromGitHub, fetchMattCopy } from "../../apps/worker/src/devflow/matt-skills/index.ts";
+import {
+  fetchFromGitHub,
+  fetchMattCopy,
+} from "../../apps/worker/src/features/matt-skills/index.ts";
 import { readMattPin } from "../../packages/skills/index.ts";
 
 const bodyFile = process.argv[2];

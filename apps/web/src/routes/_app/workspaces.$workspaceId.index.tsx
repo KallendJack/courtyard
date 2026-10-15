@@ -9,15 +9,21 @@ import { IconChooser } from "@/components/icon-chooser";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { WorkspaceMenu } from "@/components/workspace-menu";
-import type { Deleted } from "../../planning-home/planning-home.tsx";
-import { describeProblem, Problem } from "../../problems.tsx";
-import { KEPT_SESSIONS, loadSessions, useFreshSessions } from "../../sessions/kept-sessions.ts";
-import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../worker.ts";
+import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../api/worker.ts";
+import { describeProblem, Problem } from "../../components/problems.tsx";
+import type { Deleted } from "../../features/planning-home/planning-home.tsx";
+import {
+  KEPT_SESSIONS,
+  loadSessions,
+  useFreshSessions,
+} from "../../features/sessions/kept-sessions.ts";
 
 // The workspace's Home, code (#301) or planning (#300), comes with its data (workspace-page.ts).
 // A pull request no session opened (#278): loaded only when one is opened.
 const Review = lazy(() =>
-  import("../../review/pull-requests.tsx").then((module) => ({ default: module.PullRequestPage })),
+  import("../../features/pull-requests/pull-requests.tsx").then((module) => ({
+    default: module.PullRequestPage,
+  })),
 );
 
 /**
@@ -43,7 +49,9 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
   },
   // The loader stays in the first load, so it only imports what the page asks for.
   loader: ({ params }) =>
-    import("../../workspace-page.ts").then((page) => page.loadWorkspacePage(params.workspaceId)),
+    import("../../api/workspace-page.ts").then((page) =>
+      page.loadWorkspacePage(params.workspaceId),
+    ),
   component: Workspace,
 });
 

@@ -4,15 +4,15 @@ import {
   AllowedCommands,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { useAction } from "@/hooks/use-action";
 import { alwaysWords } from "@/lib/always-words";
-import { useAction } from "@/lib/use-action";
-import { describeProblem } from "../problems.tsx";
-import { describeWhen } from "../when.ts";
-import { fromWorker, sendJson } from "../worker.ts";
+import { fromWorker, sendJson } from "../api/worker.ts";
+import { describeWhen } from "../lib/when.ts";
 import { Button } from "./button.tsx";
 import { FormError } from "./form-error.tsx";
 import { createKept, PlaceholderRows, useKept } from "./kept.tsx";
 import { placeUnder } from "./place-under.ts";
+import { describeProblem } from "./problems.tsx";
 import { Scroller } from "./scroller.tsx";
 import { useDialog } from "./use-dialog.ts";
 

@@ -1,6 +1,6 @@
 import { MIN_PASSWORD_LENGTH } from "@courtyard/contract";
 import { createFileRoute } from "@tanstack/react-router";
-import { PasswordPage } from "../password-page.tsx";
+import { PasswordPage } from "../features/login/password-page.tsx";
 
 export const Route = createFileRoute("/setup")({
   component: () => (

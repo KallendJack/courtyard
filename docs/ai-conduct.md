@@ -1,7 +1,7 @@
 # AI conduct
 
 The rules for everything Courtyard tells a model, in every scenario. The worker's prompts module
-(`apps/worker/src/agent/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
+(`apps/worker/src/prompts/`) builds all of it from these rules, and providers deliver it unchanged, so Claude, Codex
 and the fake are told the same things. The exceptions are the starter files, templates the worker writes (see below),
 and a code session's provider's own coding instructions, which come first, with Courtyard's appended (Coding, below;
 ADR 0025).
@@ -10,7 +10,7 @@ ADR 0025).
 
 1. Change this guide.
 2. Change the prompts module to match.
-3. Change the provider-seam tests in `apps/worker/src/ai-conduct.test.ts` to match.
+3. Change the provider-seam tests in `apps/worker/test/ai-conduct.test.ts` to match.
 
 Done when the guide, the module and the tests agree and `pnpm verify` passes. A change to what gets saved (Saving
 context lines, below) also runs the eval set, `pnpm eval:context`, against the real model, and its pull request
@@ -260,7 +260,7 @@ lines at a time) or an image, and `search_files` searches the files' text, each 
 Their descriptions say what each does and that only the workspace folder can be reached, nothing more. A path
 outside it, a link leading out of it or a glob that climbs out is refused with the same reason Claude is given
 ("Only files in this workspace's folder can be read."), and each file read shows as an activity. The worker finds
-what the tools ask for (`apps/worker/src/security/workspace-files/`) and the prompts module words it: the lines found, with a
+what the tools ask for (`apps/worker/src/auth/workspace-files/`) and the prompts module words it: the lines found, with a
 note when there's more to read or a search stopped early, or why nothing was found (nothing there, a folder where a
 file was meant, too large, not text or an image, an input the tool doesn't take). The save tool comes alongside them
 on the same terms as Claude's.
@@ -624,7 +624,7 @@ Connections change no context, so a change here doesn't run the eval set.
 
 Built with #89 (ADR 0016). A skill is a folder of instructions in the open Agent Skills format: a `SKILL.md` with a
 name, a description and its instructions, and any files they point to. The worker finds a workspace's skills itself
-(`apps/worker/src/devflow/skills/`): the workspace's own `.agents/skills/` in the context folder, a code workspace's repo's
+(`apps/worker/src/features/skills/`): the workspace's own `.agents/skills/` in the context folder, a code workspace's repo's
 `.agents/skills/`, the context folder's top-level `.agents/skills/`, then the house skills for its kind of workspace
 (`packages/skills`), the more specific winning by name. A skill that fails the format check, or has `scripts/` in a
 planning workspace, is never offered. Every provider, the fake included, gets the same skills the same way.
@@ -1081,7 +1081,7 @@ its history, and nothing else; and a bike's typical parts are offered but saved 
 ## Starter context file
 
 Built with #24. A workspace added from the app starts with a context file from a template (`createWorkspace` in
-`apps/worker/src/context/workspaces/`), no model involved:
+`apps/worker/src/features/workspaces/`), no model involved:
 
 1. The workspace's name as the title.
 2. The **intro line**: what the owner wrote in **What's it for?** when adding the workspace (#127), one line, which
@@ -1096,7 +1096,7 @@ A save that meets a workspace with no context file writes the starter without an
 ## Starter owner context
 
 Built with #31. Settings' Start your owner context writes `OWNER.md` from a template (`startOwnerContext` in
-`apps/worker/src/context/owner-context/`), never over an existing file:
+`apps/worker/src/features/owner-context/`), never over an existing file:
 
 1. "Owner context" as the title.
 2. One line on what goes where: About me holds facts, plans and ideas true across the owner's whole life, one per
