@@ -224,8 +224,10 @@ feature missing from the overview or here.
   Allowed commands. `allowsAll` works out whether Allow all for this task (#428) covers a command off the
   allowlist: never one Allow always could never offer for the same reasons, nor gh's other commands (they act on
   GitHub, outside the session branch), publishing or signing in to a package registry, the machine's services and
-  processes, code given on the line (`python -c`), options before git's or a package manager's command (`git -c …
-  push`), or a runner's (`pnpm exec`, `npx`) whose own command isn't covered. Of the setup files, it covers package
+  processes, options before git's or a package manager's command (`git -c … push`), or a runner's (`pnpm exec`,
+  `npx`) whose own command isn't covered. Code given on the line (`node -e`, `python -c`, #464) is covered, as the
+  same code saved in the worktree is: its text is read word by word for a path outside the worktree or a credential,
+  and node's options that load other code first (`-r`, `--import`) or attach a debugger still ask. Of the setup files, it covers package
   scripts and git hooks, never git's own, `.github`, Claude Code's settings or a package manager's settings
   (`editPlaceIn`'s `all`). It checks commands as they're asked for: a script the session wrote and runs is its own
   code, as it is without Allow all. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
@@ -402,7 +404,8 @@ feature missing from the overview or here.
   or closing, or, for `task`, a pull request opening. `sessions/` keeps each session's as its events are written and
   puts it on the session's summary (`allowingAll`), for its strip and its row in Running. It's never extended while
   on. The Lead keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
-  order with it on) and starts each builder with it until then.
+  order with it on) and starts each builder with it until then. What it covers, code given on the line included
+  (#464), is `code/`'s `allowsAll`.
 - **`workspace-files/`:** the workspace folder as the edge of what a model may look at (ADRs 0003, 0015): the one
   check every provider's reads go through, following symlinks to where a path really leads, and Courtyard's own
   file tools for a provider that has none of its own (Codex, whose shell is off). `prompts/` words what they find.
