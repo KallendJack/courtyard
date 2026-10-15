@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lights: three picks, cover screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Figtree,system-ui,sans-serif;color:#fff}
+a{color:#b994ff}a:hover{color:#9d6bff}
+.pill{height:30px;padding:0 11px;border-radius:99px;background:#161616;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#ddd;flex-shrink:0}
+.count{font-size:11px;color:#8c8c8c}
+.chip{height:26px;padding:0 10px;border-radius:99px;background:#161616;display:flex;align-items:center;font-size:12px;font-weight:600;color:#bbb;flex-shrink:0}
+.chip.on{background:#9d6bff;color:#fff}
+.next{height:32px;padding:0 12px;border-radius:99px;background:#111;border:1px solid #2a2a2a;display:flex;align-items:center;font-size:13px;font-weight:600;color:#ddd;flex-shrink:0}
+.leg{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;font-size:14px;line-height:18px}
+.num{width:20px;height:20px;border-radius:99px;background:#9d6bff;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.flag{font-size:12px;color:#ffb21e;font-weight:600}
+</style>
+</helmet>
+<div style="width: 400px; height: 900px; background: #070707; display: flex; flex-direction: column; box-sizing: border-box">
+  <nav aria-label="Workspaces" style="display: flex; gap: 8px; padding: 14px 12px 10px; align-items: center; overflow: hidden">
+    <div style="width: 44px; height: 44px; border-radius: 14px; background: #161616; flex-shrink: 0"></div>
+    <div style="height: 44px; padding: 0 14px; border-radius: 16px; background: #111; display: flex; align-items: center; font-size: 14px; color: #bbb; flex-shrink: 0">Garage</div>
+    <div style="height: 44px; padding: 0 14px; border-radius: 16px; background: #1c1c1c; box-shadow: 0 0 0 2px #9d6bff; display: flex; align-items: center; font-size: 14px; font-weight: 600; flex-shrink: 0">Mountain biking</div>
+    <div style="height: 44px; padding: 0 14px; border-radius: 16px; background: #111; display: flex; align-items: center; font-size: 14px; color: #bbb; flex-shrink: 0">Courtyard</div>
+  </nav>
+  <main style="flex: 1; min-height: 0; background: #000; border-radius: 18px 18px 0 0; border: 1px solid #1a1a1a; border-bottom: 0; display: flex; flex-direction: column; padding: 16px 14px 10px; gap: 12px; box-sizing: border-box">
+    <header style="display: flex; justify-content: space-between; align-items: flex-start">
+      <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+        <h1 style="margin: 0; font-size: 26px; line-height: 31px; font-weight: 800">Mountain biking</h1>
+        <div style="display: flex; gap: 6px">
+          <span class="pill">+ New</span>
+          <span class="pill">History <span class="count">12</span></span>
+          <span class="pill">Things <span class="count">9</span></span>
+          <span class="pill">Docs <span class="count">3</span></span>
+        </div>
+      </div>
+      <div role="img" aria-label="The bike's photo" style="width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #3a3326, #1d2a22); border: 1px solid #2a2a2a; flex-shrink: 0"></div>
+    </header>
+    <div style="align-self: flex-end; max-width: 80%; background: #1a1a1a; border-radius: 14px 14px 4px 14px; padding: 8px 14px; font-size: 15px; line-height: 21px">Which lights should I get?</div>
+    <section aria-label="Lights: three picks" style="flex: 1; min-height: 0; background: #0b0b0b; border: 1px solid #1f1f1f; border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 4px"><span style="font-size: 15px; font-weight: 700">‹ Lights</span><span style="font-size: 12px; color: #8c8c8c">3 picks · checked today</span></div>
+      <div style="border-radius: 14px; background: #161616; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 0 0 1px #3b2b66;">
+        <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: #b994ff">★ Best value</div>
+        <div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 15px; font-weight: 600">Magicshine Allty 1000 + rear</span><span style="font-size: 15px; font-weight: 700">£55</span></div>
+        <div style="font-size: 13px; color: #bbb">Bright enough for trails, 2 h at full. In the sale, usually £72.</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px"><span style="font-size: 12px; color: #8c8c8c">Checked today</span><a href="#" style="height: 34px; padding: 0 14px; border-radius: 99px; background: #9d6bff; color: #fff; display: flex; align-items: center; font-size: 13px; font-weight: 600; text-decoration: none">Tredz ↗</a></div>
+      </div>
+      <div style="border-radius: 14px; background: #111; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; ">
+        <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: #8c8c8c">Cheapest that does it</div>
+        <div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 15px; font-weight: 600">Lezyne Hecto + Strip</span><span style="font-size: 15px; font-weight: 700">£38</span></div>
+        <div style="font-size: 13px; color: #bbb">Fine for lanes, too dim for night trails.</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px"><span style="font-size: 12px; color: #8c8c8c">Checked today</span><a href="#" style="height: 34px; padding: 0 14px; border-radius: 99px; background: #1c1c1c; color: #fff; display: flex; align-items: center; font-size: 13px; font-weight: 600; text-decoration: none">Halfords ↗</a></div>
+      </div>
+      <div style="border-radius: 14px; background: #111; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; ">
+        <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: #8c8c8c">Worth stretching for</div>
+        <div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 15px; font-weight: 600">Exposure Toro</span><span style="font-size: 15px; font-weight: 700">£150</span></div>
+        <div style="font-size: 13px; color: #bbb">Only if you'll ride at night most weeks.</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px"><span style="font-size: 12px; color: #8c8c8c">3 days ago</span><a href="#" style="height: 34px; padding: 0 14px; border-radius: 99px; background: #1c1c1c; color: #fff; display: flex; align-items: center; font-size: 13px; font-weight: 600; text-decoration: none">Sigma ↗</a></div>
+      </div>
+    </section>
+    <div style="display: flex; gap: 8px; overflow: hidden"><span class="next">Bought the Allty</span><span class="next">Not Tredz</span></div>
+  </main>
+  <footer style="background: #070707; padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; gap: 10px">
+      <button style="flex: 1; height: 46px; border-radius: 12px; border: 0; background: #161616; color: #ddd; font: 700 13px Figtree, sans-serif">Skills</button>
+      <button style="flex: 1; height: 46px; border-radius: 12px; border: 0; background: #161616; color: #ddd; font: 700 13px Figtree, sans-serif">Sonnet</button>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <button aria-label="Type" style="width: 62px; height: 62px; border-radius: 16px; border: 1px solid #1f1f1f; background: #0b0b0b; color: #8c8c8c; font: 700 10px Figtree, sans-serif">TYPE</button>
+      <button style="flex: 1; height: 62px; border-radius: 16px; border: 1px solid #3b2b66; background: #0b0b0b; color: #fff; text-align: left; padding: 0 16px; font-family: Figtree, sans-serif">
+        <div style="font-size: 17px; font-weight: 700">Tap or hold to talk</div>
+        <div style="font-size: 13px; color: #8c8c8c">Mountain biking</div>
+      </button>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

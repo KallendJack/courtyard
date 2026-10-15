@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add to wanted, from an answer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Figtree,system-ui,sans-serif;color:#fff}
+a{color:#b994ff}a:hover{color:#9d6bff}
+.card{border-radius:14px;background:#0b0b0b;border:1px solid #1f1f1f;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.next{height:32px;padding:0 12px;border-radius:99px;background:#111;border:1px solid #2a2a2a;display:flex;align-items:center;font-size:13px;font-weight:600;color:#ddd;flex-shrink:0}
+</style>
+</helmet>
+<div style="width: 400px; height: 900px; background: #070707; display: flex; flex-direction: column; box-sizing: border-box">
+  <main style="flex: 1; min-height: 0; margin-top: 14px; background: #000; border-radius: 18px 18px 0 0; border: 1px solid #1a1a1a; border-bottom: 0; display: flex; flex-direction: column; padding: 16px 16px 10px; gap: 14px; box-sizing: border-box">
+    <header style="display: flex; flex-direction: column; gap: 4px">
+      <a href="#" style="font-size: 13px; color: #b994ff; text-decoration: none; font-weight: 600">‹ Garage</a>
+      <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 800">Shelving for the back wall</h1>
+    </header>
+    <div style="align-self: flex-end; max-width: 80%; background: #1a1a1a; border-radius: 14px 14px 4px 14px; padding: 8px 14px; font-size: 15px; line-height: 21px">What's good value for the back wall, under £200?</div>
+    <div style="font-size: 16px; line-height: 25px; color: #eee">For a 200 cm wall that holds tins, tools and a bike pump, two of these fit best:</div>
+    <div class="card">
+      <div style="flex: 1"><div style="font-size: 15px; font-weight: 600">Steel 5-shelf rack</div><div style="font-size: 13px; color: #8c8c8c">120 cm wide · about £180</div></div>
+      <span style="height: 34px; padding: 0 12px; border-radius: 99px; background: rgba(169,188,133,.14); color: #a9bc85; display: flex; align-items: center; font-size: 13px; font-weight: 600">Added · Wanted</span>
+    </div>
+    <div class="card">
+      <div style="flex: 1"><div style="font-size: 15px; font-weight: 600">Wall track with brackets</div><div style="font-size: 13px; color: #8c8c8c">160 cm · about £140 · moves as you change</div></div>
+      <button style="height: 34px; padding: 0 12px; border-radius: 99px; border: 1.5px solid #9d6bff; background: transparent; color: #fff; font: 600 13px Figtree, sans-serif">+ Add to wanted</button>
+    </div>
+    <div style="font-size: 16px; line-height: 25px; color: #eee">The wall track costs less and grows with the garage, so it's the better value if you're still moving things around.</div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; gap: 8px; overflow: hidden"><span class="next">Find picks for both</span><span class="next">Will it fit by the door?</span></div>
+    <div style="height: 46px; border-radius: 23px; background: #0e0e0e; border: 1px solid #1f1f1f; display: flex; align-items: center; padding: 0 16px; color: #6b6b6b; font-size: 14px">Reply…</div>
+  </main>
+  <footer style="background: #070707; padding: 10px 12px 14px; display: flex; gap: 10px">
+    <button aria-label="Type" style="width: 62px; height: 62px; border-radius: 16px; border: 1px solid #1f1f1f; background: #0b0b0b; color: #8c8c8c; font: 700 10px Figtree, sans-serif">TYPE</button>
+    <button style="flex: 1; height: 62px; border-radius: 16px; border: 1px solid #3b2b66; background: #0b0b0b; color: #fff; text-align: left; padding: 0 16px; font-family: Figtree, sans-serif">
+      <div style="font-size: 17px; font-weight: 700">Tap or hold to talk</div>
+      <div style="font-size: 13px; color: #8c8c8c">Garage</div>
+    </button>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":400,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
