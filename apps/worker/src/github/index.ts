@@ -581,13 +581,13 @@ export const createGitHub = (options: {
     },
 
     /**
-     * The open issues in `repo` with `label`, with their milestones and, asked `withComments`,
-     * their comments (#301).
+     * The open issues in `repo` with `label`, with their milestones and, asked `forBuild`, their
+     * comments (#301) and the open issues they're blocked by (#377).
      */
     openIssues: async (find: {
       repo: string;
       label: string;
-      withComments: boolean;
+      forBuild: boolean;
     }): Promise<Result<readonly FoundIssue[], GitHubProblem>> => {
       const signedIn = await tokenFor(api);
       if (!signedIn.ok) return signedIn;

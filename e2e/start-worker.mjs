@@ -352,8 +352,9 @@ const github = createFakeGitHub({
     "octo-owner/stacks",
     ...Array.from({ length: 58 }, (_, i) => `octo-owner/archive-${i + 1}`),
   ],
-  // Workbench's ready issues (#301): in milestones, one claimed by a comment, and more than
-  // Next up shows before More; and first on the Build order line, one that needs grilling (#363).
+  // Workbench's ready issues (#301): in milestones, one claimed by a comment, one blocked by
+  // another (#377), and more than Next up shows before More; and first on the Build order line,
+  // one that needs grilling (#363).
   issues: {
     "octo-owner/workbench": [
       {
@@ -369,6 +370,13 @@ const github = createFakeGitHub({
         title: "Claimed by a helper",
         milestone: "4 · Code workspaces",
         comments: ["Building this: Claude Code helper (branch 199-claimed)."],
+      },
+      // Blocked by an open one (#377): its row says what it comes after, and it has no Build.
+      {
+        number: 283,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        blockedBy: [251],
       },
       { number: 255, title: "Paste images on the Fold", milestone: "5 · Tablet hub and voice" },
       ...Array.from({ length: 9 }, (_, i) => ({

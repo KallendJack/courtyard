@@ -44,6 +44,7 @@ export {
 export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
 export {
   BuildIssue,
+  buildable,
   GitHubLink,
   LEAD_BUILDERS,
   LeadBuilder,

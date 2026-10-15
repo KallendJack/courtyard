@@ -231,6 +231,53 @@ describe("Run the build order (#347)", () => {
     expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
   });
 
+  it("rests when what's left waits on an open issue, saying how many (#377)", async () => {
+    const { github, request } = await signedInWith([
+      { number: 22, title: "One loading state", milestone: "4 · Code workspaces" },
+      {
+        number: 23,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        blockedBy: [22],
+      },
+    ]);
+    github.comment(onGitHub, 22, "Building this: Claude Code helper (22-thing), next in order");
+
+    await run(request);
+
+    expect(await leadOf(request)).toMatchObject({
+      state: "resting",
+      why: "Nothing ready to build. 1 issue waits on another still open.",
+      building: [],
+    });
+  });
+
+  it("starts no builder on an issue blocked by an open one (#377)", async () => {
+    const { github, request } = await signedInWith([
+      { number: 22, title: "One loading state", milestone: "4 · Code workspaces" },
+      {
+        number: 23,
+        title: "Nothing moves once drawn",
+        milestone: "4 · Code workspaces",
+        blockedBy: [22],
+      },
+      {
+        number: 24,
+        title: "Buttons working",
+        milestone: "4 · Code workspaces",
+        blockedBy: [22],
+      },
+    ]);
+
+    await run(request);
+
+    const lead = await leadOf(request);
+    expect(lead.building.map((builder) => builder.issue)).toEqual([22]);
+    expect(lead.next).toEqual([]);
+    expect(github.commentsOn(onGitHub, 23)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+  });
+
   it("rests when nothing is ready to build, saying how many need a board or a grill", async () => {
     const { request } = await signedInWith(
       [

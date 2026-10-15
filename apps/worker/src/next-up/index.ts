@@ -1,5 +1,6 @@
 import {
   type BuildIssue,
+  buildable,
   type NextUpIssue,
   SESSION_TITLE_MAX_LENGTH,
   type SessionSummary,
@@ -47,6 +48,8 @@ export type NextUpProblem =
   | { readonly kind: "no-such-issue" }
   /** Someone claimed the issue since the page showed it. */
   | { readonly kind: "claimed" }
+  /** The issue is blocked by an open one (#377): it's built once that closes. */
+  | { readonly kind: "blocked"; readonly after: string }
   /** The issue isn't one Next up offers Grill on: ready, closed, or off its Build order line. */
   | { readonly kind: "nothing-to-grill" }
   | { readonly kind: "session"; readonly error: SessionError };
@@ -161,9 +164,9 @@ export const createNextUp = (options: {
    */
   const read = async (repo: string): Promise<Result<NextUpIssue[], NextUpProblem>> => {
     const [issues, pulls, ...unready] = await Promise.all([
-      github.openIssues({ repo, label: READY_LABEL, withComments: true }),
+      github.openIssues({ repo, label: READY_LABEL, forBuild: true }),
       github.openPullRequestTexts({ repo }),
-      ...GRILL_LABELS.map((label) => github.openIssues({ repo, label, withComments: false })),
+      ...GRILL_LABELS.map((label) => github.openIssues({ repo, label, forBuild: false })),
     ]);
     if (!issues.ok) return err({ kind: "github", problem: issues.error });
     if (!pulls.ok) return err({ kind: "github", problem: pulls.error });
@@ -187,12 +190,13 @@ export const createNextUp = (options: {
       ...toGrill.map((issue) => ({ issue, ready: false })),
     ]
       .sort((a, b) => inOrder(a.issue, b.issue))
-      .map(({ issue: { number, title, url, milestone }, ready }) => ({
+      .map(({ issue: { number, title, url, milestone, blockedBy }, ready }) => ({
         number,
         title,
         url,
         milestone,
         ready,
+        after: ready ? (blockedBy[0] ?? null) : null,
       }));
     kept.set(repo, { at: now(), issues: offered });
     return ok(offered);
@@ -233,8 +237,11 @@ export const createNextUp = (options: {
       const fresh = await read(repo);
       if (!fresh.ok) return fresh;
       const issue = fresh.value.find((each) => each.number === number && each.ready);
+      if (issue !== undefined && issue.after !== null) {
+        return err({ kind: "blocked", after: issue.after });
+      }
       if (issue === undefined) {
-        const any = await github.openIssues({ repo, label: READY_LABEL, withComments: false });
+        const any = await github.openIssues({ repo, label: READY_LABEL, forBuild: false });
         const there = any.ok && any.value.some((each) => each.number === number);
         return err({ kind: there ? "claimed" : "no-such-issue" });
       }
@@ -263,7 +270,7 @@ export const createNextUp = (options: {
       const found = await repoOf(rawId);
       if (!found.ok) return undefined;
       const fresh = await read(found.value.repo);
-      return fresh.ok && fresh.value.some((each) => each.number === number && each.ready)
+      return fresh.ok && fresh.value.some((each) => each.number === number && buildable(each))
         ? number
         : undefined;
     },
