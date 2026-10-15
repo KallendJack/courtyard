@@ -95,11 +95,11 @@ export default function TileLine(props: {
   const named = newestSessionNeed(needs);
   const only = needs.length === 1 ? named?.session.id : undefined;
   useEffect(() => onOpens(only), [onOpens, only]);
-  if (list === undefined) return <PlaceholderRows count={1} size="label" />;
+  if (list === undefined) return <PlaceholderRows count={1} size="meta" />;
 
   if (needs.length === 0) {
     return (
-      <span className="block truncate text-label font-medium text-muted-foreground">
+      <span className="block truncate text-meta font-medium text-muted-foreground">
         {usedWords(sessions)}
       </span>
     );
@@ -118,7 +118,7 @@ export default function TileLine(props: {
     <>
       <span
         className={classes(
-          "block truncate text-label font-semibold",
+          "block truncate text-meta font-semibold",
           gold ? "text-warning" : "text-primary-text",
         )}
       >

@@ -118,10 +118,10 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[]; first: Next
                       rel="noreferrer"
                       className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
                     >
-                      <span className="w-8.5 shrink-0 text-label font-bold text-placeholder">
+                      <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
                         #{issue.number}
                       </span>
-                      <span className="min-w-0 grow truncate text-label font-semibold text-foreground/90">
+                      <span className="min-w-0 grow truncate text-meta font-semibold text-foreground/90">
                         {issue.title}
                       </span>
                     </a>
@@ -287,7 +287,7 @@ function StartOnIssue(props: {
       className={classes(
         "hover:underline",
         props.small
-          ? "truncate text-label font-semibold text-foreground/90"
+          ? "truncate text-meta font-semibold text-foreground/90"
           : "text-sm/4.5 font-bold",
       )}
     >
@@ -314,7 +314,7 @@ function StartOnIssue(props: {
         <div className="flex items-center gap-2.5">
           <div className="flex min-w-0 grow flex-col gap-0.5">
             {title}
-            <p className={classes("text-label font-medium", look.status)}>Ready</p>
+            <p className={classes("text-meta font-medium", look.status)}>Ready</p>
           </div>
           {!confirming && (
             <Button variant={look.variant} size="xs" onClick={() => setConfirming(true)}>
@@ -326,7 +326,7 @@ function StartOnIssue(props: {
       ) : (
         <div className="flex flex-col gap-0.5">
           {title}
-          <p className={classes("text-label font-medium", look.status)}>{status}</p>
+          <p className={classes("text-meta font-medium", look.status)}>{status}</p>
         </div>
       )}
       {confirming ? (

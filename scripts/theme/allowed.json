@@ -8,5 +8,15 @@
     "file": "sessions/maths.css",
     "value": "overflow-x: auto",
     "reason": "A centred formula's box is KaTeX's own element, made inside the answer's Markdown, so it can't be the shared Scroller; it has the same thin thumb by its class (scroll-thin)."
+  },
+  {
+    "file": "components/frame-button.tsx",
+    "value": "uppercase",
+    "reason": "A key's name on the frame's bottom bar (Type, Cancel), under its icon at the rail's own size: a key, not a section's label."
+  },
+  {
+    "file": "components/lead-mark.tsx",
+    "value": "uppercase",
+    "reason": "The Lead's mark, LEAD in a violet pill before its row: a mark, not a section's label."
   }
 ]

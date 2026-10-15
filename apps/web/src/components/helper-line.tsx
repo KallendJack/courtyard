@@ -70,7 +70,7 @@ export function HelperLine(props: {
         >
           {props.name}
         </span>
-        <span className={classes("shrink-0 text-label font-semibold", STATUS[standing])}>
+        <span className={classes("shrink-0 text-meta font-semibold", STATUS[standing])}>
           {props.status}
         </span>
       </button>

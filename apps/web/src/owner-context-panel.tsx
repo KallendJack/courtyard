@@ -6,6 +6,7 @@ import {
 import { Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
+import { CapsLabel } from "@/components/caps-label";
 import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
 import { FormError } from "@/components/form-error";
 import { StatusPill } from "@/components/notice";
@@ -91,9 +92,7 @@ export function OwnerContextPanel(props: {
             <p className="mt-4 text-body whitespace-pre-line">{ownerContext.intro}</p>
           )}
           <div className="mt-5 space-y-6">
-            <p className="text-meta font-medium tracking-wide text-muted-foreground uppercase">
-              About me
-            </p>
+            <CapsLabel tone="muted">About me</CapsLabel>
             <FactsPlansIdeas {...ownerContext} />
             <ContextLines
               title="How to answer me"

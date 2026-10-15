@@ -1,6 +1,7 @@
 import type { LiveUpdateResult, LiveVersion } from "@courtyard/contract";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/button";
+import { CapsLabel } from "@/components/caps-label";
 import { FormError } from "@/components/form-error";
 import { PlaceholderRows } from "@/components/kept";
 import { InfoBox } from "@/components/notice";
@@ -166,13 +167,13 @@ function UpToDate(props: { running: LiveVersion }) {
       aria-label="Up to date"
       className="flex h-12.5 items-center gap-3.5 rounded-bubble border bg-surface pr-3.5 pl-3.5"
     >
-      <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase max-sm:hidden">
+      <CapsLabel tone="muted" inline className="shrink-0 max-sm:hidden">
         Up to date
-      </span>
+      </CapsLabel>
       <span className="min-w-0 grow truncate text-meta font-semibold text-muted-foreground">
         {words} · {commit}
       </span>
-      <span className="shrink-0 text-label font-semibold text-success">Live</span>
+      <span className="shrink-0 text-meta font-semibold text-success">Live</span>
     </section>
   );
 }

@@ -61,7 +61,7 @@ export function RadioRow(props: {
         {props.label}
       </span>
       {props.note !== undefined && (
-        <span className="shrink-0 text-label font-semibold text-primary-text">{props.note}</span>
+        <span className="shrink-0 text-meta font-semibold text-primary-text">{props.note}</span>
       )}
     </label>
   );

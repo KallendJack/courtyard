@@ -84,7 +84,7 @@ export function ConnectionsLine(props: {
       aria-haspopup="dialog"
       aria-expanded={props.open}
       onClick={props.onOpen}
-      className="flex h-5 w-fit max-w-full min-w-0 items-center gap-2 rounded-sm text-label font-semibold text-foreground/80 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex h-5 w-fit max-w-full min-w-0 items-center gap-2 rounded-sm text-meta font-semibold text-foreground/80 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <span className="text-muted-foreground">
         <GitHubMark size={14} />

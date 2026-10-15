@@ -1,4 +1,5 @@
 import type { WorkspaceId, WorkspaceMain } from "@courtyard/contract";
+import { CapsLabel } from "@/components/caps-label";
 import { createKept, PlaceholderRows, useKept } from "@/components/kept";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { MAIN_RUNNING_EVERY_MS, MainBuildCard, useLive } from "../live/main-build.tsx";
@@ -42,9 +43,9 @@ function NoBuild() {
       aria-label="Main"
       className="flex h-12.5 items-center gap-3.5 rounded-bubble border bg-surface pr-2.5 pl-3.5"
     >
-      <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+      <CapsLabel tone="muted" inline className="shrink-0">
         Main
-      </span>
+      </CapsLabel>
       <span className="truncate text-meta font-medium text-muted-foreground">No build yet</span>
     </section>
   );

@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/button";
+import { CapsLabel } from "@/components/caps-label";
 import { useDock } from "@/components/handheld";
 import { Page } from "@/components/page";
 import { ThumbButton } from "@/components/thumb-button";
@@ -163,7 +164,7 @@ export default function StepByStep(props: {
         <section aria-label="Step by step" className="flex flex-1 flex-col gap-4.5 pt-6 pb-4">
           <div className="flex items-center gap-3.5">
             {/* Short of room, what they're for gives way, never how far along. */}
-            <p className="flex min-w-0 text-label font-bold tracking-label whitespace-pre text-muted-foreground uppercase">
+            <CapsLabel tone="muted" className="flex min-w-0 whitespace-pre">
               {/* A no-break space, which the truncated span's end keeps. */}
               {about !== undefined && (
                 <span className="truncate">
@@ -173,7 +174,7 @@ export default function StepByStep(props: {
               <span className="shrink-0">
                 Step {at + 1} of {steps.length}
               </span>
-            </p>
+            </CapsLabel>
             <div aria-hidden className="flex min-w-12 flex-1 gap-1.5">
               {steps.map((_, index) => (
                 <span

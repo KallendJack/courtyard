@@ -21,11 +21,11 @@ export function WorkingLine(props: { since: string; doing: Doing }) {
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="text-sm/4.5 font-extrabold text-primary-text">Working</span>
-          <span className="font-mono text-label wrap-anywhere text-foreground/85">
+          <span className="font-mono text-meta wrap-anywhere text-foreground/85">
             {doingWords(props.doing)}
           </span>
         </span>
-        <span className="shrink-0 font-mono text-label text-muted-foreground">{elapsed}</span>
+        <span className="shrink-0 font-mono text-meta text-muted-foreground">{elapsed}</span>
       </div>
     </ChatFlowScope>
   );

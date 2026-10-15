@@ -66,7 +66,7 @@ export default function IconSheet(props: {
           );
         })}
       </div>
-      <p className="text-label font-semibold text-placeholder">
+      <p className="text-meta font-semibold text-placeholder">
         A small set of plain line icons, the same style everywhere.
       </p>
       <FormError message={save.error} />

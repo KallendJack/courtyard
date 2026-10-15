@@ -89,27 +89,27 @@
 
   /*
    * The type scale, by role, as the style guide names them (Paper, "Style guide · Handheld",
-   * 02 Type), at the sizes the screens use today. Where the guide says otherwise its size is
-   * noted: a design question (#232), answered by changing that line here. Below the guide's
-   * roles, the ones it doesn't have yet. Tailwind's own steps (sm 14, base 16, lg 18 up) are for
+   * 02 Type). The app keeps its sizes and the guide follows them (#242): its first six roles,
+   * then the further ones #232 found. Tailwind's own steps (sm 14, base 16, lg 18 up) are for
    * what has no role yet.
    */
-  --text-title: 26px; /* a page's title; the guide's "Workspace name" is 38/44 */
+  --text-title: 26px; /* a page's title, 800 */
   --text-title--line-height: 31px;
-  --text-answer: 16px; /* guide: 18/28 */
+  --text-answer: 16px;
   --text-answer--line-height: 26px;
-  --text-message: 15px; /* the owner's, on a phone; guide: 17/24 */
+  --text-message: 15px; /* the owner's, on a phone */
   --text-message--line-height: 23px;
   --text-interface: 15px;
   --text-interface--line-height: 20px;
-  --text-meta: 13px; /* guide: line height 16 */
+  --text-meta: 13px; /* a detail line: a row's second line, a status, a note */
   --text-meta--line-height: 18px;
-  --text-label: 12px; /* in capitals, with tracking-label, a section label */
+  /* A section's label in capitals, CapsLabel alone (600, tracking-label); and what has fixed
+     room: a tab's count, a badge, a rail tile's name, a chart's axis. */
+  --text-label: 12px;
   --text-label--line-height: 16px;
-  /* Not on the guide yet. */
   --text-body: 15px; /* a page's intro, a paragraph */
   --text-body--line-height: 23px;
-  --text-caption: 11px; /* a card's caps label, a rail disc's caption, a branch or path in mono */
+  --text-caption: 11px; /* the Lead's mark, a rail disc's caption, a branch or path in mono */
   --text-caption--line-height: 16px;
   --text-rail: 10px; /* a key's label on the frame's bottom bar */
   --text-rail--line-height: 12px;

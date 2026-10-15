@@ -145,6 +145,41 @@ export const Lines = () => (
   assert.deepEqual(allowed, { passed: true, said: "" });
 });
 
+test("fails a label in capitals written by hand, outside the shared CapsLabel (#242)", async () => {
+  await source({
+    "styles.css": THEME,
+    "components/caps-label.tsx": `const LOOK = "text-label font-semibold tracking-label uppercase";`,
+    "routes/workspace.tsx": `// A label in uppercase, the old way (#232).
+export const Above = () => (
+  <>
+    <span className="text-meta/4 font-semibold tracking-label text-muted-foreground uppercase" />
+    <p className="md:uppercase" />
+    <CapsLabel tone="muted">Workspace</CapsLabel>
+  </>
+);`,
+    "sessions/notes.css": `/* text-transform: uppercase would shout. */
+.note { text-transform: uppercase; }`,
+  });
+  const { passed, said } = await check();
+  assert.equal(passed, false);
+  assert.match(said, /CapsLabel/);
+  for (const value of [
+    "routes/workspace.tsx:4: uppercase",
+    "routes/workspace.tsx:5: md:uppercase",
+    "sessions/notes.css:2: text-transform: uppercase",
+  ])
+    assert.match(said, new RegExp(value));
+  assert.doesNotMatch(said, /caps-label\.tsx:|workspace\.tsx:[167]|notes\.css:1/);
+
+  // What isn't a section's label, a mark in a pill, is allowed with its reason.
+  await rm(join(root, "src", "sessions"), { recursive: true });
+  const allowed = await check([
+    { file: "routes/workspace.tsx", value: "uppercase", reason: "A pill's mark." },
+    { file: "routes/workspace.tsx", value: "md:uppercase", reason: "A pill's mark." },
+  ]);
+  assert.deepEqual(allowed, { passed: true, said: "" });
+});
+
 test("passes a one-off on the allowlist, which has to say why", async () => {
   await source({ "styles.css": THEME, "photo.ts": `context.fillStyle = "#ffffff";` });
   const entry = { file: "photo.ts", value: "#ffffff" };

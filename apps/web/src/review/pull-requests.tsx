@@ -10,6 +10,7 @@ import { RefreshCw } from "lucide-react";
 import { type ComponentProps, lazy, Suspense, useState } from "react";
 import { Button } from "@/components/button";
 import { ButtonLink } from "@/components/button-link";
+import { CapsLabel } from "@/components/caps-label";
 import { FormError } from "@/components/form-error";
 import { useWide } from "@/components/handheld";
 import { PlaceholderRows } from "@/components/kept";
@@ -110,12 +111,9 @@ export default function PullRequests(props: {
   return (
     <section aria-labelledby="pull-requests" data-review="" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2
-          id="pull-requests"
-          className="text-label font-semibold tracking-label text-muted-foreground uppercase"
-        >
+        <CapsLabel tone="muted" heading={{ level: 2, id: "pull-requests" }}>
           {unknown ? "Pull requests" : `Pull requests · ${rows.length} ${showing}`}
-        </h2>
+        </CapsLabel>
         <SegmentedChoice
           label="Show"
           look="apart"

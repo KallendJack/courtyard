@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
+import { CapsLabel } from "./caps-label.tsx";
 import { Scroller } from "./scroller.tsx";
 
 // The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
@@ -44,18 +45,17 @@ export function Block(props: {
       )}
     >
       <div className="flex items-center justify-between gap-2 pb-1.5">
-        <h2
-          className={classes(
-            "flex items-center gap-2 text-label font-bold tracking-label uppercase",
-            props.needs ? "text-warning" : "text-muted-foreground",
-          )}
+        <CapsLabel
+          tone={props.needs ? "warning" : "muted"}
+          heading={{ level: 2 }}
+          className="flex items-center gap-2"
         >
           {props.needs && <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />}
           {props.label}
           {props.count !== undefined && ` · ${props.count}`}
-        </h2>
+        </CapsLabel>
         {props.aside !== undefined && (
-          <span className="truncate text-label font-semibold text-placeholder">{props.aside}</span>
+          <span className="truncate text-meta font-semibold text-placeholder">{props.aside}</span>
         )}
       </div>
       {props.children}
@@ -101,9 +101,9 @@ export function BlockRow(props: {
       className="flex min-h-14 items-center gap-2.5 rounded-row bg-secondary py-2.5 pr-2.5 pl-3"
     >
       {props.lead}
-      <div className="flex min-w-0 grow flex-col gap-0.5">
+      <div className="flex min-w-0 grow flex-col">
         <p className="truncate text-sm/4.5 font-bold">{props.title}</p>
-        <p className={classes("truncate text-label font-medium", TONES[props.tone])}>{props.sub}</p>
+        <p className={classes("truncate text-meta font-medium", TONES[props.tone])}>{props.sub}</p>
       </div>
       {props.action !== undefined && (
         <div className="flex shrink-0 flex-col items-end gap-1">{props.action}</div>
