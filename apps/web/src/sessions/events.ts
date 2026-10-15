@@ -77,9 +77,15 @@ export type AnswerPart =
        */
       readonly replayed: number;
     }
-  | { readonly kind: "activities"; readonly activities: readonly Activity[] }
+  | { readonly kind: "activities"; readonly activities: readonly Step[] }
   /** Helpers the model started (#117), each by its id in the turn's `helpers`. */
   | { readonly kind: "helpers"; readonly helpers: readonly HelperId[] };
+
+/**
+ * Something a model did (an activity), marked when it ran without asking because the session was
+ * allowing all (#428): "ran under Allow all".
+ */
+export type Step = Activity & { readonly allowedAll?: true };
 
 /**
  * A helper the model started (#117): its name, whether it waits for a place among the helpers,
@@ -94,7 +100,7 @@ export type Helper = {
    * that branch merged back into the session's; or kept, as it clashed, for the session to sort.
    */
   readonly branch: HelperBranch;
-  readonly activities: readonly Activity[];
+  readonly activities: readonly Step[];
   readonly report: string | undefined;
 };
 
@@ -139,7 +145,7 @@ const withText = (
  * An activity after a turn's parts so far: with the ones just before it, or after the text. A
  * build's newer place in the queue takes the older one's line (#281).
  */
-const withActivity = (parts: readonly AnswerPart[], activity: Activity): readonly AnswerPart[] => {
+const withActivity = (parts: readonly AnswerPart[], activity: Step): readonly AnswerPart[] => {
   const last = parts.at(-1);
   if (last?.kind !== "activities") {
     return [...parts, { kind: "activities", activities: [activity] }];
@@ -197,6 +203,8 @@ export type Turn = {
         readonly helper: HelperId | undefined;
         /** What Allow always would allow (#185), when it's offered. */
         readonly always: AlwaysAllow | undefined;
+        /** Allow all for this task would cover it (#428), so the card offers turning it on. */
+        readonly all: boolean;
       }
     | undefined;
   /**
@@ -232,6 +240,11 @@ type Log = {
   readonly modelTitle: string | undefined;
   /** A code session's pull request as it last stood (#172), once it has one. */
   readonly pullRequest: PullRequest | undefined;
+  /**
+   * The event number Allow all for this task last turned on or off at (#428), or 0: the session's
+   * page asks the worker again then, which decides whether it's on.
+   */
+  readonly allowAllChanged: number;
   /** The owner's messages waiting for the running turn to end (#177), first first. */
   readonly queuedMessages: readonly QueuedMessage[];
 };
@@ -359,6 +372,9 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return { ...log, lastSeq: seq, modelTitle: event.title };
     case "pull-request":
       return { ...log, lastSeq: seq, pullRequest: event.pullRequest };
+    case "allow-all-started":
+    case "allow-all-ended":
+      return { ...log, lastSeq: seq, allowAllChanged: seq };
     case "text-delta":
       return withLastTurn(log, {
         seq,
@@ -377,6 +393,9 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       });
     case "activity": {
       const { helper } = event;
+      const step: Step = event.allowedAll
+        ? { ...event.activity, allowedAll: true }
+        : event.activity;
       return withLastTurn(log, {
         seq,
         change: (turn) => ({
@@ -386,10 +405,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             ? {
                 helpers: changeHelper(turn.helpers, helper, (each) => ({
                   ...each,
-                  activities: [...each.activities, event.activity],
+                  activities: [...each.activities, step],
                 })),
               }
-            : { parts: withActivity(turn.parts, event.activity) }),
+            : { parts: withActivity(turn.parts, step) }),
           doing: { kind: "activity", activity: event.activity },
         }),
       });
@@ -472,6 +491,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             why: event.why,
             helper: event.helper,
             always: event.always,
+            all: event.all === true,
           },
         }),
       });
@@ -606,6 +626,7 @@ const NO_EVENTS: Log = {
   turns: [],
   modelTitle: undefined,
   pullRequest: undefined,
+  allowAllChanged: 0,
   queuedMessages: [],
 };
 
@@ -745,6 +766,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     lastSeq: log.lastSeq,
     modelTitle: log.modelTitle,
     pullRequest: log.pullRequest,
+    allowAllChanged: log.allowAllChanged,
     queuedMessages: log.queuedMessages,
     problem,
     reconnecting,

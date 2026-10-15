@@ -7,6 +7,7 @@ import {
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
+import { AllowingAllMark, timeLeft } from "@/components/allowing-all";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
 import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
@@ -109,6 +110,7 @@ export function Running(props: {
                       `${capitalised(doingWords(session.now.doing))} · ${forWords(session.now.since)}`}
                   </span>
                 </span>
+                {session.allowingAll !== undefined && <AllowingAllMark />}
                 {session.byLead === true ? (
                   <ByLead />
                 ) : (
@@ -131,11 +133,17 @@ const leadTitle = (lead: LeadStatus) => {
   return `${lead.building.length} building · ${ready} ${ready === 1 ? "PR" : "PRs"} ready`;
 };
 
-/** The line under it: what it's doing, or why it holds back, rests or is paused. */
+/**
+ * The line under it: what it's doing, or why it holds back, rests or is paused. While it runs with
+ * Allow all for builders (#428), how long that has left.
+ */
 const leadLine = (lead: LeadStatus) => {
   switch (lead.state) {
     case "running":
-      return lead.why === undefined ? "Running the build order" : `Holding back: ${lead.why}`;
+      if (lead.why !== undefined) return `Holding back: ${lead.why}`;
+      return lead.buildersAllowedAll === undefined
+        ? "Running the build order"
+        : `Builders allowed all · ${timeLeft(lead.buildersAllowedAll, Date.now(), true)} left`;
     case "paused":
       return "Builders carry on · nothing new starts";
     default:

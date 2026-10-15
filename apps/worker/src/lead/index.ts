@@ -439,8 +439,14 @@ export const createLead = (options: {
      */
     run: (rawId: string, run: LeadRun) =>
       changing(rawId, async (workspaceId, was) => {
-        // Allow all for builders (#428), from this tap: on for the next 12 hours, or off.
-        const allowing = run.allowAll === true ? buildersAllowAllUntil(options.now()) : undefined;
+        // Allow all for builders (#428), when this tap says: on for the next 12 hours, or off. A
+        // wake that doesn't say (the Running row's Run) leaves it as it was.
+        const allowing =
+          run.allowAll === true
+            ? buildersAllowAllUntil(options.now())
+            : run.allowAll === false
+              ? undefined
+              : was?.allowAllUntil;
         const allowingFrom = ({ allowAllUntil: _, ...rest }: Kept): Kept =>
           allowing === undefined ? rest : { ...rest, allowAllUntil: allowing };
         const kept = was === undefined ? undefined : allowingFrom(was);

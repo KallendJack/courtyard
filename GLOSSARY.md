@@ -425,6 +425,13 @@ this session or for this workspace. Never offered for what must always ask. A wo
 commands**, each with Remove.
 _Avoid_: don't ask again, trust, auto-approve
 
+**Allow all for this task**:
+One code session, for 1, 4 or 12 hours or until its task is done (its PR opens, 12 hours at most), runs commands
+off the allowlist and edits setup files without asking, each step marked "ran under Allow all", under a gold strip
+with Turn off. What must always ask still does. Turned on from an approval or the session's ⋯, never extended
+while on; the Lead's **Allow all for builders** starts its builders with it.
+_Avoid_: yolo mode, skip permissions, auto-approve
+
 **Session branch**:
 The git branch, checked out in its own folder (a worktree), that holds everything a session changed in a code
 workspace. The session pushes it and opens its pull request; once that is merged or closed, the session ends and its

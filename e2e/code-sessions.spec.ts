@@ -76,7 +76,7 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
   await other.goto(page.url());
   await expect(approvalOn(other)).toBeVisible();
 
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   for (const each of [page, other]) {
     await expect(approvalOn(each)).toHaveCount(0);
@@ -205,7 +205,7 @@ test.describe("activity lines on the unfolded Fold", () => {
       `gh pr edit 275 --title "One line" --body "${LONG}"`,
     ]);
     // Not the session's own pull request, so it waits for the owner.
-    await approvalOn(page).getByRole("button", { name: "Allow" }).click();
+    await approvalOn(page).getByRole("button", { name: "Allow", exact: true }).click();
 
     await expect(line).toHaveText("Updated PR #275");
     expect(await takesOneLine(line)).toBe(true);
@@ -240,7 +240,7 @@ test("an answer the worker is slow to take waits for it quietly, never saying it
     return route.fulfill({ status: 502, body: "Bad Gateway" });
   });
 
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   await expect(card.getByRole("status")).toHaveText("Waiting for Courtyard…");
   await expect(approvalOn(page)).toHaveCount(0);
@@ -261,7 +261,7 @@ test("an answer given while the worker can't be reached is kept, and goes once i
     route.fulfill({ status: 502, body: "Bad Gateway" }),
   );
 
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   await expect(card.getByRole("alert")).toContainText(UNREACHABLE);
   await page.unroute(APPROVAL_ANSWERS);
@@ -283,7 +283,7 @@ test("an answer whose connection is refused says so within moments, and goes onc
     return route.abort("connectionrefused");
   });
 
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   // Three quick failures in a row, not the 30 seconds a slow worker gets.
   await expect(card.getByRole("alert")).toContainText(UNREACHABLE, { timeout: 5000 });
@@ -308,7 +308,7 @@ test("an answer given with the device's network down says so at once, and goes o
   });
   await context.setOffline(true);
 
-  await card.getByRole("button", { name: "Allow" }).click();
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
 
   // After the first try: no retries first, as there would be for a refused connection.
   await expect(card.getByRole("alert")).toContainText(UNREACHABLE, { timeout: 2000 });

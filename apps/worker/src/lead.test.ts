@@ -207,6 +207,15 @@ describe("Run the build order (#347)", () => {
     expect(listed.find((session) => session.lead === true)?.allowingAll).toBeUndefined();
     const lead = await eventsSoFar(request, listed.find((each) => each.lead === true)?.id ?? "");
     expect(lead.filter((event) => event.type === "allow-all-started")).toEqual([]);
+
+    // Woken without saying, it keeps it; Run the build order with it off ends it.
+    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
+    expect((await run(request)).buildersAllowedAll).toBe(until);
+    const off = await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      allowAll: false,
+    });
+    expect(LeadStatus.parse(await off.json()).buildersAllowedAll).toBeUndefined();
   });
 
   it("starts its builders asking as usual unless the owner turns on Allow all for builders", async () => {

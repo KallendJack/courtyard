@@ -60,8 +60,7 @@ export const allowAllAfter = (was: AllowAll, event: SessionEvent): AllowAll => {
       const { number, state } = event.pullRequest;
       const pullRequest = { number, open: state === "open" };
       // The session ends with its pull request; the task is done once one opens.
-      const done =
-        !pullRequest.open || (was.on?.task === true && was.on.pullRequest !== number);
+      const done = !pullRequest.open || (was.on?.task === true && was.on.pullRequest !== number);
       return { pullRequest, on: done ? undefined : was.on };
     }
     default:

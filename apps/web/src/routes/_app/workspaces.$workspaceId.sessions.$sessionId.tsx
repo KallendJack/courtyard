@@ -6,8 +6,9 @@ import {
   type SkillSummary,
 } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
-import { Pencil, Trash2 } from "lucide-react";
+import { Clock, Pencil, Trash2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AllowingAllStrip } from "@/components/allowing-all";
 import { BackLink } from "@/components/back-link";
 import { BranchStrip } from "@/components/branch-strip";
 import { IconButton } from "@/components/button";
@@ -16,13 +17,14 @@ import { FormError } from "@/components/form-error";
 import { JumpToLatest } from "@/components/jump-to-latest";
 import { PlaceholderRows } from "@/components/kept";
 import { Notice, StatusPill } from "@/components/notice";
+import { OptionsMenu } from "@/components/options-menu";
 import { Page, PageTitle } from "@/components/page";
 import { RenameForm } from "@/components/rename-form";
 import { describeProblem, Problem } from "../../problems.tsx";
 import { Composer, type StandIn } from "../../sessions/composer.tsx";
 import type { DocumentsHere } from "../../sessions/documents.tsx";
 import { type Turn, useSessionTurns } from "../../sessions/events.ts";
-import { removeQueued, sendMessage } from "../../sessions/messages.ts";
+import { allowAll, allowAllOff, removeQueued, sendMessage } from "../../sessions/messages.ts";
 import { useSeen } from "../../sessions/seen.ts";
 import { SessionTurns } from "../../sessions/session-turns.tsx";
 import type { Steps } from "../../sessions/steps.ts";
@@ -35,6 +37,8 @@ const Review = lazy(() => import("../../review/review.tsx"));
 const LeadStrip = lazy(() => import("../../sessions/lead-strip.tsx"));
 /** An answer's steps one at a time, in place of the conversation (#241): loaded only then. */
 const StepByStep = lazy(() => import("../../step-by-step/step-by-step.tsx"));
+/** Allow all for this task's choice of how long (#428): loaded when it first opens. */
+const AllowAllSheet = lazy(() => import("../../components/allow-all-sheet.tsx"));
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$sessionId")({
   validateSearch: (search: Record<string, unknown>): { view?: "review" } =>
@@ -99,6 +103,7 @@ function Session(props: {
     lastSeq: shownUpTo,
     modelTitle,
     pullRequest,
+    allowAllChanged,
     queuedMessages,
     problem,
     reconnecting,
@@ -235,6 +240,31 @@ function Session(props: {
     }
   }, [running, lastSeq, limitChanged, router]);
 
+  /** Allow all for this task's choice of how long is open (#428); `undefined` until it first opens. */
+  const [choosingAllowAll, setChoosingAllowAll] = useState<boolean>();
+  const openAllowAll = useCallback(() => setChoosingAllowAll(true), []);
+  /**
+   * The session can allow all (#428): a code session's own, not the Lead's, still taking messages
+   * in a workspace that isn't archived.
+   */
+  const canAllowAll =
+    session.branch !== undefined &&
+    session.lead !== true &&
+    ended === undefined &&
+    !session.workspaceArchived;
+  // Allow all turned on or off, or the pull request opened or ended (either can end it), once the
+  // page has shown the session's events: the worker, which decides whether it's on, is asked again.
+  const allowAllKey = `${allowAllChanged} ${pullRequest?.number ?? ""} ${pullRequest?.state ?? ""}`;
+  const shownAllowAllKey = useRef<string>(undefined);
+  useEffect(() => {
+    if (!ready) return;
+    if (shownAllowAllKey.current !== undefined && shownAllowAllKey.current !== allowAllKey) {
+      void router.invalidate();
+    }
+    shownAllowAllKey.current = allowAllKey;
+  }, [ready, allowAllKey, router]);
+  const askAgain = useCallback(() => void router.invalidate(), [router]);
+
   // A model titled the session after its first answer, after the page loaded it: the new title here
   // and in the sidebar. Once per title, since one the owner gave later differs from it too.
   const loadedTitleOf = useRef<string>(undefined);
@@ -294,6 +324,20 @@ function Session(props: {
           above={above}
           actions={
             <>
+              {canAllowAll && session.allowingAll === undefined && (
+                <OptionsMenu
+                  label="Session options"
+                  menuLabel="Session options"
+                  choices={[
+                    {
+                      icon: <Clock />,
+                      name: "Allow all for this task…",
+                      note: "Runs commands and edits setup files without asking",
+                      onPick: openAllowAll,
+                    },
+                  ]}
+                />
+              )}
               <IconButton
                 label="Rename session"
                 icon={<Pencil />}
@@ -330,6 +374,35 @@ function Session(props: {
             />
           </div>
         )
+      )}
+      {session.allowingAll !== undefined && ended === undefined && (
+        <div className="mt-3">
+          <AllowingAllStrip
+            allowing={session.allowingAll}
+            pullRequestOpen={pullRequest?.state === "open"}
+            onPast={askAgain}
+            onTurnOff={async () => {
+              const off = await allowAllOff(session.id);
+              if (off.kind !== "loaded") return describeProblem(off).body;
+              await router.invalidate();
+              return undefined;
+            }}
+          />
+        </div>
+      )}
+      {choosingAllowAll !== undefined && (
+        <Suspense>
+          <AllowAllSheet
+            open={choosingAllowAll}
+            onClose={() => setChoosingAllowAll(false)}
+            onAllow={async (lasts) => {
+              const on = await allowAll(session.id, lasts);
+              if (on.kind !== "loaded") return describeProblem(on).body;
+              await router.invalidate();
+              return undefined;
+            }}
+          />
+        </Suspense>
       )}
       {tidying === "delete" && (
         <div className="mt-4">
@@ -427,6 +500,9 @@ function Session(props: {
           onRetry={retry}
           onCarryOn={carryOnFrom}
           onContinue={continueFrom}
+          {...(canAllowAll && session.allowingAll === undefined
+            ? { onAllowAll: openAllowAll }
+            : {})}
           {...(session.workspaceArchived ? {} : { onReply: reply })}
           workspaceId={session.workspaceId}
           {...(props.documents === undefined ? {} : { documents: props.documents })}

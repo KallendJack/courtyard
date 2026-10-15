@@ -37,13 +37,27 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   await shot(page, "lead-not-started");
 
   await first.getByRole("button", { name: "Run the build order" }).click();
-  await expect(first).toContainText("The Lead runs the build order");
+  const dialog = page.getByRole("dialog", { name: "Run the build order" });
+  await expect(dialog).toContainText("The Lead runs the build order");
+  await expect(dialog).toContainText("beginning with #31 Hooks on the pegboard");
+  // Allow all for builders (#428), off unless the owner turns it on.
+  const allowAll = dialog.getByRole("switch", { name: "Allow all for builders" });
+  await expect(allowAll).toHaveAttribute("aria-checked", "false");
   await shot(page, "lead-confirm");
-  await first.getByRole("button", { name: "Start the order" }).click();
+  await allowAll.click();
+  await expect(allowAll).toHaveAttribute("aria-checked", "true");
+  await shot(page, "lead-confirm-allow-all");
+  await dialog.getByRole("button", { name: "Run the build order" }).click();
+  await expect(dialog).toBeHidden();
 
   const running = page.getByRole("region", { name: "Running" });
   await expect(running).toContainText("Lead");
   await expect(running.getByRole("listitem")).toHaveCount(3);
+  // Its builders allow all, each marked, and the Lead's row says for how long.
+  await expect(running.getByRole("listitem", { name: "Lead" })).toContainText(
+    /Builders allowed all · 1[12] h left/,
+  );
+  await expect(running.getByText("Allowing all", { exact: true })).toHaveCount(2);
   await shot(page, "lead-running");
 });
 
@@ -87,6 +101,7 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await shot(page, "lead-paused");
 
   await lead.getByRole("button", { name: "Run" }).click();
-  await expect(lead).toContainText("Running the build order");
+  // Woken, its builders still allow all, as the first test turned on (#428): that's its line.
+  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
 });

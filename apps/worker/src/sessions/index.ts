@@ -46,6 +46,13 @@ import {
 } from "@courtyard/contract";
 import { z } from "zod";
 import {
+  type AllowAll,
+  allowAllAfter,
+  allowAllUntil,
+  allowingAllAt,
+  NO_ALLOW_ALL,
+} from "../allow-all/index.ts";
+import {
   attachmentPath,
   attachmentsOf,
   carriedAttachments,
@@ -54,13 +61,6 @@ import {
   keepImage,
   type PreparedAttachment,
 } from "../attachments/index.ts";
-import {
-  type AllowAll,
-  allowAllAfter,
-  allowAllUntil,
-  allowingAllAt,
-  NO_ALLOW_ALL,
-} from "../allow-all/index.ts";
 import {
   allowlistFor,
   alwaysRule,
@@ -1071,8 +1071,8 @@ export const createSessions = (options: {
               ...(helper === undefined ? {} : { helper }),
               ...(allowedAll === true ? { allowedAll } : {}),
             });
-          if (!recorded.ok) recordingLost = true;
-        };
+            if (!recorded.ok) recordingLost = true;
+          };
         const report = reportAs(undefined);
         /** Records the answer's sources (ADR 0019), once, unless the turn was stopped. */
         let cited = false;
@@ -2730,20 +2730,21 @@ export const createSessions = (options: {
               byLead: true,
             })
           : written;
-      const started = written.ok && allowing.ok
-        ? await startTurn({
-            id,
-            workspaceId: start.workspaceId,
-            provider: provider.value.provider,
-            message: message.value,
-            since,
-            coding: sessionBranch !== undefined,
-            placeless: file.placeless === true,
-            firstTurn: true,
-            runsBuildOrder: file.lead === true,
-            ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
-          })
-        : err(STORAGE_ERROR);
+      const started =
+        written.ok && allowing.ok
+          ? await startTurn({
+              id,
+              workspaceId: start.workspaceId,
+              provider: provider.value.provider,
+              message: message.value,
+              since,
+              coding: sessionBranch !== undefined,
+              placeless: file.placeless === true,
+              firstTurn: true,
+              runsBuildOrder: file.lead === true,
+              ...(start.attachments === undefined ? {} : { attachments: start.attachments }),
+            })
+          : err(STORAGE_ERROR);
       if (!started.ok) {
         // Never leave a session behind without its first message.
         await rm(folderOf(id), { recursive: true, force: true });
@@ -3047,7 +3048,10 @@ export const createSessions = (options: {
      * recorded, so it survives a restart, and each approval its turn waits on that it covers is
      * allowed at once. It isn't extended while it's on: Turn off first.
      */
-    allowAll: async (rawId: string, lasts: AllowAllLasts): Promise<Result<SessionSummary, SessionError>> => {
+    allowAll: async (
+      rawId: string,
+      lasts: AllowAllLasts,
+    ): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
       const { id } = found.value;
@@ -3074,7 +3078,9 @@ export const createSessions = (options: {
         const events = await readEvents(id);
         if (!events.ok) return events;
         const answered = new Set(
-          events.value.flatMap((event) => (event.type === "approval-answered" ? [event.approval] : [])),
+          events.value.flatMap((event) =>
+            event.type === "approval-answered" ? [event.approval] : [],
+          ),
         );
         for (const event of events.value) {
           if (event.type !== "approval-requested" || event.all !== true) continue;
