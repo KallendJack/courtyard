@@ -285,10 +285,18 @@ plugin: the release `packages/skills/matt.json` names, fetched into the data fol
 only when it matches the pin's checksum (ADR 0024). His grilling replaces the house one there.
 _Avoid_: the plugin, Matt's plugin (for the copy), installed skills
 
+**House standard**:
+What every code workspace's repository has, adding one or creating one (#323, #391): Matt's setup with the house
+answers (GitHub issues with the triage labels, `GLOSSARY.md` and `docs/adr/`, `docs/agents/`, the Agent skills
+section in its `AGENTS.md` or `CLAUDE.md`), a first milestone with a `Build order:` line, and a Paper file with its
+four pages. Optional: without it, sessions follow the repository's own instructions.
+
 **Setup check**:
-What a code workspace's page offers, once, when its repository is missing what Matt's setup skill writes (its
-`docs/agents/` files, the Agent skills section, the triage labels): a row of Needs you that opens one approval,
-which makes the labels and opens a pull request with the files.
+What a code workspace's page offers, once, when its repository isn't on the house standard: a row of Needs you that
+opens the **setup card**, one line for each thing it found (its own tracker: Keep or Move to GitHub issues; its
+glossary under another name: Rename to `GLOSSARY.md` or Keep; the files and section added; a Paper file: Create or
+Skip), the standard recommended on each, unless the repository says another agent writes its tracker. One Set up
+opens a pull request.
 _Avoid_: onboarding, setup wizard
 
 **House skill**:

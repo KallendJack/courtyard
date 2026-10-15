@@ -223,7 +223,8 @@ writeFileSync(
 );
 
 // A second code workspace, Workbench (#301), for its Home's blocks, on a repository of its own
-// standing in for octo-owner/workbench: its one line in workspace.json, no Paper file yet, and
+// standing in for octo-owner/workbench: its one line in workspace.json, no Paper file yet, its own
+// tracker and glossary for the setup card (#323), and
 // on the fake GitHub (below) its ready issues and a helper's pull request whose checks passed.
 const homeOrigin = join(codeDir, "home-origin.git");
 const homeOnGitHub = "https://github.com/octo-owner/workbench.git";
@@ -233,6 +234,18 @@ const homeRepo = join(codeDir, "home-repo");
 git(homeRepo, "remote", "set-url", "origin", homeOnGitHub);
 git(homeRepo, "config", `url.${homeOrigin.replaceAll("\\", "/")}.insteadOf`, homeOnGitHub);
 writeFileSync(join(homeRepo, "README.md"), "# Workbench\n");
+// Its own tracker, which its instructions say another agent writes, and its glossary under
+// another name, for the setup card's lines (#323).
+mkdirSync(join(homeRepo, "docs"), { recursive: true });
+writeFileSync(
+  join(homeRepo, "docs", "backlog.md"),
+  "# Backlog\n\n- [ ] Pin the fan curve\n- [ ] Back up the router\n",
+);
+writeFileSync(join(homeRepo, "CONTEXT.md"), "# Glossary\n");
+writeFileSync(
+  join(homeRepo, "AGENTS.md"),
+  "# Workbench\n\nThe planning agent writes docs/backlog.md; don't edit it by hand.\n",
+);
 git(homeRepo, "add", ".");
 git(homeRepo, "commit", "-qm", "Start");
 git(homeRepo, "push", "-q", "origin", "main");

@@ -1,4 +1,9 @@
-import type { CodeSessionList, MattSetup, OpenPullRequest } from "@courtyard/contract";
+import {
+  type CodeSessionList,
+  type MattSetup,
+  type OpenPullRequest,
+  setupLines,
+} from "@courtyard/contract";
 import { describeWhen } from "../when.ts";
 
 // What waits on the owner in a workspace (#301, #334), as the worker decided it for each of its
@@ -70,7 +75,9 @@ export const needsOf = (given: {
     return session === undefined ? { kind: "conflict", pull } : { kind: "conflict", pull, session };
   });
   const setup: Need[] =
-    given.setup.state === "offered" ? [{ kind: "setup", missing: given.setup.missing.length }] : [];
+    given.setup.state === "offered"
+      ? [{ kind: "setup", missing: setupLines(given.setup.card) }]
+      : [];
   return [...approvals, ...cutOff, ...failed, ...replies, ...merges, ...conflicts, ...setup];
 };
 
