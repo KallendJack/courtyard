@@ -1027,7 +1027,8 @@ const showsHome = async (page: Page) => {
   await expect(running).toContainText("Nothing running");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
-  // issues nobody claimed, with Build; the rest, in milestone order, under More.
+  // issues nobody claimed, with Build; the rest, in milestone order, as many as fit (#418), then
+  // More.
   await expect(nextUp).toContainText("4 · Code workspaces");
   const grill = nextUp.getByRole("region", { name: "Grill #117" });
   await expect(grill).toContainText("Sub-agents for code review");
@@ -1035,9 +1036,8 @@ const showsHome = async (page: Page) => {
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
-  await expect(nextUp.getByRole("listitem")).toHaveCount(0);
   await expect(nextUp).not.toContainText("Claimed by a helper");
-  await expect(nextUp.getByRole("button", { name: "More · 11" })).toBeVisible();
+  await nextUpFills(page, 11);
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -1088,6 +1088,48 @@ const rowsScroll = (block: ReturnType<Page["locator"]>) =>
     return { overflows };
   });
 
+/**
+ * Next up as the owner saw it (#418): the first issue ready, with Build, and `count` ready issues
+ * in all, so no Grill.
+ */
+const readyOnly = async (page: Page, count: number) => {
+  await page.route("**/api/workspaces/workbench/next-up", async (route) => {
+    const response = await route.fetch();
+    const { issues } = (await response.json()) as { issues: { ready: boolean }[] };
+    const ready = issues.filter((issue) => issue.ready).slice(0, count);
+    await route.fulfill({ response, json: { issues: ready } });
+  });
+};
+
+/**
+ * From a tablet up, Next up lists every issue its block has room for, and More counts only the
+ * rest (#418): its rows never scroll while it's closed, and another row wouldn't have fitted.
+ * Returns how many rows show.
+ */
+const nextUpFills = async (page: Page, rest: number) => {
+  const { nextUp } = blocks(page);
+  const more = nextUp.getByRole("button", { name: /^More · / });
+  const rows = nextUp.getByRole("listitem");
+  await expect(nextUp.getByRole("region").first()).toBeVisible();
+  expect((await rowsScroll(nextUp)).overflows).toBe(false);
+  const shown = await rows.count();
+  if (shown === rest) {
+    await expect(more).toHaveCount(0);
+    return shown;
+  }
+  await expect(more).toHaveText(`More · ${rest - shown}`);
+  // Room for no more: what's left above More is less than one more row.
+  const [card, button, last] = await Promise.all([
+    nextUp.getByRole("region").last().boundingBox(),
+    more.boundingBox(),
+    shown > 0 ? rows.last().boundingBox() : Promise.resolve(null),
+  ]);
+  if (card === null || button === null) throw new Error("Not on the page");
+  const above = last === null ? card.y + card.height : last.y + last.height;
+  expect(button.y - above).toBeLessThan(34 + 2 + 6 + 4);
+  return shown;
+};
+
 /** Tapping Build on Next up's first issue keeps Start building and Cancel inside its card. */
 const buildButtonsFitTheirCard = async (page: Page) => {
   const build = blocks(page).nextUp.getByRole("region", { name: "Build #197" });
@@ -1126,6 +1168,21 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       ];
       expect(nextBox?.x ?? 0).toBeGreaterThan((needsBox?.x ?? 0) + (needsBox?.width ?? 0));
       await shot(page, "desktop-home");
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    // Owner, 2026-10-14: the first issue, two rows, a tall empty block and More · 3 (#418).
+    test("with five issues ready, Next up lists them all, with no More", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await readyOnly(page, 5);
+      await page.goto(HOME);
+      await expect(blocks(page).nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      await shot(page, "desktop-home-five-ready");
+      expect(await nextUpFills(page, 4)).toBe(4);
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1190,7 +1247,8 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // and the first issue with Build stay put, and More becomes Fewer.
       const { nextUp } = blocks(page);
       const before = await nextUp.boundingBox();
-      await nextUp.getByRole("button", { name: "More · 11" }).click();
+      const shown = await nextUpFills(page, 11);
+      await nextUp.getByRole("button", { name: `More · ${11 - shown}` }).click();
       await expect(nextUp.getByRole("listitem")).toHaveText([
         /#251\s*One Reply box everywhere/,
         /#255\s*Paste images on the Fold/,
@@ -1207,8 +1265,28 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(nextUp.getByRole("listitem").last()).toBeInViewport({ ratio: 1 });
       await homeFitsOneScreen(page);
       await nextUp.getByRole("button", { name: "Fewer" }).click();
-      // Under Grill, the rest all wait for More (#363).
-      await expect(nextUp.getByRole("listitem")).toHaveCount(0);
+      // Fewer goes back to the rows that fit (#418).
+      await expect(nextUp.getByRole("listitem")).toHaveCount(shown);
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("with five issues ready, Next up lists every one that fits, More only for the rest (#418)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await readyOnly(page, 5);
+      await page.goto(HOME);
+      const { nextUp } = blocks(page);
+      await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      await shot(page, "tablet-home-five-ready");
+      const shown = await nextUpFills(page, 4);
+      expect(shown).toBeGreaterThanOrEqual(2);
+      // Tapping Build makes its card taller: fewer rows fit, and More counts the rest.
+      await nextUp.getByRole("button", { name: "Build", exact: true }).click();
+      await expect(nextUp.getByRole("button", { name: "Start building" })).toBeVisible();
+      expect(await nextUpFills(page, 4)).toBeLessThan(shown);
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1411,6 +1489,23 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       );
       expect(Math.max(...tall) - Math.min(...tall)).toBeLessThanOrEqual(2);
       await shot(page, "cover-home");
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("with five issues ready, Next up keeps three and More (#418)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await readyOnly(page, 5);
+      await page.goto(HOME);
+      const { nextUp } = blocks(page);
+      await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      await nextUp.scrollIntoViewIfNeeded();
+      await shot(page, "cover-home-five-ready");
+      await expect(nextUp.getByRole("listitem")).toHaveCount(2);
+      await expect(nextUp.getByRole("button", { name: "More · 2" })).toBeVisible();
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
   });
