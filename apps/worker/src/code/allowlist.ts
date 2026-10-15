@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve } from "node:path";
-import { wordsOf } from "@courtyard/contract";
+import { type AlwaysAllow, wordsOf } from "@courtyard/contract";
 import { isHelperBranchOf } from "./branches.ts";
 
 /**
@@ -554,19 +554,125 @@ const ruleNamed = (named: string): CommandRule => {
   return { words: more ? words.slice(0, -1) : words, more };
 };
 
+/** What Allow always allows (#185) as a workspace's settings name a command: `ruleNamed`'s form. */
+export const namedAs = (allows: AlwaysAllow) =>
+  [...allows.words, ...(allows.more ? ["..."] : [])].join(" ");
+
+/** What a command named in a workspace's settings allows, as Allow always says it (#185). */
+export const allowsOf = (named: string): AlwaysAllow => {
+  const { words, more } = ruleNamed(named);
+  return { words: [...words], more };
+};
+
+/** The rule a command allowed always (#185) is: its words, and whatever may follow them. */
+export const alwaysRule = (allows: AlwaysAllow): CommandRule => ({
+  words: allows.words,
+  more: allows.more,
+});
+
 /**
  * A code workspace's command allowlist: the default, with the commands its settings add and
- * without the default ones they remove (by their words, whether or not more may follow).
+ * those the owner allowed always (#185), and without the default ones they remove (by their
+ * words, whether or not more may follow).
  */
 export const allowlistFor = (settings: {
   readonly add: readonly string[];
   readonly remove: readonly string[];
+  readonly always: readonly { readonly command: string }[];
 }): readonly CommandRule[] => {
   const removed = new Set(settings.remove.map((named) => ruleNamed(named).words.join(" ")));
   return [
     ...DEFAULT_ALLOWLIST.filter((rule) => !removed.has(rule.words.join(" "))),
     ...settings.add.map(ruleNamed),
+    ...settings.always.map(({ command }) => ruleNamed(command)),
   ];
+};
+
+/**
+ * A word Allow always may take into what it allows (#185): a command's or subcommand's name
+ * (`pnpm`, `exec`, `left-pad`), never a path, an option, a number or a value.
+ */
+const PLAIN_WORD = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * The default rules that check more than a command's words (what may follow them, the branch it's
+ * on, whose pull request it names, the paths it reaches): a command of theirs that asks failed
+ * one of those checks, which Allow always would skip.
+ */
+const CHECKED = DEFAULT_ALLOWLIST.filter(
+  (rule) =>
+    !rule.more ||
+    rule.never !== undefined ||
+    rule.own !== undefined ||
+    rule.onSessionBranch === true ||
+    rule.unpacksInto !== undefined,
+);
+
+/**
+ * Commands that must always ask (#185 decision 4), by their first words: merging a pull request
+ * (pushing to a branch not the session's), deleting a repository, a release or a ref, and git's
+ * and gh's settings and sign-in, which hold credentials and decide what runs.
+ */
+const ALWAYS_ASKS: readonly (readonly string[])[] = [
+  ["gh", "pr", "merge"],
+  ["gh", "repo", "delete"],
+  ["gh", "release", "delete"],
+  ["gh", "auth"],
+  ["gh", "secret"],
+  ["gh", "variable"],
+  ["gh", "ssh-key"],
+  ["gh", "gpg-key"],
+  ["git", "config"],
+  ["git", "credential"],
+  ["git", "update-ref"],
+  ["git", "remote"],
+];
+
+/**
+ * Programs that must always ask (#185): those that run another command named after them (a shell,
+ * `xargs`, `find`'s `-exec`, `sudo`), or that read or hold credentials (the environment, keys).
+ */
+const ALWAYS_ASKING_PROGRAMS = new Set([
+  ...["sh", "bash", "zsh", "fish", "dash", "pwsh", "powershell", "cmd", "eval", "exec"],
+  ...["sudo", "su", "doas", "xargs", "find", "env", "printenv", "nohup", "timeout", "time"],
+  ...["nice", "watch", "command", "builtin", "ssh", "scp", "sftp", "ssh-add", "ssh-keygen"],
+  ...["gpg", "security", "op", "pass", "keychain", "secret-tool"],
+]);
+
+/** Words that name a credential, or where one is kept: a token, a key, `.env`, `.ssh`, a login. */
+const CREDENTIALS =
+  /token|secret|credential|passw|\.env|\.ssh|\.netrc|\.npmrc|\.pypirc|\.aws|\.gnupg|id_rsa|id_ed25519|\bauth\b/i;
+
+/** Whether one list of words starts with the other. */
+const startsWith = (words: readonly string[], first: readonly string[]) =>
+  first.every((word, index) => words[index] === word);
+
+/**
+ * What Allow always would allow for a command off the allowlist (#185): its leading words, as
+ * Claude Code does, so the same command with other arguments doesn't ask again. Those are the
+ * words before its first path, option or value (`pnpm exec playwright test` of `pnpm exec
+ * playwright test e2e/icons.spec.ts`); when every word is one of those, the last is taken as the
+ * command's argument (`pnpm add` of `pnpm add left-pad`), unless that leaves only one. A command
+ * of one word is allowed as itself. `undefined`, so never offered, for what must always ask
+ * (decision 4): a command whose first word alone would follow (`rm -rf build`), one of a default
+ * rule's that failed its checks, or whose words could cover one of those (`gh pr …` covers its own
+ * pull request's commands), one that pushes, merges a pull request, deletes a repository, a
+ * release or a ref, a program that runs another or holds credentials, and anything naming one.
+ */
+export const alwaysOffer = (words: readonly string[]): AlwaysAllow | undefined => {
+  const [program] = words;
+  if (program === undefined || ALWAYS_ASKING_PROGRAMS.has(program)) return undefined;
+  if (words.some((word) => CREDENTIALS.test(word))) return undefined;
+  if (words.length === 1)
+    return PLAIN_WORD.test(program) ? { words: [program], more: false } : undefined;
+  const plain = words.findIndex((word) => !PLAIN_WORD.test(word));
+  const leading =
+    plain === -1 ? words.slice(0, words.length > 2 ? -1 : undefined) : words.slice(0, plain);
+  if (leading.length < 2) return undefined;
+  const covers = (rule: readonly string[]) => startsWith(words, rule) || startsWith(rule, leading);
+  if (CHECKED.some((rule) => covers(rule.words))) return undefined;
+  if (ALWAYS_ASKS.some(covers)) return undefined;
+  return { words: leading, more: true };
 };
 
 /**

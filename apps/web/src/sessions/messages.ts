@@ -1,4 +1,5 @@
 import {
+  type AlwaysFor,
   type ApprovalAnswer,
   ApprovalAnswering,
   ATTACHMENTS_FIELD,
@@ -66,20 +67,25 @@ export const sendMessage = (send: {
   });
 
 /**
- * Allow or Deny on the approval numbered `approval`, which a code session's turn waits on (#171).
- * The worker answers with the answer that stands: the first given, from whichever device. So it's
- * harmless to send twice, and the owner's tap is kept until the worker answers (#204).
+ * Allow or Deny on the approval numbered `approval`, which a code session's turn waits on (#171),
+ * or Allow always, for the session or the workspace (#185). The worker answers with the answer
+ * that stands: the first given, from whichever device. So it's harmless to send twice, and the
+ * owner's tap is kept until the worker answers (#204).
  */
 export const answerApproval = (answering: {
   sessionId: SessionId;
   approval: number;
   answer: ApprovalAnswer;
+  always?: AlwaysFor | undefined;
   onWaiting: (waiting: Waiting) => void;
   signal: AbortSignal;
 }) =>
   sendPatiently({
     path: `/sessions/${encodeURIComponent(answering.sessionId)}/approvals/${answering.approval}`,
-    body: { answer: answering.answer } satisfies ApprovalAnswering,
+    body: {
+      answer: answering.answer,
+      ...(answering.always === undefined ? {} : { always: answering.always }),
+    } satisfies ApprovalAnswering,
     schema: ApprovalAnswering,
     onWaiting: answering.onWaiting,
     signal: answering.signal,

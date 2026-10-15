@@ -419,6 +419,12 @@ _Avoid_: permission, confirmation, prompt
 The commands a code workspace lets a model run without an approval.
 _Avoid_: whitelist, safe commands
 
+**Allow always**:
+An approval's third answer: Allow, and from then on run the same command (by its leading words) without asking, for
+this session or for this workspace. Never offered for what must always ask. A workspace's are its **Allowed
+commands**, each with Remove.
+_Avoid_: don't ask again, trust, auto-approve
+
 **Session branch**:
 The git branch, checked out in its own folder (a worktree), that holds everything a session changed in a code
 workspace. The session pushes it and opens its pull request; once that is merged or closed, the session ends and its

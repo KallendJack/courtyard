@@ -98,7 +98,11 @@ test("a helper's approval names it, its line waits on the owner, and Deny lets i
 
   await expect(card).toContainText("Needs your OK · Helper · Check the e2e tests");
   await expect(card).toContainText("Run a command? It isn't on the allowlist.");
-  await expect(card.getByRole("code")).toHaveText("pnpm exec playwright install chromium");
+  // The exact command, first; Allow always's words under it (#185).
+  await expect(card.getByRole("code")).toHaveText([
+    "pnpm exec playwright install chromium",
+    "pnpm exec playwright install …",
+  ]);
   await expect(card).toContainText(
     "Installs the browser the e2e tests run in. Deny and the helper reports back without them.",
   );
