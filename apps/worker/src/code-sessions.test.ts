@@ -8,8 +8,8 @@ import {
   type SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { Provider } from "./agent/providers/index.ts";
 import {
   asOwner,
   CODING_MODEL,

@@ -10,7 +10,7 @@ import {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakePaperFiles, type FakePaperFiles } from "./paper/fake.ts";
+import { createFakePaperFiles, type FakePaperFiles } from "./integrations/paper/fake.ts";
 import {
   asOwner,
   codeRepo,

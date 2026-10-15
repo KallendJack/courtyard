@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type FailureReason, SessionEvent, SessionList, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider, type OneOffInput, type Provider } from "./providers/index.ts";
+import { createFakeProvider, type OneOffInput, type Provider } from "./agent/providers/index.ts";
 import { ok, type Result } from "./result.ts";
 import {
   asOwner,

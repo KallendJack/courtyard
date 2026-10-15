@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NotificationsStatus } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/index.ts";
 import {
   CODING_MODEL,
   codeRepo,

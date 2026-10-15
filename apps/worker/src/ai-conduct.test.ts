@@ -10,9 +10,9 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PAGE_NOT_ALLOWED } from "./prompts/index.ts";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "./providers/index.ts";
+import { PAGE_NOT_ALLOWED } from "./agent/prompts/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "./agent/providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,

@@ -15,8 +15,8 @@ import {
   type AppServerLaunch,
   createCodexProvider,
   type StartAppServer,
-} from "./providers/codex.ts";
-import type { TurnInput } from "./providers/index.ts";
+} from "./agent/providers/codex.ts";
+import type { TurnInput } from "./agent/providers/index.ts";
 import { err, ok } from "./result.ts";
 import {
   asOwner,

@@ -14,10 +14,10 @@ import {
   WorkspaceMain,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakePaperFiles, type FakePaperFiles } from "./paper/fake.ts";
-import { buildIssueMessage } from "./prompts/index.ts";
-import { createFakeProvider } from "./providers/fake.ts";
-import type { Provider } from "./providers/index.ts";
+import { buildIssueMessage } from "./agent/prompts/index.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
+import type { Provider } from "./agent/providers/index.ts";
+import { createFakePaperFiles, type FakePaperFiles } from "./integrations/paper/fake.ts";
 import {
   asOwner,
   CODING_MODEL,

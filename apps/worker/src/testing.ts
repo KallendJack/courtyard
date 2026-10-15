@@ -13,10 +13,7 @@ import {
 } from "@courtyard/contract";
 import { MattPin } from "@courtyard/skills";
 import type { Hono } from "hono";
-import { makeTemporaryFolder, removeFolder } from "./files.ts";
-import { git } from "./git.ts";
-import { type FetchMattSkills, fetchMattCopy } from "./matt-skills/index.ts";
-import { SAVE_TOOL_NAME } from "./prompts/index.ts";
+import { SAVE_TOOL_NAME } from "./agent/prompts/index.ts";
 import {
   type CodeTurn,
   createFakeProvider,
@@ -24,14 +21,17 @@ import {
   type Provider,
   type ToolConnection,
   type ToolContent,
-} from "./providers/index.ts";
+} from "./agent/providers/index.ts";
+import type { Background } from "./agent/sessions/index.ts";
+import { type FetchMattSkills, fetchMattCopy } from "./devflow/matt-skills/index.ts";
+import { makeTemporaryFolder, removeFolder } from "./files.ts";
+import { git } from "./git.ts";
 import { err, ok, type Result } from "./result.ts";
-import type { Background } from "./sessions/index.ts";
 import type { TestFile } from "./test-files.ts";
 import { createWorker, type Environment } from "./worker.ts";
 
-export { createFakeGitHub, type FakeGitHub, type FakeIssue } from "./github/fake.ts";
-export { createFakePush, type FakePush } from "./notifications/fake.ts";
+export { createFakeGitHub, type FakeGitHub, type FakeIssue } from "./devflow/github/fake.ts";
+export { createFakePush, type FakePush } from "./ops/notifications/fake.ts";
 export { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 
 /** The work test workers started that nobody waits for (titling a session, say), until it settles. */

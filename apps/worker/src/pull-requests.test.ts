@@ -13,7 +13,7 @@ import {
   type SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/fake.ts";
+import { createFakeProvider } from "./agent/providers/fake.ts";
 import {
   asOwner,
   codeRepo,

@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { type ClaudeCode, createClaudeProvider } from "./providers/claude.ts";
+import { type ClaudeCode, createClaudeProvider } from "./agent/providers/claude.ts";
 import type {
   Activity,
   AddedMessage,
@@ -19,7 +19,7 @@ import type {
   ToolContent,
   TurnInput,
   TurnTool,
-} from "./providers/index.ts";
+} from "./agent/providers/index.ts";
 import { err, ok } from "./result.ts";
 import { quotedInGuide } from "./testing.ts";
 

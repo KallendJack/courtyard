@@ -11,7 +11,7 @@ import {
   WorkspaceDetail,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider, type Provider } from "./providers/index.ts";
+import { createFakeProvider, type Provider } from "./agent/providers/index.ts";
 import { ok } from "./result.ts";
 import {
   asOwner,

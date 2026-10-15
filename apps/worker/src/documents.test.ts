@@ -11,7 +11,7 @@ import {
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/index.ts";
 import {
   asOwner,
   changesIn,

@@ -14,7 +14,7 @@ import {
 } from "@courtyard/contract";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "./providers/index.ts";
+import { createFakeProvider } from "./agent/providers/index.ts";
 import { pdfOf, pngOf, type TestFile } from "./test-files.ts";
 import {
   asOwner,

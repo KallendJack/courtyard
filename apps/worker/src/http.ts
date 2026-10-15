@@ -2,8 +2,8 @@ import { type ApiError, ATTACHMENTS_FIELD, MESSAGE_FIELD } from "@courtyard/cont
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+import type { WorkspaceError } from "./context/workspaces/index.ts";
 import { err, ok, type Result } from "./result.ts";
-import type { WorkspaceError } from "./workspaces/index.ts";
 
 /** An error answer in the contract's shape: `{ error }` with a status. */
 export const apiError = (c: Context, problem: { status: ContentfulStatusCode; error: string }) =>
