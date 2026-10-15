@@ -143,7 +143,7 @@ folder per feature (`sessions`, `things`, `code-home`, …). It shows what the w
 |---|---|---|
 | Lint and format | Biome, plus `scripts/theme` and `scripts/areas` | `pnpm check` |
 | Types | TypeScript | `pnpm typecheck` |
-| Tests | Vitest (worker and contract), Playwright (`e2e/`) | `pnpm test`, `pnpm e2e` |
+| Tests | Vitest (in each package), Playwright (`e2e/`) | `pnpm test`, `pnpm e2e` |
 | Build | Vite (web app) | `pnpm build` |
 | All of it | One build at a time on the machine (`scripts/builds`) | `pnpm verify` |
 
