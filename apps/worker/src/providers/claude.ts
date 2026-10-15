@@ -49,6 +49,8 @@ import {
   type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
+  type HelperBranch,
+  type HelperCode,
   type HelperTurn,
   jsonSchemaOf,
   type Provider,
@@ -792,8 +794,9 @@ const BashInput = z.strictObject({
 /** A task list: it touches nothing outside Claude Code, so only its shape is checked. */
 const TodoWriteInput = z.strictObject({ todos: z.array(z.unknown()) });
 /**
- * Starting a helper (#117): what it's for in a few words, its task and its type. Strict, so a
- * helper in a folder of its own, or elsewhere, is refused rather than let through unchecked.
+ * Starting a helper (#117): what it's for in a few words, its task and its type, and for one that
+ * writes code, a worktree of its own (#395), which Courtyard makes (`makeWorktree`). Strict, so a
+ * helper in a folder it names, or elsewhere, is refused rather than let through unchecked.
  */
 const AgentInput = z.strictObject({
   description: z.string(),
@@ -802,7 +805,17 @@ const AgentInput = z.strictObject({
   model: z.string().optional(),
   run_in_background: z.boolean().optional(),
   name: z.string().optional(),
+  isolation: z.literal("worktree").optional(),
 });
+
+/** What Claude Code hands back of a helper that worked in a worktree of its own (#395). */
+const InWorktree = z.object({ worktreePath: z.string() });
+
+/**
+ * The name Claude Code gives a helper's own worktree when it asks for one (#395): `agent-` and
+ * the id it gave the helper, which tags each of its tool calls.
+ */
+const AgentWorktree = /^agent-(.+)$/;
 
 /** Claude Code saying a helper is running (#117): the id it gave it, and its Agent call's. */
 const TaskStarted = z.object({
@@ -822,7 +835,36 @@ type Helpers = {
   readonly callOf: Map<string, string>;
   /** The types it may start: Claude Code's own, and the repository's. */
   readonly types: readonly string[];
+  /**
+   * The worktrees Courtyard made for helpers that write code (#395), by the id Claude Code gave
+   * the helper each is for, until that helper is given it.
+   */
+  readonly made: Map<string, HelperBranch>;
 };
+
+/**
+ * Gives a helper the worktree Courtyard made for it (#395), once it's known which helper that
+ * is: by the id Claude Code gave it, or by the folder Claude Code runs it in. Before its first
+ * tool call is decided, so that's decided in its own worktree, or as it finishes.
+ */
+const giveWorktree = async (
+  helpers: Helpers,
+  given: { helper: HelperTurn; agent: string | undefined; cwd: string | undefined },
+) => {
+  const { agent, cwd } = given;
+  for (const [madeFor, own] of helpers.made) {
+    if (madeFor !== agent && (cwd === undefined || !samePath(own.worktree, cwd))) continue;
+    helpers.made.delete(madeFor);
+    await given.helper.workIn(own);
+    return;
+  }
+};
+
+/** Whether two paths name the same folder, as Windows reads them too (case aside). */
+const samePath = (one: string, other: string) =>
+  process.platform === "win32"
+    ? resolve(one).toLowerCase() === resolve(other).toLowerCase()
+    : resolve(one) === resolve(other);
 
 /** How long a helper's tool call waits to hear which helper it is, checking this often. */
 const HELPER_KNOWN = { checks: 20, everyMs: 50 };
@@ -853,7 +895,8 @@ const reportOf = (response: unknown) =>
 
 /**
  * Checked after every Agent call (#117): the helper it started has finished, so the worker hears
- * its report, or what stopped it.
+ * its report, or what stopped it. One that worked on a branch of its own has it merged back
+ * (#395), and Claude is told how that went beside its report.
  */
 const noteHelperDone =
   (helpers: Helpers): HookCallback =>
@@ -864,10 +907,42 @@ const noteHelperDone =
     const helper = input.tool_name === "Agent" ? helpers.running.get(input.tool_use_id) : undefined;
     if (helper === undefined) return {};
     helpers.running.delete(input.tool_use_id);
-    await helper.finished(
+    // One that finished before any tool call of its own is given its worktree now.
+    const own =
+      input.hook_event_name === "PostToolUse"
+        ? InWorktree.safeParse(input.tool_response)
+        : undefined;
+    if (own?.success) {
+      await giveWorktree(helpers, { helper, agent: undefined, cwd: own.data.worktreePath });
+    }
+    const note = await helper.finished(
       input.hook_event_name === "PostToolUse" ? reportOf(input.tool_response) : input.error,
     );
-    return {};
+    return note === undefined
+      ? {}
+      : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: note } };
+  };
+
+/**
+ * Claude Code asking for a worktree for a helper that writes code (#395): Courtyard makes it
+ * (`CodeTurn.branchOff`), beside the session's worktree and never in the repository's
+ * `.claude/worktrees`, and hands Claude Code its folder to run the helper in. Which helper it's for
+ * is known by the id in its name, and it's given to that helper before its first tool call. One
+ * that can't be made fails the helper's start, with git's reason in the worker's log.
+ */
+const makeWorktree =
+  (helpers: Helpers, code: CodeTurn): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "WorktreeCreate") return {};
+    const made = await code.branchOff();
+    if (!made.ok) {
+      console.error("A helper's worktree couldn't be made:", made.error);
+      return {};
+    }
+    helpers.made.set(AgentWorktree.exec(input.name)?.[1] ?? input.name, made.value);
+    return {
+      hookSpecificOutput: { hookEventName: "WorktreeCreate", worktreePath: made.value.worktree },
+    };
   };
 
 /**
@@ -875,7 +950,7 @@ const noteHelperDone =
  * `undefined` for a tool that neither edits nor runs anything.
  */
 const askWorker = async (
-  code: Omit<CodeTurn, "helper">,
+  code: HelperCode,
   tool: string,
   input: unknown,
 ): Promise<Result<null, string> | undefined> => {
@@ -999,6 +1074,8 @@ const startHelper = async (start: {
   const { model: _, ...asked } = agent.data;
   const type = asked.subagent_type ?? "general-purpose";
   if (!helpers.types.includes(type)) return decision(false, HELPER_NOT_HERE);
+  // One that writes code asks for a worktree of its own (#395), which Courtyard makes when
+  // Claude Code asks for it (`makeWorktree`).
   const helper = await start.code.helper({
     id: HelperId.parse(input.tool_use_id),
     // Named by what the model said it's for, or by its type when it said nothing.
@@ -1041,11 +1118,16 @@ const confineTo =
     helpers: Helpers | null;
   }): HookCallback =>
   async (input) => {
-    const { folder, courtyardTools, web, helpers } = confine;
+    const { courtyardTools, web, helpers } = confine;
     try {
       if (input.hook_event_name !== "PreToolUse") return {};
       // A helper's call goes through the same checks as the model's, told as its own (#117).
       const helper = await helperOf(helpers, input.agent_id);
+      // One that writes code works in a worktree of its own once it has one (#395).
+      if (helper !== undefined && helpers !== null) {
+        await giveWorktree(helpers, { helper, agent: input.agent_id, cwd: input.cwd });
+      }
+      const folder = helper === undefined ? confine.folder : resolve(helper.code.worktree);
       const report = helper?.report ?? confine.report;
       const code = helper?.code ?? confine.code;
       const connections = helper?.connections ?? confine.connections;
@@ -1284,7 +1366,7 @@ export const createClaudeProvider = (
       const helpers: Helpers | null =
         setup === undefined
           ? null
-          : { running: new Map(), callOf: new Map(), types: setup.helperTypes };
+          : { running: new Map(), callOf: new Map(), types: setup.helperTypes, made: new Map() };
       try {
         const messages = claudeCode.run({
           prompt: turnPrompt(input.framing),
@@ -1368,6 +1450,10 @@ export const createClaudeProvider = (
                       },
                     ],
                   }),
+              // A helper's own worktree is Courtyard's to make (#395).
+              ...(helpers === null || code === null
+                ? {}
+                : { WorktreeCreate: [{ hooks: [makeWorktree(helpers, code)] }] }),
             },
             includePartialMessages: true,
             // A code turn runs until Claude finishes, the owner stops it, or a usage limit.

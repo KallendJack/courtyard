@@ -197,12 +197,27 @@ export const SessionEvent = z.discriminatedUnion("type", [
     name: z.string(),
     waiting: z.literal(true).optional(),
   }),
-  /** A helper finished, with its final report to the model. */
+  /**
+   * A helper that writes code was given a worktree and branch of its own (#395), branched from
+   * the session branch, which the worker merges back when it finishes.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("helper-branched"),
+    helper: HelperId,
+    branch: z.string(),
+  }),
+  /**
+   * A helper finished, with its final report to the model. One on its own branch (#395) says
+   * whether its branch merged back into the session branch, or clashed and was kept for the
+   * session's model to sort.
+   */
   z.object({
     ...eventBase,
     type: z.literal("helper-finished"),
     helper: HelperId,
     report: z.string(),
+    merged: z.boolean().optional(),
   }),
   z.object({ ...eventBase, type: z.literal("turn-completed") }),
   /** The owner stopped the turn; whatever was written before stays. */

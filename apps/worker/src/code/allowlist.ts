@@ -1,5 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { wordsOf } from "@courtyard/contract";
+import { isHelperBranchOf } from "./branches.ts";
 
 /**
  * The command allowlist (ADR 0007): the commands a code session runs without asking. A command is
@@ -197,9 +198,10 @@ const MERGE_FLAGS = new Set(["--no-edit", "--no-ff", "-q", "--quiet"]);
 /**
  * Whether a merge brings a branch from origin into the session branch, plainly (#388): `git merge
  * origin/main`, with `--no-edit`, `--no-ff`, `-q` or a message (`-m <text>`), as Bring up to date
- * asks; or `git merge --abort`, which undoes one that stopped on a conflict.
+ * asks; or one of the session's helpers' own branches, kept when it didn't merge cleanly (#395);
+ * or `git merge --abort`, which undoes one that stopped on a conflict.
  */
-const mergesBase = (rest: readonly string[]) => {
+const mergesBase = (rest: readonly string[], work: OwnWork) => {
   if (rest.length === 1 && rest[0] === "--abort") return true;
   const named: string[] = [];
   for (let at = 0; at < rest.length; at += 1) {
@@ -208,7 +210,11 @@ const mergesBase = (rest: readonly string[]) => {
     else if (!word.startsWith("--message=") && !MERGE_FLAGS.has(word)) named.push(word);
   }
   const [branch, ...more] = named;
-  return more.length === 0 && branch !== undefined && /^origin\/[\w./-]+$/.test(branch);
+  return (
+    more.length === 0 &&
+    branch !== undefined &&
+    (/^origin\/[\w./-]+$/.test(branch) || isHelperBranchOf(work.branch, branch))
+  );
 };
 
 /** What `git fetch` may say besides the remote and its branches. */

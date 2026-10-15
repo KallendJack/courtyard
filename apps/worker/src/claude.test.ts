@@ -1048,6 +1048,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         ended.push(command);
       },
       helper: async () => undefined,
+      branchOff: async () => err("No helpers here."),
     };
     return { worktree, code, asked, ended };
   };
@@ -1451,6 +1452,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       },
       ran: () => {},
       helper: async () => undefined,
+      branchOff: async () => err("No helpers here."),
     };
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     await runTurn(claudeCode, { folder: worktree, code });
@@ -1502,8 +1504,13 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
     const asked: string[] = [];
     const reported: { helper: string; activity: Activity }[] = [];
     const finished: { helper: string; report: string }[] = [];
-    const say = (who: string) => ({
-      worktree,
+    /** The worktrees made for helpers (#395), and which helper was given each. */
+    const made: string[] = [];
+    const given: { helper: string; branch: string }[] = [];
+    const say = (who: string, own?: { worktree: string }) => ({
+      get worktree() {
+        return own?.worktree ?? worktree;
+      },
       env: {},
       plugin: null,
       edit: async (path: string) => {
@@ -1520,19 +1527,36 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
       ...say("model"),
       helper: async (helper) => {
         started.push(helper);
+        const own: { worktree?: string; branch?: string } = {};
         return {
           report: async (activity) => {
             reported.push({ helper: helper.name, activity });
           },
-          code: say(helper.name),
+          code: say(helper.name, {
+            get worktree() {
+              return own.worktree ?? worktree;
+            },
+          }),
           connections: [],
+          workIn: async (branch) => {
+            given.push({ helper: helper.name, branch: branch.branch });
+            Object.assign(own, branch);
+          },
           finished: async (report) => {
             finished.push({ helper: helper.name, report });
+            return own.branch === undefined ? undefined : `Merged ${own.branch}.`;
           },
         };
       },
+      branchOff: async () => {
+        const branch = `courtyard/session-helper-${made.length + 1}`;
+        const folder = `${worktree}-helper-${made.length + 1}`;
+        await mkdir(folder, { recursive: true });
+        made.push(folder);
+        return ok({ branch, worktree: folder });
+      },
     };
-    return { worktree, code, started, asked, reported, finished };
+    return { worktree, code, started, asked, reported, finished, made, given };
   };
 
   /** A tool call Claude Code checks with the adapter's hook: the model's, or a helper's. */
@@ -1631,7 +1655,7 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
-  it("starts only Claude Code's own types of helper and the repository's, never in a folder of its own", async () => {
+  it("starts only Claude Code's own types of helper and the repository's, never in a folder it names or remotely", async () => {
     const { worktree, code, started } = await helpingSession();
     await mkdir(join(worktree, ".claude", "agents"), { recursive: true });
     await writeFile(
@@ -1651,8 +1675,14 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
       await call(options, agent({ subagent_type: "code-reviewer" })),
       await call(options, agent({})),
       await call(options, agent({ subagent_type: "statusline-setup" })),
-      await call(options, agent({ isolation: "worktree" })),
+      await call(options, agent({ cwd: "/path/to/elsewhere" })),
+      await call(options, agent({ isolation: "remote" })),
     ];
+    const unchecked = {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: await quotedInGuide("That request couldn't be checked"),
+    };
 
     expect(decisions).toEqual([
       expect.objectContaining({ permissionDecision: "allow" }),
@@ -1662,14 +1692,114 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
         permissionDecision: "deny",
         permissionDecisionReason: await quotedInGuide("That helper isn't one you can start here"),
       },
-      {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: await quotedInGuide("That request couldn't be checked"),
-      },
+      unchecked,
+      unchecked,
     ]);
     expect(started.map((helper) => helper.name)).toEqual(["Review it", "Review it"]);
     await rm(worktree, { recursive: true, force: true });
+  });
+
+  it("makes a helper's own worktree itself when Claude Code asks for one, holds that helper to it, and tells Claude how its branch merged back (#395)", async () => {
+    const { worktree, code, given, made, reported } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [taskStarted("a1b2", "tool-1"), taskStarted("c3d4", "tool-2"), success],
+    });
+    await runTurn(claudeCode, { folder: worktree, code });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    const worktreeCreate = options.hooks?.WorktreeCreate?.[0]?.hooks[0];
+    if (!worktreeCreate) throw new Error("no WorktreeCreate hook");
+    const writes = {
+      description: "Build the API",
+      prompt: "Build it.",
+      subagent_type: "general-purpose",
+      isolation: "worktree",
+    };
+    const reviews = { description: "Review it", prompt: "Review it.", subagent_type: "Explore" };
+
+    const starting = await call(options, { name: "Agent", input: writes });
+    await call(options, { name: "Agent", input: reviews, id: "tool-2" });
+    // Claude Code asks for the writer's worktree by a name made of the id it gave the helper.
+    const asked = await worktreeCreate(
+      {
+        hook_event_name: "WorktreeCreate",
+        name: "agent-a1b2",
+        session_id: "s",
+        transcript_path: "",
+        cwd: worktree,
+      },
+      undefined,
+      { signal: new AbortController().signal },
+    );
+    const [own] = made;
+    if (own === undefined) throw new Error("no worktree made");
+    await writeFile(join(own, "api.ts"), "export {};\n");
+    await writeFile(join(worktree, "notes.md"), "Notes\n");
+    const inOwn = await call(options, {
+      name: "Read",
+      input: { file_path: join(own, "api.ts") },
+      id: "tool-3",
+      helper: "a1b2",
+    });
+    const inSession = await call(options, {
+      name: "Read",
+      input: { file_path: join(worktree, "notes.md") },
+      id: "tool-4",
+      helper: "a1b2",
+    });
+    const reviewing = await call(options, {
+      name: "Read",
+      input: { file_path: join(worktree, "notes.md") },
+      id: "tool-5",
+      helper: "c3d4",
+    });
+    const answers: unknown[] = [];
+    for (const hook of options.hooks?.PostToolUse?.flatMap((matcher) => matcher.hooks) ?? []) {
+      answers.push(
+        await hook(
+          {
+            hook_event_name: "PostToolUse",
+            tool_name: "Agent",
+            tool_input: writes,
+            tool_response: {
+              status: "completed",
+              content: [{ type: "text", text: "Built it." }],
+              worktreePath: own,
+            },
+            tool_use_id: "tool-1",
+            session_id: "s",
+            transcript_path: "",
+            cwd: worktree,
+          },
+          "tool-1",
+          { signal: new AbortController().signal },
+        ),
+      );
+    }
+
+    // Claude Code makes nothing itself: the worktree is Courtyard's, beside the session's.
+    expect(starting).toMatchObject({ permissionDecision: "allow", updatedInput: writes });
+    expect(asked).toEqual({
+      hookSpecificOutput: { hookEventName: "WorktreeCreate", worktreePath: own },
+    });
+    expect(given).toEqual([{ helper: "Build the API", branch: "courtyard/session-helper-1" }]);
+    expect([inOwn, inSession, reviewing]).toEqual([
+      expect.objectContaining({ permissionDecision: "allow" }),
+      expect.objectContaining({ permissionDecision: "deny" }),
+      expect.objectContaining({ permissionDecision: "allow" }),
+    ]);
+    expect(reported).toEqual([
+      { helper: "Build the API", activity: { kind: "read-file", path: "api.ts" } },
+      { helper: "Review it", activity: { kind: "read-file", path: "notes.md" } },
+    ]);
+    expect(answers).toContainEqual({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: "Merged courtyard/session-helper-1.",
+      },
+    });
+    await rm(worktree, { recursive: true, force: true });
+    await rm(own, { recursive: true, force: true });
   });
 
   it("checks each of a helper's tool calls as its own, and hands the worker its report when it finishes", async () => {

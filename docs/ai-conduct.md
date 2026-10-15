@@ -276,7 +276,9 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a
 > folder git ignores) rather than running everything again. Hand parts of the work to helpers (sub-agents) only when
 > a skill you're using calls for them or the owner asks: they work in your working directory under these same rules, at
-> most three at once, and your turn goes on once they've all reported back. Base a pull
+> most three at once, and your turn goes on once they've all reported back. Give each helper that writes code a
+> worktree and branch of its own (an isolated worktree) so they don't edit over each other: it starts from your
+> branch's last commit, so commit first, and its branch is merged back into yours when it finishes. Base a pull
 > request on the default branch, never on another pull request's branch. Before you open or update one, load the pr
 > skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you
 > can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few
@@ -309,6 +311,20 @@ Plan) and the repository's own in `.claude/agents` can be started; any other is 
 A helper doesn't start helpers of its own; one that tries is told:
 
 > A helper can't start helpers of its own: do the work yourself, and say in your report what's left.
+
+A helper that writes code gets a worktree and branch of its own when Claude asks for one (the `Agent` tool's
+`isolation: "worktree"`, #395). Courtyard makes it, beside the session's worktree and never inside the repository,
+from the session branch's last commit, and holds the helper to it as it holds the model to the session's: its edits
+and commands are decided there, and it pushes or opens a pull request only with the owner's OK. When it finishes,
+the worker commits anything it left, merges its branch into the session branch, and tells Claude beside its report:
+
+> Courtyard merged this helper's branch (<branch>) into yours, so its work is in your working directory now.
+
+or, when the merge clashed, stops it, keeps the branch, and tells Claude to sort it (merging a helper's branch is on
+the allowlist):
+
+> This helper's branch (<branch>) didn't merge cleanly into yours, so Courtyard stopped the merge and kept the
+> branch: merge it yourself (git merge <branch>), sort out the clash, and commit.
 
 Claude also reads the repository's own instructions and skills (its `CLAUDE.md` or `AGENTS.md`, ADR 0022); they're
 the repository's, so they aren't part of this guide. In a code session Claude has Matt Pocock's skills too, from
