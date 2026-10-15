@@ -4,7 +4,8 @@ import type { Page } from "@playwright/test";
  * A stand-in for the browser's speech recognition and vibration, for Chromium as Playwright runs
  * it, which has no microphone to listen with and nothing to vibrate. The test speaks for the owner
  * (`hear`), and can make it stop on its own in a pause as Chrome on Android does (`pause`), or
- * refuse the microphone (`refuse`), or send the page out of sight (`goOutOfSight`) and back
+ * refuse the microphone (`refuse`), or fail to reach its speech service (`loseConnection`), or
+ * send the page out of sight (`goOutOfSight`) and back
  * (`comeBack`). It stands in for the screen's wake lock too, released out of sight as browsers do.
  * What the page asked for (the language, the microphone on or off, each vibration, the screen
  * kept awake) is kept in the page's storage for the test to read. Everything from the words on (the talk strip, the
@@ -135,12 +136,15 @@ export const standInSpeechRecognition = (page: Page) =>
       Object.defineProperty(document, "hidden", { configurable: true, value: false });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    addEventListener("stand-in-refuse", () => {
-      const refused = listening;
+    /** Listening ends at once, for the browser's reason. */
+    const endWith = (error: string) => {
+      const ended = listening;
       stopListening();
-      refused?.onerror?.({ error: "not-allowed" });
-      refused?.onend?.({});
-    });
+      ended?.onerror?.({ error });
+      ended?.onend?.({});
+    };
+    addEventListener("stand-in-refuse", () => endWith("not-allowed"));
+    addEventListener("stand-in-lose-connection", () => endWith("network"));
 
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
@@ -185,6 +189,13 @@ export const pause = (page: Page) =>
 /** The owner, or the browser, says no to the microphone. */
 export const refuse = (page: Page) =>
   page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-refuse")));
+
+/**
+ * The browser can't reach its speech service: the connection dropped, or a Chromium browser
+ * without Google's (Vivaldi, Brave, Opera), where every listen ends like this at once (#422).
+ */
+export const loseConnection = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-lose-connection")));
 
 /** The owner switches away from Courtyard, or the screen goes off: the page is out of sight. */
 export const goOutOfSight = (page: Page) =>

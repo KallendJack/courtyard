@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   buzzes,
@@ -6,6 +7,7 @@ import {
   hear,
   hearAnew,
   listenedIn,
+  loseConnection,
   micOn,
   pause,
   refuse,
@@ -14,6 +16,15 @@ import {
   vibrations,
   withoutSpeechRecognition,
 } from "./speech-recognition.ts";
+
+/** Where the boards' screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
+const shot = async (page: Page, name: string) => {
+  const folder = process.env.COURTYARD_E2E_SHOTS;
+  if (folder !== undefined) await page.screenshot({ path: join(folder, `${name}.png`) });
+};
+
+/** What talking says where the browser has no speech service to reach (#422). */
+const CANT_LISTEN = "This browser can't listen. Chrome or Edge can";
 
 /** Words enough that the fake model takes a few seconds to write them. */
 const words = (count: number) => Array.from({ length: count }, (_, i) => `word${i + 1}`).join(" ");
@@ -311,6 +322,25 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       ).toHaveCount(1);
       await expect(message(page)).toHaveValue("Half of a");
     });
+
+    // #422: Vivaldi, Brave and Opera have the recogniser but no speech service to reach.
+    test("when the browser can't reach its speech service before anything is heard, it says this browser can't listen; after words, that it needs a connection", async ({
+      page,
+    }) => {
+      await page.goto("/workspaces/garage-gym");
+      await talking(page, says.idle).click();
+      await loseConnection(page);
+      await expect(talking(page, says.idle)).toContainText(CANT_LISTEN);
+      await expect(talking(page, says.idle)).not.toContainText("needs a connection");
+
+      // A real drop, once words were heard: the connection, and the words wait in the box.
+      await talking(page, says.idle).click();
+      await hear(page, "Chalk for the");
+      await expect(message(page)).toHaveValue("Chalk for the");
+      await loseConnection(page);
+      await expect(talking(page, says.idle)).toContainText("Speech recognition needs a connection");
+      await expect(message(page)).toHaveValue("Chalk for the");
+    });
   });
 }
 
@@ -585,6 +615,20 @@ test.describe("on a desktop", () => {
     await hear(page, "Hooks for the rings");
     expect(await side("mouseup")).toBe(false);
     await expect(session(page)).toContainText("You said: Hooks for the rings");
+  });
+
+  test("in a browser that can't reach a speech service, holding Space says so and names the ones that can (#422)", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    await expect(key(page)).toContainText("Hold Space");
+    await page.keyboard.down("Space");
+    await expect(key(page)).toContainText("Let go to send");
+    await loseConnection(page);
+    await page.keyboard.up("Space");
+    await expect(key(page)).toContainText(CANT_LISTEN);
+    await expect(session(page)).toHaveCount(0);
+    await shot(page, "desktop-talk-cant-listen");
   });
 
   test("typing anywhere goes into the message box", async ({ page }) => {
