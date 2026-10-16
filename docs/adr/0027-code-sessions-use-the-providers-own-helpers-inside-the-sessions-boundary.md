@@ -24,7 +24,7 @@ inside the session's boundary.** For Claude that's Claude Code's `Agent` tool:
   its report. Its events go in the session's event log tagged with it, so a reload shows the same.
 - **Only when a skill calls for helpers or the owner asks,** which the house process tells the model.
 
-**Codex follows the same rule when it codes** (#248): its own sub-agents, inside the same boundary, shown the same way.
+**Codex follows the same rule when it codes** (#248): its own sub-agents, inside the same boundary, shown the same way. Codex codes from ADR 0029; its sub-agents stay off until #470.
 A worktree and branch of its own for a helper that writes code is #395.
 
 **#395 (2026-10-15): a helper that writes code works on a branch of its own.** When the model asks for one (Claude's

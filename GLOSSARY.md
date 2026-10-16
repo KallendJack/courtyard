@@ -465,6 +465,12 @@ _Avoid_: permission, confirmation, prompt
 The commands a code workspace lets a model run without an approval.
 _Avoid_: whitelist, safe commands
 
+**Coding tools**:
+Courtyard's own tools for coding in a code session (run a command, write a file, edit a file), for a provider that
+codes through Courtyard rather than its own shell (Codex). Each is asked of the worker, as Claude's are, before it's
+done.
+_Avoid_: Codex's shell, sandbox
+
 **Allow always**:
 An approval's third answer: Allow, and from then on run the same command (by its leading words) without asking, for
 this session or for this workspace. Never offered for what must always ask. A workspace's are its **Allowed

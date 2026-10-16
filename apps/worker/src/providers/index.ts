@@ -47,6 +47,12 @@ export type Framing = {
    * reads files through Courtyard offers them (Codex, ADR 0015); Claude reads with Claude Code's.
    */
   readonly fileTools: FileTools | null;
+  /**
+   * Courtyard's coding tools in a code session (#248), or `null` outside one. Only a provider
+   * that codes through Courtyard offers them (Codex, whose shell is off); Claude codes with
+   * Claude Code's own tools, behind its hook.
+   */
+  readonly codeTools: CodeTools | null;
   /** Web search (ADR 0019), or `null` when the turn doesn't offer it. */
   readonly webSearch: WebSearch | null;
 };
@@ -103,6 +109,16 @@ export type FileTools = {
   readonly list: CourtyardTool;
   readonly read: CourtyardTool;
   readonly search: CourtyardTool;
+};
+
+/**
+ * Courtyard's tools for coding in a code session's worktree (#248): running a command, and
+ * writing or editing a file, each asked of the worker as `CodeTurn` says before it's done.
+ */
+export type CodeTools = {
+  readonly run: CourtyardTool;
+  readonly write: CourtyardTool;
+  readonly edit: CourtyardTool;
 };
 
 /** Part of what one of Courtyard's tools gives a model: text, or an image. */

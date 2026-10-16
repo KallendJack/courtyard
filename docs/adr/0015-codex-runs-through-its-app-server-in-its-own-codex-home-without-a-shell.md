@@ -7,6 +7,8 @@ long-running process the worker exchanges JSON-RPC messages with, which streams 
 plan's models and their effort levels, reports a usage limit as a code with its reset time, stops a turn, and signs
 in. So the Codex adapter drives the app-server, started the first time Codex is needed and kept running.
 
+Amended by ADR 0029: in a code session Codex codes through Courtyard's own tools, its shell still off.
+
 Isolation follows ADR 0003, but Codex needs more of it. Codex reads files by running shell commands, and its read-only
 sandbox stops writes, not reads, so with its shell on, a turn could read anything on the worker machine. And by
 default it loads the machine's whole Codex setup: settings, skills, memories, plugins, ChatGPT connectors, `AGENTS.md`

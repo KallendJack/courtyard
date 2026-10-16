@@ -362,6 +362,29 @@ describe("Courtyard's file tools (ADR 0015)", () => {
   });
 });
 
+describe("Courtyard's coding tools (#248)", () => {
+  it("offers running a command and writing and editing a file in a code session, each saying what waits for the owner", async () => {
+    await asCode();
+    const { framing } = await firstTurn(CODES);
+
+    const { codeTools } = framing;
+    expect([codeTools?.run, codeTools?.write, codeTools?.edit].map((tool) => tool?.name)).toEqual([
+      "run_command",
+      "write_file",
+      "edit_file",
+    ]);
+    expect(codeTools?.run.description).toBe(await quotedInGuide("Runs one command in your"));
+    expect(codeTools?.write.description).toBe(await quotedInGuide("Writes a file's whole text"));
+    expect(codeTools?.edit.description).toBe(await quotedInGuide("Changes part of a file"));
+  });
+
+  it("offers none outside a code session", async () => {
+    const { framing } = await firstTurn(CODES);
+
+    expect(framing.codeTools).toBeNull();
+  });
+});
+
 describe("keeping the workspace's and the session's text from posing as instructions", () => {
   it("keeps the context file inside its markers, however a closing marker is spelt", async () => {
     await contextFile(

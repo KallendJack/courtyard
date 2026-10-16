@@ -322,8 +322,10 @@ its plugins included.
 ### Codex
 
 Courtyard also talks to Codex, on your ChatGPT plan, so a session can carry on when Claude's
-usage runs out. It uses the Codex program Courtyard installs itself (`pnpm install`), at a fixed
-version, never a Codex you've installed elsewhere.
+usage runs out, in a code workspace too. It uses the Codex program Courtyard installs itself
+(`pnpm install`), at a fixed version, never a Codex you've installed elsewhere. In a code
+workspace Codex runs its commands through Courtyard, which uses Git for Windows' bash on the
+worker machine (the one Claude Code needs there too).
 
 - **Courtyard's Codex home is its own.** Codex keeps its sign-in in a `codex` folder in the data
   folder (`COURTYARD_DATA_DIR`), separate from `~/.codex`, so none of your own Codex settings,

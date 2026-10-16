@@ -53,6 +53,7 @@ import {
 } from "../features/things/index.ts";
 import type { Result } from "../lib/result.ts";
 import type {
+  CodeTools,
   CourtyardTool,
   FileTools,
   Framing,
@@ -673,6 +674,51 @@ const FILE_TOOLS: FileTools = {
         .string()
         .optional()
         .describe("Only files whose path matches this glob, such as *.md or notes/**."),
+    },
+  },
+};
+
+/** What every coding tool that changes something says waits for the owner. */
+const WAITS_FOR_THE_OWNER =
+  "A change outside your working directory, or to what decides how commands run (a package.json, git hooks, the .claude folder), waits for the owner to allow it; if they deny it, you're told.";
+
+/**
+ * Courtyard's coding tools as a model reads them (docs/ai-conduct.md, Courtyard's coding tools;
+ * #248), for a provider that codes through Courtyard: what each does, and what waits for the
+ * owner. The access line (`CODING_ACCESS`) says which commands run without asking.
+ */
+const CODE_TOOLS: CodeTools = {
+  run: {
+    name: "run_command",
+    description:
+      "Runs one command in your working directory and gives back its exit code and what it printed. A command this workspace allows runs at once; any other waits for the owner to allow it, and you're told if they don't. Set background for one that should outlive your turn (a dev server, a slow test run): Courtyard runs it as a task and tells you when it ends.",
+    input: {
+      command: z.string().describe("The command, as you'd type it."),
+      why: z
+        .string()
+        .optional()
+        .describe("What it's for, in a few words, which the owner sees if it waits for them."),
+      background: z
+        .boolean()
+        .optional()
+        .describe("Run it as a task that outlives your turn, rather than waiting for it."),
+    },
+  },
+  write: {
+    name: "write_file",
+    description: `Writes a file's whole text, making the file and its folders if they aren't there. ${WAITS_FOR_THE_OWNER}`,
+    input: {
+      path: z.string().describe("The file, from your working directory."),
+      content: z.string().describe("The file's whole new text."),
+    },
+  },
+  edit: {
+    name: "edit_file",
+    description: `Changes part of a file: replaces old_text, which must be in it exactly once, with new_text. Read the file first, and give old_text exactly as it is there, spaces and line breaks included. ${WAITS_FOR_THE_OWNER}`,
+    input: {
+      path: z.string().describe("The file, from your working directory."),
+      old_text: z.string().describe("The text to replace, exactly as it is in the file."),
+      new_text: z.string().describe("What replaces it."),
     },
   },
 };
@@ -1392,6 +1438,8 @@ export const framingFor = (turn: {
       ...(saves && turn.lead !== undefined ? [LEAD_TOOL] : []),
     ],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
+    // Only a provider that codes works in a code workspace (ADR 0007).
+    codeTools: turn.workspace.mode === "code" && turn.capabilities.codes ? CODE_TOOLS : null,
     webSearch: searches ? { ownerLinks: ownerLinksIn(said) } : null,
   };
 };
@@ -1738,10 +1786,16 @@ export const PAGE_NOT_ALLOWED =
   "Only pages from this turn's search results, or links the owner sent, can be read. Search for the page first.";
 
 /** Why a file tool found nothing, in the model's terms. */
+/** What a model is told when what it gave one of Courtyard's tools doesn't fit it. */
+const MALFORMED_INPUT = "That input doesn't fit this tool: check what each of its inputs takes.";
+
+/** The reply for input that doesn't fit one of Courtyard's coding tools (#248). */
+export const malformedInputReply = (): ToolReply => textReply(false, MALFORMED_INPUT);
+
 const fileRefusalReason = (refusal: FileToolRefusal) => {
   switch (refusal.kind) {
     case "malformed":
-      return "That input doesn't fit this tool: check what each of its inputs takes.";
+      return MALFORMED_INPUT;
     case "outside":
       return OUTSIDE_WORKSPACE;
     case "missing":
@@ -1800,6 +1854,82 @@ export const fileToolReply = (answer: FileToolAnswer): ToolReply =>
   answer.ok
     ? { ok: true, content: foundWords(answer.value) }
     : textReply(false, fileRefusalReason(answer.error));
+
+/** How a command run through Courtyard's coding tools ended (#248), for its reply. */
+export type CommandRun = {
+  /** Its exit code, or `null` when it was ended before it finished. */
+  readonly exitCode: number | null;
+  /** What it printed, its output and errors together, as Courtyard keeps it. */
+  readonly output: string;
+  /** Whether only the end of what it printed is kept. */
+  readonly cut: boolean;
+  /** Whether it ran too long and was ended. */
+  readonly timedOut: boolean;
+};
+
+/** The most of a command's output a model is given (#248): its end, where errors and results are. */
+export const COMMAND_OUTPUT_MAX_CHARACTERS = 30_000;
+
+/** How long a command run through Courtyard's coding tools may run, in minutes, before it ends. */
+export const COMMAND_MAX_MINUTES = 10;
+
+/**
+ * What a model is told of a command it ran with run_command (docs/ai-conduct.md, Courtyard's
+ * coding tools): its exit code and what it printed, between output markers.
+ */
+export const commandRanReply = (run: CommandRun): ToolReply => {
+  const ending = run.timedOut
+    ? `It was still running after ${COMMAND_MAX_MINUTES} minutes, so it was ended: run a command that long in the background.`
+    : run.exitCode === null
+      ? "It was ended before it finished."
+      : `Exit code ${run.exitCode}.`;
+  const printed =
+    run.output.trim() === ""
+      ? "It printed nothing."
+      : `${run.cut ? `Only the last ${COMMAND_OUTPUT_MAX_CHARACTERS.toLocaleString("en-GB")} characters of what it printed are shown.\n` : ""}<output>\n${contained(run.output)}\n</output>`;
+  return textReply(run.exitCode === 0 && !run.timedOut, `${ending}\n${printed}`);
+};
+
+/** What a model is told when a coding tool's command or change isn't done, and why (#248). */
+export const codeRefusedReply = (reason: string): ToolReply => textReply(false, reason);
+
+/** What a model is told when a command it asked for in the background started, or didn't (#182). */
+export const taskReply = (started: Result<string, string>): ToolReply =>
+  textReply(started.ok, started.ok ? started.value : started.error);
+
+/** How an edit_file or write_file went (#248), for its reply. */
+export type FileChange =
+  | { readonly kind: "written"; readonly path: string }
+  | { readonly kind: "edited"; readonly path: string }
+  | { readonly kind: "no-file"; readonly path: string }
+  | { readonly kind: "not-found"; readonly path: string }
+  | { readonly kind: "found-often"; readonly path: string; readonly times: number }
+  | { readonly kind: "unwritable"; readonly path: string };
+
+/** What a model is told of a file it wrote or edited with Courtyard's coding tools (#248). */
+export const fileChangeReply = (change: FileChange): ToolReply => {
+  const path = quoted(change.path);
+  switch (change.kind) {
+    case "written":
+      return textReply(true, `Wrote ${path}.`);
+    case "edited":
+      return textReply(true, `Changed ${path}.`);
+    case "no-file":
+      return textReply(false, `There's no file at ${path}: use write_file to make one.`);
+    case "not-found":
+      return textReply(
+        false,
+        `The text to replace isn't in ${path}: read it again and give old_text exactly as it is there.`,
+      );
+    case "found-often":
+      return textReply(
+        false,
+        `The text to replace is in ${path} ${change.times} times: give more of the lines around it, so it's there once.`,
+      );
+    case "unwritable":
+      return textReply(false, `${path} couldn't be written: it may be a folder.`);
+  }
+};
 
 /**
  * What a tidy's model is told (docs/ai-conduct.md, Tidying, which quotes it): changes to propose,
