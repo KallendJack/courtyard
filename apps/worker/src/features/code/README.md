@@ -74,9 +74,11 @@ Code sessions' git, and what they may do
   credential.
 - **Allow all for this task** (`allowsAll`, #428): whether it covers a command off the allowlist. Never one Allow
   always could never offer for the same reasons, nor gh's other commands (they act on GitHub, outside the session
-  branch), publishing or signing in to a package registry, the machine's services and processes, code given on the
-  line (`python -c`), options before git's or a package manager's command (`git -c … push`), or a runner's
-  (`pnpm exec`, `npx`) whose own command isn't covered. Of the setup files, it covers package scripts and git hooks,
+  branch), publishing or signing in to a package registry, the machine's services and processes, options before git's
+  or a package manager's command (`git -c … push`), or a runner's (`pnpm exec`, `npx`) whose own command isn't
+  covered. Code given on the line (`node -e`, `python -c`, #464) is covered, as the same code saved in the worktree
+  is: its text is read word by word for a path outside the worktree or a credential, and node's options that load
+  other code first (`-r`, `--import`) or attach a debugger still ask. Of the setup files, it covers package scripts and git hooks,
   never git's own, `.github`, Claude Code's settings or a package manager's settings (`editPlaceIn`'s `all`). It
   checks commands as they're asked for: a script the session wrote and runs is its own code, as it is without Allow
   all.

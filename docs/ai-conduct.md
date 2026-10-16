@@ -367,7 +367,10 @@ The worker decides each edit and command before it happens, the same way for eve
 worktree, an edit inside it to a file that decides what its allowed commands run (a `package.json` or the package
 manager's settings, git hooks, `.claude`, git's own `.git`), a command off the command allowlist, and a command naming
 a path outside the worktree each wait for the owner's approval (#171), with no time limit; the model hears nothing
-until they answer. Allow lets it happen. Deny, and anything else refused, tells the model why, in one of these:
+until they answer. While the session allows all (#428), most of those run without asking; code given on the line
+(`node -e`, `python -c`, #464) is one of them, as the same code saved in the worktree would be, unless its text names
+a credential or a path outside the worktree, or node is told to load other code first. Allow lets it happen. Deny,
+and anything else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
   why it's needed."

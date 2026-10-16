@@ -169,10 +169,19 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
   [{ edit: ".github/workflows/ci.yml" }, ".github/workflows/ci.yml"],
   [{ edit: ".claude/settings.json" }, ".claude/settings.json"],
   [{ edit: ".git" }, ".git"],
-  // Programs that run another command, or code given on the line.
+  // Programs that run another command.
   [{ run: "sh -c ls" }, "sh -c ls"],
   [{ run: "pnpm exec sh -c ls" }, "pnpm exec sh -c ls"],
-  [{ run: "python3 -c pass" }, "python3 -c pass"],
+  // Code given on the line that names a path outside the worktree or a credential (#464), or that
+  // loads other code first.
+  ...[
+    `node -e "require('fs').readFileSync('/etc/hosts')"`,
+    `node -e "require('fs').readFileSync('../../notes.md')"`,
+    `python3 -c "open('~/notes.md').read()"`,
+    `python -c "import os; print(os.environ['GH_TOKEN'])"`,
+    `node -e "console.log(require('os').homedir() + '/.ssh/config')"`,
+    "node --require ./hook.js -e 1",
+  ].map((run) => [{ run }, run] as const),
 ];
 
 describe("Allow all for this task", () => {
@@ -232,6 +241,31 @@ describe("Allow all for this task", () => {
 
     expect(askedAbout(asked)).toEqual(STILL_ASKS.map(([, about]) => about));
     expect(asked.map((each) => each.all)).toEqual(STILL_ASKS.map(() => undefined));
+  });
+
+  it("runs code given on the line (#464), which asks without it", async () => {
+    const commands = [
+      `node -e "const fs=require('fs'); console.log(fs.readdirSync('apps').length)"`,
+      "node --eval=1+1",
+      "node -p process.version",
+      `python3 -c "print(open('README.md').read())"`,
+      `deno eval "console.log(1)"`,
+      "bun -e 1",
+    ];
+    const { provider } = codingProvider(commands.map((run) => ({ run })));
+    const request = await start(provider);
+    const id = await startSession(request);
+    const first = await denyingEach(request, id);
+    expect(askedAbout(first.asked)).toEqual(commands);
+    expect((await allowAll(request, id, "4h")).status).toBe(200);
+
+    await sendAgain(request, id);
+    const { asked, events } = await denyingEach(request, id, first.last);
+
+    expect(asked).toEqual([]);
+    expect(ranUnderAllowAll(events)).toEqual(
+      commands.map((command) => ({ kind: "ran-command", command })),
+    );
   });
 
   it("still asks before running what's in a folder git ignores (#219), never offering itself or Allow always", async () => {

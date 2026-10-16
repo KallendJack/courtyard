@@ -22,4 +22,4 @@ None of its own: `sessions/`' `POST /api/sessions/:id/allow-all` (for `1h`, `4h`
 - It's never extended while on.
 - `sessions/` keeps each session's as its events are written and puts it on the session's summary (`allowingAll`),
   for its strip and its row in Running.
-- What it covers is `code/`'s `allowsAll`.
+- What it covers, code given on the line included (#464), is `code/`'s `allowsAll`.
