@@ -8,14 +8,14 @@ import {
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/button";
-import { FormError } from "@/components/form-error";
-import { createKept, PlaceholderRows, useKept } from "@/components/kept";
-import { NoteRow, NoteWords } from "@/components/note-row";
-import { EmptyState } from "@/components/notice";
+import { Button } from "@/components/buttons/button";
+import { NoteRow, NoteWords } from "@/components/chat/note-row";
+import { FormError } from "@/components/forms/form-error";
+import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
+import { EmptyState } from "@/components/layout/notice";
 import { useAction } from "@/hooks/use-action";
 import type { ContextPlace } from "../../api/worker.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { describeWhen } from "../../lib/when.ts";
 import { loadChanges, undoChange } from "./api.ts";
 

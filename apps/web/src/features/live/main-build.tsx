@@ -7,12 +7,12 @@ import type {
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
-import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/build-stages";
-import { Button } from "@/components/button";
-import { CapsLabel } from "@/components/caps-label";
-import { useFresh } from "@/components/kept";
-import { Sheet } from "@/components/sheet";
-import { WebButton } from "@/components/web-link";
+import { Button } from "@/components/buttons/button";
+import { WebButton } from "@/components/buttons/web-link";
+import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/code/build-stages";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { useFresh } from "@/components/layout/kept";
+import { Sheet } from "@/components/sheets/sheet";
 import { classes } from "@/lib/classes";
 import type { FromWorker } from "../../api/worker.ts";
 import { elapsedWords } from "../../lib/when.ts";

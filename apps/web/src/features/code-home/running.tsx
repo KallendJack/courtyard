@@ -7,14 +7,14 @@ import {
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { AllowAllMark, timeLeft } from "@/components/allowing-all";
-import { Button } from "@/components/button";
-import { FormError } from "@/components/form-error";
-import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
-import { ByLead, LeadMark } from "@/components/lead-mark";
-import { doingWords } from "@/components/session-state";
+import { Button } from "@/components/buttons/button";
+import { doingWords } from "@/components/chat/session-state";
+import { AllowAllMark, timeLeft } from "@/components/code/allowing-all";
+import { ByLead, LeadMark } from "@/components/code/lead-mark";
+import { FormError } from "@/components/forms/form-error";
+import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { pauseLead, runLead } from "./api.ts";
 

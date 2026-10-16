@@ -6,8 +6,8 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { useEffect } from "react";
-import { useLayout } from "@/components/handheld";
-import { PlaceholderRows } from "@/components/kept";
+import { useLayout } from "@/components/frame/handheld";
+import { PlaceholderRows } from "@/components/layout/kept";
 import { classes } from "@/lib/classes";
 import { describeWhen } from "../../lib/when.ts";
 import {

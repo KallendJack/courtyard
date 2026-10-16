@@ -6,7 +6,7 @@
  * (scope.tsx): coming after the theme's, they'd otherwise outrank its classes everywhere.
  */
 @reference "../../styles.css";
-@source "./**/*.tsx";
+@source ".//**/*.tsx";
 
 :where([data-things]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

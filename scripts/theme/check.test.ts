@@ -109,7 +109,7 @@ export const Save = () => (
 test("fails anything that scrolls by itself, outside the shared scroller (#420)", async () => {
   await source({
     "styles.css": THEME,
-    "components/scroller.tsx": `const AXES = { y: "overflow-y-auto", tablet: "md:overflow-auto" };`,
+    "components/layout/scroller.tsx": `const AXES = { y: "overflow-y-auto", tablet: "md:overflow-auto" };`,
     "review/diff.tsx": `// Scrolls with overflow-y-auto (#278).
 export const Lines = () => (
   <>
@@ -148,7 +148,7 @@ export const Lines = () => (
 test("fails a label in capitals written by hand, outside the shared CapsLabel (#242)", async () => {
   await source({
     "styles.css": THEME,
-    "components/caps-label.tsx": `const LOOK = "text-label font-semibold tracking-label uppercase";`,
+    "components/layout/caps-label.tsx": `const LOOK = "text-label font-semibold tracking-label uppercase";`,
     "routes/workspace.tsx": `// A label in uppercase, the old way (#232).
 export const Above = () => (
   <>

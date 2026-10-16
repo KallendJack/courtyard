@@ -1,9 +1,9 @@
 import type { ChangeId } from "@courtyard/contract";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/button";
-import { NoteRow, NoteWords } from "@/components/note-row";
+import { Button } from "@/components/buttons/button";
+import { NoteRow, NoteWords } from "@/components/chat/note-row";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { undoChange } from "./api.ts";
 
 /**

@@ -9,18 +9,18 @@ import {
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Button, IconButton } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { FactsPlansIdeas } from "@/components/context-lines";
-import { FormError } from "@/components/form-error";
-import { EmptyState, StatusPill } from "@/components/notice";
-import { CARD, SectionTitle } from "@/components/page";
-import { SkillList } from "@/components/skill-list";
+import { Button, IconButton } from "@/components/buttons/button";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { FormError } from "@/components/forms/form-error";
+import { EmptyState, StatusPill } from "@/components/layout/notice";
+import { CARD, SectionTitle } from "@/components/layout/page";
+import { FactsPlansIdeas } from "@/components/workspace/context-lines";
+import { SkillList } from "@/components/workspace/skill-list";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
-import { GetToKnow } from "../sessions/get-to-know.tsx";
-import { GrillablePlan } from "../sessions/grill-plan.tsx";
-import { startSession } from "../sessions/messages.ts";
+import { describeProblem } from "../../components/layout/problems.tsx";
+import { startSession } from "../sessions/composer/messages.ts";
+import { GetToKnow } from "../sessions/notes/get-to-know.tsx";
+import { GrillablePlan } from "../sessions/notes/grill-plan.tsx";
 
 /**
  * What Courtyard knows (#300): the workspace's Facts, Plans and Ideas, each line with Fix (and each

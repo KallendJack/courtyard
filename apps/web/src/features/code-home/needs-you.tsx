@@ -7,18 +7,18 @@ import type {
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ButtonLink } from "@/components/button-link";
-import { FormError } from "@/components/form-error";
-import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/home-block";
-import { PlaceholderRows } from "@/components/kept";
-import { ThumbButton } from "@/components/thumb-button";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { ThumbButton } from "@/components/buttons/thumb-button";
+import { FormError } from "@/components/forms/form-error";
+import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/layout/home-block";
+import { PlaceholderRows } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
 import { continueTurn } from "../../api/worker.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { clockWords } from "../../lib/when.ts";
 import { MattSetupDone, SetupSheet } from "../matt-setup/setup-card.tsx";
 import { bringUpToDate, endPullRequest } from "../pull-requests/api.ts";
-import { answerApproval } from "../sessions/messages.ts";
+import { answerApproval } from "../sessions/composer/messages.ts";
 import { useMergeInOrder } from "./merge-in-order.ts";
 import { agoWords, type Need } from "./needs.ts";
 

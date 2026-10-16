@@ -1,9 +1,9 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { Button } from "@/components/button";
-import { CapsLabel } from "@/components/caps-label";
-import { Scroller } from "@/components/scroller";
+import { Button } from "@/components/buttons/button";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { Scroller } from "@/components/layout/scroller";
 import { classes } from "@/lib/classes";
-import { Answer } from "../sessions/answer.tsx";
+import { Answer } from "../sessions/answer/answer.tsx";
 import { readDescription } from "./description.ts";
 
 /** Markdown from the description, at body size, all at once. */

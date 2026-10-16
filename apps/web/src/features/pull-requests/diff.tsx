@@ -1,6 +1,6 @@
 import type { ChangedFile } from "@courtyard/contract";
 import { type ReactNode, useEffect, useRef } from "react";
-import { Scroller } from "@/components/scroller";
+import { Scroller } from "@/components/layout/scroller";
 import { classes } from "@/lib/classes";
 
 /** A row of a hunk, and its line in the file as it is now (none for a removed one). */

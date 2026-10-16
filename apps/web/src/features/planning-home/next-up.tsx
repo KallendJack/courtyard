@@ -1,8 +1,8 @@
 import type { DuePlan, ListedSession, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { AlignLeft } from "lucide-react";
-import { CapsLabel } from "@/components/caps-label";
-import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { describeWhen } from "../../lib/when.ts";
 
 /** How long ago a session can have been used and still be one to pick up again. */

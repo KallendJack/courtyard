@@ -7,7 +7,7 @@
  * everywhere.
  */
 @reference "../../styles.css";
-@source "./**/*.tsx";
+@source ".//**/*.tsx";
 
 :where([data-home]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

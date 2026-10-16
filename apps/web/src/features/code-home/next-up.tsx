@@ -8,16 +8,16 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { Flame, Play, Zap } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Button } from "@/components/button";
-import { DialogCard } from "@/components/dialog-card";
-import { FormError } from "@/components/form-error";
-import { useBlocksFill } from "@/components/handheld";
-import { Block, BlockEmpty, BlockRows } from "@/components/home-block";
-import { PlaceholderRows } from "@/components/kept";
-import { Switch } from "@/components/switch";
+import { Button } from "@/components/buttons/button";
+import { FormError } from "@/components/forms/form-error";
+import { Switch } from "@/components/forms/switch";
+import { useBlocksFill } from "@/components/frame/handheld";
+import { DialogCard } from "@/components/layout/dialog-card";
+import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
+import { PlaceholderRows } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { runLead, startOnIssue } from "./api.ts";
 

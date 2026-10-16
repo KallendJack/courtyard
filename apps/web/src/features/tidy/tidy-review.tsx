@@ -7,16 +7,16 @@ import {
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { Button } from "@/components/button";
-import { FormError } from "@/components/form-error";
-import { PlaceholderRows } from "@/components/kept";
-import { NoteRow } from "@/components/note-row";
-import { EmptyState } from "@/components/notice";
-import { Page } from "@/components/page";
-import { TickBox } from "@/components/tick-box";
+import { Button } from "@/components/buttons/button";
+import { NoteRow } from "@/components/chat/note-row";
+import { FormError } from "@/components/forms/form-error";
+import { TickBox } from "@/components/forms/tick-box";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { EmptyState } from "@/components/layout/notice";
+import { Page } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { proposeTidy, saveTidy } from "./api.ts";
 
 /** Whose file is tidied: a workspace's, or the owner context for `undefined`. */

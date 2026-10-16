@@ -1,13 +1,15 @@
-// The folders guard (#445, #453), run by `pnpm check`. Both apps use familiar folder names, and
-// docs/overview.md lists every feature, so the docs and the folders can't drift apart. This fails
-// on a folder or file at the top of an app's src that isn't one of its own (below), a feature
-// folder the overview doesn't list for that app, a listed feature with no folder, and a worker
-// feature, auth or integrations folder that docs/architecture.md doesn't describe (as `name/`).
+// The folders guard (#445, #453, #459), run by `pnpm check`. Both apps use familiar folder names,
+// docs/overview.md lists every feature, and each feature has a README that docs/architecture.md
+// links, so the docs and the folders can't drift apart. This fails on a folder or file at the top
+// of an app's src that isn't one of its own (below), a feature folder the overview doesn't list
+// for that app, a listed feature with no folder, a folder that needs a README (every feature, each
+// of the worker's auth and integrations, its providers and prompts) with none or one
+// docs/architecture.md doesn't link, and any folder with more than 15 files.
 //
 //   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture>]
 
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join, relative } from "node:path";
 
 const [
   workerSrc = join(import.meta.dirname, "../../apps/worker/src"),
@@ -21,8 +23,12 @@ type App = {
   src: string;
   folders: readonly string[];
   files: readonly string[];
-  /** Folders whose subfolders the architecture doc describes. */
-  described: readonly string[];
+  /** Folders each of whose subfolders has a README. */
+  readmeEach: readonly string[];
+  /** Folders that have a README themselves. */
+  readmeOwn: readonly string[];
+  /** Where the app is, as docs/architecture.md links into it. */
+  linkedAs: string;
 };
 
 const APPS: readonly App[] = [
@@ -31,16 +37,23 @@ const APPS: readonly App[] = [
     src: workerSrc,
     folders: ["features", "providers", "prompts", "auth", "integrations", "config", "lib"],
     files: ["main.ts", "start.ts", "worker.ts"],
-    described: ["features", "auth", "integrations"],
+    readmeEach: ["features", "auth", "integrations"],
+    readmeOwn: ["providers", "prompts"],
+    linkedAs: "../apps/worker/src",
   },
   {
     name: "Web",
     src: webSrc,
     folders: ["features", "components", "hooks", "api", "routes", "lib"],
     files: ["main.tsx", "styles.css", "routeTree.gen.ts"],
-    described: [],
+    readmeEach: ["features"],
+    readmeOwn: [],
+    linkedAs: "../apps/web/src",
   },
 ];
+
+/** The most files one folder holds before it's split into parts. */
+const MOST_FILES = 15;
 
 /** What's directly inside a folder: its folders and its files, each sorted. */
 const contentsOf = async (path: string) => {
@@ -52,6 +65,14 @@ const contentsOf = async (path: string) => {
       .sort();
   return { folders: names(true), files: names(false) };
 };
+
+/** A folder and every folder inside it. */
+const everyFolder = async (path: string): Promise<string[]> => [
+  path,
+  ...(
+    await Promise.all((await contentsOf(path)).folders.map((name) => everyFolder(join(path, name))))
+  ).flat(),
+];
 
 /** The features the overview lists for an app: the backticked names on its `**<app> features:**` lines. */
 const listedIn = (text: string, app: App["name"]) => {
@@ -101,13 +122,39 @@ for (const app of APPS) {
       );
     }
   }
-  for (const folder of app.described.filter((name) => top.folders.includes(name))) {
-    for (const name of (await contentsOf(join(app.src, folder))).folders) {
-      if (!architectureText.includes(`\`${name}/\``)) {
-        problems.push(
-          `${app.name}: ${folder}/${name}/ isn't described in docs/architecture.md (as \`${name}/\`).`,
-        );
-      }
+  const needReadmes = [
+    ...app.readmeOwn.filter((name) => top.folders.includes(name)),
+    ...(
+      await Promise.all(
+        app.readmeEach
+          .filter((name) => top.folders.includes(name))
+          .map(async (folder) =>
+            (await contentsOf(join(app.src, folder))).folders.map((name) => `${folder}/${name}`),
+          ),
+      )
+    ).flat(),
+  ];
+  for (const folder of needReadmes) {
+    if (!(await contentsOf(join(app.src, folder))).files.includes("README.md")) {
+      problems.push(
+        `${app.name}: ${folder}/ has no README.md: what it does, one example, what it uses, what uses it, and its API or screens.`,
+      );
+      continue;
+    }
+    const link = `${app.linkedAs}/${folder}/README.md`;
+    if (!architectureText.includes(`(${link})`)) {
+      problems.push(
+        `${app.name}: docs/architecture.md doesn't link ${folder}/README.md (as ${link}).`,
+      );
+    }
+  }
+  for (const folder of await everyFolder(app.src)) {
+    const { files } = await contentsOf(folder);
+    if (files.length > MOST_FILES) {
+      const path = relative(app.src, folder).split("\\").join("/");
+      problems.push(
+        `${app.name}: ${path === "" ? basename(app.src) : path}/ has ${files.length} files: split it into parts of at most ${MOST_FILES}.`,
+      );
     }
   }
 }

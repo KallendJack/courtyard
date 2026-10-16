@@ -2,11 +2,11 @@ import type { SessionId, WorkspaceSummary } from "@courtyard/contract";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { useLayout } from "@/components/handheld";
-import { PlaceholderRows } from "@/components/kept";
-import { EmptyState } from "@/components/notice";
-import { Page, PageTitle } from "@/components/page";
-import { WorkspaceIcon } from "@/components/workspace-icon";
+import { useLayout } from "@/components/frame/handheld";
+import { PlaceholderRows } from "@/components/layout/kept";
+import { EmptyState } from "@/components/layout/notice";
+import { Page, PageTitle } from "@/components/layout/page";
+import { WorkspaceIcon } from "@/components/workspace/workspace-icon";
 import { classes } from "@/lib/classes";
 
 // Loaded once the page shows, so the page never waits for them and they stay off the first load:

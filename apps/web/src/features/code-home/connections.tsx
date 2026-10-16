@@ -2,15 +2,15 @@ import type { PaperFile, WorkspaceConnections, WorkspaceId } from "@courtyard/co
 import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { Button } from "@/components/button";
-import { CardDialog } from "@/components/card-dialog";
-import { GitHubMark, PaperMark } from "@/components/connections-line";
-import { FormError } from "@/components/form-error";
-import { placeUnder } from "@/components/place-under";
-import { RadioRow } from "@/components/radio-row";
-import { Scroller } from "@/components/scroller";
+import { Button } from "@/components/buttons/button";
+import { GitHubMark, PaperMark } from "@/components/code/connections-line";
+import { FormError } from "@/components/forms/form-error";
+import { RadioRow } from "@/components/forms/radio-row";
+import { CardDialog } from "@/components/layout/card-dialog";
+import { placeUnder } from "@/components/layout/place-under";
+import { Scroller } from "@/components/layout/scroller";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { connectPaper, loadPaperFiles } from "./api.ts";
 
 /** The file Connect connects: one of the owner's, or a new one named after the workspace. */
