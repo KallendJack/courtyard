@@ -7,11 +7,11 @@
  * after the theme's, they'd otherwise outrank its classes everywhere.
  */
 @reference "../../styles.css";
-@source "./**/*.tsx";
-@source "../../components/workspace-tabs.tsx";
-@source "../../components/home-block.tsx";
-@source "../../components/connections-line.tsx";
-@source "../../components/thumb-button.tsx";
+@source ".//**/*.tsx";
+@source "../../components/workspace/workspace-tabs.tsx";
+@source "../../components/layout/home-block.tsx";
+@source "../../components/code/connections-line.tsx";
+@source "../../components/buttons/thumb-button.tsx";
 
 :where([data-code-home]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

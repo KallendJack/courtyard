@@ -4,18 +4,18 @@ import {
   type OwnerContextDetail,
 } from "@courtyard/contract";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { CapsLabel } from "@/components/caps-label";
-import { ContextLines, FactsPlansIdeas } from "@/components/context-lines";
-import { FormError } from "@/components/form-error";
-import { StatusPill } from "@/components/notice";
-import { SectionTitle } from "@/components/page";
+import { Button } from "@/components/buttons/button";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { FormError } from "@/components/forms/form-error";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { StatusPill } from "@/components/layout/notice";
+import { SectionTitle } from "@/components/layout/page";
+import { ContextLines, FactsPlansIdeas } from "@/components/workspace/context-lines";
 import { useAction } from "@/hooks/use-action";
 import type { FromWorker } from "../../api/worker.ts";
 import { startOwnerContext } from "../../api/worker-calls.ts";
-import { describeProblem } from "../../components/problems.tsx";
-import { GetToKnow } from "../sessions/get-to-know.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
+import { GetToKnow } from "../sessions/notes/get-to-know.tsx";
 
 /**
  * The owner context in Settings (#102): what every workspace's models read about the owner

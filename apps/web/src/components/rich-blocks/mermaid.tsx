@@ -1,6 +1,6 @@
 import mermaid from "mermaid";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Scroller } from "@/components/scroller";
+import { Scroller } from "@/components/layout/scroller";
 import { classes } from "@/lib/classes";
 import { cleanDiagram } from "./diagram-svg.ts";
 import { DrawingPlace, type DrawingProps } from "./fenced.tsx";

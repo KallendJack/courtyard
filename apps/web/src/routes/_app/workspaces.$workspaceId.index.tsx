@@ -2,15 +2,15 @@ import { ChangeId, type CodeSessionList, WORKSPACE_NAME_MAX_LENGTH } from "@cour
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { Archive, Pencil } from "lucide-react";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
-import { IconButton } from "@/components/button";
-import { CapsLabel } from "@/components/caps-label";
-import { ConfirmStep } from "@/components/confirm-step";
-import { IconChooser } from "@/components/icon-chooser";
-import { Page, PageTitle } from "@/components/page";
-import { RenameForm } from "@/components/rename-form";
-import { WorkspaceMenu } from "@/components/workspace-menu";
+import { IconButton } from "@/components/buttons/button";
+import { ConfirmStep } from "@/components/forms/confirm-step";
+import { RenameForm } from "@/components/forms/rename-form";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { Page, PageTitle } from "@/components/layout/page";
+import { IconChooser } from "@/components/sheets/icon-chooser";
+import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../api/worker.ts";
-import { describeProblem, Problem } from "../../components/problems.tsx";
+import { describeProblem, Problem } from "../../components/layout/problems.tsx";
 import type { Deleted } from "../../features/planning-home/planning-home.tsx";
 import {
   KEPT_SESSIONS,

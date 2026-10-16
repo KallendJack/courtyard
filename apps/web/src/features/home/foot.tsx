@@ -1,6 +1,6 @@
 import type { ContextBackup, WorkspaceId, WorkspaceSummary } from "@courtyard/contract";
-import { ButtonLink } from "@/components/button-link";
-import { PlaceholderRows } from "@/components/kept";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { PlaceholderRows } from "@/components/layout/kept";
 import { describeWhen } from "../../lib/when.ts";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { useBackup } from "../settings/backup-status.tsx";

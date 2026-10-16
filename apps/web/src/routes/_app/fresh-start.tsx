@@ -1,15 +1,15 @@
 import { FRESH_START_WORDS, type RunningTurn } from "@courtyard/contract";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { BackLink } from "@/components/back-link";
-import { Button } from "@/components/button";
-import { ButtonLink } from "@/components/button-link";
-import { FormError } from "@/components/form-error";
-import { InfoBox, Notice } from "@/components/notice";
-import { Page, PageTitle } from "@/components/page";
-import { TextField } from "@/components/text-field";
+import { BackLink } from "@/components/buttons/back-link";
+import { Button } from "@/components/buttons/button";
+import { ButtonLink } from "@/components/buttons/button-link";
+import { FormError } from "@/components/forms/form-error";
+import { TextField } from "@/components/forms/text-field";
+import { InfoBox, Notice } from "@/components/layout/notice";
+import { Page, PageTitle } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem, Problem } from "../../components/problems.tsx";
+import { describeProblem, Problem } from "../../components/layout/problems.tsx";
 import { startFresh } from "../../features/fresh-start/api.ts";
 
 export const Route = createFileRoute("/_app/fresh-start")({

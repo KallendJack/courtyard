@@ -1,7 +1,7 @@
 import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { BackLink } from "@/components/back-link";
-import { PageTitle } from "@/components/page";
+import { BackLink } from "@/components/buttons/back-link";
+import { PageTitle } from "@/components/layout/page";
 import { TidyReview } from "../../features/tidy/tidy-review.tsx";
 
 export const Route = createFileRoute("/_app/tidy")({

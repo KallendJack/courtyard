@@ -1,7 +1,7 @@
 import { WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Page, PageTitle } from "@/components/page";
-import { Problem } from "../../components/problems.tsx";
+import { Page, PageTitle } from "@/components/layout/page";
+import { Problem } from "../../components/layout/problems.tsx";
 import { ThingCard } from "../../features/things/thing-card.tsx";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/things/$slug")({

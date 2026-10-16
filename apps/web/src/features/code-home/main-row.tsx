@@ -1,6 +1,6 @@
 import type { WorkspaceId, WorkspaceMain } from "@courtyard/contract";
-import { CapsLabel } from "@/components/caps-label";
-import { createKept, PlaceholderRows, useKept } from "@/components/kept";
+import { CapsLabel } from "@/components/layout/caps-label";
+import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
 import { LiveUpdate } from "../live/live-update.tsx";
 import { MAIN_RUNNING_EVERY_MS, MainBuildCard, useLive } from "../live/main-build.tsx";
 import { loadMain } from "./api.ts";

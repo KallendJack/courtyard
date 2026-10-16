@@ -1,10 +1,10 @@
 import type { QuickAnswer, QuickLine } from "@courtyard/contract";
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import { Button, IconButton } from "@/components/button";
-import { Scroller } from "@/components/scroller";
+import { Button, IconButton } from "@/components/buttons/button";
+import { Scroller } from "@/components/layout/scroller";
 import { classes } from "@/lib/classes";
-import { Answer } from "../sessions/answer.tsx";
+import { Answer } from "../sessions/answer/answer.tsx";
 
 /** A file's name without its folders: "slot-row.tsx". */
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);

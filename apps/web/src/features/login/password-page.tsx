@@ -1,12 +1,12 @@
 import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Button } from "@/components/button";
-import { CourtyardMark } from "@/components/courtyard-mark";
-import { FormError } from "@/components/form-error";
-import { TextField } from "@/components/text-field";
+import { Button } from "@/components/buttons/button";
+import { FormError } from "@/components/forms/form-error";
+import { TextField } from "@/components/forms/text-field";
+import { CourtyardMark } from "@/components/layout/courtyard-mark";
 import { useAction } from "@/hooks/use-action";
 import { sendPassword } from "../../api/worker.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 
 /**
  * The setup and login pages share one shape: a title, a password form, and on success the router

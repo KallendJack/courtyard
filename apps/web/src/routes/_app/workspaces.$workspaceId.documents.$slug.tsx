@@ -1,15 +1,15 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type DocumentDetail, WorkspaceId } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { BackLink } from "@/components/back-link";
-import { Button } from "@/components/button";
-import { FormError } from "@/components/form-error";
-import { Page, PageTitle } from "@/components/page";
-import { RenameForm } from "@/components/rename-form";
+import { BackLink } from "@/components/buttons/back-link";
+import { Button } from "@/components/buttons/button";
+import { FormError } from "@/components/forms/form-error";
+import { RenameForm } from "@/components/forms/rename-form";
+import { Page, PageTitle } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem, Problem } from "../../components/problems.tsx";
+import { describeProblem, Problem } from "../../components/layout/problems.tsx";
 import { deleteDocument, renameDocument } from "../../features/documents/api.ts";
-import { Answer } from "../../features/sessions/answer.tsx";
+import { Answer } from "../../features/sessions/answer/answer.tsx";
 import { describeWhen } from "../../lib/when.ts";
 
 export const Route = createFileRoute("/_app/workspaces/$workspaceId/documents/$slug")({

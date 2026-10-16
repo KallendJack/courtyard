@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button } from "@/components/button";
+import { Button } from "@/components/buttons/button";
 import { logOutOthers as logOutOthersOnWorker } from "../../api/worker.ts";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 
 /** Ends every other device's login, for when a phone or laptop is lost. */
 export function LogOutOthers() {

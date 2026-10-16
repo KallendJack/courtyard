@@ -28,15 +28,15 @@ how the parts connect.
   failed. Components join classes with `lib/classes.ts`, which merges nothing, so no class-merging code reaches the
   first load.
 - **Every screen is a pinned header, one scrolling middle and a pinned footer** (the shared page layout,
-  `components/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is the
-  shared `Scroller` (`components/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard cut;
+  `components/layout/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is the
+  shared `Scroller` (`components/layout/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard cut;
   `scripts/theme/check.ts` fails an `overflow-*-auto` anywhere else.
-- **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/kept.tsx`,
+- **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/layout/kept.tsx`,
   #269): the last answer at once on a revisit, faint rows in its place the first time, never a spinner.
 - **Nothing moves once drawn** (#283, #398): what loads later holds its space from the first frame, at its final size.
   A dashboard block's size is set by the layout, never by its rows: its rows scroll inside, and empty it keeps its
   size with one quiet line. `e2e/layout-shift.spec.ts` fails a main page that shifts while it loads.
-- **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/kept.tsx`, #387): every 30 s
+- **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/layout/kept.tsx`, #387): every 30 s
   while calm, faster while busy, paused while the tab is hidden and asked at once when it's shown. Never a timer of
   its own.
 - **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
@@ -54,8 +54,11 @@ how the parts connect.
 - **Familiar folders, the same in both apps** (#453). The worker's `src` has `features/`, `providers/`, `prompts/`,
   `auth/`, `integrations/`, `config/` and `lib/`; the web app's has `features/`, `components/`, `hooks/`, `api/`,
   `routes/` and `lib/`. A feature has one name in both apps (`features/things/`). A new feature is listed in
-  `docs/overview.md` (and, in the worker, described in `docs/architecture.md`); `scripts/folders/check.ts` fails
-  `pnpm check` otherwise. A new top-level folder is the owner's call.
+  `docs/overview.md` and has a `README.md` (#459: what it does, one example, what it uses, what uses it, and its API
+  or screens) that `docs/architecture.md` links; so do each of the worker's `auth/` and `integrations/` folders, and
+  its `providers/` and `prompts/`. A folder holds at most 15 files: a bigger one is split into parts by kind
+  (`components/layout/`, `features/sessions/answer/`). `scripts/folders/check.ts` fails `pnpm check` otherwise. A new
+  top-level folder is the owner's call.
 - **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`lib/http.ts`), files
   through `lib/files.ts`, workspace errors through one handler, and tests through `test/testing.ts`. Check there before writing a
   helper; if one is missing, add it there.

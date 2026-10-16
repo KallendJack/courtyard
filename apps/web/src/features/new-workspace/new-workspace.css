@@ -7,8 +7,8 @@
  * classes everywhere.
  */
 @reference "../../styles.css";
-@source "./**/*.tsx";
-@source "../../components/repo-picker.tsx";
+@source ".//**/*.tsx";
+@source "../../components/code/repo-picker.tsx";
 
 :where([data-new-workspace]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

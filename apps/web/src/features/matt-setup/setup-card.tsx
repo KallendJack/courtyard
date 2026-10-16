@@ -9,15 +9,15 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { type ReactNode, useState } from "react";
-import { Button } from "@/components/button";
-import { CardDialog } from "@/components/card-dialog";
-import { FormError } from "@/components/form-error";
-import { InfoBox } from "@/components/notice";
-import { Scroller } from "@/components/scroller";
-import { SegmentedChoice } from "@/components/segmented-choice";
-import { WebLink } from "@/components/web-link";
+import { Button } from "@/components/buttons/button";
+import { WebLink } from "@/components/buttons/web-link";
+import { FormError } from "@/components/forms/form-error";
+import { SegmentedChoice } from "@/components/forms/segmented-choice";
+import { CardDialog } from "@/components/layout/card-dialog";
+import { InfoBox } from "@/components/layout/notice";
+import { Scroller } from "@/components/layout/scroller";
 import { useAction } from "@/hooks/use-action";
-import { describeProblem } from "../../components/problems.tsx";
+import { describeProblem } from "../../components/layout/problems.tsx";
 import { answerMattSetup } from "./api.ts";
 
 /**

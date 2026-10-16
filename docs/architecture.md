@@ -57,8 +57,10 @@ Both apps use familiar folder names, listed in the [overview](overview.md). The 
 `index.ts` is what the module does and `routes.ts`, when it has one, is its part of the API. `worker.ts` builds every
 module from the settings and wires them together. The web app is pages (`routes/`) built from its features
 (`features/<name>/`, a feature named as the worker's where both have it) and shared pieces (`components/`, `hooks/`,
-`api/`, `lib/`). The contract package sits between them. `pnpm check` fails a folder that isn't one of these, or a
-feature missing from the overview or here.
+`api/`, `lib/`). The contract package sits between them. Each feature (and each of the worker's `auth/` and
+`integrations/` folders, and its `providers/` and `prompts/`) has a README with its detail, linked below. `pnpm check`
+fails a folder that isn't one of these, a feature missing from the overview, a README missing or not linked here,
+and any folder with more than 15 files: a bigger one is split into parts (#459).
 
 ### The worker: `apps/worker/src`
 
@@ -72,377 +74,68 @@ feature missing from the overview or here.
   same-site JSON only, and logged in, apart from logging in itself). It also holds the routes for workspaces, the
   owner context, backup status and live updates, and serves the web app's files.
 
-**The models: `providers/` and `prompts/`**
+**Every module's README.** Each folder below has a README in one shape: what it does, one example, what it uses,
+what uses it, and its API, then how it works. This map keeps the big picture; the detail lives there.
 
-- **`providers/`:** the provider seam. `index.ts` says what every provider does (its status, its models, one turn,
-  one-off questions, a sign-in when it has one). Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`.
-  Claude and Codex keep their status with `createStatusKeeper` (#282): a good answer for a minute, one saying they
-  can't be used for a few seconds, the last good one through a check that gets no answer in time, and a finished
-  turn counts as a good check.
-- **`prompts/`:** everything a model reads, built from [`ai-conduct.md`](ai-conduct.md): each turn's framing
-  (instructions with the documents and Things lists, the skills list and the skills in use, the conversation so
-  far, and Courtyard's tools: the save tool, the document tool, the Things tool, use skill and suggest replies), the replies to Courtyard's
-  tools, and the text for Tidy, titling a session and a pull request's quick questions.
+*The models*
 
-**Features: `features/`**, one folder each, grouped here by job as in the [overview](overview.md)
+- [`providers/`](../apps/worker/src/providers/README.md): the provider seam; Claude, Codex and the fakes behind it.
+- [`prompts/`](../apps/worker/src/prompts/README.md): everything a model reads, built from [`ai-conduct.md`](ai-conduct.md).
 
-*Talking to the models*
+*Talking to the models* (`features/`)
 
-- **`sessions/`:** sessions as event logs. Starts and runs turns through a provider, answering each call to
-  Courtyard's tools by name (one `callTool` on the provider seam, so a new tool needs no adapter change). A new tool
-  is a name in `TurnToolName` (`providers/`), its definition beside its replies in `prompts/`, its answer in the
-  turn's `answers` (which the compiler asks for), and a scripted line for the fake. It follows each
-  one live from any position, and handles Stop, Carry on, titles, and Undo and Edit of saves. A message sent while
-  a turn runs goes into that answer on a provider that steers (#252), or is queued and sent once the turn ends
-  (#177), and its list of a workspace's sessions says whose
-  turn it is in each (#179). Its routes include the event stream, the
-  list of models, Get to know (a session started with its house skill), Grill this plan, each attachment
-  (`GET /api/sessions/:id/attachments/:attachment`), Save as document (`POST /api/sessions/:id/documents`), Undo
-  of a document save (`POST /api/sessions/:id/documents/:save/undo`) or a Thing save
-  (`POST /api/sessions/:id/things/:save/undo`), and removing a queued message
-  (`DELETE /api/sessions/:id/queued/:queued`).
-- **`saves/`:** checks a model's save and writes it as a change; the owner's Undo and Edit from a save's note. Uses
-  `context-file/` and `context-folder/`.
-- **`suggested-replies/`:** checks the replies a model suggests with the suggest replies tool (ADR 0017): two or
-  three, each a few words on one line, all different, one set per answer; once they're taken, keeps what the answer
-  writes after them apart from lines it repeats.
-- **`quick-questions/`:** quick questions about a pull request (#327): a small read-only conversation on its page,
-  whoever opened it. Each question is a one-off question (`answerOnce`, no tools, no files) worded by `prompts/`, with
-  the pull request's review from `pull-requests/`, so its model reads the pull request and changes nothing, and no
-  session, branch or worktree is involved. It keeps the lines an answer points at only where the diff shows them, and
-  keeps each pull request's conversation in the worker's memory (the latest 50), one question at a time. Fix it in a
-  session hands the conversation, as the worker's message, to `pull-requests/`'s `carryOver`: the session on its
-  branch, or a new one there. Its routes are a workspace's `pull-requests/:number/questions` and
-  `pull-requests/:number/fix`.
-- **`sources/`:** a turn's sources (ADR 0019), worked out the same way for every provider: the pages its answer
-  links to and the pages the model read, each with its site's name and title; when it used none, the search results
-  of a provider that gives them (Claude), those whose site the answer names or else all of them, each search's top
-  results first, at most 20. Also finds the web addresses in the owner's messages, the only pages besides search
-  results that Claude may read.
-- **`limits/`:** wraps every provider so it remembers a usage limit until its reset time and shows it on that
-  provider's models.
-- **`waiting/`:** what waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no
-  I/O of its own. A session waits for its approval while one is asked for, else as a **new reply** while its latest
-  answer (the last turn that completed or failed) is under a day old, no turn runs or waits for a slot, it has no
-  pull request, and the owner hasn't **seen** it: the session page tells the worker the last event it showed once
-  no turn runs and it's in view (`POST /api/sessions/:id/seen`), kept as `seen.json` in the session's folder, never
-  going back; Mark all read sees every session in a workspace up to its latest answer
-  (`POST /api/workspaces/:id/seen`, #345). An open pull request waits for its conflict, its failing checks (unless its session is working on
-  them, #172), or a merge once its checks pass. `sessions/` puts a session's on each listed session (`waiting`),
-  keeping its latest answer in memory (from its event log once recovered, then as each is written), and
-  `pull-requests/` puts a pull request's on each open one; the web app reads only those (a Home tile names the
-  newest session waiting, and every session list marks those waiting and puts them first, #345).
+- [`sessions/`](../apps/worker/src/features/sessions/README.md): sessions as event logs, their turns, and a code session's pull request.
+- [`saves/`](../apps/worker/src/features/saves/README.md): checks a model's save and writes it; Undo and Edit.
+- [`suggested-replies/`](../apps/worker/src/features/suggested-replies/README.md): checks the replies a model suggests.
+- [`quick-questions/`](../apps/worker/src/features/quick-questions/README.md): read-only questions about a pull request.
+- [`sources/`](../apps/worker/src/features/sources/README.md): a turn's sources, the same for every provider.
+- [`limits/`](../apps/worker/src/features/limits/README.md): each provider's usage limit until its reset.
+- [`waiting/`](../apps/worker/src/features/waiting/README.md): what waits on the owner, decided once.
 
-*What Courtyard knows*
+*What Courtyard knows* (`features/`)
 
-- **`context-folder/`:** the context folder as a git repository. Makes changes one at a time, each kept as a commit
-  that says what kind of change it is. Commits hand edits, pushes to the backup, and reads the history back for Recent
-  changes and Fresh start. Every module that changes the context folder goes through it. A change made file by file
-  rather than line by line (a document's or a Thing's) names its files in `Courtyard-File` trailers, so
-  `wholeFilesOf`, `stillAsLeft` and `undoWholeFiles` can read it back and undo it (as bytes, so a photo goes back as
-  it was); `WHOLE_FILE_FOLDERS` are the workspace folders Recent changes looks in besides `CONTEXT.md`.
-- **`context-file/`:** reads a context file or the owner context into its sections, puts line labels on it for a
-  model, and adds, changes or removes one line. It also picks out the plans that name a day from today to 7 days on
-  (`plansDue`: `2026-10-18`, `18 Oct` or `Oct 18th`, a day without its year being the next to come), which a
-  planning workspace's answer (`GET /api/workspaces/:id`) gives as `duePlans` for its Home's Next up (#300), today
-  being the worker's clock's. Text in, text out: it never touches the disk.
-- **`owner-context/`:** reads `OWNER.md` and starts a new one.
-- **`workspaces/`:** the list of workspaces: reads, creates, renames and archives workspace folders, and keeps each
-  one's icon (#210): the one the owner picked, or else the one its name suggests (`icons.ts`: a word match, `code` for
-  a code workspace, else `book`), kept in its config when it's added. Uses `context-file/` to read each `CONTEXT.md`.
-  A code workspace has none (ADR 0026): its name, its one line (`description`) and its connections are in its
-  `workspace.json`, and one kept from before is read only for its title and intro line until the config has them.
-  A new planning workspace's starter context file has no intro line unless the owner gave one, and the hint older
-  starters wrote there is read as none and left out of what models read (`withoutStarterHint`, #300).
-  It keeps the Paper file connected from the page in the config's `connections` (`connectPaper`, #308). It lists
-  the workspaces planning ones first, then code ones, each group in the owner's order (#321): one list of ids in
-  `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces` (`PUT /api/workspaces/order`), which
-  refuses an order that mixes the groups. A workspace the order doesn't name goes at the end of its group, by name.
-- **`things/`:** a planning workspace's Things (ADR 0020): reads each `things/<slug>.md` against the contract's
-  schema (listing a file that fails with its problem), lists them with each part after its Thing, adds, changes and
-  removes one as one change through `context-folder/` (its photo with it), keeps a photo resized with `sharp`
-  (`keptPhoto`), and one turn's Things tool, which labels the Things as the turn showed them and refuses a change to
-  one changed since. Its routes are a workspace's Things, each Thing, and its photo
-  (`/api/workspaces/:id/things/:slug/photo`). Add Thing and Edit send a photo picked in the form
-  with the fields, as one multipart form, so both are one change with one Undo; these and the
-  photo's route are the only multipart requests besides a message's (`THING_PHOTO_ROUTES`).
-- **`documents/`:** a planning workspace's documents (ADR 0020): lists, reads, saves, renames and deletes them, each
-  write one change through `context-folder/`; Save as document's text from an answer; and one turn's document tool,
-  which keeps what the model has read so an update to a document it hasn't read, or one changed since, is refused.
-  Its routes are a workspace's documents and each document (`/api/workspaces/:id/documents/:slug`).
-- **`planning-files/`:** what `documents/` and `things/` share: a planning workspace's folder (or why it has
-  none), a file's name from what it's called, a path from the context folder's top and back, and the change note that
-  names a change's files; and for their routes (`routes.ts`), the workspace and file a path names, and the answers
-  for the refusals they share.
-- **`tidy/`:** asks a model for a shorter file, holds the proposal until the owner saves it, then saves the ticked
-  changes as one change.
-- **`changes/`:** Recent changes: lists a file's changes from `context-folder/`'s history, and its documents' and
-  Things', and undoes one from that page (a model's document or Thing save through its session, as a save is).
-- **`attachments/`:** the photos and PDFs sent with a message (#78): checks each again as the browser did (Zod for
-  its kind, size and the count, then that its first bytes are that kind), pulls a PDF's text out with `unpdf` and
-  refuses one with none, keeps them in the session's folder, and gives each turn the session's last ten.
+- [`context-folder/`](../apps/worker/src/features/context-folder/README.md): the context folder as git; every change a commit.
+- [`context-file/`](../apps/worker/src/features/context-file/README.md): a context file's sections and lines, text in and out.
+- [`owner-context/`](../apps/worker/src/features/owner-context/README.md): `OWNER.md`.
+- [`workspaces/`](../apps/worker/src/features/workspaces/README.md): the workspaces, their icons and order.
+- [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
+- [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
+- [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
+- [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
+- [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
+- [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
-*Building code*
+*Building code* (`features/`)
 
-- **`code/`:** code sessions' git and what they may do
-  ([ADR 0007](adr/0007-code-sessions-work-on-a-session-branch-in-its-own-worktree.md)). Starts a session's session
-  branch (`courtyard/<start of its id>`) from the default branch on the repository's remote (`origin`, standing in
-  for GitHub), freshly fetched, in its own worktree in the data folder, so the owner's checkout is never touched; or
-  says why it can't (the repository missing, not git, or its remote unreachable). Decides each edit (inside the
-  worktree once symlinks are followed; a file that decides what allowed commands run, such as a `package.json`, git
-  hooks, `.claude` or git's own `.git`, needs an approval) and each command: `allowlist.ts` is the
-  command allowlist, matched on the command's words once its quotes are read (the contract's `wordsOf`), never on
-  the start of its text, so a
-  command that chains, pipes, redirects or substitutes never matches; one naming a path outside the worktree is
-  refused, and committing, pushing and the session's own PR need the worktree on the session branch. The default
-  allowlist is the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the like; #178), the
-  package scripts (in the packages pnpm's `--filter`, `-C` or `-r` pick too, when the script alone would match) and
-  the test tools they run, run directly (`vitest run`, `playwright test`, `tsc --noEmit`, `biome check`; #202), git
-  and gh commands that only look, adding and committing, pushing the session
-  branch (only to `origin`, under its own name, never forced) and `gh pr create`/`gh pr edit` on the session's own
-  PR (#172); their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
-  It also files, edits, comments on and closes the repository's issues and makes and lists its labels, never naming
-  another repository (an issue filed with no milestone, no `bug` or `enhancement` label or not exactly one triage
-  label is refused before anyone is asked, `issueGapsIn`, #324), and reads through `gh api` with GET only (#181), and downloads a run's artifacts with `gh run
-  download -D` into a folder git ignores that isn't a setup path, which `code/` checks with `git check-ignore` (#202);
-  what such a download brings is never run without asking: a package script in a folder git ignores (pnpm's `-C`
-  or `--dir`, npm's `--prefix`), a test tool's config or root there, or a script or test there run with `node`
-  asks, saying so (`ignored-folder`; each rule's `runsFrom`, read with `runsFromOf`, #219), as does one where git
-  can't say (`gitIgnores`), and `node --test` names its files, never leaving node to find them.
-  For a flake that isn't its PR's, it comments on its own PR with `gh pr comment` and re-runs one run's failed jobs
-  with `gh run rerun <run> --failed`, and nothing more of a run (#356). A backslash at a line's end joins the next
-  line on, and a title, body, message or jq filter is checked as a path only as a whole, so a link in it doesn't ask
-  (#202).
-  A code workspace's `workspace.json` can add commands to it and remove default ones (`allowlist: { add, remove }`,
-  read by `workspaces/`, built by `allowlistFor`), and keeps those the owner allowed always from an approval
-  (`allowlist.always`, #185: each command's words, when, and from which session), never in the repository's own
-  settings. `alwaysOffer` works out what Allow always may offer for a command off the allowlist: its leading words,
-  so the same command with other arguments doesn't ask again; never for one naming a path outside the worktree, one
-  of a default rule that failed its checks (or whose words could cover one, such as pushing), merging a PR, deleting
-  a repository, release or ref, git's and gh's settings and sign-in, a program that runs another, or anything
-  naming a credential. The worker's `GET /workspaces/:id/allowed-commands` and `…/remove` are Workspace ⋯ →
-  Allowed commands. `allowsAll` works out whether Allow all for this task (#428) covers a command off the
-  allowlist: never one Allow always could never offer for the same reasons, nor gh's other commands (they act on
-  GitHub, outside the session branch), publishing or signing in to a package registry, the machine's services and
-  processes, options before git's or a package manager's command (`git -c … push`), or a runner's (`pnpm exec`,
-  `npx`) whose own command isn't covered. Code given on the line (`node -e`, `python -c`, #464) is covered, as the
-  same code saved in the worktree is: its text is read word by word for a path outside the worktree or a credential,
-  and node's options that load other code first (`-r`, `--import`) or attach a debugger still ask. Of the setup files, it covers package
-  scripts and git hooks, never git's own, `.github`, Claude Code's settings or a package manager's settings
-  (`editPlaceIn`'s `all`). It checks commands as they're asked for: a script the session wrote and runs is its own
-  code, as it is without Allow all. `sessions/` hands each code turn a `CodeTurn` (`providers/`), the
-  worker's say on every edit and command, which records each one allowed as an activity and words each refusal
-  through `prompts/`, and the environment its commands run in, with Courtyard's GitHub sign-in from `github/` (the
-  module's own fetch from the remote uses it too). `slots.ts` keeps up to six code sessions running at once across the worker (#174, #364), each
-  turn holding a numbered slot no other running one holds; its commands get it as `COURTYARD_SESSION_SLOT`, with
-  the worktree it's for as `COURTYARD_SESSION_WORKTREE`, which this repository's Playwright config picks its ports
-  from (in that worktree only: a helper's own worktree picks them from its folder, #395), so side-by-side checks
-  never share them. A turn beyond
-  three waits, first come first served, until one ends. `builds.ts` is the builds queue (#281): the heavy checks
-  `allowlist.ts`'s `isBuild` picks out (the package scripts `verify`, `test`, `e2e` and `build`, in any packages
-  pnpm's workspace options pick, and `vitest run` and `playwright test`, run bare or through `pnpm exec`, `npx` or
-  `pnpm --filter … exec`) run up to `COURTYARD_BUILDS_AT_ONCE` at a time (1 by default) across every session, and
-  one at a time in each session, whose helpers share its folder (#117), the rest waiting first come first served. That order lives in the worker's memory only; the build at its front then
-  takes a place in the machine's builds lock (`packages/builds`, #306), which the repo's own scripts take too, so
-  sessions also wait behind builds started outside Courtyard, and those behind sessions. The
-  module also finds a session branch's pull request on GitHub (the repository named by its remote's address) and
-  clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
-  (only a `courtyard/…` one).
-- **`pull-requests/`:** a code workspace's pull requests, whoever opened them (#278). Lists every open one on its
-  repository through `code/` and `github/`, latest first, each with who it's from: the session on its branch
-  (which keeps its link), a Claude Code helper (its description signed "Generated with Claude Code"), or its
-  author on GitHub; while GitHub can't be asked, its sessions' open ones as last recorded. One no session opened
-  is reviewed, merged and closed by its number (one a session is on goes through that session, so it ends as
-  usual), and Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s
-  `startOnBranch`, leaving the branch on GitHub, since it isn't a `courtyard/…` one). A branch of that name the
-  repository has already (#326) is brought up to its remote and used when it's checked out nowhere and has nothing
-  the remote lacks, and the session remembers it didn't make it, so clearing the session away leaves it; otherwise
-  the start is refused, saying which. Its
-  routes are a workspace's `pull-requests`, `pull-requests/:number` with its `merge`, `close` and `sessions`.
-- **Following a pull request** (#172): `sessions/` looks at each code session's PR through `code/` and `github/`
-  every 30 seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change
-  as a `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR
-  strip shows. Checks failing on a commit not yet asked about start a turn on the model the owner last used, once
-  the session is free: its message is the worker's (`checksFailed` on it, worded by `prompts/`), and the failed
-  checks open its activity. That turn first checks whether a failing test is its PR's; a flake that isn't is said on
-  the PR and its failed jobs re-run once, with no code changed. Checks failing again on the same commit, after they
-  ran again, start no second fixing turn: the owner is asked through `notifications/` (#356). A PR that conflicts
-  with its base is brought up to date the same way first (#382): Bring up to date's message, `conflicted` on it, once
-  per commit, so one the model can't resolve waits for the owner's Bring up to date. A PR merged or closed,
-  anywhere, ends the session: it takes no more messages, and once
-  no turn runs its worktree and branch are cleared away. Each `pull-request` event carries the PR's size (lines
-  added and removed, files changed, #160), which the strip shows too, its title (#240), and whether it conflicts
-  with its base (#278). A code workspace's list
-  of sessions gives each one's branch and its PR as last recorded (kept in memory once read, so the list doesn't
-  read every event log), which the workspace page's pull requests list shows (#240).
-- **Reviewing a pull request** (#160): `/api/sessions/:id/pull-request` answers with the session PR's review,
-  asked of GitHub through `code/` and `github/` each time: its checks by name, its description as the session wrote
-  it (#240), the files it changes with their diffs, and whether it can merge, or why not in the owner's words (checks running or failed, or a conflict with its
-  base). `pull-request/merge` takes the head commit the browser reviewed and refuses when the PR has moved since
-  ("The pull request changed since you looked. Review it again."), or with that reason; else GitHub merges only that
-  commit. `pull-request/close` closes it. Either then follows the PR at once, so the session ends as one merged or
-  closed on GitHub does. `pull-request/bring-up-to-date` (#278) fetches the PR's base through `code/` and sends
-  the session the worker's message to merge it in (`bringUpToDateMessage`, worded by `prompts/`), on the model the
-  owner last used there, or queues it while a turn runs.
-- **`lead/`:** a code workspace's Lead (#347), kept in the data folder's `leads.json`, one look each time the
-  worker's jobs come round. Merge in order (#423, `lead/merge-in-order`, given the pull requests the owner's screen
-  showed) is the owner's OK to merge those still ready, in the build order's order: each look merges the first
-  still open through `sessions/` once its checks pass and its session's turn is done, waits while the worker brings
-  one that conflicts up to date (#382), and stops, saying which and why in its chat, at a failing check, a conflict
-  its session left or GitHub's refusal (`LeadStatus.merge`; forgotten once that pull request is merged or closed
-  some other way). It holds back a ready issue naming a code file (by path, or by a name few folders share) that a
-  builder still at
-  work changes (`code/`'s `changedFiles`: committed since the default branch, changed and new in its worktree) or
-  whose issue named it, never main's fix, starting it once that builder's pull request merges, and doesn't rest
-  while one is held back (`LeadStatus.heldBack`; Next up says "Held back").
-- **`next-up/`:** a code workspace's Next up (#301): its repository's open `ready-for-agent` issues through
-  `github/`, less those claimed (a comment starting "Building this" that no later "Stopped" released, or an open
-  pull request that closes it), in
-  milestone order (the number a milestone's title leads with, then Later, then none) and, inside a milestone, the
-  order its description's `Build order:` line lists, the rest by number (#336), asked of GitHub only when a
-  page asks and kept two minutes. Build (#298) asks again and starts a code session through `sessions/` on the
-  issue, whose first message is the issue (`buildIssueMessage`, worded by `prompts/`). Every session started on an
-  issue has its claim posted here (#324): `sessions/` is handed `named`, `claim` and `release`, and keeps the claim
-  in the session's file. It claims as the session starts (Build's issue, else the one ready issue nobody has claimed
-  that its first message names as `#<number>`), naming its branch; it releases the claim ("Stopped: <why>") when a
-  turn is stopped or fails, or the session is deleted, before it has a pull request, and claims again when it
-  carries on. The Lead's skip releases through `sessions/`'s `stopBuilding`. Next up also lists, not `ready`, the `needs-triage` and `needs-info` issues on their milestone's
-  `Build order:` line, in their place (#363); Grill starts a code session with the grilling skill whose first
-  message is the issue (`grillIssueMessage`), claims nothing, and starts it `placeless`: its session file says so,
-  and its turns take no slot in `slots.ts`. Its routes are a workspace's `next-up`, `next-up/:number/build` and
-  `next-up/:number/grill`. It also keeps the code files each ready issue names in its description or comments
-  (`filesNamed`, #423), for the Lead.
-- **`red-main/`:** a red main after a merge (#355), as one of the worker's repeating jobs, once a minute: each code
-  workspace's default branch, freshly fetched through `code/`, and the jobs on its newest commit through `github/`.
-  Failed, the worker re-runs the failed jobs once, by itself; failed again (or GitHub refused the re-run), it files a
-  `bug`, `ready-for-agent` issue named after the failing test (the first failure annotation on the job, which the
-  test reporters write on CI, else the job's name) with the job's link, in the lowest-numbered open milestone, and
-  puts it first in that milestone's `Build order:` line (next-up's order rules). What it did for each repository's
-  newest commit is kept in the data folder, so a restart never re-runs or files twice. No session waits on main.
-- **`repos/`:** the owner's GitHub repos as code workspaces (#258). Lists the repos `github/` gives,
-  newest pushed first, each marked added when a code workspace works on it already (its repository is
-  that repo's folder here, or its `origin` is that repo on GitHub, read through `code/`), the added ones
-  last. For New workspace → Code, gets a picked repo onto the worker machine, one at a time: a clone
-  into the data folder's `repos/<owner>/<name>` with the environment `github/` gives code sessions, so
-  git asks Courtyard's sign-in through `gh` and no token is kept in the address or git's settings; a
-  copy already there is used as it is. It refuses a repo the GitHub App doesn't reach or that a code
-  workspace works on already. New repo (#391) makes one on the account signed in through `github/`
-  (empty, private unless asked), then its folder here with its first commit, the house standard's
-  files `matt-setup/` gives, as Courtyard's own commit, pushed to `main`; it refuses a name the owner
-  has a repo by already. `matt-setup/` then gives it the labels, its first milestone and its first
-  idea as an issue needing a grill on that milestone's Build order line, and `POST
-  /api/github/repos/new` makes the workspace on it and, when asked, its Paper file through
-  `connections/` (`GET` says the account and whether Paper can be made). Its route is `/api/github/repos`; `POST /api/workspaces` with a `repo`
-  checks the name is free, places the repo, then makes the workspace on it (`workspaces/` writes
-  `{ mode: "code", repoPath }`).
-- **`matt-setup/`:** the setup check (#181, #323): what a code workspace's repository has of the house standard
-  (Matt's `setup-matt-pocock-skills` with the house answers), worked out for any repository from its default branch
-  on its remote through `code/`: its `docs/agents/` files and the Agent skills section, where its work lives (a
-  backlog or TODO file, or `.scratch/`, and whether its instructions say another agent writes it), its glossary's
-  name, the triage labels through `github/`, and whether `connections/` can make it a Paper file. Offered once, as
-  one card with the standard recommended on each line. Set up as the owner chose, it makes the labels (only when its
-  work lives on GitHub), files a moved tracker's open items as issues, puts the files (from his templates in the
-  pinned copy and the house's own) on a branch of their own in a worktree in the data folder, pushes it and opens
-  its pull request, then makes and connects the Paper file. Its routes are a workspace's `matt-setup`.
-- **`matt-skills/`:** Matt Pocock's skills for code workspaces
-  ([ADR 0024](adr/0024-code-workspaces-load-matt-pococks-skills-as-a-plugin-from-a-pinned-copy.md)): fetches the
-  release `packages/skills/matt.json` names from his plugin list into the data folder, keeping only his `plugin.json`,
-  licence and the skills it lists, and gives the copy (`copy()`) only when it matches the pin's checksum
-  (`mattChecksum`), or why not; a failure is tried again after five minutes. Fetching is a dependency passed in
-  (`fetchFromGitHub`, git at his release's tag, the one real one). `sessions/` hands a code turn the copy as its
-  `CodePlugin`, with the skills of it the workspace can use, and leaves them out of Courtyard's own skills list.
-- **`workspace-main/`:** a code workspace's main, for its Home's Main row (#301): the default branch's newest
-  commit, freshly fetched through `code/`, and its build as `github/`'s `mainBuild` reads it (#249), kept a minute
-  (8 seconds while it runs), and whether the repository is the one the live copy runs from. Its route is a
-  workspace's `main`.
-- **`skills/`:** a workspace's skills (ADR 0016), worked out in one place, the more specific winning by name: the
-  workspace's own `.agents/skills` in the context folder, a code workspace's repo's, the context folder's top-level
-  one, in a code workspace Matt Pocock's from `matt-skills/` (ADR 0024, each marked for the picker or not), then the
-  house skills for its kind of workspace from `packages/skills`. It keeps each
-  skill's source, skips a broken one with why, keeps one with scripts out of a planning workspace, and answers the use
-  skill tool: a skill's `SKILL.md`, or one of its files, confined to its folder.
-- **`connections/`:** a code workspace's connections (#308): GitHub (its repository on GitHub and whether
-  Courtyard is signed in) and its Paper file, as its page's connections line and Connections sheet show them and as
-  each of its turns is told them (`sessions/` gets `of`). Lists the owner's Paper files and connects one, or makes
-  one named after the workspace, as one change through `context-folder/`. Paper's command is the workspace's own,
-  else the `COURTYARD_PAPER_COMMAND` setting, else the one another code workspace names. Its routes are a
-  workspace's `connections`, `connections/paper/files` and `connections/paper`.
+- [`code/`](../apps/worker/src/features/code/README.md): session branches and worktrees, the allowlist, slots and the builds queue.
+- [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
+- [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
+- [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims.
+- [`red-main/`](../apps/worker/src/features/red-main/README.md): a red main after a merge.
+- [`repos/`](../apps/worker/src/features/repos/README.md): the owner's GitHub repos as code workspaces, and New repo.
+- [`matt-setup/`](../apps/worker/src/features/matt-setup/README.md): the setup check.
+- [`matt-skills/`](../apps/worker/src/features/matt-skills/README.md): Matt Pocock's skills from a pinned copy.
+- [`workspace-main/`](../apps/worker/src/features/workspace-main/README.md): a code workspace's main, for Home's Main row.
+- [`skills/`](../apps/worker/src/features/skills/README.md): a workspace's skills, the more specific winning.
+- [`connections/`](../apps/worker/src/features/connections/README.md): a code workspace's GitHub and Paper file.
 
-*Running Courtyard*
+*Running Courtyard* (`features/`)
 
-- **`live/`:** for the live copy only: whether `main` has moved on, starting an update, and how the last one went
-  ([ADR 0011](adr/0011-the-live-worker-is-its-own-copy-of-main-started-at-log-on.md)). Update when ready (#186):
-  tapped while main's build runs or a session is mid-turn (`sessions/`'s `midTurn`, an approval waiting counted),
-  it waits, kept in the data folder (`live-update-waiting.json`) so a crash keeps it, and a repeating job runs it
-  once both are clear, or drops it when main's build fails meanwhile; Update now runs it at once, Cancel drops it.
-  While one waits, `holding()` tells `sessions/` and `lead/` that nothing new starts on its own (queued messages
-  hold, no fixing turn, no new builder), the owner's own messages still starting. An update the worker starts
-  itself leaves a note (`live-update-restart.json`), so the next worker continues the turns it cut off. While main has moved on, it
-  also gives main's build (#249): CI on main's newest commit, asked of GitHub through `github/` (on the repository
-  the live copy's remote names, read through `code/`) only when a page asks for the live status, at most every 8
-  seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.
-- **`notifications/`:** web push to the devices the owner turned notifications on for (#173). The worker's own keys
-  (VAPID) are made on its first run; each device's subscription is kept by its device login, so a device that logs
-  out gets no more, and one whose subscription has gone is forgotten. `sessions/` tells it of each approval asked
-  for, each turn's end, and a PR's checks failing again after a re-run (#356; its `notify` option); an approval, a
-  finished turn, a failed one and checks failing again each send one
-  notification, carrying only the session's title, what it needs and the session's id. The sender is a dependency
-  passed in (`web-push.ts`, the one real one, through the `web-push` package; `fake.ts` keeps what was sent for the
-  tests and the browser tests). Its routes are `/api/notifications` (the public key) and its `on` and `off`.
-- **`fresh-start/`:** clears the context folder, sets every session aside, and drops any tidy waiting for review.
+- [`live/`](../apps/worker/src/features/live/README.md): the live copy's updates and main's build.
+- [`notifications/`](../apps/worker/src/features/notifications/README.md): web push to the owner's devices.
+- [`fresh-start/`](../apps/worker/src/features/fresh-start/README.md): clearing the context folder and setting sessions aside.
 
-**Who may do what: `auth/`**
+*Who may do what* (`auth/`)
 
-- **`owner/`:** the owner's password, each device login, and slowing down wrong guesses. Its routes are setup, login,
-  logout, and the login check every other request goes through. Keeps its files in the data folder.
-- **`sign-ins/`:** signing in to the providers whose sign-in Courtyard handles (Codex), and remembering the owner's
-  Not now.
-- **`allow-all/`:** whether a code session allows all for this task (#428), decided here from its events with no
-  I/O of its own, so it survives a restart and every screen reads the same: on from `allow-all-started` (the owner's
-  `POST /api/sessions/:id/allow-all`, for `1h`, `4h`, `12h` or `task`, or a Lead's builder started with it), which
-  stores its end time, until that time, `allow-all-ended` (Turn off, `…/allow-all/off`), its pull request merging
-  or closing, or, for `task`, a pull request opening. `sessions/` keeps each session's as its events are written and
-  puts it on the session's summary (`allowingAll`), for its strip and its row in Running. It's never extended while
-  on. The Lead keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
-  order with it on) and starts each builder with it until then. What it covers, code given on the line included
-  (#464), is `code/`'s `allowsAll`.
-- **`workspace-files/`:** the workspace folder as the edge of what a model may look at (ADRs 0003, 0015): the one
-  check every provider's reads go through, following symlinks to where a path really leads, and Courtyard's own
-  file tools for a provider that has none of its own (Codex, whose shell is off). `prompts/` words what they find.
+- [`owner/`](../apps/worker/src/auth/owner/README.md): the owner's password and device logins.
+- [`sign-ins/`](../apps/worker/src/auth/sign-ins/README.md): signing in to providers (Codex).
+- [`allow-all/`](../apps/worker/src/auth/allow-all/README.md): whether a code session allows all for this task.
+- [`workspace-files/`](../apps/worker/src/auth/workspace-files/README.md): the workspace folder as the edge of what a model reads.
 
-**Other apps: `integrations/`**
+*Other apps* (`integrations/`)
 
-- **`github/`:** the only place that knows GitHub (#99). Courtyard signs in through a GitHub App the owner registered
-  and installed on the repos they chose: a device code from Connections, then the token kept in the data folder,
-  refreshed by a repeating job before it runs out, and forgotten when GitHub stops taking it. GitHub itself is a
-  dependency passed in (`api.ts`, the one real one; `fake.ts` holds it in memory for the tests and the browser
-  tests). It builds what a code session's commands get on top of their environment (`commandEnv`): `gh` reading
-  Courtyard's own config folder, git's credential helpers replaced by `gh`'s and GitHub's SSH addresses turned to
-  HTTPS, and every variable naming the machine's own login unset. While no one is signed in, that folder holds a
-  stand-in that works nowhere, since `gh` would otherwise fall back to the machine's keyring. It reads a branch's
-  latest pull request and the checks on its latest commit (#172), the files it changes with their diffs, and
-  merges and closes it (#160); reads a pull request by its number and lists a repository's open ones, with each
-  one's branch, author and whether it conflicts (#278); lists and makes a repository's labels and opens a pull request (the setup
-  check, #181); lists a repository's open issues with a label, with their milestones and comments, and its open
-  pull requests' titles and descriptions, and comments on an issue (Next up and Build, #301); lists the repos the GitHub App reaches, with each one's description and where git
-  clones it from (#258); and reads main's build from the checks on a commit (#249) in stages (#337,
-  `main-build.ts`): the latest try of each job, placed by the workflows that ran on the commit (their files as they
-  were there, read by `workflow.ts`, which reads only each job's name, `needs:` and matrix): a job after the jobs
-  it needs, a matrix's runs folded into one row, a job with no run yet waiting; the failed one's page; and when a
-  running one should end, from the middle of each job's own last five passing runs on main's earlier commits
-  (kept once finished); and re-runs a commit's failed jobs, reads the failing test a job's
-  annotations name, lists and describes milestones, and files an issue (#355). Its routes are
-  `/api/github` and its `sign-in`, `cancel` and `sign-out`.
-- **`paper/`:** Paper in code workspaces, the first tool connection
-  ([ADR 0023](adr/0023-paper-is-the-first-tool-connection-in-code-workspaces.md)). Builds the turn's
-  `ToolConnection` (`providers/`) from the workspace's Paper settings (`connections.paper` in `workspace.json`,
-  read by `workspaces/`): Paper's MCP server as a command, and the worker's say on each call. Reading and drawing in
-  the workspace's one Paper file run, each an activity (`used-tool`); another file, or making a file, is refused;
-  deleting a node the session didn't make is an approval. It notes the nodes each call says it made (kept on the
-  running session), hands each screenshot to `sessions/` to keep and show, and words a failed call through
-  `prompts/`. `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's
-  page (#308), by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real
-  one; `fake.ts` holds files in memory for the tests and the browser tests).
+- [`github/`](../apps/worker/src/integrations/github/README.md): the only place that knows GitHub.
+- [`paper/`](../apps/worker/src/integrations/paper/README.md): Paper, the first tool connection.
 
 **Helpers: `lib/`**, to reuse before writing a new one (AGENTS.md):
 
@@ -468,13 +161,13 @@ helpers for the tests and the context eval), and **`apps/worker/eval/`** is the 
   them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
   devices), behind the frame's Settings sheet. Behind the login
   each page sits on a raised panel that never scrolls, nor does the window (#266), so the Handheld
-  frame stays put. Every page is `components/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
+  frame stays put. Every page is `components/layout/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
   scrolling middle and a pinned footer (its main action: the message box, Save, Create), so nothing scrolls the
   title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
-  PR page (`features/pull-requests/`) lays itself out, fitting the screen. `components/page-scroll.ts` hands the scrolling middle
+  PR page (`features/pull-requests/`) lays itself out, fitting the screen. `components/layout/page-scroll.ts` hands the scrolling middle
   to whatever follows the scroll (a session's turns), and names it to the router, which keeps its scroll per page.
   That middle, and everything else that scrolls (a sheet, the frame's rails, a diff, a wide table), is
-  `components/scroller.tsx`'s `Scroller` (#420): a thin thumb, and a fade at its top once scrolled, never a line
+  `components/layout/scroller.tsx`'s `Scroller` (#420): a thin thumb, and a fade at its top once scrolled, never a line
   cut in half under what's pinned; the theme check fails anything that scrolls without it. A workspace's page loads its Home's code (code or planning) with its data (`api/workspace-page.ts`), so the page
   shows whole.
 - **`api/`** talks to the worker. **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
@@ -485,225 +178,112 @@ helpers for the tests and the context eval), and **`apps/worker/eval/`** is the 
   what's harmless to send twice (an approval's answer) and keeps it, tried every few seconds, even once the worker
   counts as unreachable, until it answers (#204). **`worker-watch.ts`** checks the worker's health while a page needs
   it, waiting for a slow worker the same way, so the "can't reach" banner means unreachable, not busy.
-- **`features/`**, each one feature's parts, named as the worker's feature where both have it:
-  - **`sessions/`:** the session page: following the event stream and replaying it into turns (`events.ts`),
-    revealing text at an even pace (`reveal.ts`), formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced
-    blocks Courtyard draws come from `components/rich-blocks/`), code blocks with
-    their language and Copy (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code
-    block, each language's grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts`
-    finds and rewrites them, `maths-plugins.ts` is loaded only when an answer has maths), the turn list
-    (`session-turns.tsx`, which follows the end only while the owner is at it, never moving them while they read
-    back, and offers Jump to latest, #168), the
-    message box with its model, effort and skill pickers and its attachments (`attaching.ts` shrinks photos to JPEG
-    and checks each file; `messages.ts` sends a message with its files, beside `worker.ts` so it's not on the first
-    load), save notes, the usage-limit notice with Carry on, the Get to know offer, Grill this plan beside each
-    plan (`grill-plan.tsx`), an answer's Sources (`sources.tsx`), Save as document with each document's note
-    (`documents.tsx`), and each Thing save's note (`things.tsx`).
-  - **`components/rich-blocks/`:** the blocks Courtyard draws in answers and documents
-    ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
-    document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,
-    prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
-    `answer.tsx`, a fence whose language is a kind in its `FENCED_KINDS` (a `chart`, a `mermaid`) becomes a
-    `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
-    whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
-    fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
-    just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
-    (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
-    the theme's violet and chart colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
-    out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
-    one at a time, in the colours read from the theme, at its
-    own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
-    changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
-    script, load something or go somewhere (links keep their words) before it goes in the page, the one place
-    Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
-    with an `img`, an actor's icon), so the page's own policy (`index.html`) loads pictures only from Courtyard and
-    such a diagram shows as written. The build takes Mermaid from its prebuilt files without its ELK layout
-    (`mermaidAsDrawn` in `vite.config.ts`), so it adds nothing to the first load. The folder's classes are
-    in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
-    by `stylesheet.ts` (through `lib/stylesheet.ts`) from inside the answer renderer's script, so neither the classes
-    nor a stylesheet's name are on the first load. They apply only inside a `RichBlock` (`rich-block.tsx`), which
-    each table and drawing is wrapped in, never a fallback: coming after the theme's stylesheet, they would otherwise
-    outrank its screen-size variants on every page.
-  - **`changes/`:** the Recent changes list, with Undo, its calls (`api.ts`), and the note a page shows for
-    something just deleted from its own page, with Undo (`just-deleted.tsx`).
-  - **`documents/`:** a workspace's Documents section (`documents-section.tsx`) and the documents' calls (`api.ts`);
-    a document's page is in `routes/`, drawn with the answer renderer.
-  - **`things/`:** a workspace's Things section (`things-section.tsx`, filtered by status), a Thing's card
-    (`thing-card.tsx`, its route in `routes/`, its history drawn with the answer renderer), the rows both list them
-    in, parts under their Thing (`thing-rows.tsx`), Add Thing's and Edit's form (`thing-form.tsx`), Things' calls
-    (`api.ts`) and how their fields read (`words.ts`). Like `components/rich-blocks/`, its classes are in a stylesheet of its
-    own (`things.css`, which `styles.css` leaves the folder out of), added by `stylesheet.ts` when one of its pages
-    first loads, and applying only inside a `ThingsScope` (`scope.tsx`), for the same reason.
-  - **`tidy/`:** asking for a tidy, and the review with its tick boxes.
-  - **`step-by-step/`:** step by step (#241; Paper, "Tablet · Step by step"): in a planning workspace, an answer
-    with numbered steps (`sessions/steps.ts` finds them) offers them one at a time in place of the conversation,
-    loaded only then, with a stylesheet of its own (`step-by-step.css`, holding the thumb buttons' classes too).
-    Each step is read aloud in the browser's own voice (`read-aloud.ts`), and the reading line stands in for the
-    Reply box (`Composer`'s `standIn`) until Type a reply. While it's open, the page offers the dock its commands
-    (`offerCommands`), which the talk strip and the Talk key talk to ahead of the box: "next", "back" and "repeat",
-    only when the owner talks.
-  - **`planning-home/`:** a planning workspace's page under its name (#300; Paper, "Tablet · Planning workspace
-    Home" and its Sessions, Things and Docs tabs), loaded only for one, with a stylesheet of its own
-    (`planning-home.css`, holding the tabs' and Home's blocks' classes too), like `code-home/`. Its tabs, Home ·
-    Sessions · Things · Docs, each but Home shown once it has something, with its count, by the address's hash
-    (`#sessions`, `#things`, `#docs`; a document or Thing deleted from its page comes back to its tab, with Undo).
-    Home: Next up (`next-up.tsx`: the session to pick up again, one the worker says waits on the owner, else the last
-    used in the past week, then the worker's `duePlans`; hidden with neither), then the one row for What Courtyard
-    knows (`knows.tsx`, `#knows`: the facts, plans and ideas, each line with Fix, which shows then starts a session on
-    it, each plan with Grill this plan; Get to know while there are no lines; what else models read, Recent changes,
-    Tidy, and the skills), then the message box pinned at the foot. An empty workspace shows only its name, one line
-    and the box. Drawn blocks (#257, #152, #294) and the page choices that pin and hide them come with their own
-    issues.
-  - **`code-home/`:** a code workspace's page under its name (#301, #308; Paper, "Code workspace Home"), loaded
-    only for one, with its calls (`api.ts`) and a stylesheet of its own (`code-home.css`, holding the classes of the
-    shared pieces only the two Homes show: `components/workspace-tabs.tsx`, `home-block.tsx`,
-    `connections-line.tsx`, `radio-row.tsx` and the thumb buttons), like `features/pull-requests/`. Under its name, which has
-    one quiet ⋯ beside it (`components/workspace-menu.tsx`: Rename, Change icon and Archive, #333), comes its
-    connections line; its one line stays in `workspace.json`, off the page. The connections line opens the Connections sheet
-    (`connections.tsx`: GitHub, and the Paper file to pick, the one named after the workspace picked already, or
-    make; opened by itself as `#connections` right after New workspace → Code). Then its tabs, Home · Sessions ·
-    PRs, each but Home shown once it has something, by the address's hash (`#sessions`, `#prs`; the Sessions tab is
-    `sessions/session-links.tsx`, the PRs tab `features/pull-requests/`'s list). Home's blocks, in a fixed order, each keeping its
-    place when empty with one quiet line (`components/home-block.tsx`, shared with a planning workspace's Home;
-    from a tablet up the page is the screen's height and never scrolls, the blocks sharing the height left and
-    their rows scrolling inside their cards through its `BlockRows`, #335): Needs you (`needs-you.tsx`: approvals with Approve, failing checks, new replies, pull
-    requests ready to merge with Merge, conflicts with Bring up to date, and the setup check's offer), Running
-    (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`), Main (`main-row.tsx`: the repository's newest main
-    commit with `live/`'s build bar, and Update only on the live copy's own repository), then the message
-    box, pinned at the foot. Nothing jumps in late: each block that loads after the page keeps its last answer
-    for the tab's lifetime (`components/kept.tsx`), so a revisit shows it at once and asks again quietly, and a
-    first visit shows faint placeholder rows in its place; the PRs list does the same. That GitHub isn't connected
-    comes with the connections line, from the workspace's own connections. What waits on the owner is
-    the worker's say (`waiting/`, on each listed session and open pull request), read in one place, `needs.ts`,
-    with no React or styles, so the home page's tiles read it the same way; nothing in the web app works it out.
-  - **`pull-requests/`:** a code workspace's pull requests and their page (#160, #240, #278). The list
-    (`pull-requests.tsx`, the PRs tab's list, which shares its open pull requests with Home's Needs you): every open
-    PR on the repository from `pull-requests/`, whoever opened it, with its title, branch, who it's from and where
-    it stands (`checks.tsx`: moss passed, violet running, red failed, gold conflicting with its base), and Review,
-    or Bring up to date when it conflicts; or its sessions' merged ones. The PR page (`review.tsx`): a session's PR
-    on the session's page in place of the conversation (`?view=review`), and one no session opened on its
-    workspace's page, named by the address's hash (`#pr-306`; a search value would add to the first load). From a
-    tablet up it fits one screen: All PRs, its title and where it stands, What changed (`what-changed.tsx`, its
-    Summary's first line, and Read it all for the whole description, `description.ts`, in a panel that scrolls),
-    the changed files as a tree (`components/file-tree.tsx`) beside the chosen file's diff (`diff.tsx`), each
-    scrolling inside, the diff's lines never wrapping there (on a phone they wrap and the page scrolls as one).
-    Then the ask line (`components/ask-line.tsx`: quick asks for where it stands and one line), which asks quick
-    questions (#327, `quick-questions.tsx`, through `quick-questions/`): the first opens the conversation on the page,
-    beside the file list and the diff on a desktop, in the file list's and What changed's place on a tablet (the list
-    folding into an "n of N files" switcher above the diff, `components/select.tsx`'s `shown`), and as a sheet over
-    the diff on a phone, with its own ask line, Merge and Close PR coming back once it closes. Its header names the
-    model, and a line an answer points at shows marked in the diff with a tap. Follow-ups go in the same line, and
-    Fix it in a session beside them carries the conversation over to the PR's session, or, with none, to a new one
-    on its branch once the owner has seen what starts. Then Merge, or Bring up to date when it conflicts, and
-    Close PR (`components/thumb-button.tsx`, shared with the approval card): beside the title on a desktop, in thumb
-    reach on a tablet. A Merge that can't merge yet is greyed out but still takes a tap, which says why beside it
-    (#329). A session's PR is asked for again as its session's events change it; one no session opened, every 15
-    seconds while it's open (#329). Merged or closed, it folds to one card with
-    what's next: Update Courtyard (when the worker is a live copy main has moved on from, unless main's build
-    failed, by `live/`'s rule; tapped while it runs, it waits for it, #186), Start a new session and
-    Show the changes. Its own lazy load, the list's with a code workspace's page, with its calls (`api.ts`) and a
-    stylesheet of its own (`review.css`, holding the ask line's classes too), like `things/`.
-  - **`live/`:** updating the live copy from the app (ADR 0011): the notice where Update lives, at the foot
-    of the home page (main's build as a row labelled New version, #102) and in the Handheld frame's Settings
-    (`live-update.tsx`), and main's build beside Update
-    (`main-build.tsx`, #249): the newest main's title, its jobs in stages (#337, drawn by the shared
-    `components/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey waiting, its
-    time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered unless it
-    has failed; tapped before it has passed or while a session is mid-turn, the Update waits, and the row says
-    what for, with Cancel and Update now (#186); Details, the failed job's page on GitHub, once it has failed. Its
-    hook asks again every 10 seconds while the build runs
-    and the page is in front of the owner, and its rule is the one the merged PR card's Update Courtyard
-    follows too. Its own lazy load, with its calls (`api.ts`), so the live status's schemas stay off the
-    first load.
-  - **`sign-ins/`:** Settings' sign-in box and Connections (each provider, and GitHub with its device code,
-    account and repos, Switch and Sign out); one lazy load. Where they stand is kept for the tab's lifetime, and
-    until it's first known Connections keeps its place with faint rows.
-  - **`fresh-start/`:** what a fresh start would clear, and starting one (its page is in `routes/`).
-  - **`matt-setup/`:** the setup card (#181, #323), a dialog opened from its row in a code workspace's Needs you
-    (#301): each line with what was found and its choice (Keep or Move, Rename or Keep, Create or Skip), one Set
-    up, then where its pull request is, with its calls (`api.ts`).
-  - **`notifications/`:** Settings' notifications toggle for this device, beside Connections (#173): it
-    subscribes the browser with the worker's key and sends the subscription, sends it again each time the page
-    opens (so it follows the device's login), and unsubscribes on off; its own lazy load.
-  - **`new-workspace/`:** New workspace's form (#258, #264), loaded with its page, with its calls
-    (`api.ts`) and a stylesheet of its own (`new-workspace.css`, holding the repo picker's classes too,
-    `components/repo-picker.tsx`), like `features/pull-requests/`. A switch picks Planning (the form as it was) or Code,
-    which lists the owner's repos to pick one from; picking one fills in the name (title-cased from the
-    repo's) and What's it for? (its description on GitHub), shown in full (`WrappingTextField`) before
-    Create. New repo (#391) heads the list: its name follows What's it for? (said or typed) until
-    typed over, and its card's chips (private, the account, a Paper file) change with a tap. Name is focused on a desktop only, so a touch screen's keyboard waits for a tap. The page
-    offers What's it for? to the frame's talk strip and Talk key (`handheld.ts`'s `offerField`), which
-    put what's said there as they would in a message box. A code workspace just made opens with its
-    Connections sheet (`#connections`), offering Paper, which Close skips (#308).
-  - **`home/`:** what the home page loads after it shows (#102; Paper, "Home"; its title pinned at the
-    top, the foot rows at the foot, and only the tiles scrolling between them, #339), with a stylesheet of its own
-    (`home.css`), like `code-home/`. Each tile's line
-    (`tile-line.tsx`): what waits on the owner, as the worker says and Needs you reads it (`code-home/needs.ts`),
-    from the workspace's sessions and, on a code workspace, its open pull requests (`features/pull-requests/open-pull-requests.ts`, the store its Home
-    and PRs list share), else when it was last used; kept for the tab's lifetime, a faint line in its place until
-    then, so nothing jumps. And the foot rows (`foot.tsx`), shown only when needed: main's build with Update
-    (`live/`), and one gold problem line, the worst of what's wrong (context changes not kept, the backup
-    behind, a workspace's config ignored, no backup set up), with Fix it to where it's fixed.
-  - **`settings/`** and **`login/`:** Settings' pieces, the backup notice (`backup-status.tsx`), the owner context
-    panel (`owner-context-panel.tsx`) and logging out other devices (`log-out-others.tsx`); and the setup and login
-    form (`password-page.tsx`).
+- **`features/`**, each one feature's parts, named as the worker's feature where both have it. Each has a README:
+  what it does, one example, what it uses, what uses it, and its screens.
+  - [`sessions/`](../apps/web/src/features/sessions/README.md): the session page, in parts: `turns/`, `answer/`,
+    `composer/` and `notes/`.
+  - [`step-by-step/`](../apps/web/src/features/step-by-step/README.md): an answer's steps one at a time, read aloud.
+  - [`home/`](../apps/web/src/features/home/README.md): the home page's tile lines and foot rows.
+  - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page and its tabs.
+  - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
+  - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
+  - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
+  - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
+  - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
+  - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
+  - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
+    up, Main.
+  - [`pull-requests/`](../apps/web/src/features/pull-requests/README.md): the PRs list and a pull request's page.
+  - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
+  - [`live/`](../apps/web/src/features/live/README.md): Update, and main's build.
+  - [`notifications/`](../apps/web/src/features/notifications/README.md): this device's notifications toggle.
+  - [`sign-ins/`](../apps/web/src/features/sign-ins/README.md): Settings' sign-ins and Connections.
+  - [`fresh-start/`](../apps/web/src/features/fresh-start/README.md): what a fresh start would clear.
+  - [`login/`](../apps/web/src/features/login/README.md): the setup and login form.
 - **`api/workspace-page.ts`** asks for everything a workspace's page shows; its route's loader imports it, so that
   code and its schemas aren't on the first load. What to show when the worker gives no data is
-  `components/problems.tsx`, and how dates read is `lib/when.ts`.
+  `components/layout/problems.tsx`, and how dates read is `lib/when.ts`.
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
-  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)). One, a table
-  heading's sort button (`sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
+  on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
+  (#459; [its README](../apps/web/src/components/README.md) lists them): `layout/`, `buttons/`, `forms/`, `sheets/`,
+  `frame/`, `chat/`, `code/`, `workspace/` and `rich-blocks/`. One, a table
+  heading's sort button (`buttons/sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
-  #168) have a stylesheet of their own too (`chat-flow.css`), added when one first shows and applying only inside a
-  `ChatFlowScope`: whose turn it is in a session (`session-state.tsx`, in the chat, a workspace's sessions and the
+  #168) have a stylesheet of their own too (`chat/chat-flow.css`), added when one first shows and applying only inside a
+  `ChatFlowScope`: whose turn it is in a session (`chat/session-state.tsx`, in the chat, a workspace's sessions and the
   recent sessions sheet's, which ask again every few seconds while one is working), the Working line and the Your turn
-  mark (`working-line.tsx`), queued messages (`queued-message.tsx`) and Jump to latest (`jump-to-latest.tsx`).
+  mark (`chat/working-line.tsx`), queued messages (`chat/queued-message.tsx`) and Jump to latest (`chat/jump-to-latest.tsx`).
   Nothing jumps in (#269; Paper, "Component · A block that loads late keeps its place"): everything that loads
-  after its page uses one shared piece, `kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
+  after its page uses one shared piece, `layout/kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
   whose it is (`createKept`, `useKept`), so coming back shows the last answer at once and asks again quietly; a
   first visit shows faint rows the size of real ones in the block's place (`PlaceholderRows`, no spinner and no
   words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
   are in the first load's stylesheet. It holds a code workspace's Home blocks and PRs list, Home's tile lines and
   foot rows, the recent sessions sheet, Recent changes, Settings' Connections and backup, and a pull request's
   page; a page that waits as a whole (a pull request's, Tidy) shows the rows in its own shape under its title. A
-  session's conversation is kept the same way in `sessions/events.ts` (faint rows until its events have come,
+  session's conversation is kept the same way in `sessions/turns/events.ts` (faint rows until its events have come,
   and its stream carries on after what was shown); a diagram once drawn is kept by its source, a drawing still to
   load keeps a faint place rather than showing its code (`components/rich-blocks/fenced.tsx`), and maths keeps its room
-  unseen until its formulas can be drawn (`sessions/answer.tsx`).
-  The frame round every page is the Handheld frame (`handheld-frame.tsx`, #193; on a computer too since #197),
-  loaded after the page with its own stylesheet (`handheld-frame.css`). `handheld.ts` picks its shape by the
+  unseen until its formulas can be drawn (`sessions/answer/answer.tsx`).
+  The frame round every page is the Handheld frame (`frame/handheld-frame.tsx`, #193; on a computer too since #197),
+  loaded after the page with its own stylesheet (`frame/handheld-frame.css`). `frame/handheld.ts` picks its shape by the
   window's width alone, whatever the device: rails from 600 px, the cover-screen layout below. With rails (a
   tablet, the unfolded Fold, a computer, #206): workspace tiles down the left, and down the right labelled buttons (Model, Skills, Add,
   Settings) with the Talk key in the bottom corner; on the folded one, tiles across the top and a bottom bar with
-  Type and the talk strip. The page's message box (`sessions/composer.tsx`) offers itself to the frame through
-  `handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
+  Type and the talk strip. The page's message box (`sessions/composer/composer.tsx`) offers itself to the frame through
+  `frame/handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
   the folded Fold. It is the Reply box (#251), the same on every screen: + for a photo or file, a mic that talks as the Talk key does
   (the dock's `talk`) and becomes Send, and the model and effort as quiet text; it opens its Skills and Model sheets
   from the frame's buttons, or Skills from a `/` in the empty box. The talk strip and
-  the Talk key (`talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
-  browser's own speech recognition (`speech.ts`, which also vibrates for it) and put the words in the box as they are
+  the Talk key (`frame/talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
+  browser's own speech recognition (`frame/speech.ts`, which also vibrates for it) and put the words in the box as they are
   heard (#198), for the owner to send, or to queue while a turn runs. Holding Space (outside a field) or the
   mouse's side button talks too, and letting go sends (#197), and a letter typed outside a field goes into the box; on a page without a message box,
 into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). While it listens, the box shows ✕, ■ and ↑
   in place of + and the mic, keeping its shape. While the owner talks or an answer
-  comes, the screen is kept awake (`wake-lock.ts`) where the browser can;
+  comes, the screen is kept awake (`frame/wake-lock.ts`) where the browser can;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
-  round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`handheld-sheet.tsx`, #194): from the right edge
+  round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`sheets/handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
-  (`sessions/handheld-choices.tsx`, built from `sheet-choices.tsx`) load only once it's docked; their classes are in
-  `handheld-frame.css`. A workspace's icon (#210, `workspace-icon.tsx`) shows on its tile, the
-  home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace-marks.tsx`,
+  (`sessions/composer/handheld-choices.tsx`, built from `sheets/sheet-choices.tsx`) load only once it's docked; their classes are in
+  `frame/handheld-frame.css`. A workspace's icon (#210, `workspace/workspace-icon.tsx`) shows on its tile, the
+  home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace/workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
-  in a code workspace's ⋯ (`workspace-menu.tsx`), opens the Icon sheet (`icon-sheet.tsx`, through `icon-chooser.tsx`
+  in a code workspace's ⋯ (`workspace/workspace-menu.tsx`), opens the Icon sheet (`sheets/icon-sheet.tsx`, through `sheets/icon-chooser.tsx`
   on a planning page, loaded when first opened): a Handheld sheet. Arrange workspaces (#321): holding a workspace on the rail and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
-  first load (`arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one
-  (`arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it. A card over
-  the page for one task (`card-dialog.tsx`: its title, a line under it and Close) holds Connections, under the line
+  first load (`frame/arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one
+  (`frame/arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it. A card over
+  the page for one task (`layout/card-dialog.tsx`: its title, a line under it and Close) holds Connections, under the line
   that opens it, and the setup card (#323), in the middle of the screen.
   **`hooks/`:** shared `use…` functions, such as `useAction` (`use-action.ts`: an action's busy state and its error,
   #330); a component's own stays beside it. **`lib/`:** small helpers shared by pages. **`styles.css`:** the theme: Handheld, dark whatever the device's setting (#210).
+- **`components/rich-blocks/`:** the blocks Courtyard draws in answers and documents
+  ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
+  document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,
+  prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
+  `answer.tsx`, a fence whose language is a kind in its `FENCED_KINDS` (a `chart`, a `mermaid`) becomes a
+  `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
+  whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
+  fallback is the code block with its problem line, "Couldn't draw this <noun>, so here's what the model wrote", or
+  just the source while the block is still arriving; a drawing that throws shows it too. A `chart` block
+  (`chart.tsx`) is the JSON the contract's `Chart` schema accepts, drawn by our own SVG as bars, lines or a pie in
+  the theme's violet and chart colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
+  out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
+  one at a time, in the colours read from the theme, at its
+  own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+  changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
+  script, load something or go somewhere (links keep their words) before it goes in the page, the one place
+  Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
+  with an `img`, an actor's icon), so the page's own policy (`index.html`) loads pictures only from Courtyard and
+  such a diagram shows as written. The build takes Mermaid from its prebuilt files without its ELK layout
+  (`mermaidAsDrawn` in `vite.config.ts`), so it adds nothing to the first load. The folder's classes are
+  in its own Tailwind stylesheet (`rich-blocks.css`, which `styles.css` leaves the folder out of), added to the page
+  by `stylesheet.ts` (through `lib/stylesheet.ts`) from inside the answer renderer's script, so neither the classes
+  nor a stylesheet's name are on the first load. They apply only inside a `RichBlock` (`rich-block.tsx`), which
+  each table and drawing is wrapped in, never a fallback: coming after the theme's stylesheet, they would otherwise
+  outrank its screen-size variants on every page.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
   session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
   and the install manifest, and **`scripts/finish-build.mjs`**
