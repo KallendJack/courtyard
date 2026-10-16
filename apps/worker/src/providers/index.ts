@@ -13,6 +13,7 @@ import type {
   SignInState,
   SkillName,
   Source,
+  TaskId,
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { HelperBranch } from "../features/code/index.ts";
@@ -153,6 +154,13 @@ export type CodeTurn = {
    */
   readonly ran: (command: string) => void;
   /**
+   * Starts `command` as a task (#182), when the model asks for it to run in the background: the
+   * worker decides it as it decides `run` (the dev and start scripts allowed too, only this way),
+   * then runs it itself, on after the turn, and tells the model when it ends. Answers what to tell
+   * the model now: that it started, or why it didn't. Only the model's own: a helper is refused.
+   */
+  readonly task: (command: string, why?: string) => Promise<Result<string, string>>;
+  /**
    * Starts a helper the model asked for (#117, ADR 0027), named as the owner sees it: the worker
    * records it, and waits for a place when as many helpers as run at once are running. Answers
    * what the helper does through, each tagged with it, once it has a place; `undefined` when the
@@ -276,8 +284,11 @@ export type TurnInput = {
   readonly added: AddedMessages | null;
 };
 
-/** A message the owner added while the turn ran (#252): its words as written, by its event number. */
-export type AddedMessage = { readonly seq: number; readonly text: string };
+/**
+ * A message the owner added while the turn ran (#252): its words as written, by its event number.
+ * Or the worker's, saying a task ended (#182), its last lines of output added for the model.
+ */
+export type AddedMessage = { readonly seq: number; readonly text: string; readonly task?: TaskId };
 
 /**
  * The messages the owner adds while a turn runs (#252), in the order they're sent, for its

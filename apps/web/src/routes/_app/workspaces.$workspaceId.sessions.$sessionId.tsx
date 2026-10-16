@@ -39,6 +39,7 @@ import {
 } from "../../features/sessions/turns/events.ts";
 import { useSeen } from "../../features/sessions/turns/seen.ts";
 import { SessionTurns } from "../../features/sessions/turns/session-turns.tsx";
+import { RunningTaskRows } from "../../features/tasks/task-lines.tsx";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
 const Review = lazy(() => import("../../features/pull-requests/review.tsx"));
@@ -114,6 +115,7 @@ function Session(props: {
     pullRequest,
     allowAllChanged,
     queuedMessages,
+    tasks,
     problem,
     reconnecting,
     ready,
@@ -494,6 +496,8 @@ function Session(props: {
           <FormError message={sendProblem} />
         </div>
       )}
+      {/* A code session's tasks still running (#182), above the Reply box. */}
+      {standIn === undefined && <RunningTaskRows sessionId={session.id} tasks={tasks} />}
       <Composer
         providers={props.providers}
         {...(last ? { initialModel: last.model } : {})}

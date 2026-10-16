@@ -24,6 +24,7 @@ import { Notice } from "@/components/layout/notice";
 import { SkillTag } from "@/components/workspace/skill-tag";
 import { classes } from "@/lib/classes";
 import { describeProblem } from "../../../components/layout/problems.tsx";
+import { TaskEndedLine } from "../../tasks/task-lines.tsx";
 import { Answer } from "../answer/answer.tsx";
 import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
 import { type Steps, stepsIn } from "../answer/steps.ts";
@@ -485,6 +486,9 @@ export const TurnView = memo(function TurnView(props: {
           return <HelperLines key={index} turn={turn} helpers={part.helpers} />;
         }
         if (part.kind === "added") return <AddedMessage key={part.seq} added={part} turn={turn} />;
+        if (part.kind === "task-ended") {
+          return <TaskEndedLine key={part.task.task} sessionId={sessionId} task={part.task} />;
+        }
         return part.kind === "activities" ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: parts only ever grow, in order
           <Activities key={index} activities={part.activities} />

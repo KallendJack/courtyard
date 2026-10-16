@@ -379,6 +379,7 @@ const seen = (attachments: readonly FramedAttachment[]) => {
 
 const EDIT_FILE = /^edit file (\S+): (.*)$/i;
 const RUN_COMMAND = /^run command: (.+?)(?: \(for: (.+)\))?$/i;
+const START_TASK = /^start task: (.+?)(?: \(for: (.+)\))?$/i;
 const UPDATE_TASKS = /^update the task list$/i;
 
 /** The first line a command printed, or nothing. */
@@ -416,13 +417,20 @@ const runIn = (code: HelperCode, command: string) =>
  * command: git status" runs the command in the worktree, each only once the worker allows it (or
  * the owner does, #171). A command can say what it's for at the end: "run command: git --version
  * (for: To check which git runs here)". Says how each went, or why it was refused. "update the
- * task list" updates its task list, as Claude's does (ADR 0025).
+ * task list" updates its task list, as Claude's does (ADR 0025). "start task: pnpm dev" asks for
+ * it to run in the background, as a task (#182), and says what the worker said.
  */
 const scriptedCoding = async (code: CodeTurn, message: string, report: TurnInput["report"]) => {
   let said = "";
   for (const line of message.split("\n").map((each) => each.trim())) {
     if (UPDATE_TASKS.test(line)) {
       await report({ kind: "updated-tasks" });
+      continue;
+    }
+    const [, task, purpose] = START_TASK.exec(line) ?? [];
+    if (task !== undefined) {
+      const started = await code.task(task, purpose);
+      said += `${started.ok ? started.value : `Couldn't start ${task}: ${started.error}`} `;
       continue;
     }
     const [, path, text] = EDIT_FILE.exec(line) ?? [];

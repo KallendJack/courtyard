@@ -25,6 +25,7 @@ import {
   type CommandRule,
   type IssueGap,
   issueGapsIn,
+  isTaskOnly,
   reachesOut,
   ruleFor,
   runsFromOf,
@@ -144,6 +145,8 @@ export type CodeRefusal =
   | { readonly kind: "unreadable" }
   /** A command for the session branch only, such as committing, while the worktree is off it. */
   | { readonly kind: "off-branch"; readonly branch: string }
+  /** The dev or start script, run in the foreground: it runs only as a task (#182). */
+  | { readonly kind: "task-only" }
   /** The owner denied the approval it needed (#171). */
   | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" }
   /** `gh issue create` filing an issue without a milestone, a category or one triage label (#324). */
@@ -176,6 +179,8 @@ export const commandAllowed = async (
     readonly pullRequest?: number | undefined;
     /** Its code workspace's command allowlist (`allowlistFor`). */
     readonly allowlist: readonly CommandRule[];
+    /** The command is to run as a task (#182), so the dev and start scripts may. */
+    readonly asTask?: boolean;
   },
   command: string,
 ): Promise<Result<null, CodeRefusal | CommandApproval>> => {
@@ -184,6 +189,8 @@ export const commandAllowed = async (
   const [gap, ...gaps] = issueGapsIn(words.value);
   if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
   const work = { branch: session.branch, pullRequest: session.pullRequest };
+  if (session.asTask !== true && isTaskOnly(session.allowlist, words.value, work))
+    return err({ kind: "task-only" });
   const rule = ruleFor(session.allowlist, words.value, work);
   if (rule === undefined) {
     const always = alwaysOffer(words.value);

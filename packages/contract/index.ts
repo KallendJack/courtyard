@@ -196,6 +196,8 @@ export {
   Source,
   SUGGESTED_REPLIES,
   SUGGESTED_REPLY_MAX_CHARACTERS,
+  type TaskTold,
+  tasksIn,
 } from "./lib/session-event.ts";
 export {
   Doing,
@@ -216,6 +218,15 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
+export {
+  RunningTask,
+  RunningTasks,
+  TASK_OUTPUT_MAX_CHARACTERS,
+  TASKS_AT_ONCE,
+  TaskEnding,
+  TaskId,
+  TaskOutput,
+} from "./lib/tasks.ts";
 export {
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,

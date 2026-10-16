@@ -18,6 +18,7 @@ import {
   type SessionId,
   type SkillName,
   type Source,
+  type TaskTold,
   type ThingSave,
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
@@ -90,7 +91,9 @@ export type AnswerPart =
       readonly text: string;
       readonly afterApproval: boolean;
       readonly unread: boolean;
-    };
+    }
+  /** A task that ended here (#182), whichever turn started it: a line that opens its output. */
+  | { readonly kind: "task-ended"; readonly task: TaskTold };
 
 /**
  * Something a model did (an activity), marked when it ran without asking because the session was
@@ -261,6 +264,8 @@ type Log = {
   readonly allowAllChanged: number;
   /** The owner's messages waiting for the running turn to end (#177), first first. */
   readonly queuedMessages: readonly QueuedMessage[];
+  /** The session's tasks (#182), oldest first: running, or how each ended. */
+  readonly tasks: readonly TaskTold[];
 };
 
 /** A message the owner sent while a turn ran (#177), waiting to go, by its event number. */
@@ -355,7 +360,11 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             images: [],
             approval: undefined,
             fixesChecks: event.checksFailed !== undefined,
-            fromWorker: event.checksFailed !== undefined || event.merged !== undefined,
+            // A task's end (#182) shows as its own line, above the turn it starts.
+            fromWorker:
+              event.checksFailed !== undefined ||
+              event.merged !== undefined ||
+              event.tasksEnded !== undefined,
             leadNotes: [],
             startedAt: event.at,
             doing: { kind: "thinking" },
@@ -373,7 +382,9 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
           { seq, text: event.text, attachments: event.attachments?.length ?? 0 },
         ],
       };
+    // The worker's news of a task's end (#182) for the model: the task's own line shows it.
     case "message-added":
+      if (event.task !== undefined) return { ...log, lastSeq: seq };
       return withLastTurn(log, {
         seq,
         change: (turn) => ({
@@ -418,6 +429,32 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     case "allow-all-started":
     case "allow-all-ended":
       return { ...log, lastSeq: seq, allowAllChanged: seq };
+    // A task started (#182): it shows above the Reply box while it runs.
+    case "task-started":
+      return {
+        ...log,
+        lastSeq: seq,
+        tasks: [
+          ...log.tasks,
+          { task: event.task, command: event.command, startedAt: event.at, ended: undefined },
+        ],
+      };
+    // It ended: a line in the conversation where it did.
+    case "task-ended": {
+      const started = log.tasks.find((each) => each.task === event.task);
+      if (started === undefined) return { ...log, lastSeq: seq };
+      const ended: TaskTold = { ...started, ended: { ending: event.ending, at: event.at } };
+      return {
+        ...withLastTurn(log, {
+          seq,
+          change: (turn) => ({
+            ...turn,
+            parts: [...turn.parts, { kind: "task-ended", task: ended }],
+          }),
+        }),
+        tasks: log.tasks.map((each) => (each.task === event.task ? ended : each)),
+      };
+    }
     case "text-delta":
       return withLastTurn(log, {
         seq,
@@ -671,6 +708,7 @@ const NO_EVENTS: Log = {
   pullRequest: undefined,
   allowAllChanged: 0,
   queuedMessages: [],
+  tasks: [],
 };
 
 /**
@@ -811,6 +849,7 @@ export const useSessionTurns = (sessionId: SessionId) => {
     pullRequest: log.pullRequest,
     allowAllChanged: log.allowAllChanged,
     queuedMessages: log.queuedMessages,
+    tasks: log.tasks,
     problem,
     reconnecting,
     ready,

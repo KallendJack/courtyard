@@ -146,6 +146,12 @@ git(repo, "config", `url.${origin.replaceAll("\\", "/")}.insteadOf`, onGitHub);
 git(repo, "config", "user.name", "Test");
 git(repo, "config", "user.email", "test@example.com");
 writeFileSync(join(repo, "README.md"), "# Side project\n");
+// A server that runs until it's stopped, for a session to run as a task (#182).
+mkdirSync(join(repo, "scripts"));
+writeFileSync(
+  join(repo, "scripts", "serve.mjs"),
+  'console.log("Listening on 5173");\nsetInterval(() => {}, 1000);\n',
+);
 git(repo, "add", ".");
 git(repo, "commit", "-qm", "Start");
 git(repo, "push", "-q", "origin", "main");

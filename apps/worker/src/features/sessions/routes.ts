@@ -159,6 +159,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, { status: 404, error: "No such save in this session." });
     case "attachment-not-found":
       return apiError(c, { status: 404, error: "No such attachment in this session." });
+    case "task-not-found":
+      return apiError(c, { status: 404, error: "That task isn't running in this session." });
     case "note-refused":
       return apiError(c, {
         status: error.refusal.kind === "storage" ? 500 : 409,

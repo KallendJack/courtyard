@@ -17,6 +17,7 @@ import {
   type SessionEvent,
   type SkillName,
   SUGGESTED_REPLY_MAX_CHARACTERS,
+  type TaskEnding,
   THING_DETAILS,
   type ThingDetailName,
   type ThingSave,
@@ -121,6 +122,7 @@ const MARKERS = [
   "attachment",
   "pull_request",
   "build_order",
+  "output",
 ] as const;
 const CLOSING_MARKER = new RegExp(`<\\s*/\\s*(${MARKERS.join("|")})\\s*>`, "gi");
 
@@ -132,7 +134,7 @@ const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim()
 
 /** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
 const CODING_ACCESS =
-  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and biome check (with pnpm exec, never npx), the repository's own scripts and tests with node (node <script>, node --test naming its test files), git and gh commands that only look, gh run download with -D naming a folder in your working directory that git ignores, adding and committing on your branch, fetching origin and merging its branches into yours (git merge origin/main), pushing it (git push -u origin HEAD), opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish: nothing runs in the background here. A command may go over several lines. Give a pull request's or issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $ stay as written (--body '...', each ' in it written '\\''), never through $(...) or a heredoc, which never run.";
+  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and biome check (with pnpm exec, never npx), the repository's own scripts and tests with node (node <script>, node --test naming its test files), git and gh commands that only look, gh run download with -D naming a folder in your working directory that git ignores, adding and committing on your branch, fetching origin and merging its branches into yours (git merge origin/main), pushing it (git push -u origin HEAD), opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish, unless it should outlive your turn (a dev server, a slow test run): run that in the background, and Courtyard runs it as a task, at most three at once, and tells you when it finishes; the dev and start scripts run only that way. A command may go over several lines. Give a pull request's or issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $ stay as written (--body '...', each ' in it written '\\''), never through $(...) or a heredoc, which never run.";
 
 /**
  * How a model in a code session works, the house process (docs/ai-conduct.md, Coding; #205),
@@ -983,7 +985,9 @@ type Said =
       readonly saves: readonly SaidSave[];
       readonly documents: readonly SaidDocument[];
       readonly things: readonly SaidThing[];
-    };
+    }
+  /** What Courtyard did between what was said: a task starting or ending (#182). */
+  | { readonly speaker: "courtyard"; readonly text: string };
 
 /** A document the model saved in the conversation, and whether the owner has undone it since. */
 type SaidDocument = { readonly save: DocumentSave; undone: boolean };
@@ -1008,21 +1012,38 @@ const conversationOf = (events: readonly SessionEvent[]) => {
    * has, so a turn that has only done things yet still ends with the owner's message.
    */
   let didFirst: Activity[] = [];
+  /** Each task's command, by its id (#182). */
+  const commands = new Map<string, string>();
   const answer = (change: (answer: ModelSaid) => Partial<ModelSaid>) => {
-    const last = said.at(-1);
-    const current: ModelSaid =
-      last?.speaker === "model"
-        ? last
-        : {
-            speaker: "model",
-            text: "",
-            ended: "running",
-            did: didFirst,
-            saves: [],
-            documents: [],
-            things: [],
-          };
-    if (last?.speaker === "model") said.pop();
+    // A task's line (#182) can come mid-answer: the answer is the one before it.
+    const at = said.findLastIndex((each) => each.speaker !== "courtyard");
+    const answering = said[at];
+    if (answering?.speaker === "model") {
+      const changed = { ...answering, ...change(answering) };
+      if (at === said.length - 1 || changed.text === answering.text) {
+        said[at] = changed;
+        return;
+      }
+      // Text after a task's line is written after it, as more of the same answer.
+      said.push({
+        ...changed,
+        text: changed.text.slice(answering.text.length).trimStart(),
+        did: [],
+        saves: [],
+        documents: [],
+        things: [],
+      });
+      return;
+    }
+    const current: ModelSaid = {
+      speaker: "model",
+      text: "",
+      ended: "running",
+      did: didFirst,
+      saves: [],
+      documents: [],
+      things: [],
+    };
     said.push({ ...current, ...change(current) });
   };
   for (const event of events) {
@@ -1049,6 +1070,18 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       case "text-delta":
         answer((current) => ({ text: current.text + event.text }));
         break;
+      // Every task's start and end, where it happened (#182).
+      case "task-started":
+        commands.set(event.task, event.command);
+        said.push({ speaker: "courtyard", text: taskLine(event.command, "started") });
+        break;
+      case "task-ended": {
+        const command = commands.get(event.task);
+        if (command !== undefined) {
+          said.push({ speaker: "courtyard", text: taskLine(command, endedWords(event.ending)) });
+        }
+        break;
+      }
       case "turn-completed":
         answer(() => ({ ended: "completed" }));
         break;
@@ -1208,7 +1241,11 @@ const didLines = (did: readonly Activity[]) =>
 const attachedNote = (names: readonly string[]) =>
   names.length === 0 ? [] : [`attached ${names.map(quoted).join(", ")}`];
 
+/** A task's start or end as the conversation tells it (#182): "your task `pnpm dev` started". */
+const taskLine = (command: string, how: string) => `your task \`${command}\` ${how}.`;
+
 const lineFor = (said: Said) => {
+  if (said.speaker === "courtyard") return `Courtyard: ${said.text}`;
   if (said.speaker === "owner") {
     if (said.added === "read") return `Owner (while you answered): ${said.text}`;
     if (said.added === "unread") {
@@ -1406,12 +1443,62 @@ export const helperBranchNote = (note: { merged: boolean; branch: string }) =>
     ? `Courtyard merged this helper's branch (${note.branch}) into yours, so its work is in your working directory now.`
     : `This helper's branch (${note.branch}) didn't merge cleanly into yours, so Courtyard stopped the merge and kept the branch: merge it yourself (git merge ${note.branch}), sort out the clash, and commit.`;
 
+/** What a model is told when the worker starts its command as a task (#182; docs/ai-conduct.md, Coding). */
+export const TASK_STARTED =
+  "Courtyard started this as a task: it runs on after your turn ends, and you'll be told when it finishes, with its last lines of output. Carry on meanwhile.";
+
+/** What a model is told when a session already runs as many tasks as it may (#182). */
+export const TOO_MANY_TASKS =
+  "You have three tasks running already, the most a session runs at once, so this one didn't start: run it in the foreground, or wait for one of them to finish.";
+
+/** What a helper is told when it asks to run a command in the background (#182). */
+export const HELPER_NO_TASKS =
+  "A helper can't start a task: run it in the foreground, or say in your report what to start.";
+
+/** How long a task ran, as the model and the owner read it: `2:14`, or `1:02:14` past an hour. */
+export const ranFor = (ms: number) => {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = String(seconds % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+};
+
+/** How a task ended, in the words the model reads (#182): "passed", "was stopped by a restart". */
+const endedWords = (ending: TaskEnding) => {
+  switch (ending.kind) {
+    case "passed":
+      return "passed";
+    case "failed":
+      return ending.exitCode === null ? "failed" : `failed with exit code ${ending.exitCode}`;
+    case "stopped":
+      return {
+        owner: "was stopped by the owner",
+        "session-ended": "was stopped as the session ended",
+        restart: "was stopped by a restart",
+      }[ending.by];
+  }
+};
+
 /**
- * What Claude is told of a command it asks to run in the background (#178): a turn's commands end
- * with it, and nothing wakes the model when one finishes (docs/ai-conduct.md, Coding).
+ * The worker's message when a task finishes or fails (#182; docs/ai-conduct.md, Coding), as the
+ * event log keeps it: no output, which `withTaskOutput` adds for the model alone.
  */
-export const NOT_IN_BACKGROUND =
-  "Run it in the foreground: a turn's background commands stop when it ends, and nothing tells you when one finishes.";
+export const taskEndedMessage = (task: { command: string; ending: TaskEnding; ranMs: number }) =>
+  `Your task \`${task.command}\` ${endedWords(task.ending)} after ${ranFor(task.ranMs)}.`;
+
+/** The most lines, and characters, of a task's output a model is given as it ends (#182). */
+export const TASK_TAIL = { lines: 40, characters: 4000 } as const;
+
+/** A task's last lines of output (#182): at most `TASK_TAIL.lines`, and their last characters. */
+export const tailOf = (output: string) => {
+  const lines = output.replace(/\r\n?/g, "\n").trimEnd().split("\n").slice(-TASK_TAIL.lines);
+  return lines.join("\n").slice(-TASK_TAIL.characters);
+};
+
+/** The worker's message about a task that ended, with its last lines of output, for the model alone. */
+export const withTaskOutput = (message: string, output: string) =>
+  `${message} Its last lines of output:\n\n<output>\n${contained(tailOf(output))}\n</output>`;
 
 /**
  * The message the worker sends a code session when its pull request's checks fail (#172;
@@ -1594,6 +1681,8 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
       return "Run one command at a time: a command that chains, pipes, redirects or substitutes another (with ;, &, |, <, >, $ or backticks) never runs. Run each part on its own.";
     case "unreadable":
       return "That command couldn't be read: check its quotes close.";
+    case "task-only":
+      return "Run it as a task: the dev and start scripts run on after your turn, so start one in the background and you'll be told when it finishes.";
     case "off-branch":
       return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
     case "unfiled": {

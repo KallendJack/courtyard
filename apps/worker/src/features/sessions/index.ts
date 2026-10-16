@@ -30,6 +30,7 @@ import {
   pullRequestEnded,
   pullRequestIn,
   queuedIn,
+  type RunningTasks,
   SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
@@ -39,8 +40,14 @@ import {
   SOURCES_MAX,
   type Source,
   type StopRequest,
+  TASK_OUTPUT_MAX_CHARACTERS,
+  type TaskEnding,
+  TaskId,
+  type TaskOutput,
+  type TaskTold,
   type TurnNow,
   takesEffort,
+  tasksIn,
   type WorkspaceConnections,
   WorkspaceId,
 } from "@courtyard/contract";
@@ -73,6 +80,7 @@ import {
   documentReply,
   type FramingWorkspace,
   framingFor,
+  HELPER_NO_TASKS,
   helperBranchNote,
   LEAD_TOOL_NAME,
   type LeadBrief,
@@ -82,16 +90,22 @@ import {
   saveReply,
   skillsInUse,
   suggestRepliesReply,
+  TASK_STARTED,
+  TASK_TAIL,
   THING_TOOL_NAME,
   TITLING,
   TitleAnswer,
+  TOO_MANY_TASKS,
+  taskEndedMessage,
   thingReply,
   titleMessage,
   USE_SKILL_TOOL_NAME,
   useSkillReply,
+  withTaskOutput,
 } from "../../prompts/index.ts";
 import {
   type CodePlugin,
+  type Framing,
   firstWithRoom,
   type HelperCode,
   type HelperTurn,
@@ -157,6 +171,7 @@ import {
   workspaceSkills,
 } from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
+import { createTasks } from "../tasks/index.ts";
 import {
   createTurnThings,
   readThings,
@@ -209,6 +224,8 @@ export type SessionError =
   | { readonly kind: "save-not-found" }
   /** No message in the session carried an attachment with that id, or its file is gone. */
   | { readonly kind: "attachment-not-found" }
+  /** The session has no task by that id, or none running, for Stop (#182). */
+  | { readonly kind: "task-not-found" }
   /** The owner's Undo or Edit of a save couldn't be done. */
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   /** No finished answer to save as a document has that message's number. */
@@ -673,6 +690,8 @@ export const createSessions = (options: {
   const holding = () => options.holding?.() === true;
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
+  /** Code sessions' tasks (#182), which outlive the turns that start them. */
+  const tasks = createTasks();
   /**
    * Each code session's pull request as last recorded (`null` for none yet), once read from its
    * events or written there, so listing a workspace's sessions doesn't read every event log.
@@ -821,6 +840,16 @@ export const createSessions = (options: {
     }
     session.nextSeq = events.value.length + 1;
     session.queues = events.value.some((event) => event.type === "message-queued");
+    // The tasks a stopped worker left running stopped with it (#182): the model reads so next turn.
+    for (const left of tasksIn(events.value)) {
+      if (left.ended !== undefined) continue;
+      const ended = await writeEvent({
+        id,
+        session,
+        event: { type: "task-ended", task: left.task, ending: { kind: "stopped", by: "restart" } },
+      });
+      if (!ended.ok) console.error(`Session ${id}: a task a restart stopped couldn't be recorded`);
+    }
     for (const event of events.value) {
       session.answered = answeredAfter(session.answered, event);
       session.allowAll = allowAllAfter(session.allowAll, event);
@@ -1052,19 +1081,23 @@ export const createSessions = (options: {
         lead = file.value?.lead === true;
         quiet = lead || file.value?.byLead === true;
         const brief = lead ? await options.lead?.brief(turn.id) : undefined;
-        const framing = framingFor({
-          ...(brief === undefined ? {} : { lead: brief }),
-          workspace: workspace.value,
-          capabilities: turn.provider.capabilities,
-          events: events.value,
-          skills: {
-            // Matt's skills load through the provider's own skill loading (ADR 0024).
-            offered: skills.usable.filter((skill) => !skill.ownerOnly && skill.source !== "matt"),
-            inUse: await inUseTexts(skills.usable, inUse),
-          },
-          attachments: await carriedAttachments(folderOf(turn.id), events.value),
-          now: options.now(),
-        });
+        const framing = await withTasksOutput(
+          turn.id,
+          events.value,
+          framingFor({
+            ...(brief === undefined ? {} : { lead: brief }),
+            workspace: workspace.value,
+            capabilities: turn.provider.capabilities,
+            events: events.value,
+            skills: {
+              // Matt's skills load through the provider's own skill loading (ADR 0024).
+              offered: skills.usable.filter((skill) => !skill.ownerOnly && skill.source !== "matt"),
+              inUse: await inUseTexts(skills.usable, inUse),
+            },
+            attachments: await carriedAttachments(folderOf(turn.id), events.value),
+            now: options.now(),
+          }),
+        );
         const turnDocuments = createTurnDocuments(targetOf(turn));
         /** Records what the model is doing, or one of its helpers (#117), tagged with it. */
         const reportAs =
@@ -1215,6 +1248,11 @@ export const createSessions = (options: {
             readonly helper: HelperId | undefined;
             /** It's allowed because the session is allowing all (#428), so it's marked so. */
             readonly allowedAll?: boolean | undefined;
+            /**
+             * It's a command to run as a task (#182): it takes no place in the builds queue, and
+             * its start is recorded as the task's, not as an activity.
+             */
+            readonly asTask?: boolean | undefined;
           },
         ): Promise<Result<null, string>> => {
           const { helper, allowedAll } = by;
@@ -1223,6 +1261,7 @@ export const createSessions = (options: {
           }
           if (!decided.ok) return err(codeRefusalReason(decided.error));
           const activity = decided.value;
+          if (by.asTask === true) return ok(null);
           const told = reportAs(helper);
           if (activity.kind === "ran-command" && isBuild(activity.command)) {
             const started = await options.code.builds.start({
@@ -1257,6 +1296,8 @@ export const createSessions = (options: {
           always?: AlwaysAllow | undefined;
           /** Allow all for this task would cover it (#428), so the card offers turning it on. */
           all?: true | undefined;
+          /** It's a command to run as a task (#182). */
+          asTask?: boolean | undefined;
         }): Promise<Result<null, string>> => {
           if (stopper.signal.aborted || recordingLost) {
             return err(codeRefusalReason({ kind: "stopped" }));
@@ -1303,7 +1344,7 @@ export const createSessions = (options: {
             given.answer === "allow"
               ? ok(asking.allowed)
               : err({ kind: "denied", what: deniedWhat(asking.ask) }),
-            { helper: asking.helper, allowedAll: given.allowedAll },
+            { helper: asking.helper, allowedAll: given.allowedAll, asTask: asking.asTask },
           );
         };
         /**
@@ -1364,17 +1405,61 @@ export const createSessions = (options: {
           own?: true;
         }): HelperCode => {
           const { worktree, branch, helper, own } = code;
+          /** Its slot and Courtyard's GitHub sign-in for its git and gh (#99). */
+          const env = {
+            ...code.env,
+            ...(slot === undefined || own ? {} : slotEnv({ slot, worktree })),
+          };
+          /**
+           * Whether a command may run, as `run` and `task` ask (#182), the owner asked when it
+           * needs their approval; once allowed, a command not run as a task is recorded as run.
+           */
+          const command = async (
+            asked: string,
+            why: string | undefined,
+            asTask: boolean,
+          ): Promise<Result<null, string>> => {
+            const allowed = await commandAllowed(
+              {
+                worktree,
+                branch,
+                pullRequest: pullRequestIn(events.value)?.number,
+                // The Lead files an issue only with the owner's OK (#347), and a helper on its
+                // own branch pushes and opens a pull request only with it (#395).
+                allowlist: [...workspace.value.allowlist, ...allowedAlways].filter((rule) => {
+                  const words = rule.words.join(" ");
+                  if (lead && words === "gh issue create") return false;
+                  return own !== true || !OWN_BRANCH_ASKS.includes(words);
+                }),
+                asTask,
+              },
+              asked,
+            );
+            const ran: Activity = { kind: "ran-command", command: asked };
+            if (allowed.ok) return decide(ok(ran), { helper, asTask });
+            const refused = allowed.error;
+            if (refused.kind !== "needs-approval") return decide(err(refused), { helper });
+            // Allowing all, what it covers runs without asking (#428).
+            if (refused.all === true && allowingAll()) {
+              return decide(ok(ran), { helper, allowedAll: true, asTask });
+            }
+            return approval({
+              ask: { kind: "command", command: asked, reason: refused.reason },
+              why,
+              allowed: ran,
+              helper,
+              always: refused.always,
+              all: refused.all,
+              asTask,
+            });
+          };
           return {
             worktree,
             plugin: code.plugin,
-            // Its slot, Courtyard's GitHub sign-in for its git and gh (#99), and word that its
-            // builds hold a place in the machine's builds lock (#306): each runs only once the
-            // builds queue has given it one, so the repo's scripts don't wait for another.
-            env: {
-              ...code.env,
-              ...(slot === undefined || own ? {} : slotEnv({ slot, worktree })),
-              ...BUILD_HELD_ENV,
-            },
+            // Word that its builds hold a place in the machine's builds lock (#306): each runs
+            // only once the builds queue has given it one, so the repo's scripts don't wait for
+            // another.
+            env: { ...env, ...BUILD_HELD_ENV },
             edit: async (path) => {
               const place = await editPlaceIn(worktree, path);
               if (place.kind === "inside") {
@@ -1401,39 +1486,45 @@ export const createSessions = (options: {
                 helper,
               });
             },
-            run: async (command, why) => {
-              const allowed = await commandAllowed(
-                {
-                  worktree,
-                  branch,
-                  pullRequest: pullRequestIn(events.value)?.number,
-                  // The Lead files an issue only with the owner's OK (#347), and a helper on its
-                  // own branch pushes and opens a pull request only with it (#395).
-                  allowlist: [...workspace.value.allowlist, ...allowedAlways].filter((rule) => {
-                    const words = rule.words.join(" ");
-                    if (lead && words === "gh issue create") return false;
-                    return own !== true || !OWN_BRANCH_ASKS.includes(words);
-                  }),
-                },
-                command,
-              );
-              if (allowed.ok) return decide(ok({ kind: "ran-command", command }), { helper });
-              const refused = allowed.error;
-              if (refused.kind !== "needs-approval") return decide(err(refused), { helper });
-              // Allowing all, what it covers runs without asking (#428).
-              if (refused.all === true && allowingAll()) {
-                return decide(ok({ kind: "ran-command", command }), { helper, allowedAll: true });
+            run: (asked, why) => command(asked, why, false),
+            ran: (asked) => options.code.builds.ended(turn.id, asked),
+            // Only the model's own (#182): a helper works inside the turn.
+            task: async (asked, why) => {
+              if (helper !== undefined) return err(HELPER_NO_TASKS);
+              const allowed = await command(asked, why, true);
+              if (!allowed.ok) return allowed;
+              if (stopper.signal.aborted || recordingLost) {
+                return err(codeRefusalReason({ kind: "stopped" }));
               }
-              return approval({
-                ask: { kind: "command", command, reason: refused.reason },
-                why,
-                allowed: { kind: "ran-command", command },
-                helper,
-                always: refused.always,
-                all: refused.all,
+              const started = await tasks.start({
+                session: turn.id,
+                sessionFolder: folderOf(turn.id),
+                command: asked,
+                cwd: worktree,
+                // A heavy check it runs takes its own place in the machine's builds lock.
+                env: {
+                  ...env,
+                  ...Object.fromEntries(
+                    Object.keys(BUILD_HELD_ENV).map((name) => [name, undefined]),
+                  ),
+                },
+                ended: (task, ending) => taskEnded({ id: turn.id, task, ending }),
               });
+              if (!started.ok) {
+                return err(
+                  started.error.kind === "too-many"
+                    ? TOO_MANY_TASKS
+                    : codeRefusalReason({ kind: "unreadable" }),
+                );
+              }
+              const recorded = await append(turn.id, {
+                type: "task-started",
+                task: started.value,
+                command: asked,
+              });
+              if (!recorded.ok) recordingLost = true;
+              return ok(TASK_STARTED);
             },
-            ran: (command) => options.code.builds.ended(turn.id, command),
           };
         };
         /** How many helpers are running (#117), and each one waiting for a place, first first. */
@@ -1496,6 +1587,7 @@ export const createSessions = (options: {
               edit: (path) => now().edit(path),
               run: (command, why) => now().run(command, why),
               ran: (command) => now().ran(command),
+              task: (command, why) => now().task(command, why),
             },
             connections: connectionsFor(started.id),
             workIn: async (branch) => {
@@ -1629,8 +1721,9 @@ export const createSessions = (options: {
         ? { type: "turn-failed", reason: failure }
         : { type: "turn-completed" };
     const ended = await append(turn.id, ending);
-    // One the answer ended without reading still gets answered, next, unless the owner stopped.
-    for (const added of stopped ? [] : unread) {
+    // One the answer ended without reading still gets answered, next, unless the owner stopped. A
+    // task's ending it never read is told by a turn of its own instead (#182).
+    for (const added of stopped ? [] : unread.filter((each) => each.task === undefined)) {
       await queueMessage({
         id: turn.id,
         message: {
@@ -1645,6 +1738,8 @@ export const createSessions = (options: {
     options.code.slots.release(turn.id);
     // The owner's next queued message goes at once (#177), before a fixing turn could (#172).
     const queuedGoes = ended.ok && (await sendNextQueued(turn.id));
+    // Then any of its tasks that ended untold is told (#182), unless the owner stopped the turn.
+    const tasksTold = ended.ok && !queuedGoes && !stopped && (await tellTasks(turn.id));
     // What the turn did to its pull request shows at once, the PR it opened, say (#172), and its
     // notification then says when the PR's checks still fail (story 31).
     if (turn.coding) await followPullRequest(turn.id);
@@ -1656,8 +1751,8 @@ export const createSessions = (options: {
           : `Courtyard session (${branch}) failed before its pull request.`,
       );
     }
-    // It isn't the owner's turn when their queued message has just gone.
-    if (ended.ok && !queuedGoes) {
+    // It isn't the owner's turn when their queued message, or a task's news, has just gone.
+    if (ended.ok && !queuedGoes && !tasksTold) {
       const events = turn.coding ? await readEvents(turn.id) : undefined;
       const pullRequest = events?.ok ? pullRequestIn(events.value) : undefined;
       // The Lead's and its builders' turns end quietly, unless checks still fail (#347).
@@ -1755,6 +1850,8 @@ export const createSessions = (options: {
      * session is this turn's, in case a newer one ran meanwhile.
      */
     continues?: { turn: number };
+    /** Sent by the worker because these tasks ended while no turn ran (#182). */
+    tasksEnded?: [TaskId, ...TaskId[]];
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -1819,6 +1916,7 @@ export const createSessions = (options: {
       ...(start.merged === undefined ? {} : { merged: start.merged }),
       ...(start.runsBuildOrder === true ? { runsBuildOrder: true } : {}),
       ...(start.continues === undefined ? {} : { continues: start.continues }),
+      ...(start.tasksEnded === undefined ? {} : { tasksEnded: start.tasksEnded }),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the
@@ -2348,6 +2446,8 @@ export const createSessions = (options: {
       const session = running.get(id);
       if (session !== undefined && session.turn.kind !== "idle") return;
       if (pullRequest.state !== "open") {
+        // The session has ended, so its tasks do too (#182), before its worktree goes.
+        await tasks.stopAll(id, "session-ended");
         const sessionBranch = sessionBranchOf({ ...file.value, branch });
         const there = await exists(sessionBranch.worktree);
         if (there.ok && there.value) {
@@ -2494,7 +2594,195 @@ export const createSessions = (options: {
     });
   };
 
+  /**
+   * The tasks that finished or failed since the session's last message (#182) and haven't been
+   * told to its model in an answer, each as the model is told it, oldest first.
+   */
+  const untoldTasks = (events: readonly SessionEvent[]) => {
+    const since = events.findLast((event) => event.type === "owner-message")?.seq ?? 0;
+    const unread = new Set(
+      events.flatMap((event) => (event.type === "added-not-read" ? [event.added] : [])),
+    );
+    const told = new Set(
+      events.flatMap((event) =>
+        event.type === "message-added" && event.task !== undefined && !unread.has(event.seq)
+          ? [event.task]
+          : [],
+      ),
+    );
+    const endedAt = new Map(
+      events.flatMap((event) => (event.type === "task-ended" ? [[event.task, event.seq]] : [])),
+    );
+    return tasksIn(events).filter(
+      ({ task, ended }) =>
+        ended !== undefined &&
+        ended.ending.kind !== "stopped" &&
+        (endedAt.get(task) ?? 0) > since &&
+        !told.has(task),
+    );
+  };
+
+  /** What a task's ending tells the model (#182): as the event log keeps it, and with its output. */
+  const taskNews = async (id: SessionId, told: TaskTold) => {
+    const ended = told.ended;
+    const kept = taskEndedMessage({
+      command: told.command,
+      ending: ended?.ending ?? { kind: "failed", exitCode: null },
+      ranMs: Date.parse(ended?.at ?? told.startedAt) - Date.parse(told.startedAt),
+    });
+    const output = await tasks.output(folderOf(id), told.task, TASK_TAIL.characters * 4);
+    return { kept, full: withTaskOutput(kept, output.ok ? output.value.text : "") };
+  };
+
+  /**
+   * A turn's framing with the last lines of output of the tasks its message tells of (#182), which
+   * the event log never keeps.
+   */
+  const withTasksOutput = async (
+    id: SessionId,
+    events: readonly SessionEvent[],
+    framing: Framing,
+  ): Promise<Framing> => {
+    const last = events.findLast((event) => event.type === "owner-message");
+    const ended = last?.type === "owner-message" ? (last.tasksEnded ?? []) : [];
+    if (ended.length === 0 || !framing.message.endsWith(framing.newMessage)) return framing;
+    const told = tasksIn(events).filter(({ task }) => ended.includes(task));
+    const news = await Promise.all(told.map((each) => taskNews(id, each)));
+    const newMessage = news.map(({ full }) => full).join("\n\n");
+    return {
+      ...framing,
+      message: `${framing.message.slice(0, framing.message.length - framing.newMessage.length)}${newMessage}`,
+      newMessage,
+    };
+  };
+
+  /**
+   * Tells a session's model of its tasks that ended untold (#182), in a turn of their own on the
+   * model the owner last used, once the session is free and nothing holds it. Says whether one
+   * started.
+   */
+  const tellTasks = async (id: SessionId): Promise<boolean> => {
+    if (holding()) return false;
+    const session = running.get(id);
+    if (session === undefined || session.turn.kind !== "idle") return false;
+    const [events, file] = await Promise.all([
+      readEvents(id),
+      readJsonFile(sessionFilePath(id), SessionFile),
+    ]);
+    if (!events.ok || !file.ok || file.value === undefined) return false;
+    const untold = untoldTasks(events.value);
+    const [first, ...more] = untold.map(({ task }) => task);
+    const last = events.value.findLast((event) => event.type === "owner-message");
+    if (first === undefined || last?.type !== "owner-message") return false;
+    const news = await Promise.all(untold.map((each) => taskNews(id, each)));
+    const message: NewMessage = {
+      text: news.map(({ kept }) => kept).join("\n\n"),
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerIn(file.value.workspaceId, message);
+    if (!provider.ok || !provider.value.provider.capabilities.codes) return false;
+    const started = await startTurn({
+      id,
+      workspaceId: file.value.workspaceId,
+      provider: provider.value.provider,
+      message,
+      since: freshStarts,
+      coding: file.value.branch !== undefined,
+      placeless: file.value.placeless === true,
+      tasksEnded: [first, ...more],
+    });
+    return started.ok;
+  };
+
+  /**
+   * Records how a task ended (#182). One that finished or failed tells the model: in the answer
+   * that's running, as a message the owner adds does (#252), or in a turn of its own once the
+   * session is free. One that was stopped tells nobody.
+   */
+  const taskEnded = async (end: { id: SessionId; task: TaskId; ending: TaskEnding }) => {
+    const { id, task, ending } = end;
+    const session = running.get(id);
+    // Deleted, or set aside by a fresh start: there's nothing to record it in.
+    if (session === undefined || session.turn.kind === "deleting") return;
+    const recorded = await append(id, { type: "task-ended", task, ending });
+    if (!recorded.ok || ending.kind === "stopped") return;
+    const { turn } = session;
+    if (turn.kind === "running" && turn.turn !== undefined && turn.added?.reserve() === true) {
+      const events = await readEvents(id);
+      const told = events.ok ? tasksIn(events.value).find((each) => each.task === task) : undefined;
+      if (told === undefined) {
+        turn.added.release();
+        return;
+      }
+      const news = await taskNews(id, told);
+      const added = await append(id, {
+        type: "message-added",
+        text: news.kept,
+        task,
+        ...(session.approvals.size > 0 ? { afterApproval: true } : {}),
+      });
+      if (!added.ok) {
+        turn.added.release();
+        return;
+      }
+      if (turn.added.add({ seq: added.value.seq, text: news.full, task })) return;
+      // The turn ended meanwhile: it's told in a turn of its own.
+      await append(id, { type: "added-not-read", added: added.value.seq });
+    }
+    // Told once the turn running now ends, if one is.
+    await tellTasks(id);
+  };
+
   return {
+    /** A code session's tasks still running (#182), oldest first, each with its last line. */
+    runningTasks: async (rawId: string): Promise<Result<RunningTasks, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id } = found.value;
+      const listed = await Promise.all(
+        tasks.running(id).map(async (task) => ({
+          task,
+          lastLine: await tasks.lastLine(folderOf(id), task),
+        })),
+      );
+      return ok({ tasks: listed });
+    },
+
+    /** One of a session's tasks' output (#182), its end, running or not. */
+    taskOutput: async (
+      rawId: string,
+      rawTask: string,
+    ): Promise<Result<TaskOutput, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const task = TaskId.safeParse(rawTask);
+      const events = await readEvents(found.value.id);
+      if (!events.ok) return events;
+      if (!task.success || !tasksIn(events.value).some((each) => each.task === task.data)) {
+        return err({ kind: "task-not-found" });
+      }
+      const output = await tasks.output(
+        folderOf(found.value.id),
+        task.data,
+        TASK_OUTPUT_MAX_CHARACTERS,
+      );
+      return output.ok
+        ? ok({ output: output.value.text, cut: output.value.cut })
+        : err(STORAGE_ERROR);
+    },
+
+    /** Stops one of a session's tasks (#182), the owner's Stop: it tells nobody. */
+    stopTask: async (rawId: string, rawTask: string): Promise<Result<null, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const task = TaskId.safeParse(rawTask);
+      if (!task.success || !(await tasks.stop(found.value.id, task.data, "owner"))) {
+        return err({ kind: "task-not-found" });
+      }
+      return ok(null);
+    },
+
     /** A code session's pull request as the owner reviews it (#160). */
     pullRequestReview: async (rawId: string): Promise<Result<PullRequestReview, SessionError>> => {
       const found = await reviewIn(rawId);
@@ -3251,6 +3539,8 @@ export const createSessions = (options: {
       }
       // A turn just ended finishes first: the pull request it opened is recorded by then (#324).
       if (session.turn.kind === "idle") await session.ended;
+      // Its tasks end with it (#182), telling nobody, before its folder and worktree go.
+      if (session.turn.kind === "idle") await tasks.stopAll(id, "session-ended");
       const events = await readEvents(id);
       // Nothing ever ran on its session branch, so that goes too (ADR 0007).
       const neverRan =
@@ -3419,6 +3709,8 @@ export const createSessions = (options: {
         const busy = await busySession();
         if (!busy.ok) return err({ kind: "unreadable" });
         if (busy.value !== undefined) return err({ kind: "running", session: busy.value });
+        // Every session's tasks end with it (#182), before its folder moves.
+        await Promise.all([...running.keys()].map((id) => tasks.stopAll(id, "session-ended")));
         const cleared = await aside.clear();
         if (!cleared.ok) return cleared;
         // Anything asked for before now belonged to what's just been cleared.

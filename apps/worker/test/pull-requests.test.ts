@@ -594,6 +594,27 @@ describe("a merged or closed pull request", () => {
     },
   );
 
+  it("ends the session's tasks, telling nobody, before its worktree goes (#182)", async () => {
+    await mkdir(join(repo, "scripts"));
+    await writeFile(join(repo, "scripts", "serve.mjs"), "setInterval(() => {}, 1000);\n");
+    await gitIn(repo, "add", ".");
+    await gitIn(repo, "commit", "--quiet", "-m", "A server");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const { id, branch } = await codeSession("start task: node scripts/serve.mjs");
+    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1" });
+    await runJobs();
+
+    github.merge(number);
+    await runJobs();
+
+    const events = await eventsOf(id);
+    expect(events.filter((event) => event.type === "task-ended")).toMatchObject([
+      { ending: { kind: "stopped", by: "session-ended" } },
+    ]);
+    expect(events.filter((event) => event.type === "owner-message")).toHaveLength(1);
+    expect(await gitIn(repo, "worktree", "list", "--porcelain")).not.toContain(branch);
+  });
+
   it("clears away a worktree git has already half-removed, folder and all, and only once", async () => {
     const { id, branch } = await codeSession();
     const worktree = join(root, "data", "worktrees", id);

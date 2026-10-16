@@ -196,8 +196,11 @@ there is used as it is), then makes the workspace on it and opens it.
   what's in a folder git ignores, where a download puts it (`pnpm -C test-results/ci test`,
   `node test-results/ci/run.js`, a test tool's `--config` there), and `node --test` without
   naming its test files.
-- **Every command runs in the foreground,** inside the turn: a session can't leave one running in
-  the background, since it would stop when the turn ended with nothing to pick it up.
+- **A long command can run as a task** (#182): one the model runs in the background (a dev
+  server, a slow test run) is run by the worker, on after the turn, at most three per session. It
+  shows above the Reply box with its last line, where Stop ends it; the model is told when it
+  passes or fails. The `dev` and `start` scripts run only this way. Tasks end with their session,
+  and with the worker (an Update or a restart).
 - **To change a workspace's command allowlist,** add an `allowlist` to its `workspace.json`: the
   commands to add, and the default ones to remove, each by its first words, ending ` ...` when
   more arguments may follow. A command still never chains another, nor names a path outside the
