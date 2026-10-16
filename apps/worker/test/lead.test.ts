@@ -106,8 +106,15 @@ const sessionsOf = async (request: Requester) =>
     .sessions;
 
 /** Run the build order, as the owner's tap on Next up does. */
-const run = async (request: Requester, model = FAKE_MODEL) => {
-  const response = await postJson(request, "/api/workspaces/side-project/lead/run", { model });
+const run = async (
+  request: Requester,
+  model = FAKE_MODEL,
+  more: { keepGoing?: "ready-now" | "4h" | "tonight" } = {},
+) => {
+  const response = await postJson(request, "/api/workspaces/side-project/lead/run", {
+    model,
+    ...more,
+  });
   expect(response.status).toBe(200);
   return LeadStatus.parse(await response.json());
 };
@@ -489,6 +496,143 @@ describe("watching its builders (#347)", () => {
   });
 });
 
+describe("keeping going for a window (#457)", () => {
+  /** #22 is ready but waits on #30, which isn't ready: nothing to build until #30 closes. */
+  const WAITING: readonly FakeIssue[] = [
+    { number: 22, title: "Which session waits", milestone: "4 · Code workspaces", blockedBy: [30] },
+    { number: 30, title: "Not ready", milestone: "4 · Code workspaces", labels: ["needs-info"] },
+  ];
+
+  it("wakes from its rest for an issue that becomes buildable, 4 hours unless the owner says, and says so quietly", async () => {
+    const { github, request } = await signedInWith(WAITING);
+    const resting = await run(request);
+    expect(resting.state).toBe("resting");
+    const until = resting.wakesUntil;
+    if (until === undefined) throw new Error("it doesn't wake for new work");
+    expect(Date.parse(until) - Date.now()).toBeGreaterThan(3.9 * 60 * 60 * 1000);
+    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(4 * 60 * 60 * 1000);
+    // Resting with nothing new, it says nothing more each time round.
+    await runJobs();
+    const before = await notesIn(request);
+
+    github.closeIssue(onGitHub, 30);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.state).toBe("running");
+    expect(lead.building.map((each) => each.issue)).toEqual([22]);
+    const notes = await notesIn(request);
+    expect(notes.slice(0, before.length)).toEqual(before);
+    expect(notes.slice(before.length)).toEqual([
+      "Woke: #22 Which session waits is ready, started building.",
+    ]);
+  });
+
+  it("rests until the owner runs it again when told just what's ready now", async () => {
+    const { github, request } = await signedInWith(WAITING);
+    const resting = await run(request, FAKE_MODEL, { keepGoing: "ready-now" });
+    expect(resting.wakesUntil).toBeUndefined();
+
+    github.closeIssue(onGitHub, 30);
+    await runJobs();
+
+    expect(await leadOf(request)).toMatchObject({ state: "resting", building: [] });
+  });
+
+  it("keeps going until 22:00 when told until tonight", async () => {
+    const { request } = await signedInWith(WAITING);
+
+    const resting = await run(request, FAKE_MODEL, { keepGoing: "tonight" });
+
+    const tonight = new Date();
+    tonight.setHours(22, 0, 0, 0);
+    expect(resting.wakesUntil).toBe(
+      tonight.getTime() > Date.now() ? tonight.toISOString() : undefined,
+    );
+  });
+
+  it("starts no builder while 2 pull requests wait on the owner's review, and carries on as one merges", async () => {
+    const more = [
+      { number: 25, title: "Fourth", milestone: "4 · Code workspaces" },
+      { number: 26, title: "Fifth", milestone: "4 · Code workspaces" },
+    ];
+    const { github, request } = await signedInWith([...ISSUES, ...more]);
+    await run(request);
+    const numbers: number[] = [];
+    for (const issue of [22, 23]) {
+      const builder = await builderOf(request, issue);
+      const number = github.openPullRequest({
+        repo: onGitHub,
+        branch: builder.branch ?? "",
+        head: `c0ffee${issue}`,
+      });
+      github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+      numbers.push(number);
+    }
+
+    await runJobs();
+    await runJobs();
+
+    const holding = await leadOf(request);
+    expect(holding).toMatchObject({
+      state: "running",
+      building: [],
+      why: "2 PRs wait on your review, so the next builder starts once one merges.",
+    });
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+
+    github.merge(numbers[0] ?? 0);
+    await runJobs();
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([24, 25]);
+  });
+
+  it("starts at most 4 builders a run, then rests until the owner runs it again", async () => {
+    const more = [25, 26, 27].map((number) => ({
+      number,
+      title: `Issue ${number}`,
+      milestone: "4 · Code workspaces",
+    }));
+    const { github, request } = await signedInWith([...ISSUES, ...more], {
+      milestones: { "4 · Code workspaces": "Build order: #22 → #23 → #24 → #25 → #26 → #27." },
+    });
+    await run(request);
+    // Each builder's pull request merges, so the next starts in its place.
+    for (const issue of [22, 23]) {
+      const number = github.openPullRequest({
+        repo: onGitHub,
+        branch: (await builderOf(request, issue)).branch ?? "",
+        head: `c0ffee${issue}`,
+      });
+      github.merge(number);
+    }
+    await runJobs();
+    await runJobs();
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([24, 25]);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: (await builderOf(request, 24)).branch ?? "",
+      head: "c0ffee24",
+    });
+    github.merge(number);
+
+    await runJobs();
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead).toMatchObject({ state: "resting", why: "Built 4 this run · tap Run for more" });
+    expect(lead.wakesUntil).toBeUndefined();
+    expect(lead.building.map((each) => each.issue)).toEqual([25]);
+    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+    expect(await notesIn(request)).toContain("Built 4 this run · tap Run for more");
+
+    await run(request);
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([25, 26]);
+  });
+});
+
 describe("while Courtyard waits to update (#186)", () => {
   it("starts no builder until the Update has run", async () => {
     // Courtyard's live copy is this repository, a version behind main, whose build still runs.
@@ -702,7 +846,8 @@ describe("Merge in order (#423)", () => {
   const readyToMerge = async (
     pulls: readonly { checks: "passed" | "failed"; conflicts?: boolean }[],
   ) => {
-    const { github, request } = await signedInWith(ISSUES);
+    // Only the two issues: no builder starts while it merges.
+    const { github, request } = await signedInWith(ISSUES.slice(0, 2));
     await run(request);
     const numbers: number[] = [];
     for (const [at, pull] of pulls.entries()) {

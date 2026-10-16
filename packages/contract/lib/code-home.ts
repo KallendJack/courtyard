@@ -110,12 +110,29 @@ export type BuildIssue = z.infer<typeof BuildIssue>;
  * the model its own conversation last used. With Allow all for builders (#428), off unless the
  * owner turns it on, each builder it starts for the next `ALLOW_ALL_MOST_HOURS` allows all until
  * its pull request opens; `false` turns it off, and a wake that leaves it out keeps it as it was.
+ * How long it keeps going (#457): a resting Lead wakes for new work until then, 4 hours unless
+ * the owner says.
  */
-export const LeadRun = BuildIssue.extend({ allowAll: z.boolean().optional() });
+export const LeadRun = BuildIssue.extend({
+  allowAll: z.boolean().optional(),
+  keepGoing: z.enum(["ready-now", "4h", "tonight"]).optional(),
+});
 export type LeadRun = z.infer<typeof LeadRun>;
+
+/**
+ * How long a run keeps going (#457), as the Run sheet offers it: just what's ready now, 4 hours,
+ * or until tonight (22:00).
+ */
+export type LeadKeepGoing = NonNullable<LeadRun["keepGoing"]>;
 
 /** How many builders the Lead runs at once (#347): 2 unless the owner says, 1 to 3. */
 export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 3 } as const;
+
+/**
+ * The Lead's brakes (#457), on top of the code sessions' slots: no new builder while this many of
+ * its pull requests wait on the owner's review, and at most this many builders a run.
+ */
+export const LEAD_BRAKES = { reviewsWaiting: 99, buildsPerRun: 4 } as const;
 
 /** A builder the Lead started (#347): its session, its title, and the issue it builds. */
 export const LeadBuilder = z.object({
@@ -176,6 +193,8 @@ export const LeadStatus = z.object({
   ready: z.array(LeadReady),
   /** Until when the builders it starts allow all (#428), while that's still ahead. */
   buildersAllowedAll: z.iso.datetime().optional(),
+  /** Until when, resting, it wakes for new work (#457), while that's still ahead. */
+  wakesUntil: z.iso.datetime().optional(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: LeadMerge.optional(),
   /**
