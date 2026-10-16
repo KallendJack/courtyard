@@ -449,6 +449,10 @@ test.describe("several code sessions at once (#174)", () => {
     await chooseModel(page, "fake/echo");
     await page.getByLabel("Message", { exact: true }).fill("Fix the build");
     await page.getByRole("button", { name: "Start" }).click();
+    // Stopped after the test too, so it's never still running in the next one's Running (#458).
+    await page.waitForURL(/\/sessions\/[^/]+$/);
+    const started = new URL(page.url()).pathname.split("/").at(-1);
+    if (started !== undefined) busy.push(started);
 
     const session = page.getByRole("list", { name: "Session" });
     await expect(session).toContainText("waiting for a place · 0 ahead");
@@ -475,15 +479,21 @@ test.describe("several code sessions at once (#174)", () => {
 
     const running = page.getByRole("region", { name: "Running" });
     await expect(running).toContainText(`${AT_ONCE} of ${AT_ONCE}`);
-    const rows = running.getByRole("listitem");
-    await expect(rows).toHaveCount(AT_ONCE + 2);
-    await expect(rows.nth(AT_ONCE)).toHaveAccessibleName("Tidy the README");
-    await expect(rows.nth(AT_ONCE)).toContainText("Waiting for a place · 0 ahead");
-    await expect(rows.nth(AT_ONCE + 1)).toHaveAccessibleName("Rename the settings page");
-    await expect(rows.nth(AT_ONCE + 1)).toContainText("Waiting for a place · 1 ahead");
-    for (let at = 0; at < AT_ONCE; at += 1) {
-      await expect(rows.nth(at)).not.toContainText("Waiting for a place");
-    }
+    // Another session can still be finishing in this workspace (the test before starts one it
+    // doesn't stop), so only these two are counted, and the order is checked across them all
+    // (#458).
+    const tidy = running.getByRole("listitem", { name: "Tidy the README" });
+    const rename = running.getByRole("listitem", { name: "Rename the settings page" });
+    await expect(tidy).toContainText(/Waiting for a place · \d+ ahead/);
+    await expect(rename).toContainText(/Waiting for a place · \d+ ahead/);
+    const ahead = async (row: Locator) => Number(/(\d+) ahead/.exec(await row.innerText())?.[1]);
+    expect(await ahead(rename)).toBe((await ahead(tidy)) + 1);
+
+    const rows = await running.getByRole("listitem").allInnerTexts();
+    const waits = (row: string) => row.includes("Waiting for a place");
+    const firstWaiting = rows.findIndex(waits);
+    expect(rows.filter((row) => !waits(row))).toHaveLength(AT_ONCE);
+    expect(rows.slice(firstWaiting).every(waits)).toBe(true);
   });
 
   test("the sessions list shows one waiting, which the owner can remove", async ({
