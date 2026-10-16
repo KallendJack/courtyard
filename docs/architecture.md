@@ -108,6 +108,7 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 *Building code* (`features/`)
 
 - [`code/`](../apps/worker/src/features/code/README.md): session branches and worktrees, the allowlist, slots and the builds queue.
+- [`tasks/`](../apps/worker/src/features/tasks/README.md): a code session's long commands, run on after its turn, its model told when one ends.
 - [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
 - [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
 - [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims.
@@ -193,6 +194,8 @@ helpers for the tests and the context eval), and **`apps/worker/eval/`** is the 
   - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
   - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
     up, Main.
+  - [`tasks/`](../apps/web/src/features/tasks/README.md): a code session's running tasks above the Reply box, and
+    each ended one's line.
   - [`pull-requests/`](../apps/web/src/features/pull-requests/README.md): the PRs list and a pull request's page.
   - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
   - [`live/`](../apps/web/src/features/live/README.md): Update, and main's build.
@@ -416,9 +419,14 @@ Where the rest fits:
 - **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
   `session.json`. Each turn runs in the worktree, with a `CodeTurn` the provider asks before every edit and command:
-  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. Claude Code's
-  background tasks are off, and the hook refuses a `Bash` call asking for the background without asking (#178): a
-  turn's commands end with it. What's allowed shows
+  Claude's hook asks it for each `Edit`, `Write` and `Bash`, and the fake for each scripted line. A `Bash` call asking
+  for the background is a task (#182, `tasks/`): the hook hands it to `CodeTurn.task`, decided as any command (the
+  `dev` and `start` scripts allowed only this way), and Claude Code never runs it. The worker runs it under a keeper
+  process, on after the turn, its output in `tasks/` in the session's folder, recording `task-started` and
+  `task-ended`; one that passes or fails tells the model, in the answer running (a `message-added` with its task), or
+  in a turn of its own (an `owner-message` with `tasksEnded`), its last lines of output added for the model alone.
+  Its pull request ending, the session deleted or a fresh start stops them; the next worker records those a restart
+  stopped. What's allowed shows
   as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
   file that decides what allowed commands run (an approval of its own kind, `setup`), is an
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time

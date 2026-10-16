@@ -38,7 +38,6 @@ import {
   codeRefusalReason,
   HELPER_NOT_HERE,
   NO_HELPERS_OF_HELPERS,
-  NOT_IN_BACKGROUND,
   OUTSIDE_WORKSPACE,
   PAGE_NOT_ALLOWED,
   SKILL_NOT_HERE,
@@ -369,7 +368,8 @@ const projectHelpers = async (worktree: string) => {
  * repository's own skills and helpers. The machine's user and local settings, memory and
  * connectors stay off, as on every turn. The project settings can enable plugins, so Claude Code
  * looks for installed plugins in `noPlugins`, an empty folder of the turn's own, never the
- * machine's. Claude Code's background tasks are off. Matt Pocock's skills come as one local
+ * machine's. A command Claude runs in the background is the worker's task (#182), never Claude
+ * Code's (`askWorker`). Matt Pocock's skills come as one local
  * plugin, Courtyard's pinned copy, with only the skills it's given turned on (ADR 0024). Every
  * helper works on the session's model, whatever its type or the model asks for (#117).
  */
@@ -399,9 +399,8 @@ const projectSetup = async (
       env: {
         CLAUDE_CODE_PLUGIN_CACHE_DIR: noPlugins,
         CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1",
-        // A turn's commands end with it and nothing wakes Claude when one finishes, so it runs each
-        // in the foreground (#178): Claude Code then doesn't offer `run_in_background` at all.
-        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+        // Claude's background flag starts a task (#182), whatever the machine's own setting says.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: undefined,
         // Every helper on the session's model (#117): Claude Code then ignores the model a
         // helper's type names (Explore's Haiku) and any the Agent call asks for.
         CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1",
@@ -992,8 +991,12 @@ const askWorker = async (
     case "Bash": {
       const bash = BashInput.safeParse(input);
       if (!bash.success) return unchecked;
-      // Should a repository's settings turn background tasks back on (#178), they're still refused.
-      if (bash.data.run_in_background === true) return err(NOT_IN_BACKGROUND);
+      // One to run in the background is the worker's to run, as a task that outlives the turn
+      // (#182): Claude Code never runs it, and Claude is told it started, or why it didn't.
+      if (bash.data.run_in_background === true) {
+        const started = await code.task(bash.data.command, bash.data.description);
+        return err(started.ok ? started.value : started.error);
+      }
       return code.run(bash.data.command, bash.data.description);
     }
     default:

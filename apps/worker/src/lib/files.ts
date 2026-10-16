@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  type FileHandle,
   link,
   mkdir,
   mkdtemp,
+  open,
   readdir,
   readFile,
   rename,
@@ -101,6 +103,32 @@ export const readBytes = async (
     return ok(await readFile(path));
   } catch (error) {
     return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  }
+};
+
+/**
+ * The end of a text file, at most its last `bytes`, and whether more came before it (a task's
+ * output, #182); `undefined` when the file doesn't exist. A character cut in two at the start is
+ * dropped.
+ */
+export const readTextEnd = async (
+  path: string,
+  bytes: number,
+): Promise<Result<{ text: string; cut: boolean } | undefined, "unreadable">> => {
+  let file: FileHandle | undefined;
+  try {
+    file = await open(path, "r");
+    const { size } = await file.stat();
+    const length = Math.min(size, bytes);
+    const buffer = Buffer.alloc(length);
+    await file.read(buffer, 0, length, size - length);
+    const text = buffer.toString("utf8");
+    const cut = size > length;
+    return ok({ text: cut ? text.replace(/^�+/, "") : text, cut });
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  } finally {
+    await file?.close();
   }
 };
 

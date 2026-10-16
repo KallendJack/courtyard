@@ -77,6 +77,7 @@ import { repoProblem, repoRoutes } from "./features/repos/routes.ts";
 import { type Background, createSessions } from "./features/sessions/index.ts";
 import { MESSAGE_ROUTES, sessionRoutes } from "./features/sessions/routes.ts";
 import { skillList, workspaceSkills } from "./features/skills/index.ts";
+import { taskRoutes } from "./features/tasks/routes.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createTidying } from "./features/tidy/index.ts";
 import { tidyRoutes } from "./features/tidy/routes.ts";
@@ -464,6 +465,7 @@ export const createWorker = (options: {
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
+  api.route("/", taskRoutes(sessions));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));

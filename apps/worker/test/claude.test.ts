@@ -1051,6 +1051,10 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
       ran: (command) => {
         ended.push(command);
       },
+      task: async (command) => {
+        asked.push(`task ${command}`);
+        return command === "pnpm dev" ? ok("Started it.") : err("Not that one.");
+      },
       helper: async () => undefined,
       branchOff: async () => err("No helpers here."),
     };
@@ -1411,34 +1415,40 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
-  it("runs nothing in the background, refusing a background command with what to do instead (#178)", async () => {
+  it("hands a command to run in the background to the worker as a task, which Claude Code never runs (#182)", async () => {
     const { worktree, code, asked } = await codeSession();
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     await runTurn(claudeCode, { folder: worktree, code });
     const options = runs[0]?.options;
     if (!options) throw new Error("no turn ran");
 
-    const background = await preToolUse(options, {
+    const started = await preToolUse(options, {
       name: "Bash",
-      input: { command: "pnpm test", run_in_background: true },
+      input: { command: "pnpm dev", description: "Start the app", run_in_background: true },
+    });
+    const refused = await preToolUse(options, {
+      name: "Bash",
+      input: { command: "rm -rf build", run_in_background: true },
     });
     const foreground = await preToolUse(options, {
       name: "Bash",
       input: { command: "pnpm test", run_in_background: false },
     });
 
-    // Claude Code's background tasks are off, so Claude isn't offered them at all.
-    expect(options.env).toMatchObject({ CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" });
-    // One asked for anyway is refused before the worker is asked, so nothing starts.
-    expect(background).toEqual({
+    // Claude Code offers its background flag, for Claude to start a task with.
+    expect(options.env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBeUndefined();
+    // The worker runs it, so Claude Code doesn't: Claude is told what the worker said.
+    const denied = (reason: string) => ({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: await quotedInGuide("Run it in the foreground"),
+        permissionDecisionReason: reason,
       },
     });
+    expect(started).toEqual(denied("Started it."));
+    expect(refused).toEqual(denied("Not that one."));
     expect(foreground).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
-    expect(asked).toEqual(["run pnpm test"]);
+    expect(asked).toEqual(["task pnpm dev", "task rm -rf build", "run pnpm test"]);
     await rm(worktree, { recursive: true, force: true });
   });
 
@@ -1455,6 +1465,7 @@ describe("a Claude turn in a code session (ADR 0007, ADR 0022)", () => {
         return ok(null);
       },
       ran: () => {},
+      task: async () => err("No tasks here."),
       helper: async () => undefined,
       branchOff: async () => err("No helpers here."),
     };
@@ -1526,6 +1537,7 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
         return ok(null);
       },
       ran: () => {},
+      task: async () => err("No tasks here."),
     });
     const code: CodeTurn = {
       ...say("model"),

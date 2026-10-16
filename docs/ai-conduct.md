@@ -282,7 +282,9 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 > decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner
 > to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a
 > time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it
-> to finish: nothing runs in the background here. A command may go over several lines. Give a pull request's or
+> to finish, unless it should outlive your turn (a dev server, a slow test run): run that in the background, and
+> Courtyard runs it as a task, at most three at once, and tells you when it finishes; the dev and start scripts run
+> only that way. A command may go over several lines. Give a pull request's or
 > issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $
 > stay as written (--body '...', each ' in it written '\''), never through $(...) or a heredoc, which never run.
 
@@ -392,12 +394,48 @@ never let through, and Claude is told:
 
 > That request couldn't be checked, so it was refused.
 
-A command runs in the foreground, inside the turn (#178): one left running in the background would stop when the turn
-ends, and nothing would wake the model when it finished, so the session would sit waiting. Claude Code's background
-tasks are off in a code session, so Claude isn't offered them, and a command Claude asks to run in the background
-anyway is refused before the worker is asked, with:
+**Tasks (#182).** In place of #178's "run it in the foreground", a code session has tasks. A task is a long command that outlives the turn that
+starts it: a dev server, a slow test run. Claude starts one with Claude Code's own "run in background" flag on a
+command; the worker takes the command over and runs it itself, so it goes on after the turn ends, its output kept in
+the data folder, never in the event log. Codex has no such flag, so it runs everything in the foreground. A task's
+command is checked the same way as any other (the allowlist, and an approval for anything off it); the repository's
+`dev` and `start` package scripts are allowed too, but only as tasks. Run in the foreground, one is refused with:
 
-> Run it in the foreground: a turn's background commands stop when it ends, and nothing tells you when one finishes.
+> Run it as a task: the dev and start scripts run on after your turn, so start one in the background and you'll be
+> told when it finishes.
+
+Started, the model is told:
+
+> Courtyard started this as a task: it runs on after your turn ends, and you'll be told when it finishes, with its
+> last lines of output. Carry on meanwhile.
+
+A session runs at most three tasks at once; a fourth is refused with:
+
+> You have three tasks running already, the most a session runs at once, so this one didn't start: run it in the
+> foreground, or wait for one of them to finish.
+
+Only the model starts tasks: a helper works inside the turn, so one asking for the background is told:
+
+> A helper can't start a task: run it in the foreground, or say in your report what to start.
+
+When a task finishes or fails, the model is told. While a turn runs, the news goes into that answer, as a message the
+owner adds does (Steering); otherwise it starts a turn, as a failing check does, on the model the owner last used.
+Either way the message is the worker's, where `<ended>` is "passed" or "failed with exit code <n>" ("failed" alone when it has none) and `<time>` how
+long it ran (`2:14`, or `1:02:14` past an hour):
+
+> Your task `<command>` <ended> after <time>.
+
+The event log keeps only that line. The model is given the task's last lines of output after it (at most 40, and the
+last 4,000 characters of those), in an `<output>` block after "Its last lines of output:", which never go in the event
+log. A task the owner stops, or one stopped because the session ended (its pull request merged or closed, or the
+session deleted), tells nobody. A worker restart or Update stops every task: each is recorded as stopped by a restart,
+and the model's next turn reads that in the conversation, as it reads every task's start and end there, each as a
+line of Courtyard's:
+
+> Courtyard: your task `<command>` <how>.
+
+where `<how>` is "started", "passed", "failed with exit code <n>", "was stopped by the owner", "was stopped as the
+session ended" or "was stopped by a restart".
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.

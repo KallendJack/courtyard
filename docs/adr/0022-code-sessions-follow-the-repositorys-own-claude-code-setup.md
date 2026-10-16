@@ -31,6 +31,10 @@ comes. The adapter turns Claude Code's background tasks off (`CLAUDE_CODE_DISABL
 tool doesn't offer `run_in_background`, and its hook refuses a `Bash` call that asks for it anyway, before the worker
 is asked, telling Claude to run it in the foreground.
 
+Superseded in part by #182: a `Bash` call asking for the background is now a task. Claude Code's background tasks are
+on again, and the hook hands such a call to the worker, which decides it as any command and runs it itself, on after
+the turn, telling the model when it ends; Claude Code never runs it (`docs/ai-conduct.md`, Coding).
+
 Inside the worktree, the files that decide what an allowed command runs need an approval too: a `package.json` (and
 the package manager's settings: `pnpm-workspace.yaml`, `.npmrc`, `.pnpmfile.cjs`), git hooks (`.husky`, `.githooks`,
 lefthook's files, the folder `core.hooksPath` names), Claude Code's `.claude` folder (its settings, hooks and skills,
@@ -58,7 +62,8 @@ neither the worktree itself nor one of those files; anywhere else it asks, since
   installed plugins in an empty folder of the turn's own (`CLAUDE_CODE_PLUGIN_CACHE_DIR`), so nothing installed on
   the machine comes in. Its permission rules change nothing: the hook decides every tool call, and a refusal from it
   can't be overridden. A repository whose settings change how Claude signs in (an API key helper, say) changes it for
-  its own sessions. Its settings' environment could turn background tasks back on; the hook still refuses them.
+  its own sessions. Whatever its settings' environment says of background tasks, the hook hands each to the worker
+as a task (#182).
 - **The boundary is the worktree and the session's environment, not the code.** An allowed command such as `pnpm
   test` runs code the model wrote (a test file, say), as with any coding agent; no filter on commands can close
   that. What that code can reach is the worktree, the worker machine's user account, and the session's environment,

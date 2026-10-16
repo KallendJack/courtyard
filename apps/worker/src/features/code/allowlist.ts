@@ -48,6 +48,8 @@ export type CommandRule = {
    * run download`) can bring code there. A folder ends in `/`.
    */
   readonly runsFrom?: (rest: readonly string[]) => readonly string[];
+  /** Allowed only as a task (#182): the dev and start scripts, which run on after the turn. */
+  readonly taskOnly?: true;
 };
 
 /** A session's own branch, and its pull request's number once it has one. */
@@ -77,6 +79,8 @@ const LOOKS = ["cat", "ls", "head", "wc", "grep", "diff"];
 
 /** The package scripts a session runs to check its own work, and to format it (#388). */
 const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify", "format"];
+/** The package scripts that run until they're stopped, allowed only as tasks (#182). */
+const TASK_SCRIPTS = ["dev", "start"];
 /**
  * The tools those scripts run, run directly (#202), never in a mode that waits forever. They run
  * the same code the scripts do; `biome check --write` formats only files in the worktree, since a
@@ -558,6 +562,13 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     { words: ["npm", "run", script], more: true, runsFrom: npmFolders },
   ]),
   { words: ["npm", "test"], more: true, runsFrom: npmFolders },
+  // A dev server and the like, which run on after the turn as tasks (#182).
+  ...TASK_SCRIPTS.flatMap((script): CommandRule[] => [
+    { words: ["pnpm", script], more: true, taskOnly: true },
+    { words: ["pnpm", "run", script], more: true, taskOnly: true },
+    { words: ["npm", "run", script], more: true, runsFrom: npmFolders, taskOnly: true },
+  ]),
+  { words: ["npm", "start"], more: true, runsFrom: npmFolders, taskOnly: true },
   ...TEST_TOOLS.flatMap((tool) =>
     TOOL_RUNNERS.map((runner) => ({ ...tool, words: [...runner, ...tool.words], more: true })),
   ),
@@ -861,6 +872,22 @@ export const ruleFor = (
     }
     return !rest.some((argument) => rule.never?.some((never) => never.test(argument)));
   });
+
+/**
+ * Whether a command is allowed only as a task (#182): its rule's, or, for one that runs another
+ * (pnpm's workspace options), that other's.
+ */
+export const isTaskOnly = (
+  allowlist: readonly CommandRule[],
+  words: readonly string[],
+  work: OwnWork,
+): boolean => {
+  const rule = ruleFor(allowlist, words, work);
+  if (rule === undefined) return false;
+  if (rule.taskOnly === true) return true;
+  const runs = rule.runs?.(words.slice(rule.words.length));
+  return runs !== undefined && isTaskOnly(allowlist, runs, work);
+};
 
 /**
  * Everywhere a command runs code from (#219): its rule's `runsFrom` and, for one that runs another

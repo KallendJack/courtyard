@@ -6,6 +6,7 @@ import { DocumentSlug } from "./documents.ts";
 import { PullRequest } from "./pull-request.ts";
 import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
+import { TaskEnding, TaskId } from "./tasks.ts";
 import { ThingSave } from "./things.ts";
 
 // A session's events (ADR 0006) and what they carry. Apart from `session.ts`, whose summaries the
@@ -158,7 +159,19 @@ export const SessionEvent = z.discriminatedUnion("type", [
      * by the worker after an Update now.
      */
     continues: z.object({ turn: z.number().int().positive() }).optional(),
+    /**
+     * Sent by the worker, not the owner (#182): these tasks finished or failed while no turn ran,
+     * and the message tells the model so.
+     */
+    tasksEnded: z.array(TaskId).min(1).optional(),
   }),
+  /**
+   * The model started a long command as a task (#182): it runs on after the turn, its output kept
+   * in the session's folder, never here.
+   */
+  z.object({ ...eventBase, type: z.literal("task-started"), task: TaskId, command: z.string() }),
+  /** A task ended, here in the conversation: passed, failed, or stopped and by what (#182). */
+  z.object({ ...eventBase, type: z.literal("task-ended"), task: TaskId, ending: TaskEnding }),
   /**
    * What the worker did for a code workspace's Lead as it ran the build order (#347), in its
    * words: a builder started, a pull request ready to merge, holding back and why. Shown in the
@@ -196,6 +209,11 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("message-added"),
     text: z.string(),
     afterApproval: z.literal(true).optional(),
+    /**
+     * Added by the worker, not the owner (#182): this task finished or failed while the turn ran,
+     * and the message tells the model so.
+     */
+    task: TaskId.optional(),
   }),
   /** The turn ended, stopped say, before its model read the added message numbered `added` (#252). */
   z.object({
@@ -395,6 +413,34 @@ export const queuedIn = (events: readonly SessionEvent[]) => {
   return events.flatMap((event) =>
     event.type === "message-queued" && !gone.has(event.seq) ? [event] : [],
   );
+};
+
+/** A session's task (#182) as its events tell it: its command, when it started, and its end, once it has one. */
+export type TaskTold = {
+  readonly task: TaskId;
+  readonly command: string;
+  readonly startedAt: string;
+  readonly ended: { readonly ending: TaskEnding; readonly at: string } | undefined;
+};
+
+/** A session's tasks (#182), from its events, oldest first. */
+export const tasksIn = (events: readonly SessionEvent[]): TaskTold[] => {
+  const tasks = new Map<TaskId, TaskTold>();
+  for (const event of events) {
+    if (event.type === "task-started") {
+      tasks.set(event.task, {
+        task: event.task,
+        command: event.command,
+        startedAt: event.at,
+        ended: undefined,
+      });
+    }
+    const started = event.type === "task-ended" ? tasks.get(event.task) : undefined;
+    if (event.type === "task-ended" && started !== undefined) {
+      tasks.set(event.task, { ...started, ended: { ending: event.ending, at: event.at } });
+    }
+  }
+  return [...tasks.values()];
 };
 
 /** A session's pull request as it last stood, from its events, or `undefined` before it has one. */

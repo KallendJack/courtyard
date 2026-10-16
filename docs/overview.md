@@ -92,10 +92,10 @@ the chain  a time            changed                   Undo
 
 ### 🛠️ Building code
 
-**Worker features:** `code` · `pull-requests` · `lead` · `next-up` · `red-main` · `repos` · `matt-setup` ·
-`matt-skills` · `workspace-main` · `skills` · `connections`
+**Worker features:** `code` · `tasks` · `pull-requests` · `lead` · `next-up` · `red-main` · `repos` ·
+`matt-setup` · `matt-skills` · `workspace-main` · `skills` · `connections`
 
-**Web features:** `code-home` · `pull-requests` · `matt-setup`
+**Web features:** `code-home` · `tasks` · `pull-requests` · `matt-setup`
 
 You tap Build on an issue:
 
@@ -107,6 +107,8 @@ blocked     and worktree    waits on         checks
 ```
 
 - **`lead`** runs builders in the milestone's order. **`connections`** is a code workspace's GitHub and Paper.
+- **`tasks`** runs a session's long commands (a dev server, a slow test run) on after its turn, and tells the model
+  when one ends.
 
 ### ⚙️ Running Courtyard
 

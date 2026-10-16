@@ -5,7 +5,7 @@ Sessions as event logs: runs each turn through a provider and follows it live, f
 **Example:** you send "which tyres for winter?". It's written to the session's event log, the turn runs on
 Claude, and every page that has the session open gets the answer as it's written.
 
-- **Uses:** `providers/`, `prompts/`, `code/`, `saves/`, `documents/`, `things/`, `attachments/`,
+- **Uses:** `providers/`, `prompts/`, `code/`, `tasks/` (a code session's long commands, #182), `saves/`, `documents/`, `things/`, `attachments/`,
   `suggested-replies/`, `skills/`, `matt-skills/`, `waiting/`, `allow-all/`, `paper/`, `github/`,
   `context-folder/`, `owner-context/`, `workspaces/`; and, handed in by `worker.ts`, `notifications/`
   (`notify`) and `next-up/`'s claims (`named`, `claim`, `release`).

@@ -1,0 +1,29 @@
+# tasks
+
+A code session's tasks (#182): long commands that outlive the turn that starts them, a dev server or a slow test
+run. The worker runs each itself, keeps its output in the session's folder in the data folder (never the event log),
+and tells the model when it finishes. The web app's side is [`tasks/`](../../../../web/src/features/tasks/README.md).
+
+**Example:** Claude runs `pnpm dev` in the background and ends its turn. The server keeps running, its row sits above
+the Reply box with its last line, and if it crashes, a turn starts telling Claude so, with its last lines of output.
+
+- **Uses:** `lib/files.ts` (reading the end of its output), the contract.
+- **Used by:** `sessions/`, which decides each task's command as it decides any (`CodeTurn.task`), records its start
+  and end, and tells the model; `providers/` (Claude's background flag, the fake's `start task:`).
+
+## API
+
+- `GET /api/sessions/:id/tasks`: those still running, each with the last line it printed.
+- `GET /api/sessions/:id/tasks/:task/output`: its output's end (at most 200,000 characters), and whether there's more.
+- `POST /api/sessions/:id/tasks/:task/stop`: the owner's Stop, which tells nobody.
+
+## How it works
+
+- **A keeper per task** (`keeper.ts`), a small Node process the worker starts, runs the command through the shell
+  with its output going straight to `tasks/<task>.log` in the session's folder. It ends the command's whole process
+  tree when told "stop", or when the worker goes (its input closes), so no task outlives the worker.
+- **At most three** run in a session at once (`TASKS_AT_ONCE`); a fourth isn't started.
+- **Its environment** is a code session's command's, without the builds lock's "held" mark: a heavy check run as a
+  task takes its own place in the machine's builds lock.
+- **How it ended** is passed (exit code 0), failed (its exit code), or stopped: by the owner, as its session ended
+  (its pull request merged or closed, deleted, a fresh start), or by a restart, which the next worker records.

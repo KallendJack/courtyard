@@ -440,6 +440,13 @@ writes code works on its **own branch** (#395), in a worktree of its own beside 
 session branch when it finishes ("Merged"), or kept for the session's model to sort when the merge clashes.
 _Avoid_: sub-agent, agent, worker (that's Courtyard's other part)
 
+**Task**:
+A long command a code session's model starts to run on after its turn (a dev server, a slow test run): the worker
+runs it, at most three per session, shows it above the Reply box while it runs, and tells the model when it passes or
+fails. Its output stays in the data folder. It ends with its session, or a restart. Not the "task" of Allow all for
+this task, which is the session's whole job.
+_Avoid_: background command, background job, process
+
 **Web search**:
 A model in a planning workspace looking things up on the web when a question needs current facts, and reading the
 pages it finds or a link the owner sent (ADR 0019).
