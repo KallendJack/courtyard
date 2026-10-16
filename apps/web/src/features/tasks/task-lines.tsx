@@ -82,9 +82,8 @@ export function TaskEndedLine(props: { sessionId: SessionId; task: TaskTold }) {
 }
 
 /** One running task's row: how long it's run, ticking. */
-function RunningRow(props: { sessionId: SessionId; task: TaskTold; lastLine: string | undefined }) {
+function RunningRow(props: { task: TaskTold; lastLine: string | undefined; onOpen: () => void }) {
   const elapsed = useElapsed(props.task.startedAt);
-  const [open, setOpen] = useState<boolean>();
   return (
     <li>
       <TaskLine
@@ -92,13 +91,7 @@ function RunningRow(props: { sessionId: SessionId; task: TaskTold; lastLine: str
         standing="running"
         status={elapsed}
         {...(props.lastLine === undefined ? {} : { lastLine: props.lastLine })}
-        onOpen={() => setOpen(true)}
-      />
-      <OutputSheet
-        sessionId={props.sessionId}
-        task={props.task}
-        open={open}
-        onClose={() => setOpen(false)}
+        onOpen={props.onOpen}
       />
     </li>
   );
@@ -116,6 +109,10 @@ const LIVE_EVERY_MS = 3000;
  */
 export function RunningTaskRows(props: { sessionId: SessionId; tasks: readonly TaskTold[] }) {
   const running = props.tasks.filter((task) => task.ended === undefined);
+  // The task whose output is open, and whether it is: kept here, not in its row, so a task that
+  // ends while it's open (Stop) stays open on its output until it's closed.
+  const [opened, setOpened] = useState<{ task: TaskTold["task"]; open: boolean }>();
+  const openedTask = props.tasks.find((task) => task.task === opened?.task);
   const lines = useKept(KEPT, {
     key: props.sessionId,
     asking: running.length > 0,
@@ -127,17 +124,29 @@ export function RunningTaskRows(props: { sessionId: SessionId; tasks: readonly T
     },
     busy: () => LIVE_EVERY_MS,
   });
-  if (running.length === 0) return null;
   return (
-    <ul aria-label="Tasks running" className="mb-2.5 flex flex-col gap-1.5">
-      {running.map((task) => (
-        <RunningRow
-          key={task.task}
+    <>
+      {running.length > 0 && (
+        <ul aria-label="Tasks running" className="mb-2.5 flex flex-col gap-1.5">
+          {running.map((task) => (
+            <RunningRow
+              key={task.task}
+              task={task}
+              lastLine={lines?.tasks.find((each) => each.task === task.task)?.lastLine}
+              onOpen={() => setOpened({ task: task.task, open: true })}
+            />
+          ))}
+        </ul>
+      )}
+      {openedTask !== undefined && (
+        <OutputSheet
+          key={openedTask.task}
           sessionId={props.sessionId}
-          task={task}
-          lastLine={lines?.tasks.find((each) => each.task === task.task)?.lastLine}
+          task={openedTask}
+          open={opened?.open}
+          onClose={() => setOpened({ task: openedTask.task, open: false })}
         />
-      ))}
-    </ul>
+      )}
+    </>
   );
 }

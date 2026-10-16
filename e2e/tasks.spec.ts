@@ -43,6 +43,9 @@ test("a running task shows above the Reply box with its last line, opens on its 
   await expect(sheet).toContainText("Listening on 5173");
   await shot(page, "task-output");
   await sheet.getByRole("button", { name: "Stop" }).click();
+  // Ended, the sheet stays open on its output until it's closed; only Stop goes.
+  await expect(sheet.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(sheet).toContainText("Listening on 5173");
   await sheet.getByRole("button", { name: "Done" }).click();
 
   // Ended, it's a line in the conversation where it ended, and the row above the box goes.
