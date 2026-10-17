@@ -24,7 +24,17 @@ inside the session's boundary.** For Claude that's Claude Code's `Agent` tool:
   its report. Its events go in the session's event log tagged with it, so a reload shows the same.
 - **Only when a skill calls for helpers or the owner asks,** which the house process tells the model.
 
-**Codex follows the same rule when it codes** (#248): its own sub-agents, inside the same boundary, shown the same way. Codex codes from ADR 0029; its sub-agents stay off until #470.
+**Codex's helpers are Courtyard's own** (#470, the owner, 2026-10-17). The plan was Codex's own sub-agents, inside
+the same boundary. But Codex codes through Courtyard's tools, its shell off (ADR 0029), and in the pinned Codex
+(0.161) a sub-agent its `spawn_agent` starts gets none of a thread's dynamic tools, Courtyard's included, so it could
+read, run and edit nothing. Codex 0.163 passes them on only behind a feature still under development. So in a Codex
+code session the model starts helpers with Courtyard's `start_helper` tool: each is a fresh Codex thread the adapter
+runs, on the session's model and effort, given the file and coding tools (and the use skill tool), each call asked of
+its own `HelperTurn` exactly as a Claude helper's is. Everything above holds: the worker's three places, none in the
+background (the tool call waits for its report), Stop stopping them, the same lines and approval cards, and a branch of
+its own when the model sets `own_branch` (#395). A helper isn't given `start_helper`, so it starts none of its own.
+Codex's own sub-agents stay off; once Codex passes Courtyard's tools to them as a stable setting, this can go back to
+them.
 A worktree and branch of its own for a helper that writes code is #395.
 
 **#395 (2026-10-15): a helper that writes code works on a branch of its own.** When the model asks for one (Claude's
@@ -39,9 +49,13 @@ merged branch goes at once; a kept one when the session is cleared away or delet
 
 ## Considered options
 
-- **Courtyard's own helper tool, the same on every provider** (as skills are, ADR 0016). Rejected: each provider
-  already tunes its own sub-agents, and a copy would always lag them; what's Courtyard's is the boundary and how the
-  owner sees them, which this keeps the same.
+- **Courtyard's own helper tool, the same on every provider** (as skills are, ADR 0016). Rejected for Claude: each
+  provider already tunes its own sub-agents, and a copy would always lag them; what's Courtyard's is the boundary and
+  how the owner sees them, which this keeps the same. Taken for Codex (#470), whose own sub-agents can't use
+  Courtyard's tools; its models aren't trained on this tool, so they may use it less fluently than their own.
+- **For Codex, 0.163 with its under-development feature on, or waiting for Codex to make it stable** (#470).
+  Rejected: an under-development feature can change or go without notice, and waiting leaves Codex sessions without
+  the helpers the house process calls for.
 - **A worktree for every helper.** Not yet: the reviewers only read, and one folder per helper is #395's.
 
 ## Consequences

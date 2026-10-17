@@ -113,12 +113,19 @@ export type FileTools = {
 
 /**
  * Courtyard's tools for coding in a code session's worktree (#248): running a command, and
- * writing or editing a file, each asked of the worker as `CodeTurn` says before it's done.
+ * writing or editing a file, each asked of the worker as `CodeTurn` says before it's done. And
+ * starting a helper (#470, ADR 0027), for a provider whose own sub-agents can't use them.
  */
 export type CodeTools = {
   readonly run: CourtyardTool;
   readonly write: CourtyardTool;
   readonly edit: CourtyardTool;
+  readonly helper: CourtyardTool;
+  /**
+   * What a helper started with `helper` is told: the turn's instructions, and that it's a helper
+   * (docs/ai-conduct.md, Courtyard's coding tools). Its task, the model's words, is its message.
+   */
+  readonly helperInstructions: string;
 };
 
 /** Part of what one of Courtyard's tools gives a model: text, or an image. */

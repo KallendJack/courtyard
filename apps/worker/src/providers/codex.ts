@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +12,7 @@ import {
   Effort,
   type EffortInfo,
   type FailureReason,
+  HelperId,
   ModelId,
   ProviderId,
   type ProviderStatus,
@@ -26,17 +28,24 @@ import { err, ok, type Result } from "../lib/result.ts";
 import {
   COMMAND_MAX_MINUTES,
   COMMAND_OUTPUT_MAX_CHARACTERS,
+  codeRefusalReason,
   codeRefusedReply,
   commandRanReply,
   fileChangeReply,
   fileToolReply,
+  type HelperEnd,
+  helperReply,
+  helperReport,
   malformedInputReply,
   taskReply,
+  USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import {
+  type CodeTools,
   type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
+  type HelperCode,
   jsonSchemaOf,
   type Provider,
   photosOf,
@@ -125,7 +134,8 @@ const FEATURES_OFF = [
   "tool_suggest",
   "memories",
   "hooks",
-  // Browser and computer use, images, and sub-agents.
+  // Browser and computer use, images, and sub-agents: Codex's own get none of Courtyard's tools,
+  // so a code session's helpers are Courtyard's own (`startHelper`, #470).
   "browser_use",
   "browser_use_external",
   "in_app_browser",
@@ -416,7 +426,7 @@ const connect = async (options: {
   });
 };
 
-/** A level of effort Courtyard offers, least first. Codex's "ultra" hands work to sub-agents, which are off. */
+/** A level of effort Courtyard offers, least first. Codex's "ultra" hands work to its own sub-agents, which are off. */
 const CodexEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
 /** Each of Codex's levels of effort in Codex's own words. */
 const EFFORT_LABELS: Record<z.infer<typeof CodexEffort>, string> = {
@@ -645,15 +655,19 @@ const fromToolReply = (reply: ToolReply): ToolAnswer => ({
 });
 
 /**
- * The tools a turn's framing offers, by name: Courtyard's file tools, confined to the workspace
- * folder, and Courtyard's other tools (the save tool, use skill…), each call's input going to the
- * worker as Codex sent it (ADRs 0013, 0016).
+ * Courtyard's file tools, confined to `folder`, each read reported as `report` says; and in a
+ * code session, its coding tools, each asked of `code` (#248).
  */
-const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
+const workTools = (work: {
+  input: TurnInput;
+  folder: string;
+  report: TurnInput["report"];
+  code: HelperCode | null;
+}): TurnTool[] => {
   const tools: TurnTool[] = [];
-  const { fileTools } = input.framing;
+  const { fileTools, codeTools } = work.input.framing;
   if (fileTools !== null) {
-    const files = workspaceFiles({ folder: input.folder, report: input.report });
+    const files = workspaceFiles({ folder: work.folder, report: work.report });
     for (const kind of ["list", "read", "search"] as const) {
       tools.push({
         tool: fileTools[kind],
@@ -661,22 +675,123 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
       });
     }
   }
-  const { codeTools } = input.framing;
-  if (input.code !== null && codeTools !== null) {
-    const coding = codingTools({ code: input.code, signal: input.signal });
+  if (work.code !== null && codeTools !== null) {
+    const coding = codingTools({ code: work.code, signal: work.input.signal });
     tools.push(
       { tool: codeTools.run, answer: async (args) => fromToolReply(await coding.run(args)) },
       { tool: codeTools.write, answer: async (args) => fromToolReply(await coding.write(args)) },
       { tool: codeTools.edit, answer: async (args) => fromToolReply(await coding.edit(args)) },
     );
   }
-  for (const tool of input.framing.tools) {
+  return tools;
+};
+
+/** One of the framing's other tools (the save tool, use skill…), each call going to the worker. */
+const framingTool = (input: TurnInput, tool: CourtyardTool): TurnTool => ({
+  tool,
+  answer: async (args) => fromToolReply(await input.callTool({ name: tool.name, input: args })),
+});
+
+/**
+ * The tools a turn's framing offers, by name: Courtyard's file tools, confined to the workspace
+ * folder, its coding tools and helper tool in a code session, and Courtyard's other tools (the
+ * save tool, use skill…), each call's input going to the worker as Codex sent it (ADRs 0013, 0016).
+ */
+const toolsFor = (input: TurnInput, codex: Connection): ReadonlyMap<string, TurnTool> => {
+  const tools = workTools({ input, folder: input.folder, report: input.report, code: input.code });
+  const { code } = input;
+  const { codeTools } = input.framing;
+  if (code !== null && codeTools !== null) {
     tools.push({
-      tool,
-      answer: async (args) => fromToolReply(await input.callTool({ name: tool.name, input: args })),
+      tool: codeTools.helper,
+      answer: async (args) =>
+        fromToolReply(await startHelper({ codex, input, code, codeTools, args })),
     });
   }
+  for (const tool of input.framing.tools) tools.push(framingTool(input, tool));
   return new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool]));
+};
+
+const HelperArgs = z.object({
+  description: z.string().trim().min(1),
+  prompt: z.string().min(1),
+  own_branch: z.boolean().optional(),
+});
+
+/**
+ * Starts a helper the model asked for with Courtyard's helper tool (#470, ADR 0027), since Codex's
+ * own sub-agents get none of Courtyard's tools: once the worker gives it a place, it works on a
+ * fresh thread of its own, on the turn's model and effort, in the session's worktree or a branch
+ * of its own, with the file and coding tools asked of its own `HelperCode`. The use skill tool
+ * too, but never the helper tool, tasks or the save tool. Answers its report.
+ */
+const startHelper = async (start: {
+  codex: Connection;
+  input: TurnInput;
+  code: CodeTurn;
+  codeTools: CodeTools;
+  args: unknown;
+}): Promise<ToolReply> => {
+  const { codex, input, code } = start;
+  const parsed = HelperArgs.safeParse(start.args);
+  if (!parsed.success) return malformedInputReply();
+  const { description, prompt, own_branch } = parsed.data;
+  const helper = await code.helper({ id: HelperId.parse(randomUUID()), name: description });
+  if (helper === undefined) return codeRefusedReply(codeRefusalReason({ kind: "stopped" }));
+
+  const run = async (): Promise<HelperEnd> => {
+    if (own_branch === true) {
+      const made = await code.branchOff();
+      if (!made.ok) {
+        console.error("A helper's worktree couldn't be made:", made.error);
+        return { kind: "no-branch" };
+      }
+      await helper.workIn(made.value);
+    }
+    const folder = resolve(helper.code.worktree);
+    const tools = [
+      ...workTools({ input, folder, report: helper.report, code: helper.code }),
+      ...input.framing.tools
+        .filter((tool) => tool.name === USE_SKILL_TOOL_NAME)
+        .map((tool) => framingTool(input, tool)),
+    ];
+    let said = "";
+    let report: string | undefined;
+    const end = await turnOnThread(codex, {
+      model: input.model,
+      effort: input.effort,
+      cwd: folder,
+      instructions: start.codeTools.helperInstructions,
+      message: prompt,
+      tools: new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool])),
+      searchesWeb: false,
+      readsRepoInstructions: true,
+      heard: (notice) => {
+        const text = TextDelta.safeParse(notice);
+        if (text.success) said += text.data.params.delta;
+        const message = MessageCompleted.safeParse(notice);
+        if (message.success && message.data.params.item.phase !== "commentary") {
+          report = message.data.params.item.text;
+        }
+      },
+      signal: input.signal,
+    });
+    if (!end.ok) return { kind: "failed", reason: end.error.message };
+    switch (end.value.kind) {
+      case "completed":
+        return { kind: "reported", report: report ?? said };
+      case "stopped":
+        return { kind: "failed", reason: codeRefusalReason({ kind: "stopped" }) };
+      case "crashed":
+        return { kind: "failed", reason: CRASHED.message };
+      case "failed":
+        return { kind: "failed", reason: failureForTurn(end.value.error).message };
+    }
+  };
+
+  const end = await run();
+  const note = await helper.finished(helperReport(end));
+  return helperReply(end, note);
 };
 
 const RunArgs = z.object({
@@ -700,7 +815,7 @@ const timesIn = (text: string, part: string) => text.split(part).length - 1;
  * allowed, in the session's worktree. Codex's own shell stays off, so nothing it runs skips the
  * check, its "safe" reads included.
  */
-const codingTools = ({ code, signal }: { code: CodeTurn; signal: AbortSignal }) => {
+const codingTools = ({ code, signal }: { code: HelperCode; signal: AbortSignal }) => {
   /** A file's place for writing: from the worktree, or absolute once the owner allowed it. */
   const placeOf = (path: string) => resolve(code.worktree, path);
 
@@ -798,6 +913,9 @@ const failureForTurn = (error: TurnError | null): ExplainedFailure => {
   switch (error?.codexErrorInfo) {
     case "unauthorized":
       return { kind: "provider-unavailable", message: SIGNED_OUT };
+    // A session's turn says when it resets instead (`failedTurn`); this is for a helper's.
+    case "usageLimitExceeded":
+      return { kind: "unknown", message: "Codex's usage limit is used up for now." };
     case "serverOverloaded":
     case "rateLimitExceeded":
       return { kind: "unknown", message: "Codex is busy right now. Try again in a moment." };
@@ -1235,7 +1353,7 @@ export const createCodexProvider = (options: {
         instructions: input.framing.instructions,
         message: input.framing.message,
         photos: photosOf(input.framing.attachments),
-        tools: toolsFor(input),
+        tools: toolsFor(input, codex),
         searchesWeb: input.framing.webSearch !== null,
         readsRepoInstructions: input.code !== null,
         heard: (notice) => {

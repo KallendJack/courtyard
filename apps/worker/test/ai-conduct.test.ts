@@ -378,6 +378,18 @@ describe("Courtyard's coding tools (#248)", () => {
     expect(codeTools?.edit.description).toBe(await quotedInGuide("Changes part of a file"));
   });
 
+  it("offers starting a helper, which is told the turn's instructions and that it's a helper (#470)", async () => {
+    await asCode();
+    const { framing } = await firstTurn(CODES);
+
+    const { codeTools } = framing;
+    expect(codeTools?.helper.name).toBe("start_helper");
+    expect(codeTools?.helper.description).toBe(await quotedInGuide("Hands part of the work"));
+    expect(codeTools?.helperInstructions).toBe(
+      `${framing.instructions}\n\n${await quotedInGuide("You're a helper: this session's")}`,
+    );
+  });
+
   it("offers none outside a code session", async () => {
     const { framing } = await firstTurn(CODES);
 

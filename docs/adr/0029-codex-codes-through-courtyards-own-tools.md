@@ -17,7 +17,8 @@ sit behind `CodeTurn`.
 Codex keeps Courtyard's instructions in code sessions too (ADR 0015), with the code-session access line and house
 process every coding provider gets. It reads the repository's own instructions from the worktree (its `AGENTS.md`,
 else its `CLAUDE.md`), as Claude reads them (ADR 0022), and gets the repository's and Matt Pocock's skills through
-Courtyard's use skill tool (ADR 0016); the skills Codex finds itself stay off. Its own sub-agents stay off until #470.
+Courtyard's use skill tool (ADR 0016); the skills Codex finds itself stay off. Its own sub-agents stay off: its helpers are Courtyard's `start_helper`
+(#470, ADR 0027).
 
 ## Considered options
 
