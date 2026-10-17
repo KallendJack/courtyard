@@ -17,7 +17,8 @@ import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
 /**
  * A code workspace's Next up (#301): its repository's `ready-for-agent` issues nobody has claimed,
  * and every issue that needs grilling first (#463), in milestone order; a milestone's Build order
- * line only orders the issues it names first, it doesn't decide which show. Read through Courtyard's GitHub sign-in (#99) only when a page asks, and
+ * line only orders the issues it names first, it doesn't decide which show. Read through
+ * Courtyard's GitHub sign-in (#99) only when a page asks, and
  * kept a little while. Build (#298) starts a code session on the first, with the issue as its
  * first message, and claims the issue on GitHub as AGENTS.md says a builder does. Every session
  * started on an issue has its claim posted and released here, as `sessions/` asks (#324).
