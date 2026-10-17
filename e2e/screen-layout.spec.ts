@@ -157,6 +157,20 @@ const screens = () => {
     await keepsPinned(page, [title(page), connectionsLine(page)]);
   });
 
+  test("the message box scrolls the shared way once its words don't fit (#469)", async ({
+    page,
+  }) => {
+    await page.goto("/workspaces/garage-gym");
+    const box = page.getByRole("textbox", { name: "Message" });
+    await box.fill("One short line.");
+    await expect(box).not.toHaveAttribute("data-fade");
+    await box.fill(
+      Array.from({ length: 20 }, (_, line) => `Line ${line + 1} of a long message.`).join("\n"),
+    );
+    await box.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await scrollsTheSharedWay(box);
+  });
+
   test("a session keeps its back link, its title and its message box", async ({ page }) => {
     await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
     await expect(page.getByRole("list", { name: "Session" })).toContainText("You said:");

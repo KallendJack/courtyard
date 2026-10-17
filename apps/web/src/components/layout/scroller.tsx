@@ -2,6 +2,7 @@ import {
   type HTMLAttributes,
   type ReactNode,
   type Ref,
+  type RefObject,
   useCallback,
   useEffect,
   useRef,
@@ -53,39 +54,12 @@ export function Scroller({
   ref?: Ref<HTMLElement>;
 }) {
   const own = useRef<HTMLElement | null>(null);
-  const [fade, setFade] = useState<Fade>();
-  const [overflows, setOverflows] = useState(false);
   const fades = axis !== "x";
-
-  const measure = useCallback(() => {
-    const box = own.current;
-    if (box === null || !fades) return;
-    setOverflows(box.scrollHeight > box.clientHeight + 1);
-    const above = box.scrollTop > 1;
-    const below = fadeEnd === true && box.scrollTop + box.clientHeight < box.scrollHeight - 1;
-    setFade(above ? (below ? "both" : "top") : below ? "end" : undefined);
-  }, [fades, fadeEnd]);
-
-  // Scrolling says when there's more above. Its own size changing can too (a tablet's scroller is
-  // a phone's plain column once narrower), and what's in it changing says when there's more below.
-  useEffect(() => {
-    const box = own.current;
-    if (box === null || !fades) return;
-    measure();
-    const resized = new ResizeObserver(measure);
-    const watch = () => {
-      resized.disconnect();
-      resized.observe(box);
-      for (const child of box.children) resized.observe(child);
-    };
-    watch();
-    const changed = new MutationObserver(watch);
-    changed.observe(box, { childList: true });
-    return () => {
-      resized.disconnect();
-      changed.disconnect();
-    };
-  }, [fades, measure]);
+  const { fade, overflows, measure } = useScrollFade(own, {
+    on: fades,
+    end: fadeEnd === true,
+    watchChildren: true,
+  });
 
   const attach = useCallback(
     (node: HTMLElement | null) => {
@@ -101,8 +75,7 @@ export function Scroller({
       {...rest}
       ref={attach}
       onScroll={fades ? measure : undefined}
-      data-fade={fade}
-      data-overflows={overflows ? "" : undefined}
+      {...scrollFadeAttributes({ fade, overflows })}
       className={classes(
         "scroll-thin",
         from === "tablet" ? AXES[axis].tablet : AXES[axis].always,
@@ -113,3 +86,60 @@ export function Scroller({
     </Tag>
   );
 }
+
+/**
+ * What says how a box that scrolls itself fades (#420): `fade` while there's more above (or, with
+ * `end`, below), and `overflows` while what's in it is taller than it, measured as it scrolls,
+ * resizes, and (`watchChildren`) as what's in it changes. The `Scroller` uses it, and so does the
+ * one box that scrolls without being one, the composer's message box (#469), whose text scrolls
+ * inside it.
+ */
+export const useScrollFade = (
+  box: RefObject<HTMLElement | null>,
+  options: { on: boolean; end: boolean; watchChildren: boolean },
+) => {
+  const { on, end, watchChildren } = options;
+  const [fade, setFade] = useState<Fade>();
+  const [overflows, setOverflows] = useState(false);
+
+  const measure = useCallback(() => {
+    const element = box.current;
+    if (element === null || !on) return;
+    setOverflows(element.scrollHeight > element.clientHeight + 1);
+    const above = element.scrollTop > 1;
+    const below = end && element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+    setFade(above ? (below ? "both" : "top") : below ? "end" : undefined);
+  }, [box, on, end]);
+
+  // Scrolling says when there's more above. Its own size changing can too (a tablet's scroller is
+  // a phone's plain column once narrower), and what's in it changing says when there's more below.
+  useEffect(() => {
+    const element = box.current;
+    if (element === null || !on) return;
+    measure();
+    const resized = new ResizeObserver(measure);
+    const watch = () => {
+      resized.disconnect();
+      resized.observe(element);
+      if (watchChildren) for (const child of element.children) resized.observe(child);
+    };
+    watch();
+    const changed = new MutationObserver(watch);
+    if (watchChildren) changed.observe(element, { childList: true });
+    return () => {
+      resized.disconnect();
+      changed.disconnect();
+    };
+  }, [box, on, watchChildren, measure]);
+
+  return { fade, overflows, measure };
+};
+
+/** The attributes `styles.css` fades a box by, and that say it overflows. */
+export const scrollFadeAttributes = ({
+  fade,
+  overflows,
+}: {
+  fade: Fade | undefined;
+  overflows: boolean;
+}) => ({ "data-fade": fade, "data-overflows": overflows ? "" : undefined });
