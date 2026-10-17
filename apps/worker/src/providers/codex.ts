@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -21,6 +20,7 @@ import { z } from "zod";
 import { workspaceFiles } from "../auth/workspace-files/index.ts";
 import { pageRead, turnSources } from "../features/sources/index.ts";
 import { runCommand } from "../lib/commands.ts";
+import { readTextFile, writeTextFile, writeTextFileIn } from "../lib/files.ts";
 import { createOneAtATime } from "../lib/one-at-a-time.ts";
 import { err, ok, type Result } from "../lib/result.ts";
 import {
@@ -735,40 +735,31 @@ const codingTools = ({ code, signal }: { code: CodeTurn; signal: AbortSignal }) 
       const { path, content } = parsed.data;
       const allowed = await code.edit(path);
       if (!allowed.ok) return codeRefusedReply(allowed.error);
-      try {
-        await mkdir(dirname(placeOf(path)), { recursive: true });
-        await writeFile(placeOf(path), content);
-        return fileChangeReply({ kind: "written", path });
-      } catch {
-        return fileChangeReply({ kind: "unwritable", path });
-      }
+      return (await writeTextFileIn(placeOf(path), content))
+        ? fileChangeReply({ kind: "written", path })
+        : fileChangeReply({ kind: "unwritable", path });
     },
 
     edit: async (args: unknown): Promise<ToolReply> => {
       const parsed = EditArgs.safeParse(args);
       if (!parsed.success) return malformedInputReply();
       const { path, old_text, new_text } = parsed.data;
-      let text: string;
-      try {
-        text = await readFile(placeOf(path), "utf8");
-      } catch {
-        return fileChangeReply({ kind: "no-file", path });
-      }
-      const times = timesIn(text, old_text);
-      if (times === 0) return fileChangeReply({ kind: "not-found", path });
-      if (times > 1) return fileChangeReply({ kind: "found-often", path, times });
+      // Asked first, as Claude's hook asks before its Edit reads the file: nothing outside the
+      // worktree is read, even to check the text is there, before the owner allows it.
       const allowed = await code.edit(path);
       if (!allowed.ok) return codeRefusedReply(allowed.error);
-      try {
-        // A function, so a $ in the new text is kept as written.
-        await writeFile(
-          placeOf(path),
-          text.replace(old_text, () => new_text),
-        );
-        return fileChangeReply({ kind: "edited", path });
-      } catch {
-        return fileChangeReply({ kind: "unwritable", path });
-      }
+      const read = await readTextFile(placeOf(path));
+      if (!read.ok) return fileChangeReply({ kind: "unwritable", path });
+      if (read.value === undefined) return fileChangeReply({ kind: "no-file", path });
+      const times = timesIn(read.value, old_text);
+      if (times === 0) return fileChangeReply({ kind: "not-found", path });
+      if (times > 1) return fileChangeReply({ kind: "found-often", path, times });
+      // A function, so a $ in the new text is kept as written.
+      const written = await writeTextFile(
+        placeOf(path),
+        read.value.replace(old_text, () => new_text),
+      );
+      return fileChangeReply({ kind: written.ok ? "edited" : "unwritable", path });
     },
   };
 };

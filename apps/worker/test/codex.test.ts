@@ -1825,6 +1825,17 @@ describe("a Codex code session (#248)", () => {
     expect(await readFile(join(worktree, "made-by-codex.txt"), "utf8")).toBe("");
   });
 
+  it("runs a command asked for in the background as a task (#182), which outlives the turn", async () => {
+    const { answers, events } = await codingTurn([
+      { tool: "run_command", args: { command: "git status", background: true } },
+    ]);
+
+    expect(answerOf(answers[0]).success).toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "task-started", command: "git status" }),
+    );
+  });
+
   it("says a command that fails failed, with its exit code", async () => {
     const { answers } = await codingTurn([
       { tool: "run_command", args: { command: "ls no-such-file" } },
@@ -1882,6 +1893,23 @@ describe("a Codex code session (#248)", () => {
     expect(answers.map((answer) => answerOf(answer).success)).toEqual([false, false]);
     await expect(readFile(resolve(worktree, "..", "outside.txt"))).rejects.toThrow();
     await expect(readFile(join(worktree, "package.json"))).rejects.toThrow();
+  });
+
+  it("asks the owner before it looks inside a file outside the worktree to edit it, and says nothing of what's in it when they deny it", async () => {
+    await writeFile(join(root, "secret.txt"), "The word is swordfish.\n");
+
+    const { answers, asked, worktree } = await codingTurn([
+      {
+        tool: "edit_file",
+        args: { path: "../../secret.txt", old_text: "swordfish", new_text: "fish" },
+      },
+    ]);
+
+    expect(asked).toEqual([{ kind: "edit", path: resolve(worktree, "..", "..", "secret.txt") }]);
+    const edited = answerOf(answers[0]);
+    expect(edited.success).toBe(false);
+    expect(edited.text).not.toMatch(/isn't in|times/);
+    expect(await readFile(join(root, "secret.txt"), "utf8")).toBe("The word is swordfish.\n");
   });
 
   it("carries on a code session from another provider's usage limit, in the same worktree", async () => {
