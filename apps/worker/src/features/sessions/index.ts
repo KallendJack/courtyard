@@ -3639,6 +3639,12 @@ export const createSessions = (options: {
       return ok(summaryOf(session.value));
     },
 
+    /** A session's events so far, as its event log has them: what the offline copy keeps (#106). */
+    events: async (id: SessionId): Promise<Result<SessionEvent[], SessionError>> => {
+      await settled(id);
+      return readEvents(id);
+    },
+
     /**
      * Gives a session a new title, kept in its `session.json`, marked as the owner's so no model
      * titles it after that.

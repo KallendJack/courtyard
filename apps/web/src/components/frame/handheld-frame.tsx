@@ -61,8 +61,13 @@ export default function HandheldFrame(props: {
   setBoxOpen: (open: boolean) => void;
   /** Where the Talk key or strip puts its tap, for the box's mic (#251). */
   talker: RefObject<(() => void) | undefined>;
+  /**
+   * The device is reading its copy (#106): nothing can be sent, so Model, Skills and talking go,
+   * and on the cover screen the bar with them, leaving the page's grey line at its foot.
+   */
+  reading: boolean;
 }) {
-  const { layout, box, boxOpen, setBoxOpen } = props;
+  const { layout, box, boxOpen, setBoxOpen, reading } = props;
   const tablet = layout === "tablet";
   const { workspaceId } = useParams({ strict: false });
   const { pathname } = useLocation();
@@ -95,7 +100,7 @@ export default function HandheldFrame(props: {
       for (const inset of INSETS) root.removeProperty(inset);
       delete document.documentElement.dataset.frameMeasured;
     };
-  }, [layout]);
+  }, [layout, reading]);
 
   // The box closes when the owner taps away from it (the page, say), and it and any sheet when they
   // go to another page.
@@ -306,11 +311,11 @@ export default function HandheldFrame(props: {
               ref={right}
               className="fixed inset-y-0 right-0 z-20 flex w-[calc(--spacing(37.5)+env(safe-area-inset-right))] flex-col gap-3 bg-background pt-6 pr-[calc(--spacing(2.5)+env(safe-area-inset-right))] pb-[calc(--spacing(3.75)+env(safe-area-inset-bottom))] pl-2.5"
             >
-              {model}
-              {skills}
+              {!reading && model}
+              {!reading && skills}
               {settings}
               <div className="flex-1" />
-              <TalkKey box={talkTo} type={type} talker={props.talker} />
+              {!reading && <TalkKey box={talkTo} type={type} talker={props.talker} />}
             </Scroller>
           </>
         ) : (
@@ -336,7 +341,7 @@ export default function HandheldFrame(props: {
       <div ref={bottom} data-frame-bottom="">
         {/* On a tablet the box is always there, on a page that has one; on the cover screen, once opened. */}
         <div ref={props.dockRef} data-dock={layout} hidden={tablet ? undefined : !boxOpen} />
-        {!tablet && (
+        {!tablet && !reading && (
           <div data-handheld="" className="contents">
             <div
               ref={bar}

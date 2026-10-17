@@ -149,9 +149,10 @@ function EditForm(props: {
 
 /**
  * One save, as a note under the answer: what was saved where, with Undo and Edit (ADR 0013). It
- * follows the session, so an Undo or Edit from any device shows here too.
+ * follows the session, so an Undo or Edit from any device shows here too. Read offline (#106,
+ * `readOnly`), it has neither: both need the worker.
  */
-export function SaveNote(props: { sessionId: SessionId; note: Note }) {
+export function SaveNote(props: { sessionId: SessionId; note: Note; readOnly?: boolean }) {
   const { sessionId, note } = props;
   const [editing, setEditing] = useState(false);
   const undo = useAction(async () => {
@@ -182,7 +183,7 @@ export function SaveNote(props: { sessionId: SessionId; note: Note }) {
       icon={undone ? <Undo2 /> : <BookmarkCheck />}
       muted={undone}
       actions={
-        undone ? undefined : (
+        undone || props.readOnly === true ? undefined : (
           <>
             <Button
               variant="quiet"

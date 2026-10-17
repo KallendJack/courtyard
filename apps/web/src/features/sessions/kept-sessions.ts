@@ -28,11 +28,15 @@ const BUSY_EVERY_MS = 3000;
 export const sessionsBusyEveryMs = (sessions: readonly { readonly now: TurnNow }[]) =>
   sessions.some((session) => session.now.kind !== "your-turn") ? BUSY_EVERY_MS : undefined;
 
-/** Calls `refresh` the shared way (`useFresh`), as often as `sessionsBusyEveryMs` says. */
+/**
+ * Calls `refresh` the shared way (`useFresh`), as often as `sessionsBusyEveryMs` says, while
+ * `asking`.
+ */
 export const useFreshSessions = (
   sessions: readonly { readonly now: TurnNow }[],
   refresh: () => unknown,
-) => useFresh({ ask: refresh, busyEveryMs: sessionsBusyEveryMs(sessions) });
+  asking = true,
+) => useFresh({ ask: refresh, asking, busyEveryMs: sessionsBusyEveryMs(sessions) });
 
 /**
  * A workspace's sessions as last known, asked for again when `again` changes, and kept fresh the

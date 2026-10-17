@@ -13,7 +13,7 @@ import { memo, type ReactNode, useMemo, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { CopyButton } from "@/components/buttons/copy-button";
 import { ApprovalCard, approvalWords } from "@/components/chat/approval-card";
-import { PdfChip, PhotoThumb } from "@/components/chat/attachment";
+import { AttachmentNotKept, PdfChip, PhotoThumb } from "@/components/chat/attachment";
 import { HelperLine, type HelperStanding } from "@/components/chat/helper-line";
 import { PhotoViewer } from "@/components/chat/photo-viewer";
 import { type Queued, QueuedMessages } from "@/components/chat/queued-message";
@@ -342,9 +342,22 @@ function AddedMessage(props: { added: Extract<AnswerPart, { kind: "added" }>; tu
  * The owner's message in its bubble, with any photos it carried as thumbnails that open full size
  * and PDFs as chips that open in a new tab (#78).
  */
-function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
+function OwnerMessage(props: { sessionId: SessionId; turn: Turn; offline: boolean }) {
   const { sessionId, turn } = props;
   const [viewing, setViewing] = useState<number>();
+  if (props.offline && turn.attachments.length > 0) {
+    // Read offline (#106), no photo or PDF is kept: each keeps its place, to open once back.
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        {turn.attachments.map((attachment) => (
+          <AttachmentNotKept key={attachment.id} kind={attachment.kind} />
+        ))}
+        {(turn.text !== "" || turn.skill !== undefined) && (
+          <OwnerMessage sessionId={sessionId} turn={{ ...turn, attachments: [] }} offline />
+        )}
+      </div>
+    );
+  }
   const photos = turn.attachments.flatMap((attachment) =>
     attachment.kind === "photo"
       ? [{ src: attachmentUrl(sessionId, attachment.id), name: attachment.name }]
@@ -445,6 +458,8 @@ export const TurnView = memo(function TurnView(props: {
     /** Takes one back into the Reply box (#252). */
     readonly edit?: (queued: Queued) => Promise<string | undefined>;
   };
+  /** Read from the device's copy (#106): its saves can't be undone, and its photos aren't kept. */
+  offline?: boolean;
 }) {
   const { sessionId, turn, providers, onRetry, onCarryOn, onContinue, onReply } = props;
   const { workspaceId, documents } = props;
@@ -476,7 +491,9 @@ export const TurnView = memo(function TurnView(props: {
        * A turn the worker started opens with what it does: a failed check, in its activity, or
        * a Lead's merged builder (#347).
        */}
-      {!turn.fromWorker && <OwnerMessage sessionId={sessionId} turn={turn} />}
+      {!turn.fromWorker && (
+        <OwnerMessage sessionId={sessionId} turn={turn} offline={props.offline === true} />
+      )}
       {/* What it wrote, each piece between the activities it's about (#200). */}
       {turn.parts.map((part, index) => {
         // Only the last piece can still be arriving.
@@ -561,7 +578,12 @@ export const TurnView = memo(function TurnView(props: {
       {turn.notes.length > 0 && (
         <ul aria-label="Saved to context" className="space-y-1.5">
           {turn.notes.map((note) => (
-            <SaveNote key={note.seq} sessionId={sessionId} note={note} />
+            <SaveNote
+              key={note.seq}
+              sessionId={sessionId}
+              note={note}
+              readOnly={props.offline === true}
+            />
           ))}
         </ul>
       )}

@@ -1,5 +1,5 @@
 import { sizeInWords } from "@courtyard/contract";
-import { FileText, X } from "lucide-react";
+import { FileText, Image as ImageIcon, X } from "lucide-react";
 import { classes } from "@/lib/classes";
 import { IconButton } from "../buttons/button.tsx";
 
@@ -54,6 +54,20 @@ export function PhotoThumb(props: { src: string; name: string; onOpen?: () => vo
     >
       {image}
     </button>
+  );
+}
+
+/**
+ * A photo or PDF in a sent message read offline (#106; Paper, "Cover · Session, offline"): the copy
+ * doesn't keep it, so a dashed place the size of its thumbnail says it opens once back online.
+ */
+export function AttachmentNotKept(props: { kind: "photo" | "pdf" }) {
+  const Icon = props.kind === "photo" ? ImageIcon : FileText;
+  return (
+    <span className="flex size-[143px] shrink-0 flex-col items-center justify-center gap-2 rounded-bubble border border-dashed bg-surface px-3 text-center text-meta text-muted-foreground">
+      <Icon aria-hidden className="size-4.5" />
+      {props.kind === "photo" ? "Photo" : "PDF"} · opens when online
+    </span>
   );
 }
 

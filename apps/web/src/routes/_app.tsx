@@ -8,11 +8,14 @@ import {
   type TalkTarget,
   useLayout,
 } from "@/components/frame/handheld";
-import { fromWorker, logOut as logOutOnWorker } from "../api/worker.ts";
+import { type FromWorker, fromWorker, logOut as logOutOnWorker } from "../api/worker.ts";
 import { Problem } from "../components/layout/problems.tsx";
+import { keepsCopy, useKeepsCopy, wipeCopyHere } from "../features/offline-copy/switch.ts";
 
 /** The Handheld frame (#193), on every screen (#197), loaded after the page so it stays off the first load. */
 const HandheldFrame = lazy(() => import("@/components/frame/handheld-frame"));
+/** Read offline's copy kept up to date (#106), only on a device that keeps one. */
+const KeepCopyFresh = lazy(() => import("../features/offline-copy/keep-fresh.tsx"));
 
 /**
  * Until the frame is there, the room it will take (#271), so the page doesn't jump when it
@@ -33,12 +36,17 @@ const BAR = "pb-[calc(--spacing(37)+env(safe-area-inset-bottom))]";
  * never the window (#266, #339), so what's around it stays where it is.
  */
 export const Route = createFileRoute("/_app")({
-  loader: () => fromWorker("/workspaces", WorkspaceList),
+  // Reading a copy (#106), its workspaces, as they were when it was kept.
+  loader: ({ context }): Promise<FromWorker<WorkspaceList>> =>
+    context.reading === undefined
+      ? fromWorker("/workspaces", WorkspaceList)
+      : Promise.resolve({ kind: "loaded", data: context.reading.workspaces }),
   component: LoggedIn,
 });
 
 function LoggedIn() {
   const workspaces = Route.useLoaderData();
+  const { reading } = Route.useRouteContext();
   const router = useRouter();
   const list = workspaces.kind === "loaded" ? workspaces.data.workspaces : [];
   const layout = useLayout();
@@ -46,8 +54,11 @@ function LoggedIn() {
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
   const [box, setBox] = useState<MessageBox>();
   const [boxOpen, setBoxOpen] = useState(false);
+  const keeping = useKeepsCopy();
 
   const logOut = async () => {
+    // Logging out here wipes this device's copy (#106).
+    if (keepsCopy()) await wipeCopyHere();
     await logOutOnWorker();
     // Go to login explicitly rather than waiting for a re-check to redirect, which another load
     // already in flight can swallow.
@@ -85,6 +96,11 @@ function LoggedIn() {
 
   return (
     <DockContext value={dock}>
+      {keeping && reading === undefined && (
+        <Suspense>
+          <KeepCopyFresh />
+        </Suspense>
+      )}
       <div className="flex h-dvh">
         <div
           data-frame-column=""
@@ -102,6 +118,7 @@ function LoggedIn() {
               boxOpen={boxOpen}
               setBoxOpen={setBoxOpen}
               talker={talker}
+              reading={reading !== undefined}
             />
           </Suspense>
           {/* The page fills this panel and scrolls its own middle, never the window (#266, #339). */}

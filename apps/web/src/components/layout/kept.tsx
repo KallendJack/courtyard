@@ -40,15 +40,18 @@ const CALM_EVERY_MS = 30 * 1000;
  * How every block that shows the worker's data stays fresh (#387): `ask` every 30 seconds while
  * things are calm, or every `busyEveryMs` while something it shows is busy (a session working,
  * main's build running); never while the tab is hidden, and at once when it's shown again. One
- * question at a time. While `asking` is false, nothing is asked.
+ * question at a time. While `asking` is false, nothing is asked. Something slower than a block
+ * (the offline copy, #106) asks every `calmEveryMs` instead, and `atOnce` as it starts too.
  */
 export const useFresh = (options: {
   ask: () => unknown;
   asking?: boolean;
   busyEveryMs?: number | undefined;
+  calmEveryMs?: number;
+  atOnce?: boolean;
 }) => {
-  const { asking = true } = options;
-  const everyMs = options.busyEveryMs ?? CALM_EVERY_MS;
+  const { asking = true, atOnce = false } = options;
+  const everyMs = options.busyEveryMs ?? options.calmEveryMs ?? CALM_EVERY_MS;
   const ask = useRef(options.ask);
   ask.current = options.ask;
   useEffect(() => {
@@ -71,14 +74,15 @@ export const useFresh = (options: {
     };
     // Hidden, the next ask finds it so and waits; shown again, it asks at once.
     const shown = () => void askNow();
-    timer = setTimeout(askNow, everyMs);
+    if (atOnce) void askNow();
+    else timer = setTimeout(askNow, everyMs);
     document.addEventListener("visibilitychange", shown);
     return () => {
       current = false;
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", shown);
     };
-  }, [asking, everyMs]);
+  }, [asking, everyMs, atOnce]);
 };
 
 /**

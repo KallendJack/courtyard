@@ -3,6 +3,12 @@ const time = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minu
 /** The time of day something happened, as a clock shows it: "10:42". */
 export const clockWords = (iso: string) => time(new Date(iso));
 
+/** The day of the week and the time of day something happened: "Sat 14:32". */
+export const dayAndTimeWords = (iso: string) => {
+  const date = new Date(iso);
+  return `${date.toLocaleDateString([], { weekday: "short" })} ${time(date)}`;
+};
+
 /** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
 export const elapsedWords = (ms: number) => {
   const seconds = Math.max(0, Math.floor(ms / 1000));

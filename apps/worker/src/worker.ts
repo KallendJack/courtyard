@@ -66,6 +66,8 @@ import { nextUpRoutes } from "./features/next-up/routes.ts";
 import { createNotifications, type SendPush } from "./features/notifications/index.ts";
 import { notificationRoutes } from "./features/notifications/routes.ts";
 import { sendWebPush } from "./features/notifications/web-push.ts";
+import { createOfflineCopy } from "./features/offline-copy/index.ts";
+import { offlineCopyRoutes } from "./features/offline-copy/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./features/owner-context/index.ts";
 import { createHomePicks } from "./features/planning-home/index.ts";
 import { planningHomeRoutes } from "./features/planning-home/routes.ts";
@@ -97,6 +99,7 @@ import {
   listWorkspaces,
   removeAllowed,
   type Workspace,
+  type WorkspaceError,
 } from "./features/workspaces/index.ts";
 import { createGitHubApi, type GitHubApi } from "./integrations/github/api.ts";
 import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.ts";
@@ -469,6 +472,38 @@ export const createWorker = (options: {
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
 
+  /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
+  const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
+    const [workspace, ownerContext] = await Promise.all([
+      getWorkspace(contextDir, id),
+      readOwnerContext(contextDir),
+    ]);
+    if (!workspace.ok) return workspace;
+    if (!ownerContext.ok) return ownerContext;
+    const { shared } = sharedOwnerContext({
+      mode: workspace.value.summary.mode,
+      ownerContext: ownerContext.value,
+    });
+    const { description, contextFile, summary } = workspace.value;
+    // Today on the worker machine's calendar, which is the owner's.
+    const today = new Date(now());
+    return ok({
+      workspace: summary,
+      contextFile,
+      ...(description === null ? {} : { description }),
+      ownerContextShared: shared,
+      ...(summary.mode === "planning"
+        ? {
+            duePlans: plansDue(contextFile?.plans ?? [], {
+              year: today.getFullYear(),
+              month: today.getMonth(),
+              day: today.getDate(),
+            }),
+          }
+        : {}),
+    });
+  };
+
   const api = new Hono();
   const tooLarge = (c: Context) => apiError(c, { status: 413, error: "Request too large" });
   const jsonLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
@@ -534,6 +569,17 @@ export const createWorker = (options: {
     }
   });
   api.route("/", notificationRoutes(notifications));
+  api.route(
+    "/",
+    offlineCopyRoutes(
+      createOfflineCopy({
+        contextDir,
+        sessions,
+        detail: (workspace) => workspaceDetail(workspace.id),
+        now,
+      }),
+    ),
+  );
 
   api.get("/backup", async (c) => c.json((await contextFolder.backup()) satisfies ContextBackup));
   api.get("/live", async (c) => c.json((await live.status()) satisfies LiveStatus));
@@ -680,34 +726,9 @@ export const createWorker = (options: {
     return c.body(null, 204);
   });
   api.get("/workspaces/:id", async (c) => {
-    const [workspace, ownerContext] = await Promise.all([
-      getWorkspace(contextDir, c.req.param("id")),
-      readOwnerContext(contextDir),
-    ]);
-    if (!workspace.ok) return contextError(c, workspace.error);
-    if (!ownerContext.ok) return contextError(c, ownerContext.error);
-    const { shared } = sharedOwnerContext({
-      mode: workspace.value.summary.mode,
-      ownerContext: ownerContext.value,
-    });
-    const { description, contextFile, summary } = workspace.value;
-    // Today on the worker machine's calendar, which is the owner's.
-    const today = new Date(now());
-    return c.json({
-      workspace: summary,
-      contextFile,
-      ...(description === null ? {} : { description }),
-      ownerContextShared: shared,
-      ...(summary.mode === "planning"
-        ? {
-            duePlans: plansDue(contextFile?.plans ?? [], {
-              year: today.getFullYear(),
-              month: today.getMonth(),
-              day: today.getDate(),
-            }),
-          }
-        : {}),
-    } satisfies WorkspaceDetail);
+    const detail = await workspaceDetail(c.req.param("id"));
+    if (!detail.ok) return contextError(c, detail.error);
+    return c.json(detail.value satisfies WorkspaceDetail);
   });
   api.get("/workspaces/:id/skills", async (c) => {
     const workspace = await getWorkspace(contextDir, c.req.param("id"));

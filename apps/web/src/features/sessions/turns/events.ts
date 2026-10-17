@@ -717,6 +717,10 @@ const NO_EVENTS: Log = {
   tasks: [],
 };
 
+/** A session's turns from events kept to read offline (#106), all shown at once as a replay is. */
+export const turnsIn = (events: readonly SessionEvent[]): readonly Turn[] =>
+  applyBatch(NO_EVENTS, { events, replayed: true }).turns;
+
 /**
  * Each session's log as last shown, for the tab's lifetime (owner, 2026-10-12: nothing jumps in):
  * coming back to a session shows it at once, and its stream carries on after it.

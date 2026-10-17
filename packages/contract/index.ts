@@ -129,6 +129,12 @@ export {
   NotificationsStatus,
   PushNotice,
 } from "./lib/notifications.ts";
+export {
+  KeptConversation,
+  KeptWorkspace,
+  OFFLINE_CONVERSATIONS,
+  OfflineCopy,
+} from "./lib/offline-copy.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
   HomeView,

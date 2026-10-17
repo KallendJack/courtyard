@@ -24,6 +24,7 @@ import { Page, PageTitle } from "@/components/layout/page";
 import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
 import { renameSession } from "../../api/worker-calls.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
+import { ReadSession } from "../../features/offline-copy/read-session.tsx";
 import {
   ConfirmPreview,
   PreviewButton,
@@ -61,8 +62,10 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$se
   validateSearch: (search: Record<string, unknown>): { view?: "review" } =>
     search.view === "review" ? { view: "review" } : {},
   // The loader stays in the first load, so it only imports what the page asks for.
-  loader: ({ params }) =>
-    import("../../api/session-page.ts").then((page) => page.loadSessionPage(params)),
+  loader: ({ params, context }) =>
+    import("../../api/session-page.ts").then((page) =>
+      page.loadSessionPage(params, context.reading),
+    ),
   component: SessionPage,
 });
 
@@ -70,9 +73,13 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/sessions/$se
 const appRoute = getRouteApi("/_app");
 
 function SessionPage() {
-  const { session, providers, skills } = Route.useLoaderData();
+  const { session, providers, skills, offline } = Route.useLoaderData();
   const workspaces = appRoute.useLoaderData();
   if (session.kind !== "loaded") return <Problem result={session} />;
+  // Read from the device's copy (#106): the same page, read-only.
+  if (offline !== undefined) {
+    return <ReadSession key={session.data.id} session={session.data} offline={offline} />;
+  }
   const workspace =
     workspaces.kind === "loaded"
       ? workspaces.data.workspaces.find((w) => w.id === session.data.workspaceId)

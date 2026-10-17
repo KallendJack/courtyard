@@ -41,10 +41,13 @@ export function SessionTurns(props: {
   sessionId: SessionId;
   turns: readonly Turn[];
   providers: ProviderList["providers"];
-  onRetry: (turn: Turn) => void;
-  onCarryOn: (turn: Turn) => Promise<string | undefined>;
+  /** Retry, Carry on and Continue: left out where nothing can be sent, as when reading offline. */
+  onRetry?: (turn: Turn) => void;
+  onCarryOn?: (turn: Turn) => Promise<string | undefined>;
   /** Continue a turn a restart cut off (#186). */
-  onContinue: (turn: Turn) => Promise<string | undefined>;
+  onContinue?: (turn: Turn) => Promise<string | undefined>;
+  /** Read from the device's copy (#106): nothing it shows can be acted on, and photos aren't kept. */
+  offline?: boolean;
   /**
    * Opens Allow all for this task's choice of how long (#428), from an approval it would cover;
    * left out where the session can't allow all.
@@ -241,11 +244,12 @@ export function SessionTurns(props: {
               {...(onStepByStep === undefined ? {} : { onStepByStep })}
               // Only the last turn can be retried, carried on, continued or replied to, so only it
               // gets the handlers.
+              {...(props.offline === true ? { offline: true } : {})}
               {...(turn === last
                 ? {
-                    onRetry,
-                    onCarryOn,
-                    onContinue,
+                    ...(onRetry ? { onRetry } : {}),
+                    ...(onCarryOn ? { onCarryOn } : {}),
+                    ...(onContinue ? { onContinue } : {}),
                     ...(onReply ? { onReply } : {}),
                     ...(onAllowAll ? { onAllowAll } : {}),
                     latest: true,

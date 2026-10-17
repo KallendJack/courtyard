@@ -43,8 +43,14 @@ _Avoid_: pipeline (in code and UI text), deploy status
 
 **Web app**:
 The part the owner opens in a browser. Static files that show things and call the worker; it does no model work and
-stores nothing.
+stores nothing but the offline copy, on a device that keeps one (ADR 0030).
 _Avoid_: frontend, client, UI server
+
+**Offline copy**:
+What a device keeps to read while the worker can't be reached (#106, ADR 0030), when the owner turns on Read offline
+for that device in Settings: the owner context, each workspace's context file and sessions, and each workspace's 5
+latest conversations. The worker decides what's in it; the device keeps it read-only, and wipes it on logging out.
+_Avoid_: cache, offline mode, sync, backup
 
 ### Context
 
