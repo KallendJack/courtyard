@@ -473,7 +473,10 @@ Where the rest fits:
   (`helper-finished`, with its report). Claude's hook starts one for each `Agent` call it allows (Claude Code's own
   types and the repository's), tells each helper's tool calls apart by the id Claude Code gives the helper (from its
   `task_started` message), and hands back its report from the `Agent` call's result; Claude Code puts every helper
-  on the session's model. The fake starts one for each line a message scripts. The browser shows one line per
+  on the session's model. Codex's own sub-agents get none of Courtyard's tools, so Codex starts one for each call to
+  Courtyard's `start_helper` (#470): a fresh thread the adapter runs on the session's model and effort, with the file
+  and coding tools asked of the helper's `HelperTurn`, its last message its report; with `own_branch` it gets a
+  branch of its own through `CodeTurn.branchOff` first. The fake starts one for each line a message scripts. The browser shows one line per
   helper where the model started it, which opens on what it did and its report.
   A helper that writes code works on a branch of its own (#395). `code/`'s `branchOff` makes its worktree beside
   the session's (`<session worktree>-helper-<n>`, on `courtyard/<session branch>-helper-<n>`, from the session
