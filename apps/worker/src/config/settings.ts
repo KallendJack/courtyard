@@ -71,6 +71,27 @@ const Env = z.object({
       .optional(),
   ),
   COURTYARD_PAPER_COMMAND: z.preprocess(unsetIfEmpty, z.string().optional()),
+  COURTYARD_PREVIEW_PORTS: z.preprocess(
+    unsetIfEmpty,
+    z
+      .string()
+      .default("9901-9906")
+      .transform((value, context) => {
+        const [, from, to] = /^(\d{1,5})(?:-(\d{1,5}))?$/.exec(value.trim()) ?? [];
+        const first = Number(from);
+        const last = to === undefined ? first : Number(to);
+        // 0 alone lets the machine pick a free port for each, as tests do.
+        if (from !== undefined && first === 0 && to === undefined) return [0];
+        if (from === undefined || first < 1 || last > 65535 || last < first || last - first > 99) {
+          context.addIssue({
+            code: "custom",
+            message: "must be a port or a range of up to 100 ports, such as 9901-9906",
+          });
+          return z.NEVER;
+        }
+        return Array.from({ length: last - first + 1 }, (_, at) => first + at);
+      }),
+  ),
 });
 
 /** Where `pnpm build` puts the web app, relative to this file. */
@@ -127,6 +148,12 @@ export type Settings = {
    * page (#308); `null` to use the one a code workspace names already, if any.
    */
   readonly paperCommand: string | null;
+  /**
+   * The ports a code session's preview is reached on (#183), one per preview running, on the
+   * worker's own address behind the HTTPS proxy: 9901 to 9906 unless set. `[0]` lets the machine
+   * pick a free one for each, as tests do.
+   */
+  readonly previewPorts: readonly number[];
 };
 
 /**
@@ -160,5 +187,6 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     githubClientId: parsed.data.COURTYARD_GITHUB_CLIENT_ID ?? null,
     buildsLock: buildsLockOf(parsed.data),
     paperCommand: parsed.data.COURTYARD_PAPER_COMMAND ?? null,
+    previewPorts: parsed.data.COURTYARD_PREVIEW_PORTS,
   });
 };

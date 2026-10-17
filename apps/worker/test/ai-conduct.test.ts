@@ -232,6 +232,70 @@ describe("what every turn tells a model", () => {
     );
   });
 
+  it("tells a code turn on a provider that takes Courtyard's tools how the owner previews its app, and offers it the screenshot tool (#183)", async () => {
+    await asCode();
+
+    const { framing } = await firstTurn({ ...CODES, savesContext: true });
+
+    expect(framing.instructions).toContain(
+      await quotedInGuide("When one of your tasks serves a web page"),
+    );
+    const tool = framing.tools.find((each) => each.name === "preview_screenshot");
+    expect(tool?.description).toBe(await quotedInGuide("Takes a screenshot of a page"));
+    expect(Object.keys(tool?.input ?? {})).toEqual(["path", "size"]);
+  });
+
+  it("tells a planning turn nothing of previews (#183)", async () => {
+    const { framing } = await firstTurn({ ...CODES, savesContext: true });
+
+    expect(framing.instructions).not.toContain("preview_screenshot");
+    expect(framing.tools.map((each) => each.name)).not.toContain("preview_screenshot");
+  });
+
+  it("tells a provider that takes none of Courtyard's tools nothing of previews (#183)", async () => {
+    await asCode();
+
+    const { framing } = await firstTurn(CODES);
+
+    expect(framing.instructions).not.toContain("preview_screenshot");
+    expect(framing.tools.map((each) => each.name)).not.toContain("preview_screenshot");
+  });
+
+  it("tells a code turn of the owner's preview, started and ended, as Courtyard's lines (#183)", async () => {
+    await asCode();
+    const { provider, turns } = recorder({ ...CODES, savesContext: true });
+    const request: Requester = await asOwner(testWorker({ root, providers: [provider] }));
+    const started = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Hello",
+      model: MODEL,
+    });
+    const { id } = SessionSummary.parse(await started.json());
+    const first = await followSession(request, { sessionId: id, until: "turn-completed" });
+    await postJson(request, `/api/sessions/${id}/preview`, { command: "node --version" });
+    const ended = await followSession(request, {
+      sessionId: id,
+      after: first.at(-1)?.seq ?? 0,
+      until: "task-ended",
+    });
+
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Carry on", model: MODEL });
+    await followSession(request, {
+      sessionId: id,
+      after: ended.at(-1)?.seq ?? 0,
+      until: "turn-completed",
+    });
+
+    const line = (how: string) =>
+      quotedInGuide("Courtyard: the owner's preview `<command>` <how>.", {
+        command: "node --version",
+        how,
+      });
+    expect(turns[1]?.framing.message).toContain(await line("started"));
+    expect(turns[1]?.framing.message).toContain(await line("passed"));
+    // Its end started no turn of its own.
+    expect(turns).toHaveLength(2);
+  });
+
   it("tells a code turn nothing of a context file, even one its workspace kept from before (#301)", async () => {
     await asCode();
     await contextFile("# Garage gym\n\nA side project.\n\n## Facts\n- Single garage.\n");

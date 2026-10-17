@@ -3,7 +3,12 @@ import { z } from "zod";
 import type { PaperSettings } from "../../features/workspaces/index.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { PAPER_FAILED, PAPER_MAKES_NO_FILES, paperFileOnly } from "../../prompts/index.ts";
-import type { ToolCall, ToolConnection, ToolContent } from "../../providers/index.ts";
+import {
+  imageOf,
+  type ToolCall,
+  type ToolConnection,
+  type ToolContent,
+} from "../../providers/index.ts";
 
 /**
  * Paper in code workspaces (ADR 0023): the first tool connection. A code workspace's config names
@@ -70,14 +75,6 @@ const madeIn = (call: ToolCall, content: readonly ToolContent[]) => {
     }
   }
   return made.filter((id) => !given.has(id));
-};
-
-/** An image's data URL as its kind and bytes, or `undefined` when it isn't one. */
-const imageOf = (dataUrl: string) => {
-  const [, mediaType, data] = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl) ?? [];
-  return mediaType === undefined || data === undefined
-    ? undefined
-    : { mediaType, bytes: Buffer.from(data, "base64") };
 };
 
 /**

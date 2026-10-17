@@ -132,6 +132,27 @@ export const readTextEnd = async (
   }
 };
 
+/**
+ * The start of a text file, at most its first `bytes` (where a dev server says where it serves,
+ * #183); `undefined` when the file doesn't exist. A character cut in two at the end is dropped.
+ */
+export const readTextStart = async (
+  path: string,
+  bytes: number,
+): Promise<Result<string | undefined, "unreadable">> => {
+  let file: FileHandle | undefined;
+  try {
+    file = await open(path, "r");
+    const buffer = Buffer.alloc(bytes);
+    const { bytesRead } = await file.read(buffer, 0, bytes, 0);
+    return ok(buffer.subarray(0, bytesRead).toString("utf8").replace(/�+$/, ""));
+  } catch (error) {
+    return hasCode(error, "ENOENT") ? ok(undefined) : err("unreadable");
+  } finally {
+    await file?.close();
+  }
+};
+
 /** One thing in a folder: a link is a link here, wherever it leads. */
 export type FolderEntry = {
   readonly name: string;

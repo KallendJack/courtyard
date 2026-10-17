@@ -663,6 +663,56 @@ Courtyard can't tell why a Paper tool failed (Paper doesn't say in a way it can 
 
 Paper changes no context, so a change here doesn't run the eval set.
 
+## Previews
+
+Built with #183. A code session's running app can be looked at from the phone. When one of the session's tasks
+(#182) serves a web page, which its output says by printing `http://localhost:<port>` as Vite, Next and most dev
+servers do, the owner gets a Preview button in the session. It opens the app through a port of the worker's own,
+behind the owner's login, only while the task runs. With none serving, the owner's Start preview runs the workspace's
+preview command as a task, with `PORT` set to a free port. Courtyard fills that command in from the repository's
+`preview:session` script, or its `dev` script, and the owner confirms it once. That task is the owner's, not the
+model's: it needs no approval, and its end starts no turn and tells nobody. The model's next turn reads its start and
+end in the conversation, each as a line of Courtyard's, where `<how>` is as for a task (Coding, above):
+
+> Courtyard: the owner's preview `<command>` <how>.
+
+A code session's turn on a provider that takes Courtyard's tools is told, after the Paper part when there is one:
+
+> When one of your tasks serves a web page (a dev server printing http://localhost:<port>), the owner can open it
+> from their phone with the session's Preview button, and you can look at it with the preview_screenshot tool: give
+> it a page's path and a size (cover for the Fold's cover screen, unfolded for the Fold open, or desktop). Each
+> screenshot shows in the chat too, so take one when a change is ready for the owner to look at, at each size it
+> changes. A screenshot shows the page as the owner sees it, logged in as they are in the preview: if it shows a login
+> page, ask the owner to log in there first.
+
+Its tool, `preview_screenshot`:
+
+> Takes a screenshot of a page of this session's running app, as the owner sees it: give the page's path from the
+> app's root (/ for its home) and a size: cover (400 by 640, the Fold's cover screen), unfolded (950 by 712, the Fold
+> open) or desktop (1440 by 900). The screenshot comes back to you and shows in the owner's chat.
+
+What the model is told back, once taken, with the screenshot after it:
+
+> Here's <path> at the <size> size, as it shows in the owner's chat.
+
+With nothing serving:
+
+> Nothing in this session serves a web page now, so there's nothing to take a screenshot of. Start the app's dev
+> server as a task (in the background), then try again once it has said where it serves.
+
+When it couldn't be taken, with the reason (Chromium missing, the page not loading):
+
+> The screenshot couldn't be taken: <reason>
+
+And for anything else:
+
+> That input doesn't fit this tool: it takes a page's path, starting with /, and a size: cover, unfolded or desktop.
+
+The worker takes each screenshot with the Chromium already on the machine for the browser tests (Playwright's),
+headless, a fresh browser each time, sending the app the cookies the owner's browser last sent it through the preview,
+so a logged-in page shows as the owner sees it. Courtyard's own login never reaches the app. A preview changes no
+context, so a change here doesn't run the eval set.
+
 ## Connections
 
 Built with #308. Every turn in a code workspace gets one line about its connections (Every turn, item 7), so a
