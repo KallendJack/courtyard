@@ -17,6 +17,7 @@ import { err, ok, type Result } from "../lib/result.ts";
 import {
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
+  PREVIEW_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   THING_TOOL_NAME,
@@ -189,6 +190,31 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     }
     return [input];
   });
+
+const PREVIEW_SHOT = /^preview screenshot: (\S+)(?: (\S+))?$/i;
+
+/**
+ * What a message to a code session scripts its preview screenshot tool doing (#183), one per
+ * line: "preview screenshot: <path> <size>", such as "preview screenshot: / cover". Each reply's
+ * words go in its answer, "Preview: <reply>", so what the model was told can be seen.
+ */
+const scriptedPreview = async (
+  message: string,
+  callTool: TurnInput["callTool"],
+): Promise<string> => {
+  const said: string[] = [];
+  for (const line of message.split("\n")) {
+    const [, path, size] = PREVIEW_SHOT.exec(line.trim()) ?? [];
+    if (path === undefined) continue;
+    const reply = await callTool({
+      name: PREVIEW_TOOL_NAME,
+      input: { path, ...(size === undefined ? {} : { size }) },
+    });
+    const words = reply.content.flatMap((part) => (part.kind === "text" ? [part.text] : []));
+    said.push(`Preview: ${words.join(" ")}\n\n`);
+  }
+  return said.join("");
+};
 
 const BUILD_ORDER = /^(?:build order: )?(pause|run|skip #?(\d+)|builders (\d+))\.?$/i;
 
@@ -629,7 +655,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
  * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
- * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`). To a Lead,
+ * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`), and "preview
+ * screenshot: <path> <size>" looks at the session's preview (see `scriptedPreview`). To a Lead,
  * "pause" pauses the build order (see `scriptedBuildOrder`).
  */
 export const createFakeProvider = (
@@ -735,6 +762,9 @@ export const createFakeProvider = (
       const coded = code === null ? "" : await scriptedCoding(code, last, report);
       const paper = connections.find((connection) => connection.name === "paper");
       const drew = paper === undefined ? "" : await scriptedPaper(paper, last);
+      const looked = framing.tools.some((tool) => tool.name === PREVIEW_TOOL_NAME)
+        ? await scriptedPreview(last, callTool)
+        : "";
       // "wait for more" waits for what the owner adds while it answers (#252).
       if (added !== null && /^wait for more$/im.test(last)) {
         const more = await added.next();
@@ -743,7 +773,7 @@ export const createFakeProvider = (
       const saw = /please look/i.test(last) || last === "" ? seen(framing.attachments) : "";
       // A message of only attachments has nothing to echo (#164).
       const said = last === "" ? "" : `You said: ${last}`;
-      for (const word of `${coded}${drew}${saw}${said}`.trimEnd().split(/(?<= )/)) {
+      for (const word of `${coded}${drew}${looked}${saw}${said}`.trimEnd().split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         if (added !== null) await noted({ added, taken: added.waiting(), emit });

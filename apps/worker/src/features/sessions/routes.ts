@@ -22,6 +22,7 @@ import {
   type SessionSummary,
   SkillName,
   StopRequest,
+  TASKS_AT_ONCE,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
@@ -161,6 +162,16 @@ export const sessionError = (c: Context, error: SessionError) => {
       return apiError(c, { status: 404, error: "No such attachment in this session." });
     case "task-not-found":
       return apiError(c, { status: 404, error: "That task isn't running in this session." });
+    case "task-refused":
+      return error.refusal.kind === "too-many"
+        ? apiError(c, {
+            status: 409,
+            error: `This session runs ${TASKS_AT_ONCE} tasks already, the most it runs at once. Stop one first.`,
+          })
+        : apiError(c, {
+            status: 400,
+            error: "That command couldn't be read: check its quotes close.",
+          });
     case "note-refused":
       return apiError(c, {
         status: error.refusal.kind === "storage" ? 500 : 409,

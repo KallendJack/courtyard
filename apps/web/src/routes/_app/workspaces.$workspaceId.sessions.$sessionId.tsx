@@ -17,12 +17,19 @@ import { BranchStrip } from "@/components/code/branch-strip";
 import { ConfirmStep } from "@/components/forms/confirm-step";
 import { FormError } from "@/components/forms/form-error";
 import { RenameForm } from "@/components/forms/rename-form";
+import { useLayout } from "@/components/frame/handheld";
 import { PlaceholderRows } from "@/components/layout/kept";
 import { Notice, StatusPill } from "@/components/layout/notice";
 import { Page, PageTitle } from "@/components/layout/page";
 import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
 import { renameSession } from "../../api/worker-calls.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
+import {
+  ConfirmPreview,
+  PreviewButton,
+  PreviewPanel,
+  usePreview,
+} from "../../features/preview/preview.tsx";
 import type { Steps } from "../../features/sessions/answer/steps.ts";
 import { Composer, type StandIn } from "../../features/sessions/composer/composer.tsx";
 import {
@@ -299,6 +306,27 @@ function Session(props: {
   }, [ready, allowAllKey, router]);
   const askAgain = useCallback(() => void router.invalidate(), [router]);
 
+  // Its preview (#183): a code session's own, not the Lead's, still taking messages.
+  const layout = useLayout();
+  const { preview, start: startPreview } = usePreview({
+    sessionId: session.id,
+    tasksRunning: tasks.filter((task) => task.ended === undefined).length,
+    asking: canAllowAll,
+  });
+  /** The preview open beside the chat, by its address, while it serves. */
+  const [previewing, setPreviewing] = useState<string>();
+  const besideChat = layout === "tablet" && preview?.kind === "serving" ? previewing : undefined;
+  /** Start preview's command is waiting for the owner to confirm it, the first time. */
+  const [confirmingPreview, setConfirmingPreview] = useState(false);
+  const openPreview = useCallback(
+    (address: string) => {
+      // On the cover screen there's no room beside the chat: a tab of its own.
+      if (layout === "cover") window.open(address, "_blank", "noreferrer");
+      else setPreviewing(address);
+    },
+    [layout],
+  );
+
   // A model titled the session after its first answer, after the page loaded it: the new title here
   // and in the sidebar. Once per title, since one the owner gave later differs from it too.
   const loadedTitleOf = useRef<string>(undefined);
@@ -399,15 +427,30 @@ function Session(props: {
         </div>
       ) : (
         session.branch !== undefined && (
-          <div className="mt-3">
-            <BranchStrip
-              branch={session.branch}
-              pullRequest={pullRequest}
-              fixing={running && last?.fixesChecks === true}
-              session={{ workspaceId: session.workspaceId, sessionId: session.id }}
+          <div className="mt-3 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <BranchStrip
+                branch={session.branch}
+                pullRequest={pullRequest}
+                fixing={running && last?.fixesChecks === true}
+                session={{ workspaceId: session.workspaceId, sessionId: session.id }}
+              />
+            </div>
+            <PreviewButton
+              preview={preview}
+              onOpen={openPreview}
+              onStart={startPreview}
+              onConfirm={() => setConfirmingPreview(true)}
             />
           </div>
         )
+      )}
+      {confirmingPreview && preview?.kind === "none" && preview.command !== null && (
+        <ConfirmPreview
+          command={preview.command}
+          onStart={startPreview}
+          onCancel={() => setConfirmingPreview(false)}
+        />
       )}
       {session.allowingAll !== undefined && ended === undefined && (
         <div className="mt-3">
@@ -562,6 +605,15 @@ function Session(props: {
     </Page>
   );
 
+  if (besideChat !== undefined && stepping === undefined) {
+    // The preview beside the chat (#183), on the unfolded Fold and a desktop.
+    return (
+      <div className="flex h-full min-h-0">
+        <div className="min-w-0 flex-1">{conversation}</div>
+        <PreviewPanel address={besideChat} onClose={() => setPreviewing(undefined)} />
+      </div>
+    );
+  }
   if (stepping === undefined) return conversation;
   return (
     <Suspense fallback={conversation}>

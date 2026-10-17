@@ -9,7 +9,8 @@ the Reply box with its last line, and if it crashes, a turn starts telling Claud
 
 - **Uses:** `lib/files.ts` (reading the end of its output), the contract.
 - **Used by:** `sessions/`, which decides each task's command as it decides any (`CodeTurn.task`), records its start
-  and end, and tells the model; `providers/` (Claude's background flag, the fake's `start task:`).
+  and end, and tells the model; `providers/` (Claude's background flag, the fake's `start task:`); `preview/`, through
+  `sessions/`, which reads the start of a running task's output for where it serves (#183) and starts Start preview's.
 
 ## API
 

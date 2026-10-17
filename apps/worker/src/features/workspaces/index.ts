@@ -95,6 +95,8 @@ const WorkspaceConfig = z
     allowlist: AllowlistSettings.optional(),
     /** A code workspace's tool connections (ADR 0008): for now only Paper (ADR 0023). */
     connections: z.object({ paper: PaperSettings.optional() }).optional(),
+    /** The command a code workspace's Start preview runs (#183), once the owner has confirmed it. */
+    preview: z.string().trim().min(1).optional(),
     /** The icon the owner chose, or the one suggested when it was added (#210). */
     icon: z.optional(WorkspaceIcon),
   })
@@ -114,6 +116,7 @@ type Config =
       readonly repoPath?: string;
       readonly allowlist?: AllowlistSettings;
       readonly paper?: PaperSettings;
+      readonly preview?: string;
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -133,6 +136,8 @@ export type Workspace = {
   readonly allowlist: AllowlistSettings;
   /** A code workspace's Paper connection (ADR 0023), or `null` when its config names none. */
   readonly paper: PaperSettings | null;
+  /** The command a code workspace's Start preview runs (#183), or `null` until the owner confirms one. */
+  readonly preview: string | null;
 };
 
 /** Why a workspace couldn't be read, added or changed. */
@@ -169,7 +174,7 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, description, icon, repoPath, allowlist, connections } = parsed.data;
+  const { name, mode, description, icon, repoPath, allowlist, connections, preview } = parsed.data;
   return {
     kind: "read",
     mode,
@@ -179,6 +184,7 @@ const readConfig = async (folder: string): Promise<Config> => {
     ...(repoPath === undefined ? {} : { repoPath }),
     ...(allowlist === undefined ? {} : { allowlist }),
     ...(connections?.paper === undefined ? {} : { paper: connections.paper }),
+    ...(preview === undefined ? {} : { preview }),
   };
 };
 
@@ -225,6 +231,7 @@ const readWorkspace = async (
     repoPath: valid?.mode === "code" ? (valid.repoPath ?? null) : null,
     allowlist: valid?.allowlist ?? { add: [], remove: [], always: [] },
     paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
+    preview: valid?.mode === "code" ? (valid.preview ?? null) : null,
   });
 };
 
@@ -715,6 +722,29 @@ export const connectPaper = async (
       connections: { ...(connections.success ? connections.data : {}), paper: connect.paper },
     };
   });
+  if (!kept.ok) return kept;
+  return readWorkspace(contextDir, summary.id);
+};
+
+/**
+ * Keeps the command a code workspace's Start preview runs (#183), once the owner has confirmed it,
+ * in its config beside anything else there. Refuses a planning workspace, and a config that was
+ * ignored, which is left for the owner to fix.
+ */
+export const keepPreviewCommand = async (
+  contextDir: string,
+  keep: { id: string; command: string },
+): Promise<Result<Workspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, keep.id);
+  if (!workspace.ok) return workspace;
+  const { summary } = workspace.value;
+  if (summary.configProblem !== undefined) {
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  if (summary.mode !== "code") {
+    return err({ kind: "invalid", message: "Only a code workspace previews its app." });
+  }
+  const kept = await keepInConfig(workspace.value, () => ({ preview: keep.command }));
   if (!kept.ok) return kept;
   return readWorkspace(contextDir, summary.id);
 };

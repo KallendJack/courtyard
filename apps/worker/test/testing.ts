@@ -96,6 +96,8 @@ export const testWorker = (
       COURTYARD_CONTEXT_DIR: join(root, "context"),
       COURTYARD_DATA_DIR: join(root, "data"),
       COURTYARD_BUILDS_LOCK_DIR: testBuildsLock(root).dir,
+      // Previews (#183) on free ports the machine picks, so tests side by side never share one.
+      COURTYARD_PREVIEW_PORTS: "0",
       ...env,
     },
   });

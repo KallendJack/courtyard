@@ -97,6 +97,9 @@ export default defineConfig({
         COURTYARD_DATA_DIR: "test-results/e2e/data",
         // A builds lock of its own (#306), never the machine's, which `pnpm e2e` itself holds.
         COURTYARD_BUILDS_LOCK_DIR: "test-results/e2e/builds",
+        // Previews' ports (#183) of their own, never the live worker's (9901 to 9906), moved up as
+        // the copy's own ports are, so copies side by side never share one.
+        COURTYARD_PREVIEW_PORTS: `${7901 + portShift}-${7906 + portShift}`,
         ...providers,
       },
     },
@@ -109,6 +112,7 @@ export default defineConfig({
         COURTYARD_CONTEXT_DIR: "test-results/e2e-fresh-start/context",
         COURTYARD_DATA_DIR: "test-results/e2e-fresh-start/data",
         COURTYARD_BUILDS_LOCK_DIR: "test-results/e2e-fresh-start/builds",
+        COURTYARD_PREVIEW_PORTS: `${7907 + portShift}-${7909 + portShift}`,
         ...providers,
       },
     },

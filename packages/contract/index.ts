@@ -140,6 +140,13 @@ export {
   WantedItem,
 } from "./lib/planning-home.ts";
 export {
+  PREVIEW_COMMAND_MAX_LENGTH,
+  PREVIEW_SIZES,
+  Preview,
+  PreviewSize,
+  StartPreview,
+} from "./lib/preview.ts";
+export {
   ChangedFile,
   MergeReadiness,
   OpenPullRequest,

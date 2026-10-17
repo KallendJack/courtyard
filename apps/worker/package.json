@@ -19,6 +19,7 @@
     "@modelcontextprotocol/sdk": "1.32.0",
     "@openai/codex": "0.161.0",
     "hono": "^4.13.12",
+    "playwright-core": "1.63.0",
     "sharp": "0.35.5",
     "unpdf": "1.8.1",
     "web-push": "3.6.7",

@@ -10,6 +10,8 @@ import {
   type OwnerContextShared,
   OwnerSection,
   type PlacedLine,
+  PREVIEW_SIZES,
+  PreviewSize,
   type PullRequestReview,
   pinText,
   placeName,
@@ -974,6 +976,8 @@ const instructionsFor = (turn: {
   documents: boolean;
   things: boolean;
   lead: LeadBrief | undefined;
+  /** It offers the preview screenshot tool (#183). */
+  previews: boolean;
 }) => {
   const { workspace, capabilities } = turn;
   const fromOwner = sharedOwnerContext(workspace);
@@ -1014,6 +1018,7 @@ const instructionsFor = (turn: {
     ...(workspace.mode === "code" && capabilities.usesTools && workspace.paperFile !== undefined
       ? [paperPart(workspace.paperFile)]
       : []),
+    ...(turn.previews ? [PREVIEWING] : []),
     ...(turn.documents ? [DOCUMENTING] : []),
     ...(turn.things ? [KEEPING_THINGS] : []),
     ...(turn.skills.offered.length > 0 ? [skillsListPart(turn.skills.offered)] : []),
@@ -1104,7 +1109,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
    */
   let didFirst: Activity[] = [];
   /** Each task's command, by its id (#182). */
-  const commands = new Map<string, string>();
+  const commands = new Map<string, { command: string; preview: boolean }>();
   const answer = (change: (answer: ModelSaid) => Partial<ModelSaid>) => {
     // A task's line (#182) can come mid-answer: the answer is the one before it.
     const at = said.findLastIndex((each) => each.speaker !== "courtyard");
@@ -1163,13 +1168,19 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         break;
       // Every task's start and end, where it happened (#182).
       case "task-started":
-        commands.set(event.task, event.command);
-        said.push({ speaker: "courtyard", text: taskLine(event.command, "started") });
+        commands.set(event.task, { command: event.command, preview: event.preview === true });
+        said.push({
+          speaker: "courtyard",
+          text: taskLine(event.command, "started", event.preview === true),
+        });
         break;
       case "task-ended": {
-        const command = commands.get(event.task);
-        if (command !== undefined) {
-          said.push({ speaker: "courtyard", text: taskLine(command, endedWords(event.ending)) });
+        const started = commands.get(event.task);
+        if (started !== undefined) {
+          said.push({
+            speaker: "courtyard",
+            text: taskLine(started.command, endedWords(event.ending), started.preview),
+          });
         }
         break;
       }
@@ -1333,7 +1344,9 @@ const attachedNote = (names: readonly string[]) =>
   names.length === 0 ? [] : [`attached ${names.map(quoted).join(", ")}`];
 
 /** A task's start or end as the conversation tells it (#182): "your task `pnpm dev` started". */
-const taskLine = (command: string, how: string) => `your task \`${command}\` ${how}.`;
+/** A task's start or end as the model reads it (#182): its own, or the owner's preview (#183). */
+const taskLine = (command: string, how: string, preview: boolean) =>
+  `${preview ? "the owner's preview" : "your task"} \`${command}\` ${how}.`;
 
 const lineFor = (said: Said) => {
   if (said.speaker === "courtyard") return `Courtyard: ${said.text}`;
@@ -1451,10 +1464,14 @@ export const framingFor = (turn: {
   const searches = turn.capabilities.searchesWeb && turn.workspace.mode === "planning";
   // Beside the save tool, in a planning workspace (ADR 0020).
   const documents = saves && turn.workspace.mode === "planning";
+  // In a code session, never the Lead's, which runs no app (#183).
+  const previews =
+    saves && turn.workspace.mode === "code" && turn.capabilities.codes && turn.lead === undefined;
   const instructions = instructionsFor({
     ...turn,
     lead: turn.lead,
     saves,
+    previews,
     suggests,
     searches,
     documents,
@@ -1482,6 +1499,7 @@ export const framingFor = (turn: {
       ...(offersSkillTool ? [USE_SKILL_TOOL] : []),
       ...(suggests ? [SUGGEST_REPLIES_TOOL] : []),
       ...(saves && turn.lead !== undefined ? [LEAD_TOOL] : []),
+      ...(previews ? [PREVIEW_TOOL] : []),
     ],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
     // Only a provider that codes works in a code workspace (ADR 0007).
@@ -1826,6 +1844,66 @@ export const PAPER_MAKES_NO_FILES =
  */
 export const PAPER_FAILED =
   "If that failed because Paper couldn't be reached, Paper isn't open on the worker machine: tell the owner so, don't try to open it, and carry on with the rest of the work.";
+
+/** The preview screenshot tool's name, as a code session's model calls it (#183). */
+export const PREVIEW_TOOL_NAME = "preview_screenshot" satisfies TurnToolName;
+
+/** What a code session's model is told about its previews (docs/ai-conduct.md, Previews; #183). */
+const PREVIEWING = `When one of your tasks serves a web page (a dev server printing http://localhost:<port>), the owner can open it from their phone with the session's Preview button, and you can look at it with the ${PREVIEW_TOOL_NAME} tool: give it a page's path and a size (cover for the Fold's cover screen, unfolded for the Fold open, or desktop). Each screenshot shows in the chat too, so take one when a change is ready for the owner to look at, at each size it changes. A screenshot shows the page as the owner sees it, logged in as they are in the preview: if it shows a login page, ask the owner to log in there first.`;
+
+/** The preview screenshot tool as a code session's model reads it (#183). */
+const PREVIEW_TOOL: TurnTool = {
+  name: PREVIEW_TOOL_NAME,
+  description: `Takes a screenshot of a page of this session's running app, as the owner sees it: give the page's path from the app's root (/ for its home) and a size: cover (${PREVIEW_SIZES.cover.width} by ${PREVIEW_SIZES.cover.height}, the Fold's cover screen), unfolded (${PREVIEW_SIZES.unfolded.width} by ${PREVIEW_SIZES.unfolded.height}, the Fold open) or desktop (${PREVIEW_SIZES.desktop.width} by ${PREVIEW_SIZES.desktop.height}). The screenshot comes back to you and shows in the owner's chat.`,
+  input: {
+    path: z.string().describe("The page's path from the app's root, starting with /."),
+    size: PreviewSize.describe("The size to look at it in."),
+  },
+};
+
+/** What the preview screenshot tool did (#183), as its reply tells it. */
+export type PreviewToolDone =
+  | {
+      readonly kind: "taken";
+      readonly path: string;
+      readonly size: PreviewSize;
+      readonly png: Uint8Array;
+    }
+  | { readonly kind: "nothing-serving" }
+  | { readonly kind: "failed"; readonly reason: string }
+  | { readonly kind: "malformed" };
+
+/** What a code session's model is told about a call to the preview screenshot tool (#183). */
+export const previewToolReply = (done: PreviewToolDone): ToolReply => {
+  switch (done.kind) {
+    case "taken":
+      return {
+        ok: true,
+        content: [
+          {
+            kind: "text",
+            text: `Here's ${done.path} at the ${done.size} size, as it shows in the owner's chat.`,
+          },
+          {
+            kind: "image",
+            dataUrl: `data:image/png;base64,${Buffer.from(done.png).toString("base64")}`,
+          },
+        ],
+      };
+    case "nothing-serving":
+      return textReply(
+        false,
+        "Nothing in this session serves a web page now, so there's nothing to take a screenshot of. Start the app's dev server as a task (in the background), then try again once it has said where it serves.",
+      );
+    case "failed":
+      return textReply(false, `The screenshot couldn't be taken: ${done.reason}`);
+    case "malformed":
+      return textReply(
+        false,
+        "That input doesn't fit this tool: it takes a page's path, starting with /, and a size: cover, unfolded or desktop.",
+      );
+  }
+};
 
 /**
  * What a model is told when it tries to read a web page it may not (ADR 0019): one that's neither
