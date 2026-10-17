@@ -451,9 +451,7 @@ export const createWorker = (options: {
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
 
   /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
-  const workspaceDetail = async (
-    id: string,
-  ): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
+  const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(contextDir, id),
       readOwnerContext(contextDir),

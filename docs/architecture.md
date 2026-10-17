@@ -9,7 +9,8 @@ in the spec issues on GitHub (the original is [`spec.md`](spec.md), frozen), why
 ## The big picture
 
 Courtyard is two parts. The **web app** is what the owner opens in a browser: it shows things and asks the worker,
-and keeps nothing itself. The **worker** does everything else: it checks the owner's login, keeps the context folder
+and keeps nothing itself but, on a device that turns it on, a read-only copy to read offline
+([ADR 0030](adr/0030-the-web-app-may-keep-a-read-only-copy.md)). The **worker** does everything else: it checks the owner's login, keeps the context folder
 and the data folder, and runs sessions by talking to providers. Both run from one machine, and the owner reaches them
 through their own HTTPS proxy ([ADR 0001](adr/0001-the-worker-owns-everything-the-web-app-is-static-files.md),
 [ADR 0002](adr/0002-one-owner-private-network-https-through-the-owners-proxy.md)).
@@ -124,6 +125,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 
 - [`live/`](../apps/worker/src/features/live/README.md): the live copy's updates and main's build.
 - [`notifications/`](../apps/worker/src/features/notifications/README.md): web push to the owner's devices.
+- [`offline-copy/`](../apps/worker/src/features/offline-copy/README.md): the copy a device keeps to read offline,
+  `GET /api/offline-copy` (#106).
 - [`fresh-start/`](../apps/worker/src/features/fresh-start/README.md): clearing the context folder and setting sessions aside.
 
 *Who may do what* (`auth/`)
@@ -158,7 +161,8 @@ helpers for the tests and the context eval), and **`apps/worker/eval/`** is the 
 
 - **`main.tsx`** starts the router, which moves the scroll only for a move to another page (to the top, or back
   to where that page was), never when a page reloads its data (#168). **`routes/`** holds one file per page (TanStack Router; `routeTree.gen.ts` is
-  generated). `__root.tsx` checks the worker is reachable; `_app.tsx` is the layout behind the login, with the
+  generated). `__root.tsx` checks the worker is reachable, and when it isn't, reads this device's offline copy if
+it keeps one (#106), which every page below then reads from; `_app.tsx` is the layout behind the login, with the
   workspaces down the side or across the top; the rest are pages. `_app/index.tsx` is the home page (#102), the
   workspaces as tiles; `_app/settings.tsx` is Settings, with everything that used to be on the home page besides
   them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
@@ -202,6 +206,8 @@ helpers for the tests and the context eval), and **`apps/worker/eval/`** is the 
   - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
   - [`live/`](../apps/web/src/features/live/README.md): Update, and main's build.
   - [`notifications/`](../apps/web/src/features/notifications/README.md): this device's notifications toggle.
+  - [`offline-copy/`](../apps/web/src/features/offline-copy/README.md): Read offline (#106): this device's switch, its
+    copy in IndexedDB, kept fresh, and the pages read from it while the worker can't be reached.
   - [`sign-ins/`](../apps/web/src/features/sign-ins/README.md): Settings' sign-ins and Connections.
   - [`fresh-start/`](../apps/web/src/features/fresh-start/README.md): what a fresh start would clear.
   - [`login/`](../apps/web/src/features/login/README.md): the setup and login form.
@@ -331,7 +337,8 @@ is in each session a list shows and what it waits on the owner for, with what th
 owner, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
-which only that page parses), backup, live updates with main's build, fresh start, health and errors, and a `chart`
+which only that page parses), backup, live updates with main's build, fresh start, the offline copy
+(`offline-copy.ts`, #106), health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
 `command-words.ts` reads a shell command's words as a POSIX shell does, which the worker matches against the
 allowlist and the web app summarises a command's activity line from (#285). The worker's
@@ -609,6 +616,13 @@ things live only in the worker's memory and go when it restarts.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
 
 **Only in the worker's memory:** usage limits, tidies waiting for review, and which turns are running.
+
+**On a device that keeps an offline copy** (#106, [ADR 0030](adr/0030-the-web-app-may-keep-a-read-only-copy.md)):
+the copy the worker gave it (`GET /api/offline-copy`), whole and read-only, in the browser's IndexedDB (`courtyard`,
+its `offline-copy` store), and the switch that it keeps one, in `localStorage`. The worker keeps no list of these
+devices. The copy is updated when the app opens or comes back into view and every 15 minutes, and wiped on logging out
+on that device, on hearing it's logged out (from another device), or on turning the switch off. While the worker
+can't be reached, the root route reads it (its context's `reading`) and the pages' loaders answer from it.
 
 **The other settings** set the worker's port (`COURTYARD_PORT`), point at the web app's built files
 (`COURTYARD_WEB_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by

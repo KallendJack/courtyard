@@ -9,6 +9,8 @@ export type WorkspaceTab = {
   readonly label: string;
   /** How many it holds, shown after its name; none for Home. */
   readonly count?: number;
+  /** What it holds can't be shown now: read offline, the copy doesn't keep it (#106). */
+  readonly faint?: boolean;
 };
 
 /**
@@ -44,7 +46,9 @@ export function WorkspaceTabs(props: {
               "flex h-11 shrink-0 items-center gap-2 rounded-full px-4.5 text-interface outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               chosen
                 ? "border-stroke border-primary-text bg-primary/12 font-bold text-foreground"
-                : "bg-secondary font-semibold text-foreground/85 hover:bg-muted",
+                : tab.faint === true
+                  ? "bg-secondary/50 font-semibold text-placeholder"
+                  : "bg-secondary font-semibold text-foreground/85 hover:bg-muted",
             )}
           >
             {tab.label}

@@ -20,5 +20,6 @@ worker, with no extra process on that box. The page then still loads when the wo
 
 ## Consequences
 
-- Nothing works while the worker is off except a page saying so. Models are unavailable then anyway.
+- Nothing works while the worker is off except a page saying so. Models are unavailable then anyway. (Amended by ADR
+  0030: a device that keeps a read-only copy reads it then.)
 - Login is the worker's job (ADR 0002), so there is no shared secret between two servers.

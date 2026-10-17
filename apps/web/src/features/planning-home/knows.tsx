@@ -32,8 +32,24 @@ export function WhatCourtyardKnows(props: {
   contextFile: ContextFile | null;
   ownerContextShared: OwnerContextShared;
   skills: readonly SkillSummary[] | undefined;
+  /** Read from the device's copy (#106): the lines alone, with nothing that needs the worker. */
+  readOnly?: boolean;
 }) {
   const { workspaceId, contextFile, ownerContextShared } = props;
+  if (props.readOnly === true) {
+    return (
+      <section aria-label="What Courtyard knows" className={CARD}>
+        <SectionTitle>What Courtyard knows</SectionTitle>
+        {contextFile === null ? (
+          <EmptyState>Nothing yet.</EmptyState>
+        ) : (
+          <div className="mt-4 space-y-6">
+            <FactsPlansIdeas {...contextFile} />
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       <section aria-label="What Courtyard knows" className={CARD}>

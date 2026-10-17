@@ -11,6 +11,7 @@ import { IconChooser } from "@/components/sheets/icon-chooser";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../api/worker.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
+import { ReadCodeHome } from "../../features/offline-copy/read-code-home.tsx";
 import type { Deleted } from "../../features/planning-home/planning-home.tsx";
 import {
   KEPT_SESSIONS,
@@ -48,15 +49,16 @@ export const Route = createFileRoute("/_app/workspaces/$workspaceId/")({
     };
   },
   // The loader stays in the first load, so it only imports what the page asks for.
-  loader: ({ params }) =>
+  loader: ({ params, context }) =>
     import("../../api/workspace-page.ts").then((page) =>
-      page.loadWorkspacePage(params.workspaceId),
+      page.loadWorkspacePage(params.workspaceId, context.reading),
     ),
   component: Workspace,
 });
 
 function Workspace() {
-  const { detail, home, sessions, providers, skills, documents, things } = Route.useLoaderData();
+  const { detail, home, sessions, providers, skills, documents, things, offline } =
+    Route.useLoaderData();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
@@ -71,10 +73,11 @@ function Workspace() {
   const sessionList = useSessionList(
     params.workspaceId,
     sessions.kind === "loaded" ? sessions.data : undefined,
+    offline === undefined,
   );
 
   const pr = pullRequestIn(hash);
-  if (pr !== undefined && detail.kind === "loaded") {
+  if (pr !== undefined && detail.kind === "loaded" && offline === undefined) {
     // A pull request no session opened, on a page of its own (#278).
     const workspaceId = detail.data.workspace.id;
     return (
@@ -101,6 +104,28 @@ function Workspace() {
     return <Problem result={detail.kind === "loaded" ? NOT_FOUND : detail} />;
   }
   const { workspace, contextFile, ownerContextShared } = detail.data;
+
+  if (offline !== undefined) {
+    // Read from the device's copy (#106): its name alone, with nothing that needs the worker.
+    const title = <PageTitle>{workspace.name}</PageTitle>;
+    return home.kind === "code" ? (
+      <ReadCodeHome header={title} list={sessionList} offline={offline} />
+    ) : (
+      <home.Home
+        header={title}
+        workspace={workspace}
+        contextFile={contextFile}
+        ownerContextShared={ownerContextShared}
+        duePlans={detail.data.duePlans ?? []}
+        list={sessionList}
+        loaded={{ providers, skills, documents, things }}
+        hash={hash}
+        deleted={undefined}
+        onUndone={async () => {}}
+        offline={offline}
+      />
+    );
+  }
 
   const change = async (wanted: { name: string } | { icon: typeof workspace.icon }) => {
     const changed = await changeWorkspace(workspace.id, wanted);
@@ -245,16 +270,25 @@ const NO_SESSIONS: CodeSessionList = { sessions: [], running: 0 };
  * (#179) and where each pull request stands (#240), and every 30 seconds otherwise, so one started
  * from another device shows. What it hears is kept for the workspace's tiles too.
  */
-const useSessionList = (workspaceId: string, loaded: CodeSessionList | undefined) => {
+const useSessionList = (
+  workspaceId: string,
+  loaded: CodeSessionList | undefined,
+  /** Whether to ask the worker: not while reading the device's copy (#106). */
+  asking: boolean,
+) => {
   const [asked, setAsked] = useState<{ from: CodeSessionList; now: CodeSessionList }>();
   const fromPage = loaded ?? NO_SESSIONS;
   // The page's own list until a newer one is asked for, and again whenever the page reloads it.
   const list = asked?.from === fromPage ? asked.now : fromPage;
-  useFreshSessions(list.sessions, async () => {
-    const now = await loadSessions(workspaceId);
-    if (now === undefined) return;
-    setAsked({ from: fromPage, now });
-    KEPT_SESSIONS.set(workspaceId, now);
-  });
+  useFreshSessions(
+    list.sessions,
+    async () => {
+      const now = await loadSessions(workspaceId);
+      if (now === undefined) return;
+      setAsked({ from: fromPage, now });
+      KEPT_SESSIONS.set(workspaceId, now);
+    },
+    asking,
+  );
   return list;
 };

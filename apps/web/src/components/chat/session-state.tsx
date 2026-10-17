@@ -112,8 +112,30 @@ export function ListedSessionText(props: {
   updatedAt: string;
   /** When something happened, as the page says it. */
   when: (iso: string) => string;
+  /**
+   * Read from the device's copy (#106; Paper, "Cover · Workspace, offline"): no state, only when
+   * it was last active, and, when the copy doesn't keep its conversation, faint, saying so.
+   */
+  offline?: "kept" | "not-kept";
 }) {
   const { now } = props;
+  if (props.offline !== undefined) {
+    const notKept = props.offline === "not-kept";
+    return (
+      <span className={classes("flex min-w-0 flex-col gap-1", notKept && "text-placeholder")}>
+        <span className="truncate font-medium">{props.title}</span>
+        <span
+          className={classes(
+            "truncate font-mono text-caption/3.75",
+            notKept ? "text-placeholder" : "text-muted-foreground",
+          )}
+        >
+          {props.when(props.updatedAt)}
+          {notKept && " · Not kept offline"}
+        </span>
+      </span>
+    );
+  }
   return (
     <ChatFlowScope grows>
       <span className="flex min-w-0 flex-col gap-1">

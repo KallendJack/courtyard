@@ -15,11 +15,13 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Notice } from "@/components/layout/notice";
+import { NotKept, OfflineLine } from "@/components/layout/offline";
 import { Page } from "@/components/layout/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { FromWorker } from "../../api/worker.ts";
+import type { OfflinePage } from "../../api/workspace-page.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { DocumentsSection } from "../documents/documents-section.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
@@ -76,13 +78,22 @@ export default function PlanningHome(props: {
   hash: string;
   deleted: Deleted | undefined;
   onUndone: () => Promise<void>;
+  /**
+   * Read from the device's copy (#106; Paper, "Cover · Workspace, offline"): read-only, its Things
+   * and Docs faint (not kept), and the grey line saying it's a copy in place of the message box.
+   */
+  offline?: OfflinePage;
 }) {
-  const { workspace, contextFile, list, deleted } = props;
+  const { workspace, contextFile, list, deleted, offline } = props;
   const { providers, skills, documents, things } = props.loaded;
   const navigate = useNavigate();
 
-  const thingCount = things.kind === "loaded" ? things.data.things.length : 0;
-  const docCount = documents.kind === "loaded" ? documents.data.documents.length : 0;
+  const thingCount =
+    offline?.notKept.things ?? (things.kind === "loaded" ? things.data.things.length : 0);
+  const docCount =
+    offline?.notKept.documents ??
+    (documents.kind === "loaded" ? documents.data.documents.length : 0);
+  const faint = offline === undefined ? {} : { faint: true };
   const tabs: WorkspaceTab[] = [
     { hash: "", label: "Home" },
     ...(list.sessions.length > 0
@@ -90,10 +101,10 @@ export default function PlanningHome(props: {
       : []),
     // A tab whose last one was just deleted stays, with its Undo.
     ...(thingCount > 0 || deleted?.kind === "thing" || hasProblems(things)
-      ? [{ hash: "things", label: "Things", count: thingCount }]
+      ? [{ hash: "things", label: "Things", count: thingCount, ...faint }]
       : []),
     ...(docCount > 0 || deleted?.kind === "document"
-      ? [{ hash: "docs", label: "Docs", count: docCount }]
+      ? [{ hash: "docs", label: "Docs", count: docCount, ...faint }]
       : []),
   ];
   const asked = placeIn(props.hash);
@@ -138,7 +149,11 @@ export default function PlanningHome(props: {
   const footer = (
     <div data-planning-home="">
       <div>
-        {providers.kind === "loaded" ? (
+        {offline !== undefined ? (
+          <div className="pt-2 pb-3 md:pb-6">
+            <OfflineLine at={offline.at} />
+          </div>
+        ) : providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
             placeholder="Talk or type to start a session…"
@@ -170,7 +185,13 @@ export default function PlanningHome(props: {
           className={classes("mt-4 flex flex-col gap-3.5", place === "" && "md:min-h-0 md:flex-1")}
         >
           {place === "sessions" ? (
-            <SessionLinks list={list} mode="planning" />
+            <SessionLinks
+              list={list}
+              mode="planning"
+              {...(offline === undefined ? {} : { kept: offline.conversations })}
+            />
+          ) : offline !== undefined && (place === "things" || place === "docs") ? (
+            <NotKept />
           ) : place === "things" ? (
             things.kind === "loaded" && (
               <ThingsSection
@@ -195,6 +216,7 @@ export default function PlanningHome(props: {
               contextFile={contextFile}
               ownerContextShared={props.ownerContextShared}
               skills={skills.kind === "loaded" ? skills.data.skills : undefined}
+              readOnly={offline !== undefined}
             />
           ) : (
             <>

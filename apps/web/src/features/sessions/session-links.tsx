@@ -1,6 +1,7 @@
 import {
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
+  type SessionId,
   type SessionSummary,
   type WorkspaceMode,
 } from "@courtyard/contract";
@@ -33,8 +34,17 @@ export const sessionEnded = (session: Listed) =>
  * shows them as a card; a code workspace's, on its Sessions tab (#301), its Lead pinned at the
  * top with its mark and its builders marked "by Lead" (#347).
  */
-export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
+export function SessionLinks(props: {
+  list: CodeSessionList;
+  mode: WorkspaceMode;
+  /**
+   * Read from the device's copy (#106): the sessions whose conversations it keeps. The rest stay
+   * listed, faint, and say they're not kept; nothing says whose turn it is or what's running.
+   */
+  kept?: ReadonlySet<SessionId>;
+}) {
   const { sessions, running } = props.list;
+  const { kept } = props;
   if (sessions.length === 0) return null;
   // A session whose pull request was merged or closed has ended: it leaves the sessions for
   // History, so its place is free for a new one (#278).
@@ -53,7 +63,7 @@ export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <SectionTitle>Sessions</SectionTitle>
             <div className="flex items-center gap-3">
-              {props.mode === "code" && (
+              {props.mode === "code" && kept === undefined && (
                 <span className="text-meta text-muted-foreground">
                   {running} of {CODE_SESSIONS_AT_ONCE} code sessions running
                 </span>
@@ -61,21 +71,28 @@ export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode
               {replies && <MarkAllRead workspaceId={sessions[0]?.workspaceId} />}
             </div>
           </div>
-          <SessionList sessions={current} />
+          <SessionList sessions={current} kept={kept} />
         </section>
       )}
       {history.length > 0 && (
         <section aria-label="History" className={CARD}>
           <SectionTitle>History</SectionTitle>
-          <SessionList sessions={history} />
+          <SessionList sessions={history} kept={kept} />
         </section>
       )}
     </>
   );
 }
 
-/** Sessions, each a link with whose turn it is and what it waits on, and Remove for one queued. */
-function SessionList(props: { sessions: readonly Listed[] }) {
+/**
+ * Sessions, each a link with whose turn it is and what it waits on, and Remove for one queued; or,
+ * read offline (`kept`), each with when it was last active, faint where it isn't kept.
+ */
+function SessionList(props: {
+  sessions: readonly Listed[];
+  kept: ReadonlySet<SessionId> | undefined;
+}) {
+  const { kept } = props;
   return (
     <ul className="mt-2 divide-y">
       {props.sessions.map((session) => (
@@ -90,6 +107,9 @@ function SessionList(props: { sessions: readonly Listed[] }) {
               now={session.now}
               updatedAt={session.updatedAt}
               when={describeWhen}
+              {...(kept === undefined
+                ? {}
+                : { offline: kept.has(session.id) ? "kept" : "not-kept" })}
             />
             {session.lead === true && <LeadMark />}
             {session.byLead === true && <ByLead />}

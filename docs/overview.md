@@ -13,7 +13,7 @@ is the short version: what the parts are, where their code lives, and what each 
 
 | Part | Its job |
 |---|---|
-| 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself. |
+| 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself but a read-only copy to read offline, on a device that turns it on. |
 | 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. |
 | 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. |
 
@@ -112,9 +112,9 @@ blocked     and worktree    waits on         checks
 
 ### ⚙️ Running Courtyard
 
-**Worker features:** `live` · `notifications` · `fresh-start`
+**Worker features:** `live` · `notifications` · `offline-copy` · `fresh-start`
 
-**Web features:** `live` · `notifications` · `sign-ins` · `fresh-start` · `login`
+**Web features:** `live` · `notifications` · `offline-copy` · `sign-ins` · `fresh-start` · `login`
 
 You tap Update:
 
@@ -123,6 +123,8 @@ live ─► main moved on? ─► waits for builds and turns ─► updates and 
 ```
 
 - **`notifications`** pushes "needs your approval" and "answer ready" to your devices.
+- **`offline-copy`** is what a device keeps to read while the worker can't be reached: your context and each
+  workspace's 5 latest conversations, read-only, wiped when the device logs out.
 
 ### 🔒 The edges (`auth/`)
 
