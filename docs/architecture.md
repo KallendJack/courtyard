@@ -146,6 +146,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - **`files.ts`:** reads, writes (making the folder, with `writeTextFileIn`) and removes files, and JSON checked with
   a schema.
 - **`git.ts`:** runs git, never stopping to ask for a password.
+- **`commands.ts`:** runs a command line through bash and waits for it, keeping the end of what it printed, and ends
+  a process and everything it started (a Codex coding command, #248; a task's keeper, #182).
 - **`result.ts`:** the `Result` type.
 
 Beside `src/`, **`apps/worker/test/`** holds the API tests and **`testing.ts`** (a worker on temporary folders, and
@@ -689,7 +691,11 @@ Everything Courtyard's models read is built in one place, from written rules, an
     asked of the worker (ADR 0023).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
-    finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019).
+    finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019). In a code
+    session its shell stays off too: it codes with Courtyard's coding tools (`run_command`, `write_file`,
+    `edit_file`), each asked of the worker through `CodeTurn` as Claude's hook asks, then done by the adapter in the
+    worktree, a command through bash with the session's environment (`lib/commands.ts`); it reads the repository's
+    `AGENTS.md` (else `CLAUDE.md`) from the worktree ([ADR 0029](adr/0029-codex-codes-through-courtyards-own-tools.md)).
     [`docs/real-codex-check.md`](real-codex-check.md) checks what's switched off against a real Codex before its
     version changes. Each photo goes with the message as `localImage` input, by its path in the data folder.
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or

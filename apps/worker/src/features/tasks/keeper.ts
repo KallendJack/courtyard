@@ -5,7 +5,8 @@
 //
 //   node keeper.ts <word> [more words]
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { endProcessTree } from "../../lib/commands.ts";
 
 const words = process.argv.slice(2);
 const windows = process.platform === "win32";
@@ -30,22 +31,7 @@ const endTree = () => {
   const { pid } = child;
   if (ending || pid === undefined || child.exitCode !== null) return;
   ending = true;
-  if (windows) {
-    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    return;
-  }
-  const signal = (name: NodeJS.Signals) => {
-    try {
-      process.kill(-pid, name);
-    } catch {
-      // Gone already.
-    }
-  };
-  signal("SIGTERM");
-  setTimeout(() => signal("SIGKILL"), 3000).unref();
+  endProcessTree(pid);
 };
 
 process.stdin.setEncoding("utf8");

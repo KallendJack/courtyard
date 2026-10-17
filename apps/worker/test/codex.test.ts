@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type Activity,
+  type ApprovalAsk,
   Effort,
   ModelId,
   ProviderList,
@@ -17,11 +18,15 @@ import {
   createCodexProvider,
   type StartAppServer,
 } from "../src/providers/codex.ts";
+import { createFakeProvider } from "../src/providers/fake.ts";
 import type { TurnInput } from "../src/providers/index.ts";
 import {
   asOwner,
-  errorOf,
+  codeRepo,
+  codeWorkspace,
+  FAKE_MODEL,
   followSession,
+  gitIn,
   postJson,
   removeTestFolder,
   testWorker,
@@ -332,6 +337,7 @@ const runTurn = async (
       attachments: [],
       tools: [],
       fileTools: null,
+      codeTools: null,
       webSearch: null,
     },
     callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
@@ -365,7 +371,7 @@ describe("Codex's status", () => {
       available: true,
       capabilities: {
         readsFiles: true,
-        codes: false,
+        codes: true,
         usesTools: false,
         savesContext: true,
         searchesWeb: true,
@@ -709,6 +715,7 @@ describe("a Codex turn", () => {
         ],
         tools: [],
         fileTools: null,
+        codeTools: null,
         webSearch: null,
       },
     });
@@ -738,6 +745,7 @@ describe("a Codex turn", () => {
         ],
         tools: [],
         fileTools: null,
+        codeTools: null,
         webSearch: null,
       },
     });
@@ -790,6 +798,7 @@ describe("web search on a Codex turn (ADR 0019)", () => {
     attachments: [],
     tools: [],
     fileTools: null,
+    codeTools: null,
     webSearch: { ownerLinks: [] },
   };
 
@@ -1652,29 +1661,286 @@ describe("Courtyard's tools on a Codex turn, after the review", () => {
 
     expect(textOf(answers[0])).toContain("notes/rack.md:1: The rack goes against the back wall.");
   });
+});
 
-  it("isn't used in a code workspace, since it doesn't code yet (ADR 0007)", async () => {
-    await writeFile(
-      join(workspace, "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
-    const codex = standIn({ turn: async (turn) => turn.complete("completed") });
+describe("a Codex code session (#248)", () => {
+  // Codex codes through Courtyard's own tools, its shell off as in planning: every command and
+  // edit goes through the same check as Claude's, and the worker does it in the session's
+  // worktree. Real git, in temporary repositories.
+  let root: string;
+  let repo: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    ({ repo } = await codeRepo(root));
+    await codeWorkspace(root, "side-project", repo);
+  });
+
+  afterEach(async () => {
+    await removeTestFolder(root);
+  });
+
+  type Call = { tool: string; args: unknown };
+
+  /**
+   * A Codex session in the code workspace whose first turn makes the scripted tool calls, each
+   * approval it asks for answered with `answer`: the worker's answer to each call, what it asked,
+   * its events, the stand-in, and the session's worktree.
+   */
+  const codingTurn = async (calls: readonly Call[], answer: "allow" | "deny" = "deny") => {
+    const answers: Message[] = [];
+    const codex = standIn({
+      turn: async (turn) => {
+        for (const { tool, args } of calls) answers.push(await turn.call(tool, args));
+        delta(turn, "Done.");
+        turn.complete("completed");
+      },
+    });
     const provider = createCodexProvider({
       dataDir: join(root, "data"),
       startAppServer: codex.startAppServer,
     });
     const request = await asOwner(testWorker({ root, providers: [provider] }));
-
-    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
-      text: "Where should the rack go?",
+    const response = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: "Tidy up the readme.",
       model: { provider: "codex", model: "gpt-6.1-sol" },
     });
+    expect(response.status).toBe(201);
+    const { id } = SessionSummary.parse(await response.json());
+    const asked: ApprovalAsk[] = [];
+    const events = await followSession(request, {
+      sessionId: id,
+      until: (event) => event.type === "turn-completed" || event.type === "turn-failed",
+      onEvent: (event) => {
+        if (event.type !== "approval-requested") return;
+        asked.push(event.ask);
+        void postJson(request, `/api/sessions/${id}/approvals/${event.seq}`, { answer });
+      },
+    });
+    const worktree = z.object({ cwd: z.string() }).parse(codex.requests("thread/start")[0]?.params);
+    return { answers, asked, events, codex, worktree: worktree.cwd };
+  };
 
-    expect(response.status).toBe(409);
-    expect(await errorOf(response)).toBe(
-      "Codex can't code, so it can't work in a code workspace. Pick a model that can.",
+  const AnswerText = z.object({
+    result: z.object({
+      success: z.boolean(),
+      contentItems: z.array(z.object({ text: z.string() })),
+    }),
+  });
+  /** A tool's answer as Codex reads it: whether it worked, and its text. */
+  const answerOf = (message: Message | undefined) => {
+    const { result } = AnswerText.parse(message);
+    return {
+      success: result.success,
+      text: result.contentItems.map((item) => item.text).join("\n"),
+    };
+  };
+  const activitiesIn = (events: readonly { type: string }[]) =>
+    events.flatMap((event) =>
+      event.type === "activity" && "activity" in event ? [event.activity] : [],
     );
-    expect(codex.requests("thread/start")).toEqual([]);
+
+  it("says Codex codes", async () => {
+    const codex = standIn();
+
+    const status = await createCodexProvider({
+      dataDir,
+      startAppServer: codex.startAppServer,
+    }).status();
+
+    expect(status).toMatchObject({ available: true, capabilities: { codes: true } });
+  });
+
+  it("works in the session branch's worktree, with Courtyard's coding tools and the repository's own instructions, and still no shell of Codex's", async () => {
+    const { codex, worktree, events } = await codingTurn([]);
+
+    expect(events.at(-1)).toMatchObject({ type: "turn-completed" });
+    expect(worktree).not.toBe(repo);
+    expect(await readFile(join(worktree, "README.md"), "utf8")).toBe("# A project\n");
+    const started = z
+      .object({
+        dynamicTools: z.array(z.object({ name: z.string() })),
+        sandbox: z.string(),
+        approvalPolicy: z.string(),
+        config: z.record(z.string(), z.unknown()),
+      })
+      .parse(codex.requests("thread/start")[0]?.params);
+    expect(started.dynamicTools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "list_folder",
+        "read_file",
+        "search_files",
+        "run_command",
+        "write_file",
+        "edit_file",
+        "use_skill",
+      ]),
+    );
+    // Codex's own shell and patches stay off: everything goes through Courtyard's tools.
+    expect(started).toMatchObject({ sandbox: "read-only", approvalPolicy: "never" });
+    expect(codex.requests("turn/start")[0]?.params).toMatchObject({
+      sandboxPolicy: { type: "readOnly", networkAccess: false },
+      approvalPolicy: "never",
+    });
+    // The repository's AGENTS.md (or CLAUDE.md) in the worktree, as Claude reads it (ADR 0022).
+    expect(started.config).toMatchObject({
+      project_doc_max_bytes: expect.any(Number),
+      project_doc_fallback_filenames: ["CLAUDE.md"],
+    });
+    expect(started.config.project_doc_max_bytes).toBeGreaterThan(0);
+  });
+
+  it("runs an allowed command in the worktree without asking, and gives Codex its output and exit code", async () => {
+    const { answers, asked, events } = await codingTurn([
+      { tool: "run_command", args: { command: "ls" } },
+    ]);
+
+    expect(asked).toEqual([]);
+    const ran = answerOf(answers[0]);
+    expect(ran.success).toBe(true);
+    expect(ran.text).toContain("README.md");
+    expect(ran.text).toContain("0");
+    expect(activitiesIn(events)).toContainEqual({ kind: "ran-command", command: "ls" });
+  });
+
+  it("waits for the owner's approval for a command off the allowlist, and never runs it when they deny it", async () => {
+    const { answers, asked, worktree } = await codingTurn([
+      { tool: "run_command", args: { command: "touch made-by-codex.txt", why: "To try it" } },
+    ]);
+
+    expect(asked).toEqual([
+      { kind: "command", command: "touch made-by-codex.txt", reason: "off-allowlist" },
+    ]);
+    expect(answerOf(answers[0]).success).toBe(false);
+    await expect(readFile(join(worktree, "made-by-codex.txt"))).rejects.toThrow();
+  });
+
+  it("runs a command off the allowlist once the owner allows it", async () => {
+    const { answers, worktree } = await codingTurn(
+      [{ tool: "run_command", args: { command: "touch made-by-codex.txt" } }],
+      "allow",
+    );
+
+    expect(answerOf(answers[0]).success).toBe(true);
+    expect(await readFile(join(worktree, "made-by-codex.txt"), "utf8")).toBe("");
+  });
+
+  it("runs a command asked for in the background as a task (#182), which outlives the turn", async () => {
+    const { answers, events } = await codingTurn([
+      { tool: "run_command", args: { command: "git status", background: true } },
+    ]);
+
+    expect(answerOf(answers[0]).success).toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "task-started", command: "git status" }),
+    );
+  });
+
+  it("says a command that fails failed, with its exit code", async () => {
+    const { answers } = await codingTurn([
+      { tool: "run_command", args: { command: "ls no-such-file" } },
+    ]);
+
+    const ran = answerOf(answers[0]);
+    expect(ran.success).toBe(false);
+    expect(ran.text).toMatch(/exit code [1-9]/i);
+  });
+
+  it("writes and edits files in the worktree, shown as edits", async () => {
+    const { answers, events, worktree } = await codingTurn([
+      { tool: "write_file", args: { path: "notes/plan.md", content: "Step one.\n" } },
+      {
+        tool: "edit_file",
+        args: { path: "README.md", old_text: "# A project", new_text: "# The project" },
+      },
+    ]);
+
+    expect(answers.map((answer) => answerOf(answer).success)).toEqual([true, true]);
+    expect(await readFile(join(worktree, "notes", "plan.md"), "utf8")).toBe("Step one.\n");
+    expect(await readFile(join(worktree, "README.md"), "utf8")).toBe("# The project\n");
+    expect(activitiesIn(events)).toEqual(
+      expect.arrayContaining([
+        { kind: "edited-file", path: "notes/plan.md" },
+        { kind: "edited-file", path: "README.md" },
+      ]),
+    );
+  });
+
+  it("leaves a file as it was when the text to replace isn't there exactly once", async () => {
+    const { answers, worktree } = await codingTurn([
+      {
+        tool: "edit_file",
+        args: { path: "README.md", old_text: "# No such heading", new_text: "# The project" },
+      },
+    ]);
+
+    const edited = answerOf(answers[0]);
+    expect(edited.success).toBe(false);
+    expect(edited.text).toContain("README.md");
+    expect(await readFile(join(worktree, "README.md"), "utf8")).toBe("# A project\n");
+  });
+
+  it("waits for the owner before a change outside the worktree or to what decides how commands run, and makes neither when they deny it", async () => {
+    const { answers, asked, worktree } = await codingTurn([
+      { tool: "write_file", args: { path: "../outside.txt", content: "Out.\n" } },
+      { tool: "write_file", args: { path: "package.json", content: "{}\n" } },
+    ]);
+
+    expect(asked).toEqual([
+      { kind: "edit", path: resolve(worktree, "..", "outside.txt") },
+      { kind: "setup", path: "package.json" },
+    ]);
+    expect(answers.map((answer) => answerOf(answer).success)).toEqual([false, false]);
+    await expect(readFile(resolve(worktree, "..", "outside.txt"))).rejects.toThrow();
+    await expect(readFile(join(worktree, "package.json"))).rejects.toThrow();
+  });
+
+  it("asks the owner before it looks inside a file outside the worktree to edit it, and says nothing of what's in it when they deny it", async () => {
+    await writeFile(join(root, "secret.txt"), "The word is swordfish.\n");
+
+    const { answers, asked, worktree } = await codingTurn([
+      {
+        tool: "edit_file",
+        args: { path: "../../secret.txt", old_text: "swordfish", new_text: "fish" },
+      },
+    ]);
+
+    expect(asked).toEqual([{ kind: "edit", path: resolve(worktree, "..", "..", "secret.txt") }]);
+    const edited = answerOf(answers[0]);
+    expect(edited.success).toBe(false);
+    expect(edited.text).not.toMatch(/isn't in|times/);
+    expect(await readFile(join(root, "secret.txt"), "utf8")).toBe("The word is swordfish.\n");
+  });
+
+  it("carries on a code session from another provider's usage limit, in the same worktree", async () => {
+    const codex = standIn();
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    const request = await asOwner(
+      testWorker({
+        root,
+        providers: [provider, createFakeProvider({ delayMs: 0 })],
+      }),
+    );
+    const response = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: "please hit Fake's limit",
+      model: FAKE_MODEL,
+    });
+    const { id } = SessionSummary.parse(await response.json());
+    const failed = await followSession(request, { sessionId: id, until: "turn-failed" });
+    const turn = failed.find((event) => event.type === "owner-message")?.seq ?? 0;
+
+    const carried = await postJson(request, `/api/sessions/${id}/carry-on`, { turn });
+
+    expect(carried.status).toBe(202);
+    await followSession(request, { sessionId: id, after: failed.length, until: "turn-completed" });
+    const { cwd } = z.object({ cwd: z.string() }).parse(codex.requests("thread/start")[0]?.params);
+    const worktrees = (await gitIn(repo, "worktree", "list", "--porcelain"))
+      .split(/\n\s*\n/)
+      .map((block) => resolve(/^worktree (.+)$/m.exec(block)?.[1] ?? ""));
+    expect(worktrees).toEqual([resolve(repo), cwd]);
   });
 });
 

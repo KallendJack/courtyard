@@ -503,6 +503,43 @@ code sessions running (it gets no port slot). Its first message:
 > the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next
 > up offers Build once it's ready.
 
+### Courtyard's coding tools
+
+Built with #248, for a provider that codes through Courtyard (Codex, whose shell stays off; ADR 0029). Its access
+line and house process are the ones above, word for word; the tools behind them are Courtyard's, offered in a code
+session (`codeTools`, for a provider that codes) beside the file tools, which reach the worktree. Each call is asked
+of the worker first, exactly as Claude's hook asks it (`CodeTurn`), and done only once it's allowed, in the session's
+worktree, so no command skips the allowlist, Codex's own "safe" reads included. Nothing else changes: the approval
+cards, the activity lines, the protected files and tasks (#182) are the same.
+
+`run_command`:
+
+> Runs one command in your working directory and gives back its exit code and what it printed. A command this
+> workspace allows runs at once; any other waits for the owner to allow it, and you're told if they don't. Set
+> background for one that should outlive your turn (a dev server, a slow test run): Courtyard runs it as a task and
+> tells you when it ends.
+
+`write_file`:
+
+> Writes a file's whole text, making the file and its folders if they aren't there. A change outside your working
+> directory, or to what decides how commands run (a package.json, git hooks, the .claude folder), waits for the owner
+> to allow it; if they deny it, you're told.
+
+`edit_file`:
+
+> Changes part of a file: replaces old_text, which must be in it exactly once, with new_text. Read the file first,
+> and give old_text exactly as it is there, spaces and line breaks included. A change outside your working directory,
+> or to what decides how commands run (a package.json, git hooks, the .claude folder), waits for the owner to allow
+> it; if they deny it, you're told.
+
+What comes back is worded by the prompts module. A command gives "Exit code <n>." and what it printed between
+`<output>` markers (the last 30,000 characters, saying so when it's cut), or "It printed nothing."; one still
+running after 10 minutes is ended, and the model is told to run anything that long in the background. A refusal is
+the same reason Claude is given. An edit whose text isn't in the file exactly once changes nothing, and says whether
+it wasn't there or was there more than once. The worker runs each command through bash (Git for Windows' on the
+Windows worker), with the session's environment and without Courtyard's settings, and ends it and everything it
+started when the turn is stopped.
+
 ## The Lead
 
 Built with #347. A code workspace can have one Lead: a long-lived code session whose job is the build order, not one

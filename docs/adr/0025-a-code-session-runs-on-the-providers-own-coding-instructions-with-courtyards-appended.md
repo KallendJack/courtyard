@@ -27,6 +27,9 @@ A code turn also gets:
 **Codex follows the same rule when it gets code sessions:** its own coding instructions, with Courtyard's framing
 appended. Nothing changes for Codex now, since it doesn't code yet (ADR 0015).
 
+Superseded in part by ADR 0029: Codex codes through Courtyard's own tools, its shell off, and keeps Courtyard's
+instructions with the repository's own read from the worktree.
+
 ## Considered options
 
 - **Courtyard's own framing alone, with the missing coding guidance written into it** (efficient and parallel tool

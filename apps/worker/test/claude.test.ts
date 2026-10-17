@@ -114,6 +114,7 @@ const turnOn = async (provider: Provider, overrides: Partial<TurnInput> = {}) =>
       attachments: [],
       tools: [],
       fileTools: null,
+      codeTools: null,
       webSearch: null,
     },
     callTool: async () => ({ ok: false, content: [{ kind: "text", text: "No tools here." }] }),
@@ -567,6 +568,7 @@ describe("a Claude turn", () => {
         attachments: [],
         tools: [],
         fileTools: null,
+        codeTools: null,
         webSearch: null,
       },
     });
@@ -597,6 +599,7 @@ describe("a Claude turn", () => {
           ],
           tools: [],
           fileTools: null,
+          codeTools: null,
           webSearch: null,
         },
       });
@@ -637,6 +640,7 @@ describe("a Claude turn", () => {
           ],
           tools: [],
           fileTools: null,
+          codeTools: null,
           webSearch: null,
         },
       });
@@ -1003,6 +1007,7 @@ const framingWith = (tools: readonly TurnTool[]) => ({
   attachments: [],
   tools,
   fileTools: null,
+  codeTools: null,
   webSearch: null,
 });
 

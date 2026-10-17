@@ -19,10 +19,22 @@ import {
 import { z } from "zod";
 import { workspaceFiles } from "../auth/workspace-files/index.ts";
 import { pageRead, turnSources } from "../features/sources/index.ts";
+import { runCommand } from "../lib/commands.ts";
+import { readTextFile, writeTextFile, writeTextFileIn } from "../lib/files.ts";
 import { createOneAtATime } from "../lib/one-at-a-time.ts";
 import { err, ok, type Result } from "../lib/result.ts";
-import { fileToolReply } from "../prompts/index.ts";
 import {
+  COMMAND_MAX_MINUTES,
+  COMMAND_OUTPUT_MAX_CHARACTERS,
+  codeRefusedReply,
+  commandRanReply,
+  fileChangeReply,
+  fileToolReply,
+  malformedInputReply,
+  taskReply,
+} from "../prompts/index.ts";
+import {
+  type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
   jsonSchemaOf,
@@ -36,12 +48,12 @@ import {
 
 const id = ProviderId.parse("codex");
 /**
- * Codex reads the workspace's files and saves to context, both through Courtyard's own tools
- * (ADR 0015); coding and tool connections come later.
+ * Codex reads the workspace's files, saves to context and codes, all through Courtyard's own
+ * tools (ADR 0015, #248); tool connections come later.
  */
 const CAPABILITIES: Capabilities = {
   readsFiles: true,
-  codes: false,
+  codes: true,
   usesTools: false,
   savesContext: true,
   searchesWeb: true,
@@ -141,11 +153,18 @@ const appServerArgs = (): string[] => [
  * without Courtyard's settings or anything that would change which Codex setup or account it uses.
  */
 const isolatedEnv = (codexHome: string): Record<string, string | undefined> => ({
-  ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !/^(COURTYARD_|CODEX_|OPENAI_)/i.test(key)),
-  ),
+  ...withoutCourtyard(process.env),
   CODEX_HOME: codexHome,
 });
+
+/**
+ * An environment without Courtyard's settings or anything that would change which Codex setup or
+ * account is used: what Codex runs with, and the commands it runs in a code session (#248).
+ */
+const withoutCourtyard = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+  Object.fromEntries(
+    Object.entries(env).filter(([key]) => !/^(COURTYARD_|CODEX_|OPENAI_)/i.test(key)),
+  );
 
 /** Codex as it really is: the pinned `@openai/codex` package's program. */
 const realStartAppServer: StartAppServer = (launch) => {
@@ -642,6 +661,15 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
       });
     }
   }
+  const { codeTools } = input.framing;
+  if (input.code !== null && codeTools !== null) {
+    const coding = codingTools({ code: input.code, signal: input.signal });
+    tools.push(
+      { tool: codeTools.run, answer: async (args) => fromToolReply(await coding.run(args)) },
+      { tool: codeTools.write, answer: async (args) => fromToolReply(await coding.write(args)) },
+      { tool: codeTools.edit, answer: async (args) => fromToolReply(await coding.edit(args)) },
+    );
+  }
   for (const tool of input.framing.tools) {
     tools.push({
       tool,
@@ -649,6 +677,91 @@ const toolsFor = (input: TurnInput): ReadonlyMap<string, TurnTool> => {
     });
   }
   return new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool]));
+};
+
+const RunArgs = z.object({
+  command: z.string().min(1),
+  why: z.string().optional(),
+  background: z.boolean().optional(),
+});
+const WriteArgs = z.object({ path: z.string().min(1), content: z.string() });
+const EditArgs = z.object({
+  path: z.string().min(1),
+  old_text: z.string().min(1),
+  new_text: z.string(),
+});
+
+/** How many times `part` is in `text`, not overlapping. */
+const timesIn = (text: string, part: string) => text.split(part).length - 1;
+
+/**
+ * What answers Courtyard's coding tools in a code session (#248): each command or change is asked
+ * of the worker first (`CodeTurn`), exactly as Claude's hook asks it, and done only once it's
+ * allowed, in the session's worktree. Codex's own shell stays off, so nothing it runs skips the
+ * check, its "safe" reads included.
+ */
+const codingTools = ({ code, signal }: { code: CodeTurn; signal: AbortSignal }) => {
+  /** A file's place for writing: from the worktree, or absolute once the owner allowed it. */
+  const placeOf = (path: string) => resolve(code.worktree, path);
+
+  return {
+    run: async (args: unknown): Promise<ToolReply> => {
+      const parsed = RunArgs.safeParse(args);
+      if (!parsed.success) return malformedInputReply();
+      const { command, why, background } = parsed.data;
+      if (background === true) return taskReply(await code.task(command, why));
+      const allowed = await code.run(command, why);
+      if (!allowed.ok) return codeRefusedReply(allowed.error);
+      try {
+        return commandRanReply(
+          await runCommand({
+            command,
+            cwd: code.worktree,
+            base: withoutCourtyard(process.env),
+            env: code.env,
+            signal,
+            timeoutMs: COMMAND_MAX_MINUTES * 60_000,
+            keep: COMMAND_OUTPUT_MAX_CHARACTERS,
+          }),
+        );
+      } finally {
+        code.ran(command);
+      }
+    },
+
+    write: async (args: unknown): Promise<ToolReply> => {
+      const parsed = WriteArgs.safeParse(args);
+      if (!parsed.success) return malformedInputReply();
+      const { path, content } = parsed.data;
+      const allowed = await code.edit(path);
+      if (!allowed.ok) return codeRefusedReply(allowed.error);
+      return (await writeTextFileIn(placeOf(path), content))
+        ? fileChangeReply({ kind: "written", path })
+        : fileChangeReply({ kind: "unwritable", path });
+    },
+
+    edit: async (args: unknown): Promise<ToolReply> => {
+      const parsed = EditArgs.safeParse(args);
+      if (!parsed.success) return malformedInputReply();
+      const { path, old_text, new_text } = parsed.data;
+      // Asked first, as Claude's hook asks before its Edit reads the file: nothing outside the
+      // worktree is read, even to check the text is there, before the owner allows it.
+      const allowed = await code.edit(path);
+      if (!allowed.ok) return codeRefusedReply(allowed.error);
+      const read = await readTextFile(placeOf(path));
+      if (!read.ok) return fileChangeReply({ kind: "unwritable", path });
+      if (read.value === undefined) return fileChangeReply({ kind: "no-file", path });
+      const times = timesIn(read.value, old_text);
+      if (times === 0) return fileChangeReply({ kind: "not-found", path });
+      if (times > 1) return fileChangeReply({ kind: "found-often", path, times });
+      // A function, so a $ in the new text is kept as written.
+      const written = await writeTextFile(
+        placeOf(path),
+        read.value.replace(old_text, () => new_text),
+      );
+      return fileChangeReply({ kind: written.ok ? "edited" : "unwritable", path });
+    },
+  };
 };
 
 /** A tool as the app-server offers it to a thread (its dynamic tools), its inputs as JSON Schema. */
@@ -709,6 +822,9 @@ const failedTurn = async (codex: Connection, error: TurnError | null): Promise<F
   return { kind: "rate-limited", ...(resetAt ? { resetAt } : {}) };
 };
 
+/** How much of a repository's own instructions Codex reads in a code session: Codex's default. */
+const REPO_INSTRUCTIONS_MAX_BYTES = 32 * 1024;
+
 /** One turn on a thread of its own, as a session's turn or a one-off question needs it. */
 type ThreadTurn = {
   readonly model: ModelId;
@@ -723,6 +839,11 @@ type ThreadTurn = {
   readonly tools: ReadonlyMap<string, TurnTool>;
   /** Whether the thread searches the web, on cached mode only (ADR 0019). */
   readonly searchesWeb: boolean;
+  /**
+   * Whether Codex reads the repository's own instructions in `cwd` (its AGENTS.md, else its
+   * CLAUDE.md), as in a code session's worktree (#248), the way Claude reads them (ADR 0022).
+   */
+  readonly readsRepoInstructions?: boolean;
   /** The shape the answer must have, as JSON Schema, for a one-off question. */
   readonly outputSchema?: unknown;
   /** Hears each of the turn's notices but its end. */
@@ -778,6 +899,12 @@ const turnOnThread = async (
       "skills.config": skillsOff.value,
       // Results from OpenAI's index, never live: Courtyard can't limit what Codex opens.
       ...(turn.searchesWeb ? { web_search: "cached" } : {}),
+      ...(turn.readsRepoInstructions === true
+        ? {
+            project_doc_max_bytes: REPO_INSTRUCTIONS_MAX_BYTES,
+            project_doc_fallback_filenames: ["CLAUDE.md"],
+          }
+        : {}),
     },
   });
   if (!thread.ok) return err(failureForRequest(thread.error));
@@ -1110,6 +1237,7 @@ export const createCodexProvider = (options: {
         photos: photosOf(input.framing.attachments),
         tools: toolsFor(input),
         searchesWeb: input.framing.webSearch !== null,
+        readsRepoInstructions: input.code !== null,
         heard: (notice) => {
           const activity = webActivity(notice);
           if (activity !== undefined) {
