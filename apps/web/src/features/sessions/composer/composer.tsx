@@ -24,6 +24,7 @@ import { Button, IconButton } from "@/components/buttons/button";
 import { PdfChip, PhotoThumb } from "@/components/chat/attachment";
 import { FormError } from "@/components/forms/form-error";
 import { type Listener, useDock, useLayout } from "@/components/frame/handheld";
+import { scrollFadeAttributes, useScrollFade } from "@/components/layout/scroller";
 import { inPicker, matchingSkills } from "@/components/workspace/skill-list";
 import { SkillTag } from "@/components/workspace/skill-tag";
 import { useAction } from "@/hooks/use-action";
@@ -127,6 +128,12 @@ export const Composer = memo(function Composer(props: {
   const [text, setText] = useState("");
   const [skill, setSkill] = useState<SkillName>();
   const box = useRef<HTMLTextAreaElement>(null);
+  // Its words scroll inside it once they're taller than it: the thin thumb and the top fade every
+  // scroller has (#420, #469).
+  const boxFade = useScrollFade(box, { on: true, end: false, watchChildren: false });
+  const measureBox = boxFade.measure;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measured again whenever its words change.
+  useEffect(measureBox, [text, measureBox]);
   const send = useAction(props.send);
   const [attaching, setAttaching] = useState<readonly Attaching[]>([]);
   /** Photos still being shrunk, so Send waits for them. */
@@ -503,8 +510,10 @@ export const Composer = memo(function Composer(props: {
               }}
               placeholder={props.placeholder}
               rows={1}
+              onScroll={measureBox}
+              {...scrollFadeAttributes(boxFade)}
               // One line to start, growing upward with the words to six, then scrolling.
-              className="block max-h-36 min-h-6 w-full resize-none bg-transparent text-base/6 outline-none field-sizing-content"
+              className="scroll-thin block max-h-36 min-h-6 w-full resize-none bg-transparent text-base/6 outline-none field-sizing-content"
             />
             {/* Listening: a thin live line under the words, in the box's padding, so nothing moves. */}
             {listening && (
