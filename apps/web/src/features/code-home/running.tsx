@@ -14,6 +14,7 @@ import { ByLead, LeadMark } from "@/components/code/lead-mark";
 import { FormError } from "@/components/forms/form-error";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { useAction } from "@/hooks/use-action";
+import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { pauseLead, runLead } from "./api.ts";
@@ -135,9 +136,13 @@ const leadTitle = (lead: LeadStatus) => {
 
 /**
  * The line under it: what it's doing, or why it holds back, rests or is paused. While it runs with
- * Allow all for builders (#428), how long that has left.
+ * Allow all for builders (#428), how long that has left; resting within its window (#457), until
+ * when it wakes for new work (its chat says why it rests).
  */
 const leadLine = (lead: LeadStatus) => {
+  if (lead.state === "resting" && lead.wakesUntil !== undefined) {
+    return `Wakes for new work until ${clockWords(lead.wakesUntil)}`;
+  }
   switch (lead.state) {
     case "running":
       if (lead.why !== undefined) return `Holding back: ${lead.why}`;
