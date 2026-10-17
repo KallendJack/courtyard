@@ -454,6 +454,12 @@ fails. Its output stays in the data folder. It ends with its session, or a resta
 this task, which is the session's whole job.
 _Avoid_: background command, background job, process
 
+**Preview**:
+A code session's running app, looked at from the phone (#183): a task serving a web page, opened beside the chat or in
+a tab, through a port of the worker's own behind the owner's login, only while the task runs. Start preview runs the
+workspace's preview command as a task of the owner's. The model looks at it with its screenshot tool.
+_Avoid_: dev server (that's what serves it), live view, staging
+
 **Web search**:
 A model in a planning workspace looking things up on the web when a question needs current facts, and reading the
 pages it finds or a link the owner sent (ADR 0019).

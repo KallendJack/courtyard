@@ -91,6 +91,31 @@ A NAS at `192.0.2.2` runs Caddy and Tailscale, and the worker runs on a PC at `1
   Get-NetFirewallApplicationFilter | Where-Object Program -like "*node.exe" | Get-NetFirewallRule | Where-Object { $_.Direction -eq "Inbound" -and $_.Action -eq "Allow" -and $_.Enabled -eq "True" } | Select-Object DisplayName, Profile
   ```
 
+#### Previews: one more entry and rule
+
+A code session's preview (a session's running app, opened from the phone) is served on a port of the worker's own,
+one per preview running: 9901 to 9906 unless `COURTYARD_PREVIEW_PORTS` says otherwise. It's behind your login, but
+the proxy and firewall need to let those ports through too, the same way as the worker's. In the example above:
+
+- **Caddy** answers the same name on each preview port and forwards each to the worker's same port:
+
+  ```caddyfile
+  courtyard.internal:9901, courtyard.internal:9902, courtyard.internal:9903,
+  courtyard.internal:9904, courtyard.internal:9905, courtyard.internal:9906 {
+  	tls internal
+  	reverse_proxy 192.0.2.10:{http.request.port}
+  }
+  ```
+
+- **On the PC**, a firewall rule for the range, from the NAS only:
+
+  ```powershell
+  New-NetFirewallRule -DisplayName "Courtyard previews" -Direction Inbound -Protocol TCP -LocalPort 9901-9906 -RemoteAddress 192.0.2.2 -Action Allow
+  ```
+
+Screenshots of a preview use Playwright's Chromium on the worker machine; `pnpm install` and the browser tests' setup
+(`pnpm exec playwright install chromium`) put it there.
+
 ### The live copy (Windows)
 
 Run the everyday Courtyard from its own clone of `main`, the **live copy**, not from a checkout

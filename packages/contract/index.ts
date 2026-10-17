@@ -137,6 +137,13 @@ export {
 } from "./lib/offline-copy.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
+  PREVIEW_COMMAND_MAX_LENGTH,
+  PREVIEW_SIZES,
+  Preview,
+  PreviewSize,
+  StartPreview,
+} from "./lib/preview.ts";
+export {
   ChangedFile,
   MergeReadiness,
   OpenPullRequest,

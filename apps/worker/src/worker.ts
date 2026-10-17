@@ -33,7 +33,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createOwner } from "./auth/owner/index.ts";
-import { loginRoutes, requireLogin, sameSiteJsonOnly } from "./auth/owner/routes.ts";
+import { loginRoutes, ownerLoggedIn, requireLogin, sameSiteJsonOnly } from "./auth/owner/routes.ts";
 import { createSignIns } from "./auth/sign-ins/index.ts";
 import { signInRoutes } from "./auth/sign-ins/routes.ts";
 import { type Environment, readSettings } from "./config/settings.ts";
@@ -69,6 +69,9 @@ import { sendWebPush } from "./features/notifications/web-push.ts";
 import { createOfflineCopy } from "./features/offline-copy/index.ts";
 import { offlineCopyRoutes } from "./features/offline-copy/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./features/owner-context/index.ts";
+import { createPreviews } from "./features/preview/index.ts";
+import { previewRoutes } from "./features/preview/routes.ts";
+import type { Screenshot } from "./features/preview/screenshot.ts";
 import { createPullRequests } from "./features/pull-requests/index.ts";
 import { pullRequestRoutes } from "./features/pull-requests/routes.ts";
 import { createQuickQuestions } from "./features/quick-questions/index.ts";
@@ -256,6 +259,8 @@ export const createWorker = (options: {
    * page. Tests pass a fake; otherwise Paper's own MCP server is asked.
    */
   paperFiles?: PaperFiles;
+  /** Takes a preview's screenshots (#183). Tests pass a fake; otherwise Chromium does. */
+  screenshot?: Screenshot;
 }): Result<Worker, string> => {
   const settings = readSettings(options.env);
   if (!settings.ok) return settings;
@@ -275,6 +280,7 @@ export const createWorker = (options: {
     githubClientId,
     buildsLock,
     paperCommand,
+    previewPorts,
   } = settings.value;
   const now = options.now ?? Date.now;
   const background = options.background ?? (() => {});
@@ -370,6 +376,20 @@ export const createWorker = (options: {
       claim: (workspaceId, issue, claim) => nextUp.claim(workspaceId, issue, claim),
       release: (workspaceId, issue, why) => nextUp.release(workspaceId, issue, why),
     },
+    // The previews are made below, from the sessions (#183).
+    previews: {
+      ended: (session, task) => previews.ended(session, task),
+      tool: (session, input) => previews.tool(session, input),
+    },
+  });
+  const previews = createPreviews({
+    ports: previewPorts,
+    loggedIn: (cookies) => ownerLoggedIn(owner, cookies),
+    sessions,
+    contextDir,
+    contextFolder,
+    commandEnv: github.commandEnv,
+    ...(options.screenshot === undefined ? {} : { screenshot: options.screenshot }),
   });
   const nextUp = createNextUp({ contextDir, code, github, sessions, now });
   // A code workspace's main and its build, for its Home's Main row (#301, #249) and its Lead.
@@ -501,6 +521,7 @@ export const createWorker = (options: {
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
   api.route("/", taskRoutes(sessions));
+  api.route("/", previewRoutes(previews));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));

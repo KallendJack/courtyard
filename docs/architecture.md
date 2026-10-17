@@ -110,6 +110,7 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 
 - [`code/`](../apps/worker/src/features/code/README.md): session branches and worktrees, the allowlist, slots and the builds queue.
 - [`tasks/`](../apps/worker/src/features/tasks/README.md): a code session's long commands, run on after its turn, its model told when one ends.
+- [`preview/`](../apps/worker/src/features/preview/README.md): a code session's running app on a port of the worker's own, behind the login, and its screenshots.
 - [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
 - [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
 - [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims.
@@ -202,6 +203,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     up, Main.
   - [`tasks/`](../apps/web/src/features/tasks/README.md): a code session's running tasks above the Reply box, and
     each ended one's line.
+  - [`preview/`](../apps/web/src/features/preview/README.md): a code session's Preview button, and the app beside
+    the chat.
   - [`pull-requests/`](../apps/web/src/features/pull-requests/README.md): the PRs list and a pull request's page.
   - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
   - [`live/`](../apps/web/src/features/live/README.md): Update, and main's build.
@@ -435,7 +438,12 @@ Where the rest fits:
   `task-ended`; one that passes or fails tells the model, in the answer running (a `message-added` with its task), or
   in a turn of its own (an `owner-message` with `tasksEnded`), its last lines of output added for the model alone.
   Its pull request ending, the session deleted or a fresh start stops them; the next worker records those a restart
-  stopped. What's allowed shows
+  stopped. A task whose output prints `http://localhost:<port>` is the session's preview (#183, `preview/`): the
+  worker opens one of its own ports (`COURTYARD_PREVIEW_PORTS`) in front of it, letting in only the owner's login
+  cookie and passing pages and WebSockets (live reload) through to the app on localhost, and closes it as the task
+  ends. Start preview runs the workspace's `preview` command (kept in `workspace.json`) as a task of the owner's
+  (`task-started` with `preview`), whose end tells nobody; the model's `preview_screenshot` tool is answered by
+  `preview/` with Playwright's Chromium, and shown as an `image-shown` event, as Paper's screenshots are. What's allowed shows
   as an activity (`edited-file`, `ran-command`). A command off the allowlist, an edit outside the worktree, or one to a
   file that decides what allowed commands run (an approval of its own kind, `setup`), is an
   approval (#171): the session records an `approval-requested` event and the `CodeTurn` call waits on it, with no time

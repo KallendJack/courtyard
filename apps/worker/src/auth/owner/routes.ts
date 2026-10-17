@@ -1,13 +1,15 @@
 import { type AuthState, MIN_PASSWORD_LENGTH, PasswordForm } from "@courtyard/contract";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { parse } from "hono/utils/cookie";
 import { apiError, readBody } from "../../lib/http.ts";
 import { deviceLoginOf, LoginSecret, type Owner, type StorageError } from "./index.ts";
 
 /** The answer to a setup or login request that didn't send a password form. */
 const PASSWORD_REFUSED = "Send a password of up to 1,024 characters";
 
-const LOGIN_COOKIE = "courtyard_login";
+/** The device login's cookie, sent to every port on the worker's address. */
+export const LOGIN_COOKIE = "courtyard_login";
 /** Browsers cap a cookie's life at 400 days; it's renewed every time the device checks in. */
 const LOGIN_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 /** API paths that work without a login. */
@@ -95,6 +97,17 @@ export const requireLogin =
       ? next()
       : apiError(c, { status: 401, error: "Log in first" });
   };
+
+/**
+ * Whether a request's `Cookie` header carries a device login of the owner's: how a preview's own
+ * port (#183), outside the API, lets only the owner in.
+ */
+export const ownerLoggedIn = async (owner: Owner, cookies: string | undefined) => {
+  const parsed = LoginSecret.safeParse(parse(cookies ?? "", LOGIN_COOKIE)[LOGIN_COOKIE]);
+  if (!parsed.success) return false;
+  const state = await owner.state(parsed.data);
+  return state.ok && state.value === "logged-in";
+};
 
 /** Setup, login and logout, mounted under `/api`. */
 export const loginRoutes = (owner: Owner) => {
