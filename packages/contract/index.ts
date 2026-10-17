@@ -246,11 +246,15 @@ export {
   ThingHistoryEntry,
   ThingList,
   ThingPhotoPath,
+  ThingPin,
+  ThingPinMove,
   ThingProblem,
   ThingSave,
   ThingSlug,
   ThingStatus,
   ThingSummary,
+  pinOf,
+  pinText,
 } from "./lib/things.ts";
 export {
   TidyChange,

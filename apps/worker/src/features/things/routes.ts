@@ -9,10 +9,11 @@ import {
   type ThingDetailName,
   ThingForm,
   type ThingList,
+  ThingPinMove,
   ThingSlug,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
-import { apiError, contextError, readWithFiles } from "../../lib/http.ts";
+import { apiError, contextError, readBody, readWithFiles } from "../../lib/http.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { prepareAttachments } from "../attachments/index.ts";
 import type { PlanningFilesTarget } from "../planning-files/index.ts";
@@ -33,6 +34,7 @@ const ROUTES = {
   things: "/workspaces/:id/things",
   thing: "/workspaces/:id/things/:slug",
   photo: "/workspaces/:id/things/:slug/photo",
+  pin: "/workspaces/:id/things/:slug/pin",
 } as const;
 
 /**
@@ -91,6 +93,11 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
       return apiError(c, { status: 400, error: "That changes nothing." });
     case "bad-photo":
       return apiError(c, { status: 400, error: "That photo can't be read." });
+    case "not-a-part":
+      return apiError(c, {
+        status: 400,
+        error: "Only a part has a pin: it marks where the part is on its Thing's photo.",
+      });
     case "changed-since":
       return apiError(c, {
         status: 409,
@@ -221,6 +228,20 @@ export const thingRoutes = (
     );
     if (!removed.ok) return thingError(c, removed.error);
     return c.json({ change: removed.value.change ?? null } satisfies ThingDeleted);
+  });
+
+  // A part's pin, where the owner dragged it on its Thing's photo (#208).
+  routes.put(ROUTES.pin, async (c) => {
+    const named = thingIn(c);
+    if (named === undefined) return noSuchThing(c);
+    const body = await readBody(c, ThingPinMove);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const saved = await saveThing(
+      named.workspace,
+      { slug: named.slug, fields: { pin: body.value.pin } },
+      { now: now() },
+    );
+    return changed(c, named.workspace, saved, 200);
   });
 
   routes.get(ROUTES.photo, async (c) => {

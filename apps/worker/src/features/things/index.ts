@@ -8,7 +8,10 @@ import {
   type ThingDetailName,
   ThingFields,
   type ThingHistoryEntry,
+  type ThingPin,
   type ThingProblem,
+  pinOf,
+  pinText,
   type ThingSave,
   ThingSlug,
   ThingStatus,
@@ -85,6 +88,8 @@ export type ThingRefusal =
   | { readonly kind: "stale" }
   /** A photo that can't be read as one. */
   | { readonly kind: "bad-photo" }
+  /** A pin on a Thing that isn't part of another, so has no Thing's photo to sit on (#208). */
+  | { readonly kind: "not-a-part" }
   | { readonly kind: "storage" };
 
 /** A Thing's file, or its photo, on the worker machine. */
@@ -100,6 +105,8 @@ const FILE_KEYS = [
   ["status", "status"],
   ...THING_DETAILS.map((name) => [name, name] as const),
   ["part of", "partOf"],
+  ["needs", "needs"],
+  ["pin", "pin"],
   ["photo", "photo"],
 ] as const satisfies readonly (readonly [string, keyof ThingFields])[];
 
@@ -213,13 +220,14 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
     } catch {
       return err({ kind: "storage" });
     }
-    const { photo, ...fields } = read.value.fields;
+    const { photo, pin, ...fields } = read.value.fields;
     things.push({
       summary: {
         ...fields,
         slug: slug.data,
         path: thingPath(slug.data),
         photo: photo !== undefined,
+        pin: pin === undefined ? null : (pinOf(pin) ?? null),
         updatedAt,
       },
       history: read.value.history,
@@ -296,6 +304,8 @@ type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
   readonly partOf?: ThingSlug | null;
+  readonly needs?: string | null;
+  readonly pin?: ThingPin | null;
 } & { readonly [K in ThingDetailName]?: string | null };
 
 /** A change to one Thing: a new one, or one that's there, by its file's name. */
@@ -395,8 +405,15 @@ export const saveThing = async (
       if (was !== undefined && !was.ok) return err({ kind: "storage" });
       const before = was?.value.fields;
       const merged: Record<string, string | undefined> = { ...before };
-      for (const [field, value] of Object.entries(edit.fields ?? {})) {
+      const { pin, ...written } = edit.fields ?? {};
+      for (const [field, value] of Object.entries(written)) {
         merged[field] = value === null ? undefined : value;
+      }
+      // A pin sits on the photo of the Thing it's part of (#208), so it goes once that changes.
+      if (pin !== undefined) merged.pin = pin === null ? undefined : pinText(pin);
+      else if (merged.partOf !== before?.partOf) merged.pin = undefined;
+      if (merged.pin !== undefined && merged.partOf === undefined) {
+        return err({ kind: "not-a-part" });
       }
       if (merged.name === undefined || merged.status === undefined) {
         return err({ kind: "incomplete" });
@@ -544,6 +561,8 @@ const ThingRequest = z.looseObject({
   name: z.string().optional(),
   status: ThingStatus.optional(),
   part_of: z.string().optional(),
+  needs: z.string().optional(),
+  pin: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
 });
@@ -614,7 +633,8 @@ export const createTurnThings = (
   return async (raw: unknown): Promise<Result<ThingToolSaved, ThingToolRefusal>> => {
     const request = ThingRequest.safeParse(raw);
     if (!request.success) return err({ kind: "malformed" });
-    const { thing, remove, name, status, part_of, history, photo, ...rest } = request.data;
+    const { thing, remove, name, status, part_of, needs, pin, history, photo, ...rest } =
+      request.data;
     const details = detailsSent(rest);
     if (details === undefined) return err({ kind: "malformed" });
     const label = thing === undefined || thing.trim() === "" ? undefined : asLabel(thing);
@@ -627,7 +647,18 @@ export const createTurnThings = (
       ...(name === undefined ? {} : { name }),
       ...(status === undefined ? {} : { status }),
       ...details,
+      ...(needs === undefined ? {} : { needs: needs.trim() === "" ? null : needs }),
     };
+    if (pin !== undefined) {
+      const placed = pin.trim() === "" ? null : pinOf(pin);
+      if (placed === undefined) {
+        return err({
+          kind: "invalid",
+          problem: "Give the pin as across, then down, each 0 to 100, such as 42.5, 61.",
+        });
+      }
+      fields.pin = placed;
+    }
     if (part_of !== undefined) {
       const parentLabel = asLabel(part_of);
       const parent = parentLabel === "" ? null : labels.get(parentLabel);
