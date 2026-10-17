@@ -101,6 +101,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
+- [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
+  showing, and the last question with its next steps.
 - [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
@@ -604,6 +606,8 @@ things live only in the worker's memory and go when it restarts.
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.
 - `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
+- `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
+  it's there.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

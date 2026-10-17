@@ -13,6 +13,7 @@ import {
   PREVIEW_SIZES,
   PreviewSize,
   type PullRequestReview,
+  pinText,
   placeName,
   type QuickAnswer,
   type Save,
@@ -472,6 +473,8 @@ const thingLine = ({ label, thing }: LabelledThing, all: readonly LabelledThing[
       const value = thing[field];
       return value === undefined ? [] : [`${field} ${said(value)}`];
     }),
+    ...(thing.needs === undefined ? [] : [`needs ${said(thing.needs)}`]),
+    ...(thing.pin === null ? [] : [`pin ${pinText(thing.pin)}`]),
     ...(parent !== undefined
       ? [`part of [${parent.label}]`]
       : thing.partOf === undefined
@@ -506,7 +509,7 @@ const thingsPart = (things: ReadThings, readsFiles: boolean) => {
 };
 
 /** When and how a model keeps Things current (docs/ai-conduct.md, Things). */
-const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
+const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing. The workspace's page shows what each Thing needs next, so keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its brand, size or specs, which stay on its card, and clear it once it's done. When a Thing with parts has a photo, pin each part where it is on that photo, by looking at it, and leave out a part you can't see there. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
 
 /** Each of a Thing's details as the Things tool describes it to a model. */
 const THING_DETAIL_INPUTS: Readonly<Record<ThingDetailName, string>> = {
@@ -544,6 +547,18 @@ const THING_TOOL: TurnTool = {
       .optional()
       .describe(
         "The label of the Thing it's part of, such as T1, which isn't a part itself. An empty text makes it a Thing of its own.",
+      ),
+    needs: z
+      .string()
+      .optional()
+      .describe(
+        "The next thing to do about it, in a few words, such as Pump it up before Saturday: never background such as its brand or size. An empty text clears it once it's done.",
+      ),
+    pin: z
+      .string()
+      .optional()
+      .describe(
+        "Where a part is on the photo of the Thing it's part of: how far across, then how far down, each a percentage, such as 42.5, 61. An empty text clears it.",
       ),
     history: z
       .string()
@@ -594,6 +609,8 @@ const thingRefusalReason = (refusal: ThingToolRefusal) => {
       return `There's no photo ${refusal.number} with this message: give the number of one of the images that come with it, as Image 1 is 1.`;
     case "bad-photo":
       return "That photo can't be read.";
+    case "not-a-part":
+      return "Only a part has a pin: give it the Thing it's part of first, or leave the pin out.";
     case "code-workspace":
       return "Only planning workspaces keep Things.";
     case "stopped":

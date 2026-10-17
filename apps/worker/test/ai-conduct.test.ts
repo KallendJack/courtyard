@@ -1458,6 +1458,20 @@ describe("Things (#149, ADR 0020)", () => {
     expect(framing.instructions).not.toContain("Bolted to the floor");
   });
 
+  it("lists what a part needs and its pin on its Thing's photo (#208)", async () => {
+    await withThings();
+    await writeFile(
+      join(things(), "pull-up-bar.md"),
+      "---\nname: Pull-up bar\nstatus: replace\ncondition: Bent\npart of: power-rack\nneeds: Order one before Monday\npin: 50, 8.5\n---\n",
+    );
+
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(
+      "[T2] Pull-up bar, replace, condition Bent, needs Order one before Monday, pin 50, 8.5, part of [T1] (things/pull-up-bar.md)",
+    );
+  });
+
   it("tells a provider that reads no files to ask, and says when there are none yet", async () => {
     await withThings();
     const { framing } = await firstTurn({ ...READS_FILES, readsFiles: false });
@@ -1511,6 +1525,8 @@ describe("Things (#149, ADR 0020)", () => {
         tool({ thing: "T1", photo: 1 }),
         tool({ thing: "T1", where: "Back wall" }),
         tool({ name: "Mat", status: "have", bought: "last year" }),
+        tool({ thing: "T1", pin: "40, 20" }),
+        tool({ thing: "T2", pin: "left a bit" }),
       ],
       [
         () =>
@@ -1536,6 +1552,8 @@ describe("Things (#149, ADR 0020)", () => {
       await quotedInGuide("There's no photo", { number: "1" }),
       await quotedInGuide("That changes nothing", { name: "Power rack" }),
       "Give the date bought as a year, a month or a day, such as 2026, 2026-03 or 2026-10-09.",
+      await quotedInGuide("Only a part has a pin"),
+      await quotedInGuide("Give the pin as across, then down"),
       `${await quotedInGuide("<label> has changed since you were shown it.", { label: "T1" })}\n[T1] Power rack, have, where Garage (things/power-rack.md)\n[T2] Pull-up bar, replace, condition Bent, part of [T1] (things/pull-up-bar.md)`,
     ]);
   });

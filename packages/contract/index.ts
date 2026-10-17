@@ -131,6 +131,15 @@ export {
 } from "./lib/notifications.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
+  HomeView,
+  HomeViewId,
+  HomeViewPick,
+  LastQuestion,
+  PinnedPart,
+  PlanningHome,
+  WantedItem,
+} from "./lib/planning-home.ts";
+export {
   PREVIEW_COMMAND_MAX_LENGTH,
   PREVIEW_SIZES,
   Preview,
@@ -237,6 +246,8 @@ export {
   TaskOutput,
 } from "./lib/tasks.ts";
 export {
+  pinOf,
+  pinText,
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,
   THING_FORM_FIELD,
@@ -253,6 +264,8 @@ export {
   ThingHistoryEntry,
   ThingList,
   ThingPhotoPath,
+  ThingPin,
+  ThingPinMove,
   ThingProblem,
   ThingSave,
   ThingSlug,
