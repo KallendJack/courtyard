@@ -687,7 +687,7 @@ const WAITS_FOR_THE_OWNER =
  * #248), for a provider that codes through Courtyard: what each does, and what waits for the
  * owner. The access line (`CODING_ACCESS`) says which commands run without asking.
  */
-const CODE_TOOLS: CodeTools = {
+const CODE_TOOLS: Omit<CodeTools, "helperInstructions"> = {
   run: {
     name: "run_command",
     description:
@@ -721,7 +721,35 @@ const CODE_TOOLS: CodeTools = {
       new_text: z.string().describe("What replaces it."),
     },
   },
+  helper: {
+    name: "start_helper",
+    description:
+      "Hands part of the work to a helper: another model on your model and effort, which works in your working directory with these same tools under the same rules, and gives back its report when it's done. Only when a skill you're using calls for helpers or the owner asks. Several can work at once, at most three; another waits for a place. Set own_branch for a helper that writes code: it works on a worktree and branch of its own, from your branch's last commit, so commit first, and its branch is merged back into yours when it finishes.",
+    input: {
+      description: z
+        .string()
+        .min(1)
+        .describe("What it's for, in a few words, which the owner sees as its name."),
+      prompt: z
+        .string()
+        .min(1)
+        .describe(
+          "Its whole task: it sees nothing of this conversation, so say everything it needs, and what to report.",
+        ),
+      own_branch: z
+        .boolean()
+        .optional()
+        .describe("Give it a worktree and branch of its own, for a helper that writes code."),
+    },
+  },
 };
+
+/**
+ * What a helper started with Courtyard's helper tool is told after the turn's instructions
+ * (docs/ai-conduct.md, Courtyard's coding tools; #470).
+ */
+const HELPER_BRIEF =
+  "You're a helper: this session's model handed you the task in your message. Do it with your tools, under the rules above, in your working directory. You can't start helpers or tasks of your own. When you're done, end with your report: what you found or did, and anything left undone. It's all the model sees of your work.";
 
 /** The use skill tool's name, as a model calls it (ADR 0016). */
 export const USE_SKILL_TOOL_NAME = "use_skill" satisfies TurnToolName;
@@ -1406,20 +1434,21 @@ export const framingFor = (turn: {
   const searches = turn.capabilities.searchesWeb && turn.workspace.mode === "planning";
   // Beside the save tool, in a planning workspace (ADR 0020).
   const documents = saves && turn.workspace.mode === "planning";
+  const instructions = instructionsFor({
+    ...turn,
+    lead: turn.lead,
+    saves,
+    suggests,
+    searches,
+    documents,
+    things: documents,
+    offersSkillTool,
+    startedNow: turn.skills.inUse.some((skill) => skill.name === startedNow)
+      ? startedNow
+      : undefined,
+  });
   return {
-    instructions: instructionsFor({
-      ...turn,
-      lead: turn.lead,
-      saves,
-      suggests,
-      searches,
-      documents,
-      things: documents,
-      offersSkillTool,
-      startedNow: turn.skills.inUse.some((skill) => skill.name === startedNow)
-        ? startedNow
-        : undefined,
-    }),
+    instructions,
     message: messageFor({
       earlier: newest?.speaker === "owner" ? said.slice(0, -1) : said,
       newest: newMessage,
@@ -1439,7 +1468,10 @@ export const framingFor = (turn: {
     ],
     fileTools: turn.capabilities.readsFiles ? FILE_TOOLS : null,
     // Only a provider that codes works in a code workspace (ADR 0007).
-    codeTools: turn.workspace.mode === "code" && turn.capabilities.codes ? CODE_TOOLS : null,
+    codeTools:
+      turn.workspace.mode === "code" && turn.capabilities.codes
+        ? { ...CODE_TOOLS, helperInstructions: `${instructions}\n\n${HELPER_BRIEF}` }
+        : null,
     webSearch: searches ? { ownerLinks: ownerLinksIn(said) } : null,
   };
 };
@@ -1896,6 +1928,40 @@ export const codeRefusedReply = (reason: string): ToolReply => textReply(false, 
 /** What a model is told when a command it asked for in the background started, or didn't (#182). */
 export const taskReply = (started: Result<string, string>): ToolReply =>
   textReply(started.ok, started.ok ? started.value : started.error);
+
+/** How a helper started with start_helper ended (#470), for its report and reply. */
+export type HelperEnd =
+  /** It finished, with its last message: its report, which may be empty. */
+  | { readonly kind: "reported"; readonly report: string }
+  /** It stopped before it finished, for a reason in Courtyard's words. */
+  | { readonly kind: "failed"; readonly reason: string }
+  /** Courtyard couldn't make the branch of its own it was to work on (#395). */
+  | { readonly kind: "no-branch" };
+
+/**
+ * A helper's report as the owner sees it on its line and the model reads it (docs/ai-conduct.md,
+ * Courtyard's coding tools; #470).
+ */
+export const helperReport = (end: HelperEnd) => {
+  switch (end.kind) {
+    case "reported":
+      return end.report.trim() === "" ? "The helper finished without a report." : end.report;
+    case "failed":
+      return `The helper stopped before it finished: ${end.reason}`;
+    case "no-branch":
+      return "Courtyard couldn't make a branch of its own for this helper, so it didn't start: start it without own_branch, or do the work yourself.";
+  }
+};
+
+/**
+ * What a model is told when a helper it started with start_helper ends (#470): its report, and
+ * what became of its branch (`helperBranchNote`), when it had one.
+ */
+export const helperReply = (end: HelperEnd, note?: string): ToolReply =>
+  textReply(
+    end.kind === "reported",
+    note === undefined ? helperReport(end) : `${helperReport(end)}\n\n${note}`,
+  );
 
 /** How an edit_file or write_file went (#248), for its reply. */
 export type FileChange =
