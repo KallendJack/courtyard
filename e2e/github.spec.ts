@@ -1173,8 +1173,8 @@ const showsHome = async (page: Page) => {
   await expect(running).toContainText("Nothing running");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
-  // issues nobody claimed, with Build; the rest, in milestone order, as many as fit (#418), then
-  // More.
+  // issues nobody claimed, with Build; the rest, those to grill too (#463), in milestone order, as
+  // many as fit (#418), then More.
   await expect(nextUp).toContainText("4 · Code workspaces");
   const grill = nextUp.getByRole("region", { name: "Grill #117" });
   await expect(grill).toContainText("Sub-agents for code review");
@@ -1184,7 +1184,7 @@ const showsHome = async (page: Page) => {
   );
   await expect(nextUp).not.toContainText("Claimed by a helper");
   await expect(nextUp.getByRole("region", { name: "Build #283" })).toHaveCount(0);
-  await nextUpFills(page, 12);
+  await nextUpFills(page, 13);
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -1354,6 +1354,32 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
+    // Owner, 2026-10-15: Next up showed one card while two milestones had issues to grill (#463).
+    test("Grill is on the first issue to grill in order, wherever it is, with the first ready under it", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.route("**/api/workspaces/workbench/next-up", async (route) => {
+        const response = await route.fetch();
+        const { issues } = (await response.json()) as { issues: { number: number }[] };
+        const json = { issues: issues.filter((issue) => issue.number !== 117) };
+        await route.fulfill({ response, json });
+      });
+      await page.goto(HOME);
+      const { nextUp } = blocks(page);
+      const grill = nextUp.getByRole("region").first();
+      await expect(grill).toHaveAccessibleName("Grill #66");
+      await expect(grill).toContainText("Usage at a glance");
+      await expect(nextUp.getByRole("region").nth(1)).toHaveAccessibleName("Build #197");
+      await expect(nextUp.getByRole("listitem", { name: /^#66 / })).toHaveCount(0);
+      await expect(nextUp.getByRole("listitem").first()).toHaveAccessibleName(
+        "#251 One Reply box everywhere",
+      );
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
     // Owner rule (2026-10-12): nothing jumps in late. What loads after the page shows the last
     // answer known at once on a revisit, asked for again quietly.
     test("coming back to a code workspace shows its pull requests at once, while they're asked for again", async ({
@@ -1415,11 +1441,12 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       // and the first issue with Build stay put, and More becomes Fewer.
       const { nextUp } = blocks(page);
       const before = await nextUp.boundingBox();
-      const shown = await nextUpFills(page, 12);
-      await nextUp.getByRole("button", { name: `More · ${12 - shown}` }).click();
+      const shown = await nextUpFills(page, 13);
+      await nextUp.getByRole("button", { name: `More · ${13 - shown}` }).click();
       await expect(nextUp.getByRole("listitem")).toHaveText([
         /#251\s*One Reply box everywhere/,
         /#283\s*Nothing moves once drawn\s*After One Reply box everywhere/,
+        /#66\s*Usage at a glance\s*Needs grilling first/,
         /#255\s*Paste images on the Fold/,
         ...Array.from({ length: 9 }, () => /A later idea/),
       ]);
@@ -1427,6 +1454,11 @@ test.describe("a code workspace's Home (#301, #308)", () => {
         Math.round(before?.height ?? 0),
       );
       await blockedRowSaysAfter(page);
+      // One to grill says so, never "After …", though it waits on another (#463): it can be
+      // grilled before that one is done.
+      await expect(nextUp.getByRole("listitem", { name: /^#66 / })).toHaveAccessibleName(
+        "#66 Usage at a glance, needs grilling first",
+      );
       await nextUp.getByRole("listitem", { name: /^#283 / }).scrollIntoViewIfNeeded();
       await shot(page, "tablet-home-more");
       await nextUp.getByRole("region").first().scrollIntoViewIfNeeded();

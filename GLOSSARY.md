@@ -223,10 +223,11 @@ _Avoid_: queued, paused, deferred
 **Next up**:
 The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
 claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the
-model, a second starts a session on it and claims the issue on GitHub. When the next on its milestone's Build order
-line isn't ready yet (`needs-triage` or `needs-info`), **Grill** takes the top in gold (#363): it starts a session
-with the grilling skill on that issue, which ends with it marked ready; the first ready issue sits under it with a
-small Build. A grill claims nothing and takes no builder's place in Running. A ready issue blocked by an open one
+model, a second starts a session on it and claims the issue on GitHub. It also lists every issue that isn't ready yet
+(`needs-triage` or `needs-info`, #463), in its place, saying "Needs grilling first"; a milestone's Build order line
+only orders them. **Grill** takes the top in gold on the first of them (#363): it starts a session with the grilling
+skill on that issue, which ends with it marked ready; the first ready issue sits under it with a small Build. A
+grill claims nothing and takes no builder's place in Running. A ready issue blocked by an open one
 (GitHub's blocked by) keeps its place with no Build, its row saying **After** and the blocker's title (#377), until
 that closes. A planning workspace's (#300): the session to
 pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the

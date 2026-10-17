@@ -18,8 +18,8 @@ const workspacePath = (workspaceId: WorkspaceId) =>
   `/workspaces/${encodeURIComponent(workspaceId)}`;
 
 /**
- * The ready issues nobody has claimed, and those on a Build order line that need grilling first,
- * in milestone order (#301, #363).
+ * The ready issues nobody has claimed, and every one that needs grilling first, in milestone
+ * order (#301, #363, #463).
  */
 export const loadNextUp = (workspaceId: WorkspaceId) =>
   fromWorker(`${workspacePath(workspaceId)}/next-up`, NextUp);

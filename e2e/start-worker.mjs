@@ -375,7 +375,7 @@ const github = createFakeGitHub({
   ],
   // Workbench's ready issues (#301): in milestones, one claimed by a comment, one blocked by
   // another (#377), and more than Next up shows before More; and first on the Build order line,
-  // one that needs grilling (#363).
+  // one that needs grilling (#363), with another off it (#463).
   issues: {
     "octo-owner/workbench": [
       {
@@ -397,6 +397,15 @@ const github = createFakeGitHub({
         number: 283,
         title: "Nothing moves once drawn",
         milestone: "4 · Code workspaces",
+        blockedBy: [251],
+      },
+      // To grill, on no Build order line and blocked by an open one (#463): its row still says it
+      // needs grilling first.
+      {
+        number: 66,
+        title: "Usage at a glance",
+        milestone: "5 · Tablet hub and voice",
+        labels: ["needs-info"],
         blockedBy: [251],
       },
       { number: 255, title: "Paste images on the Fold", milestone: "5 · Tablet hub and voice" },
