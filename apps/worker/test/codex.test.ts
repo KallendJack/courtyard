@@ -7,6 +7,7 @@ import {
   Effort,
   ModelId,
   ProviderList,
+  type SessionEvent,
   SessionSummary,
   type Source,
 } from "@courtyard/contract";
@@ -46,11 +47,15 @@ const Message = z.object({
 type Message = z.infer<typeof Message>;
 /** What the worker names when it asks about a turn. */
 const TurnParams = z.object({ threadId: z.string(), turnId: z.string().optional() });
+/** The text a turn starts with, first in its input. */
+const TurnText = z.object({ input: z.tuple([z.object({ text: z.string() })]).rest(z.unknown()) });
 
 /** What the stand-in can do during a turn: what Codex would send while it answers. */
 type TurnScript = (turn: {
   threadId: string;
   turnId: string;
+  /** The text the worker started the turn with: its message, or a helper's task. */
+  text: string;
   notify: (method: string, params: unknown) => void;
   /** Codex finishing the turn, as it does when it's done, stopped or failed. */
   complete: (status: string, error?: unknown) => void;
@@ -250,6 +255,7 @@ const standIn = (
         case "turn/start": {
           turns += 1;
           const { threadId } = TurnParams.parse(message.params);
+          const text = TurnText.safeParse(message.params);
           const turnId = `turn-${turns}`;
           reply(id, { turn: { id: turnId, status: "inProgress", error: null } });
           (
@@ -260,6 +266,7 @@ const standIn = (
           )({
             threadId,
             turnId,
+            text: text.success ? text.data.input[0].text : "",
             notify,
             complete: (status, error = null) =>
               notify("turn/completed", { threadId, turn: { id: turnId, status, error } }),
@@ -1941,6 +1948,205 @@ describe("a Codex code session (#248)", () => {
       .split(/\n\s*\n/)
       .map((block) => resolve(/^worktree (.+)$/m.exec(block)?.[1] ?? ""));
     expect(worktrees).toEqual([resolve(repo), cwd]);
+  });
+});
+
+describe("Codex's helpers in a code session (#470)", () => {
+  // Codex's own sub-agents get none of Courtyard's tools, so a Codex code session starts helpers
+  // through Courtyard's helper tool (ADR 0027): each one a thread of its own, on the session's
+  // model and effort, with the coding tools under the same rules. Real git, in temporary
+  // repositories.
+  let root: string;
+  let repo: string;
+  const MESSAGE = "Look at the project.";
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    ({ repo } = await codeRepo(root));
+    await codeWorkspace(root, "side-project", repo);
+  });
+
+  afterEach(async () => {
+    await removeTestFolder(root);
+  });
+
+  /** A helper the session's model starts: what it's asked, and what it runs before reporting. */
+  type Asked = { description: string; command: string; report: string; own_branch?: boolean };
+
+  /**
+   * A Codex code session whose model starts the helpers asked, all at once, then answers; each
+   * helper runs its command and reports, and every approval asked is denied. Gives the session's
+   * events, what was asked, the stand-in, and the most helpers that worked at once.
+   */
+  const helpingTurn = async (helpers: readonly Asked[]) => {
+    let working = 0;
+    let most = 0;
+    const answers: Message[] = [];
+    const codex = standIn({
+      turn: async (turn) => {
+        if (turn.text === MESSAGE) {
+          answers.push(
+            ...(await Promise.all(
+              helpers.map(({ description, command, own_branch }) =>
+                turn.call("start_helper", {
+                  description,
+                  prompt: `Run ${command}.`,
+                  ...(own_branch === undefined ? {} : { own_branch }),
+                }),
+              ),
+            )),
+          );
+          delta(turn, "Done.");
+          turn.complete("completed");
+          return;
+        }
+        const helper = helpers.find(({ command }) => turn.text === `Run ${command}.`);
+        working += 1;
+        most = Math.max(most, working);
+        await turn.call("run_command", { command: helper?.command ?? "pwd" });
+        await new Promise((done) => setTimeout(done, 50));
+        turn.notify("item/completed", {
+          threadId: turn.threadId,
+          turnId: turn.turnId,
+          item: { type: "agentMessage", id: "msg-1", text: helper?.report ?? "", phase: null },
+        });
+        working -= 1;
+        turn.complete("completed");
+      },
+    });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    const request = await asOwner(testWorker({ root, providers: [provider] }));
+    const response = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: MESSAGE,
+      model: { provider: "codex", model: "gpt-6.1-sol" },
+      effort: "high",
+    });
+    expect(response.status).toBe(201);
+    const { id } = SessionSummary.parse(await response.json());
+    const asked: unknown[] = [];
+    const events = await followSession(request, {
+      sessionId: id,
+      until: (event) => event.type === "turn-completed" || event.type === "turn-failed",
+      onEvent: (event) => {
+        if (event.type !== "approval-requested") return;
+        asked.push(event);
+        void postJson(request, `/api/sessions/${id}/approvals/${event.seq}`, { answer: "deny" });
+      },
+    });
+    return { events, asked, codex, most, answers };
+  };
+
+  /** The helper's id the worker recorded for a name. */
+  const helperNamed = (events: readonly SessionEvent[], name: string) => {
+    const started = events.find((event) => event.type === "helper-started" && event.name === name);
+    if (started?.type !== "helper-started") throw new Error(`No helper ${name}`);
+    return started.helper;
+  };
+
+  /** The events a helper's line is made of, in order: its start, its work and its finish. */
+  const helperLine = (events: readonly SessionEvent[], name: string) => {
+    const helper = helperNamed(events, name);
+    return events.flatMap(
+      (event): (Activity | { started: string } | { waits: string } | { finished: string })[] => {
+        if (event.type === "helper-started" && event.helper === helper) {
+          return [event.waiting ? { waits: event.name } : { started: event.name }];
+        }
+        if (event.type === "activity" && event.helper === helper) return [event.activity];
+        if (event.type === "helper-finished" && event.helper === helper) {
+          return [{ finished: event.report }];
+        }
+        return [];
+      },
+    );
+  };
+
+  it("shows each helper's activity lines, routes its commands through the approval cards, and runs at most three at once", async () => {
+    const { events, asked, most, codex } = await helpingTurn([
+      { description: "List the files", command: "ls", report: "Seen the files." },
+      { description: "Check the status", command: "git status", report: "Clean." },
+      { description: "Show the log", command: "git log", report: "One commit." },
+      {
+        description: "Make a file",
+        command: "touch made-by-helper.txt",
+        report: "Couldn't make it.",
+      },
+    ]);
+
+    expect(events.at(-1)).toMatchObject({ type: "turn-completed" });
+    expect(most).toBe(3);
+    expect(helperLine(events, "List the files")).toEqual([
+      { started: "List the files" },
+      { kind: "ran-command", command: "ls" },
+      { finished: "Seen the files." },
+    ]);
+    // The fourth waits for a place, then asks the owner for its command, which is denied.
+    expect(helperLine(events, "Make a file")).toEqual([
+      { waits: "Make a file" },
+      { started: "Make a file" },
+      { finished: "Couldn't make it." },
+    ]);
+    expect(asked).toEqual([
+      expect.objectContaining({
+        ask: { kind: "command", command: "touch made-by-helper.txt", reason: "off-allowlist" },
+        helper: helperNamed(events, "Make a file"),
+      }),
+    ]);
+    const worktree = z.object({ cwd: z.string() }).parse(codex.requests("thread/start")[0]?.params);
+    await expect(readFile(join(worktree.cwd, "made-by-helper.txt"))).rejects.toThrow();
+  });
+
+  it("starts each helper on a thread of its own, on the session's model and effort, with the coding tools and none to start helpers", async () => {
+    const { codex, answers } = await helpingTurn([
+      { description: "List the files", command: "ls", report: "Seen the files." },
+    ]);
+
+    const Started = z.object({
+      model: z.string(),
+      cwd: z.string(),
+      baseInstructions: z.string(),
+      dynamicTools: z.array(z.object({ name: z.string() })),
+    });
+    const [session, helper] = codex.requests("thread/start").map((m) => Started.parse(m.params));
+    expect(session?.dynamicTools.map((tool) => tool.name)).toContain("start_helper");
+    expect(helper).toMatchObject({ model: "gpt-6.1-sol", cwd: session?.cwd });
+    expect(helper?.dynamicTools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["read_file", "run_command", "write_file", "edit_file"]),
+    );
+    expect(helper?.dynamicTools.map((tool) => tool.name)).not.toContain("start_helper");
+    expect(helper?.baseInstructions).toContain("You're a helper");
+    expect(codex.requests("turn/start")[1]?.params).toMatchObject({
+      effort: "high",
+      input: [{ type: "text", text: "Run ls." }],
+    });
+    // The model reads the helper's report as the tool's answer.
+    expect(JSON.stringify(answers[0])).toContain("Seen the files.");
+  });
+
+  it("gives a helper that writes code a branch of its own, and merges it back as it finishes", async () => {
+    const { events, codex } = await helpingTurn([
+      {
+        description: "Write the notes",
+        command: "git status",
+        report: "Wrote them.",
+        own_branch: true,
+      },
+    ]);
+
+    const helper = helperNamed(events, "Write the notes");
+    const branched = events.find(
+      (event) => event.type === "helper-branched" && event.helper === helper,
+    );
+    expect(branched).toMatchObject({ branch: expect.stringMatching(/-helper-1$/) });
+    const [session, own] = codex
+      .requests("thread/start")
+      .map((m) => z.object({ cwd: z.string() }).parse(m.params).cwd);
+    expect(own).toBe(`${session}-helper-1`);
+    expect(
+      events.find((event) => event.type === "helper-finished" && event.helper === helper),
+    ).toMatchObject({ report: "Wrote them.", merged: true });
   });
 });
 

@@ -65,6 +65,12 @@ a file just outside the workspace folder (in the context folder, next to it) hol
       "Searched the web for …" and the answer lists sources. A turn whose thread starts without it (a code
       workspace) doesn't search.
 
+- [ ] **Helpers through Courtyard's tool** (#470, ADR 0027). In a Codex code session, asked to review the branch
+      with the code-review skill, Codex starts its two helpers with `start_helper`: the chat shows a line for each,
+      each read and command on its own line, and the turn ends only after both report. A helper's command off the
+      allowlist asks the owner, naming the helper. A long helper (several minutes) still hands its report back, so
+      Codex doesn't time out a tool call that waits that long. Codex's own `spawn_agent` isn't offered.
+
 ## Runs
 
 | Date       | Codex   | Result                                                                               |

@@ -540,6 +540,31 @@ it wasn't there or was there more than once. The worker runs each command throug
 Windows worker), with the session's environment and without Courtyard's settings, and ends it and everything it
 started when the turn is stopped.
 
+Codex's own sub-agents get none of Courtyard's tools, so its helpers are Courtyard's (#470, ADR 0027), started with
+`start_helper`:
+
+> Hands part of the work to a helper: another model on your model and effort, which works in your working directory
+> with these same tools under the same rules, and gives back its report when it's done. Only when a skill you're
+> using calls for helpers or the owner asks. Several can work at once, at most three; another waits for a place. Set
+> own_branch for a helper that writes code: it works on a worktree and branch of its own, from your branch's last
+> commit, so commit first, and its branch is merged back into yours when it finishes.
+
+It takes `description` (what it's for, in a few words, which the owner sees as its name), `prompt` (its whole task:
+it sees nothing of the conversation) and `own_branch`. Each helper is a fresh thread on the session's model and
+effort, in the session's worktree or its own branch's, with the file tools, the coding tools and the use skill tool,
+each call decided as its own, as a Claude helper's is (Coding, above). It isn't given `start_helper`, and a task it
+asks for is refused as a Claude helper's is. Its instructions are the turn's, with its task as the message, and then:
+
+> You're a helper: this session's model handed you the task in your message. Do it with your tools, under the rules
+> above, in your working directory. You can't start helpers or tasks of your own. When you're done, end with your
+> report: what you found or did, and anything left undone. It's all the model sees of your work.
+
+Its last message is its report, shown on its line and given back as the tool's answer, with the merge note of a
+branch of its own (Coding, above) after it. One with nothing to say gives "The helper finished without a report.";
+one that stopped (the owner's Stop, Codex failing) gives "The helper stopped before it finished: <reason>"; and when
+its branch couldn't be made: "Courtyard couldn't make a branch of its own for this helper, so it didn't start: start
+it without own_branch, or do the work yourself."
+
 ## The Lead
 
 Built with #347. A code workspace can have one Lead: a long-lived code session whose job is the build order, not one
