@@ -225,7 +225,7 @@ describe("Next up (#301)", () => {
     ]);
   });
 
-  it("lists the issues on a Build order line that need grilling first in their place, and no others that aren't ready (#363)", async () => {
+  it("lists every issue that needs grilling first, those on a Build order line in their place and the rest after them by number (#363, #463)", async () => {
     const { request } = await signedInWith(
       [
         { number: 2, title: "Two", milestone: "4 · Code workspaces" },
@@ -266,6 +266,41 @@ describe("Next up (#301)", () => {
       [117, false],
       [2, true],
       [8, false],
+      [6, false],
+      [12, false],
+    ]);
+  });
+
+  it("offers the issues to grill in a milestone with no Build order line, in Later and in none, by number, and never says one waits on another (#463)", async () => {
+    const { request } = await signedInWith(
+      [
+        { number: 9, title: "Nine", milestone: "5 · Tablet hub", labels: ["needs-info"] },
+        {
+          number: 4,
+          title: "Four",
+          milestone: "5 · Tablet hub",
+          labels: ["needs-triage"],
+          blockedBy: [9],
+        },
+        { number: 3, title: "Later", milestone: "Later", labels: ["needs-triage"] },
+        { number: 1, title: "Nowhere", labels: ["needs-triage"] },
+      ],
+      { milestones: { "5 · Tablet hub": "Next." } },
+    );
+
+    const response = await request("/api/workspaces/side-project/next-up");
+
+    expect(
+      NextUp.parse(await response.json()).issues.map((issue) => [
+        issue.number,
+        issue.ready,
+        issue.after,
+      ]),
+    ).toEqual([
+      [4, false, null],
+      [9, false, null],
+      [3, false, null],
+      [1, false, null],
     ]);
   });
 

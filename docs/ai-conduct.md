@@ -491,8 +491,8 @@ house process tells the model about. One started on an issue that stops, fails o
 has its claim released ("Stopped: <why>"), and claimed again if it carries on; a pull request needs no comment, since
 it links the issue.
 
-Next up also offers the issues on a milestone's Build order line that aren't ready yet (`needs-triage` or
-`needs-info`, #363), in their place in the order. When the next in order is one, Grill takes Build's place on top, and
+Next up also offers every open issue that isn't ready yet (`needs-triage` or `needs-info`, #363, #463), in its place
+in the order, whether a Build order line names it or not. Grill takes the top on the first of them, and
 starts a new session with the Grilling skill (Matt Pocock's in a code workspace), once the owner has seen the issue
 and the model. The worker claims nothing, since a grill builds nothing, and the session doesn't take a place among the
 code sessions running (it gets no port slot). Its first message:

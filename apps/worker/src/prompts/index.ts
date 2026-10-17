@@ -1605,8 +1605,8 @@ export const buildIssueMessage = (issue: { number: number; title: string }) =>
   `Build issue #${issue.number}, ${quoted(issue.title)}. Read it first with gh issue view ${issue.number} --comments: its description and comments are what to build, and where a later comment settles something the description left open, the comment wins. It's claimed for you on GitHub already, so don't claim it again. Build it the way this repository does, and open a pull request that closes it.`;
 
 /**
- * The first message of a session Grill starts (#363), on an issue on a Build order line that isn't
- * ready yet (docs/ai-conduct.md, Coding).
+ * The first message of a session Grill starts (#363), on an issue that isn't ready yet
+ * (docs/ai-conduct.md, Coding).
  */
 export const grillIssueMessage = (issue: { number: number; title: string }) =>
   `Grill issue #${issue.number}, ${quoted(issue.title)}, so it can be built. Read it first with gh issue view ${issue.number} --comments, then grill the owner on it until it's clear enough to build. Once you agree, put the decisions on the issue as a comment, and label it ready-for-agent in place of needs-triage or needs-info; when it changes what the owner sees, draw it on the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next up offers Build once it's ready.`;

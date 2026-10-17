@@ -32,11 +32,12 @@ const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
  * in milestone order, the milestone they're in beside its label: from a tablet up, as many as its
  * block has room for, then More for the rest (#418); on a phone, three, then More. The first has
  * Build (#298): one tap shows the issue and the model it'll be built with, a second starts the
- * session, which the worker claims the issue for. When the next in order on its Build order line
- * needs grilling first, Grill takes the top in gold (#363; Paper, "Next up offers Grill"), and the
- * first ready issue sits under it with a small Build; on a phone the rest wait for More.
- * An issue blocked by an open one (#377; Paper, "Next up: blocked rows say After …") keeps its
- * place among the rows, with no Build, saying what it comes after; Build is on the first that isn't.
+ * session, which the worker claims the issue for. When an issue needs grilling first, Grill takes
+ * the top in gold on the first in order (#363, #463; Paper, "Next up every issue"), and the first
+ * ready issue sits under it with a small Build; on a phone the rest wait for More. The other
+ * issues to grill keep their place among the rows, saying "Needs grilling first". A ready issue
+ * blocked by an open one (#377; Paper, "Next up: blocked rows say After …") keeps its place, with
+ * no Build, saying what it comes after; Build is on the first that isn't.
  * More opens the rest inside its card, which keeps its height, and becomes Fewer (#335). Under
  * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
  * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
@@ -84,14 +85,14 @@ type Offered = {
 function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   const [more, setMore] = useState(false);
   const [next] = props.issues;
-  /** The next in order, when it needs grilling: Grill takes the top. */
-  const grill = next?.ready === false ? next : undefined;
+  /** The first issue to grill, in order across every milestone (#463): Grill takes the top. */
+  const grill = props.issues.find((issue) => !issue.ready);
   /** The first ready issue blocked by no open one: Build's, under Grill when there is one. */
   const build = props.issues.find(buildable);
   const first = grill ?? build;
   const under = grill === undefined ? undefined : build;
-  /** The other ready issues in order, blocked ones in their place. */
-  const rest = props.issues.filter((issue) => issue.ready && issue !== build);
+  /** The other issues in order, those to grill and blocked ones in their place. */
+  const rest = props.issues.filter((issue) => issue !== grill && issue !== build);
   const room = useRoomFor(rest.length);
   const closed =
     room.fits !== undefined
@@ -125,34 +126,42 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
             </div>
             {shown.length > 0 && (
               <ul ref={room.list} className="flex flex-col gap-0.5 pt-1">
-                {shown.map((issue) => (
-                  <li
-                    key={issue.number}
-                    aria-label={`#${issue.number} ${issue.title}${issue.after === null ? "" : `, after ${issue.after}`}`}
-                  >
-                    <a
-                      href={issue.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
+                {shown.map((issue) => {
+                  /** What it waits on, under its title: a grill (#463), else an open issue (#377). */
+                  const waits = !issue.ready
+                    ? { says: "Needs grilling first", named: "needs grilling first" }
+                    : issue.after === null
+                      ? undefined
+                      : { says: `After ${issue.after}`, named: `after ${issue.after}` };
+                  return (
+                    <li
+                      key={issue.number}
+                      aria-label={`#${issue.number} ${issue.title}${waits === undefined ? "" : `, ${waits.named}`}`}
                     >
-                      <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
-                        #{issue.number}
-                      </span>
-                      <span className="flex min-w-0 grow flex-col">
-                        <span className="truncate text-meta font-semibold text-foreground/90">
-                          {issue.title}
+                      <a
+                        href={issue.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
+                      >
+                        <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
+                          #{issue.number}
                         </span>
-                        {/* Blocked by an open issue (#377): what it comes after, in a row as tall as one in one line. */}
-                        {issue.after !== null && (
-                          <span className="truncate text-label font-medium text-muted-foreground">
-                            After {issue.after}
+                        <span className="flex min-w-0 grow flex-col">
+                          <span className="truncate text-meta font-semibold text-foreground/90">
+                            {issue.title}
                           </span>
-                        )}
-                      </span>
-                    </a>
-                  </li>
-                ))}
+                          {/* What it waits on, in a row as tall as one in one line. */}
+                          {waits !== undefined && (
+                            <span className="truncate text-label font-medium text-muted-foreground">
+                              {waits.says}
+                            </span>
+                          )}
+                        </span>
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </BlockRows>
