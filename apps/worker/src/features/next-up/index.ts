@@ -16,7 +16,9 @@ import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
 
 /**
  * A code workspace's Next up (#301): its repository's `ready-for-agent` issues nobody has claimed,
- * in milestone order, read through Courtyard's GitHub sign-in (#99) only when a page asks, and
+ * and every issue that needs grilling first (#463), in milestone order; a milestone's Build order
+ * line only orders the issues it names first, it doesn't decide which show. Read through
+ * Courtyard's GitHub sign-in (#99) only when a page asks, and
  * kept a little while. Build (#298) starts a code session on the first, with the issue as its
  * first message, and claims the issue on GitHub as AGENTS.md says a builder does. Every session
  * started on an issue has its claim posted and released here, as `sessions/` asks (#324).
@@ -27,7 +29,7 @@ export const READY_LABEL = "ready-for-agent";
 
 /**
  * The labels of an issue that needs grilling before it's built (Matt Pocock's triage labels):
- * Next up offers Grill for one on its milestone's Build order line (#363).
+ * Next up offers Grill for every one (#363, #463).
  */
 const GRILL_LABELS = ["needs-triage", "needs-info"] as const;
 
@@ -50,7 +52,7 @@ export type NextUpProblem =
   | { readonly kind: "claimed" }
   /** The issue is blocked by an open one (#377): it's built once that closes. */
   | { readonly kind: "blocked"; readonly after: string }
-  /** The issue isn't one Next up offers Grill on: ready, closed, or off its Build order line. */
+  /** The issue isn't one Next up offers Grill on: ready, closed, or not to grill. */
   | { readonly kind: "nothing-to-grill" }
   | { readonly kind: "session"; readonly error: SessionError };
 
@@ -178,9 +180,9 @@ export const createNextUp = (options: {
   };
 
   /**
-   * The repository's ready issues nobody has claimed, and those on a Build order line that need
-   * grilling first (#363), in order, asked of GitHub now. Only a ready one's comments are asked
-   * for: a grill claims nothing.
+   * The repository's ready issues nobody has claimed, and every one that needs grilling first
+   * (#363, #463), in order, asked of GitHub now. Only a ready one's comments are asked for: a
+   * grill claims nothing.
    */
   const read = async (repo: string): Promise<Result<NextUpIssue[], NextUpProblem>> => {
     const [issues, pulls, ...unready] = await Promise.all([
@@ -199,9 +201,7 @@ export const createNextUp = (options: {
       if (!found.ok) return err({ kind: "github", problem: found.error });
       toGrill.push(
         ...found.value.filter(
-          (issue) =>
-            buildOrderOf(issue.milestoneDescription).includes(issue.number) &&
-            ![...issues.value, ...toGrill].some((each) => each.number === issue.number),
+          (issue) => ![...issues.value, ...toGrill].some((each) => each.number === issue.number),
         ),
       );
     }
@@ -337,7 +337,7 @@ export const createNextUp = (options: {
 
     /**
      * Grill (#363): a new code session on `grill.model` with the grilling skill, whose first
-     * message is an issue on a Build order line that isn't ready yet. It claims nothing, and takes
+     * message is an issue that needs grilling first. It claims nothing, and takes
      * no place among the code sessions running.
      */
     grill: async (

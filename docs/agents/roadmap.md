@@ -6,10 +6,13 @@ agent's memory. Inside a spec, order comes from GitHub's blocked-by links, as Ma
 
 - **Each milestone is a group of work** that leaves something usable, titled `N · <name>`, worked through in number
   order. `Later` holds parked ideas, in no order.
-- **Its description gives the build order inside it:** `Build order: #A → #B → #C.`, with a note when something waits
-  on the owner. A code workspace's Next up reads this line: it ends at the first full stop, so notes go after it.
-  Issues on it that edit the same files are each marked blocked by the one before (GitHub's blocked by): Next up
-  keeps a blocked one in its place, "After …", with no Build until its blocker closes (#377).
+- **Its description may give the build order inside it:** `Build order: #A → #B → #C.`, with a note when something
+  waits on the owner. The line is optional and only orders: a code workspace's Next up offers every ready issue and
+  every one that needs grilling, whether the line names it or not, the ones it names first in its order, then the
+  rest by number (#463). It ends at the first full stop, so notes go after it.
+- **Holding an issue back is "blocked by", never taking `ready-for-agent` off.** Issues that edit the same files are
+  each marked blocked by the one before (GitHub's blocked by): Next up keeps a blocked one in its place, "After …",
+  with no Build, and the Lead starts it once its blocker closes (#377).
 - **Every open issue is in exactly one milestone.**
 
 ## What comes first
