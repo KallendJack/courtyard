@@ -85,6 +85,7 @@ import {
   LEAD_TOOL_NAME,
   type LeadBrief,
   notOfferedReply,
+  PREVIEW_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   saveReply,
@@ -109,6 +110,7 @@ import {
   firstWithRoom,
   type HelperCode,
   type HelperTurn,
+  imageOf,
   modelsOnOffer,
   offerFor,
   type Provider,
@@ -171,7 +173,7 @@ import {
   workspaceSkills,
 } from "../skills/index.ts";
 import { createTurnReplies } from "../suggested-replies/index.ts";
-import { createTasks } from "../tasks/index.ts";
+import { createTasks, type TaskRefusal } from "../tasks/index.ts";
 import {
   createTurnThings,
   readThings,
@@ -226,6 +228,8 @@ export type SessionError =
   | { readonly kind: "attachment-not-found" }
   /** The session has no task by that id, or none running, for Stop (#182). */
   | { readonly kind: "task-not-found" }
+  /** Start preview's task didn't start (#183), and why. */
+  | { readonly kind: "task-refused"; readonly refusal: TaskRefusal }
   /** The owner's Undo or Edit of a save couldn't be done. */
   | { readonly kind: "note-refused"; readonly act: NoteAct; readonly refusal: NoteRefusal }
   /** No finished answer to save as a document has that message's number. */
@@ -649,6 +653,35 @@ export type ClaimHooks = {
 };
 
 /**
+ * What code sessions' turns and tasks need from their previews (#183): word that a task has
+ * ended, so its preview closes, and the answer to a call of the screenshot tool.
+ */
+export type PreviewHooks = {
+  readonly ended: (session: SessionId, task: TaskId) => void;
+  readonly tool: (session: SessionId, input: unknown) => Promise<ToolReply>;
+};
+
+/** What a preview screenshot shows (#183): its page and size, by which the chat keeps the newest of each. */
+const PreviewShot = z.object({ path: z.string(), size: z.string() });
+
+/** How much of the start of a task's output is read for where it serves (#183). */
+const TASK_OPENING_BYTES = 64 * 1024;
+
+/** A code session's tasks still running, for its preview (#183), and where Start preview runs. */
+export type PreviewTasks = {
+  readonly id: SessionId;
+  readonly workspaceId: WorkspaceId;
+  readonly worktree: string;
+  readonly tasks: readonly {
+    readonly task: TaskId;
+    /** The owner started it with Start preview. */
+    readonly preview: boolean;
+    /** The start of its output. */
+    readonly opening: string;
+  }[];
+};
+
+/**
  * Sessions as jobs with an append-only event log in plain files (ADR 0006): one folder per session
  * in the data folder, holding `session.json` and `events.jsonl`. A turn runs on the worker to the
  * end whether or not anyone is watching; anyone can subscribe from a position and follow live.
@@ -681,6 +714,8 @@ export const createSessions = (options: {
   lead?: LeadHooks;
   /** The claim on the issue a code session was started on (#324). */
   claims?: ClaimHooks;
+  /** Code sessions' previews (#183): each closes as its task ends, and takes the model's screenshots. */
+  previews?: PreviewHooks;
   /**
    * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
    * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
@@ -692,6 +727,8 @@ export const createSessions = (options: {
   const running = new Map<SessionId, RunningSession>();
   /** Code sessions' tasks (#182), which outlive the turns that start them. */
   const tasks = createTasks();
+  /** The tasks the owner started with Start preview (#183), while they run. */
+  const previewsStarted = new Set<TaskId>();
   /**
    * Each code session's pull request as last recorded (`null` for none yet), once read from its
    * events or written there, so listing a workspace's sessions doesn't read every event log.
@@ -1227,6 +1264,22 @@ export const createSessions = (options: {
             suggestRepliesReply(await replies.suggest(input)),
           [LEAD_TOOL_NAME]: async (input) =>
             (await options.lead?.tool(turn.id, input)) ?? notOfferedReply(LEAD_TOOL_NAME),
+          // Each screenshot shows in the chat too (#183), as Paper's do.
+          [PREVIEW_TOOL_NAME]: async (input) => {
+            const reply =
+              (await options.previews?.tool(turn.id, input)) ?? notOfferedReply(PREVIEW_TOOL_NAME);
+            const asked = PreviewShot.safeParse(input);
+            for (const part of reply.content) {
+              const image = part.kind === "image" ? imageOf(part.dataUrl) : undefined;
+              if (image === undefined || !asked.success) continue;
+              await show({
+                connection: "Preview",
+                of: `${asked.data.path} · ${asked.data.size}`,
+                ...image,
+              });
+            }
+            return reply;
+          },
         };
         /** A model's call to one of Courtyard's tools, answered only when the framing offers it. */
         const callTool = (call: { name: string; input: unknown }): Promise<ToolReply> => {
@@ -2614,9 +2667,10 @@ export const createSessions = (options: {
       events.flatMap((event) => (event.type === "task-ended" ? [[event.task, event.seq]] : [])),
     );
     return tasksIn(events).filter(
-      ({ task, ended }) =>
+      ({ task, ended, preview }) =>
         ended !== undefined &&
         ended.ending.kind !== "stopped" &&
+        !preview &&
         (endedAt.get(task) ?? 0) > since &&
         !told.has(task),
     );
@@ -2702,11 +2756,15 @@ export const createSessions = (options: {
    */
   const taskEnded = async (end: { id: SessionId; task: TaskId; ending: TaskEnding }) => {
     const { id, task, ending } = end;
+    // Its preview goes with it (#183).
+    options.previews?.ended(id, task);
+    const preview = previewsStarted.delete(task);
     const session = running.get(id);
     // Deleted, or set aside by a fresh start: there's nothing to record it in.
     if (session === undefined || session.turn.kind === "deleting") return;
     const recorded = await append(id, { type: "task-ended", task, ending });
-    if (!recorded.ok || ending.kind === "stopped") return;
+    // The owner's Start preview tells nobody how it ended (#183).
+    if (!recorded.ok || ending.kind === "stopped" || preview) return;
     const { turn } = session;
     if (turn.kind === "running" && turn.turn !== undefined && turn.added?.reserve() === true) {
       const events = await readEvents(id);
@@ -2781,6 +2839,71 @@ export const createSessions = (options: {
         return err({ kind: "task-not-found" });
       }
       return ok(null);
+    },
+
+    /**
+     * A code session's tasks still running, for its preview (#183), oldest first: each with the
+     * start of its output, where a dev server says where it serves, and whether the owner started
+     * it with Start preview; and the session's worktree, where Start preview runs.
+     */
+    previewTasks: async (rawId: string): Promise<Result<PreviewTasks, SessionError>> => {
+      const found = await findSession(rawId);
+      if (!found.ok) return found;
+      const { id, branch } = found.value;
+      if (branch === undefined) return err({ kind: "not-code-session" });
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      const told = tasksIn(events.value);
+      const listed = await Promise.all(
+        tasks.running(id).map(async (task) => ({
+          task,
+          preview: told.some((each) => each.task === task && each.preview),
+          opening: await tasks.opening(folderOf(id), task, TASK_OPENING_BYTES),
+        })),
+      );
+      return ok({
+        id,
+        workspaceId: found.value.workspaceId,
+        worktree: options.code.worktreeOf(id),
+        tasks: listed,
+      });
+    },
+
+    /**
+     * Start preview (#183): the owner's command runs as one of a code session's tasks, in its
+     * worktree, with `env` on top of the worker's. Its end tells nobody, as a stopped task's
+     * doesn't. Needs no approval: the owner tapped it.
+     */
+    startPreview: async (start: {
+      id: string;
+      command: string;
+      env: CommandEnv;
+    }): Promise<Result<TaskId, SessionError>> => {
+      const found = await findSession(start.id);
+      if (!found.ok) return found;
+      const { id, branch } = found.value;
+      if (branch === undefined) return err({ kind: "not-code-session" });
+      const started = await tasks.start({
+        session: id,
+        sessionFolder: folderOf(id),
+        command: start.command,
+        cwd: options.code.worktreeOf(id),
+        env: start.env,
+        ended: (task, ending) => taskEnded({ id, task, ending }),
+      });
+      if (!started.ok) return err({ kind: "task-refused", refusal: started.error });
+      previewsStarted.add(started.value);
+      const recorded = await append(id, {
+        type: "task-started",
+        task: started.value,
+        command: start.command,
+        preview: true,
+      });
+      if (!recorded.ok) {
+        await tasks.stop(id, started.value, "owner");
+        return recorded;
+      }
+      return ok(started.value);
     },
 
     /** A code session's pull request as the owner reviews it (#160). */

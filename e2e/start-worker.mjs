@@ -152,6 +152,29 @@ writeFileSync(
   join(repo, "scripts", "serve.mjs"),
   'console.log("Listening on 5173");\nsetInterval(() => {}, 1000);\n',
 );
+// Its app, which its dev script serves on PORT and says where, as Vite does, for its preview (#183).
+writeFileSync(
+  join(repo, "scripts", "site.mjs"),
+  [
+    'import { createServer } from "node:http";',
+    "const server = createServer((request, response) => {",
+    '  response.setHeader("content-type", "text/html");',
+    '  response.end("<title>Side project</title><h1>Side project, running</h1>");',
+    "});",
+    'server.listen(Number(process.env.PORT ?? 0), "localhost", () =>',
+    '  console.log("  ➜  Local:   http://localhost:" + server.address().port + "/"),',
+    ");",
+    "",
+  ].join("\n"),
+);
+writeFileSync(
+  join(repo, "package.json"),
+  JSON.stringify({
+    name: "side-project",
+    private: true,
+    scripts: { dev: "node scripts/site.mjs" },
+  }),
+);
 git(repo, "add", ".");
 git(repo, "commit", "-qm", "Start");
 git(repo, "push", "-q", "origin", "main");

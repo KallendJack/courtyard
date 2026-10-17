@@ -167,9 +167,16 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /**
    * The model started a long command as a task (#182): it runs on after the turn, its output kept
-   * in the session's folder, never here.
+   * in the session's folder, never here. Or the owner did, with Start preview (`preview`, #183):
+   * its end tells nobody.
    */
-  z.object({ ...eventBase, type: z.literal("task-started"), task: TaskId, command: z.string() }),
+  z.object({
+    ...eventBase,
+    type: z.literal("task-started"),
+    task: TaskId,
+    command: z.string(),
+    preview: z.literal(true).optional(),
+  }),
   /** A task ended, here in the conversation: passed, failed, or stopped and by what (#182). */
   z.object({ ...eventBase, type: z.literal("task-ended"), task: TaskId, ending: TaskEnding }),
   /**
@@ -421,6 +428,8 @@ export type TaskTold = {
   readonly command: string;
   readonly startedAt: string;
   readonly ended: { readonly ending: TaskEnding; readonly at: string } | undefined;
+  /** The owner started it with Start preview (#183), not the model. */
+  readonly preview: boolean;
 };
 
 /** A session's tasks (#182), from its events, oldest first. */
@@ -433,6 +442,7 @@ export const tasksIn = (events: readonly SessionEvent[]): TaskTold[] => {
         command: event.command,
         startedAt: event.at,
         ended: undefined,
+        preview: event.preview === true,
       });
     }
     const started = event.type === "task-ended" ? tasks.get(event.task) : undefined;

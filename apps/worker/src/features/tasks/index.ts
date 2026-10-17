@@ -9,7 +9,7 @@ import {
   TaskId,
   wordsOf,
 } from "@courtyard/contract";
-import { readTextEnd } from "../../lib/files.ts";
+import { readTextEnd, readTextStart } from "../../lib/files.ts";
 import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 
@@ -170,6 +170,12 @@ export const createTasks = () => {
       const read = await readTextEnd(taskOutputPath(sessionFolder, task), characters);
       if (!read.ok) return read;
       return ok(read.value ?? { text: "", cut: false });
+    },
+
+    /** The start of a task's output, at most its first `bytes`: where a dev server says it serves (#183). */
+    opening: async (sessionFolder: string, task: TaskId, bytes: number) => {
+      const read = await readTextStart(taskOutputPath(sessionFolder, task), bytes);
+      return read.ok ? (read.value ?? "") : "";
     },
 
     /** The last line a task has printed so far, for the row above the Reply box. */

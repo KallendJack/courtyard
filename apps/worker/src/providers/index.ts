@@ -91,7 +91,8 @@ export type CourtyardTool = {
 /**
  * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
  * the save tool (ADR 0013), the document and Things tools (ADR 0020), the use skill tool (ADR 0016),
- * the suggest replies tool (ADR 0017) and a code workspace's Lead's build order tool (#347).
+ * the suggest replies tool (ADR 0017), a code workspace's Lead's build order tool (#347) and a
+ * code session's preview screenshot tool (#183).
  */
 export type TurnToolName =
   | "save_to_context"
@@ -99,7 +100,8 @@ export type TurnToolName =
   | "save_thing"
   | "use_skill"
   | "suggest_replies"
-  | "build_order";
+  | "build_order"
+  | "preview_screenshot";
 
 /** One of Courtyard's tools that a turn can offer. */
 export type TurnTool = CourtyardTool & { readonly name: TurnToolName };
@@ -132,6 +134,14 @@ export type CodeTools = {
 export type ToolContent =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "image"; readonly dataUrl: string };
+
+/** An image's data URL as its kind and bytes, or `undefined` when it isn't one. */
+export const imageOf = (dataUrl: string) => {
+  const [, mediaType, data] = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl) ?? [];
+  return mediaType === undefined || data === undefined
+    ? undefined
+    : { mediaType, bytes: Buffer.from(data, "base64") };
+};
 
 /**
  * What one of Courtyard's tools did, as the model is told: whether it did what was asked (a save

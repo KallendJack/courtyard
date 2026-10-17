@@ -60,6 +60,16 @@ describe("settings", () => {
     expect(startWorker({ ...settings, COURTYARD_PORT: "9100" }).port).toBe(9100);
   });
 
+  it("names preview ports that aren't a port or a range of them (#183)", () => {
+    for (const ports of ["9906-9901", "nine", "9901-99999", "1-500"]) {
+      const error = startupError({ ...settings, COURTYARD_PREVIEW_PORTS: ports });
+
+      expect(error).toContain("COURTYARD_PREVIEW_PORTS");
+    }
+    startWorker({ ...settings, COURTYARD_PREVIEW_PORTS: "9901-9906" });
+    startWorker({ ...settings, COURTYARD_PREVIEW_PORTS: "9950" });
+  });
+
   it("refuses a context folder that doesn't exist", () => {
     const error = startupError({ ...settings, COURTYARD_CONTEXT_DIR: join(root, "missing") });
 
