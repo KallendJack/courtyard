@@ -68,6 +68,7 @@ const signedInWith = async (
     milestones?: Readonly<Record<string, string>>;
     sendPush?: FakePush["send"];
     env?: Record<string, string>;
+    now?: () => number;
   } = {},
 ): Promise<{ github: FakeGitHub; request: Requester }> => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project" });
@@ -82,6 +83,7 @@ const signedInWith = async (
       providers: more.providers ?? [createFakeProvider({ delayMs: 0 })],
       ...(more.sendPush === undefined ? {} : { sendPush: more.sendPush }),
       ...(more.env === undefined ? {} : { env: more.env }),
+      ...(more.now === undefined ? {} : { now: more.now }),
       repeat: (_everyMs, job) => {
         jobs.push(job);
       },
@@ -319,6 +321,161 @@ describe("Run the build order (#347)", () => {
 
     expect((await leadOf(request)).state).toBe("resting");
     expect((await sessionsOf(request)).filter((session) => session.lead === true)).toHaveLength(1);
+  });
+});
+
+describe("keeping going for a window (#457)", () => {
+  const HOUR = 60 * 60 * 1000;
+  /** #22 claimed by someone else, and #23 blocked by it: nothing ready until #22 closes. */
+  const WAITING: readonly FakeIssue[] = [
+    { number: 22, title: "One loading state", milestone: "4 · Code workspaces" },
+    {
+      number: 23,
+      title: "Nothing moves once drawn",
+      milestone: "4 · Code workspaces",
+      blockedBy: [22],
+    },
+  ];
+
+  /** A worker whose clock a test moves on, with #22 claimed elsewhere. */
+  const waitingWorker = async (issues: readonly FakeIssue[] = WAITING) => {
+    const clock = { now: Date.parse("2026-10-17T09:00:00") };
+    const worker = await signedInWith(issues, { now: () => clock.now });
+    worker.github.comment(
+      onGitHub,
+      22,
+      "Building this: Claude Code helper (22-thing), next in order",
+    );
+    return { ...worker, clock };
+  };
+
+  const runFor = async (request: Requester, window: string) => {
+    const response = await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      window,
+    });
+    expect(response.status).toBe(200);
+    return LeadStatus.parse(await response.json());
+  };
+
+  it("wakes from its rest for an issue made buildable within its window, saying so in its chat", async () => {
+    const { github, request, clock } = await waitingWorker();
+    const rested = await runFor(request, "4-hours");
+    expect(rested).toMatchObject({ state: "resting" });
+    expect(rested.wakesUntil).toBe(new Date(clock.now + 4 * HOUR).toISOString());
+
+    clock.now += 3 * HOUR;
+    github.closeIssue(onGitHub, 22);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.state).toBe("running");
+    expect(lead.building.map((builder) => builder.issue)).toEqual([23]);
+    expect(await notesIn(request)).toContain("Woke: #23 is ready, started building.");
+  });
+
+  it("rests until the owner runs it again once its window has passed", async () => {
+    const { github, request, clock } = await waitingWorker();
+    await runFor(request, "4-hours");
+
+    clock.now += 4 * HOUR + 1;
+    github.closeIssue(onGitHub, 22);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead).toMatchObject({ state: "resting", building: [] });
+    expect(lead.wakesUntil).toBeUndefined();
+  });
+
+  it("never wakes when the owner ran just what's ready now", async () => {
+    const { github, request } = await waitingWorker();
+    expect((await runFor(request, "ready-now")).wakesUntil).toBeUndefined();
+
+    github.closeIssue(onGitHub, 22);
+    await runJobs();
+
+    expect(await leadOf(request)).toMatchObject({ state: "resting", building: [] });
+  });
+
+  it("keeps going until 22:00 when the owner says until tonight, and for 4 hours unless they say", async () => {
+    const { request, clock } = await waitingWorker();
+
+    expect((await runFor(request, "tonight")).wakesUntil).toBe(
+      new Date(Date.parse("2026-10-17T22:00:00")).toISOString(),
+    );
+    expect((await run(request)).wakesUntil).toBe(
+      new Date(Date.parse("2026-10-17T22:00:00")).toISOString(),
+    );
+    clock.now = Date.parse("2026-10-17T23:00:00");
+    expect((await run(request)).wakesUntil).toBe(new Date(clock.now + 4 * HOUR).toISOString());
+  });
+});
+
+describe("the brakes on a Run (#457)", () => {
+  const SIX: readonly FakeIssue[] = [
+    ...ISSUES,
+    { number: 25, title: "Fourth", milestone: "4 · Code workspaces" },
+    { number: 26, title: "Fifth", milestone: "4 · Code workspaces" },
+    { number: 27, title: "Sixth", milestone: "4 · Code workspaces" },
+  ];
+
+  /** The builder for `issue` opens its pull request, and its checks pass. */
+  const readyToMerge = async (github: FakeGitHub, request: Requester, issue: number) => {
+    const builder = await builderOf(request, issue);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: `c0ffee${issue}`,
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    return number;
+  };
+
+  it("starts no builder while 2 PRs wait on the owner's review, and carries on as one merges", async () => {
+    const { github, request } = await signedInWith(SIX);
+    await run(request);
+    const first = await readyToMerge(github, request, 22);
+    await readyToMerge(github, request, 23);
+
+    await runJobs();
+
+    const holding = await leadOf(request);
+    expect(holding.building).toEqual([]);
+    expect(holding.why).toBe(
+      "2 PRs wait on your review, so the next builder starts once one merges.",
+    );
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+
+    github.merge(first);
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([24, 25]);
+    expect(await notesIn(request)).toContain(
+      "Holding back: 2 PRs wait on your review, so the next builder starts once one merges.",
+    );
+  });
+
+  it("rests once it has started 4 builders this Run, until the owner runs it again", async () => {
+    const { github, request } = await signedInWith(SIX);
+    await run(request);
+    github.merge(await readyToMerge(github, request, 22));
+    await runJobs();
+    github.merge(await readyToMerge(github, request, 23));
+    await runJobs();
+
+    const rested = await leadOf(request);
+    expect(rested).toMatchObject({ state: "resting", why: "Built 4 this run · tap Run for more" });
+    expect(rested.wakesUntil).toBeUndefined();
+    expect(rested.building.map((each) => each.issue)).toEqual([24, 25]);
+    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+    await runJobs();
+    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+
+    expect((await run(request)).state).toBe("running");
+    github.merge(await readyToMerge(github, request, 24));
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([25, 26]);
   });
 });
 
@@ -726,13 +883,19 @@ describe("Merge in order (#423)", () => {
   const mergeInOrder = (request: Requester, pullRequests: readonly (number | undefined)[]) =>
     postJson(request, "/api/workspaces/side-project/lead/merge-in-order", { pullRequests });
 
-  /** Runs the worker's jobs until `done` holds, as time passing would. */
+  /**
+   * Runs the worker's jobs until `done` holds, as time passing would: a look may start a builder
+   * held back while two pull requests waited on the owner (#457), which takes a while.
+   */
   const until = async (done: () => boolean | Promise<boolean>) =>
     expect
-      .poll(async () => {
-        await runJobs();
-        return done();
-      })
+      .poll(
+        async () => {
+          await runJobs();
+          return done();
+        },
+        { timeout: 15_000 },
+      )
       .toBe(true);
 
   it("merges the ready pull requests one at a time, in the build order's order, then says so", async () => {

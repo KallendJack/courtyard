@@ -44,6 +44,13 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   // Allow all for builders (#428), off unless the owner turns it on.
   const allowAll = dialog.getByRole("switch", { name: "Allow all for builders" });
   await expect(allowAll).toHaveAttribute("aria-checked", "false");
+  // How long it keeps going (#457): 4 hours unless the owner says.
+  const keepGoing = dialog.getByRole("group", { name: "Keep going" });
+  await expect(keepGoing.getByRole("radio", { name: "4 hours" })).toBeChecked();
+  await expect(keepGoing.getByRole("radio")).toHaveCount(3);
+  await keepGoing.getByText("Until tonight").click();
+  await expect(keepGoing.getByRole("radio", { name: "Until tonight" })).toBeChecked();
+  await keepGoing.getByText("4 hours").click();
   await shot(page, "lead-confirm");
   await allowAll.click();
   await expect(allowAll).toHaveAttribute("aria-checked", "true");
@@ -191,5 +198,26 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
   await expect(strip).toContainText("Stopped · #340");
   await shot(page, "tablet-lead-chat-merge-stopped-at-a-check");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+// Resting within its window (#457): the e2e issues never become buildable later, so the Lead's
+// status is given here as the worker would give it.
+test("a resting Lead's row says until when it wakes for new work", async ({ page, request }) => {
+  const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
+  const wakesUntil = new Date(2026, 9, 17, 22, 0).toISOString();
+  await page.route(`**/api${HOME}/lead`, (route) =>
+    route.fulfill({ json: { ...real, state: "resting", building: [], wakesUntil } }),
+  );
+
+  await page.goto(HOME);
+
+  const lead = page
+    .getByRole("region", { name: "Running" })
+    .getByRole("listitem", { name: "Lead" });
+  await expect(lead).toContainText("Resting");
+  // As the device's clock shows it: 22:00, or 10:00 PM.
+  await expect(lead).toContainText(/Wakes for new work until (22:00|10:00\sPM)/);
+  await expect(lead.getByRole("button", { name: "Run" })).toBeVisible();
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

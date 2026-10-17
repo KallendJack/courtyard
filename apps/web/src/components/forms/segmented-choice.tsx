@@ -12,8 +12,9 @@ const LOOKS = {
     chosen: "bg-card text-foreground shadow-xs",
     other: "text-muted-foreground hover:text-foreground",
   },
+  /** Apart, they wrap onto a second line where a row is too narrow for them all. */
   apart: {
-    set: "gap-2",
+    set: "flex-wrap gap-2",
     choice: "flex h-8 items-center border px-3 text-meta/4 font-semibold",
     chosen: "border-primary/35 bg-primary/12 text-primary-text",
     other: "border-input text-foreground hover:bg-muted",
