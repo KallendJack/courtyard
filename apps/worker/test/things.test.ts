@@ -446,7 +446,10 @@ describe("a part's pin on its Thing's photo (#208)", () => {
     await withKit();
     await writeFile(
       join(thingsDir(), "chain.md"),
-      CHAIN.replace("part of: whyte-t-140\n", "part of: whyte-t-140\nneeds: Lube it\npin: 40, 60\n"),
+      CHAIN.replace(
+        "part of: whyte-t-140\n",
+        "part of: whyte-t-140\nneeds: Lube it\npin: 40, 60\n",
+      ),
     );
     const request = await owner();
     const form = { name: "Chain", status: "have", brand: "KMC X11", bought: "2026-03" };

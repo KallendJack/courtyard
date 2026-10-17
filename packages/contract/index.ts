@@ -131,6 +131,15 @@ export {
 } from "./lib/notifications.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
+  HomeView,
+  HomeViewId,
+  HomeViewPick,
+  LastQuestion,
+  PinnedPart,
+  PlanningHome,
+  WantedItem,
+} from "./lib/planning-home.ts";
+export {
   ChangedFile,
   MergeReadiness,
   OpenPullRequest,
@@ -230,6 +239,8 @@ export {
   TaskOutput,
 } from "./lib/tasks.ts";
 export {
+  pinOf,
+  pinText,
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,
   THING_FORM_FIELD,
@@ -253,8 +264,6 @@ export {
   ThingSlug,
   ThingStatus,
   ThingSummary,
-  pinOf,
-  pinText,
 } from "./lib/things.ts";
 export {
   TidyChange,

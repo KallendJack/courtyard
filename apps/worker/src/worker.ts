@@ -67,6 +67,8 @@ import { createNotifications, type SendPush } from "./features/notifications/ind
 import { notificationRoutes } from "./features/notifications/routes.ts";
 import { sendWebPush } from "./features/notifications/web-push.ts";
 import { readOwnerContext, startOwnerContext } from "./features/owner-context/index.ts";
+import { createHomePicks } from "./features/planning-home/index.ts";
+import { planningHomeRoutes } from "./features/planning-home/routes.ts";
 import { createPullRequests } from "./features/pull-requests/index.ts";
 import { pullRequestRoutes } from "./features/pull-requests/routes.ts";
 import { createQuickQuestions } from "./features/quick-questions/index.ts";
@@ -469,6 +471,14 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
+  api.route(
+    "/",
+    planningHomeRoutes({
+      contextDir,
+      picks: createHomePicks({ dataDir }),
+      lastQuestion: sessions.lastQuestion,
+    }),
+  );
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(

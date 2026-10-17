@@ -98,7 +98,10 @@ export const ThingFields = z
     /** A part's pin, as `pinText` writes it. */
     pin: z
       .string()
-      .refine((text) => pinOf(text) !== undefined, "Give the pin as across, then down, each 0 to 100.")
+      .refine(
+        (text) => pinOf(text) !== undefined,
+        "Give the pin as across, then down, each 0 to 100.",
+      )
       .optional(),
     photo: ThingPhotoPath.optional(),
   })

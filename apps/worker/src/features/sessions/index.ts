@@ -20,6 +20,7 @@ import {
   type FailureReason,
   type FirstMessage,
   type HelperId,
+  type LastQuestion,
   type ModelRef,
   type NewMessage,
   type Overflow,
@@ -3681,6 +3682,45 @@ export const createSessions = (options: {
         : undefined;
       if (last?.type !== "owner-message") return undefined;
       return { model: last.model, ...(last.effort === undefined ? {} : { effort: last.effort }) };
+    },
+
+    /**
+     * The owner's last message in a workspace (#208), in the session they last used that has one,
+     * with the replies its answer suggested; `null` before they've written any. A message the
+     * worker sent in their place (a failed check, Continue) isn't theirs.
+     */
+    lastQuestion: async (
+      workspaceId: WorkspaceId,
+    ): Promise<Result<LastQuestion | null, SessionError>> => {
+      const list = await sessionsOf(workspaceId);
+      if (!list.ok) return list;
+      const latestFirst = [...list.value].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      for (const listed of latestFirst) {
+        const events = await readEvents(listed.id);
+        if (!events.ok) return events;
+        const asked = events.value.findLast(
+          (event) =>
+            event.type === "owner-message" &&
+            event.checksFailed === undefined &&
+            event.conflicted === undefined &&
+            event.merged === undefined &&
+            event.runsBuildOrder === undefined &&
+            event.continues === undefined &&
+            event.tasksEnded === undefined,
+        );
+        if (asked?.type !== "owner-message") continue;
+        const replies = events.value.findLast(
+          (event) => event.type === "suggested-replies" && event.seq > asked.seq,
+        );
+        return ok({
+          session: listed.id,
+          text: asked.text,
+          at: asked.at,
+          nextSteps: replies?.type === "suggested-replies" ? replies.replies : [],
+          answering: listed.busy,
+        });
+      }
+      return ok(null);
     },
 
     /** How many sessions there are, in every workspace. */

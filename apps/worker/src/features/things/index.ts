@@ -2,6 +2,8 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ChangeId,
+  pinOf,
+  pinText,
   THING_DETAILS,
   THING_HISTORY_MAX_CHARACTERS,
   type ThingChange,
@@ -10,8 +12,6 @@ import {
   type ThingHistoryEntry,
   type ThingPin,
   type ThingProblem,
-  pinOf,
-  pinText,
   type ThingSave,
   ThingSlug,
   ThingStatus,

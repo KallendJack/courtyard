@@ -11,6 +11,7 @@ import {
   OwnerSection,
   type PlacedLine,
   type PullRequestReview,
+  pinText,
   placeName,
   type QuickAnswer,
   type Save,
@@ -24,7 +25,6 @@ import {
   ThingStatus,
   type WorkspaceConnections,
   type WorkspaceMode,
-  pinText,
 } from "@courtyard/contract";
 import { z } from "zod";
 import {

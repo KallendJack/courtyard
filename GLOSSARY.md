@@ -163,8 +163,23 @@ _Avoid_: note, page, file (on its own), artifact
 **Thing**:
 One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
 with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
-save context lines, and the owner undoes or edits (ADR 0020).
+save context lines, and the owner undoes or edits (ADR 0020). What it **needs** is the next thing to do about it, in
+a few words ("Pump it up before Saturday"), until it's done: the only part of it a page shows besides its name and
+status (#208, #220).
 _Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
+
+**Pin**:
+Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, moved by the
+owner dragging it, and gone once the part moves to another Thing. A pinned part is **flagged** only when it needs
+something (to get, to replace, or a next step).
+_Avoid_: marker, hotspot, label (that's a model's `T2`)
+
+**Home view**:
+One big panel a planning workspace's Home shows (#208), filled by the worker from the workspace's data: a Thing's
+photo with its parts pinned, or the wanted list (the Things wanted or to replace). The one showing is the one last
+changed, unless the owner picked one, whose pick sticks; above it the owner's last question, under it the next steps
+its answer suggested. Floor plans, renders and phases come as further kinds.
+_Avoid_: block (that's a fixed piece of the code Home), card, widget, dashboard
 
 **Planning workspace**:
 A workspace whose files models may read but not change.
@@ -231,7 +246,7 @@ grill claims nothing and takes no builder's place in Running. A ready issue bloc
 (GitHub's blocked by) keeps its place with no Build, its row saying **After** and the blocker's title (#377), until
 that closes. A planning workspace's (#300): the session to
 pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the
-next 7 days, soonest first; with neither, it doesn't show.
+next 7 days, soonest first; with neither, it keeps its place with one quiet line, "Nothing to pick up".
 _Avoid_: backlog, queue, roadmap (that's the milestones)
 
 **Connections line**:

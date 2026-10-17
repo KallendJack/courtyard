@@ -1,0 +1,158 @@
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  type HomeView,
+  HomeViewId,
+  type PinnedPart,
+  type PlanningHome,
+  type ThingSlug,
+  type ThingSummary,
+  type WantedItem,
+  type WorkspaceId,
+} from "@courtyard/contract";
+import { z } from "zod";
+import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
+import { err, ok, type Result } from "../../lib/result.ts";
+
+/**
+ * A planning workspace's Home (#208): the views it can show, each filled from the workspace's
+ * Things, which one shows, and its photo. Decided here, once, for every screen.
+ */
+
+/** A Thing's photo view's id. */
+const pictureOf = (slug: ThingSlug) => HomeViewId.parse(`picture:${slug}`);
+
+const WANTED = HomeViewId.parse("wanted");
+
+/** Whether a Thing needs something: to get, to replace, or a next step. */
+const needsSomething = (thing: ThingSummary) =>
+  thing.status !== "have" || thing.needs !== undefined;
+
+/** The latest of some times, as ISO strings compare. */
+const latest = (times: readonly string[]) =>
+  times.reduce((last, time) => (time > last ? time : last), "");
+
+const partOn = (part: ThingSummary): PinnedPart => ({
+  thing: part.slug,
+  name: part.name,
+  status: part.status,
+  ...(part.needs === undefined ? {} : { needs: part.needs }),
+  pin: part.pin,
+  flagged: needsSomething(part),
+});
+
+const wantedItem = (thing: ThingSummary & { status: WantedItem["status"] }): WantedItem => ({
+  thing: thing.slug,
+  name: thing.name,
+  status: thing.status,
+  ...(thing.price === undefined ? {} : { price: thing.price }),
+  ...(thing.needs === undefined ? {} : { needs: thing.needs }),
+});
+
+const isWanted = (thing: ThingSummary): thing is ThingSummary & { status: WantedItem["status"] } =>
+  thing.status !== "have";
+
+/** Each Thing that isn't a part, with its parts, in list order. */
+const withParts = (things: readonly ThingSummary[]) => {
+  const slugs = new Set(things.map(({ slug }) => slug));
+  return things
+    .filter(({ partOf }) => partOf === undefined || !slugs.has(partOf))
+    .map((top) => ({ top, parts: things.filter(({ partOf }) => partOf === top.slug) }));
+};
+
+/**
+ * Home's views from a workspace's Things, in list order: each Thing's photo that has parts, its
+ * parts that need something first, then the wanted list once anything is wanted.
+ */
+export const homeViews = (things: readonly ThingSummary[]): HomeView[] => {
+  const pictures = withParts(things).flatMap(({ top, parts }): HomeView[] =>
+    top.photo && parts.length > 0
+      ? [
+          {
+            kind: "picture",
+            id: pictureOf(top.slug),
+            title: top.name,
+            changedAt: latest([top, ...parts].map(({ updatedAt }) => updatedAt)),
+            thing: top.slug,
+            parts: [
+              ...parts.filter(needsSomething),
+              ...parts.filter((one) => !needsSomething(one)),
+            ].map(partOn),
+          },
+        ]
+      : [],
+  );
+  const wanted = things.filter(isWanted);
+  return [
+    ...pictures,
+    ...(wanted.length === 0
+      ? []
+      : [
+          {
+            kind: "wanted" as const,
+            id: WANTED,
+            title: "Wanted",
+            changedAt: latest(wanted.map(({ updatedAt }) => updatedAt)),
+            items: wanted.map(wantedItem),
+          },
+        ]),
+  ];
+};
+
+/** The workspace's photo: its main Thing's, the one with a photo and the most parts. */
+const mainPhoto = (things: readonly ThingSummary[]) =>
+  withParts(things)
+    .filter(({ top }) => top.photo)
+    .reduce<{ top: ThingSummary; parts: readonly ThingSummary[] } | undefined>(
+      (main, one) => (main === undefined || one.parts.length > main.parts.length ? one : main),
+      undefined,
+    )?.top.slug ?? null;
+
+/** Home without its question: its views, the one showing, and its photo. */
+export const homeOf = (
+  things: readonly ThingSummary[],
+  pick: HomeViewId | undefined,
+): Omit<PlanningHome, "question"> => {
+  const views = homeViews(things);
+  const picked = views.find(({ id }) => id === pick);
+  const lastChanged = views.reduce<HomeView | undefined>(
+    (last, view) => (last === undefined || view.changedAt > last.changedAt ? view : last),
+    undefined,
+  );
+  return {
+    views,
+    showing: (picked ?? lastChanged)?.id ?? null,
+    picked: picked !== undefined,
+    photo: mainPhoto(things),
+  };
+};
+
+const KeptPick = z.object({ view: HomeViewId });
+
+/**
+ * The owner's pick of each planning workspace's view, kept in the data folder (it's Courtyard's
+ * own state, not the workspace's): `planning-home/<workspace>.json`.
+ */
+export const createHomePicks = (options: { dataDir: string }) => {
+  const folder = join(options.dataDir, "planning-home");
+  const fileOf = (workspaceId: WorkspaceId) => join(folder, `${workspaceId}.json`);
+  return {
+    /** The view the owner last picked, if any. */
+    of: async (workspaceId: WorkspaceId): Promise<HomeViewId | undefined> => {
+      const kept = await readJsonFile(fileOf(workspaceId), KeptPick);
+      return kept.ok ? kept.value?.view : undefined;
+    },
+    /** Keeps the owner's pick. */
+    pick: async (workspaceId: WorkspaceId, view: HomeViewId): Promise<Result<null, "storage">> => {
+      try {
+        await mkdir(folder, { recursive: true });
+      } catch {
+        return err("storage");
+      }
+      const written = await writeJsonFile(fileOf(workspaceId), { view });
+      return written.ok ? ok(null) : err("storage");
+    },
+  };
+};
+
+export type HomePicks = ReturnType<typeof createHomePicks>;

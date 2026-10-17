@@ -75,7 +75,7 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `documents` ·
-`planning-files` · `tidy` · `changes` · `attachments`
+`planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
 
 **Web features:** `home` · `planning-home` · `new-workspace` · `things` · `documents` · `changes` · `tidy` ·
 `settings`
