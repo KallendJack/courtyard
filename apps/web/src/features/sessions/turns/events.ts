@@ -436,7 +436,13 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         lastSeq: seq,
         tasks: [
           ...log.tasks,
-          { task: event.task, command: event.command, startedAt: event.at, ended: undefined },
+          {
+            task: event.task,
+            command: event.command,
+            startedAt: event.at,
+            ended: undefined,
+            preview: event.preview === true,
+          },
         ],
       };
     // It ended: a line in the conversation where it did.
