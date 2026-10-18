@@ -154,7 +154,11 @@ const makesPullRequest = (line: string, subject: string) =>
     "run command: git push -u origin HEAD",
   ].join("\n");
 
-/** Starts a code session on the fake that opens a pull request, and waits for it to show. */
+/**
+ * Starts a code session on the fake that opens a pull request, and waits for it to show and for
+ * the turn that opened it to end, so a message sent next starts at once instead of waiting
+ * behind it (#495).
+ */
 const sessionWithPullRequest = async (page: Page, subject: string) => {
   await page.goto("/workspaces/side-project");
   await chooseModel(page, "fake/echo");
@@ -165,6 +169,7 @@ const sessionWithPullRequest = async (page: Page, subject: string) => {
   await expect(page).toHaveURL(/\/workspaces\/side-project\/sessions\//);
   const strip = page.getByRole("region", { name: "Branch and pull request" });
   await expect(strip.getByRole("link", { name: /^PR #\d+/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
   return strip;
 };
 
