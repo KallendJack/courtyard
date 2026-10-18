@@ -101,11 +101,13 @@ export type PullRequestReview = z.infer<typeof PullRequestReview>;
 
 /**
  * Who opened a pull request (#278): one of the workspace's sessions, which keeps its link to it; a
- * Claude Code helper, which signs its descriptions; or someone on GitHub, by their login.
+ * Claude Code helper, which signs its descriptions; Dependabot, with a version bump (#496); or
+ * someone on GitHub, by their login.
  */
 export const PullRequestFrom = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), sessionId: SessionId, title: z.string() }),
   z.object({ kind: z.literal("claude-code") }),
+  z.object({ kind: z.literal("dependabot") }),
   z.object({ kind: z.literal("github"), login: z.string() }),
 ]);
 export type PullRequestFrom = z.infer<typeof PullRequestFrom>;
@@ -118,6 +120,18 @@ export type PullRequestFrom = z.infer<typeof PullRequestFrom>;
 export const PullRequestWaiting = z.enum(["failed", "merge", "conflict", "nothing"]);
 export type PullRequestWaiting = z.infer<typeof PullRequestWaiting>;
 
+/**
+ * Where a Dependabot bump with a failing check stands as the worker looks after it (#496): its
+ * failed checks re-running; the Lead fixing it, from the issue the worker filed; or still failing
+ * after that fix, which hands it to the owner.
+ */
+export const BumpStanding = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("rerunning") }),
+  z.object({ kind: z.literal("fixing"), issue: z.number().int().positive() }),
+  z.object({ kind: z.literal("stuck"), issue: z.number().int().positive() }),
+]);
+export type BumpStanding = z.infer<typeof BumpStanding>;
+
 /** One of a repository's open pull requests, whoever opened it (#278), and what it waits on. */
 export const OpenPullRequest = z.object({
   pullRequest: PullRequest,
@@ -127,6 +141,8 @@ export const OpenPullRequest = z.object({
   base: z.string().optional(),
   from: PullRequestFrom,
   waiting: PullRequestWaiting,
+  /** A Dependabot bump's failing check, while the worker looks after it (#496). */
+  bump: BumpStanding.optional(),
 });
 export type OpenPullRequest = z.infer<typeof OpenPullRequest>;
 

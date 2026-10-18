@@ -190,7 +190,12 @@ function NeedRow(props: {
         <BlockRow
           label={pullTitle(need.pull)}
           title={prLink(need.pull)}
-          sub={`${need.count} ${need.count === 1 ? "check" : "checks"} failed`}
+          sub={
+            // A bump the Lead's fix didn't mend is the owner's to decide (#496).
+            need.pull.bump?.kind === "stuck"
+              ? `Still failing after fix · #${need.pull.bump.issue}`
+              : `${need.count} ${need.count === 1 ? "check" : "checks"} failed`
+          }
           tone="failed"
           action={<RowLink pull={need.pull} workspaceId={workspaceId} label="Review" />}
         />
@@ -223,7 +228,9 @@ function NeedRow(props: {
           sub={
             need.session?.byLead === true
               ? "By Lead · checks passed · ready to merge"
-              : "Checks passed · ready to merge"
+              : need.pull.from.kind === "dependabot"
+                ? "From Dependabot · checks passed"
+                : "Checks passed · ready to merge"
           }
           tone="passed"
           action={<Merge workspaceId={workspaceId} pull={need.pull} onChanged={props.onChanged} />}

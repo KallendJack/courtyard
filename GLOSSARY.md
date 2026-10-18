@@ -236,6 +236,13 @@ build order's order, bringing one up to date through its session when it conflic
 and stops at a failing check or a refusal, saying which and why. The tap covers only the ones ready then.
 _Avoid_: merge queue, merge all, auto-merge
 
+**Version bump**:
+A pull request Dependabot opens to move a dependency on (#84). The worker looks after one whose check fails (#496): it
+re-runs the failed jobs once per commit, files a passing re-run as **Flaky e2e** (last in the build order) and a
+failing one as **Bump fails** (first, one per bump) for the Lead, asks Dependabot to rebase once that fix merges, and
+hands one still failing after it to the owner. A green one waits in Needs you for Merge; it never merges itself.
+_Avoid_: dependency update, upgrade, Dependabot PR (in the UI, "From Dependabot")
+
 **Held back**:
 A ready issue the Lead doesn't start yet because a builder still at work is changing the code files it names
 (#423); it starts once that builder's pull request merges.

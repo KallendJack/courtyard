@@ -90,6 +90,7 @@ import { taskRoutes } from "./features/tasks/routes.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createTidying } from "./features/tidy/index.ts";
 import { tidyRoutes } from "./features/tidy/routes.ts";
+import { createVersionBumps } from "./features/version-bumps/index.ts";
 import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
 import {
@@ -485,12 +486,15 @@ export const createWorker = (options: {
       }
     })().catch((error: unknown) => console.error("Sessions couldn't be checked", error)),
   );
+  const versionBumps = createVersionBumps({ contextDir, dataDir, code, github });
   const repeat = options.repeat ?? repeatForever;
   repeat(KEEP_UP_EVERY_MS, contextFolder.keepUp);
   repeat(KEEP_FRESH_EVERY_MS, github.keepFresh);
   repeat(FOLLOW_PULL_REQUESTS_EVERY_MS, sessions.followPullRequests);
   // A red main is re-run once, then filed first in the order (#355).
   repeat(WATCH_MAIN_EVERY_MS, createRedMain({ contextDir, dataDir, code, github }).watch);
+  // Dependabot's bumps are re-run once, then filed for the Lead (#496).
+  repeat(WATCH_MAIN_EVERY_MS, versionBumps.watch);
   // Each code workspace's Lead runs its build order (#347).
   repeat(WATCH_LEADS_EVERY_MS, lead.watch);
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
@@ -573,7 +577,7 @@ export const createWorker = (options: {
   api.route("/", gitHubRoutes(github));
   const repos = createRepos({ dataDir, contextDir, github, code });
   api.route("/", repoRoutes(repos));
-  const pullRequests = createPullRequests({ contextDir, code, sessions });
+  const pullRequests = createPullRequests({ contextDir, code, sessions, bumps: versionBumps });
   api.route("/", pullRequestRoutes(pullRequests));
   api.route(
     "/",

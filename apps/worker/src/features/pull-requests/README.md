@@ -5,7 +5,8 @@ A code workspace's pull requests, whoever opened them (#278).
 **Example:** a Claude Code helper opened a PR from your laptop. The workspace's PRs tab lists it beside the sessions'
 own, signed "Claude Code", and you can review, merge or close it there.
 
-- **Uses:** `code/`, `github/`, `sessions/`, `waiting/` (what each waits on), `prompts/`, `workspaces/`.
+- **Uses:** `code/`, `github/`, `sessions/`, `waiting/` (what each waits on), `version-bumps/` (where a Dependabot
+  bump stands), `prompts/`, `workspaces/`.
 - **Used by:** `quick-questions/` (the review and `carryOver`), `worker.ts`; in the web app,
   `features/pull-requests/`.
 
@@ -20,7 +21,7 @@ own, signed "Claude Code", and you can review, merge or close it there.
 
 - Lists every open one on its repository through `code/` and `github/`, latest first, each with who it's from: the
   session on its branch (which keeps its link), a Claude Code helper (its description signed "Generated with Claude
-  Code"), or its author on GitHub. While GitHub can't be asked, its sessions' open ones as last recorded.
+  Code"), Dependabot (with where its bump stands, #496), or its author on GitHub. While GitHub can't be asked, its sessions' open ones as last recorded.
 - One no session opened is reviewed, merged and closed by its number; one a session is on goes through that session,
   so it ends as usual.
 - Bring up to date, or Fix it in a session (`carryOver`, #327), on it starts a session on its own branch (`code/`'s

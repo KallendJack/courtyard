@@ -29,7 +29,8 @@ Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id
   `seen.json` in the session's folder, never going back. Mark all read sees every session in a workspace up to its
   latest answer (#345).
 - **An open pull request** waits for its conflict, its failing checks (unless its session is working on them, #172),
-  or a merge once its checks pass.
+  or a merge once its checks pass. A Dependabot bump's failing checks wait on no one while the worker re-runs them or
+  the Lead fixes them, only once it's still failing after that fix (#496).
 - **A plan near its limit** (#66): a provider's fullest window from 80% warns, fullest first and at most two, unless
   Not now put it off until it resets (it comes back once past 95%). It offers Switch to the first other provider
   connected with room, saying that one's own window when it's past 80% too; at 100% with nowhere to switch, there's

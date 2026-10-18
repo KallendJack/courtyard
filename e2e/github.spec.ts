@@ -836,6 +836,32 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // #496: a green bump waits for the owner's one tap, never merging itself.
+  test("Dependabot's bump whose checks passed says it's from Dependabot, with Merge", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/workspaces/side-project#prs");
+    const row = page
+      .getByRole("region", { name: /^Pull requests/ })
+      .getByRole("listitem", { name: /Bump home-assistant/ });
+    await expect(row).toContainText("from Dependabot");
+
+    await page.goto("/workspaces/side-project");
+    const ready = page
+      .getByRole("region", { name: "Needs you" })
+      .getByRole("listitem", { name: /Bump home-assistant/ });
+    await expect(ready).toContainText("From Dependabot · checks passed");
+    await expect(ready.getByRole("button", { name: /^Merge/ })).toBeVisible();
+    // Tapping the row opens the PR page.
+    await expect(ready.getByRole("link", { name: /Bump home-assistant/ })).toHaveAttribute(
+      "href",
+      /#pr-\d+$/,
+    );
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   test("the PR page fits the screen with a long diff and description, and the diff scrolls inside it", async ({
     page,
     request,

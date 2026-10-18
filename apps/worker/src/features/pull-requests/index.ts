@@ -15,6 +15,7 @@ import { err, ok, type Result } from "../../lib/result.ts";
 import { bringUpToDateMessage } from "../../prompts/index.ts";
 import type { Code } from "../code/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
+import { DEPENDABOT, type VersionBumps } from "../version-bumps/index.ts";
 import { pullRequestWaiting } from "../waiting/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
 
@@ -59,6 +60,7 @@ const fromOf = (sessions: readonly Listed[], found: FoundPullRequest): PullReque
   if (session !== undefined) {
     return { kind: "session", sessionId: session.id, title: session.title };
   }
+  if (found.author === DEPENDABOT) return { kind: "dependabot" };
   return CLAUDE_CODE_SIGNED.test(found.body)
     ? { kind: "claude-code" }
     : { kind: "github", login: found.author };
@@ -78,8 +80,9 @@ export const createPullRequests = (options: {
   contextDir: string;
   code: Code;
   sessions: Sessions;
+  bumps: Pick<VersionBumps, "standings">;
 }) => {
-  const { code, sessions } = options;
+  const { code, sessions, bumps } = options;
 
   /** A code workspace's id, repository and sessions, or why it has no pull requests. */
   const codeWorkspace = async (
@@ -135,14 +138,20 @@ export const createPullRequests = (options: {
       const { repoPath, sessions: listed } = workspace.value;
       const open = await code.openPullRequests({ repoPath });
       if (open.ok) {
+        const bumpOf = await bumps.standings(repoPath);
         return ok(
-          open.value.map(({ found, pullRequest }) => ({
-            pullRequest,
-            branch: found.branch,
-            base: found.base,
-            from: fromOf(listed, found),
-            waiting: pullRequestWaiting(pullRequest, sessionOn(listed, found.branch, found.number)),
-          })),
+          open.value.map(({ found, pullRequest }) => {
+            const bump = bumpOf(found, pullRequest.checks);
+            const session = sessionOn(listed, found.branch, found.number);
+            return {
+              pullRequest,
+              branch: found.branch,
+              base: found.base,
+              from: fromOf(listed, found),
+              waiting: pullRequestWaiting(pullRequest, session, bump),
+              ...(bump === undefined ? {} : { bump }),
+            };
+          }),
         );
       }
       return ok(

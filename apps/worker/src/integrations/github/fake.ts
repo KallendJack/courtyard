@@ -125,6 +125,8 @@ export const createFakeGitHub = (
       readonly checks: (subject: string) => readonly FoundCheck[];
       /** Whether a commit pushed conflicts with `main`, from its subject (#278). */
       readonly conflicts?: (subject: string) => boolean;
+      /** Who opened a branch's pull request, by login: the account signed in unless it says (#496). */
+      readonly author?: (branch: string) => string;
       /**
        * Whether the checks running on a commit pushed pass by themselves, `afterMs` after its pull
        * request is first asked for by its number, as a page no session opened asks (#329).
@@ -226,6 +228,8 @@ export const createFakeGitHub = (
     readonly branch: string;
     readonly files: readonly FoundFile[];
   })[] = [];
+  /** The comments on each pull request, by number, oldest first (#496). */
+  const pullComments = new Map<number, string[]>();
   const pullNumbered = (number: number) => {
     const at = pulls.findIndex((pull) => pull.number === number);
     if (at === -1) throw new Error(`The fake GitHub has no pull request #${number}`);
@@ -319,7 +323,14 @@ export const createFakeGitHub = (
     if (pull === undefined) {
       // Titled and described by its first commit, as gh pr create --fill would.
       const body = (await gitOrNothing(onPush.remote, ["log", "-1", "--format=%b", head])) ?? "";
-      number = openPullRequest({ ...find, head, files, title: subject, body: body.trim() });
+      number = openPullRequest({
+        ...find,
+        head,
+        files,
+        title: subject,
+        body: body.trim(),
+        ...(onPush.author === undefined ? {} : { author: onPush.author(find.branch) }),
+      });
       change(number, { checks, conflicts });
     } else {
       change(pull.number, { head, checks, conflicts, files, changes: changesOf(files) });
@@ -473,8 +484,11 @@ export const createFakeGitHub = (
       const refused = refusedToken(accessToken);
       if (refused !== undefined) return refused;
       const issue = issueIn(repo, number);
-      if (issue === undefined) return err("GitHub said: Not Found");
-      issue.comments.push(body);
+      // A pull request is an issue to GitHub's comments, as `@dependabot rebase` is (#496).
+      const pull = pulls.find((each) => each.repo === repo && each.number === number);
+      if (issue === undefined && pull === undefined) return err("GitHub said: Not Found");
+      if (issue !== undefined) issue.comments.push(body);
+      else pullComments.set(number, [...(pullComments.get(number) ?? []), body]);
       return ok(null);
     },
     merge: async (accessToken, { number, head }) => {
@@ -691,8 +705,10 @@ export const createFakeGitHub = (
     branchesDeleted: () => [...deleted],
     /** A repository's labels now, in the order they were made (#181). */
     labelsOf: (repo: string) => [...(labels.get(repo) ?? [])],
-    /** The comments on issue `number` in `repo` now, oldest first (#301). */
-    commentsOn: (repo: string, number: number) => [...(issueIn(repo, number)?.comments ?? [])],
+    /** The comments on issue or pull request `number` in `repo` now, oldest first (#301, #496). */
+    commentsOn: (repo: string, number: number) => [
+      ...(issueIn(repo, number)?.comments ?? pullComments.get(number) ?? []),
+    ],
     /** Someone comments on issue `number` in `repo` (a claim, say). */
     comment: (repo: string, number: number, body: string) => {
       issueIn(repo, number)?.comments.push(body);
