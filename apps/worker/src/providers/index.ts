@@ -7,6 +7,7 @@ import type {
   ModelId,
   ModelInfo,
   ModelRef,
+  ModelUsageMeter,
   PhotoMediaType,
   ProviderId,
   ProviderStatus,
@@ -14,6 +15,7 @@ import type {
   SkillName,
   Source,
   TaskId,
+  UsageWindow,
 } from "@courtyard/contract";
 import { z } from "zod";
 import type { HelperBranch } from "../features/code/index.ts";
@@ -315,7 +317,31 @@ export type TurnInput = {
    * (`Capabilities.steers`); `null` for one that doesn't.
    */
   readonly added: AddedMessages | null;
+  /**
+   * Says what the provider heard of one of its plan windows while the turn ran (#66), such as
+   * Claude's `rate_limit_event`, so a window crossing into its warning is known at once.
+   */
+  readonly heardUsage?: (meter: HeardMeter) => void;
 };
+
+/** One plan window as a provider heard it (#66): how much is used, in percent, and when it resets. */
+export type HeardMeter = {
+  readonly window: UsageWindow;
+  readonly used: number;
+  readonly resetAt?: string;
+};
+
+/**
+ * A provider's reading of its plan usage (#66): its windows as far as it knows them and its
+ * models' own weekly limits; or that its sign-in has no plan limits (an API key, or none).
+ */
+export type UsageReading =
+  | { readonly kind: "no-plan" }
+  | {
+      readonly kind: "plan";
+      readonly meters: readonly HeardMeter[];
+      readonly models: readonly ModelUsageMeter[];
+    };
 
 /**
  * A message the owner added while the turn ran (#252): its words as written, by its event number.
@@ -390,6 +416,11 @@ export type Provider = {
   readonly answerOnce: (input: OneOffInput) => Promise<Result<unknown, FailureReason>>;
   /** Its sign-in, when Courtyard handles it; Claude's is the worker machine's own. */
   readonly signIn?: SignIn;
+  /**
+   * Reads its plan usage now (#66), or `undefined` when it couldn't. A provider without it has
+   * no plan limits to show.
+   */
+  readonly readUsage?: () => Promise<UsageReading | undefined>;
 };
 
 /**

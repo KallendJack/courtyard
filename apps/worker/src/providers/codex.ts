@@ -17,6 +17,7 @@ import {
   ProviderId,
   type ProviderStatus,
   type SignInState,
+  type UsageWindow,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { workspaceFiles } from "../auth/workspace-files/index.ts";
@@ -45,6 +46,7 @@ import {
   type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
+  type HeardMeter,
   type HelperCode,
   jsonSchemaOf,
   type Provider,
@@ -53,6 +55,7 @@ import {
   type StatusCheck,
   type ToolReply,
   type TurnInput,
+  type UsageReading,
 } from "./index.ts";
 
 const id = ProviderId.parse("codex");
@@ -266,8 +269,11 @@ type Connection = {
    * function is called.
    */
   readonly listen: (threadId: string, listener: ThreadListener) => () => void;
-  /** Hears every notice that names no thread, such as one about the sign-in. */
-  readonly onOtherNotice: (listener: (notice: z.infer<typeof CodexNotice>) => void) => void;
+  /**
+   * Hears every notice that names no thread, such as one about the sign-in, until the returned
+   * function is called.
+   */
+  readonly onOtherNotice: (listener: (notice: z.infer<typeof CodexNotice>) => void) => () => void;
   /** Settles when the app-server ends. */
   readonly ended: Promise<void>;
 };
@@ -417,6 +423,10 @@ const connect = async (options: {
     request,
     onOtherNotice: (listener) => {
       otherListeners.push(listener);
+      return () => {
+        const at = otherListeners.indexOf(listener);
+        if (at >= 0) otherListeners.splice(at, 1);
+      };
     },
     listen: (threadId, listener) => {
       listeners.set(threadId, listener);
@@ -609,7 +619,12 @@ type TurnEnd =
   | { kind: "stopped" }
   | { kind: "crashed" };
 
-const LimitWindow = z.object({ usedPercent: z.number(), resetsAt: z.number().nullable() });
+const LimitWindow = z.object({
+  usedPercent: z.number(),
+  /** How long the window lasts, when Codex says. */
+  windowDurationMins: z.number().nullable().optional().catch(null),
+  resetsAt: z.number().nullable(),
+});
 const LimitSnapshot = z.object({
   primary: LimitWindow.nullable().catch(null),
   secondary: LimitWindow.nullable().catch(null),
@@ -618,6 +633,46 @@ const RateLimits = z.object({
   rateLimits: LimitSnapshot.nullable().catch(null),
   rateLimitsByLimitId: z.record(z.string(), LimitSnapshot).nullable().catch(null),
 });
+/** Codex saying its plan's windows changed, as a turn runs (#66). */
+const RateLimitsUpdated = z.object({
+  method: z.literal("account/rateLimits/updated"),
+  params: z.object({ rateLimits: LimitSnapshot }),
+});
+
+/** The longest a window lasts that Courtyard shows as the 5-hour one: a day. */
+const SHORT_WINDOW_MINS = 24 * 60;
+
+/**
+ * Codex's plan windows as Courtyard shows them (#66): each by how long it lasts, a day or less
+ * being the 5-hour one and longer the week; when Codex doesn't say, its first is the 5-hour one
+ * and its second the week.
+ */
+const metersOf = (snapshot: z.infer<typeof LimitSnapshot> | null): HeardMeter[] =>
+  (
+    [
+      ["five-hour", snapshot?.primary],
+      ["weekly", snapshot?.secondary],
+    ] as const
+  ).flatMap(([order, window]): HeardMeter[] => {
+    if (window === null || window === undefined) return [];
+    const mins = window.windowDurationMins;
+    const shown: UsageWindow =
+      mins === null || mins === undefined
+        ? order
+        : mins <= SHORT_WINDOW_MINS
+          ? "five-hour"
+          : "weekly";
+    return [
+      {
+        window: shown,
+        used: window.usedPercent,
+        ...(window.resetsAt === null
+          ? {}
+          : { resetAt: new Date(window.resetsAt * 1000).toISOString() }),
+      },
+    ];
+  })
+  .sort((a, b) => (a.window === b.window ? 0 : a.window === "five-hour" ? -1 : 1));
 
 /**
  * When the usage limit Codex reached resets: the latest reset among the windows that are used up,
@@ -1321,10 +1376,26 @@ export const createCodexProvider = (options: {
   };
   const keptStatus = createStatusKeeper({ check: checkStatus, now });
 
+  /** Its plan's windows (#66), from its rate limits; none for an API key; nothing when it can't say. */
+  const readUsage = async (): Promise<UsageReading | undefined> => {
+    const started = await connection();
+    if (!started.ok) return undefined;
+    const codex = started.value;
+    const account = await codex.request("account/read", { refreshToken: false });
+    const parsedAccount = account.ok ? AccountAnswer.safeParse(account.value) : undefined;
+    if (!parsedAccount?.success) return undefined;
+    if (parsedAccount.data.account?.type !== "chatgpt") return { kind: "no-plan" };
+    const limits = await codex.request("account/rateLimits/read", undefined);
+    const parsed = limits.ok ? RateLimits.safeParse(limits.value) : undefined;
+    if (!parsed?.success) return undefined;
+    return { kind: "plan", meters: metersOf(parsed.data.rateLimits), models: [] };
+  };
+
   return {
     id,
     capabilities: CAPABILITIES,
     status: keptStatus.status,
+    readUsage,
 
     runTurn: async (input) => {
       if (input.signal.aborted) return ok(null);
@@ -1346,6 +1417,12 @@ export const createCodexProvider = (options: {
       let answer = "";
       let usedWeb = false;
       const read: string[] = [];
+      // What Codex says of its plan's windows as the turn runs (#66), which names no thread.
+      const stopHearingUsage = codex.onOtherNotice((notice) => {
+        const limits = RateLimitsUpdated.safeParse(notice);
+        if (!limits.success) return;
+        for (const meter of metersOf(limits.data.params.rateLimits)) input.heardUsage?.(meter);
+      });
       const end = await turnOnThread(codex, {
         model: input.model,
         effort: input.effort,
@@ -1372,6 +1449,7 @@ export const createCodexProvider = (options: {
         },
         signal: input.signal,
       });
+      stopHearingUsage();
       await emitting;
       if (!end.ok) return end;
       if (input.signal.aborted) return ok(null);

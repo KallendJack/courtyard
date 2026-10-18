@@ -20,7 +20,7 @@ import {
   type StartAppServer,
 } from "../src/providers/codex.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
-import type { TurnInput } from "../src/providers/index.ts";
+import type { HeardMeter, TurnInput } from "../src/providers/index.ts";
 import {
   asOwner,
   codeRepo,
@@ -449,6 +449,95 @@ describe("Codex's usage limit, in its status", () => {
     });
 
     expect(limits).toEqual([undefined, undefined]);
+  });
+});
+
+describe("Codex's plan usage (#66)", () => {
+  const window = (usedPercent: number, windowDurationMins: number | null, resetsAt: number) => ({
+    usedPercent,
+    windowDurationMins,
+    resetsAt,
+  });
+  const at = (iso: string) => Date.parse(iso) / 1000;
+  const readWith = (script: Parameters<typeof standIn>[0]) =>
+    createCodexProvider({ dataDir, startAppServer: standIn(script).startAppServer }).readUsage?.();
+
+  it("reads its 5-hour and weekly windows from its rate limits, by how long each lasts", async () => {
+    const reading = await readWith({
+      rateLimits: {
+        rateLimits: {
+          limitId: "codex",
+          // In whichever order Codex lists them.
+          primary: window(31, 10080, at("2026-10-12T06:00:00Z")),
+          secondary: window(12, 300, at("2026-10-08T15:30:00Z")),
+        },
+        rateLimitsByLimitId: null,
+      },
+    });
+
+    expect(reading).toEqual({
+      kind: "plan",
+      meters: [
+        { window: "five-hour", used: 12, resetAt: "2026-10-08T15:30:00.000Z" },
+        { window: "weekly", used: 31, resetAt: "2026-10-12T06:00:00.000Z" },
+      ],
+      models: [],
+    });
+  });
+
+  it("takes the first window as the 5-hour one and the second as the week when Codex doesn't say how long", async () => {
+    const reading = await readWith({
+      rateLimits: {
+        rateLimits: {
+          primary: window(40, null, at("2026-10-08T15:30:00Z")),
+          secondary: null,
+        },
+        rateLimitsByLimitId: null,
+      },
+    });
+
+    expect(reading).toEqual({
+      kind: "plan",
+      meters: [{ window: "five-hour", used: 40, resetAt: "2026-10-08T15:30:00.000Z" }],
+      models: [],
+    });
+  });
+
+  it("is no plan for an API key", async () => {
+    expect(
+      await readWith({
+        account: { account: { type: "apiKey" }, requiresOpenaiAuth: true },
+        rateLimits: { rateLimits: null, rateLimitsByLimitId: null },
+      }),
+    ).toEqual({ kind: "no-plan" });
+  });
+
+  it("is nothing when Codex can't say", async () => {
+    expect(await readWith({ refuse: "Codex is too old" })).toBeUndefined();
+  });
+
+  it("hears its windows as a turn runs, when Codex says they changed", async () => {
+    const heard: HeardMeter[] = [];
+    const codex = standIn({
+      turn: ({ notify, complete }) => {
+        notify("account/rateLimits/updated", {
+          rateLimits: {
+            limitId: "codex",
+            primary: window(82, 300, at("2026-10-08T15:30:00Z")),
+            secondary: window(31, 10080, at("2026-10-12T06:00:00Z")),
+          },
+        });
+        complete("completed");
+      },
+    });
+    const provider = createCodexProvider({ dataDir, startAppServer: codex.startAppServer });
+
+    await runTurn(provider, { heardUsage: (meter) => heard.push(meter) });
+
+    expect(heard).toEqual([
+      { window: "five-hour", used: 82, resetAt: "2026-10-08T15:30:00.000Z" },
+      { window: "weekly", used: 31, resetAt: "2026-10-12T06:00:00.000Z" },
+    ]);
   });
 });
 

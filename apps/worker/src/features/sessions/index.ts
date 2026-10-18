@@ -26,6 +26,7 @@ import {
   type Overflow,
   overflowFrom,
   type PlacedLine,
+  type ProviderId,
   type PullRequest,
   type PullRequestReview,
   pullRequestEnded,
@@ -109,6 +110,7 @@ import {
   type CodePlugin,
   type Framing,
   firstWithRoom,
+  type HeardMeter,
   type HelperCode,
   type HelperTurn,
   imageOf,
@@ -722,6 +724,14 @@ export const createSessions = (options: {
    * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
    */
   holding?: () => boolean;
+  /**
+   * Usage at a glance (#66): told what a turn's provider heard of its plan windows as the turn
+   * ran, and when each turn has ended, so its provider's usage is read again.
+   */
+  usage?: {
+    readonly heard: (session: SessionId, provider: ProviderId, meter: HeardMeter) => void;
+    readonly turnEnded: (provider: ProviderId) => void;
+  };
 }) => {
   const holding = () => options.holding?.() === true;
   const sessionsDir = join(options.dataDir, "sessions");
@@ -1729,6 +1739,7 @@ export const createSessions = (options: {
             cite,
             signal: stopper.signal,
             added: turn.added?.messages ?? null,
+            heardUsage: (meter) => options.usage?.heard(turn.id, turn.provider.id, meter),
           }),
           stoppedByOwner,
         ]);
@@ -1744,6 +1755,8 @@ export const createSessions = (options: {
     }
     // No build outlives its turn, whether its provider said it ended or not (#281).
     options.code.builds.leave(turn.id);
+    // What the turn used of its provider's plan is read again (#66).
+    options.usage?.turnEnded(turn.provider.id);
     // A save already being written stays, whatever happens to the turn (ADR 0013), and a tool
     // call under way finishes, recording what it did.
     await Promise.allSettled(callsUnderway);

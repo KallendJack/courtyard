@@ -53,6 +53,8 @@ import { freshStartRoutes } from "./features/fresh-start/routes.ts";
 import { createLead } from "./features/lead/index.ts";
 import { leadRoutes } from "./features/lead/routes.ts";
 import { rememberingLimits } from "./features/limits/index.ts";
+import { usageRoutes } from "./features/limits/routes.ts";
+import { createUsage } from "./features/limits/usage.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./features/live/index.ts";
 import { createMattSetup } from "./features/matt-setup/index.ts";
 import {
@@ -383,7 +385,25 @@ export const createWorker = (options: {
       ended: (session, task) => previews.ended(session, task),
       tool: (session, input) => previews.tool(session, input),
     },
+    usage: {
+      heard: (session, provider, meter) => usage.heard(session, provider, meter),
+      turnEnded: (provider) => background(usage.read(provider)),
+    },
   });
+  // Usage at a glance (#66): each provider's plan usage, read now and after every turn.
+  const usage = createUsage({
+    providers,
+    dataDir,
+    now,
+    notify: (session, need) => {
+      background(
+        need()
+          .then((said) => notifications.notice(session, said))
+          .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
+      );
+    },
+  });
+  background(usage.read());
   const previews = createPreviews({
     ports: previewPorts,
     loggedIn: (cookies) => ownerLoggedIn(owner, cookies),
@@ -569,6 +589,7 @@ export const createWorker = (options: {
     }
   });
   api.route("/", notificationRoutes(notifications));
+  api.route("/", usageRoutes(usage));
   api.route(
     "/",
     offlineCopyRoutes(

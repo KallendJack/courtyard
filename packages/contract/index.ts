@@ -287,6 +287,20 @@ export {
   TidySave,
 } from "./lib/tidy.ts";
 export {
+  ModelUsageMeter,
+  PlanUsage,
+  ProviderUsage,
+  USAGE_READING_OLD_MS,
+  USAGE_WARNS_AGAIN_AT,
+  USAGE_WARNS_AT,
+  UsageList,
+  UsageMeter,
+  UsageNotNow,
+  UsageWarning,
+  UsageWindow,
+  usageWindowWords,
+} from "./lib/usage.ts";
+export {
   CONTEXT_FILE_LONG_CHARACTERS,
   CONTEXT_LINE_MAX_CHARACTERS,
   CONTEXT_SECTION_NAMES,
