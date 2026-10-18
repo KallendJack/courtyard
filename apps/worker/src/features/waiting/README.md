@@ -8,9 +8,10 @@ page has shown it to you, and Home's Needs you lists it, "Reply · Winter tyres 
 gold count.
 
 - **Uses:** the contract, `sessions/` (each workspace's listed sessions) and `workspaces/` (the list), for its route.
-- **Used by:** `sessions/` (on each listed session) and `pull-requests/` (on each open one). The web app reads those:
-  a Home tile names the newest session waiting, and every session list marks those waiting and puts them first
-  (#345). It reads `GET /api/needs-you` for Home's Needs you, the mark's count and a session's Next pill (#492).
+- **Used by:** `sessions/` (on each listed session), `pull-requests/` (on each open one) and `limits/` (the warnings
+  before a limit). The web app reads those: a Home tile names the newest session waiting, and every session list
+  marks those waiting and puts them first (#345). It reads `GET /api/needs-you` for Home's Needs you, the mark's
+  count and a session's Next pill (#492).
 
 ## API
 
@@ -29,6 +30,10 @@ Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id
   latest answer (#345).
 - **An open pull request** waits for its conflict, its failing checks (unless its session is working on them, #172),
   or a merge once its checks pass.
+- **A plan near its limit** (#66): a provider's fullest window from 80% warns, fullest first and at most two, unless
+  Not now put it off until it resets (it comes back once past 95%). It offers Switch to the first other provider
+  connected with room, saying that one's own window when it's past 80% too; at 100% with nowhere to switch, there's
+  no warning, as the limit card after the turn says it.
 - **Needs you, everywhere** (#492): each workspace's sessions, and the pull request each one opened as the worker
   last followed it, so it never asks GitHub. A pull request no session opened shows on its code workspace's own
   Needs you. In order: approvals, turns cut off, failing checks, new replies, merges, conflicts, the newest first in

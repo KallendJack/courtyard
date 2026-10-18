@@ -4,6 +4,7 @@ import {
   type ModelRef,
   type NewMessage,
   PDF_TYPE,
+  type ProviderId,
   type ProviderList,
   type SkillName,
   type SkillSummary,
@@ -30,7 +31,7 @@ import { SkillTag } from "@/components/workspace/skill-tag";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
-import { choiceSummary, modelName, useModelChoice } from "./model-pickers.tsx";
+import { choiceSummary, modelKey, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
 /**
@@ -116,6 +117,14 @@ export const Composer = memo(function Composer(props: {
   send: (message: NewMessage, files: readonly File[]) => Promise<string | undefined>;
   /** What shows for now in the box's place, while step by step reads aloud (#241). */
   standIn?: StandIn;
+  /**
+   * What shows above the box, in the page's foot, given the provider the message goes to and a
+   * way to switch the box's model: a session's warning before a limit (#66).
+   */
+  above?: (box: {
+    readonly provider: ProviderId | undefined;
+    readonly switchTo: (model: ModelRef) => void;
+  }) => ReactNode;
 }) {
   const models = availableModels(props.providers);
   const choice = useModelChoice({
@@ -582,6 +591,10 @@ export const Composer = memo(function Composer(props: {
   const docked = line !== undefined && layout === "tablet" ? line : messageBox;
   return (
     <>
+      {props.above?.({
+        provider: choice.model?.ref.provider,
+        switchTo: (model) => choice.pickModel(modelKey(model)),
+      })}
       <Suspense fallback={null}>
         <HandheldChoices
           choosing={choosing}

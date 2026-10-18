@@ -1,4 +1,11 @@
-import { Effort, type SkillName, type SkillSummary } from "@courtyard/contract";
+import {
+  Effort,
+  type SkillName,
+  type SkillSummary,
+  USAGE_WARNS_AT,
+  type UsageList,
+} from "@courtyard/contract";
+import type { ReactNode } from "react";
 import { HandheldSheet } from "@/components/sheets/handheld-sheet";
 import {
   SheetChoices,
@@ -7,6 +14,8 @@ import {
   SheetModels,
   SheetSkills,
 } from "@/components/sheets/sheet-choices";
+import { useUsage } from "../../limits/api.ts";
+import { ModelMeter, PlanMeters } from "../../limits/plan-meters.tsx";
 import { limitLabel } from "./limits.ts";
 import { type ModelChoice, modelKey } from "./model-pickers.tsx";
 import type { OfferedModel } from "./models.ts";
@@ -18,12 +27,26 @@ const DEFAULT = "";
 const SHORT: Partial<Record<string, string>> = { medium: "Med", xhigh: "XHigh", minimal: "Min" };
 
 /**
- * The models on offer as the Model sheet lists them (#201): by provider, each once. A provider's
- * default isn't a row of its own: the model it resolves to says it's the default, and picking that
- * row picks the default. `same` gives the row a model shows as, which differs only for that one.
+ * The models on offer as the Model sheet lists them (#201): by provider, each once, under its plan
+ * meters (#66), and a model past the warning on its own weekly limit with that meter under it. A
+ * provider's default isn't a row of its own: the model it resolves to says it's the default, and
+ * picking that row picks the default. `same` gives the row a model shows as, which differs only
+ * for that one.
  */
-const listed = (models: readonly OfferedModel[]) => {
-  const providers = new Map<string, { name: string; models: SheetModel<string>[] }>();
+const listed = (models: readonly OfferedModel[], usage: UsageList | undefined) => {
+  type Listed = { name: string; models: SheetModel<string>[]; above?: ReactNode };
+  const providers = new Map<string, Listed>();
+  const usageOf = (provider: string) =>
+    usage?.providers.find((each) => each.provider === provider)?.usage;
+  /** A model's own weekly limit, by the family its name starts with, once past the warning. */
+  const modelMeterOf = (model: OfferedModel) => {
+    const plan = usageOf(model.ref.provider);
+    return plan?.kind === "plan"
+      ? plan.models.find(
+          (meter) => meter.used >= USAGE_WARNS_AT && model.name.startsWith(meter.name),
+        )
+      : undefined;
+  };
   const same = new Map<string, string>();
   const twinOf = (model: OfferedModel) =>
     models.find(
@@ -42,11 +65,20 @@ const listed = (models: readonly OfferedModel[]) => {
       ...(model.followsDefault ? [`${model.providerLabel}'s default`] : []),
       ...(model.limit === undefined ? [] : [limitLabel(model.limit)]),
     ];
-    const provider = providers.get(model.ref.provider) ?? { name: model.providerLabel, models: [] };
+    const plan = usageOf(model.ref.provider);
+    const provider: Listed = providers.get(model.ref.provider) ?? {
+      name: model.providerLabel,
+      models: [],
+      ...(plan === undefined
+        ? {}
+        : { above: <PlanMeters label={model.providerLabel} usage={plan} /> }),
+    };
+    const meter = modelMeterOf(model);
     provider.models.push({
       value: key,
       name: model.name,
       ...(notes.length === 0 ? {} : { note: notes.join(" · ") }),
+      ...(meter === undefined ? {} : { below: <ModelMeter meter={meter} /> }),
     });
     providers.set(model.ref.provider, provider);
   }
@@ -81,7 +113,10 @@ export default function HandheldChoices(props: {
 }) {
   const { choice } = props;
   const { model } = choice;
-  const { providers, same } = listed(props.models);
+  // Read afresh while the Model sheet is open (#66), at most once a minute.
+  const choosingModel = props.choosing === "model";
+  const usage = useUsage({ reading: choosingModel, asking: choosingModel });
+  const { providers, same } = listed(props.models, usage);
   const chosen = model === undefined ? undefined : modelKey(model.ref);
   const aside = props.skills === undefined ? {} : { aside: props.skills.workspaceName };
   return (

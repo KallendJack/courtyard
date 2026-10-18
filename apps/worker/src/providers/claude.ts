@@ -5,6 +5,7 @@ import {
   createSdkMcpServer,
   type HookCallback,
   type Options,
+  type Query,
   query,
   type SDKUserMessage,
   type SyncHookJSONOutput,
@@ -20,6 +21,7 @@ import {
   ProviderId,
   type ProviderStatus,
   SkillName,
+  type UsageWindow,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { shownPath, staysInside } from "../auth/workspace-files/index.ts";
@@ -50,6 +52,7 @@ import {
   type CodeTurn,
   type CourtyardTool,
   createStatusKeeper,
+  type HeardMeter,
   type HelperBranch,
   type HelperCode,
   type HelperTurn,
@@ -61,6 +64,7 @@ import {
   type ToolContent,
   type ToolReply,
   type TurnInput,
+  type UsageReading,
   type WebSearch,
 } from "./index.ts";
 
@@ -83,6 +87,11 @@ const LABEL = "Claude";
 export type ClaudeCode = {
   /** Who is signed in, and the models their plan offers, without sending a prompt. */
   readonly check: (signal: AbortSignal) => Promise<unknown>;
+  /**
+   * How much of the plan's limits is used (#66), without sending a prompt: the Agent SDK's
+   * experimental usage call, which may change, so its answer is checked like any other.
+   */
+  readonly usage: (signal: AbortSignal) => Promise<unknown>;
   /**
    * Runs one turn, yielding Claude Code's messages as they arrive. A session's turn streams its
    * message, so it can carry images (#78); a one-off question is a string.
@@ -450,27 +459,41 @@ const skillFileIn = (plugin: CodePlugin, path: string) => {
     : undefined;
 };
 
+/**
+ * Starts Claude Code with a prompt that never arrives, asks it something, then stops it: what
+ * Courtyard asks of Claude Code outside a turn.
+ */
+const askClaudeCode = async <T>(signal: AbortSignal, ask: (session: Query) => Promise<T>) => {
+  const stop = new AbortController();
+  const stopNow = () => stop.abort();
+  signal.addEventListener("abort", stopNow);
+  const silence: AsyncIterable<SDKUserMessage> = {
+    [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }),
+  };
+  const session = query({
+    prompt: silence,
+    options: { ...isolatedOptions(), abortController: stop },
+  });
+  try {
+    return await ask(session);
+  } finally {
+    signal.removeEventListener("abort", stopNow);
+    stop.abort();
+  }
+};
+
 /** Claude Code as it really is: the Agent SDK, with this machine's sign-in. */
 const realClaudeCode: ClaudeCode = {
-  check: async (signal) => {
-    const stop = new AbortController();
-    const stopNow = () => stop.abort();
-    signal.addEventListener("abort", stopNow);
-    // A prompt that never arrives: start Claude Code, ask who's signed in, then stop it.
-    const silence: AsyncIterable<SDKUserMessage> = {
-      [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }),
-    };
-    const session = query({
-      prompt: silence,
-      options: { ...isolatedOptions(), abortController: stop },
-    });
-    try {
-      return { account: await session.accountInfo(), models: await session.supportedModels() };
-    } finally {
-      signal.removeEventListener("abort", stopNow);
-      stop.abort();
-    }
-  },
+  check: (signal) =>
+    askClaudeCode(signal, async (session) => ({
+      account: await session.accountInfo(),
+      models: await session.supportedModels(),
+    })),
+  // Only the plan's limits: the scan of the machine's transcripts is skipped.
+  usage: (signal) =>
+    askClaudeCode(signal, (session) =>
+      session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
+    ),
   run: ({ prompt, options }) => query({ prompt, options }),
 };
 
@@ -573,8 +596,102 @@ const MessageStart = z.object({
 const BETWEEN_MESSAGES = "\n\n";
 const RateLimitEvent = z.object({
   type: z.literal("rate_limit_event"),
-  rate_limit_info: z.object({ status: z.string(), resetsAt: z.number().optional() }),
+  rate_limit_info: z.object({
+    status: z.string(),
+    resetsAt: z.number().optional(),
+    /** The window it's about, when it says; anything new or unreadable is none of Courtyard's. */
+    rateLimitType: z.string().optional().catch(undefined),
+    /** How much of that window is used, as a fraction. */
+    utilization: z.number().optional().catch(undefined),
+  }),
 });
+/** Claude's plan windows as Courtyard shows them (#66), by Claude Code's names for them. */
+const CLAUDE_WINDOWS: Partial<Record<string, UsageWindow>> = {
+  five_hour: "five-hour",
+  seven_day: "weekly",
+};
+
+/** One window in Claude Code's usage answer: percent used, and when it resets. */
+const UsageWindowAnswer = z
+  .object({
+    utilization: z.number().nullable(),
+    resets_at: z.string().nullable().optional(),
+  })
+  .nullable()
+  .optional();
+/**
+ * The plan's limits in Claude Code's usage answer (#66). Overage and the per-app window are left
+ * out; a per-model family's weekly window is named as Claude Code names it.
+ */
+const UsageAnswer = z.object({
+  rate_limits_available: z.boolean(),
+  rate_limits: z
+    .object({
+      five_hour: UsageWindowAnswer,
+      seven_day: UsageWindowAnswer,
+      seven_day_opus: UsageWindowAnswer,
+      seven_day_sonnet: UsageWindowAnswer,
+      model_scoped: z
+        .array(
+          z.object({
+            display_name: z.string().min(1),
+            utilization: z.number().nullable(),
+            resets_at: z.string().nullable().optional(),
+          }),
+        )
+        .optional()
+        .catch(undefined),
+    })
+    .nullable(),
+});
+
+/** A reset time as Claude Code wrote it, as an ISO time, or nothing when it isn't one. */
+const resetFrom = (resetsAt: string | null | undefined) => {
+  const at = resetsAt === null || resetsAt === undefined ? Number.NaN : Date.parse(resetsAt);
+  return Number.isNaN(at) ? {} : { resetAt: new Date(at).toISOString() };
+};
+
+/** Claude Code's usage answer as a reading of the plan (#66), or nothing when it can't be read. */
+const usageReadingOf = (answer: unknown): UsageReading | undefined => {
+  const parsed = UsageAnswer.safeParse(answer);
+  if (!parsed.success) return undefined;
+  const limits = parsed.data.rate_limits;
+  if (!parsed.data.rate_limits_available || limits === null) return { kind: "no-plan" };
+  const meters = (
+    [
+      ["five-hour", limits.five_hour],
+      ["weekly", limits.seven_day],
+    ] as const
+  ).flatMap(([window, found]) =>
+    found?.utilization === null || found?.utilization === undefined
+      ? []
+      : [{ window, used: found.utilization, ...resetFrom(found.resets_at) }],
+  );
+  const families = [
+    { name: "Opus", found: limits.seven_day_opus },
+    { name: "Sonnet", found: limits.seven_day_sonnet },
+    ...(limits.model_scoped ?? []).map((each) => ({ name: each.display_name, found: each })),
+  ];
+  const models = families.flatMap(({ name, found }) =>
+    found?.utilization === null || found?.utilization === undefined
+      ? []
+      : [{ name, used: found.utilization, ...resetFrom(found.resets_at) }],
+  );
+  return { kind: "plan", meters, models };
+};
+
+/** What a rate limit event says of one of the plan's windows (#66), when it says anything. */
+const heardMeterOf = (info: z.infer<typeof RateLimitEvent>["rate_limit_info"]) => {
+  const window = info.rateLimitType === undefined ? undefined : CLAUDE_WINDOWS[info.rateLimitType];
+  if (window === undefined || info.utilization === undefined) return undefined;
+  const resetAt = resetTimeFrom(info.resetsAt);
+  return {
+    window,
+    // A fraction, as Claude's API sends it, in percent to a tenth.
+    used: Math.round(info.utilization * 1000) / 10,
+    ...(resetAt === undefined ? {} : { resetAt }),
+  };
+};
 /** The ways Claude Code says an answer failed; anything new counts as "unknown". */
 const AnswerError = z
   .enum([
@@ -719,9 +836,15 @@ const saidIn = (message: z.infer<typeof AssistantError>["message"]) =>
  * Notes what a message says about the run: a usage limit, a retry, a failed answer, or its
  * result.
  */
-const noteProgress = (message: unknown, progress: Progress) => {
+const noteProgress = (
+  message: unknown,
+  progress: Progress,
+  heardUsage?: (meter: HeardMeter) => void,
+) => {
   const limit = RateLimitEvent.safeParse(message);
   if (limit.success) {
+    const meter = heardMeterOf(limit.data.rate_limit_info);
+    if (meter !== undefined) heardUsage?.(meter);
     if (limit.data.rate_limit_info.status === "rejected") {
       progress.resetAt = resetTimeFrom(limit.data.rate_limit_info.resetsAt);
       progress.failure = failureFor("rate_limit", progress);
@@ -1364,10 +1487,32 @@ export const createClaudeProvider = (
   };
   const keptStatus = createStatusKeeper({ check: checkStatus, now });
 
+  /** The plan's usage from Claude Code (#66), or nothing when it fails or takes too long. */
+  const readUsage = async (): Promise<UsageReading | undefined> => {
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), timeouts.laterMs);
+    try {
+      const answer = await Promise.race([
+        claudeCode.usage(stop.signal),
+        new Promise((_, reject) =>
+          stop.signal.addEventListener("abort", () => reject(new Error("timed out"))),
+        ),
+      ]);
+      return usageReadingOf(answer);
+    } catch {
+      // The call is experimental: when it fails, what turns hear is all there is.
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+      stop.abort();
+    }
+  };
+
   return {
     id,
     capabilities: CAPABILITIES,
     status: keptStatus.status,
+    readUsage,
 
     runTurn: async (input) => {
       const effort = effortFor(input.effort);
@@ -1531,7 +1676,7 @@ export const createClaudeProvider = (
             helpers?.callOf.set(task.data.task_id, task.data.tool_use_id);
             continue;
           }
-          noteProgress(message, progress);
+          noteProgress(message, progress, input.heardUsage);
         }
       } catch (error) {
         // Stopping can make Claude Code end with an error; that's the stop working, not a failure,

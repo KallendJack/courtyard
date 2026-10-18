@@ -1,6 +1,6 @@
 import type { SkillIcon, SkillName, SkillSummary } from "@courtyard/contract";
 import { Book, ChevronDown, ChevronRight, Flame, UserRound } from "lucide-react";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { classes } from "@/lib/classes";
 import { FrameButton, modelMark } from "../frame/frame-button.tsx";
 import { CapsLabel } from "../layout/caps-label.tsx";
@@ -108,11 +108,22 @@ export function SheetModelLine(props: { name: string; detail: string; change: ()
   );
 }
 
-/** A model to pick: its full name, and a line under it when there's something to say. */
+/**
+ * A model to pick: its full name, a line under it when there's something to say, and anything to
+ * show under that (its own weekly limit's meter, #66).
+ */
 export type SheetModel<T extends string> = {
   readonly value: T;
   readonly name: string;
   readonly note?: string;
+  readonly below?: ReactNode;
+};
+
+/** A provider's models to pick from, under its name, and anything to show above them (its plan's meters, #66). */
+export type SheetProvider<T extends string> = {
+  readonly name: string;
+  readonly models: readonly SheetModel<T>[];
+  readonly above?: ReactNode;
 };
 
 /** How many of a provider's models show before the rest fold away. */
@@ -126,7 +137,7 @@ const SHOWN = 3;
  * them as one.
  */
 export function SheetModels<T extends string>(props: {
-  providers: readonly { readonly name: string; readonly models: readonly SheetModel<T>[] }[];
+  providers: readonly SheetProvider<T>[];
   value: T | undefined;
   onChange: (value: T) => void;
 }) {
@@ -150,7 +161,7 @@ export function SheetModels<T extends string>(props: {
 
 function ProviderModels<T extends string>(props: {
   radio: string;
-  provider: { readonly name: string; readonly models: readonly SheetModel<T>[] };
+  provider: SheetProvider<T>;
   value: T | undefined;
   onChange: (value: T) => void;
 }) {
@@ -169,6 +180,7 @@ function ProviderModels<T extends string>(props: {
           {provider.name}
         </CapsLabel>
       </span>
+      {provider.above !== undefined && <div className="pb-1.5">{provider.above}</div>}
       {shown.map((model) => {
         const chosen = model.value === props.value;
         return (
@@ -194,6 +206,7 @@ function ProviderModels<T extends string>(props: {
               {model.note !== undefined && (
                 <span className="text-meta text-muted-foreground">{model.note}</span>
               )}
+              {model.below !== undefined && <span className="block pt-1.5">{model.below}</span>}
             </span>
             <span
               aria-hidden

@@ -53,6 +53,8 @@ import { freshStartRoutes } from "./features/fresh-start/routes.ts";
 import { createLead } from "./features/lead/index.ts";
 import { leadRoutes } from "./features/lead/routes.ts";
 import { rememberingLimits } from "./features/limits/index.ts";
+import { usageRoutes } from "./features/limits/routes.ts";
+import { createUsage } from "./features/limits/usage.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./features/live/index.ts";
 import { createMattSetup } from "./features/matt-setup/index.ts";
 import {
@@ -205,6 +207,9 @@ const WATCH_UPDATE_EVERY_MS = 10_000;
 
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
+
+/** How often each provider's plan usage is read while no turn ends (#66), so Home's line stays fresh. */
+const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
 
 /** Runs a job now and every `everyMs`, never overlapping itself. */
 export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
@@ -384,6 +389,24 @@ export const createWorker = (options: {
       ended: (session, task) => previews.ended(session, task),
       tool: (session, input) => previews.tool(session, input),
     },
+    usage: {
+      heard: (session, provider, meter) => usage.heard(session, provider, meter),
+      turnEnded: (provider) => background(usage.read(provider)),
+    },
+  });
+  // Usage at a glance (#66): each provider's plan usage, read as it starts, every so often and
+  // after every turn.
+  const usage = createUsage({
+    providers,
+    dataDir,
+    now,
+    notify: (session, need) => {
+      background(
+        need()
+          .then((said) => notifications.notice(session, said))
+          .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
+      );
+    },
   });
   const previews = createPreviews({
     ports: previewPorts,
@@ -472,6 +495,7 @@ export const createWorker = (options: {
   repeat(WATCH_LEADS_EVERY_MS, lead.watch);
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
+  repeat(READ_USAGE_EVERY_MS, () => usage.read());
 
   /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
@@ -571,6 +595,7 @@ export const createWorker = (options: {
     }
   });
   api.route("/", notificationRoutes(notifications));
+  api.route("/", usageRoutes(usage));
   api.route(
     "/",
     offlineCopyRoutes(

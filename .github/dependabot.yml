@@ -13,6 +13,10 @@ updates:
     # longer than that before proposing a version, rather than proposing one pnpm refuses.
     cooldown:
       default-days: 2
+    # Node's types follow the Node that Courtyard runs on (engines: 24.x), so a new major waits for Courtyard to move.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       routine:
         patterns: ["*"]

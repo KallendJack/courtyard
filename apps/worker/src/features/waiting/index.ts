@@ -1,13 +1,22 @@
-import type {
-  CodeSessionList,
-  NeedsYou,
-  NeedYou,
-  PullRequest,
-  PullRequestWaiting,
-  SessionEvent,
-  SessionWaiting,
-  TurnNow,
-  WorkspaceSummary,
+import {
+  type CodeSessionList,
+  type NeedsYou,
+  type NeedYou,
+  overflowFrom,
+  type PlanUsage,
+  type ProviderId,
+  type ProviderStatus,
+  type ProviderUsage,
+  type PullRequest,
+  type PullRequestWaiting,
+  type SessionEvent,
+  type SessionWaiting,
+  type TurnNow,
+  USAGE_WARNS_AGAIN_AT,
+  USAGE_WARNS_AT,
+  type UsageWarning,
+  type UsageWindow,
+  type WorkspaceSummary,
 } from "@courtyard/contract";
 
 /**
@@ -145,6 +154,93 @@ export const needsYouOf = (
       sessions.some((session) => session.now.kind !== "your-turn"),
     ),
   };
+};
+
+/**
+ * A provider's warning put off with Not now (#66): its window, until when (the window's reset),
+ * and how much of it was used then, so passing `USAGE_WARNS_AGAIN_AT` brings it back once.
+ */
+export type PutOff = {
+  readonly provider: ProviderId;
+  readonly window: UsageWindow;
+  readonly until: number;
+  readonly used: number;
+};
+
+/** The most warnings shown at once: one line per provider on Home, at most two (#66). */
+const MOST_WARNINGS = 2;
+
+/** A plan's fullest window it knows, or nothing for no plan or none known. */
+export const fullestOf = (usage: PlanUsage) => {
+  if (usage.kind === "no-plan") return undefined;
+  let fullest: { window: UsageWindow; used: number; resetAt?: string } | undefined;
+  for (const { window, used, resetAt } of usage.meters) {
+    if (used === null || (fullest !== undefined && fullest.used >= used)) continue;
+    fullest = { window, used, ...(resetAt === undefined ? {} : { resetAt }) };
+  }
+  return fullest;
+};
+
+/** Whether a warning on `window` at `used` stays put off by the owner's Not now. */
+const isPutOff = (
+  putOff: readonly PutOff[],
+  warning: { provider: ProviderId; window: UsageWindow; used: number },
+  clock: number,
+) =>
+  putOff.some(
+    (each) =>
+      each.provider === warning.provider &&
+      each.window === warning.window &&
+      clock < each.until &&
+      !(warning.used >= USAGE_WARNS_AGAIN_AT && each.used < USAGE_WARNS_AGAIN_AT),
+  );
+
+/**
+ * The warnings before a limit (#66), fullest first, at most two: each provider whose fullest
+ * window is past `USAGE_WARNS_AT`, unless the owner put it off (Not now) until it resets or passes
+ * `USAGE_WARNS_AGAIN_AT`. Each offers Switch to the first other provider that's connected with
+ * room (as Carry on would go), saying that one's own fullest window when it's past
+ * `USAGE_WARNS_AT` too. A provider at its limit with nowhere to switch has none: the limit card
+ * after its turn says so.
+ */
+export const usageWarnings = (state: {
+  readonly usage: readonly ProviderUsage[];
+  readonly statuses: readonly ProviderStatus[];
+  readonly putOff: readonly PutOff[];
+  readonly clock: number;
+}): UsageWarning[] => {
+  const fullest = new Map(state.usage.map((each) => [each.provider, fullestOf(each.usage)]));
+  const full = (provider: ProviderId) => (fullest.get(provider)?.used ?? 0) >= 100;
+  const warnings = state.usage.flatMap((each): UsageWarning[] => {
+    const meter = fullest.get(each.provider);
+    if (meter === undefined || meter.used < USAGE_WARNS_AT) return [];
+    if (isPutOff(state.putOff, { provider: each.provider, ...meter }, state.clock)) return [];
+    const overflow = overflowFrom(
+      state.statuses.filter((status) => !full(status.id)),
+      each.provider,
+    );
+    if (overflow.kind !== "carry-on" && meter.used >= 100) return [];
+    const theirs = overflow.kind === "carry-on" ? fullest.get(overflow.model.provider) : undefined;
+    return [
+      {
+        provider: each.provider,
+        label: each.label,
+        ...meter,
+        ...(overflow.kind === "carry-on"
+          ? {
+              switchTo: {
+                label: overflow.label,
+                model: overflow.model,
+                ...(theirs !== undefined && theirs.used >= USAGE_WARNS_AT
+                  ? { fullest: { window: theirs.window, used: theirs.used } }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+    ];
+  });
+  return warnings.sort((a, b) => b.used - a.used).slice(0, MOST_WARNINGS);
 };
 
 /**

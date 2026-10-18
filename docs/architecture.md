@@ -90,7 +90,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`suggested-replies/`](../apps/worker/src/features/suggested-replies/README.md): checks the replies a model suggests.
 - [`quick-questions/`](../apps/worker/src/features/quick-questions/README.md): read-only questions about a pull request.
 - [`sources/`](../apps/worker/src/features/sources/README.md): a turn's sources, the same for every provider.
-- [`limits/`](../apps/worker/src/features/limits/README.md): each provider's usage limit until its reset.
+- [`limits/`](../apps/worker/src/features/limits/README.md): each provider's usage limit until its reset, and its
+  plan usage at a glance (#66).
 - [`waiting/`](../apps/worker/src/features/waiting/README.md): what waits on the owner, decided once, and listed
   from every workspace (`GET /api/needs-you`, #492).
 
@@ -194,6 +195,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`sessions/`](../apps/web/src/features/sessions/README.md): the session page, in parts: `turns/`, `answer/`,
     `composer/` and `notes/`.
   - [`step-by-step/`](../apps/web/src/features/step-by-step/README.md): an answer's steps one at a time, read aloud.
+  - [`limits/`](../apps/web/src/features/limits/README.md): usage at a glance (#66): the Model sheet's plan meters,
+    the warning above the Reply box and Home's usage lines.
   - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
@@ -344,7 +347,7 @@ topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for 
 is in each session a list shows and what it waits on the owner for, with what the session page has shown the
 owner, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
+tidies, usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, the offline copy
 (`offline-copy.ts`, #106), health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
@@ -556,6 +559,13 @@ Where the rest fits:
   model with room (for Get to know and Tidy, the first that saves to context). The worker picks it, not the browser.
   A session whose provider shows as unavailable keeps its model in the picker, and Send waits until the provider is
   back or the owner picks another (#299).
+- **Usage at a glance** (#66). Each provider's `readUsage` reads its plan's 5-hour and weekly windows (Claude
+  through the Agent SDK's experimental usage call, Codex through its rate limits), asked by `limits/` as the
+  worker starts, after every turn ends (`sessions/` says so) and when the Model sheet opens, at most once a minute
+  per provider; as a turn runs, its provider hands what it hears of a window to `TurnInput.heardUsage`, which
+  `sessions/` passes on with the session. `waiting/` decides the warning from 80% (`GET /api/usage`), which the
+  Model sheet, the session page's card and a code workspace's Home show; Switch only changes the Reply box's
+  model, before a limit as Carry on does after one. A window a running turn hears cross 80% notifies once.
 - **Carry on.** On the last turn, when it failed on a usage limit, the owner can carry on. The session records the
   model change and sends the last message again to another provider's model, with the conversation so far (spec,
   Overflow).
@@ -616,6 +626,8 @@ things live only in the worker's memory and go when it restarts.
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.
 - `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
+- `usage-not-now.json`: the warnings before a limit the owner put off with Not now (#66), each until its window
+  resets.
 - `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
   it's there.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
@@ -630,7 +642,8 @@ things live only in the worker's memory and go when it restarts.
   `sign-ins.json`: the providers the owner said Not now to.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
 
-**Only in the worker's memory:** usage limits, tidies waiting for review, and which turns are running.
+**Only in the worker's memory:** usage limits and each plan's usage as last read, tidies waiting for review, and
+which turns are running.
 
 **On a device that keeps an offline copy** (#106, [ADR 0030](adr/0030-the-web-app-may-keep-a-read-only-copy.md)):
 the copy the worker gave it (`GET /api/offline-copy`), whole and read-only, in the browser's IndexedDB (`courtyard`,
