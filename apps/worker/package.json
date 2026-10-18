@@ -17,7 +17,7 @@
     "@courtyard/skills": "workspace:*",
     "@hono/node-server": "^2.1.3",
     "@modelcontextprotocol/sdk": "1.32.0",
-    "@openai/codex": "0.161.0",
+    "@openai/codex": "0.163.0",
     "hono": "^4.13.12",
     "playwright-core": "1.63.0",
     "sharp": "0.35.5",
