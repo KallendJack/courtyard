@@ -22,6 +22,12 @@ export type WorkspaceTab = {
 };
 
 /**
+ * A tab's count: as wide as two digits, each digit as wide as any other, so a count coming in, or
+ * going from 9 to 13, takes the room kept for it and the tabs beside the title don't move (#503).
+ */
+const COUNT = "min-w-[2ch] text-label font-semibold tabular-nums";
+
+/**
  * A workspace's tabs (#300, #301; Paper, "Tablet · Code workspace Home"): Home, then each tab that
  * has something (Sessions, PRs or Things, Docs) with its count, the chosen one ringed in violet.
  * Each is a link to its hash on the workspace's page, so Back goes back a tab. A row that scrolls
@@ -51,7 +57,7 @@ export function WorkspaceTabs(props: {
               className="invisible flex h-11 shrink-0 items-center gap-2 px-4.5 text-interface font-semibold"
             >
               {tab.label}
-              {tab.count !== undefined && <span className="text-label tabular-nums">0</span>}
+              {tab.count !== undefined && <span className={COUNT}>0</span>}
             </span>
           );
         }
@@ -72,16 +78,13 @@ export function WorkspaceTabs(props: {
             )}
           >
             {tab.label}
-            {/* Its digits all as wide, so a count coming in takes exactly the room kept for it. */}
             {tab.count === "unknown" ? (
-              <span aria-hidden className="invisible text-label font-semibold tabular-nums">
+              <span aria-hidden className={classes(COUNT, "invisible")}>
                 0
               </span>
             ) : (
               tab.count !== undefined && (
-                <span className="text-label font-semibold text-placeholder tabular-nums">
-                  {tab.count}
-                </span>
+                <span className={classes(COUNT, "text-placeholder")}>{tab.count}</span>
               )
             )}
           </Link>
