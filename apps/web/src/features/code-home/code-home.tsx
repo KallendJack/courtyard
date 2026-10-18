@@ -21,6 +21,7 @@ import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspa
 import { addStylesheet } from "@/lib/stylesheet";
 import type { FromWorker } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
+import { UsageLines } from "../limits/usage-lines.tsx";
 import { loadMattSetup } from "../matt-setup/api.ts";
 import PullRequests, { useOpenPullRequests } from "../pull-requests/pull-requests.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
@@ -296,7 +297,9 @@ export default function CodeHome(props: {
                 />
               )}
             </div>
-            <div className="shrink-0">
+            <div className="flex shrink-0 flex-col gap-3">
+              {/* Near a plan's limit (#66): a gold line above Main; nothing while there's room. */}
+              <UsageLines />
               <MainRow workspaceId={workspace.id} again={again} />
             </div>
           </div>

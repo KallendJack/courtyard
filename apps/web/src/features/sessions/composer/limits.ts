@@ -27,7 +27,7 @@ export const resetsWhen = (iso: string, now = new Date()) => {
 };
 
 /** The same, as short as a picker needs: "18:30" today, "Thu 14:00" within the week, else "14 Oct". */
-const resetsShort = (iso: string, now = new Date()) => {
+export const resetsShort = (iso: string, now = new Date()) => {
   const date = new Date(iso);
   const days = daysAhead(date, now);
   if (days <= 0) return time(date);

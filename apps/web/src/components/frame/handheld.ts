@@ -126,6 +126,8 @@ export type Dock = {
    * or stopping and keeping what was said.
    */
   talk: () => void;
+  /** Opens the message box's Model sheet, as the frame's Model button does (#66). */
+  chooseModel: () => void;
 };
 
 export const DockContext = createContext<Dock | undefined>(undefined);

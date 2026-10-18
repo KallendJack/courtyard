@@ -708,7 +708,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (see `scriptedTidy`), a session's title its first message (see `scriptedTitle`), and a quick
  * question's answer the question (see `scriptedQuickAnswer`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
- * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
+ * hours on, so overflow can be seen and tested, and "use 82% of Fake's week" (or "5-hour") fills
+ * its pretend plan (see `pretendPlan`, #66). "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
  * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`), and "preview

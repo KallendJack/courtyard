@@ -86,12 +86,25 @@ function LoggedIn() {
   /** The frame's Talk, for the box's mic: set by the Talk key or strip once the frame is there. */
   const talker = useRef<() => void>(undefined);
   const talk = useCallback(() => talker.current?.(), []);
+  /** The message box's Model sheet, as the rail's Model button opens it (#66: Home's usage line). */
+  const boxNow = useRef(box);
+  boxNow.current = box;
+  const chooseModel = useCallback(() => boxNow.current?.chooseModel(), []);
   const dock = useMemo<Dock | undefined>(
     () =>
       dockElement === null
         ? undefined
-        : { element: dockElement, offer, offerField, offerCommands, open, close, talk },
-    [dockElement, offer, offerField, offerCommands, open, close, talk],
+        : {
+            element: dockElement,
+            offer,
+            offerField,
+            offerCommands,
+            open,
+            close,
+            talk,
+            chooseModel,
+          },
+    [dockElement, offer, offerField, offerCommands, open, close, talk, chooseModel],
   );
 
   return (

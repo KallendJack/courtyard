@@ -197,7 +197,8 @@ export const createUsage = (options: {
           : {}),
       });
       kept.readAt = clock;
-      const crossed = meter.used >= USAGE_WARNS_AT && (was === undefined || was.used < USAGE_WARNS_AT);
+      const crossed =
+        meter.used >= USAGE_WARNS_AT && (was === undefined || was.used < USAGE_WARNS_AT);
       const key = `${provider}:${meter.window}`;
       const resetAt = meter.resetAt ?? was?.resetAt;
       if (!crossed || (told.has(key) && told.get(key) === resetAt)) return;

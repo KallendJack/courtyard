@@ -6,9 +6,9 @@ What waits on the owner (#334; AGENTS.md), decided here once for every screen an
 page has shown it to you.
 
 - **Uses:** nothing but the contract.
-- **Used by:** `sessions/` (on each listed session) and `pull-requests/` (on each open one). The web app reads only
-  those: a Home tile names the newest session waiting, and every session list marks those waiting and puts them
-  first (#345).
+- **Used by:** `sessions/` (on each listed session), `pull-requests/` (on each open one) and `limits/` (the warnings
+  before a limit). The web app reads only those: a Home tile names the newest session waiting, and every session list
+  marks those waiting and puts them first (#345).
 
 ## API
 
@@ -25,3 +25,7 @@ None of its own: `waiting` is on `sessions/`' list and `pull-requests/`' list. S
   latest answer (#345).
 - **An open pull request** waits for its conflict, its failing checks (unless its session is working on them, #172),
   or a merge once its checks pass.
+- **A plan near its limit** (#66): a provider's fullest window from 80% warns, fullest first and at most two, unless
+  Not now put it off until it resets (it comes back once past 95%). It offers Switch to the first other provider
+  connected with room, saying that one's own window when it's past 80% too; at 100% with nowhere to switch, there's
+  no warning, as the limit card after the turn says it.

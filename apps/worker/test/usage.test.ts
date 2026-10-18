@@ -96,22 +96,24 @@ describe("each provider's plan meters", () => {
   it("are read as the worker starts: the 5-hour and weekly windows, or no plan limits for a sign-in without them", async () => {
     const request = await start();
 
-    await expect.poll(async () => (await usageOf(request)).providers).toEqual([
-      {
-        provider: "fake",
-        label: "Fake",
-        usage: {
-          kind: "plan",
-          meters: [
-            { window: "five-hour", used: 12, resetAt: at(clock + 3 * HOUR) },
-            { window: "weekly", used: 31, resetAt: at(clock + 72 * HOUR) },
-          ],
-          models: [],
-          readAt: at(clock),
+    await expect
+      .poll(async () => (await usageOf(request)).providers)
+      .toEqual([
+        {
+          provider: "fake",
+          label: "Fake",
+          usage: {
+            kind: "plan",
+            meters: [
+              { window: "five-hour", used: 12, resetAt: at(clock + 3 * HOUR) },
+              { window: "weekly", used: 31, resetAt: at(clock + 72 * HOUR) },
+            ],
+            models: [],
+            readAt: at(clock),
+          },
         },
-      },
-      { provider: "fake-two", label: "Fake two", usage: { kind: "no-plan" } },
-    ]);
+        { provider: "fake-two", label: "Fake two", usage: { kind: "no-plan" } },
+      ]);
     expect((await usageOf(request)).warnings).toEqual([]);
   });
 
@@ -205,14 +207,22 @@ describe("the warning before a limit", () => {
       {
         provider: "fake",
         used: 100,
-        switchTo: { label: "Fake two", model: FAKE_TWO_MODEL, fullest: { window: "weekly", used: 84 } },
+        switchTo: {
+          label: "Fake two",
+          model: FAKE_TWO_MODEL,
+          fullest: { window: "weekly", used: 84 },
+        },
       },
       { provider: "fake-two", used: 84, switchTo: undefined },
     ]);
   });
 
   it("isn't there once both providers are at their limit: the limit card says so after the turn", async () => {
-    const full: UsageReading = { kind: "plan", meters: [{ window: "weekly", used: 100 }], models: [] };
+    const full: UsageReading = {
+      kind: "plan",
+      meters: [{ window: "weekly", used: 100 }],
+      models: [],
+    };
     const request = await start([
       createFakeProvider({ delayMs: 0, now, usage: full }),
       createFakeProvider({ delayMs: 0, now, second: true, usage: full }),
@@ -233,7 +243,13 @@ describe("the warning before a limit", () => {
     await turn(request, "use 88% of Fake's 5-hour");
 
     expect((await usageOf(request)).warnings).toEqual([
-      { provider: "fake", label: "Fake", window: "five-hour", used: 88, resetAt: at(clock + 3 * HOUR) },
+      {
+        provider: "fake",
+        label: "Fake",
+        window: "five-hour",
+        used: 88,
+        resetAt: at(clock + 3 * HOUR),
+      },
     ]);
   });
 
@@ -303,8 +319,11 @@ describe("the warning's notification", () => {
     });
   const usagePushes = (push: FakePush) =>
     push.sent.flatMap(({ payload }) =>
-      typeof payload === "object" && payload !== null && "body" in payload &&
-      typeof payload.body === "string" && payload.body.includes("% of")
+      typeof payload === "object" &&
+      payload !== null &&
+      "body" in payload &&
+      typeof payload.body === "string" &&
+      payload.body.includes("% of")
         ? [payload]
         : [],
     );
@@ -317,9 +336,9 @@ describe("the warning's notification", () => {
     const id = await turn(request, "use 82% of Fake's week");
     await turn(request, "use 85% of Fake's week");
 
-    await expect.poll(() => usagePushes(push)).toEqual([
-      { title: expect.any(String), body: "Fake: 82% of this week used", session: id },
-    ]);
+    await expect
+      .poll(() => usagePushes(push))
+      .toEqual([{ title: expect.any(String), body: "Fake: 82% of this week used", session: id }]);
   });
 
   it("isn't sent for a window already past 80% when the worker read it, with no turn running", async () => {

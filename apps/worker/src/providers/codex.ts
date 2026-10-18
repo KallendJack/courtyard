@@ -653,26 +653,27 @@ const metersOf = (snapshot: z.infer<typeof LimitSnapshot> | null): HeardMeter[] 
       ["five-hour", snapshot?.primary],
       ["weekly", snapshot?.secondary],
     ] as const
-  ).flatMap(([order, window]): HeardMeter[] => {
-    if (window === null || window === undefined) return [];
-    const mins = window.windowDurationMins;
-    const shown: UsageWindow =
-      mins === null || mins === undefined
-        ? order
-        : mins <= SHORT_WINDOW_MINS
-          ? "five-hour"
-          : "weekly";
-    return [
-      {
-        window: shown,
-        used: window.usedPercent,
-        ...(window.resetsAt === null
-          ? {}
-          : { resetAt: new Date(window.resetsAt * 1000).toISOString() }),
-      },
-    ];
-  })
-  .sort((a, b) => (a.window === b.window ? 0 : a.window === "five-hour" ? -1 : 1));
+  )
+    .flatMap(([order, window]): HeardMeter[] => {
+      if (window === null || window === undefined) return [];
+      const mins = window.windowDurationMins;
+      const shown: UsageWindow =
+        mins === null || mins === undefined
+          ? order
+          : mins <= SHORT_WINDOW_MINS
+            ? "five-hour"
+            : "weekly";
+      return [
+        {
+          window: shown,
+          used: window.usedPercent,
+          ...(window.resetsAt === null
+            ? {}
+            : { resetAt: new Date(window.resetsAt * 1000).toISOString() }),
+        },
+      ];
+    })
+    .sort((a, b) => (a.window === b.window ? 0 : a.window === "five-hour" ? -1 : 1));
 
 /**
  * When the usage limit Codex reached resets: the latest reset among the windows that are used up,

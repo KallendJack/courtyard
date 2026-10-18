@@ -2755,7 +2755,10 @@ describe("Claude's plan usage (#66)", () => {
           },
         },
         // One for overage, or with no use, says nothing of a window.
-        { type: "rate_limit_event", rate_limit_info: { status: "allowed", rateLimitType: "overage" } },
+        {
+          type: "rate_limit_event",
+          rate_limit_info: { status: "allowed", rateLimitType: "overage" },
+        },
         { type: "rate_limit_event", rate_limit_info: { status: "allowed" } },
         textDelta("Against the back wall."),
         success,
