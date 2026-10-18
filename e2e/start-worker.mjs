@@ -466,6 +466,8 @@ const github = createFakeGitHub({
     conflicts: (subject) => subject.includes("[conflicts]"),
     // One whose subject says "[e2e passes later]" passes a while after its page first asks (#329).
     passesLater: { when: (subject) => subject.includes("[e2e passes later]"), afterMs: 5000 },
+    // A dependabot/… branch is Dependabot's, as its version bumps are (#496).
+    author: (branch) => (branch.startsWith("dependabot/") ? "dependabot[bot]" : "octo-owner"),
   },
 });
 // A Claude Code helper's pull request on Workbench whose checks passed: ready to merge (#301).

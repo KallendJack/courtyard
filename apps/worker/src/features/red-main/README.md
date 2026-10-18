@@ -5,8 +5,8 @@ A red main after a merge (#355): re-runs its failed jobs once, then files an iss
 **Example:** after a merge, main's e2e job fails twice. An issue "Fix: chat scrolls on load" is filed, `bug` and
 `ready-for-agent`, first in the lowest open milestone's build order.
 
-- **Uses:** `code/` (fetching the default branch), `github/` (jobs, re-runs, issues), `next-up/` (the order rules),
-  `workspaces/`.
+- **Uses:** `code/` (fetching the default branch), `github/` (jobs, re-runs, issues), `next-up/` (the order rules,
+  and `build-order.ts` to file first in the order, as `version-bumps/` does), `workspaces/`.
 - **Used by:** `worker.ts`, as one of its repeating jobs, once a minute.
 
 ## API

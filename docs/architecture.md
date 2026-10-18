@@ -119,6 +119,7 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
 - [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims.
 - [`red-main/`](../apps/worker/src/features/red-main/README.md): a red main after a merge.
+- [`version-bumps/`](../apps/worker/src/features/version-bumps/README.md): Dependabot's bumps, re-run once, then filed for the Lead.
 - [`repos/`](../apps/worker/src/features/repos/README.md): the owner's GitHub repos as code workspaces, and New repo.
 - [`matt-setup/`](../apps/worker/src/features/matt-setup/README.md): the setup check.
 - [`matt-skills/`](../apps/worker/src/features/matt-skills/README.md): Matt Pocock's skills from a pinned copy.
@@ -626,6 +627,8 @@ things live only in the worker's memory and go when it restarts.
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.
 - `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
+- `version-bumps.json`: what was done about each open Dependabot bump (#496): its commit, its re-run, what that
+  showed, its "Bump fails" issue and whether Dependabot was asked to rebase.
 - `usage-not-now.json`: the warnings before a limit the owner put off with Not now (#66), each until its window
   resets.
 - `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while

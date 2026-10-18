@@ -1,10 +1,11 @@
 import { join } from "node:path";
 import { z } from "zod";
-import type { FoundCheckRun, FoundMilestone, GitHub } from "../../integrations/github/index.ts";
+import type { FoundCheckRun, GitHub } from "../../integrations/github/index.ts";
 import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
 import { gitOrNothing } from "../../lib/git.ts";
 import type { Code } from "../code/index.ts";
-import { buildOrderOf, milestoneRank, READY_LABEL } from "../next-up/index.ts";
+import { fileInBuildOrder } from "../next-up/build-order.ts";
+import { READY_LABEL } from "../next-up/index.ts";
 import { listCodeWorkspaces } from "../workspaces/index.ts";
 
 /**
@@ -20,9 +21,6 @@ const FILE = "red-main.json";
 /** The labels a red main's issue carries (Matt Pocock's triage labels). */
 const LABELS = ["bug", READY_LABEL];
 
-/** The longest title GitHub shows whole in a list. */
-const TITLE_MAX_LENGTH = 200;
-
 /** What was done about main's newest commit in one repository. */
 const Done = z.object({
   commit: z.string(),
@@ -33,36 +31,6 @@ const Done = z.object({
 });
 type Done = z.infer<typeof Done>;
 const Kept = z.object({ repos: z.record(z.string(), Done) });
-
-/** The milestone work goes in first: the lowest-numbered open one (docs/agents/roadmap.md). */
-const currentOf = (milestones: readonly FoundMilestone[]) =>
-  [...milestones].sort((a, b) => {
-    const [rankA, numberA] = milestoneRank(a.title);
-    const [rankB, numberB] = milestoneRank(b.title);
-    return rankA - rankB || numberA - numberB;
-  })[0];
-
-/** A milestone's description with issue `number` first in its `Build order:` line, or a new one. */
-const putFirst = (description: string, number: number) => {
-  const order = buildOrderOf(description);
-  if (order.includes(number)) return description;
-  const line = /build order:[ \t]*/i.exec(description);
-  if (line === null) {
-    return description.trim() === ""
-      ? `Build order: #${number}.`
-      : `Build order: #${number}. ${description}`;
-  }
-  const at = line.index + line[0].length;
-  const then = order.length > 0 ? " → " : "";
-  return `${description.slice(0, at)}#${number}${then}${description.slice(at)}`;
-};
-
-const titleOf = (test: string) => {
-  const title = `Main fails: ${test}`;
-  return title.length <= TITLE_MAX_LENGTH
-    ? title
-    : `${title.slice(0, TITLE_MAX_LENGTH - 1).trimEnd()}…`;
-};
 
 const bodyOf = (filing: { commit: string; test: string; job: FoundCheckRun; done: Done }) => {
   const { commit, test, job, done } = filing;
@@ -107,27 +75,16 @@ export const createRedMain = (options: {
   const fileIssue = async (repo: string, failed: FoundCheckRun, done: Done) => {
     const named = await github.checkRunFailure({ repo, id: failed.id });
     const test = named.ok && named.value !== null ? named.value : failed.name;
-    const milestones = await github.openMilestones({ repo });
-    const current = milestones.ok ? currentOf(milestones.value) : undefined;
-    const created = await github.createIssue({
+    const filed = await fileInBuildOrder(github, {
       repo,
-      title: titleOf(test),
+      title: `Main fails: ${test}`,
       body: bodyOf({ commit: done.commit, test, job: failed, done }),
       labels: LABELS,
-      milestone: current?.number ?? null,
+      place: "first",
     });
     // Tried again next time round.
-    if (!created.ok) return console.error(`${repo}'s red main couldn't be filed`, created.error);
-    await keep(repo, { ...done, filed: created.value.number });
-    if (current === undefined) return;
-    const described = await github.describeMilestone({
-      repo,
-      number: current.number,
-      description: putFirst(current.description, created.value.number),
-    });
-    if (!described.ok) {
-      console.error(`#${created.value.number} couldn't be put first in ${current.title}`);
-    }
+    if (!filed.ok) return console.error(`${repo}'s red main couldn't be filed`, filed.error);
+    await keep(repo, { ...done, filed: filed.value });
   };
 
   /** Looks at main's newest commit in `repo`, re-running or filing it when it's red. */

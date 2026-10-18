@@ -146,6 +146,8 @@ const fromSaid = (from: PullRequestFrom) => {
       return `from the session “${from.title}”`;
     case "claude-code":
       return "from a Claude Code helper";
+    case "dependabot":
+      return "from Dependabot";
     case "github":
       return `from ${from.login} on GitHub`;
   }
@@ -161,7 +163,21 @@ function PullRequestRow(props: { workspaceId: WorkspaceId; row: Row }) {
   const open = pullRequest.state === "open";
   const conflicts = open && pullRequest.conflicts === true;
   const ready = open && !conflicts && pullRequest.checks.kind === "passed";
-  const checks = <ChecksState pullRequest={pullRequest} base={row.base} chip={desktop} />;
+  const { bump } = row;
+  const checks = (
+    <ChecksState
+      pullRequest={pullRequest}
+      base={row.base}
+      chip={desktop}
+      rerunning={bump?.kind === "rerunning"}
+    />
+  );
+  // A bump the worker filed for the Lead (#496) says so, with its issue.
+  const said = fixing
+    ? "the session is fixing it"
+    : bump?.kind === "fixing"
+      ? `the Lead is fixing it · #${bump.issue}`
+      : fromSaid(row.from);
 
   const bring = useAction(async () => {
     if (session === undefined) return undefined;
@@ -189,9 +205,7 @@ function PullRequestRow(props: { workspaceId: WorkspaceId; row: Row }) {
         <p className="flex min-w-0 items-center gap-2 text-meta/4 text-muted-foreground">
           {/* Its branch is cut short only once who it's from has given way (#319). */}
           <span className="min-w-0 truncate font-mono text-primary-text">{row.branch}</span>
-          <span className="min-w-0 flex-1 truncate">
-            · {fixing ? "the session is fixing it" : fromSaid(row.from)}
-          </span>
+          <span className="min-w-0 flex-1 truncate">· {said}</span>
         </p>
         {/* On a phone, its checks go under its branch. */}
         <div className="md:hidden">{checks}</div>

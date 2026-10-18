@@ -153,6 +153,7 @@ export {
   StartPreview,
 } from "./lib/preview.ts";
 export {
+  BumpStanding,
   ChangedFile,
   MergeReadiness,
   OpenPullRequest,

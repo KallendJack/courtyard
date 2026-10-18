@@ -18,7 +18,9 @@ line; you ask "is the test new?", then Merge.
 - **The list** (`pull-requests.tsx`, the PRs tab's list, which shares its open pull requests with Home's Needs you
   through `open-pull-requests.ts`): every open PR on the repository, whoever opened it, with its title, branch, who
   it's from and where it stands (`checks.tsx`: moss passed, violet running, red failed, gold conflicting with its
-  base), and Review, or Bring up to date when it conflicts; or its sessions' merged ones.
+  base), and Review, or Bring up to date when it conflicts; or its sessions' merged ones. A Dependabot bump the worker
+  looks after (#496) says "Re-running checks" while it re-runs them, and "the Lead is fixing it · #<issue>" once
+  it's filed.
 - **The PR page** (`review.tsx`): a session's PR on the session's page in place of the conversation
   (`?view=review`), and one no session opened on its workspace's page, named by the address's hash (`#pr-306`; a
   search value would add to the first load). Only this page lays itself out, fitting the screen.

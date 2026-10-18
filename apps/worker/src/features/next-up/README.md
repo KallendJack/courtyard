@@ -8,7 +8,8 @@ gets "Building this: …" with the session's branch.
 
 - **Uses:** `github/` (issues, comments, milestones), `sessions/` (starting a session), `prompts/` (its first
   message), `code/`, `workspaces/`.
-- **Used by:** `worker.ts`, `lead/` (the order, `filesNamed`), `red-main/` (the order rules); `sessions/` is handed
+- **Used by:** `worker.ts`, `lead/` (the order, `filesNamed`), `red-main/` and `version-bumps/` (the order rules,
+  and `build-order.ts`, which files an issue first or last in the current milestone's order); `sessions/` is handed
   its `named`, `claim` and `release`.
 
 ## API

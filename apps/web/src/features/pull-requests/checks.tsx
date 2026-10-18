@@ -6,11 +6,12 @@ import { classes } from "@/lib/classes";
  * running in violet (live, as the branch strip has it), failed in red, a conflict with its base in
  * gold, since it needs the owner (#278), and quiet when it has none or has ended.
  */
-const standing = (pullRequest: PullRequest, base = "its base") => {
+const standing = (pullRequest: PullRequest, base = "its base", rerunning = false) => {
   if (pullRequest.state === "merged") return { tone: "passed", text: "Merged" } as const;
   if (pullRequest.state === "closed") return { tone: "quiet", text: "Closed" } as const;
   // Its checks may not run at all while it conflicts, so that's what it says, not "No checks".
   if (pullRequest.conflicts) return { tone: "needs", text: `Conflicts with ${base}` } as const;
+  if (rerunning) return { tone: "running", text: "Re-running checks" } as const;
   const { checks } = pullRequest;
   switch (checks.kind) {
     case "none":
@@ -50,8 +51,10 @@ export function ChecksState(props: {
   /** The branch it merges into, which a conflict names, once known. */
   base: string | undefined;
   chip?: boolean;
+  /** The worker is re-running a Dependabot bump's failed checks (#496). */
+  rerunning?: boolean;
 }) {
-  const now = standing(props.pullRequest, props.base);
+  const now = standing(props.pullRequest, props.base, props.rerunning);
   const tone = TONES[now.tone];
   return (
     <span
