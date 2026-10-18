@@ -14,6 +14,7 @@ import type {
   AddedMessage,
   AddedMessages,
   CodeTurn,
+  HeardMeter,
   Provider,
   ToolCall,
   ToolConnection,
@@ -30,10 +31,15 @@ const folder = resolve("/path/to/context/garage-gym");
  * function among them is a step Claude Code takes at that point, such as calling a hook.
  */
 const stubClaudeCode = (
-  script: { check?: (signal: AbortSignal) => Promise<unknown>; messages?: unknown[] } = {},
+  script: {
+    check?: (signal: AbortSignal) => Promise<unknown>;
+    usage?: (signal: AbortSignal) => Promise<unknown>;
+    messages?: unknown[];
+  } = {},
 ) => {
   const runs: Parameters<ClaudeCode["run"]>[0][] = [];
   const claudeCode: ClaudeCode = {
+    usage: script.usage ?? (async () => ({ rate_limits_available: false, rate_limits: null })),
     check:
       script.check ??
       (async () => ({
@@ -2466,6 +2472,7 @@ describe("stopping a Claude turn", () => {
     let givenToClaudeCode: AbortController | undefined;
     const claudeCode: ClaudeCode = {
       check: async () => ({ account: {}, models: [] }),
+      usage: async () => ({ rate_limits_available: false, rate_limits: null }),
       run: ({ options }) =>
         (async function* () {
           givenToClaudeCode = options.abortController;
@@ -2539,6 +2546,7 @@ describe("steering a Claude turn (#252)", () => {
     let inputEnded = false;
     const claudeCode: ClaudeCode = {
       check: async () => ({ account: {}, models: [] }),
+      usage: async () => ({ rate_limits_available: false, rate_limits: null }),
       run: ({ prompt }) =>
         (async function* () {
           if (typeof prompt === "string") throw new Error("not streamed");
@@ -2577,6 +2585,7 @@ describe("steering a Claude turn (#252)", () => {
     let inputEnded = false;
     const claudeCode: ClaudeCode = {
       check: async () => ({ account: {}, models: [] }),
+      usage: async () => ({ rate_limits_available: false, rate_limits: null }),
       run: ({ prompt }) =>
         (async function* () {
           if (typeof prompt === "string") throw new Error("not streamed");
@@ -2680,5 +2689,84 @@ describe("a one-off question to Claude (a tidy, a session's title)", () => {
     });
 
     expect(await ask(claudeCode)).toEqual({ ok: false, error: { kind: "rate-limited" } });
+  });
+});
+
+describe("Claude's plan usage (#66)", () => {
+  const readUsage = (usage: () => Promise<unknown>) =>
+    createClaudeProvider({ claudeCode: stubClaudeCode({ usage }).claudeCode }).readUsage?.();
+
+  it("reads the 5-hour and weekly windows, and each model family's weekly one, from Claude Code's usage call", async () => {
+    const reading = await readUsage(async () => ({
+      session: { total_cost_usd: 0 },
+      subscription_type: "max",
+      rate_limits_available: true,
+      rate_limits: {
+        five_hour: { utilization: 46, resets_at: "2026-10-08T14:00:00.000Z" },
+        seven_day: { utilization: 82.4, resets_at: "2026-10-09T09:00:00.000Z" },
+        seven_day_opus: { utilization: 88, resets_at: "2026-10-09T09:00:00.000Z" },
+        seven_day_sonnet: null,
+        model_scoped: [{ display_name: "Fable", utilization: 12, resets_at: null }],
+        extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 0, utilization: 0 },
+      },
+    }));
+
+    expect(reading).toEqual({
+      kind: "plan",
+      meters: [
+        { window: "five-hour", used: 46, resetAt: "2026-10-08T14:00:00.000Z" },
+        { window: "weekly", used: 82.4, resetAt: "2026-10-09T09:00:00.000Z" },
+      ],
+      // Overage is left out.
+      models: [
+        { name: "Opus", used: 88, resetAt: "2026-10-09T09:00:00.000Z" },
+        { name: "Fable", used: 12 },
+      ],
+    });
+  });
+
+  it("is no plan for a sign-in without plan limits, such as an API key", async () => {
+    expect(
+      await readUsage(async () => ({ rate_limits_available: false, rate_limits: null })),
+    ).toEqual({ kind: "no-plan" });
+  });
+
+  it("is nothing when the usage call fails or answers in a shape Courtyard doesn't know", async () => {
+    expect(
+      await readUsage(async () => {
+        throw new Error("no such call");
+      }),
+    ).toBeUndefined();
+    expect(await readUsage(async () => ({ rate_limits_available: "yes" }))).toBeUndefined();
+  });
+
+  it("hears each rate limit event a turn sees, as its window's use", async () => {
+    const heard: HeardMeter[] = [];
+    const resetsAt = Date.parse("2026-10-09T09:00:00Z") / 1000;
+    const { claudeCode } = stubClaudeCode({
+      messages: [
+        {
+          type: "rate_limit_event",
+          rate_limit_info: {
+            status: "allowed_warning",
+            rateLimitType: "seven_day",
+            utilization: 0.82,
+            resetsAt,
+          },
+        },
+        // One for overage, or with no use, says nothing of a window.
+        {
+          type: "rate_limit_event",
+          rate_limit_info: { status: "allowed", rateLimitType: "overage" },
+        },
+        { type: "rate_limit_event", rate_limit_info: { status: "allowed" } },
+        textDelta("Against the back wall."),
+        success,
+      ],
+    });
+
+    await runTurn(claudeCode, { heardUsage: (meter) => heard.push(meter) });
+
+    expect(heard).toEqual([{ window: "weekly", used: 82, resetAt: "2026-10-09T09:00:00.000Z" }]);
   });
 });

@@ -1,5 +1,7 @@
 import {
+  type ModelRef,
   type NewMessage,
+  type ProviderId,
   type ProviderList,
   SESSION_TITLE_MAX_LENGTH,
   type SessionDetail,
@@ -24,6 +26,7 @@ import { Page, PageTitle } from "@/components/layout/page";
 import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
 import { renameSession } from "../../api/worker-calls.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
+import { UsageWarningCard } from "../../features/limits/usage-warning.tsx";
 import { ReadSession } from "../../features/offline-copy/read-session.tsx";
 import {
   ConfirmPreview,
@@ -312,6 +315,13 @@ function Session(props: {
     shownAllowAllKey.current = allowAllKey;
   }, [ready, allowAllKey, router]);
   const askAgain = useCallback(() => void router.invalidate(), [router]);
+  /** The warning before a limit (#66), above the Reply box, for the provider its message goes to. */
+  const usageWarning = useCallback(
+    (box: { provider: ProviderId | undefined; switchTo: (model: ModelRef) => void }) => (
+      <UsageWarningCard provider={box.provider} onSwitch={box.switchTo} />
+    ),
+    [],
+  );
 
   // Its preview (#183): a code session's own, not the Lead's, still taking messages.
   const layout = useLayout();
@@ -535,6 +545,9 @@ function Session(props: {
     </>
   );
 
+  /** The session can be sent a message: a warning before a limit shows above its box (#66). */
+  const takesMessages = problem === undefined && !session.workspaceArchived && ended === undefined;
+
   /** The page's foot: the Reply box, or what stands in for it (step by step's reading line, #241). */
   const footer = (standIn?: StandIn) => (
     <div className="pt-2 pb-3 md:pb-6">
@@ -570,6 +583,7 @@ function Session(props: {
         {...(props.skills === undefined ? {} : { skills: props.skills })}
         send={send}
         {...(standIn === undefined ? {} : { standIn })}
+        {...(takesMessages ? { above: usageWarning } : {})}
       />
     </div>
   );

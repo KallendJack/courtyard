@@ -9,6 +9,7 @@ import {
   ModelId,
   ProviderId,
   type SignInState,
+  type UsageWindow,
 } from "@courtyard/contract";
 import { pngOf } from "../../test/test-files.ts";
 import { pageRead, turnSources } from "../features/sources/index.ts";
@@ -30,6 +31,7 @@ import type {
   CodeTurn,
   FramedAttachment,
   Framing,
+  HeardMeter,
   HelperCode,
   Provider,
   SignIn,
@@ -37,6 +39,7 @@ import type {
   ToolContent,
   TurnInput,
   TurnToolName,
+  UsageReading,
 } from "./index.ts";
 
 /** The fake reads nothing; it echoes, and saves, codes and uses Paper when a message scripts it. */
@@ -633,6 +636,59 @@ const noted = async (noting: {
 /** How long after a pretend usage limit the fake says it resets. */
 const LIMIT_RESETS_AFTER_MS = 2 * 60 * 60 * 1000;
 
+const HOUR_MS = 60 * 60 * 1000;
+/** How long each of the fake's pretend plan windows lasts. */
+const WINDOW_MS: Record<UsageWindow, number> = { "five-hour": 5 * HOUR_MS, weekly: 168 * HOUR_MS };
+
+/** "use 82% of Fake's week" or "use 30% of Fake two's 5-hour": a plan window filling (#66). */
+const usedIn = (label: string, message: string) =>
+  [...message.matchAll(new RegExp(`use (\\d+)% of ${label}'s (week|5-hour)`, "gi"))].map(
+    ([, used, window]): { window: UsageWindow; used: number } => ({
+      window: window?.toLowerCase() === "week" ? "weekly" : "five-hour",
+      used: Number(used),
+    }),
+  );
+
+/**
+ * The fake's pretend plan (#66), as it reads it: the first fake's starts quiet, a fifth of its
+ * 5-hour window and a third of its week used; "unreadable" never reads, as a provider whose usage
+ * call fails. A turn's "use 82% of Fake's week" fills a window and is heard as the turn runs.
+ */
+const pretendPlan = (
+  start: UsageReading | "unreadable" | undefined,
+  now: () => number,
+): { reading: () => UsageReading | undefined; fill: (meter: HeardMeter) => HeardMeter } => {
+  let plan =
+    start ??
+    ({
+      kind: "plan",
+      meters: [
+        { window: "five-hour", used: 20, resetAt: new Date(now() + 3 * HOUR_MS).toISOString() },
+        { window: "weekly", used: 33, resetAt: new Date(now() + 72 * HOUR_MS).toISOString() },
+      ],
+      models: [],
+    } satisfies UsageReading);
+  return {
+    reading: () => (plan === "unreadable" ? undefined : plan),
+    fill: (meter) => {
+      if (plan === "unreadable" || plan.kind === "no-plan") return meter;
+      const was = plan.meters.find((each) => each.window === meter.window);
+      // A window past its reset has rolled on to its next.
+      let resetAt = was?.resetAt === undefined ? undefined : Date.parse(was.resetAt);
+      while (resetAt !== undefined && resetAt <= now()) resetAt += WINDOW_MS[meter.window];
+      const filled =
+        resetAt === undefined ? meter : { ...meter, resetAt: new Date(resetAt).toISOString() };
+      plan = {
+        ...plan,
+        meters: [...plan.meters.filter((each) => each.window !== meter.window), filled].sort(
+          (a, b) => (a.window === b.window ? 0 : a.window === "five-hour" ? -1 : 1),
+        ),
+      };
+      return filled;
+    },
+  };
+};
+
 /** Waits `ms`, or less if the turn is stopped first. */
 const pause = (ms: number, signal: AbortSignal) =>
   wait(ms, undefined, { signal }).catch(() => undefined);
@@ -652,7 +708,8 @@ const pause = (ms: number, signal: AbortSignal) =>
  * (see `scriptedTidy`), a session's title its first message (see `scriptedTitle`), and a quick
  * question's answer the question (see `scriptedQuickAnswer`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
- * hours on, so overflow can be seen and tested. "please look", or a message of no words, says
+ * hours on, so overflow can be seen and tested, and "use 82% of Fake's week" (or "5-hour") fills
+ * its pretend plan (see `pretendPlan`, #66). "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
  * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`), and "preview
@@ -680,6 +737,11 @@ export const createFakeProvider = (
     second?: boolean;
     /** The clock its pretend usage limit's reset time is set by. */
     now?: () => number;
+    /**
+     * Its pretend plan usage (#66), as it starts (see `pretendPlan`): the first fake has a quiet
+     * plan unless this says otherwise; the second has no plan limits unless given one.
+     */
+    usage?: UsageReading | "unreadable";
   } = {},
 ): Provider => {
   const delayMs = options.delayMs ?? 40;
@@ -687,6 +749,8 @@ export const createFakeProvider = (
   const id = ProviderId.parse(options.second ? "fake-two" : "fake");
   const label = options.second ? "Fake two" : "Fake";
   const hitsLimit = new RegExp(`please hit ${label}'s limit`, "i");
+  const plan =
+    options.second && options.usage === undefined ? undefined : pretendPlan(options.usage, now);
   // Fake two doesn't code, so a model that can't is there to be refused in a code workspace, nor
   // steer, so one that queues is there too.
   const capabilities = {
@@ -699,6 +763,7 @@ export const createFakeProvider = (
     id,
     capabilities,
     ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
+    ...(plan === undefined ? {} : { readUsage: async () => plan.reading() }),
     status: async () => ({
       id,
       label,
@@ -727,12 +792,17 @@ export const createFakeProvider = (
       callTool,
       signal,
       added,
+      heardUsage,
     }) => {
       options.heard?.({ model, effort });
       options.framed?.(framing);
       await options.beforeReply?.(signal);
       if (signal.aborted) return ok(null);
       const last = framing.newMessage;
+      for (const meter of usedIn(label, last)) {
+        const filled = plan === undefined ? meter : plan.fill(meter);
+        heardUsage?.(filled);
+      }
       if (/please read/i.test(last)) await report({ kind: "read-file", path: "CONTEXT.md" });
       for (const work of scriptedWork(last)) {
         // Each piece it writes a paragraph, as a model's message between what it does is.
