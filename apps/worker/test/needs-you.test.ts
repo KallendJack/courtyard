@@ -43,7 +43,9 @@ afterEach(async () => {
   await removeTestFolder(root);
 });
 
-const start = async (more: { coding?: ReturnType<typeof codingProvider>; github?: FakeGitHub } = {}) => {
+const start = async (
+  more: { coding?: ReturnType<typeof codingProvider>; github?: FakeGitHub } = {},
+) => {
   const app = testWorker({
     root,
     now: () => now,
@@ -159,7 +161,12 @@ describe("Needs you", () => {
     const { id } = await answeredIn(request, "side-project", "Implement the talk key");
     const listed = await gitIn(repo, "worktree", "list", "--porcelain");
     const branch = /branch refs\/heads\/(courtyard\/\S+)/.exec(listed)?.[1] ?? "";
-    const number = github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1", title: "Talk" });
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch,
+      head: "c0ffee1",
+      title: "Talk",
+    });
     github.setChecks(number, [{ name: "e2e", outcome: "passed" }]);
     for (const job of jobs) await job();
 

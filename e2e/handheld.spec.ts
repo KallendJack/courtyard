@@ -237,7 +237,7 @@ const everywhere = (screen: Screen) => {
     await expect(workspaces.getByRole("link", { name: "New workspace" })).toBeVisible();
   });
 
-  test("tapping the open workspace from one of its sessions goes back to its page", async ({
+  test("tapping the open workspace from one of its sessions goes back to its page, or on the cover screen shows its sessions", async ({
     page,
   }) => {
     await page.goto(`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`);
@@ -245,6 +245,14 @@ const everywhere = (screen: Screen) => {
 
     await workspaces.getByRole("link", { name: "Garage gym" }).click();
 
+    if (screen === "cover") {
+      // With no rail to list them, its sessions show on a sheet (#492), All sessions at its foot.
+      const sheet = page.getByRole("dialog", { name: "Garage gym" });
+      await sheet.getByRole("link", { name: "All sessions" }).click();
+      await expect(page).toHaveURL(/\/workspaces\/garage-gym#sessions$/);
+      await expect(sheet).toBeHidden();
+      return;
+    }
     await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
     await expect(page.getByRole("heading", { level: 1, name: "Garage gym" })).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Garage gym" })).toHaveCount(0);

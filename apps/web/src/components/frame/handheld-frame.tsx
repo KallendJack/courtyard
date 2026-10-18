@@ -16,6 +16,7 @@ import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { LiveUpdate } from "../../features/live/live-update.tsx";
 import { useKeptSessions } from "../../features/sessions/kept-sessions.ts";
+import { useNeedsYou } from "../../features/waiting/api.ts";
 import { Button } from "../buttons/button.tsx";
 import { ButtonLink } from "../buttons/button-link.tsx";
 import { CourtyardMark } from "../layout/courtyard-mark.tsx";
@@ -27,6 +28,7 @@ import { ARRANGE_HELD, ARRANGE_SLOT, type Held, useArrange } from "./arrange.ts"
 import { FrameButton, modelMark } from "./frame-button.tsx";
 import { type Layout, type MessageBox, type TalkTarget, typingIn } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
+import { RailSessions } from "./rail-sessions.tsx";
 import { TalkBar, TalkKey } from "./talk-strip.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
@@ -39,7 +41,8 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
  * The Handheld frame (#193, Paper boards Handheld · 00, 03, 10, 11), in place of the sidebar on a
  * touch screen. On a tablet or the unfolded Fold (#206, the agreed tablet boards): workspace tiles
  * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, and a
- * quieter Settings) with the Talk key in the bottom corner; the page's message box, the Reply box,
+ * quieter Settings), the open workspace's latest sessions (#492), and the Talk key in the bottom
+ * corner; the page's message box, the Reply box,
  * is always there at the foot of the page between them. On a phone or the folded Fold: tiles
  * across the top, and the buttons in a row above Type and the talk strip, Type opening the
  * message box above the bar. The key and the strip listen (talk-strip.tsx, #79). Loaded only on
@@ -218,18 +221,28 @@ export default function HandheldFrame(props: {
     </Link>
   );
   // On Home, the mark is ringed in violet as an open tile is (#237), so the owner always sees
-  // where they are.
+  // where they are; while anything waits on them, anywhere, it counts it in gold (#492).
+  const waiting = useNeedsYou(pathname, !reading)?.needs.length ?? 0;
   const home = (
     <Link
       to="/"
       aria-label="Home"
       activeOptions={{ exact: true }}
       className={classes(
-        "flex shrink-0 items-center justify-center data-[status=active]:bg-muted data-[status=active]:ring-2 data-[status=active]:ring-primary",
+        "relative flex shrink-0 items-center justify-center data-[status=active]:bg-muted data-[status=active]:ring-2 data-[status=active]:ring-primary",
         tablet ? "size-12 rounded-row" : "size-13 rounded-lg bg-muted/60",
       )}
     >
       <CourtyardMark size={tablet ? 34 : 28} />
+      {waiting > 0 && (
+        <span
+          aria-hidden
+          data-needs-you-count=""
+          className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-warning px-1.5 text-label/3 font-bold text-card"
+        >
+          {waiting}
+        </span>
+      )}
     </Link>
   );
   const settings = (
@@ -314,7 +327,11 @@ export default function HandheldFrame(props: {
               {!reading && model}
               {!reading && skills}
               {settings}
-              <div className="flex-1" />
+              {here === undefined || reading ? (
+                <div className="flex-1" />
+              ) : (
+                <RailSessions workspace={here} />
+              )}
               {!reading && <TalkKey box={talkTo} type={type} talker={props.talker} />}
             </Scroller>
           </>
@@ -391,13 +408,6 @@ export default function HandheldFrame(props: {
             <Plus aria-hidden />
             New session
           </Button>
-          <Link
-            to="/workspaces/$workspaceId"
-            params={{ workspaceId: here.id }}
-            className="text-sm font-semibold text-primary-text underline underline-offset-[3px]"
-          >
-            Open {here.name}
-          </Link>
           <RecentSessions workspaces={props.workspaces} />
         </HandheldSheet>
       )}
@@ -408,8 +418,9 @@ export default function HandheldFrame(props: {
 /**
  * A workspace's tile: its icon and name, ringed in violet while it's open, its icon violet too
  * (Paper board Handheld · 36). Closed, every tile looks the same, a code workspace's too: it's
- * told apart by its icon, never by colour (#237). A tap always goes to the workspace's page, even
- * from one of its sessions (#276); holding the open one shows its recent sessions (on a tablet, once let go
+ * told apart by its icon, never by colour (#237). On a tablet's rail a tap always goes to the
+ * workspace's page, even from one of its sessions (#276); on the cover screen a tap on the open one
+ * shows its sessions (#492). Holding the open one shows them too (on a tablet, once let go
  * where it was: held and dragged, it moves, #321). In its corner, how many of its sessions wait on
  * the owner, as the worker says (#345): violet for new replies, gold once one needs an approval or
  * a Continue after a restart (#186).
@@ -447,6 +458,8 @@ function Tile(props: {
       aria-label={workspace.name}
       {...props.arrange}
       onContextMenu={held}
+      // On the cover screen, with no rail to list them, a tap on the open one shows its sessions (#492).
+      {...(props.look === "row" ? { onClick: held } : {})}
       className={classes(
         // Held, it's the recent sessions, not the browser's preview of the link or a selection.
         "relative flex shrink-0 items-center justify-center font-semibold outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/50",

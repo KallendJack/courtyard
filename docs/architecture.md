@@ -91,7 +91,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`quick-questions/`](../apps/worker/src/features/quick-questions/README.md): read-only questions about a pull request.
 - [`sources/`](../apps/worker/src/features/sources/README.md): a turn's sources, the same for every provider.
 - [`limits/`](../apps/worker/src/features/limits/README.md): each provider's usage limit until its reset.
-- [`waiting/`](../apps/worker/src/features/waiting/README.md): what waits on the owner, decided once.
+- [`waiting/`](../apps/worker/src/features/waiting/README.md): what waits on the owner, decided once, and listed
+  from every workspace (`GET /api/needs-you`, #492).
 
 *What Courtyard knows* (`features/`)
 
@@ -193,7 +194,9 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`sessions/`](../apps/web/src/features/sessions/README.md): the session page, in parts: `turns/`, `answer/`,
     `composer/` and `notes/`.
   - [`step-by-step/`](../apps/web/src/features/step-by-step/README.md): an answer's steps one at a time, read aloud.
-  - [`home/`](../apps/web/src/features/home/README.md): the home page's tile lines and foot rows.
+  - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's
+    Needs you and a session's Next pill.
+  - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page and its tabs.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
