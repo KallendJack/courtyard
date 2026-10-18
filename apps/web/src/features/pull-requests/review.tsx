@@ -548,9 +548,11 @@ function Reviewing(props: {
               </Button>
             </div>
           ) : (
+            // Its one row is the height left, however little, so the tree and the diff scroll
+            // inside it rather than running on under the ask line and the foot (#501).
             <div
               className={classes(
-                "grid gap-3 md:min-h-0 md:flex-1",
+                "grid gap-3 md:min-h-0 md:flex-1 md:grid-rows-[minmax(0,1fr)]",
                 folded
                   ? "md:grid-cols-2"
                   : panelOpen && desktop

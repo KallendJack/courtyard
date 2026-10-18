@@ -851,6 +851,52 @@ test.describe("on the unfolded Fold", () => {
     await request.post("/api/github/sign-out", { data: {} });
   });
 
+  // #501: with a failed check, its merge reason a second line of the status, the files and diff
+  // spilled out of their box, under the ask line and Merge / Close PR, and the page scrolled.
+  test("with a failed check and many files, the files and diff end above the ask line and Merge, and only they scroll", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    const id = await pullRequestFrom(
+      request,
+      "Bump the routine group",
+      SLOTS_DESCRIPTION,
+      Array.from({ length: 16 }, (_, i) => `bump-${i + 1}.md`),
+    );
+    await page.goto(`/workspaces/side-project/sessions/${id}?view=review`);
+    const review = page.getByRole("region", { name: "Review" });
+    await expect(review).toContainText("Merge waits for");
+    const heading = page.getByRole("heading", { level: 1 });
+    const whatChanged = review.getByRole("region", { name: "What changed" });
+    const files = review.getByRole("navigation", { name: "Changed files" });
+    const diff = review.getByRole("region", { name: /^Diff of / });
+    const ask = review.getByRole("textbox", { name: "Ask about this PR" });
+    const merge = review.getByRole("button", { name: "Merge", exact: true });
+    const close = review.getByRole("button", { name: "Close PR" });
+    await expect(files).toContainText("16 files");
+
+    for (const shown of [heading, whatChanged, files, diff, ask, merge, close]) {
+      await expect(shown).toBeInViewport({ ratio: 1 });
+    }
+    expect((await pageScroll(page)).scrolls).toBe(false);
+    const edges = (shown: typeof files) =>
+      shown.evaluate((box) => {
+        const { top, bottom } = box.getBoundingClientRect();
+        return { top, bottom };
+      });
+    const quick = review.getByRole("button", { name: "Why did the check fail?" });
+    const askTop = Math.min((await edges(ask)).top, (await edges(quick)).top);
+    expect((await edges(files)).bottom).toBeLessThanOrEqual(askTop);
+    expect((await edges(diff)).bottom).toBeLessThanOrEqual(askTop);
+    expect((await edges(ask)).bottom).toBeLessThanOrEqual((await edges(merge)).top);
+    // The tree scrolls inside its own box, rather than running on below it.
+    expect(
+      await files.locator(":scope > div").evaluate((box) => box.scrollHeight > box.clientHeight),
+    ).toBe(true);
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   test("a conflicting pull request says so, and one tap has its session bring it up to date", async ({
     page,
     request,
