@@ -870,6 +870,9 @@ export const codeRepo = async (root: string) => {
   await standInForGitHub(repo, { origin, github });
   await gitIn(repo, "config", "user.name", "Test");
   await gitIn(repo, "config", "user.email", "test@example.com");
+  // Files check out as written, whatever the machine's own git says (Git for Windows turns
+  // `core.autocrlf` on for everyone, #477); worktrees share this setting.
+  await gitIn(repo, "config", "core.autocrlf", "false");
   await writeFile(join(repo, "README.md"), "# A project\n");
   await gitIn(repo, "add", ".");
   await gitIn(repo, "commit", "--quiet", "-m", "Start");
