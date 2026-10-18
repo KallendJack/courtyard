@@ -14,7 +14,7 @@ import { ButtonLink } from "@/components/buttons/button-link";
 import { ConnectionsLine } from "@/components/code/connections-line";
 import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
 import { InfoBox } from "@/components/layout/notice";
-import { Page } from "@/components/layout/page";
+import { Page, type TitleBeside } from "@/components/layout/page";
 import { useAnchorName } from "@/components/layout/place-under";
 import { Scroller } from "@/components/layout/scroller";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspace-tabs";
@@ -83,8 +83,8 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
  * knowledge lives in its repository, so it has no context file, Things or skills.
  */
 export default function CodeHome(props: {
-  /** The page's title and what goes with it, pinned above the line and the tabs. */
-  header: ReactNode;
+  /** The page's title, given the connections line to put under the name and the tabs beside it. */
+  header: (beside: TitleBeside) => ReactNode;
   workspace: WorkspaceSummary;
   list: CodeSessionList;
   providers: FromWorker<ProviderList>;
@@ -166,59 +166,74 @@ export default function CodeHome(props: {
   const needs = needsOf({ sessions: list.sessions, pulls, setup, lead });
   /** Whether what Needs you shows is still to come, on a first visit. */
   const needsPending = open === undefined;
+  // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
+  const hasPulls =
+    pulls.length > 0 ||
+    list.sessions.some((session) => session.pullRequest !== undefined) ||
+    (open === undefined && tab === "prs");
   const tabs: WorkspaceTab[] = [
     { hash: "", label: "Home" },
     ...(list.sessions.length > 0
       ? [{ hash: "sessions", label: TABS.sessions, count: list.sessions.length }]
       : []),
-    // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
-    ...(pulls.length > 0 ||
-    list.sessions.some((session) => session.pullRequest !== undefined) ||
-    (open === undefined && tab === "prs")
-      ? [{ hash: "prs", label: TABS.prs, ...(open === undefined ? {} : { count: pulls.length }) }]
-      : []),
+    // Without pull requests, or before they're known, PRs keeps its place (#503).
+    hasPulls
+      ? { hash: "prs", label: TABS.prs, count: open === undefined ? "unknown" : pulls.length }
+      : { hash: "prs", label: TABS.prs, count: 0, held: true },
   ];
   // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
-  const showsTabs = tabs.length > 1 || open === undefined;
-  const chosen = tabs.some((each) => each.hash === tab) ? tab : "";
+  const showsTabs = list.sessions.length > 0 || hasPulls || open === undefined;
+  const chosen = tabs.some((each) => each.hash === tab && each.held !== true) ? tab : "";
 
-  // Its own classes apply inside each part (code-home.css), but not to the page's title above.
-  const header = (
-    <>
-      {props.header}
-      <div data-code-home="">
-        <div className="mt-2 flex flex-col gap-2">
-          {connections === undefined ? (
-            <PlaceholderRows count={1} size="text" />
-          ) : (
-            <>
-              <ConnectionsLine
-                connections={connections}
-                open={connecting}
-                onOpen={() => setConnecting(true)}
-                anchor={line}
-              />
-              <ConnectionsSheet
-                open={connecting}
-                onClose={closeSheet}
-                workspaceId={workspace.id}
-                workspaceName={workspace.name}
-                connections={connections}
-                onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
-                anchor={line}
-              />
-            </>
-          )}
-        </div>
-        {/* With the connections line, so it never comes on its own and pushes the rest down. */}
-        {connections?.github.kind === "signed-out" && <GitHubNotice />}
-
-        {showsTabs && (
-          <div className="mt-3.5">
-            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
-          </div>
+  // Its own classes apply inside each part (code-home.css), but not to the page's title around
+  // them: the connections line under the name, and the tabs beside it (#503).
+  const under = (
+    <div data-code-home="">
+      <div className="flex flex-col gap-2">
+        {connections === undefined ? (
+          <PlaceholderRows count={1} size="text" />
+        ) : (
+          <>
+            <ConnectionsLine
+              connections={connections}
+              open={connecting}
+              onOpen={() => setConnecting(true)}
+              anchor={line}
+            />
+            <ConnectionsSheet
+              open={connecting}
+              onClose={closeSheet}
+              workspaceId={workspace.id}
+              workspaceName={workspace.name}
+              connections={connections}
+              onConnected={(now) => KEPT_CONNECTIONS.set(workspace.id, now)}
+              anchor={line}
+            />
+          </>
         )}
       </div>
+    </div>
+  );
+  const header = (
+    <>
+      {props.header({
+        under,
+        ...(showsTabs
+          ? {
+              tabs: (
+                <div data-code-home="">
+                  <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+                </div>
+              ),
+            }
+          : {}),
+      })}
+      {/* With the connections line, so it never comes on its own and pushes the rest down. */}
+      {connections?.github.kind === "signed-out" && (
+        <div data-code-home="">
+          <GitHubNotice />
+        </div>
+      )}
     </>
   );
 

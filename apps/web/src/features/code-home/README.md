@@ -16,11 +16,13 @@ and Next up offers Build on the next issue.
 ## Screens
 
 - **Its name**, with one quiet ⋯ beside it (`components/workspace/workspace-menu.tsx`: Rename, Change icon and
-  Archive, #333), then its connections line; its one line stays in `workspace.json`, off the page.
+  Archive, #333), then its connections line under it; from a tablet up its tabs share the name's row, before the ⋯
+  (#503). Its one line stays in `workspace.json`, off the page.
 - **The Connections sheet** (`connections.tsx`): GitHub, and the Paper file to pick (the one named after the
   workspace picked already), or make; opened by itself as `#connections` right after New workspace → Code.
 - **Tabs:** Home · Sessions · PRs, each but Home shown once it has something, by the address's hash (`#sessions`,
-  `#prs`; the Sessions tab is `sessions/session-links.tsx`, the PRs tab `features/pull-requests/`' list).
+  `#prs`; the Sessions tab is `sessions/session-links.tsx`, the PRs tab `features/pull-requests/`' list). PRs keeps
+  its place, unseen, until it's known to have some, so the tabs never move as it loads.
 - **Home's blocks**, in a fixed order, each keeping its place when empty with one quiet line
   (`components/layout/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals
   with Approve, failing checks, new replies, pull requests ready to merge with Merge, conflicts with Bring up to

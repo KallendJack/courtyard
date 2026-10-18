@@ -16,7 +16,7 @@ import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Notice } from "@/components/layout/notice";
 import { NotKept, OfflineLine } from "@/components/layout/offline";
-import { Page } from "@/components/layout/page";
+import { Page, type TitleBeside } from "@/components/layout/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspace-tabs";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
@@ -66,8 +66,8 @@ export type PlanningLoaded = {
  * nudge: a planning workspace stays calm (AGENTS.md).
  */
 export default function PlanningHome(props: {
-  /** The page's title and what goes with it, pinned above the tabs. */
-  header: ReactNode;
+  /** The page's title, given a line to put under the name and the tabs beside it. */
+  header: (beside: TitleBeside) => ReactNode;
   workspace: WorkspaceSummary;
   contextFile: ContextFile | null;
   ownerContextShared: OwnerContextShared;
@@ -119,29 +119,41 @@ export default function PlanningHome(props: {
         : "";
   const empty = tabs.length === 1 && (contextFile === null || !hasLines(contextFile));
 
-  // Its own classes apply inside each part (planning-home.css), but not to the page's title above.
+  // Its own classes apply inside each part (planning-home.css), but not to the page's title around
+  // them: a line under the name while it's empty, else the tabs beside it (#503). In What
+  // Courtyard knows, Home is the way back.
+  const showsTabs = !empty && (tabs.length > 1 || place === "knows");
   const header = (
     <>
-      {props.header}
-      <div data-planning-home="">
-        {workspace.configProblem !== undefined && (
+      {props.header({
+        ...(empty
+          ? {
+              under: (
+                <div data-planning-home="">
+                  <p className="text-body text-muted-foreground">
+                    Tell Courtyard about this, by voice or photo
+                  </p>
+                </div>
+              ),
+            }
+          : {}),
+        ...(showsTabs
+          ? {
+              tabs: (
+                <div data-planning-home="">
+                  <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={place} />
+                </div>
+              ),
+            }
+          : {}),
+      })}
+      {workspace.configProblem !== undefined && (
+        <div data-planning-home="">
           <div className="mt-4">
             <Notice>Treated as a planning workspace. {workspace.configProblem}</Notice>
           </div>
-        )}
-        {empty ? (
-          <p className="mt-2 text-body text-muted-foreground">
-            Tell Courtyard about this, by voice or photo
-          </p>
-        ) : (
-          // In What Courtyard knows, Home is the way back.
-          (tabs.length > 1 || place === "knows") && (
-            <div className="mt-3.5">
-              <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={place} />
-            </div>
-          )
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 

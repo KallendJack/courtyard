@@ -1,13 +1,9 @@
 import { ChangeId, type CodeSessionList, WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { Archive, Pencil } from "lucide-react";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
-import { IconButton } from "@/components/buttons/button";
 import { ConfirmStep } from "@/components/forms/confirm-step";
 import { RenameForm } from "@/components/forms/rename-form";
-import { CapsLabel } from "@/components/layout/caps-label";
-import { Page, PageTitle } from "@/components/layout/page";
-import { IconChooser } from "@/components/sheets/icon-chooser";
+import { Page, PageTitle, type TitleBeside } from "@/components/layout/page";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../api/worker.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
@@ -107,9 +103,9 @@ function Workspace() {
 
   if (offline !== undefined) {
     // Read from the device's copy (#106): its name alone, with nothing that needs the worker.
-    const title = <PageTitle>{workspace.name}</PageTitle>;
+    const title = (beside: TitleBeside) => <PageTitle {...beside}>{workspace.name}</PageTitle>;
     return home.kind === "code" ? (
-      <ReadCodeHome header={title} list={sessionList} offline={offline} />
+      <ReadCodeHome header={title({})} list={sessionList} offline={offline} />
     ) : (
       <home.Home
         header={title}
@@ -134,26 +130,10 @@ function Workspace() {
     await router.invalidate();
     return undefined;
   };
-  /** A planning workspace's line above its name: its icon, to change it, and "Workspace". */
-  const above = (
-    // The chooser stays outside the words' capitals: its sheet is inside it.
-    <div className="flex items-center gap-2">
-      <IconChooser
-        workspaceName={workspace.name}
-        icon={workspace.icon}
-        choose={(icon) => change({ icon })}
-      />
-      <CapsLabel tone="muted" inline>
-        Workspace
-      </CapsLabel>
-    </div>
-  );
-  const toggle = (what: "rename" | "archive") =>
-    setTidying((was) => (was === what ? undefined : what));
-  // A code workspace's title is its name alone, with rename, its icon and archive behind one ⋯
-  // (#333; Paper, "Code workspace Home"); a planning workspace's keeps its line and buttons.
-  const code = workspace.mode === "code";
-  const actions = code ? (
+  // A workspace's title is its name alone, with rename, its icon and archive behind one ⋯ (#333;
+  // Paper, "Code workspace Home"), a planning workspace's too (#503; "Planning Home, roomier on
+  // the Fold").
+  const actions = (
     <WorkspaceMenu
       workspaceId={workspace.id}
       workspaceName={workspace.name}
@@ -162,17 +142,6 @@ function Workspace() {
       onRename={() => setTidying("rename")}
       onArchive={() => setTidying("archive")}
     />
-  ) : (
-    <>
-      <IconButton label="Rename workspace" icon={<Pencil />} onClick={() => toggle("rename")} />
-      <IconButton
-        label="Archive workspace"
-        icon={<Archive />}
-        expanded={tidying === "archive"}
-        look={tidying === "archive" ? "pressed" : "quiet"}
-        onClick={() => toggle("archive")}
-      />
-    </>
   );
   /** A document or a Thing just deleted from its page, which its section offers to undo. */
   const deleted: Deleted | undefined =
@@ -191,12 +160,14 @@ function Workspace() {
     await router.invalidate();
   };
 
-  /** The top of the page: its name, and archiving it once asked. Each Home adds its tabs. */
-  const header = (
+  /**
+   * The top of the page: its name, with the line under it and the tabs each Home gives it, and
+   * archiving it once asked. While renaming, the name's field takes the title's row.
+   */
+  const header = (beside: TitleBeside) => (
     <>
       {tidying === "rename" ? (
         <div className="flex flex-col gap-2">
-          {!code && above}
           <RenameForm
             label="Workspace name"
             value={workspace.name}
@@ -205,9 +176,11 @@ function Workspace() {
             save={(name) => change({ name })}
             onDone={() => setTidying(undefined)}
           />
+          {beside.under}
+          {beside.tabs}
         </div>
       ) : (
-        <PageTitle {...(code ? {} : { above })} actions={actions}>
+        <PageTitle actions={actions} {...beside}>
           {workspace.name}
         </PageTitle>
       )}

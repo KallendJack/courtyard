@@ -171,8 +171,9 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   workspaces as tiles; `_app/settings.tsx` is Settings, with everything that used to be on the home page besides
   them (the owner context, the backup notice, the sign-ins and Connections, Fresh start, logging out other
   devices), behind the frame's Settings sheet. Behind the login
-  each page sits on a raised panel that never scrolls, nor does the window (#266), so the Handheld
-  frame stays put. Every page is `components/layout/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
+  each page sits in a panel that never scrolls, nor does the window (#266), so the Handheld
+  frame stays put; from a tablet up the panel is flat on the frame, with no border or margin, for room on the
+  Fold (#503). Every page is `components/layout/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
   scrolling middle and a pinned footer (its main action: the message box, Save, Create), so nothing scrolls the
   title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
   PR page (`features/pull-requests/`) lays itself out, fitting the screen. `components/layout/page-scroll.ts` hands the scrolling middle
@@ -267,9 +268,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   (`sessions/composer/handheld-choices.tsx`, built from `sheets/sheet-choices.tsx`) load only once it's docked; their classes are in
   `frame/handheld-frame.css`. A workspace's icon (#210, `workspace/workspace-icon.tsx`) shows on its tile, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace/workspace-marks.tsx`,
-  lucide's) load once a page first shows one, off the first load. A planning workspace's page's icon, or Change icon
-  in a code workspace's ⋯ (`workspace/workspace-menu.tsx`), opens the Icon sheet (`sheets/icon-sheet.tsx`, through `sheets/icon-chooser.tsx`
-  on a planning page, loaded when first opened): a Handheld sheet. Arrange workspaces (#321): holding a workspace on the rail and
+  lucide's) load once a page first shows one, off the first load. Change icon in a workspace's ⋯
+  (`workspace/workspace-menu.tsx`) opens the Icon sheet (`sheets/icon-sheet.tsx`,
+  loaded when first opened): a Handheld sheet. Arrange workspaces (#321): holding a workspace on the rail and
   dragging it up or down within its group saves the order on the worker, and every list of workspaces follows it
   (the cover screen's tiles and Home's, which can't be dragged themselves). Only the press is on the
   first load (`frame/arrange.ts`, with Alt+↑ and Alt+↓ for the keyboard); the drag and the save load with the first one

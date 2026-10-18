@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { READING_SESSION_ID } from "./long-session.ts";
 import { fromTheEnd, pageScroll, scrollPageTo, scrollPageToMiddle } from "./page-scroll.ts";
+import { fromWorkspaceMenu } from "./workspace-page.ts";
 
 // The Handheld frame (#193): on a touch tablet or the unfolded Fold, two thumb rails and a bottom
 // bar in place of the sidebar; on a phone or the folded Fold, the cover-screen layout. Desktops
@@ -743,7 +744,7 @@ test.describe("unfolded", () => {
     expect(await colourOf("office")).not.toBe("rgb(185, 148, 255)");
 
     const settings = await boxOf(page.getByRole("button", { name: "Settings" }));
-    await page.getByRole("button", { name: "Change icon" }).click();
+    await fromWorkspaceMenu(page, "Garage gym", "Change icon");
     const sheet = page.getByRole("dialog", { name: "Icon" });
     await expect(sheet).toBeVisible();
     const box = await boxOf(sheet);

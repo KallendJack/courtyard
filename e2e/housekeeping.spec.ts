@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openRecent } from "./frame.ts";
-import { openTab } from "./workspace-page.ts";
+import { fromWorkspaceMenu, openTab } from "./workspace-page.ts";
 
 test("the owner renames a workspace, then archives it after a confirm step", async ({ page }) => {
   // Names of its own, so the test can run again on the same worker.
@@ -13,7 +13,7 @@ test("the owner renames a workspace, then archives it after a confirm step", asy
   const address = page.url();
   const switcher = page.getByRole("navigation", { name: "Workspaces" });
 
-  await page.getByRole("button", { name: "Rename workspace" }).click();
+  await fromWorkspaceMenu(page, name, "Rename");
   await page.getByLabel("Workspace name").fill(renamed);
   await page.getByRole("button", { name: "Save" }).click();
 
@@ -23,13 +23,13 @@ test("the owner renames a workspace, then archives it after a confirm step", asy
   expect(page.url()).toBe(address);
 
   // A name another workspace has gets the same message as adding one.
-  await page.getByRole("button", { name: "Rename workspace" }).click();
+  await fromWorkspaceMenu(page, renamed, "Rename");
   await page.getByLabel("Workspace name").fill("garage GYM");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("alert")).toContainText("already a workspace called Garage gym");
   await page.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Archive workspace" }).click();
+  await fromWorkspaceMenu(page, renamed, "Archive");
   const confirm = page.getByRole("region", { name: `Archive ${renamed}?` });
   await expect(confirm).toContainText("archived");
   await confirm.getByRole("button", { name: "Archive workspace" }).click();
