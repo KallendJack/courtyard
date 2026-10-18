@@ -1,0 +1,33 @@
+# Version bumps as pull requests, once a week (#84). Routine bumps come grouped; the two providers each get a PR of
+# their own: the Claude Agent SDK, and Codex, which is pinned on purpose (ADR 0015) and gets the real-Codex checklist
+# as a comment (.github/workflows/codex-bump.yml). CI checks every bump, the first-load budget included.
+version: 2
+
+updates:
+  - package-ecosystem: npm # pnpm's lockfile and workspace, from the top
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # pnpm installs nothing published less than a day ago (minimumReleaseAge, on by default), so Dependabot waits
+    # longer than that before proposing a version, rather than proposing one pnpm refuses.
+    cooldown:
+      default-days: 2
+    groups:
+      routine:
+        patterns: ["*"]
+        # Left out of the group, so each comes as its own PR.
+        exclude-patterns:
+          - "@anthropic-ai/claude-agent-sdk"
+          - "@openai/codex"
+
+  - package-ecosystem: github-actions # the workflows, and the shared setup action
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      routine:
+        patterns: ["*"]

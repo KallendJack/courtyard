@@ -2,7 +2,9 @@
 
 The tests drive the Codex adapter against a stand-in app-server. This check runs it against the real one, signed in
 on a ChatGPT plan, because only that shows the pinned Codex still behaves as the adapter expects (ADR 0015). Run it
-before any change to Codex's pinned version, and whenever the adapter's isolation changes.
+before any change to Codex's pinned version, and whenever the adapter's isolation changes. A new Codex version comes
+as a Dependabot PR of its own, with this check as a checklist comment (`.github/workflows/codex-bump.yml`); it's
+never merged on green CI alone.
 
 ## Before changing the pinned version
 

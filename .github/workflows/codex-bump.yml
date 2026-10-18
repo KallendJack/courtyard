@@ -1,0 +1,42 @@
+# A Dependabot PR that bumps Codex gets the real-Codex checklist as a comment (#84): Codex is pinned on purpose
+# (ADR 0015), since a new version can switch on what Courtyard keeps off, so its PR is never merged on green CI alone.
+# pull_request_target, so the comment can be written; it reads only the PR's metadata and never checks out its code.
+name: Codex bump
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  checklist:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: bump
+        uses: dependabot/fetch-metadata@v3
+      # Codex is never in the routine group (.github/dependabot.yml), so its PR bumps it alone.
+      - if: steps.bump.outputs.dependency-names == '@openai/codex'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          FROM: ${{ steps.bump.outputs.previous-version }}
+          TO: ${{ steps.bump.outputs.new-version }}
+          BODY: |
+            ## Before merging this Codex bump
+
+            Codex is pinned on purpose (ADR 0015): a new version can add tools that are on by default, or give its code mode more reach. Green CI only shows the stand-in app-server still works, so this PR waits for the real-Codex check ([`docs/real-codex-check.md`](${{ github.server_url }}/${{ github.repository }}/blob/main/docs/real-codex-check.md)).
+
+            - [ ] **Features re-checked.** `codex features list` in Courtyard's Codex home, every feature that's on compared against `FEATURES_OFF` and `SETTINGS` in `apps/worker/src/providers/codex.ts` (the check's "Before changing the pinned version").
+            - [ ] **It starts.** The worker starts the new Codex with `--strict-config`, and the model picker lists its models.
+            - [ ] **The real-Codex check passed,** every item of "The check".
+            - [ ] **The run is recorded** in the check's Runs table, on this PR's branch.
+            - [ ] **The old version's `minimumReleaseAgeExclude` line** in `pnpm-workspace.yaml` is gone, if it names only the old version.
+            - [ ] **The result noted here:** the version, the model, and what passed or failed.
+        run: |
+          gh pr comment "$NUMBER" --body "Codex $FROM → $TO.
+
+          $BODY"
