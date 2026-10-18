@@ -30,6 +30,7 @@ import {
   gitIn,
   postJson,
   removeTestFolder,
+  sendJson,
   testWorker,
 } from "./testing.ts";
 
@@ -1930,8 +1931,9 @@ describe("a Codex code session (#248)", () => {
     expect(events).toContainEqual(
       expect.objectContaining({ type: "task-started", command: "git status" }),
     );
-    // The task holds the worktree open until it ends, which Windows won't remove (#477).
-    await followSession(request, { sessionId: id, until: "task-ended" });
+    // Deleting stops the task, which holds the worktree open (#477), and the turn that would tell
+    // Codex it ended, which writes on into the session's folder.
+    expect((await sendJson(request, `/api/sessions/${id}`, "DELETE", {})).status).toBe(204);
   });
 
   it("says a command that fails failed, with its exit code", async () => {
