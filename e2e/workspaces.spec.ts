@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openWhatCourtyardKnows } from "./workspace-page.ts";
+import { fromWorkspaceMenu, openWhatCourtyardKnows } from "./workspace-page.ts";
 
 test("the owner sees every workspace and switches between them in one tap", async ({ page }) => {
   await page.goto("/");
@@ -69,7 +69,7 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   // a person would (the radio itself is hidden), it shows on its tile at once, and stays.
   const icon = switcher.getByRole("link", { name }).locator("svg[data-workspace-icon]");
   await expect(icon).toHaveAttribute("data-workspace-icon", "sprout");
-  await page.getByRole("button", { name: "Change icon" }).click();
+  await fromWorkspaceMenu(page, name, "Change icon");
   const sheet = page.getByRole("dialog", { name: "Icon" });
   const icons = sheet.getByRole("radiogroup", { name: "Icon" });
   await expect(icons.getByRole("radio")).toHaveCount(15);

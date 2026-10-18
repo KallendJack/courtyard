@@ -1209,7 +1209,7 @@ const showsHome = async (page: Page) => {
   await expect(nextUp).toContainText("4 · Code workspaces");
   const grill = nextUp.getByRole("region", { name: "Grill #117" });
   await expect(grill).toContainText("Sub-agents for code review");
-  await expect(grill).toContainText("Next in order · needs grilling first");
+  await expect(grill).toContainText("Needs grilling first");
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
@@ -1506,24 +1506,25 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    test("with five issues ready, Next up lists every one that fits, More only for the rest (#418)", async ({
+    // Nine, more than its block has room for since the Fold's screens got roomier (#503).
+    test("with nine issues ready, Next up lists every one that fits, More only for the rest (#418)", async ({
       page,
       request,
     }) => {
       await signIn(request);
-      await readyOnly(page, 5);
+      await readyOnly(page, 9);
       await page.goto(HOME);
       const { nextUp } = blocks(page);
       await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
       // The Lead's answer comes later and makes Build's card taller: count rows once it's in.
       await expect(nextUp.getByRole("button", { name: "Run the build order" })).toBeVisible();
-      await shot(page, "tablet-home-five-ready");
-      const shown = await nextUpFills(page, 4);
+      await shot(page, "tablet-home-nine-ready");
+      const shown = await nextUpFills(page, 8);
       expect(shown).toBeGreaterThanOrEqual(2);
       // Tapping Build makes its card taller: fewer rows fit, and More counts the rest.
       await nextUp.getByRole("button", { name: "Build", exact: true }).click();
       await expect(nextUp.getByRole("button", { name: "Start building" })).toBeVisible();
-      expect(await nextUpFills(page, 4)).toBeLessThan(shown);
+      expect(await nextUpFills(page, 8)).toBeLessThan(shown);
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });

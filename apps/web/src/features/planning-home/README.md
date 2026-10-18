@@ -13,6 +13,8 @@ the message box.
 
 ## Screens
 
+- **Its name**, with the same quiet ⋯ as a code workspace's (Rename, Change icon, Allowed commands, Archive), and
+  from a tablet up its tabs on the name's row (#503).
 - **Tabs:** Home · Sessions · Things · Docs, each but Home shown once it has something, with its count, by the
   address's hash (`#sessions`, `#things`, `#docs`; a document or Thing deleted from its page comes back to its tab,
   with Undo).

@@ -134,8 +134,9 @@ function LoggedIn() {
               reading={reading !== undefined}
             />
           </Suspense>
-          {/* The page fills this panel and scrolls its own middle, never the window (#266, #339). */}
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-lg border border-b-0 bg-card pb-[env(safe-area-inset-bottom)] md:mt-3 md:mr-3 md:mb-[calc(--spacing(3)+env(safe-area-inset-bottom))] md:rounded-lg md:border-b md:pb-0">
+          {/* The page fills this panel and scrolls its own middle, never the window (#266, #339).
+              From a tablet up it sits straight on the frame, with no raised panel (#503). */}
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-lg border border-b-0 bg-card pb-[env(safe-area-inset-bottom)] md:rounded-none md:border-0 md:bg-transparent">
             {workspaces.kind === "loaded" ? <Outlet /> : <Problem result={workspaces} />}
           </div>
         </div>

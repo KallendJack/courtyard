@@ -34,8 +34,11 @@ const WINDOWS: readonly { value: LeadWindow; label: string }[] = [
 /** On a phone and the cover screen, how many issues show before More. */
 const SHOWN = 3;
 
-/** From a tablet up, a narrow column beside Needs you and Running, as tall as theirs. */
-const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
+/**
+ * From a tablet up, a narrow column beside Needs you and Running, as tall as theirs, wide enough
+ * that most titles fit on one line (#503).
+ */
+const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-72.5 md:shrink-0 xl:w-80";
 
 /**
  * Next up (#301; Paper, "Code workspace Home"): the repository's ready issues nobody has claimed,
@@ -333,6 +336,8 @@ function StartOnIssue(props: {
     props.lead?.onLead(started.data);
     return undefined;
   });
+  /** Grill's card (#503; Paper, "Code Home, roomier on the Fold"): its title in two lines at most. */
+  const grilling = props.does === "grill";
   const title = (
     <a
       href={issue.url}
@@ -343,6 +348,7 @@ function StartOnIssue(props: {
         props.small
           ? "truncate text-meta font-semibold text-foreground/90"
           : "text-sm/4.5 font-bold",
+        grilling && "line-clamp-2",
       )}
     >
       {/* Under Grill, and on Grill itself as on its board, the title is enough. */}
@@ -353,14 +359,13 @@ function StartOnIssue(props: {
   const behind = leading
     ? props.lead?.status.heldBack?.find((held) => held.issue === issue.number)?.behind
     : undefined;
-  const status =
-    props.does === "grill"
-      ? "Next in order · needs grilling first"
-      : behind !== undefined
-        ? `Held back · same files as #${behind}, starts once it merges`
-        : leading
-          ? "The Lead starts this next"
-          : "Ready to build";
+  const status = grilling
+    ? "Needs grilling first"
+    : behind !== undefined
+      ? `Held back · same files as #${behind}, starts once it merges`
+      : leading
+        ? "The Lead starts this next"
+        : "Ready to build";
   return (
     <section
       aria-label={`${look.label} #${issue.number}`}
@@ -382,6 +387,20 @@ function StartOnIssue(props: {
               {look.label}
             </Button>
           )}
+        </div>
+      ) : grilling ? (
+        // Its status with a small Grill beside it, not a full-width button under it (#503).
+        <div className="flex flex-col gap-2">
+          {title}
+          <div className="flex items-center justify-between gap-2">
+            <p className={classes("text-meta font-medium", look.status)}>{status}</p>
+            {!confirming && (
+              <Button variant={look.variant} size="xs" onClick={() => setConfirming(true)}>
+                <Icon aria-hidden />
+                {look.label}
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -422,7 +441,8 @@ function StartOnIssue(props: {
           Lead is running the order
         </p>
       ) : (
-        !props.small && (
+        !props.small &&
+        !grilling && (
           <>
             <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
               <Icon aria-hidden />

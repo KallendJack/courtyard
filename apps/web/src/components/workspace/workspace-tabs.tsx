@@ -7,11 +7,25 @@ import { Scroller } from "../layout/scroller.tsx";
 export type WorkspaceTab = {
   readonly hash: string;
   readonly label: string;
-  /** How many it holds, shown after its name; none for Home. */
-  readonly count?: number;
+  /**
+   * How many it holds, shown after its name; none for Home. `"unknown"` while it's still to come:
+   * its room kept, drawn invisible, so the tabs don't move when it does (#503).
+   */
+  readonly count?: number | "unknown";
   /** What it holds can't be shown now: read offline, the copy doesn't keep it (#106). */
   readonly faint?: boolean;
+  /**
+   * Not there, but its place kept (#503): beside the title the tabs end at the ⋯, so one coming
+   * in late would push those before it aside. Drawn invisible, and out of reach.
+   */
+  readonly held?: boolean;
 };
+
+/**
+ * A tab's count: as wide as two digits, each digit as wide as any other, so a count coming in, or
+ * going from 9 to 13, takes the room kept for it and the tabs beside the title don't move (#503).
+ */
+const COUNT = "min-w-[2ch] text-label font-semibold tabular-nums";
 
 /**
  * A workspace's tabs (#300, #301; Paper, "Tablet · Code workspace Home"): Home, then each tab that
@@ -35,6 +49,18 @@ export function WorkspaceTabs(props: {
     >
       {props.tabs.map((tab) => {
         const chosen = tab.hash === props.chosen;
+        if (tab.held === true) {
+          return (
+            <span
+              key={tab.hash}
+              aria-hidden
+              className="invisible flex h-11 shrink-0 items-center gap-2 px-4.5 text-interface font-semibold"
+            >
+              {tab.label}
+              {tab.count !== undefined && <span className={COUNT}>0</span>}
+            </span>
+          );
+        }
         return (
           <Link
             key={tab.hash}
@@ -52,8 +78,14 @@ export function WorkspaceTabs(props: {
             )}
           >
             {tab.label}
-            {tab.count !== undefined && (
-              <span className="text-label font-semibold text-placeholder">{tab.count}</span>
+            {tab.count === "unknown" ? (
+              <span aria-hidden className={classes(COUNT, "invisible")}>
+                0
+              </span>
+            ) : (
+              tab.count !== undefined && (
+                <span className={classes(COUNT, "text-placeholder")}>{tab.count}</span>
+              )
             )}
           </Link>
         );
