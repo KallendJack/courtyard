@@ -1,6 +1,7 @@
 import type { PullRequest, SessionId, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { GitBranch } from "lucide-react";
+import type { ReactNode } from "react";
 import { classes } from "@/lib/classes";
 
 /** A chip in the strip: the session branch, or its pull request. */
@@ -49,6 +50,8 @@ export function BranchStrip(props: {
   fixing: boolean;
   /** The session, whose page shows the pull request's review. */
   session: { workspaceId: WorkspaceId; sessionId: SessionId };
+  /** At the end of the row: the Next pill (#492). */
+  after?: ReactNode;
 }) {
   const { pullRequest } = props;
   const now = pullRequest === undefined ? undefined : standing(pullRequest, props.fixing);
@@ -86,6 +89,7 @@ export function BranchStrip(props: {
           {pullRequest.changes.files === 1 ? "1 file" : `${pullRequest.changes.files} files`}
         </span>
       )}
+      {props.after}
     </section>
   );
 }

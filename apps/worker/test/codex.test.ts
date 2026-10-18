@@ -30,6 +30,7 @@ import {
   gitIn,
   postJson,
   removeTestFolder,
+  sendJson,
   testWorker,
 } from "./testing.ts";
 
@@ -1781,7 +1782,7 @@ describe("a Codex code session (#248)", () => {
   /**
    * A Codex session in the code workspace whose first turn makes the scripted tool calls, each
    * approval it asks for answered with `answer`: the worker's answer to each call, what it asked,
-   * its events, the stand-in, and the session's worktree.
+   * its events, the stand-in, the session's worktree, and the request and session id to follow it on.
    */
   const codingTurn = async (calls: readonly Call[], answer: "allow" | "deny" = "deny") => {
     const answers: Message[] = [];
@@ -1814,7 +1815,7 @@ describe("a Codex code session (#248)", () => {
       },
     });
     const worktree = z.object({ cwd: z.string() }).parse(codex.requests("thread/start")[0]?.params);
-    return { answers, asked, events, codex, worktree: worktree.cwd };
+    return { answers, asked, events, codex, worktree: worktree.cwd, request, id };
   };
 
   const AnswerText = z.object({
@@ -1922,7 +1923,7 @@ describe("a Codex code session (#248)", () => {
   });
 
   it("runs a command asked for in the background as a task (#182), which outlives the turn", async () => {
-    const { answers, events } = await codingTurn([
+    const { answers, events, request, id } = await codingTurn([
       { tool: "run_command", args: { command: "git status", background: true } },
     ]);
 
@@ -1930,6 +1931,9 @@ describe("a Codex code session (#248)", () => {
     expect(events).toContainEqual(
       expect.objectContaining({ type: "task-started", command: "git status" }),
     );
+    // Deleting stops the task, which holds the worktree open (#477), and the turn that would tell
+    // Codex it ended, which writes on into the session's folder.
+    expect((await sendJson(request, `/api/sessions/${id}`, "DELETE", {})).status).toBe(204);
   });
 
   it("says a command that fails failed, with its exit code", async () => {

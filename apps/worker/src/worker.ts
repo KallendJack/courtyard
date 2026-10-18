@@ -90,6 +90,7 @@ import { taskRoutes } from "./features/tasks/routes.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createTidying } from "./features/tidy/index.ts";
 import { tidyRoutes } from "./features/tidy/routes.ts";
+import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
 import {
   archiveWorkspace,
@@ -546,6 +547,7 @@ export const createWorker = (options: {
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
+  api.route("/", waitingRoutes({ contextDir, sessions }));
   api.route("/", taskRoutes(sessions));
   api.route("/", previewRoutes(previews));
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));

@@ -13,6 +13,7 @@ import { classes } from "@/lib/classes";
 // each tile's line, and the foot rows.
 const TileLine = lazy(() => import("../../features/home/tile-line.tsx"));
 const HomeFoot = lazy(() => import("../../features/home/foot.tsx"));
+const HomeNeedsYou = lazy(() => import("../../features/home/needs-you.tsx"));
 
 const loggedIn = getRouteApi("/_app");
 
@@ -68,8 +69,9 @@ function Tile(props: { workspace: WorkspaceSummary }) {
 }
 
 /**
- * Home (#102; Paper, "Home", desktop, tablet and cover screen): calm and touch-first. The
- * workspaces are the page, a big tile each and New workspace; at its foot, near the thumbs and only
+ * Home (#102; Paper, "Home", desktop, tablet and cover screen): calm and touch-first. At its top,
+ * Needs you: everything waiting on the owner in every workspace (#492). Then the workspaces, a big
+ * tile each and New workspace; at its foot, near the thumbs and only
  * when needed, main's build with Update and one gold line for something wrong. Everything else
  * that was here (the owner context, sign-ins, Connections, Fresh start) is in Settings.
  */
@@ -113,7 +115,15 @@ function Home() {
           </EmptyState>
         ) : (
           // The space round them keeps a focused tile's ring in view.
-          <div className="-mx-1 mt-3 p-1 md:mt-4">
+          <div className="-mx-1 mt-3 flex flex-col gap-2.5 p-1 md:mt-4 md:gap-3">
+            {/* What waits on the owner, everywhere, at the top (#492): its size is its slot's. */}
+            <div className="h-51 shrink-0 md:h-47">
+              <Suspense
+                fallback={<span aria-hidden className="block h-full rounded-card bg-muted/50" />}
+              >
+                <HomeNeedsYou />
+              </Suspense>
+            </div>
             <ul
               aria-label="Workspaces"
               className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3"

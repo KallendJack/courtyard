@@ -33,6 +33,8 @@ export function Block(props: {
    * between blocks. Its rows, in `BlockRows`, scroll inside it, and empty it keeps its size.
    */
   fill?: boolean;
+  /** Its size is its slot's, set by the page (Home's Needs you, #492); its rows scroll inside. */
+  fillsSlot?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -42,6 +44,7 @@ export function Block(props: {
         "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
         props.needs && "border-warning/25",
         props.fill && "md:min-h-0 md:flex-1 max-md:h-46 max-md:shrink-0",
+        props.fillsSlot && "h-full min-h-0",
       )}
     >
       <div className="flex items-center justify-between gap-2 pb-1.5">

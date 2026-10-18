@@ -1485,6 +1485,8 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await page.goto(HOME);
       const { nextUp } = blocks(page);
       await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      // The Lead's answer comes later and makes Build's card taller: count rows once it's in.
+      await expect(nextUp.getByRole("button", { name: "Run the build order" })).toBeVisible();
       await shot(page, "tablet-home-nine-ready");
       const shown = await nextUpFills(page, 8);
       expect(shown).toBeGreaterThanOrEqual(2);

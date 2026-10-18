@@ -1,4 +1,10 @@
-import { type ApprovalAsk, type Doing, skillTitle, type TurnNow } from "@courtyard/contract";
+import {
+  type ApprovalAsk,
+  type Doing,
+  type SessionWaiting,
+  skillTitle,
+  type TurnNow,
+} from "@courtyard/contract";
 import { useEffect, useState } from "react";
 import { classes } from "@/lib/classes";
 import { elapsedWords } from "../../lib/when.ts";
@@ -73,19 +79,41 @@ const TONES = {
 
 const NAMES = { working: "Working", "needs-you": "Needs you", "your-turn": "Your turn" } as const;
 
-/** A session's state as a dot alone, before its title in the sidebar; none when it's the owner's turn. */
-export function SessionStateDot(props: { now: TurnNow }) {
-  if (props.now.kind === "your-turn") return null;
+/**
+ * A listed session's dot, as the worker says it waits (#492): gold while it needs the owner (an
+ * approval, or a turn cut off by a restart), violet while it's working or has a new reply; none
+ * otherwise. Its word, for a list with room to say it: Approve, Continue, Running, New reply.
+ */
+export const waitingMark = (session: { now: TurnNow; waiting: SessionWaiting }) => {
+  if (session.waiting === "approval") {
+    return { tone: "needs-you", name: "Needs you", word: "Approve" } as const;
+  }
+  if (session.waiting === "cut-off") {
+    return { tone: "needs-you", name: "Needs you", word: "Continue" } as const;
+  }
+  if (session.now.kind === "working") {
+    return { tone: "working", name: "Working", word: "Running" } as const;
+  }
+  if (session.waiting === "reply") {
+    return { tone: "working", name: "New reply", word: "New reply" } as const;
+  }
+  return undefined;
+};
+
+/** The dot `waitingMark` says, in a slot of its own so titles line up; an empty slot otherwise. */
+export function SessionWaitingDot(props: { now: TurnNow; waiting: SessionWaiting }) {
+  const mark = waitingMark(props);
   return (
     <ChatFlowScope inline>
-      <span
-        role="img"
-        aria-label={NAMES[props.now.kind]}
-        className={classes(
-          "mr-2 mb-px inline-block size-1.75 rounded-full align-middle",
-          TONES[props.now.kind].dot,
+      <span className="inline-flex h-4.5 w-1.75 shrink-0 items-center">
+        {mark !== undefined && (
+          <span
+            role="img"
+            aria-label={mark.name}
+            className={classes("size-1.75 rounded-full", TONES[mark.tone].dot)}
+          />
         )}
-      />
+      </span>
     </ChatFlowScope>
   );
 }

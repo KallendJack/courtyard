@@ -51,6 +51,7 @@ import {
 import { useSeen } from "../../features/sessions/turns/seen.ts";
 import { SessionTurns } from "../../features/sessions/turns/session-turns.tsx";
 import { RunningTaskRows } from "../../features/tasks/task-lines.tsx";
+import { NextPill } from "../../features/waiting/next-pill.tsx";
 
 // A code session's pull request, reviewed in place of the conversation (#160): loaded only then.
 const Review = lazy(() => import("../../features/pull-requests/review.tsx"));
@@ -378,6 +379,9 @@ function Session(props: {
     );
   }
 
+  // The next thing waiting elsewhere (#492), at the end of the chip row, which a session has once
+  // it has a branch: nothing above the chat grows when it comes. Asked afresh as events come.
+  const nextPill = <NextPill sessionId={session.id} again={shownUpTo} />;
   const header = (
     <>
       {tidying === "rename" ? (
@@ -451,6 +455,7 @@ function Session(props: {
                 pullRequest={pullRequest}
                 fixing={running && last?.fixesChecks === true}
                 session={{ workspaceId: session.workspaceId, sessionId: session.id }}
+                after={nextPill}
               />
             </div>
             <PreviewButton

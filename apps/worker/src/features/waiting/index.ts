@@ -1,4 +1,7 @@
 import {
+  type CodeSessionList,
+  type NeedsYou,
+  type NeedYou,
   overflowFrom,
   type PlanUsage,
   type ProviderId,
@@ -13,6 +16,7 @@ import {
   USAGE_WARNS_AT,
   type UsageWarning,
   type UsageWindow,
+  type WorkspaceSummary,
 } from "@courtyard/contract";
 
 /**
@@ -91,6 +95,65 @@ export const sessionWaiting = (session: {
     answer !== undefined &&
     answer.seq > session.seen;
   return newReply ? "reply" : "nothing";
+};
+
+/** Needs you's order (#301): approvals, turns cut off, failing checks, replies, merges, conflicts. */
+const NEEDS_ORDER: readonly NeedYou["kind"][] = [
+  "approval",
+  "cut-off",
+  "failed",
+  "reply",
+  "merge",
+  "conflict",
+];
+
+/**
+ * Everything waiting on the owner in every workspace (#492), from each one's listed sessions: what
+ * each session waits for, and what its pull request does, in Needs you's order, the newest first
+ * in each. A pull request no session opened is its code workspace's own Needs you's to show.
+ */
+export const needsYouOf = (
+  listed: readonly {
+    readonly workspace: WorkspaceSummary;
+    readonly sessions: CodeSessionList["sessions"];
+  }[],
+): NeedsYou => {
+  const needs = listed.flatMap(({ workspace, sessions }) =>
+    sessions.flatMap((session): NeedYou[] => {
+      const where = {
+        workspace: { id: workspace.id, name: workspace.name },
+        session: { id: session.id, title: session.title },
+      };
+      const since = session.now.kind === "needs-you" ? session.now.since : session.updatedAt;
+      const own: NeedYou[] =
+        session.waiting === "nothing" ? [] : [{ kind: session.waiting, ...where, since }];
+      const { pullRequest } = session;
+      const pull = pullRequest === undefined ? "nothing" : pullRequestWaiting(pullRequest, session);
+      if (pullRequest === undefined || pull === "nothing") return own;
+      return [
+        ...own,
+        {
+          kind: pull,
+          ...where,
+          since: session.updatedAt,
+          pullRequest: {
+            number: pullRequest.number,
+            ...(pullRequest.title === undefined ? {} : { title: pullRequest.title }),
+          },
+        },
+      ];
+    }),
+  );
+  return {
+    needs: needs.sort(
+      (a, b) =>
+        NEEDS_ORDER.indexOf(a.kind) - NEEDS_ORDER.indexOf(b.kind) ||
+        Date.parse(b.since) - Date.parse(a.since),
+    ),
+    busy: listed.some(({ sessions }) =>
+      sessions.some((session) => session.now.kind !== "your-turn"),
+    ),
+  };
 };
 
 /**
