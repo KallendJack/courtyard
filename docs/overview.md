@@ -59,7 +59,7 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 
 **Worker features:** `sessions` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` · `waiting`
 
-**Web features:** `sessions` · `step-by-step` · `limits`
+**Web features:** `sessions` · `step-by-step` · `limits` · `waiting`
 
 You ask "which tyres for winter?":
 
@@ -70,7 +70,8 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
             reads
 ```
 
-- **`waiting`** decides, once, what waits on you. Every screen reads it.
+- **`waiting`** decides, once, what waits on you, and lists it from every workspace for Home's Needs you, the
+  Courtyard mark's gold count and a session's Next pill. Every screen reads it.
 - **`limits`** keeps each plan's usage at a glance: its meters in the Model sheet, and a gold warning from 80%.
 
 ### 🗂️ What Courtyard knows

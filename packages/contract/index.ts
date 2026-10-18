@@ -226,6 +226,8 @@ export {
 export {
   Doing,
   ListedSession,
+  NeedsYou,
+  NeedYou,
   SessionList,
   SessionSeen,
   SessionWaiting,
