@@ -75,8 +75,20 @@ const start = async (
   ],
   push: FakePush = createFakePush(),
 ) => {
-  const app = testWorker({ root, providers, now, sendPush: push.send });
-  return requesterFor(app, await setUpOwner(app));
+  const jobs: (() => Promise<void>)[] = [];
+  const app = testWorker({
+    root,
+    providers,
+    now,
+    sendPush: push.send,
+    repeat: (_everyMs, job) => {
+      jobs.push(job);
+    },
+  });
+  const request = requesterFor(app, await setUpOwner(app));
+  // What the worker does as it starts, reading each provider's usage among it.
+  for (const job of jobs) await job();
+  return request;
 };
 
 const usageOf = async (request: Requester, read = false) => {

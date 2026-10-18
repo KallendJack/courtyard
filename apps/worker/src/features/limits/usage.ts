@@ -53,8 +53,8 @@ type Known = {
 
 /**
  * Usage at a glance (#66): each provider's plan usage as last known, in the worker's memory. It's
- * read from each provider as the worker starts, after every turn ends and when the Model sheet
- * opens, at most once a minute per provider; a turn adds what its provider hears as it runs. A
+ * read from each provider as the worker starts and every 15 minutes, after every turn ends and
+ * when the Model sheet opens, at most once a minute per provider; a turn adds what its provider hears as it runs. A
  * reading that fails keeps what was heard, and a window never heard is "not known yet". The
  * warnings are decided by `waiting/`; those put off with Not now are kept in the data folder.
  * A window crossing `USAGE_WARNS_AT` while a turn runs notifies the owner, once per window until

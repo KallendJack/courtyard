@@ -207,6 +207,9 @@ const WATCH_UPDATE_EVERY_MS = 10_000;
 /** How often the context folder's hand edits are committed and a failed backup retried. */
 const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
 
+/** How often each provider's plan usage is read while no turn ends (#66), so Home's line stays fresh. */
+const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
+
 /** Runs a job now and every `everyMs`, never overlapping itself. */
 export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
 
@@ -390,7 +393,8 @@ export const createWorker = (options: {
       turnEnded: (provider) => background(usage.read(provider)),
     },
   });
-  // Usage at a glance (#66): each provider's plan usage, read now and after every turn.
+  // Usage at a glance (#66): each provider's plan usage, read as it starts, every so often and
+  // after every turn.
   const usage = createUsage({
     providers,
     dataDir,
@@ -403,7 +407,6 @@ export const createWorker = (options: {
       );
     },
   });
-  background(usage.read());
   const previews = createPreviews({
     ports: previewPorts,
     loggedIn: (cookies) => ownerLoggedIn(owner, cookies),
@@ -491,6 +494,7 @@ export const createWorker = (options: {
   repeat(WATCH_LEADS_EVERY_MS, lead.watch);
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
+  repeat(READ_USAGE_EVERY_MS, () => usage.read());
 
   /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {

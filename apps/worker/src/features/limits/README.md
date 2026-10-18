@@ -22,8 +22,8 @@ Model sheet's meter turns gold and a session on Claude warns, with Switch to Cod
 
 - **Limits** (`index.ts`): it wraps every provider, so a turn that fails as rate-limited is remembered until its
   reset, and shows on that provider's models. Kept only in the worker's memory.
-- **Plan usage** (`usage.ts`): each provider's `readUsage` is asked as the worker starts, after every turn ends and
-  when the Model sheet opens, at most once a minute per provider: Claude through the Agent SDK's experimental usage
+- **Plan usage** (`usage.ts`): each provider's `readUsage` is asked as the worker starts and every 15 minutes, after
+  every turn ends and when the Model sheet opens, at most once a minute per provider: Claude through the Agent SDK's experimental usage
   call, Codex through its rate limits, the fake from its pretend plan. As a turn runs, its provider hears its windows
   change (Claude's `rate_limit_event`, Codex's `account/rateLimits/updated`), kept at once. A reading that fails keeps
   what was heard; a window never heard, or past its reset, is "not known yet". A provider not signed in, or a sign-in
