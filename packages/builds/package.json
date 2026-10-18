@@ -11,9 +11,9 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1"
+    "@types/node": "^26.6.5"
   }
 }

@@ -22,10 +22,10 @@
     "verify": "node scripts/builds/run.ts \"pnpm check && pnpm typecheck && pnpm test && pnpm build && pnpm e2e\""
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^24.19.1",
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   }
 }
