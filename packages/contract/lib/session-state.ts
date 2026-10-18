@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { ApprovalAsk } from "./approval.ts";
-import { SessionSummary } from "./session.ts";
+import { SessionId, SessionSummary } from "./session.ts";
 import { Activity } from "./session-event.ts";
+import { WorkspaceId } from "./workspace.ts";
 
 // Whose turn it is in a session (#179), as its workspace's lists show it. Apart from `session.ts`,
 // whose summaries the first load needs, so only the pages that list sessions load these.
@@ -58,6 +59,36 @@ export type ListedSession = z.infer<typeof ListedSession>;
 
 export const SessionList = z.object({ sessions: z.array(ListedSession) });
 export type SessionList = z.infer<typeof SessionList>;
+
+/**
+ * One thing waiting on the owner (#492), in any workspace: a session's approval, its turn cut off
+ * by a restart, or its new reply; or its pull request's failing checks, merge or conflict. Each
+ * names its workspace and session, so a row or the Next pill opens it in one tap.
+ */
+export const NeedYou = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.enum(["approval", "cut-off", "reply"]),
+    workspace: z.object({ id: WorkspaceId, name: z.string() }),
+    session: z.object({ id: SessionId, title: z.string() }),
+    since: z.iso.datetime(),
+  }),
+  z.object({
+    kind: z.enum(["failed", "merge", "conflict"]),
+    workspace: z.object({ id: WorkspaceId, name: z.string() }),
+    session: z.object({ id: SessionId, title: z.string() }),
+    since: z.iso.datetime(),
+    pullRequest: z.object({ number: z.number().int().positive(), title: z.string().optional() }),
+  }),
+]);
+export type NeedYou = z.infer<typeof NeedYou>;
+
+/**
+ * Everything waiting on the owner, in every workspace (#492), in Needs you's order (#301):
+ * approvals, turns cut off, failing checks, new replies, merges, then conflicts, the newest first
+ * in each. `busy` while a turn runs anywhere, so whatever shows it asks again sooner.
+ */
+export const NeedsYou = z.object({ needs: z.array(NeedYou), busy: z.boolean() });
+export type NeedsYou = z.infer<typeof NeedsYou>;
 
 /**
  * The owner has seen a session up to its event numbered `upTo` (#334): its page showed them

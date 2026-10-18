@@ -1,19 +1,23 @@
 # waiting
 
-What waits on the owner (#334; AGENTS.md), decided here once for every screen and device, with no I/O of its own.
+What waits on the owner (#334; AGENTS.md), decided here once for every screen and device, and gathered from every
+workspace into one list (#492).
 
 **Example:** a session's answer arrives while you're away. Its row says "new reply" on every device until a session
-page has shown it to you.
+page has shown it to you, and Home's Needs you lists it, "Reply · Winter tyres · Bike", with the Courtyard mark's
+gold count.
 
-- **Uses:** nothing but the contract.
-- **Used by:** `sessions/` (on each listed session) and `pull-requests/` (on each open one). The web app reads only
-  those: a Home tile names the newest session waiting, and every session list marks those waiting and puts them
-  first (#345).
+- **Uses:** the contract, `sessions/` (each workspace's listed sessions) and `workspaces/` (the list), for its route.
+- **Used by:** `sessions/` (on each listed session) and `pull-requests/` (on each open one). The web app reads those:
+  a Home tile names the newest session waiting, and every session list marks those waiting and puts them first
+  (#345). It reads `GET /api/needs-you` for Home's Needs you, the mark's count and a session's Next pill (#492).
 
 ## API
 
-None of its own: `waiting` is on `sessions/`' list and `pull-requests/`' list. Seen is `sessions/`'
-`POST /api/sessions/:id/seen` and `POST /api/workspaces/:id/seen`.
+- `GET /api/needs-you`: everything waiting on the owner in every workspace, in Needs you's order, and `busy` while a
+  turn runs anywhere (`NeedsYou`).
+
+Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id/seen`.
 
 ## How it works
 
@@ -25,3 +29,7 @@ None of its own: `waiting` is on `sessions/`' list and `pull-requests/`' list. S
   latest answer (#345).
 - **An open pull request** waits for its conflict, its failing checks (unless its session is working on them, #172),
   or a merge once its checks pass.
+- **Needs you, everywhere** (#492): each workspace's sessions, and the pull request each one opened as the worker
+  last followed it, so it never asks GitHub. A pull request no session opened shows on its code workspace's own
+  Needs you. In order: approvals, turns cut off, failing checks, new replies, merges, conflicts, the newest first in
+  each.
