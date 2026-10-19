@@ -72,6 +72,11 @@ const CAPABILITIES: Capabilities = {
   steers: false,
 };
 const LABEL = "Codex";
+/**
+ * Astra at High, as the owner chose it (#247): Codex lists Sol first, at Low. Gone from its list,
+ * the default falls back to its first model.
+ */
+const STARTING_DEFAULT = { model: ModelId.parse("gpt-6-astra"), effort: Effort.parse("high") };
 
 /** How Codex's app-server is started: its arguments, its environment, and where its output goes. */
 export type AppServerLaunch = {
@@ -1395,6 +1400,7 @@ export const createCodexProvider = (options: {
   return {
     id,
     capabilities: CAPABILITIES,
+    startingDefault: STARTING_DEFAULT,
     status: keptStatus.status,
     readUsage,
 

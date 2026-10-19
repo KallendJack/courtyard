@@ -63,6 +63,8 @@ import {
   fetchFromGitHub,
   type MattPin,
 } from "./features/matt-skills/index.ts";
+import { createModelDefaults } from "./features/model-defaults/index.ts";
+import { modelDefaultRoutes } from "./features/model-defaults/routes.ts";
 import { createNextUp } from "./features/next-up/index.ts";
 import { nextUpRoutes } from "./features/next-up/routes.ts";
 import { createNotifications, type SendPush } from "./features/notifications/index.ts";
@@ -294,18 +296,23 @@ export const createWorker = (options: {
   const now = options.now ?? Date.now;
   const background = options.background ?? (() => {});
   const owner = createOwner({ dataDir, now });
-  // Claude first, so it's the default model wherever it's available.
-  const providers = rememberingLimits(
-    options.providers ?? [
-      ...(claudeProvider ? [createClaudeProvider()] : []),
-      ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
-      ...(fakeProvider
-        ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
-        : []),
-      ...(secondFakeProvider ? [createFakeProvider({ second: true })] : []),
-    ],
-    now,
-  );
+  // Claude first, so a new session starts on its default wherever it's available. Each provider's
+  // default (#247) is chosen once its usage limits are known.
+  const modelDefaults = createModelDefaults({
+    dataDir,
+    providers: rememberingLimits(
+      options.providers ?? [
+        ...(claudeProvider ? [createClaudeProvider()] : []),
+        ...(codexProvider ? [createCodexProvider({ dataDir })] : []),
+        ...(fakeProvider
+          ? [createFakeProvider(fakeSignIn ? { signIn: { finishAfterMs: FAKE_SIGN_IN_MS } } : {})]
+          : []),
+        ...(secondFakeProvider ? [createFakeProvider({ second: true })] : []),
+      ],
+      now,
+    ),
+  });
+  const { providers } = modelDefaults;
   const contextFolder = createContextFolder({ contextDir, remote: contextRemote });
   const github = createGitHub({
     api:
@@ -551,6 +558,7 @@ export const createWorker = (options: {
   api.get("/health", (c) => c.json({ status: "ok" } satisfies Health));
   api.route("/", loginRoutes(owner));
   api.route("/", sessionRoutes({ sessions, providers, contextDir }));
+  api.route("/", modelDefaultRoutes(modelDefaults));
   api.route("/", waitingRoutes({ contextDir, sessions }));
   api.route("/", taskRoutes(sessions));
   api.route("/", previewRoutes(previews));

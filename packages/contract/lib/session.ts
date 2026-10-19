@@ -80,6 +80,13 @@ export const Capabilities = z.object({
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 
+/**
+ * A provider's default (#247): the model and effort a new session, a switch to the provider and
+ * Carry on use. No effort is the model's own default.
+ */
+export const ModelDefault = z.object({ model: ModelId, effort: Effort.optional() });
+export type ModelDefault = z.infer<typeof ModelDefault>;
+
 export const ProviderStatus = z.discriminatedUnion("available", [
   z.object({
     id: ProviderId,
@@ -87,6 +94,12 @@ export const ProviderStatus = z.discriminatedUnion("available", [
     available: z.literal(true),
     models: z.array(ModelInfo),
     capabilities: Capabilities,
+    /**
+     * Its default as the worker uses it now (#247): the owner's, while its model is on offer and
+     * not at its usage limit; else the first model that isn't, at its own effort. None when it
+     * offers no models.
+     */
+    default: ModelDefault.optional(),
   }),
   z.object({
     id: ProviderId,
@@ -98,6 +111,21 @@ export const ProviderStatus = z.discriminatedUnion("available", [
   }),
 ]);
 export type ProviderStatus = z.infer<typeof ProviderStatus>;
+
+/**
+ * An available provider's default (#247) as a message goes to it: its model, with what the
+ * provider says of it, and the effort, none for the model's own. A list from before defaults says
+ * none, so it's the first model, at its own effort. `undefined` when it offers no models.
+ */
+export const defaultOf = (provider: {
+  readonly models: readonly ModelInfo[];
+  readonly default?: ModelDefault | undefined;
+}): { model: ModelInfo; effort: Effort | undefined } | undefined => {
+  const chosen = provider.models.find((model) => model.id === provider.default?.model);
+  if (chosen !== undefined) return { model: chosen, effort: provider.default?.effort };
+  const first = provider.models[0];
+  return first && { model: first, effort: undefined };
+};
 
 export const ProviderList = z.object({ providers: z.array(ProviderStatus) });
 export type ProviderList = z.infer<typeof ProviderList>;

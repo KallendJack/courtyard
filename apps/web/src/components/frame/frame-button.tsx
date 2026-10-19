@@ -75,6 +75,27 @@ const LOOKS = {
     off: "[&_svg]:text-foreground/70",
     on: "bg-accent [&_svg]:text-primary-text",
   },
+  /**
+   * A provider's default at the top of the Model sheet (#247, "Tablet · Model sheet: quick
+   * switch"), lit in violet when it's what the message goes with.
+   */
+  chip: {
+    base: classes(
+      PRESS,
+      "flex min-w-0 flex-1 basis-0 items-center justify-between gap-3 rounded-card px-4 py-3.5 text-left ring-1 ring-inset",
+    ),
+    off: "ring-input",
+    on: "bg-muted ring-primary",
+  },
+  /** A heading across a sheet that folds what's under it open or shut ("More models", #247). */
+  fold: {
+    base: classes(
+      PRESS,
+      "flex w-full items-center gap-3 border-t px-1 py-3.5 text-left [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-foreground/70",
+    ),
+    off: "",
+    on: "",
+  },
   /** The line at a sheet's foot that opens another (the model, Paper board Handheld · 28). */
   line: {
     base: classes(

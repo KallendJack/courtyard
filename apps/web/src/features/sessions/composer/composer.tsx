@@ -31,7 +31,7 @@ import { SkillTag } from "@/components/workspace/skill-tag";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
 import { type Attaching, prepareFiles, releasePreviews } from "./attaching.ts";
-import { choiceSummary, modelKey, modelName, useModelChoice } from "./model-pickers.tsx";
+import { choiceSummary, modelName, useModelChoice } from "./model-pickers.tsx";
 import { availableModels } from "./models.ts";
 
 /**
@@ -593,7 +593,8 @@ export const Composer = memo(function Composer(props: {
     <>
       {props.above?.({
         provider: choice.model?.ref.provider,
-        switchTo: (model) => choice.pickModel(modelKey(model)),
+        // Switching provider lands on its default (#247).
+        switchTo: (model) => choice.pickProvider(model.provider),
       })}
       <Suspense fallback={null}>
         <HandheldChoices

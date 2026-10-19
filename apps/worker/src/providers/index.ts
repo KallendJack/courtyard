@@ -4,6 +4,7 @@ import type {
   Effort,
   FailureReason,
   HelperId,
+  ModelDefault,
   ModelId,
   ModelInfo,
   ModelRef,
@@ -410,6 +411,11 @@ export type Provider = {
   readonly id: ProviderId;
   /** What its models can do, which decides what a turn tells them they may do. */
   readonly capabilities: Capabilities;
+  /**
+   * The model and effort it starts as the default on (#247), until the owner makes another the
+   * default; without one, its first model at its own effort.
+   */
+  readonly startingDefault?: ModelDefault;
   readonly status: () => Promise<ProviderStatus>;
   readonly runTurn: (input: TurnInput) => Promise<Result<null, FailureReason>>;
   /** Answers a one-off question: the answer unparsed, or why there's none. */

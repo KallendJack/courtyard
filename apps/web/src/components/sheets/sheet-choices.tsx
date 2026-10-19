@@ -1,5 +1,5 @@
 import type { SkillIcon, SkillName, SkillSummary } from "@courtyard/contract";
-import { Book, ChevronDown, ChevronRight, Flame, UserRound } from "lucide-react";
+import { Book, ChevronDown, ChevronRight, ChevronUp, Flame, Star, UserRound } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { classes } from "@/lib/classes";
 import { FrameButton, modelMark } from "../frame/frame-button.tsx";
@@ -103,6 +103,105 @@ export function SheetModelLine(props: { name: string; detail: string; change: ()
         </span>
         <span className="text-meta font-bold text-foreground/85">Change</span>
         <ChevronRight aria-hidden strokeWidth={1.6} />
+      </FrameButton>
+    </div>
+  );
+}
+
+/** A provider's chip in the quick switch: its name, and its default in a few words ("Astra · High"). */
+export type SheetChip<T extends string> = {
+  readonly value: T;
+  readonly name: string;
+  readonly choice: string;
+};
+
+/**
+ * The quick switch at the top of the Model sheet (#247): one chip per provider, each its name in
+ * capitals over its default, the one the message goes with lit in violet with a dot. None is lit
+ * when the message goes with anything but a provider's default: a chip only ever means that.
+ */
+export function SheetQuickSwitch<T extends string>(props: {
+  chips: readonly SheetChip<T>[];
+  value: T | undefined;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div data-handheld="" className="contents">
+      <fieldset aria-label="Quick switch" className="flex min-w-0 gap-2.5">
+        {props.chips.map((chip) => {
+          const lit = chip.value === props.value;
+          return (
+            <FrameButton
+              key={chip.value}
+              look="chip"
+              lit={lit}
+              aria-pressed={lit}
+              onClick={() => props.onChange(chip.value)}
+            >
+              <span className="flex min-w-0 flex-col gap-1">
+                <CapsLabel tone="muted" inline>
+                  {chip.name}
+                </CapsLabel>
+                <span className="text-interface/5 font-bold wrap-anywhere text-foreground">
+                  {chip.choice}
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className={classes("size-2 shrink-0 rounded-full", lit && "bg-primary")}
+              />
+            </FrameButton>
+          );
+        })}
+      </fieldset>
+    </div>
+  );
+}
+
+/**
+ * "More models" (#247): folds the full list of models and efforts open under the quick switch,
+ * with a line saying what's there while it's shut.
+ */
+export function SheetFold(props: {
+  title: string;
+  detail: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div data-handheld="" className="contents">
+      <FrameButton look="fold" aria-expanded={props.open} onClick={props.onToggle}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-sm/4.5 font-bold text-foreground">{props.title}</span>
+          {!props.open && <span className="text-meta text-muted-foreground">{props.detail}</span>}
+        </span>
+        {props.open ? (
+          <ChevronUp aria-hidden strokeWidth={1.6} />
+        ) : (
+          <ChevronRight aria-hidden strokeWidth={1.6} />
+        )}
+      </FrameButton>
+    </div>
+  );
+}
+
+/**
+ * Make this the default (#247): a line at the Model sheet's foot saying what the provider starts on
+ * from now on, with a star.
+ */
+export function SheetMakeDefault(props: { detail: string; busy: boolean; make: () => void }) {
+  return (
+    <div data-handheld="" className="contents">
+      <FrameButton look="line" aria-busy={props.busy} onClick={() => !props.busy && props.make()}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-sm/4.5 font-bold text-foreground">Make this the default</span>
+          <span className="text-meta text-muted-foreground">
+            {props.busy ? "Saving…" : props.detail}
+          </span>
+        </span>
+        <span aria-hidden className="shrink-0 text-primary-text">
+          <Star strokeWidth={2} className="size-5" />
+        </span>
       </FrameButton>
     </div>
   );

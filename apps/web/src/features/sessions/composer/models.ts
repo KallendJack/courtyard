@@ -1,8 +1,8 @@
-import type { Effort, ModelRef, ProviderList } from "@courtyard/contract";
+import { defaultOf, type Effort, type ModelRef, type ProviderList } from "@courtyard/contract";
 
 /**
- * Every model the available providers offer, in order: the first is a new session's default. On
- * its own, so pages can pick a model without loading the composer.
+ * Every model the available providers offer, in order. On its own, so pages can pick a model
+ * without loading the composer.
  */
 export const availableModels = (providers: ProviderList["providers"]) =>
   providers.flatMap((provider) =>
@@ -25,6 +25,37 @@ export const availableModels = (providers: ProviderList["providers"]) =>
 
 /** One model on offer, with the levels of effort it takes. */
 export type OfferedModel = ReturnType<typeof availableModels>[number];
+
+/**
+ * Each available provider's default (#247), in the worker's order: the model and effort a switch
+ * to it lands on, and a new session starts on (the first not at its usage limit).
+ */
+export const providerDefaults = (
+  providers: ProviderList["providers"],
+  models: readonly OfferedModel[],
+) =>
+  providers.flatMap((provider) => {
+    const chosen = provider.available ? defaultOf(provider) : undefined;
+    const model = models.find(
+      (each) => each.ref.provider === provider.id && each.ref.model === chosen?.model.id,
+    );
+    return model === undefined
+      ? []
+      : [{ provider: provider.id, label: provider.label, model, effort: chosen?.effort }];
+  });
+
+/** One provider's default, as the Model sheet's chips show it. */
+export type ProviderDefault = ReturnType<typeof providerDefaults>[number];
+
+/** Whether a model and effort are their provider's default: only then is its chip lit. */
+export const isDefault = (
+  provider: ProviderDefault,
+  choice: { model: OfferedModel | undefined; effort: Effort | undefined },
+) =>
+  choice.model !== undefined &&
+  choice.model.ref.provider === provider.model.ref.provider &&
+  choice.model.ref.model === provider.model.ref.model &&
+  choice.effort === provider.effort;
 
 /**
  * A model whose provider is listed but can't be used now, named by its id: a session's last model,
