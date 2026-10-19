@@ -99,44 +99,27 @@ This repo is public, and the app runs models that can change files on a real mac
 
 ## Process
 
-The process is Matt Pocock's skills (below), as they are. On top of them:
+Matt Pocock's skills, as they are, plus the rules below. The detail behind them (choosing the next task, claims,
+when a change needs a board): `docs/agents/process.md`.
 
-- **Every project's Paper file has four pages** (#340): `1 · Live` (one board per screen per device, as built, plus
-  the style guide and components), `2 · Agreed` (OK'd, not built), `3 · Drafts`, `4 · Archive`. Names, layout and
-  how boards move: `docs/ai-conduct.md`, Paper. A PR that changes what the owner sees lists its boards in its
-  description ("Boards: Tablet · Home → Live, replaces …"), and whoever merges it moves them.
-- **Design in Paper first.** Anything that adds or changes what the owner sees gets a Paper design the owner has
-  agreed before it's built: the ticket links its Paper board before it's `ready-for-agent`, and one without a board
-  stops for a design first. A change with nothing new to see (a title updating in place, say) needs none; a ticket
-  that says it needs no new design names the agreed board that already covers it.
+- **One `ready-for-agent` issue per PR**, taken in milestone order (`docs/agents/roadmap.md`). Work without an issue
+  gets one first, in a milestone (`Later` when unsure) with a category and a triage label; docs or CI only needs none.
+  Bundle issues only when the owner says so, and keep an open PR to the work it was opened for.
+- **Claim before building.** With no claim in the issue's comments or open PRs, comment
+  "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
+- **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
+  that changes what the owner sees lists its boards ("Boards: Tablet · Home → Live, replaces …").
 - **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
   calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
   shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
 - **Tap or talk; typing is the fallback.** Wherever Courtyard can know or guess a value (a repo's name, a photo's
   contents, what was just said), it fills it in and the owner taps to pick or confirms; any field can also be spoken.
-  Before acting, show everything it filled in, all of it, so one tap does exactly what the owner sees. A text box is
-  for words only the owner has, and opening a page never opens the keyboard on touch.
-- The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
-- A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
-  `docs/architecture.md` (and `docs/overview.md` for a new feature).
-- A PR that changes how Courtyard is installed, set up, run or recovered updates `README.md`.
-- The order of work is the GitHub milestones: `docs/agents/roadmap.md`. **Every issue you file goes in a milestone**
-  (`gh issue create --milestone "<title>"`, `Later` when unsure) with a category and a triage label; a Courtyard
-  session's `gh issue create` without them is refused (#324). Courtyard's own screens read the roadmap from them.
-- **Claim an issue before building it.** Several builders work at once (Courtyard sessions and Claude Code
-  helpers). Before starting, check the issue's comments and open PRs for a claim; if there is none, comment
-  "Building this: <session or helper> (<branch>), <why>" first, where why is "next in order" or "the owner asked".
-  "The next task" means the first `ready-for-agent` issue, in milestone order, that nobody has claimed, that isn't
-  blocked by an open issue (GitHub's blocked by; Next up says "After …", #377) and that doesn't touch the same files
-  as a claimed one. Issues that edit the same files are a family: whoever keeps the order marks each one blocked by
-  the one before. Stopping without a PR, say so on the issue ("Stopped: <why>"); a
-  claim with no pushed branch or PR after 12 hours is free. For a Courtyard session started on an issue (Build, or a
-  first message naming a ready one), the worker posts both: the claim as it starts, and "Stopped" when it stops,
-  fails or is deleted before its PR (#324). The rule stays for Claude Code helpers and anything the worker doesn't
-  see.
-- **Build only `ready-for-agent` issues, one per PR.** Work without an issue gets one first (milestone and labels),
-  unless it's docs or CI only. Bundle issues in one PR only when the owner says so, and never add new work to an
-  open PR.
+  Before acting, show everything it filled in, so one tap does exactly what the owner sees. A text box is for words
+  only the owner has, and opening a page never opens the keyboard on touch.
+- **Docs move with the code.** A new module, or a change to how the parts connect or to what's in a workspace folder,
+  updates `docs/architecture.md` (and `docs/overview.md` for a new feature). A change to installing, setting up,
+  running or recovering Courtyard updates `README.md`.
+- The owner reviews every PR on GitHub: check a PR's state before pushing more commits to it.
 
 ## Agent skills
 
