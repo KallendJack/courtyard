@@ -87,6 +87,18 @@ export {
   SaveAsDocument,
 } from "./lib/documents.ts";
 export {
+  FLOOR_PLAN_MAX_ITEMS,
+  FloorPlan,
+  PlanFloorItem,
+  PlanItem,
+  PlanOpening,
+  PlanPartition,
+  PlanWall,
+  PlanWallItem,
+  PlanZone,
+  wallLength,
+} from "./lib/floor-plan.ts";
+export {
   FRESH_START_WORDS,
   FreshStartRequest,
   FreshStartSummary,

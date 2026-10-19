@@ -11,17 +11,21 @@ import { SuggestedReplies } from "@/components/chat/suggested-replies";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { classes } from "@/lib/classes";
 import { describeProblem } from "../../components/layout/problems.tsx";
+import { FencedBlock, fencedKind, OnHome } from "../../components/rich-blocks/fenced.tsx";
 import { KEPT_HOME, pickView } from "./api.ts";
 import { PictureView } from "./picture-view.tsx";
 
-type Picture = Extract<HomeView, { kind: "picture" }>;
+type Drawn = Extract<HomeView, { kind: "picture" | "plan" }>;
 
 /**
- * The views Home draws so far: a Thing's photo with its parts pinned. The wanted list comes whole
- * with its picks and shop links (#245), so until then it's left out, never half drawn.
+ * The views Home draws so far: a Thing's photo with its parts pinned, and a room's floor plan
+ * (#257). The wanted list lives on the Things tab (#245), so it's left out here.
  */
 const drawn = (views: readonly HomeView[]) =>
-  views.filter((view): view is Picture => view.kind === "picture");
+  views.filter((view): view is Drawn => view.kind === "picture" || view.kind === "plan");
+
+/** A floor plan is drawn as in an answer, by its rich block, loaded only when Home has one. */
+const PLAN = fencedKind("plan");
 
 /**
  * A planning workspace's Home now (#481; Paper, "Tablet · Home: the bike, parts pinned"): the
@@ -89,13 +93,26 @@ export function HomeNow(props: {
               {problem}
             </p>
           )}
-          <PictureView
-            key={showing.id}
-            workspaceId={workspaceId}
-            view={showing}
-            things={props.things}
-            changed={props.changed}
-          />
+          {showing.kind === "plan" ? (
+            PLAN !== undefined && (
+              <OnHome value={true}>
+                <FencedBlock
+                  key={showing.id}
+                  kind={PLAN}
+                  language="plan"
+                  source={JSON.stringify(showing.plan)}
+                />
+              </OnHome>
+            )
+          ) : (
+            <PictureView
+              key={showing.id}
+              workspaceId={workspaceId}
+              view={showing}
+              things={props.things}
+              changed={props.changed}
+            />
+          )}
         </div>
       )}
       {question !== null && question.nextSteps.length > 0 && (
