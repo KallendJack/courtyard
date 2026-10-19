@@ -52,7 +52,8 @@ const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-72.5 md:shrink-0 xl:w-80";
  * roadmap opens the Roadmap tab, saying how many more there are: the queue lives there. Under
  * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
  * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
- * it next, in Build's place ("Lead running"). With none offered it says so.
+ * it next, in Build's place ("Lead running"). With Grill on top, both sit under the small Build
+ * (#550; Paper, "Code Home: Grill on top, Run the build order"). With none offered it says so.
  */
 export function NextUp(
   props: Offered & {
@@ -154,7 +155,18 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
                 : {})}
             />
           )}
-          {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
+          {/* With Grill on top, the Lead's controls go with the first ready issue under it (#550). */}
+          {under !== undefined && (
+            <StartOnIssue
+              {...on}
+              issue={under}
+              does="build"
+              small
+              {...(props.lead === undefined
+                ? {}
+                : { lead: { status: props.lead, onLead: props.onLead } })}
+            />
+          )}
         </BlockRows>
         {(then.length > 0 || more > 0) && (
           <div className="flex shrink-0 flex-col gap-2.5 border-t border-border pt-2.5">
@@ -220,7 +232,8 @@ function StartOnIssue(props: {
   small?: boolean;
   /**
    * On the first ready issue, the workspace's Lead (#347): Run the build order under Build, or,
-   * while it runs, that it starts this next in Build's place.
+   * while it runs, that it starts this next in Build's place. On the small card under Grill, both
+   * go under the card (#550).
    */
   lead?: { status: LeadStatus; onLead: (lead: LeadStatus) => void };
 }) {
@@ -300,7 +313,20 @@ function StartOnIssue(props: {
       : leading
         ? "The Lead starts this next"
         : "Ready to build";
-  return (
+  /** While the Lead runs, it starts this one: there's no Build to tap (Paper, "Lead running"). */
+  const leadRuns = (
+    <p className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-primary/35 bg-secondary text-meta font-bold text-primary-text">
+      <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
+      Lead is running the order
+    </p>
+  );
+  const runTheOrder = props.lead !== undefined && (
+    <Button variant="outline" fullWidth onClick={() => setRunning(true)}>
+      <Play aria-hidden />
+      Run the build order
+    </Button>
+  );
+  const card = (
     <section
       aria-label={`${look.label} #${issue.number}`}
       className={classes(
@@ -313,9 +339,11 @@ function StartOnIssue(props: {
         <div className="flex items-center gap-2.5">
           <div className="flex min-w-0 grow flex-col">
             {title}
-            <p className={classes("text-meta font-medium", look.status)}>Ready</p>
+            <p className={classes("text-meta font-medium", look.status)}>
+              {leading ? status : "Ready"}
+            </p>
           </div>
-          {!confirming && (
+          {!confirming && !leading && (
             <Button variant={look.variant} size="xs" onClick={() => setConfirming(true)}>
               <Icon aria-hidden />
               {look.label}
@@ -368,28 +396,20 @@ function StartOnIssue(props: {
           </div>
           <FormError message={start.error} />
         </>
-      ) : leading ? (
-        // While the Lead runs, it starts this one: there's no Build to tap (Paper, "Lead running").
-        <p className="flex h-9 items-center justify-center gap-2 rounded-full border border-primary/35 bg-secondary text-meta font-bold text-primary-text">
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
-          Lead is running the order
-        </p>
       ) : (
         !props.small &&
-        !grilling && (
+        !grilling &&
+        (leading ? (
+          leadRuns
+        ) : (
           <>
             <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
               <Icon aria-hidden />
               {look.label}
             </Button>
-            {props.lead !== undefined && (
-              <Button variant="outline" fullWidth onClick={() => setRunning(true)}>
-                <Play aria-hidden />
-                Run the build order
-              </Button>
-            )}
+            {runTheOrder}
           </>
-        )
+        ))
       )}
       {props.lead !== undefined && (
         // Run the build order, tapped: what starts, and Allow all for builders (#428; Paper, "Run
@@ -399,7 +419,7 @@ function StartOnIssue(props: {
           says={
             model === undefined
               ? "No model that codes is available right now."
-              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}, each in a session of its own that claims its issue, and tells you what's ready to merge. Merging stays yours.`
+              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}.${props.small ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue, and it tells you what's ready to merge. Merging stays yours.`
           }
           open={running}
           onClose={() => setRunning(false)}
@@ -465,5 +485,13 @@ function StartOnIssue(props: {
         </DialogCard>
       )}
     </section>
+  );
+  if (!props.small || props.lead === undefined || confirming) return card;
+  // Under Grill, the Lead's control sits under the small card, not in it (#550).
+  return (
+    <>
+      {card}
+      {leading ? leadRuns : runTheOrder}
+    </>
   );
 }
