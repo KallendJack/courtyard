@@ -355,7 +355,7 @@ function Session(props: {
     void router.invalidate();
   }, [modelTitle, session.title, router]);
 
-  const above = <BackLink workspaceId={session.workspaceId} />;
+  const above = <BackLink workspaceId={session.workspaceId} button />;
   const toggle = (what: "rename" | "delete") =>
     setTidying((was) => (was === what ? undefined : what));
 

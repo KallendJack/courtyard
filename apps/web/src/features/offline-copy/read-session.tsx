@@ -20,7 +20,9 @@ export function ReadSession(props: { session: SessionDetail; offline: OfflineSes
   const { events } = offline;
   const turns = useMemo(() => (events === undefined ? undefined : turnsIn(events)), [events]);
   const header = (
-    <PageTitle above={<BackLink workspaceId={session.workspaceId} />}>{session.title}</PageTitle>
+    <PageTitle above={<BackLink workspaceId={session.workspaceId} button />}>
+      {session.title}
+    </PageTitle>
   );
   const footer = (
     <div className="pt-2 pb-3 md:pb-6">

@@ -1,6 +1,6 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 
-// Getting around (#492): the open workspace's latest sessions in the right rail, Home's Needs you
+// Getting around (#492, #521): a session's way back as a button, no sessions in the right rail, Home's Needs you
 // with everything waiting in every workspace and the mark's gold count, and a session's Next pill
 // to the next thing waiting. On the cover screen, the open workspace's tile opens its sessions.
 // All of it reads what the worker says waits on the owner.
@@ -69,7 +69,7 @@ test.describe("on a computer", () => {
     await expect(needsYou(page).getByRole("link", { name: new RegExp(pads.title) })).toHaveCount(0);
   });
 
-  test("the right rail lists the open workspace's latest sessions, marking those waiting", async ({
+  test("the right rail lists no sessions: it's Model, Skills, Settings and Talk (#521)", async ({
     page,
     request,
   }) => {
@@ -79,17 +79,27 @@ test.describe("on a computer", () => {
 
     await page.goto(`/workspaces/${workspace.id}/sessions/${shops.id}`);
 
-    const rail = page.getByRole("region", { name: `Latest in ${workspace.name}` });
-    await expect(rail.getByRole("link", { name: shops.title })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    const other = rail.getByRole("link", { name: pads.title });
-    await expect(other.getByRole("img", { name: "New reply" })).toBeVisible();
-    await other.click();
-    await expect(page.getByRole("heading", { level: 1, name: pads.title })).toBeVisible();
-    await rail.getByRole("link", { name: "All sessions" }).click();
-    await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.id}#sessions$`));
+    await expect(page.getByRole("heading", { level: 1, name: shops.title })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("link", { name: pads.title, exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "All sessions" })).toHaveCount(0);
+  });
+
+  test("a session's way back is a button, a full tap high, to its workspace (#521)", async ({
+    page,
+    request,
+  }) => {
+    const workspace = await madeWorkspace(request, "Garage");
+    const pads = await answered(request, workspace.id, "Brake pads");
+
+    await page.goto(`/workspaces/${workspace.id}/sessions/${pads.id}`);
+
+    const back = page.getByRole("link", { name: `Back to ${workspace.name}` });
+    await expect(back).toHaveText(workspace.name);
+    const box = await back.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(40);
+    await back.click();
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.id}$`));
   });
 
   test("a session's Next pill opens the next thing waiting elsewhere", async ({
