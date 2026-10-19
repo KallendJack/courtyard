@@ -269,6 +269,9 @@ test("the tabs appear as the workspace fills, and Home with nothing to break dow
   const quiet = page.getByText("A Thing with a photo and parts shows here, part by part.");
   await expect(quiet).toBeVisible();
   await expect(page.getByRole("link", { name: /^Your last question/ })).toHaveCount(0);
+  // With nothing to show, the box stays, to start a session.
+  await expect(messageBox(page)).toBeVisible();
+  await expect(messageBox(page)).toHaveAttribute("placeholder", "Talk or type to start a session…");
 
   await openTab(page, "Things");
   await expect(page.getByRole("region", { name: "Things" })).toContainText("Shelving");

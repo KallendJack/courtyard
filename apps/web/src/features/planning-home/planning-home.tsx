@@ -76,8 +76,9 @@ export type PlanningLoaded = {
  * part by part (#565)" and its Desktop and Cover boards). Its header: the name with its ⋯, the
  * workspace's photo top right, and pills for + New · History · Things · Docs, each tab once it has
  * something, with its count, by the address's hash. Home is a view of the workspace's main subject
- * (`HomeNow`), not a chat: the box that starts a new session is out of sight until Talk, + New or
- * a part's Ask about it opens it, and the latest session's next steps are in History. An empty
+ * (`HomeNow`), not a chat: while it shows a view, the box that starts a new session is out of
+ * sight until Talk, + New or a part's Ask about it opens it, and the latest session's next steps
+ * are in History. An empty
  * workspace shows only its name, one line and the box. Nothing on it is a warning or a nudge: a
  * planning workspace stays calm (AGENTS.md).
  */
@@ -177,6 +178,16 @@ export default function PlanningHome(props: {
   const homeNow = offline === undefined ? home : undefined;
   const latest = homeNow?.question ?? null;
   const photoThing = allThings.find((thing) => thing.slug === homeNow?.photo);
+  /**
+   * While Home shows a view, the box is out of sight until it's asked for: the view needs the room.
+   * With nothing to show, it stays, under Home's quiet line. Known from the page's Things before
+   * Home loads (a Thing with a photo and parts is a view, as the worker's `homeViews` has it), so
+   * the box never comes and goes as Home arrives (#283).
+   */
+  const showsView =
+    homeNow?.views !== undefined
+      ? homeNow.views.length > 0
+      : allThings.some((top) => top.photo && allThings.some((part) => part.partOf === top.slug));
   const changed = async () => {
     await loadKeptHome(workspace.id);
     await router.invalidate();
@@ -278,7 +289,7 @@ export default function PlanningHome(props: {
             providers={providers.data.providers}
             placeholder="Talk or type to start a session…"
             submitLabel="Start"
-            tucked={!empty}
+            tucked={showsView}
             {...(draft === undefined ? {} : { draft })}
             {...(skills.kind === "loaded"
               ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
