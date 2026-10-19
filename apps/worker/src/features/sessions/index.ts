@@ -3904,7 +3904,9 @@ export const createSessions = (options: {
           session: listed.id,
           text: asked.text,
           at: asked.at,
-          nextSteps: replies?.type === "suggested-replies" ? replies.replies : [],
+          // Under a finished answer only, as a session shows them: one tapped mid-answer would be
+          // added to it rather than replying to it.
+          nextSteps: replies?.type === "suggested-replies" && !listed.busy ? replies.replies : [],
           answering: listed.busy,
           model: asked.model,
           ...(asked.effort === undefined ? {} : { effort: asked.effort }),
