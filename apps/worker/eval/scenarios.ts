@@ -247,6 +247,13 @@ const SEARCHING_GYM: Pick<Scenario, "workspace" | "context"> = {
   },
 };
 
+/** A code workspace for the web search scenarios (#517). */
+const SEARCHING_SITE: Pick<Scenario, "workspace" | "mode" | "context"> = {
+  workspace: "Website",
+  mode: "code",
+  context: { facts: ["A static site built with Astro"] },
+};
+
 /** This month as a Thing's bought field starts with it today: `2026-10`. */
 const THIS_MONTH = new Date().toLocaleDateString("en-CA").slice(0, 7);
 
@@ -314,6 +321,30 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Roughly how many sets of squats a week should a beginner do for strength?",
+        expect: [],
+        searches: false,
+      },
+    ],
+  },
+  {
+    name: "search-code-library-release",
+    rule: "in a code workspace, a question about a library's latest release searches the web and lists sources (#517)",
+    ...SEARCHING_SITE,
+    turns: [
+      {
+        say: "What's the latest stable version of Astro, and what changed in it?",
+        expect: [],
+        searches: true,
+      },
+    ],
+  },
+  {
+    name: "search-code-not-for-code",
+    rule: "in a code workspace, a question about writing code is answered without searching the web (#517)",
+    ...SEARCHING_SITE,
+    turns: [
+      {
+        say: "In TypeScript, how do I type a function that takes either a string or a list of strings?",
         expect: [],
         searches: false,
       },

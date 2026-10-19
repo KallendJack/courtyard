@@ -1878,6 +1878,66 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("lets a helper search the web on a turn that offers it, under the same fetch rule, reported as its own (#517)", async () => {
+    const { worktree, code, reported } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [taskStarted("agent-a", "tool-1"), success],
+    });
+    await runTurn(claudeCode, { folder: worktree, code, framing: searchingFraming() });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    await call(options, {
+      name: "Agent",
+      input: { description: "Check Vitest's release", prompt: "Look.", subagent_type: "Explore" },
+    });
+    const fetch = (url: string, id: string) =>
+      call(options, {
+        name: "WebFetch",
+        input: { url, prompt: "Which version?" },
+        id,
+        helper: "agent-a",
+      });
+
+    const search = await call(options, {
+      name: "WebSearch",
+      input: { query: "Vitest latest release" },
+      id: "tool-2",
+      helper: "agent-a",
+    });
+    await postToolUse(options, {
+      name: "WebSearch",
+      input: { query: "Vitest latest release" },
+      response: searchResults("Vitest latest release", [
+        { title: "Releases | Vitest", url: "https://vitest.example/releases" },
+      ]),
+    });
+
+    expect(options.tools).toEqual(expect.arrayContaining(["Agent", "WebSearch", "WebFetch"]));
+    expect(search).toMatchObject({ permissionDecision: "allow" });
+    expect(await fetch("https://vitest.example/releases", "tool-3")).toMatchObject({
+      permissionDecision: "allow",
+    });
+    expect(await fetch("https://example.com/collect?q=courtyard", "tool-4")).toMatchObject({
+      permissionDecision: "deny",
+      permissionDecisionReason: await quotedInGuide("Only pages from this turn's search results"),
+    });
+    expect(reported).toEqual([
+      {
+        helper: "Check Vitest's release",
+        activity: { kind: "web-searched", query: "Vitest latest release" },
+      },
+      {
+        helper: "Check Vitest's release",
+        activity: {
+          kind: "page-read",
+          url: "https://vitest.example/releases",
+          site: "vitest.example",
+        },
+      },
+    ]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("refuses a helper starting helpers of its own, and one the worker couldn't start as the turn stopped", async () => {
     const { worktree, code } = await helpingSession();
     const stopped: CodeTurn = { ...code, helper: async () => undefined };
