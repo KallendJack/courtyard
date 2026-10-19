@@ -51,6 +51,7 @@ const FENCED_KINDS = new Map<string, FencedKind>([
   ["chart", { noun: "chart", load: () => import("./chart.tsx") }],
   ["mermaid", { noun: "diagram", load: () => import("./mermaid.tsx") }],
   ["product", { noun: "product", load: () => import("./product.tsx") }],
+  ["plan", { noun: "floor plan", load: () => import("./floor-plan.tsx") }],
 ]);
 
 /** The kind of block a fence is, by its language, when it's one Courtyard draws. */
@@ -59,6 +60,12 @@ export const fencedKind = (language: string | undefined) =>
 
 /** Whether the block being drawn is the last of a streaming answer, so it may still be arriving. */
 export const Arriving = createContext(false);
+
+/**
+ * Whether the block is drawn as a view on a workspace's Home (#257), in a block whose size the
+ * layout sets, rather than in an answer or a document.
+ */
+export const OnHome = createContext(false);
 
 /** The drawings loaded so far, so later blocks draw at once. */
 const loaded = new Map<FencedKind, Drawing>();

@@ -7,6 +7,7 @@ import {
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody } from "../../lib/http.ts";
 import type { Result } from "../../lib/result.ts";
+import { planViews } from "../floor-plans/index.ts";
 import type { PlanningFilesTarget } from "../planning-files/index.ts";
 import { workspaceIn } from "../planning-files/routes.ts";
 import { readThings } from "../things/index.ts";
@@ -32,9 +33,11 @@ export const planningHomeRoutes = (target: {
       return { refused: apiError(c, { status: 500, error: "Its sessions can't be read." }) };
     }
     const things = read.value.things.map(({ summary }) => summary);
+    // Documents that can't be read leave Home without plans, never without the rest.
+    const plans = await planViews({ contextDir, workspaceId });
     return {
       home: {
-        ...homeOf(things, await picks.of(workspaceId)),
+        ...homeOf(things, await picks.of(workspaceId), plans.ok ? plans.value : []),
         question: question.value,
       } satisfies PlanningHome,
     };

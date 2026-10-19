@@ -164,6 +164,7 @@ import {
   saveNewDocument,
   undoDocumentChange,
 } from "../documents/index.ts";
+import { savePlansFrom } from "../floor-plans/index.ts";
 import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
@@ -1873,6 +1874,8 @@ export const createSessions = (options: {
         message: "Part of the answer couldn't be saved, so it stopped.",
       };
     }
+    // Each room's plan in a finished answer is saved straight away (#257), its note under it.
+    if (!failure && !stopper.signal.aborted && !turn.coding) await savePlans(turn);
 
     // How the turn ended is decided now: a stop arriving from here on finds nothing to stop, so
     // it can't turn a completed or failed turn into a stopped one.
@@ -1954,6 +1957,27 @@ export const createSessions = (options: {
           console.error(`Session ${turn.id}: titling it crashed`, error),
         ),
       );
+    }
+  };
+
+  /**
+   * Saves each room's plan in the answer just written as that room's document (#257), recorded
+   * like a document the model saved, so its note shows under the answer with Undo.
+   */
+  const savePlans = async (turn: { id: SessionId; workspaceId: WorkspaceId }) => {
+    const events = await readEvents(turn.id);
+    if (!events.ok) return;
+    const asked = events.value.findLastIndex((event) => event.type === "owner-message");
+    const answer = events.value
+      .slice(asked + 1)
+      .map((event) => (event.type === "text-delta" ? event.text : ""))
+      .join("");
+    for (const { save, change } of await savePlansFrom(targetOf(turn), answer)) {
+      await append(turn.id, {
+        type: "document-saved",
+        save,
+        ...(change === undefined ? {} : { change }),
+      });
     }
   };
 

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { DocumentSlug } from "./documents.ts";
+import { FloorPlan } from "./floor-plan.ts";
 import { Effort, ModelRef, SessionId } from "./session.ts";
 import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 
@@ -6,10 +8,13 @@ import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 // with the owner's last question above it and the next steps under it. Each view is general, filled
 // from any workspace's Things, never made for one workspace.
 
-/** A view on Home, by what it shows: `wanted`, or `picture:<slug>` for that Thing's photo. */
+/**
+ * A view on Home, by what it shows: `wanted`, `picture:<slug>` for that Thing's photo, or
+ * `plan:<slug>` for the floor plan saved as that document.
+ */
 export const HomeViewId = z
   .string()
-  .regex(/^(?:wanted|picture:[a-z0-9]+(?:-[a-z0-9]+)*)$/)
+  .regex(/^(?:wanted|(?:picture|plan):[a-z0-9]+(?:-[a-z0-9]+)*)$/)
   .brand<"HomeViewId">();
 export type HomeViewId = z.infer<typeof HomeViewId>;
 
@@ -45,11 +50,19 @@ const viewBase = {
 };
 
 /**
- * One of Home's views: a Thing's photo with its parts pinned, flagged first, then the rest; or
- * the wanted list, from the Things wanted or to replace. Floor plans, renders and phases come
- * with their own issues, as further kinds here.
+ * One of Home's views: a Thing's photo with its parts pinned, flagged first, then the rest; a
+ * room's floor plan, as last drawn in an answer (#257); or the wanted list, from the Things wanted
+ * or to replace. Renders and phases come with their own issues, as further kinds here.
  */
 export const HomeView = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("plan"),
+    id: HomeViewId,
+    ...viewBase,
+    /** The document it's saved as. */
+    document: DocumentSlug,
+    plan: FloorPlan,
+  }),
   z.object({
     kind: z.literal("picture"),
     id: HomeViewId,
