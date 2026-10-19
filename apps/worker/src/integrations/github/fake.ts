@@ -483,6 +483,38 @@ export const createFakeGitHub = (
           })),
       );
     },
+    roadmap: async (accessToken, { repo }) => {
+      const refused = refusedRead(accessToken);
+      if (refused !== undefined) return refused;
+      issuesAsked += 1;
+      return ok(
+        (milestones.get(repo) ?? []).map((milestone) => ({
+          ...milestone,
+          issues: (issues.get(repo) ?? [])
+            .filter((issue) => issue.milestone === milestone.title)
+            .map((issue) => {
+              const open = issue.state === "open";
+              return {
+                number: issue.number,
+                title: issue.title,
+                url: `https://github.com/${repo}/issues/${issue.number}`,
+                milestone: milestone.title,
+                milestoneDescription: milestone.description,
+                body: issue.body ?? "",
+                comments: open ? [...issue.comments] : [],
+                blockedBy: open
+                  ? (issue.blockedBy ?? []).flatMap((number) => {
+                      const blocker = issueIn(repo, number);
+                      return blocker?.state === "open" ? [blocker.title] : [];
+                    })
+                  : [],
+                labels: [...(issue.labels ?? ["ready-for-agent"])],
+                closed: !open,
+              };
+            }),
+        })),
+      );
+    },
     openPullRequestTexts: async (accessToken, { repo }) =>
       refusedRead(accessToken) ??
       ok(

@@ -46,6 +46,7 @@ export {
   BuildIssue,
   buildable,
   GitHubLink,
+  GitHubUnread,
   LEAD_BUILDERS,
   LEAD_WINDOW_BY_DEFAULT,
   LeadBuilder,
@@ -62,6 +63,10 @@ export {
   PaperFile,
   PaperFileList,
   PaperLink,
+  Roadmap,
+  RoadmapIssue,
+  RoadmapMilestone,
+  RoadmapState,
   WorkspaceConnections,
   WorkspaceMain,
 } from "./lib/code-home.ts";

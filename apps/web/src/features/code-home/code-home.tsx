@@ -33,6 +33,7 @@ import { ConnectionsSheet } from "./connections.tsx";
 import { MainRow } from "./main-row.tsx";
 import { NeedsYou, needsOf } from "./needs-you.tsx";
 import { NextUp } from "./next-up.tsx";
+import { Roadmap } from "./roadmap.tsx";
 import { Running } from "./running.tsx";
 
 // The Home's own stylesheet (code-home.css), added once, when a code workspace's page first opens.
@@ -57,10 +58,11 @@ function GitHubNotice() {
 }
 
 /** The tabs a code workspace's page has, by their hash; Home has none (#301). */
-const TABS = { sessions: "Sessions", prs: "PRs" } as const;
+const TABS = { roadmap: "Roadmap", sessions: "Sessions", prs: "PRs" } as const;
 type Tab = keyof typeof TABS | "";
 
-const tabIn = (hash: string): Tab => (hash === "sessions" || hash === "prs" ? hash : "");
+const tabIn = (hash: string): Tab =>
+  hash === "roadmap" || hash === "sessions" || hash === "prs" ? hash : "";
 
 /** Each workspace's connections, setup check and Next up as last known, for the tab's lifetime. */
 const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
@@ -75,7 +77,8 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
- * cover screen): its connections line (#308), its tabs (Home · Sessions · PRs), and on Home, in a
+ * cover screen): its connections line (#308), its tabs (Home · Roadmap · Sessions · PRs; the
+ * Roadmap, #532, its milestones and their issues), and on Home, in a
  * fixed order, Needs you, Running, Next up, Main, then the message box at the foot. From a tablet
  * up it's exactly the screen tall and never scrolls (#335): the blocks share the height left, each
  * keeping its place, empty or not (#283), and scroll inside their cards. Its one line, What it's
@@ -174,6 +177,8 @@ export default function CodeHome(props: {
     (open === undefined && tab === "prs");
   const tabs: WorkspaceTab[] = [
     { hash: "", label: "Home" },
+    // Every code workspace has its Roadmap (#532): its milestones on GitHub, or why there are none.
+    { hash: "roadmap", label: TABS.roadmap },
     ...(list.sessions.length > 0
       ? [{ hash: "sessions", label: TABS.sessions, count: list.sessions.length }]
       : []),
@@ -182,8 +187,6 @@ export default function CodeHome(props: {
       ? { hash: "prs", label: TABS.prs, count: open === undefined ? "unknown" : pulls.length }
       : { hash: "prs", label: TABS.prs, count: 0, held: true },
   ];
-  // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
-  const showsTabs = list.sessions.length > 0 || hasPulls || open === undefined;
   const chosen = tabs.some((each) => each.hash === tab && each.held !== true) ? tab : "";
 
   // Its own classes apply inside each part (code-home.css), but not to the page's title around
@@ -219,15 +222,11 @@ export default function CodeHome(props: {
     <>
       {props.header({
         under,
-        ...(showsTabs
-          ? {
-              tabs: (
-                <div data-code-home="">
-                  <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
-                </div>
-              ),
-            }
-          : {}),
+        tabs: (
+          <div data-code-home="">
+            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+          </div>
+        ),
       })}
       {/* With the connections line, so it never comes on its own and pushes the rest down. */}
       {connections?.github.kind === "signed-out" && (
@@ -272,7 +271,14 @@ export default function CodeHome(props: {
     // lists scroll inside it, and on Home the blocks share it, their rows scrolling in their cards.
     <Page wide fill header={header} footer={footer}>
       <div data-code-home="">
-        {chosen === "sessions" ? (
+        {chosen === "roadmap" ? (
+          <Roadmap
+            workspaceId={workspace.id}
+            paperFileId={
+              connections?.paper.kind === "connected" ? connections.paper.fileId : undefined
+            }
+          />
+        ) : chosen === "sessions" ? (
           <Scroller from="tablet" className="mt-4 flex flex-col gap-4 md:min-h-0 md:flex-1">
             <SessionLinks list={list} mode="code" />
           </Scroller>

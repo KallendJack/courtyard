@@ -75,6 +75,13 @@ export type GitHubApi = {
     find: { readonly repo: string; readonly label: string; readonly forBuild: boolean },
   ) => Promise<Result<readonly FoundIssue[], ReadRefused>>;
   /**
+   * `repo`'s open milestones, each with every issue in it, open and closed (#532's Roadmap).
+   */
+  readonly roadmap: (
+    accessToken: string,
+    find: { readonly repo: string },
+  ) => Promise<Result<readonly FoundRoadmapMilestone[], ReadRefused>>;
+  /**
    * The title and description of each open pull request in `repo` (#301): what says which issues
    * they close. Lighter than `openPullRequests`, which asks for each one's checks.
    */
@@ -253,6 +260,20 @@ export type FoundMilestone = {
   readonly description: string;
 };
 
+/**
+ * An issue in an open milestone (#532), open or closed, with its labels; an open one has its
+ * comments and the open issues it's blocked by, as `openIssues` gives them asked `forBuild`.
+ */
+export type FoundMilestoneIssue = FoundIssue & {
+  readonly labels: readonly string[];
+  readonly closed: boolean;
+};
+
+/** An open milestone and every issue in it (#532). */
+export type FoundRoadmapMilestone = FoundMilestone & {
+  readonly issues: readonly FoundMilestoneIssue[];
+};
+
 /** One check on a pull request's latest commit, and how it's going. */
 export type FoundCheck = {
   readonly name: string;
@@ -414,6 +435,9 @@ const Issues = z.array(
     pull_request: z.unknown().optional(),
     /** How many open issues it's blocked by (#377); a GitHub without dependencies leaves it out. */
     issue_dependencies_summary: z.object({ blocked_by: z.number().int() }).optional(),
+    /** Its labels and whether it's closed, as the Roadmap reads them (#532). */
+    labels: z.array(z.union([z.string(), z.object({ name: z.string() })])).optional(),
+    state: z.string().optional(),
   }),
 );
 /** The issues one is blocked by (#377), open and closed, in any repository. */
@@ -690,6 +714,47 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
       if (error instanceof RateLimited) throw error;
       return [];
     }
+  };
+
+  /**
+   * Issues `listed` in `repo` as Courtyard has them, asked `forBuild` with their comments and the
+   * open issues they're blocked by: only one with comments is asked for them, and one blocked for
+   * its blockers, a few at a time.
+   */
+  const foundIssues = async (
+    token: string,
+    find: { repo: string; listed: z.infer<typeof Issues>; forBuild: boolean },
+  ) => {
+    const { repo, listed, forBuild } = find;
+    const found: FoundIssue[] = [];
+    for (let at = 0; at < listed.length; at += COMMENTS_AT_ONCE) {
+      const some = await Promise.all(
+        listed.slice(at, at + COMMENTS_AT_ONCE).map(async (issue) => ({
+          number: issue.number,
+          title: issue.title,
+          url: issue.html_url,
+          milestone: issue.milestone?.title ?? null,
+          milestoneDescription: issue.milestone?.description ?? null,
+          body: issue.body ?? "",
+          comments:
+            issue.comments === 0 || !forBuild
+              ? []
+              : (
+                  await apiGet(
+                    token,
+                    `/repos/${repo}/issues/${issue.number}/comments?per_page=${PAGE}`,
+                    Comments,
+                  )
+                ).map((comment) => comment.body ?? ""),
+          blockedBy:
+            (issue.issue_dependencies_summary?.blocked_by ?? 0) === 0 || !forBuild
+              ? []
+              : await openBlockersOf(token, `${repo}/issues/${issue.number}`),
+        })),
+      );
+      found.push(...some);
+    }
+    return found;
   };
 
   /**
@@ -1055,39 +1120,69 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
           listed.push(...issues.filter((issue) => issue.pull_request === undefined));
           if (issues.length < PAGE) break;
         }
-        // Only an issue with comments is asked for them, and one blocked for its blockers, a few
-        // at a time.
-        const found: FoundIssue[] = [];
-        for (let at = 0; at < listed.length; at += COMMENTS_AT_ONCE) {
-          const some = await Promise.all(
-            listed.slice(at, at + COMMENTS_AT_ONCE).map(async (issue) => ({
-              number: issue.number,
-              title: issue.title,
-              url: issue.html_url,
-              milestone: issue.milestone?.title ?? null,
-              milestoneDescription: issue.milestone?.description ?? null,
-              body: issue.body ?? "",
-              comments:
-                issue.comments === 0 || !find.forBuild
-                  ? []
-                  : (
-                      await apiGet(
-                        accessToken,
-                        `/repos/${repo.data}/issues/${issue.number}/comments?per_page=${PAGE}`,
-                        Comments,
-                      )
-                    ).map((comment) => comment.body ?? ""),
-              blockedBy:
-                (issue.issue_dependencies_summary?.blocked_by ?? 0) === 0 || !find.forBuild
-                  ? []
-                  : await openBlockersOf(accessToken, `${repo.data}/issues/${issue.number}`),
-            })),
-          );
-          found.push(...some);
+        return ok(
+          await foundIssues(accessToken, { repo: repo.data, listed, forBuild: find.forBuild }),
+        );
+      } catch (error) {
+        return err(refusedRead(error, "GitHub couldn't be asked for the repository's issues."));
+      }
+    },
+
+    roadmap: async (accessToken, find) => {
+      const repo = RepoName.safeParse(find.repo);
+      if (!repo.success)
+        return err({ kind: "failed", message: "That isn't a repository on GitHub." });
+      try {
+        const milestones = await apiGet(
+          accessToken,
+          `/repos/${repo.data}/milestones?state=open&per_page=${PAGE}`,
+          Milestones,
+        );
+        const found: FoundRoadmapMilestone[] = [];
+        for (const milestone of milestones) {
+          const listed: z.infer<typeof Issues> = [];
+          for (let page = 1; page <= FILE_PAGES; page += 1) {
+            const issues = await apiGet(
+              accessToken,
+              `/repos/${repo.data}/issues?state=all&milestone=${milestone.number}&per_page=${PAGE}&page=${page}`,
+              Issues,
+            );
+            listed.push(...issues.filter((issue) => issue.pull_request === undefined));
+            if (issues.length < PAGE) break;
+          }
+          // Only an open issue is asked for its comments and blockers: a closed one is done.
+          const open = listed.filter((issue) => issue.state !== "closed");
+          const read = await foundIssues(accessToken, {
+            repo: repo.data,
+            listed: open,
+            forBuild: true,
+          });
+          const closed = await foundIssues(accessToken, {
+            repo: repo.data,
+            listed: listed.filter((issue) => issue.state === "closed"),
+            forBuild: false,
+          });
+          const labelsOf = (number: number) =>
+            (listed.find((issue) => issue.number === number)?.labels ?? []).map((label) =>
+              typeof label === "string" ? label : label.name,
+            );
+          found.push({
+            number: milestone.number,
+            title: milestone.title,
+            description: milestone.description ?? "",
+            issues: [
+              ...read.map((issue) => ({ ...issue, labels: labelsOf(issue.number), closed: false })),
+              ...closed.map((issue) => ({
+                ...issue,
+                labels: labelsOf(issue.number),
+                closed: true,
+              })),
+            ],
+          });
         }
         return ok(found);
       } catch (error) {
-        return err(refusedRead(error, "GitHub couldn't be asked for the repository's issues."));
+        return err(refusedRead(error, "GitHub couldn't be asked for the repository's milestones."));
       }
     },
 
