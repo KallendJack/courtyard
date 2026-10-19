@@ -19,6 +19,14 @@ export const elapsedWords = (ms: number) => {
     : `${Math.floor(minutes / 60)}:${two(minutes % 60)}:${two(seconds % 60)}`;
 };
 
+/** How fresh something is, in days: "today", "yesterday" or "6 days ago" (a price checked, #245). */
+export const daysAgoWords = (iso: string, now = new Date()) => {
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.max(0, Math.round((day(now) - day(new Date(iso))) / 86_400_000));
+  if (daysAgo === 0) return "today";
+  return daysAgo === 1 ? "yesterday" : `${daysAgo} days ago`;
+};
+
 /** When something happened, the way people say it: "Today, 18:42", "Yesterday" or "2 Oct". */
 export const describeWhen = (iso: string, now = new Date()) => {
   const date = new Date(iso);

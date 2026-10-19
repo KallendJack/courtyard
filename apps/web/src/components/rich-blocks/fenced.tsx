@@ -50,6 +50,7 @@ type FencedKind = {
 const FENCED_KINDS = new Map<string, FencedKind>([
   ["chart", { noun: "chart", load: () => import("./chart.tsx") }],
   ["mermaid", { noun: "diagram", load: () => import("./mermaid.tsx") }],
+  ["product", { noun: "product", load: () => import("./product.tsx") }],
 ]);
 
 /** The kind of block a fence is, by its language, when it's one Courtyard draws. */

@@ -16,8 +16,10 @@ import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
 import { err, ok, type Result } from "../lib/result.ts";
 import {
+  BLOCK_SHOP_TOOL_NAME,
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
+  PICKS_TOOL_NAME,
   PREVIEW_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
@@ -194,6 +196,67 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     return [input];
   });
 
+const WANTED_LINE = /^\[(W\d+)\] ([^,]+),/;
+const BLOCKED_SHOPS = /^Leave out these shops, which the owner blocked: (.+)\.$/;
+
+/** The shops the fake picks from, in order, leaving out any the owner blocked. */
+const FAKE_SHOPS = ["Tredz", "Halfords", "Wiggle", "Sigma"];
+
+/**
+ * The picks a price check's message gets from the fake (#245): for each Thing it lists ("[W1]
+ * Lights, to get"), a best-value pick at £55 (usually £72), a cheapest at £38 and one worth
+ * stretching for at £150, from the first shops the owner hasn't blocked, in that order.
+ */
+const scriptedPicks = (message: string): Record<string, unknown>[] => {
+  const lines = message.split("\n").map((line) => line.trim());
+  const blocked = lines
+    .flatMap((line) => BLOCKED_SHOPS.exec(line)?.[1]?.split(", ") ?? [])
+    .map((shop) => shop.toLowerCase());
+  const shops = FAKE_SHOPS.filter((shop) => !blocked.includes(shop.toLowerCase()));
+  return lines.flatMap((line) => {
+    const [, label, name] = WANTED_LINE.exec(line) ?? [];
+    if (label === undefined || name === undefined) return [];
+    const page = (shop: string) =>
+      `https://${shop.toLowerCase()}.example/${name.toLowerCase().replace(/\W+/g, "-")}`;
+    const kinds = [
+      {
+        kind: "best-value",
+        words: "best value",
+        why: "Does the job well for the money",
+        price: 55,
+      },
+      { kind: "cheapest", words: "cheapest", why: "Does the job, no more", price: 38 },
+      { kind: "stretch", words: "worth stretching for", why: "Lasts twice as long", price: 150 },
+    ];
+    const picks = kinds.flatMap(({ kind, words, why, price }, at) => {
+      const shop = shops[at];
+      return shop === undefined
+        ? []
+        : [
+            {
+              kind,
+              product: `${name}, ${words}`,
+              why,
+              price,
+              ...(kind === "best-value" ? { usual_price: 72 } : {}),
+              shop,
+              url: page(shop),
+            },
+          ];
+    });
+    return [{ thing: label, picks }];
+  });
+};
+
+const BLOCK_SHOP = /^block shop: ([^|]+?)(?: \| (.+))?$/i;
+
+/** The shops a message scripts blocking (#245), one per line: "block shop: Tredz | not from Tredz". */
+const scriptedBlocks = (message: string): Record<string, string>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, shop, said] = BLOCK_SHOP.exec(line.trim()) ?? [];
+    return shop === undefined ? [] : [{ shop, ...(said === undefined ? {} : { said }) }];
+  });
+
 const PREVIEW_SHOT = /^preview screenshot: (\S+)(?: (\S+))?$/i;
 
 /**
@@ -246,8 +309,10 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
+  [BLOCK_SHOP_TOOL_NAME, scriptedBlocks],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
+  [PICKS_TOOL_NAME, scriptedPicks],
 ];
 
 const SEARCH = /^search the web for: (.+)$/i;
@@ -762,6 +827,8 @@ export const createFakeProvider = (
   return {
     id,
     capabilities,
+    // Its own model at Low, so a price check's model and effort can be seen (#245).
+    errand: { model: ModelId.parse("echo"), effort: Effort.parse("low") },
     ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     ...(plan === undefined ? {} : { readUsage: async () => plan.reading() }),
     status: async () => ({

@@ -94,8 +94,9 @@ export type CourtyardTool = {
 /**
  * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
  * the save tool (ADR 0013), the document and Things tools (ADR 0020), the use skill tool (ADR 0016),
- * the suggest replies tool (ADR 0017), a code workspace's Lead's build order tool (#347) and a
- * code session's preview screenshot tool (#183).
+ * the suggest replies tool (ADR 0017), a code workspace's Lead's build order tool (#347), a
+ * code session's preview screenshot tool (#183), and the wanted list's picks tool, which only its
+ * price checks offer, and block shop tool (#245).
  */
 export type TurnToolName =
   | "save_to_context"
@@ -104,7 +105,9 @@ export type TurnToolName =
   | "use_skill"
   | "suggest_replies"
   | "build_order"
-  | "preview_screenshot";
+  | "preview_screenshot"
+  | "save_picks"
+  | "block_shop";
 
 /** One of Courtyard's tools that a turn can offer. */
 export type TurnTool = CourtyardTool & { readonly name: TurnToolName };
@@ -416,6 +419,11 @@ export type Provider = {
    * default; without one, its first model at its own effort.
    */
   readonly startingDefault?: ModelDefault;
+  /**
+   * The cheap model and effort it runs a short background errand on (#245), such as checking the
+   * wanted list's prices on the web; a provider without one runs none.
+   */
+  readonly errand?: ModelDefault;
   readonly status: () => Promise<ProviderStatus>;
   readonly runTurn: (input: TurnInput) => Promise<Result<null, FailureReason>>;
   /** Answers a one-off question: the answer unparsed, or why there's none. */

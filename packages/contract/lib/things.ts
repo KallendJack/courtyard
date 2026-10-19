@@ -45,7 +45,15 @@ export const ThingBought = z
 export const ThingPhotoPath = z.string().regex(/^photos\/[a-z0-9]+(?:-[a-z0-9]+)*\.jpg$/);
 
 /** The fields a Thing may have besides its name and status, all free text but bought. */
-export const THING_DETAILS = ["brand", "bought", "price", "condition", "size", "where"] as const;
+export const THING_DETAILS = [
+  "brand",
+  "bought",
+  "price",
+  "shop",
+  "condition",
+  "size",
+  "where",
+] as const;
 export type ThingDetailName = (typeof THING_DETAILS)[number];
 
 /**
@@ -86,6 +94,8 @@ export const ThingFields = z
     brand: oneLine(THING_FIELD_MAX_CHARACTERS, "brand").optional(),
     bought: ThingBought.optional(),
     price: oneLine(THING_FIELD_MAX_CHARACTERS, "price").optional(),
+    /** Where it was bought (#245), such as Tredz. */
+    shop: oneLine(THING_FIELD_MAX_CHARACTERS, "shop").optional(),
     condition: oneLine(THING_FIELD_MAX_CHARACTERS, "condition").optional(),
     size: oneLine(THING_FIELD_MAX_CHARACTERS, "size").optional(),
     where: oneLine(THING_FIELD_MAX_CHARACTERS, "where").optional(),
@@ -164,6 +174,7 @@ export const ThingForm = z.object({
   brand: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "brand")),
   bought: blankable(ThingBought),
   price: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "price")),
+  shop: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "shop")),
   condition: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "condition")),
   size: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "size")),
   where: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "where")),
@@ -215,6 +226,7 @@ export const ThingSave = z.object({
       brand: z.string().nullable(),
       bought: z.string().nullable(),
       price: z.string().nullable(),
+      shop: z.string().nullable(),
       condition: z.string().nullable(),
       size: z.string().nullable(),
       where: z.string().nullable(),

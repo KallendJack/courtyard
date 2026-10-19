@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  BlockedShop,
   type ContextFile,
   type NewWorkspace,
   SessionId,
@@ -99,6 +100,8 @@ const WorkspaceConfig = z
     preview: z.string().trim().min(1).optional(),
     /** The icon the owner chose, or the one suggested when it was added (#210). */
     icon: z.optional(WorkspaceIcon),
+    /** The shops a planning workspace's owner said not to use for its wanted list (#245). */
+    blockedShops: z.array(BlockedShop).optional(),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
     message: "is required for a code workspace",
@@ -117,6 +120,7 @@ type Config =
       readonly allowlist?: AllowlistSettings;
       readonly paper?: PaperSettings;
       readonly preview?: string;
+      readonly blockedShops?: readonly BlockedShop[];
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -138,6 +142,8 @@ export type Workspace = {
   readonly paper: PaperSettings | null;
   /** The command a code workspace's Start preview runs (#183), or `null` until the owner confirms one. */
   readonly preview: string | null;
+  /** The shops its owner blocked for the wanted list (#245): none in a code workspace. */
+  readonly blockedShops: readonly BlockedShop[];
 };
 
 /** Why a workspace couldn't be read, added or changed. */
@@ -174,10 +180,12 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, description, icon, repoPath, allowlist, connections, preview } = parsed.data;
+  const { name, mode, description, icon, repoPath, allowlist, connections, preview, blockedShops } =
+    parsed.data;
   return {
     kind: "read",
     mode,
+    ...(blockedShops === undefined ? {} : { blockedShops }),
     ...(name === undefined ? {} : { name }),
     ...(description === undefined ? {} : { description }),
     ...(icon === undefined ? {} : { icon }),
@@ -232,6 +240,7 @@ const readWorkspace = async (
     allowlist: valid?.allowlist ?? { add: [], remove: [], always: [] },
     paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
     preview: valid?.mode === "code" ? (valid.preview ?? null) : null,
+    blockedShops: code ? [] : (valid?.blockedShops ?? []),
   });
 };
 
@@ -810,6 +819,64 @@ export const removeAllowed = (
 ): Promise<Result<Workspace, WorkspaceError>> =>
   changeAllowedAlways(contextDir, removing.id, (entries) =>
     entries.flatMap(({ entry, read }) => (read?.command === removing.command ? [] : [entry])),
+  );
+
+const sameShop = (a: string, b: string) =>
+  a.localeCompare(b, "en-GB", { sensitivity: "base" }) === 0;
+
+/**
+ * Changes the shops a planning workspace's owner blocked for its wanted list (#245), kept in its
+ * config beside whatever else is there: `change` makes the new list from the one on disk, whose
+ * entries it can't read kept as they are. Refuses a code workspace, and a config that was ignored.
+ */
+const changeBlockedShops = async (
+  contextDir: string,
+  id: string,
+  change: (
+    blocked: readonly { readonly entry: unknown; readonly read: BlockedShop | undefined }[],
+  ) => readonly unknown[],
+): Promise<Result<Workspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, id);
+  if (!workspace.ok) return workspace;
+  const { summary } = workspace.value;
+  if (summary.configProblem !== undefined) {
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  if (summary.mode !== "planning") {
+    return err({ kind: "invalid", message: "Only a planning workspace keeps a wanted list." });
+  }
+  const kept = await keepInConfig(workspace.value, (config) => {
+    const was = z.array(z.unknown()).safeParse(config.blockedShops);
+    const entries = (was.success ? was.data : []).map((entry) => {
+      const read = BlockedShop.safeParse(entry);
+      return { entry, read: read.success ? read.data : undefined };
+    });
+    return { blockedShops: change(entries) };
+  });
+  if (!kept.ok) return kept;
+  return readWorkspace(contextDir, summary.id);
+};
+
+/** Blocks a shop for a planning workspace's wanted list (#245). One blocked already stays as it was. */
+export const blockShop = (
+  contextDir: string,
+  blocking: { id: string; blocked: BlockedShop },
+): Promise<Result<Workspace, WorkspaceError>> =>
+  changeBlockedShops(contextDir, blocking.id, (entries) =>
+    entries.some(({ read }) => read !== undefined && sameShop(read.shop, blocking.blocked.shop))
+      ? entries.map(({ entry }) => entry)
+      : [...entries.map(({ entry }) => entry), blocking.blocked],
+  );
+
+/** Unblocks a shop, by its name, so the next price check can pick from it again. */
+export const unblockShop = (
+  contextDir: string,
+  unblocking: { id: string; shop: string },
+): Promise<Result<Workspace, WorkspaceError>> =>
+  changeBlockedShops(contextDir, unblocking.id, (entries) =>
+    entries.flatMap(({ entry, read }) =>
+      read !== undefined && sameShop(read.shop, unblocking.shop) ? [] : [entry],
+    ),
   );
 
 /**
