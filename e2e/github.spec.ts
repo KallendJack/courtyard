@@ -1457,6 +1457,51 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
+    // Owner, 2026-10-18: GitHub's limit ran out and Next up said Nothing ready to build (#519;
+    // Paper, "Tablet · Code Home: Next up can't reach GitHub").
+    test("when GitHub refuses the read, Next up keeps the last list, says why and as of when, and doesn't move", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const { nextUp } = blocks(page);
+      await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      const before = await nextUp.boundingBox();
+      await page.route("**/api/workspaces/workbench/next-up", async (route) => {
+        const response = await route.fetch();
+        const { issues } = (await response.json()) as { issues: unknown[] };
+        const unread = {
+          kind: "rate-limited",
+          backAt: "2026-10-18T22:13:00.000Z",
+          asOf: "2026-10-18T21:52:00.000Z",
+        };
+        await route.fulfill({ response, json: { issues, unread } });
+      });
+      await page.goto(HOME);
+
+      await expect(nextUp.getByRole("status")).toHaveText(
+        /^GitHub's limit is used up · back at \d{1,2}:\d{2}/,
+      );
+      await expect(nextUp).toContainText(/As of \d{1,2}:\d{2}/);
+      await expect(nextUp).not.toContainText("Nothing ready to build");
+      await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+      expect(await nextUp.boundingBox()).toEqual(before);
+      await shot(page, "desktop-home-github-refused");
+
+      // With nothing known, the line takes the empty line's place.
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await page.route("**/api/workspaces/workbench/next-up", (route) =>
+        route.fulfill({ json: { issues: [], unread: { kind: "unreachable", asOf: null } } }),
+      );
+      await page.goto(HOME);
+      await expect(nextUp.getByRole("status")).toHaveText("Can't reach GitHub");
+      await expect(nextUp).not.toContainText("Nothing ready to build");
+      await expect(nextUp).not.toContainText("As of");
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
     // Owner rule (2026-10-12): nothing jumps in late. What loads after the page shows the last
     // answer known at once on a revisit, asked for again quietly.
     test("coming back to a code workspace shows its pull requests at once, while they're asked for again", async ({

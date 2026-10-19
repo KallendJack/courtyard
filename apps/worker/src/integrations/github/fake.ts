@@ -12,6 +12,7 @@ import type {
   FoundRepo,
   FoundWorkflow,
   GitHubApi,
+  ReadRefused,
   SignInEnd,
   UserToken,
 } from "./api.ts";
@@ -283,6 +284,15 @@ export const createFakeGitHub = (
   /** The token works now; else GitHub's refusal. */
   const refusedToken = (accessToken: string) =>
     accessToken === current?.accessToken ? undefined : err("That token doesn't work.");
+  /** How Next up's reads are refused while a test says (#519): none unless it does. */
+  let reads: ReadRefused | undefined;
+  /** Next up's read answers now; else GitHub's refusal (#519). */
+  const refusedRead = (accessToken: string) =>
+    accessToken !== current?.accessToken
+      ? err({ kind: "failed", message: "That token doesn't work." } as const)
+      : reads === undefined
+        ? undefined
+        : err(reads);
   const latestFor = (find: { repo: string; branch: string }) =>
     pulls.findLast((pull) => pull.repo === find.repo && pull.branch === find.branch);
   /** A pull request as GitHub gives it, without what only the fake keeps. */
@@ -444,7 +454,7 @@ export const createFakeGitHub = (
     pullRequestFiles: async (accessToken, { number }) =>
       refusedToken(accessToken) ?? ok(pulls[pullNumbered(number)]?.files ?? []),
     openIssues: async (accessToken, { repo, label, forBuild }) => {
-      const refused = refusedToken(accessToken);
+      const refused = refusedRead(accessToken);
       if (refused !== undefined) return refused;
       issuesAsked += 1;
       return ok(
@@ -474,7 +484,7 @@ export const createFakeGitHub = (
       );
     },
     openPullRequestTexts: async (accessToken, { repo }) =>
-      refusedToken(accessToken) ??
+      refusedRead(accessToken) ??
       ok(
         pulls
           .filter((pull) => pull.repo === repo && pull.state === "open")
@@ -720,6 +730,18 @@ export const createFakeGitHub = (
     },
     /** How many times the repositories' issues were asked for. */
     issuesAsked: () => issuesAsked,
+    /** GitHub's hourly allowance is used up until `backAt` (#519): Next up's reads are refused. */
+    limitUntil: (backAt: string) => {
+      reads = { kind: "rate-limited", backAt };
+    },
+    /** Next up's reads fail some other way (#519), GitHub down, say. */
+    failReads: () => {
+      reads = { kind: "failed", message: "GitHub couldn't be asked for the repository's issues." };
+    },
+    /** Next up's reads are answered again. */
+    answerReads: () => {
+      reads = undefined;
+    },
     /** The number of the latest pull request from `branch`, if any. */
     pullRequestFrom: (branch: string) => pulls.findLast((pull) => pull.branch === branch)?.number,
   };

@@ -82,7 +82,25 @@ export const buildable = (issue: NextUpIssue) => issue.ready && issue.after === 
  * A code workspace's Next up (#301): its unclaimed ready issues and every one that needs grilling
  * first (#363, #463), in milestone order.
  */
-export const NextUp = z.object({ issues: z.array(NextUpIssue) });
+export const NextUp = z.object({
+  issues: z.array(NextUpIssue),
+  /**
+   * Why GitHub couldn't be read just now (#519), when it couldn't: `issues` are then the last
+   * known, read `asOf` (`null` when none is known yet).
+   */
+  unread: z.optional(
+    z.discriminatedUnion("kind", [
+      /** GitHub's hourly allowance is used up, until `backAt`. */
+      z.object({
+        kind: z.literal("rate-limited"),
+        backAt: z.iso.datetime(),
+        asOf: z.iso.datetime().nullable(),
+      }),
+      /** It failed some other way. */
+      z.object({ kind: z.literal("unreachable"), asOf: z.iso.datetime().nullable() }),
+    ]),
+  ),
+});
 export type NextUp = z.infer<typeof NextUp>;
 
 /**

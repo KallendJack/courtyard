@@ -67,6 +67,8 @@ const signedInWith = async (
     /** Its milestones' descriptions, by title. */
     milestones?: Readonly<Record<string, string>>;
     providers?: readonly Provider[];
+    /** The worker's clock. */
+    now?: () => number;
   } = {},
 ) => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project", ...more.config });
@@ -80,6 +82,7 @@ const signedInWith = async (
       github: github.api,
       providers: more.providers ?? [createFakeProvider({ delayMs: 0 })],
       ...(more.paper === undefined ? {} : { paperFiles: more.paper.paper }),
+      ...(more.now === undefined ? {} : { now: more.now }),
     }),
   );
   if (more.signIn !== false) {
@@ -341,6 +344,57 @@ describe("Next up (#301)", () => {
 
     expect(asked).toBeGreaterThan(0);
     expect(github.issuesAsked()).toBe(asked);
+  });
+
+  it("keeps the last list known when GitHub's limit is used up, saying when it's back and as of when (#519)", async () => {
+    let clock = Date.parse("2026-10-18T21:52:00.000Z");
+    const { github, request } = await signedInWith([{ number: 3, title: "Three" }], {
+      now: () => clock,
+    });
+    await nextUpOf(request);
+    github.limitUntil("2026-10-18T22:13:00.000Z");
+    clock += 5 * 60 * 1000;
+
+    const response = await request("/api/workspaces/side-project/next-up");
+
+    expect(response.status).toBe(200);
+    const nextUp = NextUp.parse(await response.json());
+    expect(nextUp.issues.map((issue) => issue.number)).toEqual([3]);
+    expect(nextUp.unread).toEqual({
+      kind: "rate-limited",
+      backAt: "2026-10-18T22:13:00.000Z",
+      asOf: "2026-10-18T21:52:00.000Z",
+    });
+  });
+
+  it("says GitHub can't be reached when it fails otherwise, with nothing known yet (#519)", async () => {
+    const { github, request } = await signedInWith([{ number: 3, title: "Three" }]);
+    github.failReads();
+
+    const response = await request("/api/workspaces/side-project/next-up");
+
+    expect(response.status).toBe(200);
+    expect(NextUp.parse(await response.json())).toEqual({
+      issues: [],
+      unread: { kind: "unreachable", asOf: null },
+    });
+  });
+
+  it("says nothing of GitHub once it answers again (#519)", async () => {
+    let clock = Date.parse("2026-10-18T21:52:00.000Z");
+    const { github, request } = await signedInWith([{ number: 3, title: "Three" }], {
+      now: () => clock,
+    });
+    github.failReads();
+    await request("/api/workspaces/side-project/next-up");
+    github.answerReads();
+    clock += 1000;
+
+    const nextUp = NextUp.parse(
+      await (await request("/api/workspaces/side-project/next-up")).json(),
+    );
+
+    expect(nextUp).toEqual({ issues: [expect.objectContaining({ number: 3 })] });
   });
 
   it("says to sign in to GitHub while no one is", async () => {

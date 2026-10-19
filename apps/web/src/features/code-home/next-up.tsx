@@ -3,12 +3,13 @@ import {
   LEAD_WINDOW_BY_DEFAULT,
   type LeadStatus,
   type LeadWindow,
+  type NextUp as NextUpAnswer,
   type NextUpIssue,
   type ProviderList,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { useNavigate } from "@tanstack/react-router";
-import { Flame, Play, Zap } from "lucide-react";
+import { Clock, Flame, Play, Zap } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
@@ -20,6 +21,7 @@ import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { PlaceholderRows } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
+import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { runLead, startOnIssue } from "./api.ts";
@@ -75,8 +77,13 @@ export function NextUp(
   if (props.issues.length === 0) {
     return (
       <div className={COLUMN}>
-        <Block label="Next up" fill>
-          <BlockEmpty>Nothing ready to build</BlockEmpty>
+        <Block label="Next up" fill aside={asOf(props.unread)}>
+          {/* GitHub unread with nothing known: the line takes the empty line's place (#519). */}
+          {props.unread === undefined ? (
+            <BlockEmpty>Nothing ready to build</BlockEmpty>
+          ) : (
+            <Unread unread={props.unread} />
+          )}
         </Block>
       </div>
     );
@@ -84,8 +91,33 @@ export function NextUp(
   return <Offering {...props} issues={props.issues} />;
 }
 
+/** When the last list known was read, while GitHub can't be (#519): "As of 21:52". */
+const asOf = (unread: NextUpAnswer["unread"]) =>
+  unread === undefined || unread.asOf === null ? undefined : `As of ${clockWords(unread.asOf)}`;
+
+/**
+ * Why GitHub couldn't be read just now (#519; Paper, "Tablet · Code Home: Next up can't reach
+ * GitHub"), in one quiet grey line under Next up's label, as the worker says it.
+ */
+function Unread(props: { unread: NonNullable<NextUpAnswer["unread"]> }) {
+  const { unread } = props;
+  return (
+    <p
+      role="status"
+      className="flex shrink-0 items-center gap-2 rounded-md bg-secondary px-2.5 py-2 text-label font-medium text-foreground/75"
+    >
+      <Clock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      {unread.kind === "rate-limited"
+        ? `GitHub's limit is used up · back at ${clockWords(unread.backAt)}`
+        : "Can't reach GitHub"}
+    </p>
+  );
+}
+
 /** What Next up is given, besides its issues. */
 type Offered = {
+  /** Why GitHub couldn't be read just now, when it couldn't (#519): the issues are the last known. */
+  unread?: NextUpAnswer["unread"];
   workspaceId: WorkspaceId;
   providers: ProviderList["providers"];
   /** The workspace's Lead (#347), once known: Run the build order sits under Build. */
@@ -119,7 +151,8 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   const on = { workspaceId: props.workspaceId, providers: props.providers };
   return (
     <div className={COLUMN}>
-      <Block label="Next up" aside={next?.milestone ?? undefined} fill>
+      <Block label="Next up" aside={asOf(props.unread) ?? next?.milestone ?? undefined} fill>
+        {props.unread !== undefined && <Unread unread={props.unread} />}
         {/* The rows and More, in the room the layout gives them. */}
         <div ref={room.room} className="flex min-h-0 flex-1 flex-col gap-1.5">
           {/* Grill, a Build under it, an open Start and More's rows scroll together, as one (#408). */}

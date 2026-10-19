@@ -21,6 +21,7 @@ import type {
   FoundPullRequest,
   FoundRepo,
   GitHubApi,
+  ReadRefused,
   UserToken,
 } from "./api.ts";
 import { mainBuildOf, typicalLengths } from "./main-build.ts";
@@ -73,6 +74,8 @@ export type GitHubProblem =
   | { readonly kind: "signed-out" }
   /** GitHub couldn't do it, in plain words. */
   | { readonly kind: "github"; readonly message: string }
+  /** GitHub's hourly allowance is used up (#519), until `backAt`. */
+  | { readonly kind: "rate-limited"; readonly backAt: string }
   | { readonly kind: "storage" };
 
 /** A sign-in started from Connections and not yet finished, or why the last one didn't. */
@@ -187,6 +190,10 @@ const FINISHED_KEPT = 200;
 
 /** An open pull request as GitHub gave it, and as a session shows it (#278). */
 export type OpenFound = { readonly found: FoundPullRequest; readonly pullRequest: PullRequest };
+
+/** A read GitHub refused, as the problem it is (#519). */
+const problemOf = (refused: ReadRefused): GitHubProblem =>
+  refused.kind === "rate-limited" ? refused : { kind: "github", message: refused.message };
 
 /** A pull request GitHub gave, read into Courtyard's shape, or why it couldn't be. */
 const readPull = <T>(shape: z.ZodType<T>, pull: unknown): Result<T, GitHubProblem> => {
@@ -592,7 +599,7 @@ export const createGitHub = (options: {
       const signedIn = await tokenFor(api);
       if (!signedIn.ok) return signedIn;
       const found = await signedIn.value.github.openIssues(signedIn.value.token, find);
-      return found.ok ? found : err({ kind: "github", message: found.error });
+      return found.ok ? found : err(problemOf(found.error));
     },
 
     /** The title and description of each open pull request in `repo` (#301). */
@@ -602,7 +609,7 @@ export const createGitHub = (options: {
       const signedIn = await tokenFor(api);
       if (!signedIn.ok) return signedIn;
       const found = await signedIn.value.github.openPullRequestTexts(signedIn.value.token, find);
-      return found.ok ? found : err({ kind: "github", message: found.error });
+      return found.ok ? found : err(problemOf(found.error));
     },
 
     /** Comments on issue `number` in `repo` (#298). */

@@ -26,7 +26,8 @@ and Next up offers Build on the next issue.
 - **Home's blocks**, in a fixed order, each keeping its place when empty with one quiet line
   (`components/layout/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals
   with Approve, failing checks, new replies, pull requests ready to merge with Merge, conflicts with Bring up to
-  date, and the setup check's offer), Running (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`),
+  date, and the setup check's offer), Running (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`; when GitHub refused the read, the
+  last list known with "As of …" and one grey line saying why, as the worker says it, #519),
   Main (`main-row.tsx`: the repository's newest main commit with `live/`'s build bar, and Update only on the live
   copy's own repository), then the message box, pinned at the foot.
 - From a tablet up the page is the screen's height and never scrolls, the blocks sharing the height left and their

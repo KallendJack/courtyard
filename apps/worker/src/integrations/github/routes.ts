@@ -20,6 +20,11 @@ export const gitHubProblem = (c: Context, why: GitHubProblem) => {
       });
     case "github":
       return apiError(c, { status: 502, error: why.message });
+    case "rate-limited":
+      return apiError(c, {
+        status: 429,
+        error: "GitHub's limit for the hour is used up: try again once it's back.",
+      });
     case "storage":
       return apiError(c, { status: 500, error: STORAGE });
   }

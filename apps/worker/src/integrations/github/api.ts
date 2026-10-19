@@ -73,7 +73,7 @@ export type GitHubApi = {
   readonly openIssues: (
     accessToken: string,
     find: { readonly repo: string; readonly label: string; readonly forBuild: boolean },
-  ) => Promise<Result<readonly FoundIssue[], string>>;
+  ) => Promise<Result<readonly FoundIssue[], ReadRefused>>;
   /**
    * The title and description of each open pull request in `repo` (#301): what says which issues
    * they close. Lighter than `openPullRequests`, which asks for each one's checks.
@@ -81,7 +81,7 @@ export type GitHubApi = {
   readonly openPullRequestTexts: (
     accessToken: string,
     find: { readonly repo: string },
-  ) => Promise<Result<readonly { readonly title: string; readonly body: string }[], string>>;
+  ) => Promise<Result<readonly { readonly title: string; readonly body: string }[], ReadRefused>>;
   /** Comments on issue `number` in `repo` (Build's claim, #298). */
   readonly commentOnIssue: (
     accessToken: string,
@@ -179,6 +179,14 @@ export type GitHubApi = {
     },
   ) => Promise<Result<{ readonly number: number; readonly url: string }, string>>;
 };
+
+/**
+ * Why GitHub wouldn't answer a read Next up makes (#519): its hourly allowance used up until
+ * `backAt`, or anything else, in plain words.
+ */
+export type ReadRefused =
+  | { readonly kind: "rate-limited"; readonly backAt: string }
+  | { readonly kind: "failed"; readonly message: string };
 
 /** A pull request as GitHub has it. */
 export type FoundPullRequest = {
@@ -517,6 +525,40 @@ const tokenOf = (answer: z.infer<typeof TokenAnswer>): UserToken => ({
   refreshToken: answer.refresh_token ?? null,
 });
 
+/** GitHub refused a read because its allowance is used up (#519): it answers again at `backAt`. */
+class RateLimited extends Error {
+  readonly backAt: string;
+  constructor(backAt: string) {
+    super(`GitHub's limit is used up until ${backAt}`);
+    this.backAt = backAt;
+  }
+}
+
+/** How long GitHub asks to wait after slowing a caller down without saying (its docs: a minute). */
+const SLOWED_DOWN_MS = 60_000;
+
+/**
+ * When GitHub answers again, if `response` says its allowance is used up: a 403 or 429 with
+ * `retry-after` (its secondary limit), or with none left until `x-ratelimit-reset` (the hourly
+ * one), as GitHub's docs on rate limits describe.
+ */
+const backAtOf = (response: Response): string | undefined => {
+  if (response.status !== 403 && response.status !== 429) return undefined;
+  const seconds = (name: string) => {
+    const value = Number(response.headers.get(name) ?? Number.NaN);
+    return Number.isFinite(value) ? value : undefined;
+  };
+  const retryAfter = seconds("retry-after");
+  if (retryAfter !== undefined) return new Date(Date.now() + retryAfter * 1000).toISOString();
+  if (response.headers.get("x-ratelimit-remaining") !== "0") {
+    return response.status === 429
+      ? new Date(Date.now() + SLOWED_DOWN_MS).toISOString()
+      : undefined;
+  }
+  const reset = seconds("x-ratelimit-reset");
+  return new Date(reset === undefined ? Date.now() + SLOWED_DOWN_MS : reset * 1000).toISOString();
+};
+
 /** How long any one request to GitHub may take. */
 const REQUEST_TIMEOUT_MS = 30_000;
 /** Seconds GitHub adds to the wait between asks when it says to slow down. */
@@ -563,12 +605,26 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-  /** Reads one of GitHub's API answers as the account signed in with `token`. */
+  /**
+   * Reads one of GitHub's API answers as the account signed in with `token`; throws `RateLimited`
+   * when its allowance is used up.
+   */
   const apiGet = async <T>(token: string, path: string, schema: z.ZodType<T>) => {
     const response = await apiRequest(token, path);
-    if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+    if (!response.ok) {
+      const backAt = backAtOf(response);
+      throw backAt === undefined
+        ? new Error(`GitHub answered ${response.status}`)
+        : new RateLimited(backAt);
+    }
     return schema.parse(await response.json());
   };
+
+  /** Why a read GitHub wouldn't answer failed, from what it threw (#519). */
+  const refusedRead = (error: unknown, message: string): ReadRefused =>
+    error instanceof RateLimited
+      ? { kind: "rate-limited", backAt: error.backAt }
+      : { kind: "failed", message };
 
   /**
    * The titles of the open issues `issue` (`owner/name/issues/<number>`) is blocked by (#377).
@@ -582,7 +638,9 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         Blockers,
       );
       return blockers.filter((blocker) => blocker.state === "open").map(({ title }) => title);
-    } catch {
+    } catch (error) {
+      // A used-up allowance leaves Next up unread, as every other ask would fail too.
+      if (error instanceof RateLimited) throw error;
       return [];
     }
   };
@@ -937,7 +995,8 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
 
     openIssues: async (accessToken, find) => {
       const repo = RepoName.safeParse(find.repo);
-      if (!repo.success) return err("That isn't a repository on GitHub.");
+      if (!repo.success)
+        return err({ kind: "failed", message: "That isn't a repository on GitHub." });
       const label = encodeURIComponent(find.label);
       try {
         const listed: z.infer<typeof Issues> = [];
@@ -981,14 +1040,15 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           found.push(...some);
         }
         return ok(found);
-      } catch {
-        return err("GitHub couldn't be asked for the repository's issues.");
+      } catch (error) {
+        return err(refusedRead(error, "GitHub couldn't be asked for the repository's issues."));
       }
     },
 
     openPullRequestTexts: async (accessToken, find) => {
       const repo = RepoName.safeParse(find.repo);
-      if (!repo.success) return err("That isn't a repository on GitHub.");
+      if (!repo.success)
+        return err({ kind: "failed", message: "That isn't a repository on GitHub." });
       try {
         const pulls = await apiGet(
           accessToken,
@@ -996,8 +1056,8 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
           PullTexts,
         );
         return ok(pulls.map((pull) => ({ title: pull.title, body: pull.body ?? "" })));
-      } catch {
-        return err("GitHub couldn't be asked for the pull requests.");
+      } catch (error) {
+        return err(refusedRead(error, "GitHub couldn't be asked for the pull requests."));
       }
     },
 
