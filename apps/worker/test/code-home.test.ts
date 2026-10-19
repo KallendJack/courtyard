@@ -670,9 +670,7 @@ describe("the Roadmap (#532)", () => {
 
     const roadmap = await roadmapOf(request);
 
-    expect(roadmap.milestones.map((milestone) => milestone.title)).toEqual([
-      "4 · Code workspaces",
-    ]);
+    expect(roadmap.milestones.map((milestone) => milestone.title)).toEqual(["4 · Code workspaces"]);
     expect(roadmap.unread).toEqual({
       kind: "rate-limited",
       backAt: "2026-10-18T22:13:00.000Z",

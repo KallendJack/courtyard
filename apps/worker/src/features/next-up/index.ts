@@ -1,8 +1,8 @@
 import {
   type BuildIssue,
   buildable,
-  type NextUpIssue,
   type GitHubUnread,
+  type NextUpIssue,
   type NextUp as NextUpShown,
   type Roadmap,
   type RoadmapMilestone,
@@ -15,9 +15,9 @@ import type { FoundIssue, GitHub, GitHubProblem } from "../../integrations/githu
 import { err, ok, type Result } from "../../lib/result.ts";
 import { buildIssueMessage, grillIssueMessage } from "../../prompts/index.ts";
 import type { Code } from "../code/index.ts";
-import { roadmapOf } from "./roadmap.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
+import { roadmapOf } from "./roadmap.ts";
 
 /**
  * A code workspace's Next up (#301): its repository's `ready-for-agent` issues nobody has claimed,
@@ -182,7 +182,10 @@ export const createNextUp = (options: {
   /** Each repository's Next up as last read, and when. */
   const kept = new Map<string, { readonly at: number; readonly issues: NextUpIssue[] }>();
   /** Each repository's Roadmap as last read, and when (#532). */
-  const roadmaps = new Map<string, { readonly at: number; readonly milestones: RoadmapMilestone[] }>();
+  const roadmaps = new Map<
+    string,
+    { readonly at: number; readonly milestones: RoadmapMilestone[] }
+  >();
   /** The files each ready issue names (#423), by repository then number, as last read. */
   const named = new Map<string, ReadonlyMap<number, readonly string[]>>();
 
@@ -281,7 +284,8 @@ export const createNextUp = (options: {
       if (!found.ok) return found;
       const { repo } = found.value;
       const last = roadmaps.get(repo);
-      if (last !== undefined && now() - last.at < KEEP_MS) return ok({ milestones: last.milestones });
+      if (last !== undefined && now() - last.at < KEEP_MS)
+        return ok({ milestones: last.milestones });
       const [milestones, pulls] = await Promise.all([
         github.roadmap({ repo }),
         github.openPullRequestTexts({ repo }),

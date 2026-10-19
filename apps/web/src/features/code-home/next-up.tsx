@@ -1,5 +1,6 @@
 import {
   buildable,
+  type GitHubUnread,
   LEAD_WINDOW_BY_DEFAULT,
   type LeadStatus,
   type LeadWindow,
@@ -8,14 +9,13 @@ import {
   type ProviderList,
   type WorkspaceId,
 } from "@courtyard/contract";
-import { useNavigate } from "@tanstack/react-router";
-import { Clock, Flame, Play, Zap } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, Clock, Flame, Play, Zap } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { Switch } from "@/components/forms/switch";
-import { useBlocksFill } from "@/components/frame/handheld";
 import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { PlaceholderRows } from "@/components/layout/kept";
@@ -33,8 +33,8 @@ const WINDOWS: readonly { value: LeadWindow; label: string }[] = [
   { value: "tonight", label: "Until tonight" },
 ];
 
-/** On a phone and the cover screen, how many issues show before More. */
-const SHOWN = 3;
+/** How many titles the Then line names. */
+const THEN = 3;
 
 /**
  * From a tablet up, a narrow column beside Needs you and Running, as tall as theirs, wide enough
@@ -43,17 +43,13 @@ const SHOWN = 3;
 const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-72.5 md:shrink-0 xl:w-80";
 
 /**
- * Next up (#301; Paper, "Code workspace Home"): the repository's ready issues nobody has claimed,
- * in milestone order, the milestone they're in beside its label: from a tablet up, as many as its
- * block has room for, then More for the rest (#418); on a phone, three, then More. The first has
- * Build (#298): one tap shows the issue and the model it'll be built with, a second starts the
- * session, which the worker claims the issue for. When an issue needs grilling first, Grill takes
- * the top in gold on the first in order (#363, #463; Paper, "Next up every issue"), and the first
- * ready issue sits under it with a small Build; on a phone the rest wait for More. The other
- * issues to grill keep their place among the rows, saying "Needs grilling first". A ready issue
- * blocked by an open one (#377; Paper, "Next up: blocked rows say After …") keeps its place, with
- * no Build, saying what it comes after; Build is on the first that isn't.
- * More opens the rest inside its card, which keeps its height, and becomes Fewer (#335). Under
+ * Next up (#301, slimmed by #532; Paper, "Tablet · Code Home, slim Next up"): only what starts
+ * the next thing, the milestone it's in beside the label. The first ready issue blocked by no open
+ * one has Build (#298): one tap shows the issue and the model it'll be built with, a second starts
+ * the session, which the worker claims the issue for. When an issue needs grilling first, Grill
+ * takes the top in gold on the first in order (#363, #463), and the first ready issue sits under
+ * it with a small Build. Under them, one faint Then line names the next few titles, and Whole
+ * roadmap opens the Roadmap tab, saying how many more there are: the queue lives there. Under
  * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
  * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
  * it next, in Build's place ("Lead running"). With none offered it says so.
@@ -99,7 +95,7 @@ const asOf = (unread: NextUpAnswer["unread"]) =>
  * Why GitHub couldn't be read just now (#519; Paper, "Tablet · Code Home: Next up can't reach
  * GitHub"), in one quiet grey line under Next up's label, as the worker says it.
  */
-function Unread(props: { unread: NonNullable<NextUpAnswer["unread"]> }) {
+export function Unread(props: { unread: GitHubUnread }) {
   const { unread } = props;
   return (
     <p
@@ -128,7 +124,6 @@ type Offered = {
 
 /** Next up with at least one issue to offer. */
 function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
-  const [more, setMore] = useState(false);
   const [next] = props.issues;
   /** The first issue to grill, in order across every milestone (#463): Grill takes the top. */
   const grill = props.issues.find((issue) => !issue.ready);
@@ -138,148 +133,54 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   const under = grill === undefined ? undefined : build;
   /** The other issues in order, those to grill and blocked ones in their place. */
   const rest = props.issues.filter((issue) => issue !== grill && issue !== build);
-  const room = useRoomFor(rest.length);
-  const closed =
-    room.fits !== undefined
-      ? rest.slice(0, room.fits)
-      : under === undefined
-        ? rest.slice(0, SHOWN - 1)
-        : [];
-  const shown = more ? rest : closed;
-  /** How many More opens. */
-  const hidden = rest.length - closed.length;
+  /** What comes after the cards, by title: those blocked wait, so they aren't next. */
+  const then = rest.filter((issue) => !issue.ready || issue.after === null).slice(0, THEN);
+  /** How many more the Roadmap has on Next up's list. */
+  const more = rest.length - then.length;
   const on = { workspaceId: props.workspaceId, providers: props.providers };
   return (
     <div className={COLUMN}>
-      <Block label="Next up" aside={asOf(props.unread) ?? next?.milestone ?? undefined} fill>
+      <Block label="Next up" aside={(first ?? next)?.milestone ?? undefined} fill>
         {props.unread !== undefined && <Unread unread={props.unread} />}
-        {/* The rows and More, in the room the layout gives them. */}
-        <div ref={room.room} className="flex min-h-0 flex-1 flex-col gap-1.5">
-          {/* Grill, a Build under it, an open Start and More's rows scroll together, as one (#408). */}
-          <BlockRows>
-            <div ref={room.head} className="flex flex-col gap-1.5">
-              {first !== undefined && (
-                <StartOnIssue
-                  {...on}
-                  issue={first}
-                  does={first.ready ? "build" : "grill"}
-                  {...(first.ready && props.lead !== undefined
-                    ? { lead: { status: props.lead, onLead: props.onLead } }
-                    : {})}
-                />
-              )}
-              {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
-            </div>
-            {shown.length > 0 && (
-              <ul ref={room.list} className="flex flex-col gap-0.5 pt-1">
-                {shown.map((issue) => {
-                  /** What it waits on, under its title: a grill (#463), else an open issue (#377). */
-                  const waits = !issue.ready
-                    ? { says: "Needs grilling first", named: "needs grilling first" }
-                    : issue.after === null
-                      ? undefined
-                      : { says: `After ${issue.after}`, named: `after ${issue.after}` };
-                  return (
-                    <li
-                      key={issue.number}
-                      aria-label={`#${issue.number} ${issue.title}${waits === undefined ? "" : `, ${waits.named}`}`}
-                    >
-                      <a
-                        href={issue.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex min-h-8.5 items-center gap-2.5 rounded-md px-2.5 hover:bg-secondary"
-                      >
-                        <span className="w-8.5 shrink-0 text-meta font-bold text-placeholder">
-                          #{issue.number}
-                        </span>
-                        <span className="flex min-w-0 grow flex-col">
-                          <span className="truncate text-meta font-semibold text-foreground/90">
-                            {issue.title}
-                          </span>
-                          {/* What it waits on, in a row as tall as one in one line. */}
-                          {waits !== undefined && (
-                            <span className="truncate text-label font-medium text-muted-foreground">
-                              {waits.says}
-                            </span>
-                          )}
-                        </span>
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </BlockRows>
-          {hidden > 0 && (
-            <div ref={room.more} className="shrink-0">
-              <Button variant="quietPrimary" size="xs" onClick={() => setMore((was) => !was)}>
-                {more ? "Fewer" : `More · ${hidden}`}
-              </Button>
-            </div>
+        {/* Grill, a Build under it and an open Start scroll together, as one (#408). */}
+        <BlockRows>
+          {first !== undefined && (
+            <StartOnIssue
+              {...on}
+              issue={first}
+              does={first.ready ? "build" : "grill"}
+              {...(first.ready && props.lead !== undefined
+                ? { lead: { status: props.lead, onLead: props.onLead } }
+                : {})}
+            />
           )}
-        </div>
+          {under !== undefined && <StartOnIssue {...on} issue={under} does="build" small />}
+        </BlockRows>
+        {(then.length > 0 || more > 0) && (
+          <div className="flex shrink-0 flex-col gap-2.5 border-t border-border pt-2.5">
+            {then.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <p className="text-label font-semibold text-placeholder">Then</p>
+                <p className="line-clamp-3 text-meta text-foreground/70">
+                  {then.map((issue) => issue.title).join(" · ")}
+                </p>
+              </div>
+            )}
+            <Link
+              to="/workspaces/$workspaceId"
+              params={{ workspaceId: props.workspaceId }}
+              hash="roadmap"
+              className="flex min-h-9 items-center justify-between gap-2 rounded-md bg-secondary px-3 text-meta font-semibold text-primary-text outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {more > 0 ? `Whole roadmap · ${more} more` : "Whole roadmap"}
+              <ChevronRight aria-hidden className="size-4 shrink-0" />
+            </Link>
+          </div>
+        )}
       </Block>
     </div>
   );
 }
-
-/**
- * From a tablet up, how many of Next up's rows its block has room for (#418), now the block's size
- * is the layout's (#398): the room for its rows and More, less the cards above the rows, in rows
- * as tall as they're drawn, leaving More's place when they don't all fit. Measured before the block
- * is painted and again whenever the room or the cards change size (Build tapped, the window
- * resized). `fits` is `undefined` below a tablet, where Next up shows three.
- */
-function useRoomFor(count: number) {
-  const fills = useBlocksFill();
-  const room = useRef<HTMLDivElement>(null);
-  const head = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLUListElement>(null);
-  const more = useRef<HTMLDivElement>(null);
-  /** The sizes last drawn, kept for when there's no row or More to measure. */
-  const drawn = useRef<{ row?: number; gap?: number; above?: number; more?: number }>({});
-  const [measured, setMeasured] = useState<number>();
-  const measure = useRef(() => {});
-  measure.current = () => {
-    const [box, cards] = [room.current, head.current];
-    if (!fills || box === null || cards === null) return;
-    const sizes = drawn.current;
-    const row = list.current?.firstElementChild;
-    if (list.current && row) {
-      const bounds = row.getBoundingClientRect();
-      sizes.row = bounds.height;
-      sizes.gap = gapOf(list.current);
-      sizes.above = bounds.top - cards.getBoundingClientRect().bottom;
-    }
-    if (more.current !== null)
-      sizes.more = more.current.getBoundingClientRect().height + gapOf(box);
-    const { row: tall, gap = 0, above = 0 } = sizes;
-    // No row drawn yet: all of them are, next, so one can be measured.
-    if (tall === undefined) {
-      setMeasured(count);
-      return;
-    }
-    const space = box.getBoundingClientRect().height - cards.getBoundingClientRect().height - above;
-    // Half a pixel's grace for rounding: a row past it would make the rows scroll.
-    const rowsIn = (height: number) => Math.max(0, Math.floor((height + gap + 0.5) / (tall + gap)));
-    const all = rowsIn(space);
-    // Not all of them fit: More takes its place under them, measured once it's drawn.
-    setMeasured(all >= count ? count : sizes.more === undefined ? all : rowsIn(space - sizes.more));
-  };
-  // After every render, before it's painted: a first draw never shows rows that don't fit.
-  useLayoutEffect(() => measure.current());
-  useEffect(() => {
-    const observer = new ResizeObserver(() => measure.current());
-    for (const each of [room.current, head.current]) if (each !== null) observer.observe(each);
-    return () => observer.disconnect();
-  }, []);
-  // Until it's measured, every row is drawn so one can be.
-  return { room, head, list, more, fits: fills ? (measured ?? count) : undefined };
-}
-
-/** The gap between an element's rows, in pixels. */
-const gapOf = (element: Element) => Number.parseFloat(getComputedStyle(element).rowGap) || 0;
 
 /** What Build and Grill say and look like. */
 const STARTS = {

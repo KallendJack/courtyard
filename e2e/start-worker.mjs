@@ -408,7 +408,20 @@ const github = createFakeGitHub({
         labels: ["needs-triage"],
       },
       { number: 251, title: "One Reply box everywhere", milestone: "4 · Code workspaces" },
-      { number: 197, title: "The rail on desktop", milestone: "4 · Code workspaces" },
+      // With a summary and a board, as the Roadmap opens them (#532).
+      {
+        number: 197,
+        title: "The rail on desktop",
+        milestone: "4 · Code workspaces",
+        body: 'The rail stays on screen on a desktop.\n\n## Boards\n\nAgreed: "Desktop · Rail (#197)".',
+      },
+      // Done: the Roadmap folds it into its milestone's "1 done" (#532).
+      {
+        number: 190,
+        title: "Tabs on the code Home",
+        milestone: "4 · Code workspaces",
+        state: "closed",
+      },
       {
         number: 199,
         title: "Claimed by a helper",
@@ -445,7 +458,11 @@ const github = createFakeGitHub({
     ],
   },
   milestones: {
-    "octo-owner/workbench": { "4 · Code workspaces": "NOW. Build order: #117 → #197 → #251." },
+    "octo-owner/workbench": {
+      "4 · Code workspaces": "NOW. Build order: #117 → #197 → #251.",
+      "5 · Tablet hub and voice": "",
+      Later: "Ideas.",
+    },
     "octo-owner/toolshed": { "1 · Tidy": "NOW. Build order: #31 → #32 → #33." },
   },
   opensOnPush: {

@@ -32,9 +32,9 @@ export type {
   FoundIssue,
   FoundMilestone,
   FoundMilestoneIssue,
-  FoundRoadmapMilestone,
   FoundPullRequest,
   FoundRepo,
+  FoundRoadmapMilestone,
   GitHubApi,
 } from "./api.ts";
 

@@ -1172,7 +1172,11 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
             description: milestone.description ?? "",
             issues: [
               ...read.map((issue) => ({ ...issue, labels: labelsOf(issue.number), closed: false })),
-              ...closed.map((issue) => ({ ...issue, labels: labelsOf(issue.number), closed: true })),
+              ...closed.map((issue) => ({
+                ...issue,
+                labels: labelsOf(issue.number),
+                closed: true,
+              })),
             ],
           });
         }

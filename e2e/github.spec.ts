@@ -1250,8 +1250,8 @@ const showsHome = async (page: Page) => {
   await expect(running).toContainText("Nothing running");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
-  // issues nobody claimed, with Build; the rest, those to grill too (#463), in milestone order, as
-  // many as fit (#418), then More.
+  // issues nobody claimed, with Build; then only the next few titles and the way to the Roadmap,
+  // which has the rest (#532).
   await expect(nextUp).toContainText("4 · Code workspaces");
   const grill = nextUp.getByRole("region", { name: "Grill #117" });
   await expect(grill).toContainText("Sub-agents for code review");
@@ -1259,9 +1259,10 @@ const showsHome = async (page: Page) => {
   await expect(nextUp.getByRole("region", { name: "Build #197" })).toContainText(
     "The rail on desktop",
   );
-  await expect(nextUp).not.toContainText("Claimed by a helper");
-  await expect(nextUp.getByRole("region", { name: "Build #283" })).toHaveCount(0);
-  await nextUpFills(page, 13);
+  await nextUpIsSlim(page, {
+    titles: "One Reply box everywhere · Usage at a glance · Paste images on the Fold",
+    more: 10,
+  });
 
   // Main's newest commit with its build, and no Update: it isn't the live copy's repository.
   const main = page.getByRole("region", { name: "Main" });
@@ -1279,9 +1280,10 @@ const showsHome = async (page: Page) => {
   await graph.getByRole("button", { name: "Done" }).click();
   await expect(graph).toBeHidden();
 
-  // Tabs show once they have something: no sessions yet, one pull request.
+  // Tabs show once they have something: the Roadmap always (#532), no sessions yet, one pull
+  // request.
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
-  await expect(tabs.getByRole("link")).toHaveText(["Home", "PRs1"]);
+  await expect(tabs.getByRole("link")).toHaveText(["Home", "Roadmap", "PRs1"]);
   // A code workspace has no context file, Things or skills on its page (#301).
   await expect(page.getByRole("region", { name: "Context file" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Skills" })).toHaveCount(0);
@@ -1289,23 +1291,71 @@ const showsHome = async (page: Page) => {
 };
 
 /**
- * An issue blocked by an open one keeps its place in Next up's order, with no Build: its row says
- * what it comes after (#377; Paper, "Next up: blocked rows say After …").
+ * Next up only starts the next thing (#532; Paper, "Code Home, slim Next up"): no queue of rows
+ * and no More, one faint Then line naming the next titles, and Whole roadmap saying how many more.
  */
-const blockedRowSaysAfter = async (page: Page) => {
-  const blocked = blocks(page).nextUp.getByRole("listitem", { name: /^#283 / });
-  await expect(blocked).toHaveAccessibleName(
-    "#283 Nothing moves once drawn, after One Reply box everywhere",
+const nextUpIsSlim = async (page: Page, shows: { titles: string; more: number }) => {
+  const { nextUp } = blocks(page);
+  await expect(nextUp.getByRole("listitem")).toHaveCount(0);
+  await expect(nextUp.getByRole("button", { name: /^More/ })).toHaveCount(0);
+  await expect(nextUp.getByText("Then", { exact: true })).toBeVisible();
+  await expect(nextUp.getByText(shows.titles, { exact: true })).toBeVisible();
+  await expect(nextUp.getByRole("link", { name: /^Whole roadmap/ })).toHaveText(
+    `Whole roadmap · ${shows.more} more`,
   );
-  await expect(blocked).toHaveText(
-    /^#283\s*Nothing moves once drawn\s*After One Reply box everywhere$/,
+};
+
+/** The Roadmap's block, and a milestone's row in it, by its title. */
+const roadmap = (page: Page) => page.getByRole("region", { name: "Milestones, in build order" });
+const milestone = (page: Page, title: string) =>
+  roadmap(page).getByRole("listitem", { name: title, exact: true });
+/** The issues a milestone shows, by their rows' names: "#197 The rail on desktop, Ready". */
+const issuesIn = (row: ReturnType<typeof milestone>) =>
+  expect.poll(() =>
+    row
+      .getByRole("listitem", { name: /^#/ })
+      .evaluateAll((rows) => rows.map((each) => each.getAttribute("aria-label"))),
   );
-  // As tall as a row in one line, so as many fit (#418).
-  const [row, after] = await Promise.all([
-    blocks(page).nextUp.getByRole("listitem").first().boundingBox(),
-    blocked.boundingBox(),
+
+/**
+ * The Roadmap (#532; Paper, "Roadmap"): every open milestone in the roadmap's order, Later last;
+ * the current one open, its issues in its Build order, each in one plain state, the done one
+ * folded; the others folded until tapped.
+ */
+const roadmapShowsTheOrder = async (page: Page) => {
+  await expect(roadmap(page).getByRole("listitem", { name: /^(\d+ · |Later)/ })).toHaveText([
+    /^4 · Code workspaces\s*Now\s*5 left/,
+    /^5 · Tablet hub and voice\s*2 left/,
+    /^Later\s*9 left/,
   ]);
-  expect(Math.round(after?.height ?? 0)).toBe(Math.round(row?.height ?? 0));
+  const current = milestone(page, "4 · Code workspaces");
+  await expect(current.getByRole("img", { name: "1 of 6 done" }).first()).toBeAttached();
+  await issuesIn(current).toEqual([
+    "#117 Sub-agents for code review, To grill",
+    "#197 The rail on desktop, Ready",
+    "#251 One Reply box everywhere, Ready",
+    "#199 Claimed by a helper, Building",
+    "#283 Nothing moves once drawn, After One Reply box everywhere",
+  ]);
+  await expect(current.getByRole("button", { name: /1 done/ })).toBeVisible();
+  // The others are folded until tapped.
+  const next = milestone(page, "5 · Tablet hub and voice");
+  await expect(next.getByRole("listitem")).toHaveCount(0);
+  await next.getByRole("button", { name: /^5 · Tablet hub and voice/ }).click();
+  await issuesIn(next).toEqual([
+    "#66 Usage at a glance, To grill",
+    "#255 Paste images on the Fold, Ready",
+  ]);
+  // The done one shows once its row is tapped.
+  await current.getByRole("button", { name: /1 done/ }).click();
+  await expect(
+    current.getByRole("listitem", { name: "#190 Tabs on the code Home, Done" }),
+  ).toBeVisible();
+  // Tapping an issue opens its summary and its board.
+  await current.getByRole("button", { name: /The rail on desktop/ }).click();
+  await expect(current).toContainText("The rail stays on screen on a desktop.");
+  await expect(current).toContainText("Board: Desktop · Rail (#197)");
+  await expect(current.getByRole("link", { name: "Open #197 on GitHub" })).toBeVisible();
 };
 
 /** The page doesn't scroll at all: everything on Home is on one screen. */
@@ -1345,35 +1395,6 @@ const readyOnly = async (page: Page, count: number) => {
   });
 };
 
-/**
- * From a tablet up, Next up lists every issue its block has room for, and More counts only the
- * rest (#418): its rows never scroll while it's closed, and another row wouldn't have fitted.
- * Returns how many rows show.
- */
-const nextUpFills = async (page: Page, rest: number) => {
-  const { nextUp } = blocks(page);
-  const more = nextUp.getByRole("button", { name: /^More · / });
-  const rows = nextUp.getByRole("listitem");
-  await expect(nextUp.getByRole("region").first()).toBeVisible();
-  expect((await rowsScroll(nextUp)).overflows).toBe(false);
-  const shown = await rows.count();
-  if (shown === rest) {
-    await expect(more).toHaveCount(0);
-    return shown;
-  }
-  await expect(more).toHaveText(`More · ${rest - shown}`);
-  // Room for no more: what's left above More is less than one more row.
-  const [card, button, last] = await Promise.all([
-    nextUp.getByRole("region").last().boundingBox(),
-    more.boundingBox(),
-    shown > 0 ? rows.last().boundingBox() : Promise.resolve(null),
-  ]);
-  if (card === null || button === null) throw new Error("Not on the page");
-  const above = last === null ? card.y + card.height : last.y + last.height;
-  expect(button.y - above).toBeLessThan(34 + 2 + 6 + 4);
-  return shown;
-};
-
 /** Tapping Build on Next up's first issue keeps Start building and Cancel inside its card. */
 const buildButtonsFitTheirCard = async (page: Page) => {
   const build = blocks(page).nextUp.getByRole("region", { name: "Build #197" });
@@ -1405,7 +1426,6 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await signIn(request);
       await showsHome(page);
       await homeFitsOneScreen(page);
-      await blockedRowSaysAfter(page);
       // Next up sits beside Needs you, not under it.
       const [needsBox, nextBox] = [
         await blocks(page).needsYou.boundingBox(),
@@ -1416,8 +1436,8 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    // Owner, 2026-10-14: the first issue, two rows, a tall empty block and More · 3 (#418).
-    test("with five issues ready, Next up lists them all, with no More", async ({
+    // #532: the queue moved to the Roadmap; Next up names what's next and how many more.
+    test("with five issues ready, Next up has Build, a Then line of the next three, and Whole roadmap · 1 more", async ({
       page,
       request,
     }) => {
@@ -1426,8 +1446,28 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await page.goto(HOME);
       await expect(blocks(page).nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
       await shot(page, "desktop-home-five-ready");
-      expect(await nextUpFills(page, 4)).toBe(4);
+      await nextUpIsSlim(page, {
+        titles: "One Reply box everywhere · Paste images on the Fold · A later idea 1",
+        more: 1,
+      });
       await page.unrouteAll({ behavior: "ignoreErrors" });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("the Roadmap tab shows every milestone in order, the current one open, each issue in one plain state (#532)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(`${HOME}#roadmap`);
+      const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
+      await expect(tabs.getByRole("link", { name: "Roadmap" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await roadmapShowsTheOrder(page);
+      await homeFitsOneScreen(page);
+      await shot(page, "desktop-roadmap");
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1449,10 +1489,12 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(grill).toHaveAccessibleName("Grill #66");
       await expect(grill).toContainText("Usage at a glance");
       await expect(nextUp.getByRole("region").nth(1)).toHaveAccessibleName("Build #197");
-      await expect(nextUp.getByRole("listitem", { name: /^#66 / })).toHaveCount(0);
-      await expect(nextUp.getByRole("listitem").first()).toHaveAccessibleName(
-        "#251 One Reply box everywhere",
-      );
+      await expect(nextUp).toContainText("5 · Tablet hub and voice");
+      await expect(
+        nextUp.getByText("One Reply box everywhere · Paste images on the Fold · A later idea 1", {
+          exact: true,
+        }),
+      ).toBeVisible();
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
@@ -1483,7 +1525,8 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(nextUp.getByRole("status")).toHaveText(
         /^GitHub's limit is used up · back at \d{1,2}:\d{2}/,
       );
-      await expect(nextUp).toContainText(/As of \d{1,2}:\d{2}/);
+      // Beside the label, the milestone, as always (#532).
+      await expect(nextUp).toContainText("4 · Code workspaces");
       await expect(nextUp).not.toContainText("Nothing ready to build");
       await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
       expect(await nextUp.boundingBox()).toEqual(before);
@@ -1553,70 +1596,22 @@ test.describe("a code workspace's Home (#301, #308)", () => {
   test.describe("on the unfolded Fold", () => {
     test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
 
-    test("Home fits one screen, and More shows the rest of Next up", async ({ page, request }) => {
+    test("Home fits one screen, and Whole roadmap opens the Roadmap", async ({ page, request }) => {
       await signIn(request);
       await showsHome(page);
       await homeFitsOneScreen(page);
       await shot(page, "tablet-home");
 
-      // More opens the rest inside Next up's own card (#335): it keeps its height, its heading
-      // and the first issue with Build stay put, and More becomes Fewer.
+      // Next up's cards, Then line and Whole roadmap all show, nothing scrolling inside it.
       const { nextUp } = blocks(page);
-      const before = await nextUp.boundingBox();
-      const shown = await nextUpFills(page, 13);
-      await nextUp.getByRole("button", { name: `More · ${13 - shown}` }).click();
-      await expect(nextUp.getByRole("listitem")).toHaveText([
-        /#251\s*One Reply box everywhere/,
-        /#283\s*Nothing moves once drawn\s*After One Reply box everywhere/,
-        /#66\s*Usage at a glance\s*Needs grilling first/,
-        /#255\s*Paste images on the Fold/,
-        ...Array.from({ length: 9 }, () => /A later idea/),
-      ]);
-      expect(Math.round((await nextUp.boundingBox())?.height ?? 0)).toBe(
-        Math.round(before?.height ?? 0),
-      );
-      await blockedRowSaysAfter(page);
-      // One to grill says so, never "After …", though it waits on another (#463): it can be
-      // grilled before that one is done.
-      await expect(nextUp.getByRole("listitem", { name: /^#66 / })).toHaveAccessibleName(
-        "#66 Usage at a glance, needs grilling first",
-      );
-      await nextUp.getByRole("listitem", { name: /^#283 / }).scrollIntoViewIfNeeded();
-      await shot(page, "tablet-home-more");
-      await nextUp.getByRole("region").first().scrollIntoViewIfNeeded();
-      await expect(nextUp.getByRole("heading", { name: "Next up" })).toBeInViewport();
-      // One scroller for the card and the rows (#408): the first issue shows whole, at the top,
-      // and scrolled to the end, so does the last row.
-      await expect(nextUp.getByRole("button", { name: "Build" })).toBeInViewport({ ratio: 1 });
-      expect((await rowsScroll(nextUp)).overflows).toBe(true);
-      await expect(nextUp.getByRole("listitem").last()).toBeInViewport({ ratio: 1 });
+      await expect(nextUp.getByRole("link", { name: /^Whole roadmap/ })).toBeInViewport({
+        ratio: 1,
+      });
+      await nextUp.getByRole("link", { name: /^Whole roadmap/ }).click();
+      await expect(page).toHaveURL(/#roadmap$/);
+      await roadmapShowsTheOrder(page);
       await homeFitsOneScreen(page);
-      await nextUp.getByRole("button", { name: "Fewer" }).click();
-      // Fewer goes back to the rows that fit (#418).
-      await expect(nextUp.getByRole("listitem")).toHaveCount(shown);
-      await request.post("/api/github/sign-out", { data: {} });
-    });
-
-    // Nine, more than its block has room for since the Fold's screens got roomier (#503).
-    test("with nine issues ready, Next up lists every one that fits, More only for the rest (#418)", async ({
-      page,
-      request,
-    }) => {
-      await signIn(request);
-      await readyOnly(page, 9);
-      await page.goto(HOME);
-      const { nextUp } = blocks(page);
-      await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
-      // The Lead's answer comes later and makes Build's card taller: count rows once it's in.
-      await expect(nextUp.getByRole("button", { name: "Run the build order" })).toBeVisible();
-      await shot(page, "tablet-home-nine-ready");
-      const shown = await nextUpFills(page, 8);
-      expect(shown).toBeGreaterThanOrEqual(2);
-      // Tapping Build makes its card taller: fewer rows fit, and More counts the rest.
-      await nextUp.getByRole("button", { name: "Build", exact: true }).click();
-      await expect(nextUp.getByRole("button", { name: "Start building" })).toBeVisible();
-      expect(await nextUpFills(page, 8)).toBeLessThan(shown);
-      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await shot(page, "tablet-roadmap");
       await request.post("/api/github/sign-out", { data: {} });
     });
 
@@ -1822,7 +1817,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    test("with five issues ready, Next up keeps three and More (#418)", async ({
+    test("with five issues ready, Next up has Build, a Then line and Whole roadmap (#532)", async ({
       page,
       request,
     }) => {
@@ -1833,9 +1828,23 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
       await nextUp.scrollIntoViewIfNeeded();
       await shot(page, "cover-home-five-ready");
-      await expect(nextUp.getByRole("listitem")).toHaveCount(2);
-      await expect(nextUp.getByRole("button", { name: "More · 2" })).toBeVisible();
+      await nextUpIsSlim(page, {
+        titles: "One Reply box everywhere · Paste images on the Fold · A later idea 1",
+        more: 1,
+      });
       await page.unrouteAll({ behavior: "ignoreErrors" });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    test("the Roadmap is one column, and nothing scrolls sideways (#532)", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(`${HOME}#roadmap`);
+      await roadmapShowsTheOrder(page);
+      expect(await pageScrollsSideways(page)).toBe(false);
+      await shot(page, "cover-roadmap");
       await request.post("/api/github/sign-out", { data: {} });
     });
   });

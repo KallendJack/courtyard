@@ -117,7 +117,7 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`preview/`](../apps/worker/src/features/preview/README.md): a code session's running app on a port of the worker's own, behind the login, and its screenshots.
 - [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
 - [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
-- [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims.
+- [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims, and the Roadmap.
 - [`red-main/`](../apps/worker/src/features/red-main/README.md): a red main after a merge.
 - [`version-bumps/`](../apps/worker/src/features/version-bumps/README.md): Dependabot's bumps, re-run once, then filed for the Lead.
 - [`repos/`](../apps/worker/src/features/repos/README.md): the owner's GitHub repos as code workspaces, and New repo.
@@ -210,7 +210,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
   - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
   - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
-    up, Main.
+    up, Main, and its Roadmap tab.
   - [`tasks/`](../apps/web/src/features/tasks/README.md): a code session's running tasks above the Reply box, and
     each ended one's line.
   - [`preview/`](../apps/web/src/features/preview/README.md): a code session's Preview button, and the app beside

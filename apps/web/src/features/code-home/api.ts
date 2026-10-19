@@ -5,6 +5,7 @@ import {
   NextUp,
   type PaperConnecting,
   PaperFileList,
+  Roadmap,
   SessionSummary,
   WorkspaceConnections,
   type WorkspaceId,
@@ -23,6 +24,13 @@ const workspacePath = (workspaceId: WorkspaceId) =>
  */
 export const loadNextUp = (workspaceId: WorkspaceId) =>
   fromWorker(`${workspacePath(workspaceId)}/next-up`, NextUp);
+
+/**
+ * The Roadmap (#532): every open milestone in the roadmap's order, each issue in its Build order
+ * with one plain state.
+ */
+export const loadRoadmap = (workspaceId: WorkspaceId) =>
+  fromWorker(`${workspacePath(workspaceId)}/roadmap`, Roadmap);
 
 /**
  * Build (#298): a new code session builds the issue, which the worker claims on GitHub; or Grill
