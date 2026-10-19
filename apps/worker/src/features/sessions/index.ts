@@ -2386,6 +2386,77 @@ export const createSessions = (options: {
     return known ?? undefined;
   };
 
+  /**
+   * Turns on Allow all for this task (#428) for a code session: recorded, so it survives a
+   * restart, and each approval its turn waits on that it covers is allowed at once. One already on
+   * is never extended, and one whose pull request has merged or closed is refused.
+   */
+  const startAllowingAll = (
+    file: SessionFile,
+    on: { until: string; task: boolean; byLead: boolean },
+  ) => {
+    const { id } = file;
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const pullRequest = await lastPullRequestOf(file);
+      if (pullRequestEnded(pullRequest)) {
+        return err({ kind: "pull-request-ended", state: pullRequest.state });
+      }
+      if (allowingAllAt(session.allowAll, options.now()) !== undefined) {
+        return err({ kind: "allowing-all" });
+      }
+      const recorded = await writeEvent({
+        id,
+        session,
+        event: {
+          type: "allow-all-started",
+          until: on.until,
+          task: on.task,
+          ...(on.byLead ? { byLead: true as const } : {}),
+        },
+      });
+      if (!recorded.ok) return recorded;
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      const answered = new Set(
+        events.value.flatMap((event) =>
+          event.type === "approval-answered" ? [event.approval] : [],
+        ),
+      );
+      for (const event of events.value) {
+        if (event.type !== "approval-requested" || event.all !== true) continue;
+        const waiting = session.approvals.get(event.seq);
+        if (waiting === undefined || answered.has(event.seq)) continue;
+        const given: GivenAnswer = { answer: "allow", allowedAll: true };
+        const allowed = await writeEvent({
+          id,
+          session,
+          event: { type: "approval-answered", approval: event.seq, ...given },
+        });
+        if (!allowed.ok) return allowed;
+        session.approvals.delete(event.seq);
+        waiting(given);
+      }
+      return ok(null);
+    });
+  };
+
+  /**
+   * Turns Allow all for this task off (#428), at once: any, or, `byLead`, only one the Lead gave
+   * (#551). One that's off already stays off.
+   */
+  const stopAllowingAll = (id: SessionId, which: { byLead: boolean }) => {
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const on = allowingAllAt(session.allowAll, options.now());
+      if (on === undefined || (which.byLead && session.allowAll.on?.byLead !== true)) {
+        return ok(null);
+      }
+      const recorded = await writeEvent({ id, session, event: { type: "allow-all-ended" } });
+      return recorded.ok ? ok(null) : recorded;
+    });
+  };
+
   /** A session's latest event number, 0 before its first. */
   const lastSeqOf = async (
     id: SessionId,
@@ -3353,6 +3424,7 @@ export const createSessions = (options: {
               type: "allow-all-started",
               until: start.allowAllUntil,
               task: true,
+              byLead: true,
             })
           : written;
       const started =
@@ -3681,7 +3753,7 @@ export const createSessions = (options: {
     ): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id, workspaceId } = found.value;
+      const { workspaceId } = found.value;
       // A code session's own: never the Lead's, whose builders are allowed all by its order.
       if (found.value.branch === undefined || found.value.lead === true) {
         return err({ kind: "not-code-session" });
@@ -3689,47 +3761,10 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const session = runningSession(id);
-      const started = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        const pullRequest = await lastPullRequestOf(found.value);
-        if (pullRequestEnded(pullRequest)) {
-          return err({ kind: "pull-request-ended", state: pullRequest.state });
-        }
-        if (allowingAllAt(session.allowAll, options.now()) !== undefined) {
-          return err({ kind: "allowing-all" });
-        }
-        const recorded = await writeEvent({
-          id,
-          session,
-          event: {
-            type: "allow-all-started",
-            until: allowAllUntil(lasts, options.now()),
-            task: lasts === "task",
-          },
-        });
-        if (!recorded.ok) return recorded;
-        const events = await readEvents(id);
-        if (!events.ok) return events;
-        const answered = new Set(
-          events.value.flatMap((event) =>
-            event.type === "approval-answered" ? [event.approval] : [],
-          ),
-        );
-        for (const event of events.value) {
-          if (event.type !== "approval-requested" || event.all !== true) continue;
-          const waiting = session.approvals.get(event.seq);
-          if (waiting === undefined || answered.has(event.seq)) continue;
-          const given: GivenAnswer = { answer: "allow", allowedAll: true };
-          const allowed = await writeEvent({
-            id,
-            session,
-            event: { type: "approval-answered", approval: event.seq, ...given },
-          });
-          if (!allowed.ok) return allowed;
-          session.approvals.delete(event.seq);
-          waiting(given);
-        }
-        return ok(null);
+      const started = await startAllowingAll(found.value, {
+        until: allowAllUntil(lasts, options.now()),
+        task: lasts === "task",
+        byLead: false,
       });
       if (!started.ok) return started;
       return ok(summaryOf(found.value));
@@ -3739,16 +3774,33 @@ export const createSessions = (options: {
     allowAllOff: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
-      const session = runningSession(id);
-      const ended = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        if (allowingAllAt(session.allowAll, options.now()) === undefined) return ok(null);
-        const recorded = await writeEvent({ id, session, event: { type: "allow-all-ended" } });
-        return recorded.ok ? ok(null) : recorded;
-      });
+      const ended = await stopAllowingAll(found.value.id, { byLead: false });
       if (!ended.ok) return ended;
       return ok(summaryOf(found.value));
     },
+
+    /**
+     * Allow all for builders, switched on from the Lead's row (#551): one of its builders allows
+     * all until its pull request opens, until `until` at most, marked the Lead's. One allowing all
+     * already keeps its own; `false` says nothing changed.
+     */
+    allowAllFromLead: async (
+      builder: SessionId,
+      until: string,
+    ): Promise<Result<boolean, SessionError>> => {
+      const found = await findSession(builder);
+      if (!found.ok) return found;
+      if (found.value.byLead !== true) return err({ kind: "not-code-session" });
+      const started = await startAllowingAll(found.value, { until, task: true, byLead: true });
+      if (!started.ok) return started.error.kind === "allowing-all" ? ok(false) : started;
+      return ok(true);
+    },
+
+    /**
+     * Allow all for builders, switched off from the Lead's row (#551): a builder's Allow all ends
+     * if the Lead gave it; one the owner turned on themselves stays on.
+     */
+    allowAllOffFromLead: (builder: SessionId) => stopAllowingAll(builder, { byLead: true }),
 
     /** One of the session's attachments (#78) and its bytes, by its id. */
     attachment: async (

@@ -6,6 +6,7 @@ import {
   type CodeSessionList,
   LEAD_BUILDERS,
   LEAD_WINDOW_BY_DEFAULT,
+  type LeadAllowAll,
   type LeadBuilder,
   LeadHeldBack,
   type LeadMerge,
@@ -176,9 +177,21 @@ type Listed = CodeSessionList["sessions"][number];
 
 /**
  * What a builder with no pull request has done, as the Lead reads it each look (#474): its latest
- * event, and whether its last turn failed or was stopped.
+ * event, whether its last turn failed or was stopped, and how many approvals it waits on that
+ * Allow all would allow (#551).
  */
-type Heard = { readonly seq: number; readonly stopped: boolean };
+type Heard = { readonly seq: number; readonly stopped: boolean; readonly allowable: number };
+
+/** How many approvals a session waits on that Allow all covers (#551): asked, not yet answered. */
+const allowableIn = (events: readonly SessionEvent[]) => {
+  const answered = new Set(
+    events.flatMap((event) => (event.type === "approval-answered" ? [event.approval] : [])),
+  );
+  return events.filter(
+    (event) =>
+      event.type === "approval-requested" && event.all === true && !answered.has(event.seq),
+  ).length;
+};
 
 /**
  * Whether a session's last turn failed or was stopped (#474); one cut off by a restart waits for
@@ -267,6 +280,8 @@ export const createLead = (options: {
     | "mergePullRequest"
     | "events"
     | "markStalled"
+    | "allowAllFromLead"
+    | "allowAllOffFromLead"
   >;
   nextUp: Pick<NextUp, "list" | "fresh" | "build" | "filesNamed">;
   /** The files a builder's worktree changes (#423), by its workspace and session. */
@@ -330,6 +345,8 @@ export const createLead = (options: {
       heard.set(session, {
         seq: events.value.at(-1)?.seq ?? 0,
         stopped: endedBadly(events.value),
+        // Only while its turn waits on one: a turn that ended asks nothing any more.
+        allowable: each.waiting === "approval" ? allowableIn(events.value) : 0,
       });
     }
     return heard;
@@ -359,6 +376,26 @@ export const createLead = (options: {
   const allowAllUntilOf = (kept: Kept | undefined) => {
     const until = kept?.allowAllUntil;
     return until !== undefined && Date.parse(until) > options.now() ? until : undefined;
+  };
+
+  /** Its builders still building with no pull request yet, which Allow all for builders reaches (#551). */
+  const allowableOf = (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) =>
+    (kept?.built ?? []).filter((builder) => {
+      const each = listed.get(builder.session);
+      return each !== undefined && each.pullRequest === undefined;
+    });
+
+  /** Who Allow all for builders reaches if it's switched on now (#551). */
+  const reachOf = (
+    kept: Kept | undefined,
+    listed: ReadonlyMap<SessionId, Listed>,
+    heard: ReadonlyMap<SessionId, Heard>,
+  ) => {
+    const builders = allowableOf(kept, listed);
+    const approvals = builders
+      .filter((builder) => listed.get(builder.session)?.allowingAll === undefined)
+      .reduce((sum, builder) => sum + (heard.get(builder.session)?.allowable ?? 0), 0);
+    return { builders: builders.length, approvals };
   };
 
   /** Until when a resting Lead wakes for new work (#457), while that's still ahead. */
@@ -484,7 +521,8 @@ export const createLead = (options: {
     kept: Kept | undefined,
   ): Promise<LeadStatus> => {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
-    const { building, ready } = buildersOf(kept, listed, await heardOf(kept, listed));
+    const heard = await heardOf(kept, listed);
+    const { building, ready } = buildersOf(kept, listed, heard);
     const allowing = allowAllUntilOf(kept);
     const merge = mergeOf(kept?.merge, listed);
     const wakes = kept?.state === "resting" ? openWindowOf(kept) : undefined;
@@ -497,6 +535,7 @@ export const createLead = (options: {
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
+      allowAllReaches: reachOf(kept, listed, heard),
       ...(wakes === undefined ? {} : { wakesUntil: wakes }),
       ...(merge === undefined ? {} : { merge }),
       ...(kept?.heldBack === undefined || kept.state !== "running"
@@ -936,6 +975,40 @@ export const createLead = (options: {
           `Merging in order: ${order}.`,
         );
         return ok(await mergeStep(merging, listed));
+      }),
+
+    /**
+     * Allow all for builders from the Lead's row (#551), while it runs, is paused or rests. On:
+     * for the next 12 hours, its builders still building (no pull request yet) allow all until
+     * each one's pull request opens, as do any it starts; one allowing all already keeps its own
+     * end, and the approvals they wait on that it covers are allowed at once. Off: the builders it
+     * gave it to ask again, those the owner switched on themselves don't, and new ones start
+     * asking.
+     */
+    allowAll: (rawId: string, request: LeadAllowAll) =>
+      changing(rawId, async (workspaceId, was) => {
+        if (was === undefined) return err({ kind: "session", error: { kind: "not-found" } });
+        const { allowAllUntil: _, ...kept } = was;
+        const builders = allowableOf(was, await listedIn(workspaceId));
+        if (!request.on) {
+          for (const { session } of was.built) {
+            const ended = await sessions.allowAllOffFromLead(session);
+            if (!ended.ok)
+              console.error("The Lead couldn't end a builder's Allow all", ended.error);
+          }
+          return ok(await noted(kept, "Allow all for builders is off: its builders ask again."));
+        }
+        const until = allowAllUntil("12h", options.now());
+        for (const { session } of builders) {
+          const allowed = await sessions.allowAllFromLead(session, until);
+          if (!allowed.ok) console.error("The Lead couldn't allow a builder all", allowed.error);
+        }
+        return ok(
+          await noted(
+            { ...kept, allowAllUntil: until },
+            `Allow all for builders is on for 12 hours: ${plural(builders.length, "builder", "builders")} now, and any it starts.`,
+          ),
+        );
       }),
 
     /** Pause (#347): builders already running carry on, and nothing new starts. */

@@ -49,6 +49,7 @@ export {
   GitHubUnread,
   LEAD_BUILDERS,
   LEAD_WINDOW_BY_DEFAULT,
+  LeadAllowAll,
   LeadBuilder,
   LeadHeldBack,
   LeadMerge,

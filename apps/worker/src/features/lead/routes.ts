@@ -1,4 +1,4 @@
-import { LeadMergeRequest, LeadRun, type LeadStatus } from "@courtyard/contract";
+import { LeadAllowAll, LeadMergeRequest, LeadRun, type LeadStatus } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody } from "../../lib/http.ts";
 import { sessionError } from "../sessions/routes.ts";
@@ -25,7 +25,10 @@ const leadProblem = (c: Context, problem: LeadProblem) => {
   }
 };
 
-/** A code workspace's Lead (#347): where it stands, Run the build order, Merge in order (#423) and Pause. */
+/**
+ * A code workspace's Lead (#347): where it stands, Run the build order, Merge in order (#423),
+ * Allow all for builders (#551) and Pause.
+ */
 export const leadRoutes = (lead: Lead) => {
   const routes = new Hono();
 
@@ -49,6 +52,14 @@ export const leadRoutes = (lead: Lead) => {
     const merging = await lead.mergeInOrder(c.req.param("id"), body.value);
     if (!merging.ok) return leadProblem(c, merging.error);
     return c.json(merging.value satisfies LeadStatus);
+  });
+
+  routes.post("/workspaces/:id/lead/allow-all", async (c) => {
+    const body = await readBody(c, LeadAllowAll);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const switched = await lead.allowAll(c.req.param("id"), body.value);
+    if (!switched.ok) return leadProblem(c, switched.error);
+    return c.json(switched.value satisfies LeadStatus);
   });
 
   routes.post("/workspaces/:id/lead/pause", async (c) => {
