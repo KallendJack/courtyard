@@ -7,7 +7,7 @@ test("the owner renames a workspace, then archives it after a confirm step", asy
   const name = `Shed ${Date.now()}`;
   const renamed = `Workshop ${Date.now()}`;
   await page.goto("/new-workspace");
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Add workspace" }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   const address = page.url();

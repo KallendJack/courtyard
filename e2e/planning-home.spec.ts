@@ -8,6 +8,9 @@ import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 // last question above it and its next steps under it, Reply at the foot; its header's photo and
 // pills (+ New · History · Things · Docs); and with nothing to show, the last conversation.
 
+// Its workspaces sort after the Garage gym fixture: Settings' Get to know me starts its session in
+// the first planning workspace, and that would become this Home's last question.
+
 /** A tall photo, as a phone takes one: grey. */
 const bikePhoto = () => ({
   name: "bike.png",
@@ -67,7 +70,7 @@ test("a new workspace's Home is only its name, one line and the message box", as
 test("Home shows the bike's photo with what needs doing pinned, the last question and its next steps", async ({
   page,
 }) => {
-  const name = `Bikes ${Date.now()}`;
+  const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
@@ -109,7 +112,7 @@ test("Home shows the bike's photo with what needs doing pinned, the last questio
 test("a tap on a pin opens its part's card, whose Done it takes it off what needs doing", async ({
   page,
 }) => {
-  const name = `Bikes ${Date.now()}`;
+  const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
@@ -126,7 +129,7 @@ test("a tap on a pin opens its part's card, whose Done it takes it off what need
 });
 
 test("dragging a pin moves it, and it stays where it was put", async ({ page }) => {
-  const name = `Bikes ${Date.now()}`;
+  const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
@@ -152,7 +155,7 @@ test("dragging a pin moves it, and it stays where it was put", async ({ page }) 
 test("a next step replies in the last question's session, and + New starts another", async ({
   page,
 }) => {
-  const name = `Bikes ${Date.now()}`;
+  const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
@@ -180,7 +183,7 @@ test("a next step replies in the last question's session, and + New starts anoth
 });
 
 test("with two pictures, the switch chips pick one, and the pick sticks", async ({ page }) => {
-  const name = `Bikes ${Date.now()}`;
+  const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
   await page.getByRole("button", { name: "+ New" }).click();
@@ -279,7 +282,7 @@ test.describe("on the unfolded Fold", () => {
   };
 
   test("a pin moves only once held; a quick tap opens its card", async ({ page }) => {
-    const name = `Bikes ${Date.now()}`;
+    const name = `Road bikes ${Date.now()}`;
     await newWorkspace(page, name);
     await addBike(page, name);
     await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();

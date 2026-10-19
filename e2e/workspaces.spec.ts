@@ -56,7 +56,7 @@ test("the owner adds a workspace from the sidebar, and it opens ready for a firs
   const switcher = page.getByRole("navigation", { name: "Workspaces" });
 
   await switcher.getByRole("link", { name: "New workspace" }).click();
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Add workspace" }).click();
 
   await expect(page).toHaveURL(/\/workspaces\/allotment-\d+$/);
@@ -87,7 +87,7 @@ test("what a new workspace is for, when the owner says, goes to its models, not 
   const name = `Pottery ${Date.now()}`;
   await page.goto("/new-workspace");
 
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   const forWhat = page.getByLabel("What's it for?");
   // Every screen has the frame and its Talk key since #197, once its own chunk has come.
   await expect(forWhat).toHaveAccessibleDescription(
@@ -106,7 +106,7 @@ test("what a new workspace is for, when the owner says, goes to its models, not 
 test("a name another workspace has gets a clear message", async ({ page }) => {
   await page.goto("/new-workspace");
 
-  await page.getByLabel("Name").fill("garage GYM");
+  await page.getByLabel("Name", { exact: true }).fill("garage GYM");
   await page.getByRole("button", { name: "Add workspace" }).click();
 
   await expect(page.getByRole("alert")).toContainText("already a workspace called Garage gym");
