@@ -106,6 +106,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
 - [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
   provider's errand model, and blocked shops (#245).
+- [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a workspace's name,
+  ✓ just done · ● now · ○ next (#256): a planning one's kept and moved along, a code one's built from its data.
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
@@ -212,6 +214,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one
     button (#245).
+  - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a workspace's name,
+    and the card an item opens: Done, Edit, Remove (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
   - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
@@ -444,6 +448,10 @@ Where the rest fits:
   `errand` model (its cheap model and effort: Claude's Sonnet at Low), with web search and only the picks tool, in
   the background, when the owner taps Find picks, opens the list with prices over a week old (once a day), or blocks
   a shop.
+- **The status line** (#256). As a planning session's turn completes with nothing more queued, `sessions/` hands its
+  last exchanges to `status-line/`, which asks the first provider's `errand` model one one-off question (no tools) in
+  the background and keeps the line it gives, unless the owner changed it meanwhile. A code workspace's line is built
+  from `sessions/`' list and `next-up/` when asked, with no model.
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -653,6 +661,8 @@ things live only in the worker's memory and go when it restarts.
   it's there.
 - `wanted/<workspace>.json`: a planning workspace's wanted list's picks, by each Thing's file name, and the day its
   prices were last checked (#245). Found again on the web, so no change to the context folder.
+- `status-line/<workspace>.json`: a planning workspace's status line (#256), ✓ just done, ● now and ○ next, each
+  with the session that put it there or marked the owner's own words.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
