@@ -9,6 +9,7 @@ import {
   type ThingDetailName,
   ThingForm,
   type ThingList,
+  ThingMark,
   ThingPinMove,
   ThingSlug,
 } from "@courtyard/contract";
@@ -35,6 +36,7 @@ const ROUTES = {
   thing: "/workspaces/:id/things/:slug",
   photo: "/workspaces/:id/things/:slug/photo",
   pin: "/workspaces/:id/things/:slug/pin",
+  mark: "/workspaces/:id/things/:slug/mark",
 } as const;
 
 /**
@@ -242,6 +244,27 @@ export const thingRoutes = (
       { now: now() },
     );
     return changed(c, named.workspace, saved, 200);
+  });
+
+  // A part's card on Home (#481): Done it, which clears what it needed (its history says what)
+  // and has it again; or Add to wanted, one the owner has, to replace.
+  routes.put(ROUTES.mark, async (c) => {
+    const named = thingIn(c);
+    if (named === undefined) return noSuchThing(c);
+    const body = await readBody(c, ThingMark);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const current = await getThing(named.workspace, named.slug);
+    if (!current.ok) return thingError(c, current.error);
+    const { needs } = current.value.summary;
+    const edit: ThingEdit =
+      body.value.mark === "done"
+        ? {
+            slug: named.slug,
+            fields: { status: "have", needs: null },
+            ...(needs === undefined ? {} : { history: `Done: ${needs}` }),
+          }
+        : { slug: named.slug, fields: { status: "replace" } };
+    return changed(c, named.workspace, await saveThing(named.workspace, edit, { now: now() }), 200);
   });
 
   routes.get(ROUTES.photo, async (c) => {

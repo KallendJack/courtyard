@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SessionId } from "./session.ts";
+import { Effort, ModelRef, SessionId } from "./session.ts";
 import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 
 // A planning workspace's Home (#208): one big view, kept by the worker from the workspace's data,
@@ -78,6 +78,9 @@ export const LastQuestion = z.object({
   nextSteps: z.array(z.string()),
   /** Whether its answer is being written now. */
   answering: z.boolean(),
+  /** The model and effort it was asked with, which a reply from Home carries on with (#481). */
+  model: ModelRef,
+  effort: Effort.optional(),
 });
 export type LastQuestion = z.infer<typeof LastQuestion>;
 

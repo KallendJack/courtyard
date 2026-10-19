@@ -50,7 +50,7 @@ test("a new session starts on the first provider's default, model and effort", a
 });
 
 test("the other provider's chip sends the next message to its default", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   const sheet = await modelSheet(page, { more: false });
   const chips = quickSwitch(sheet).getByRole("button");
   await expect(chips).toHaveCount(2);

@@ -280,6 +280,7 @@ export {
   ThingForm,
   ThingHistoryEntry,
   ThingList,
+  ThingMark,
   ThingPhotoPath,
   ThingPin,
   ThingPinMove,

@@ -9,7 +9,7 @@ import { themeColour } from "./theme.ts";
 
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await openBox(page);
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();

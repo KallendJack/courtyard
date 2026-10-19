@@ -7,7 +7,7 @@ test("the owner renames a workspace, then archives it after a confirm step", asy
   const name = `Shed ${Date.now()}`;
   const renamed = `Workshop ${Date.now()}`;
   await page.goto("/new-workspace");
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Add workspace" }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   const address = page.url();
@@ -42,7 +42,7 @@ test("the owner renames a session from its page and its workspace's recent sessi
   page,
 }) => {
   const first = `Where should the bench go? ${Date.now()}`;
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(first);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${first}`);
@@ -68,7 +68,7 @@ test("the owner renames a session from its page and its workspace's recent sessi
   await confirm.getByRole("button", { name: "Delete session" }).click();
 
   await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
-  await openTab(page, "Sessions");
+  await openTab(page, "History");
   await expect(page.getByRole("region", { name: "Sessions" })).not.toContainText("Bench and rack");
   const after = await openRecent(page, "Garage gym");
   await expect(after.getByRole("link", { name: "Bench and rack" })).toHaveCount(0);

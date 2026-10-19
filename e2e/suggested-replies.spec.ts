@@ -14,7 +14,7 @@ const startSuggesting = async (
   effort?: string,
   cover = false,
 ) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   if (effort !== undefined) await chooseEffort(page, effort);
   if (cover) await page.getByRole("button", { name: "Type" }).click();
   await page

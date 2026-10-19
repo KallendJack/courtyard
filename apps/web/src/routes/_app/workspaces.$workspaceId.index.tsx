@@ -112,7 +112,6 @@ function Workspace() {
         workspace={workspace}
         contextFile={contextFile}
         ownerContextShared={ownerContextShared}
-        duePlans={detail.data.duePlans ?? []}
         list={sessionList}
         loaded={{ providers, skills, documents, things }}
         hash={hash}
@@ -142,6 +141,16 @@ function Workspace() {
       choose={(icon) => change({ icon })}
       onRename={() => setTidying("rename")}
       onArchive={() => setTidying("archive")}
+      {...(workspace.mode === "code"
+        ? {}
+        : {
+            onKnows: () =>
+              void navigate({
+                to: "/workspaces/$workspaceId",
+                params: { workspaceId: workspace.id },
+                hash: "knows",
+              }),
+          })}
     />
   );
   /** A document or a Thing just deleted from its page, which its section offers to undo. */
@@ -226,7 +235,6 @@ function Workspace() {
       workspace={workspace}
       contextFile={contextFile}
       ownerContextShared={ownerContextShared}
-      duePlans={detail.data.duePlans ?? []}
       list={sessionList}
       loaded={{ providers, skills, documents, things }}
       hash={hash}
