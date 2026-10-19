@@ -80,7 +80,7 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `wanted` ·
-`documents` · `planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
+`documents` · `floor-plans` · `planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
 
 **Web features:** `home` · `planning-home` · `new-workspace` · `things` · `wanted` · `documents` · `changes` · `tidy`
 · `settings`
@@ -94,6 +94,7 @@ the chain  a time            changed                   Undo
 ```
 
 - **Every change to the context folder** goes through `context-folder`, so each one is a commit you can undo.
+- **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
 - **`wanted`** keeps the wanted list: up to three picks for each Thing wanted, found and priced on the web by a short
   background turn on a cheap model, and the shops you blocked.
 

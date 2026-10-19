@@ -251,6 +251,32 @@ drawn shows its source under "Couldn't draw this diagram". Told on every turn, a
 The eval's `diagram-*` scenario checks it on both providers: steps that depend on what you find are answered with a
 diagram after a sentence of its own, and a plain question gets none.
 
+Built with #257: a `plan` block is a room described as data in centimetres, which the web app draws top-down and to
+scale, front of the house at the bottom, with a list of what's in it beside the plan. The contract's `FloorPlan`
+schema checks it, and one that fails shows its source under "Couldn't draw this floor plan". In a planning workspace
+the worker saves each room's plan as its document ("Garage floor plan") once the answer ends, one per room, so a
+redraw replaces it, and Home shows it. Told on every turn, after the diagram rule:
+
+> A room's layout, such as where the bench and shelves go in a garage, is drawn to scale as a floor plan, never with
+> letters and dashes: write a code block whose language is `plan`, holding only JSON that describes the room in
+> centimetres as seen from the front of the house, its front wall at the bottom, such as `{"room": "Garage", "width":
+> 300, "depth": 540, "front": "Garage door", "beyond": {"left": "House"}, "openings": [{"kind": "garage-door", "wall":
+> "front", "at": 30, "width": 240}, {"kind": "door", "wall": "right", "at": 300, "width": 80}], "partitions":
+> [{"fromBack": 270, "doorway": {"at": 200, "width": 80}}], "zones": [{"name": "Office", "fromLeft": 0, "fromBack": 0,
+> "width": 300, "depth": 270}], "items": [{"name": "Workbench", "fromLeft": 0, "fromBack": 300, "width": 60, "depth":
+> 120, "why": "Bikes stand clear of the side door"}, {"name": "Tool wall", "wall": "left", "at": 300, "length": 120},
+> {"name": "Turbo trainer", "status": "want", "fromLeft": 200, "fromBack": 60, "width": 60, "depth": 180}]}`. The
+> width runs from the left wall to the right, and the depth from the back wall to the front. Something on the floor
+> gives its back left corner (`fromLeft`, `fromBack`) and its size (`round` for a chair or a stand); something on a
+> wall, such as a tool wall or a socket, gives its wall, where it starts along it and its length, as doors and windows
+> do (kind `door`, `window`, `garage-door` or `doorway`, `at` measured from a side wall's back corner or the back or
+> front wall's left corner). A partition goes across the room (`fromBack`) or down it (`fromLeft`). Mark what the
+> owner wants but doesn't have `"status": "want"`, and say in `why` why each thing is where it is. Turn a plan only
+> for a reason, written in it: `"turned": {"to": "right", "why": "…"}`. To move something, draw the whole plan again
+> with it moved; in a planning workspace Courtyard keeps each room's latest plan on its Home. Where a room's front
+> is, once you know, is worth keeping as a fact, so every later plan agrees. Write a sentence or two of your own
+> before it.
+
 ## Courtyard's file tools
 
 Built with #71, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its

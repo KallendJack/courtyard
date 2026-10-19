@@ -107,6 +107,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
   provider's errand model, and blocked shops (#245).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
+- [`floor-plans/`](../apps/worker/src/features/floor-plans/README.md): each room's last floor plan from an answer,
+  saved as its document once the answer ends, and Home's plan views (#257).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
   showing, and the last question with its next steps.
@@ -305,7 +307,12 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   one at a time, in the colours read from the theme, at its
   own size so a wide one scrolls sideways. A `product` block (`product.tsx`, #245) is the JSON the contract's
   `ProductBlock` accepts, drawn as a card with + Add to wanted, which adds a Thing of that name, wanted, through
-  `features/things/`'s call, or ✓ In Wanted once one is. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+  `features/things/`'s call, or ✓ In Wanted once one is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
+  contract's `FloorPlan` accepts, a room in centimetres seen from the front, drawn top-down and to scale by our own
+  SVG (`plan-geometry.ts` places each part, and turns the plan when it says why) beside a list of its things by
+  side; a tap on a thing or its row lights both up. It says "On Home ✓" once the workspace's Home shows that very
+  plan, which the worker saved when the answer ended (`floor-plans/`), and Home draws its plan views with the same
+  block, `OnHome` telling it it's in a block whose size is set. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
   changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
   script, load something or go somewhere (links keep their words) before it goes in the page, the one place
   Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step

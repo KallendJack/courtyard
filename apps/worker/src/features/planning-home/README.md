@@ -7,7 +7,7 @@ photo, and the owner's last question with its next steps. Decided here once, so 
 stretched chain and the soft rear tyre flagged first, the fork a quiet pin) and "Wanted" (lights, about £40). Lights
 changed last, so Wanted shows, until you tap the bike, which then stays.
 
-- **Uses:** `things/` (the Things, read), `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
+- **Uses:** `things/` (the Things, read), `floor-plans/` (its plan views), `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/planning-home/` once its screens are built.
 
 ## API
@@ -20,8 +20,9 @@ changed last, so Wanted shows, until you tap the bike, which then stays.
 ## How it works
 
 - **Views** (`homeViews`): a picture for each Thing that isn't a part and has a photo and parts, its parts that need
-  something first (flagged), then the rest, each with its pin; then the wanted list once anything is wanted or to
-  replace. A view's `changedAt` is the newest of its Things' files.
+  something first (flagged), then the rest, each with its pin; then each room's floor plan, saved as its document
+  (#257), newest first; then the wanted list once anything is wanted or to replace. A view's `changedAt` is the
+  newest of its Things' files, or its plan's document's.
 - **Showing:** the owner's pick while that view is there, else the view last changed; a pick whose view has gone is
   passed over, never refused.
 - **The pick** is Courtyard's own state, kept in the data folder (`planning-home/<workspace>.json`), not a change to

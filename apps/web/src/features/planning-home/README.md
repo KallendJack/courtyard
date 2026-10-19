@@ -29,6 +29,9 @@ foot.
   something, faint dots otherwise; beside it on a tablet, under it on the cover screen, only what needs doing, never
   brands or sizes (#220). A tap on a pin or a row opens the part's card (`part-card.tsx`: Done it, Add to wanted, its
   Thing's card): beside them on a wide screen, over the page otherwise. A mouse drags a pin; a finger holds it first.
+- **The plan view** (#257; Paper, "Tablet · Floor plan in an answer (#257)"): a room's floor plan, drawn by the same
+  rich block as in an answer (`components/rich-blocks/floor-plan.tsx`, told it's `OnHome`), its list of things
+  scrolling inside the block, which keeps its size.
 - **Add** on the frame's rail: a Thing, a photo or a doc.
 - An empty workspace shows only its name, one line and the box. The wanted list view comes whole with #245.
 

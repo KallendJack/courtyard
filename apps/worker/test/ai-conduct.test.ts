@@ -393,6 +393,14 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toContain(await quotedInGuide("A `mermaid` block"));
   });
 
+  it("asks for a floor plan block for a room's layout, never letters and dashes (#257)", async () => {
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(
+      `${await quotedInGuide("A `mermaid` block")}\n\n${await quotedInGuide("A room's layout")}`,
+    );
+  });
+
   it("sends the owner's new message on its own for a session's first turn", async () => {
     const { framing } = await firstTurn();
 
