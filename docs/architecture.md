@@ -707,8 +707,9 @@ the owner talks to in a session) read what the second list builds; only an app t
   original, frozen. **[`docs/adr/`](adr/):** why it is built that way.
 - **`docs/architecture.md`:** this map.
 - **[`docs/agents/`](agents/):** what Matt's setup writes, kept as he writes it (`issue-tracker.md`,
-  `triage-labels.md`, `domain.md`), and Courtyard's one addition, [`roadmap.md`](agents/roadmap.md): the GitHub
-  milestones that hold the order of work.
+  `triage-labels.md`, `domain.md`), and Courtyard's two additions: [`roadmap.md`](agents/roadmap.md), the GitHub
+  milestones that hold the order of work, and [`process.md`](agents/process.md), the detail behind AGENTS.md's
+  Process rules (the next task, claims, when a change needs a board).
 - **Skills:** the process is [mattpocock/skills](https://github.com/mattpocock/skills) as it is, installed on the
   machine of whoever works on the repo from Matt's own plugin list, so it updates itself; AGENTS.md's Agent skills
   section says which docs they read. Skills for building Courtyard would go in `.agents/skills/` at the repo's top
