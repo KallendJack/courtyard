@@ -141,7 +141,9 @@ describe("Find picks", () => {
     await writeFile(
       join(contextDir, "mountain-biking", "workspace.json"),
       JSON.stringify({
-        blockedShops: [{ shop: "Tredz", since: "2026-10-13T09:00:00.000Z", said: "not from Tredz" }],
+        blockedShops: [
+          { shop: "Tredz", since: "2026-10-13T09:00:00.000Z", said: "not from Tredz" },
+        ],
       }),
     );
     const pick = (fields: Record<string, unknown>) => ({
@@ -264,9 +266,7 @@ const keepPicks = async (daysAgo: number) => {
 };
 
 const blockedShops = async (request: Requester) =>
-  BlockedShops.parse(
-    await (await request("/api/workspaces/mountain-biking/blocked-shops")).json(),
-  );
+  BlockedShops.parse(await (await request("/api/workspaces/mountain-biking/blocked-shops")).json());
 
 describe("blocked shops", () => {
   it("are blocked by a model when the owner says not to use one, and its picks found again elsewhere", async () => {

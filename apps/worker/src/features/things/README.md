@@ -5,8 +5,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 **Example:** you add "Chain" with a photo. It's one file and its resized photo in one change, with one Undo.
 
 - **Uses:** `context-folder/` (each change), `planning-files/`, `attachments/` (a photo from a turn).
-- **Used by:** `sessions/` (the Things tool), `prompts/`, `changes/`, `worker.ts`; in the web app,
-  `features/things/`.
+- **Used by:** `sessions/` (the Things tool), `prompts/`, `changes/`, `wanted/` (the Things wanted or to replace),
+  `worker.ts`; in the web app, `features/things/`.
 
 ## API
 
@@ -17,7 +17,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 
 ## How it works
 
-- Reads each file against the contract's schema, listing a file that fails with its problem.
+- Reads each file against the contract's schema, listing a file that fails with its problem. A Thing bought from
+  the wanted list keeps what was paid as its price and where as its shop (#245).
 - Lists them with each part after its Thing.
 - A part's pin (`pin: 42.5, 61`, across then down, each a percentage of its Thing's photo) and a Thing's `needs`
   (its next step) are kept by the owner's form as they are; a pin goes when its part moves to another Thing or none.

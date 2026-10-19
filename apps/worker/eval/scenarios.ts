@@ -125,9 +125,7 @@ export type Turn = {
 export type ExpectedThing = {
   readonly action: "add" | "change" | "remove";
   readonly name: Words;
-  readonly fields?: Readonly<
-    Partial<Record<"status" | ThingDetailName, Words>>
-  >;
+  readonly fields?: Readonly<Partial<Record<"status" | ThingDetailName, Words>>>;
   readonly history?: Words;
   readonly partOf?: string;
 };

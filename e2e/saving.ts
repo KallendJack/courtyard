@@ -7,7 +7,8 @@ export const newWorkspace = async (page: Page, name: string) => {
     .getByRole("navigation", { name: "Workspaces" })
     .getByRole("link", { name: "New workspace" })
     .click();
-  await page.getByLabel("Name").fill(name);
+  // Exactly, as a session waiting on the owner can have "name" in its link's label.
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Add workspace" }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 };

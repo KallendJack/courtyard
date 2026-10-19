@@ -93,9 +93,9 @@ import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createTidying } from "./features/tidy/index.ts";
 import { tidyRoutes } from "./features/tidy/routes.ts";
 import { createVersionBumps } from "./features/version-bumps/index.ts";
+import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWanted } from "./features/wanted/index.ts";
 import { wantedRoutes } from "./features/wanted/routes.ts";
-import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
 import {
   archiveWorkspace,

@@ -16,6 +16,7 @@ import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
 import { err, ok, type Result } from "../lib/result.ts";
 import {
+  BLOCK_SHOP_TOOL_NAME,
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
   PICKS_TOOL_NAME,
@@ -218,7 +219,12 @@ const scriptedPicks = (message: string): Record<string, unknown>[] => {
     const page = (shop: string) =>
       `https://${shop.toLowerCase()}.example/${name.toLowerCase().replace(/\W+/g, "-")}`;
     const kinds = [
-      { kind: "best-value", words: "best value", why: "Does the job well for the money", price: 55 },
+      {
+        kind: "best-value",
+        words: "best value",
+        why: "Does the job well for the money",
+        price: 55,
+      },
       { kind: "cheapest", words: "cheapest", why: "Does the job, no more", price: 38 },
       { kind: "stretch", words: "worth stretching for", why: "Lasts twice as long", price: 150 },
     ];
@@ -241,6 +247,15 @@ const scriptedPicks = (message: string): Record<string, unknown>[] => {
     return [{ thing: label, picks }];
   });
 };
+
+const BLOCK_SHOP = /^block shop: ([^|]+?)(?: \| (.+))?$/i;
+
+/** The shops a message scripts blocking (#245), one per line: "block shop: Tredz | not from Tredz". */
+const scriptedBlocks = (message: string): Record<string, string>[] =>
+  message.split("\n").flatMap((line) => {
+    const [, shop, said] = BLOCK_SHOP.exec(line.trim()) ?? [];
+    return shop === undefined ? [] : [{ shop, ...(said === undefined ? {} : { said }) }];
+  });
 
 const PREVIEW_SHOT = /^preview screenshot: (\S+)(?: (\S+))?$/i;
 
@@ -294,6 +309,7 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
+  [BLOCK_SHOP_TOOL_NAME, scriptedBlocks],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
   [PICKS_TOOL_NAME, scriptedPicks],

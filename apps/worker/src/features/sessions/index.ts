@@ -26,7 +26,6 @@ import {
   type NewMessage,
   type Overflow,
   overflowFrom,
-  type WantedPick,
   type PlacedLine,
   type ProviderId,
   type PullRequest,
@@ -53,6 +52,7 @@ import {
   type TurnNow,
   takesEffort,
   tasksIn,
+  type WantedPick,
   type WorkspaceConnections,
   WorkspaceId,
 } from "@courtyard/contract";
@@ -682,7 +682,9 @@ export type PreviewHooks = {
  * found again elsewhere.
  */
 export type WantedHooks = {
-  readonly picksOf: (workspaceId: WorkspaceId) => Promise<ReadonlyMap<string, readonly WantedPick[]>>;
+  readonly picksOf: (
+    workspaceId: WorkspaceId,
+  ) => Promise<ReadonlyMap<string, readonly WantedPick[]>>;
   readonly shopBlocked: (workspaceId: WorkspaceId, shop: string) => Promise<void>;
 };
 

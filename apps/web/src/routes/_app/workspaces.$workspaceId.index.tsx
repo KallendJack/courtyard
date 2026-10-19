@@ -137,6 +137,7 @@ function Workspace() {
     <WorkspaceMenu
       workspaceId={workspace.id}
       workspaceName={workspace.name}
+      mode={workspace.mode}
       icon={workspace.icon}
       choose={(icon) => change({ icon })}
       onRename={() => setTidying("rename")}

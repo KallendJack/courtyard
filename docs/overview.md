@@ -79,11 +79,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 
 ### 🗂️ What Courtyard knows
 
-**Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `documents` ·
-`planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
+**Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `wanted` ·
+`documents` · `planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
 
-**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `documents` · `changes` · `tidy` ·
-`settings`
+**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `wanted` · `documents` · `changes` · `tidy`
+· `settings`
 
 You say "swapped the chain today":
 
@@ -94,6 +94,8 @@ the chain  a time            changed                   Undo
 ```
 
 - **Every change to the context folder** goes through `context-folder`, so each one is a commit you can undo.
+- **`wanted`** keeps the wanted list: up to three picks for each Thing wanted, found and priced on the web by a short
+  background turn on a cheap model, and the shops you blocked.
 
 ### 🛠️ Building code
 

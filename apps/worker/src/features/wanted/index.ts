@@ -3,11 +3,11 @@ import { join } from "node:path";
 import {
   PICK_KINDS,
   PICKS_MAX,
-  WantedPick,
   PickKind,
   ThingSlug,
   type ThingSummary,
   type WantedList,
+  WantedPick,
   type WantedRow,
   type WorkspaceId,
 } from "@courtyard/contract";
@@ -203,7 +203,9 @@ export const createWanted = (options: {
   /** The wanted Things now, as a price check is given them, with the shops the owner blocked. */
   const wantedNow = async (
     workspaceId: WorkspaceId,
-  ): Promise<Result<{ things: CheckedThing[]; blocked: string[]; folder: string }, ThingRefusal>> => {
+  ): Promise<
+    Result<{ things: CheckedThing[]; blocked: string[]; folder: string }, ThingRefusal>
+  > => {
     const [things, workspace] = await Promise.all([
       readThings({ contextDir, workspaceId }),
       getWorkspace(contextDir, workspaceId),
@@ -371,7 +373,9 @@ export const createWanted = (options: {
     list: listNow,
 
     /** Each wanted Thing's picks by its file's name, ★ first, for a session's turn. */
-    picksOf: async (workspaceId: WorkspaceId): Promise<ReadonlyMap<string, readonly WantedPick[]>> => {
+    picksOf: async (
+      workspaceId: WorkspaceId,
+    ): Promise<ReadonlyMap<string, readonly WantedPick[]>> => {
       const kept = await read(workspaceId);
       const picks = new Map<string, readonly WantedPick[]>();
       for (const slug of Object.keys(kept.picks)) {
@@ -423,7 +427,6 @@ export const createWanted = (options: {
       }
       return listNow(workspaceId);
     },
-
   };
 };
 

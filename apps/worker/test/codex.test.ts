@@ -1451,7 +1451,7 @@ describe("Courtyard's tools on a Codex turn", () => {
     return { success: result.success, text, items: result.contentItems };
   };
 
-  it("offers the file tools, the save tool, the document and Things tools, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
+  it("offers the file tools, the save tool, the document, Things and block shop tools, the use skill tool and the suggest replies tool on each thread, with what each takes", async () => {
     const { codex } = await turnCalling([]);
 
     const ToolSpec = z.object({
@@ -1473,6 +1473,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "save_to_context",
       "save_document",
       "save_thing",
+      "block_shop",
       "use_skill",
       "suggest_replies",
     ]);
