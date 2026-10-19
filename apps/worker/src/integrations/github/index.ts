@@ -20,6 +20,7 @@ import type {
   FoundIssue,
   FoundPullRequest,
   FoundRepo,
+  FoundRoadmapMilestone,
   GitHubApi,
   ReadRefused,
   UserToken,
@@ -30,6 +31,8 @@ export type {
   FoundCheckRun,
   FoundIssue,
   FoundMilestone,
+  FoundMilestoneIssue,
+  FoundRoadmapMilestone,
   FoundPullRequest,
   FoundRepo,
   GitHubApi,
@@ -599,6 +602,16 @@ export const createGitHub = (options: {
       const signedIn = await tokenFor(api);
       if (!signedIn.ok) return signedIn;
       const found = await signedIn.value.github.openIssues(signedIn.value.token, find);
+      return found.ok ? found : err(problemOf(found.error));
+    },
+
+    /** `repo`'s open milestones, each with every issue in it, open and closed (#532). */
+    roadmap: async (find: {
+      repo: string;
+    }): Promise<Result<readonly FoundRoadmapMilestone[], GitHubProblem>> => {
+      const signedIn = await tokenFor(api);
+      if (!signedIn.ok) return signedIn;
+      const found = await signedIn.value.github.roadmap(signedIn.value.token, find);
       return found.ok ? found : err(problemOf(found.error));
     },
 
