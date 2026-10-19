@@ -2,14 +2,14 @@ import { z } from "zod";
 import { Effort, ModelRef, SessionId } from "./session.ts";
 import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 
-// A planning workspace's Home (#208): one big view, kept by the worker from the workspace's data,
-// with the owner's last question above it and the next steps under it. Each view is general, filled
-// from any workspace's Things, never made for one workspace.
+// A planning workspace's Home (#208, #565): one big view of the workspace's main subject, kept by
+// the worker from the workspace's data, and nothing else: no chat. Each view is general, filled from
+// any workspace's Things, never made for one workspace.
 
-/** A view on Home, by what it shows: `wanted`, or `picture:<slug>` for that Thing's photo. */
+/** A view on Home, by what it shows: `picture:<slug>` for that Thing broken down on its photo. */
 export const HomeViewId = z
   .string()
-  .regex(/^(?:wanted|picture:[a-z0-9]+(?:-[a-z0-9]+)*)$/)
+  .regex(/^picture:[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .brand<"HomeViewId">();
 export type HomeViewId = z.infer<typeof HomeViewId>;
 
@@ -27,16 +27,6 @@ export const PinnedPart = z.object({
 });
 export type PinnedPart = z.infer<typeof PinnedPart>;
 
-/** A Thing the owner wants or means to replace, with its price when known and its next step. */
-export const WantedItem = z.object({
-  thing: ThingSlug,
-  name: z.string(),
-  status: z.enum(["want", "replace"]),
-  price: z.string().optional(),
-  needs: z.string().optional(),
-});
-export type WantedItem = z.infer<typeof WantedItem>;
-
 const viewBase = {
   /** Its switch chip's words. */
   title: z.string(),
@@ -45,9 +35,9 @@ const viewBase = {
 };
 
 /**
- * One of Home's views: a Thing's photo with its parts pinned, flagged first, then the rest; or
- * the wanted list, from the Things wanted or to replace. Floor plans, renders and phases come
- * with their own issues, as further kinds here.
+ * One of Home's views: the Breakdown view, a Thing's photo with every part pinned and labelled,
+ * those that need something first. Plans (#567) and a Thing's drawing (#566) come with their own
+ * issues, as further kinds here.
  */
 export const HomeView = z.discriminatedUnion("kind", [
   z.object({
@@ -57,12 +47,6 @@ export const HomeView = z.discriminatedUnion("kind", [
     /** The Thing whose photo it is. */
     thing: ThingSlug,
     parts: z.array(PinnedPart),
-  }),
-  z.object({
-    kind: z.literal("wanted"),
-    id: HomeViewId,
-    ...viewBase,
-    items: z.array(WantedItem),
   }),
 ]);
 export type HomeView = z.infer<typeof HomeView>;

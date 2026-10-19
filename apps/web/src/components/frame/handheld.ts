@@ -80,6 +80,11 @@ export type MessageBox = TalkTarget & {
   model: string;
   /** Which of its sheets is open, so the button that opened it shows lit (#194). */
   choosing?: "skill" | "model";
+  /**
+   * Out of sight on a tablet too until it's opened, as it always is on the cover screen: on a
+   * planning workspace's Home, which is a view, not a chat (#565).
+   */
+  tucked?: boolean;
 };
 
 /** What's listening for the message box or a page's field: the talk strip, or the Talk key. */

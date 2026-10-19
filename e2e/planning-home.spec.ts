@@ -3,13 +3,14 @@ import { pngOf } from "../apps/worker/test/test-files.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
-// A planning workspace's Home (#481; Paper, "Tablet · Home: the bike, parts pinned (#481)" and its
-// Desktop and Cover boards): its current view, a Thing's photo with its parts pinned, the owner's
-// last question above it and its next steps under it, Reply at the foot; its header's photo and
-// pills (+ New · History · Things · Docs); and with nothing to show, the last conversation.
+// A planning workspace's Home (#565; Paper, "Tablet · Planning Home: the bike, part by part
+// (#565)" and its Desktop and Cover boards): a view of the workspace's main subject and nothing
+// else, a Thing's photo with every part labelled, a tap on one opening its card at the view's
+// foot; no chat, the next steps in History; its header's photo and pills (+ New · History ·
+// Things · Docs); and with nothing to show, one quiet line.
 
 // Its workspaces sort after the Garage gym fixture: Settings' Get to know me starts its session in
-// the first planning workspace, and that would become this Home's last question.
+// the first planning workspace, and that would become this Home's latest session.
 
 /** A tall photo, as a phone takes one: grey. */
 const bikePhoto = () => ({
@@ -18,7 +19,7 @@ const bikePhoto = () => ({
   buffer: Buffer.from(pngOf(60, 80, () => [120, 120, 120])),
 });
 
-/** Attaches a photo to the Reply box with its +. */
+/** Attaches a photo to the message box with its +. */
 const attachPhoto = async (page: Page) => {
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Add a photo or file" }).click();
@@ -26,9 +27,9 @@ const attachPhoto = async (page: Page) => {
 };
 
 /**
- * A bike with a photo and three parts, as a model would add them: the chain to replace and the
- * rear tyre to pump up, both flagged; the fork fine, a faint dot. The answer suggests two next
- * steps. Back on Home after.
+ * A bike with a photo and four parts, as a model would add them: the chain to replace and the
+ * rear tyre to pump up, both flagged; the fork fine; the saddle not placed on the photo yet. The
+ * answer suggests two next steps. Back on Home after.
  */
 const addBike = async (page: Page, name: string) => {
   await attachPhoto(page);
@@ -38,17 +39,24 @@ const addBike = async (page: Page, name: string) => {
       "thing add: name Whyte T-140 | status have | brand Whyte | photo 1",
       "thing add: name Chain | status replace | part of T1 | pin 50, 50 | needs Replace: it's stretched | brand KMC X11",
       "thing add: name Rear tyre | status have | part of T1 | pin 80, 60 | needs Pump it up before Saturday",
-      "thing add: name Fork | status have | part of T1 | pin 20, 30",
+      "thing add: name Fork | status have | part of T1 | pin 20, 30 | brand RockShox | size 120 mm",
+      "thing add: name Saddle | status have | part of T1",
       "suggest replies: Find a chain under £30 | Which lights?",
     ].join("\n"),
   );
   await expect(page.getByRole("list", { name: "Things saved" }).getByRole("listitem")).toHaveCount(
-    4,
+    5,
   );
   await page.getByRole("link", { name: `Back to ${name}` }).click();
 };
 
 const view = (page: Page) => page.getByRole("region", { name: "Whyte T-140" });
+/** A part's label: beside the photo once it's placed, under it until then. */
+const label = (page: Page, part: string) =>
+  view(page).getByRole("button", { name: part, exact: true });
+const pin = (page: Page, part: string) =>
+  view(page).getByRole("button", { name: `Pin: ${part}`, exact: true });
+const messageBox = (page: Page) => page.getByLabel("Message", { exact: true });
 
 /** Where a pin's middle is on the page. */
 const middleOf = async (pin: Locator) => {
@@ -61,13 +69,13 @@ test("a new workspace's Home is only its name, one line and the message box", as
   await newWorkspace(page, name);
 
   await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
-  await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
+  await expect(messageBox(page)).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Workspace tabs" })).toHaveCount(0);
   // With no photo yet, the header's ring is the workspace's icon, which offers one.
   await expect(page.getByRole("button", { name: `Add a photo of ${name}` })).toBeVisible();
 });
 
-test("Home shows the bike's photo with what needs doing pinned, the last question and its next steps", async ({
+test("Home breaks the bike down on its photo, every part labelled, with no chat", async ({
   page,
 }) => {
   const name = `Road bikes ${Date.now()}`;
@@ -78,54 +86,57 @@ test("Home shows the bike's photo with what needs doing pinned, the last questio
   await expect(page.getByRole("link", { name: "Whyte T-140's card" })).toBeVisible();
   const pills = page.getByRole("navigation", { name: "Workspace tabs" });
   await expect(pills.getByRole("button", { name: "+ New" })).toBeVisible();
-  await expect(pills.getByRole("link")).toHaveText(["History1", "Things4"]);
+  await expect(pills.getByRole("link")).toHaveText(["History1", "Things5"]);
 
-  // The view: the flagged parts numbered in gold, the fine one a faint dot; only what needs doing.
+  // The view: every part labelled, not only those that need something; a pin for each placed one.
   const bike = view(page);
   await expect(bike.getByRole("img", { name: "Photo of Whyte T-140" })).toBeVisible();
-  await expect(bike.getByRole("button", { name: "1: Chain" })).toBeVisible();
-  await expect(bike.getByRole("button", { name: "2: Rear tyre" })).toBeVisible();
-  await expect(bike.getByRole("button", { name: "Fork", exact: true })).toBeVisible();
-  const parts = bike.getByRole("list", { name: "What needs doing" });
-  await expect(parts.getByRole("listitem")).toHaveText([
-    "1ChainReplace: it's stretched",
-    "2Rear tyrePump it up before Saturday",
-  ]);
+  for (const part of ["Chain", "Rear tyre", "Fork", "Saddle"]) {
+    await expect(label(page, part)).toBeVisible();
+  }
+  for (const part of ["Chain", "Rear tyre", "Fork"]) await expect(pin(page, part)).toBeVisible();
+  await expect(pin(page, "Saddle")).toHaveCount(0);
+  // Calm: what a part needs waits in its card, and its details too.
+  await expect(bike).not.toContainText("Pump it up before Saturday");
   await expect(bike).not.toContainText("KMC X11");
 
-  // The last question above it, the next steps under it, and Reply at the foot.
-  await expect(page.getByRole("link", { name: /^Your last question: thing add/ })).toBeVisible();
-  await expect(page.getByRole("list", { name: "Next steps" }).getByRole("button")).toHaveText([
-    "Find a chain under £30",
-    "Which lights?",
-  ]);
-  await expect(page.getByLabel("Message", { exact: true })).toHaveAttribute(
-    "placeholder",
-    "Reply…",
-  );
+  // No chat: no last question, no next steps, and the box out of sight until it's asked for.
+  await expect(page.getByRole("link", { name: /^Your last question/ })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Next steps" })).toHaveCount(0);
+  await expect(messageBox(page)).toBeHidden();
 
-  // What Courtyard knows is in the ⋯ now.
+  // What Courtyard knows is in the ⋯.
   await openWhatCourtyardKnows(page);
   await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
 });
 
-test("a tap on a pin opens its part's card, whose Done it takes it off what needs doing", async ({
+test("a tap on a part opens its card at the view's foot: what's fitted, what it needs, Done it and Ask about it", async ({
   page,
 }) => {
   const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
-  await view(page).getByRole("button", { name: "2: Rear tyre" }).click();
-  const card = page.getByRole("region", { name: "Rear tyre's card" });
-  await expect(card).toContainText("Pump it up before Saturday");
-  await card.getByRole("button", { name: "Done it" }).click();
+  // From its pin: what's fitted.
+  await pin(page, "Fork").click();
+  const fork = view(page).getByRole("region", { name: "Fork's card" });
+  await expect(fork).toContainText("RockShox · 120 mm");
+  await expect(label(page, "Fork")).toHaveAttribute("aria-pressed", "true");
 
-  await expect(card).toHaveCount(0);
-  await expect(view(page).getByRole("button", { name: "Rear tyre", exact: true })).toBeVisible();
-  await expect(
-    view(page).getByRole("list", { name: "What needs doing" }).getByRole("listitem"),
-  ).toHaveCount(1);
+  // From its label: what it needs, and Done it.
+  await label(page, "Rear tyre").click();
+  const tyre = view(page).getByRole("region", { name: "Rear tyre's card" });
+  await expect(tyre).toContainText("Pump it up before Saturday");
+  await expect(fork).toHaveCount(0);
+  await tyre.getByRole("button", { name: "Done it" }).click();
+  await expect(tyre).not.toContainText("Pump it up before Saturday");
+  await expect(tyre.getByRole("button", { name: "Done it" })).toHaveCount(0);
+
+  // Ask about it opens the box for a new session about the part.
+  await tyre.getByRole("button", { name: "Ask about it" }).click();
+  await expect(messageBox(page)).toBeVisible();
+  await expect(messageBox(page)).toHaveValue("About the Rear tyre on the Whyte T-140: ");
+  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
 });
 
 test("dragging a pin moves it, and it stays where it was put", async ({ page }) => {
@@ -133,8 +144,9 @@ test("dragging a pin moves it, and it stays where it was put", async ({ page }) 
   await newWorkspace(page, name);
   await addBike(page, name);
 
-  const fork = view(page).getByRole("button", { name: "Fork", exact: true });
-  const from = await middleOf(fork);
+  // Hovering waits for the pin to be still: the page settles once the frame has measured it.
+  await pin(page, "Fork").hover();
+  const from = await middleOf(pin(page, "Fork"));
   const saved = page.waitForResponse(
     (response) => response.url().endsWith("/pin") && response.request().method() === "PUT",
   );
@@ -147,19 +159,49 @@ test("dragging a pin moves it, and it stays where it was put", async ({ page }) 
   expect((await saved).ok()).toBe(true);
 
   await page.reload();
-  const moved = await middleOf(view(page).getByRole("button", { name: "Fork", exact: true }));
+  const moved = await middleOf(pin(page, "Fork"));
   expect(Math.abs(moved.x - (from.x + 30))).toBeLessThan(4);
   expect(Math.abs(moved.y - (from.y + 40))).toBeLessThan(4);
 });
 
-test("a next step replies in the last question's session, and + New starts another", async ({
+test("a part with no pin is placed with a tap on it, then on the photo, and stays", async ({
   page,
 }) => {
   const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
 
-  await page
+  await label(page, "Saddle").click();
+  await expect(view(page)).toContainText("Tap the photo where the Saddle is");
+  const photo = await view(page).getByRole("img", { name: "Photo of Whyte T-140" }).boundingBox();
+  const at = {
+    x: (photo?.x ?? 0) + (photo?.width ?? 0) * 0.4,
+    y: (photo?.y ?? 0) + (photo?.height ?? 0) * 0.3,
+  };
+  const saved = page.waitForResponse(
+    (response) => response.url().endsWith("/pin") && response.request().method() === "PUT",
+  );
+  await page.mouse.click(at.x, at.y);
+  expect((await saved).ok()).toBe(true);
+  await expect(pin(page, "Saddle")).toBeVisible();
+  await expect(view(page)).not.toContainText("Tap the photo where the Saddle is");
+
+  await page.reload();
+  const placed = await middleOf(pin(page, "Saddle"));
+  expect(Math.abs(placed.x - at.x)).toBeLessThan(4);
+  expect(Math.abs(placed.y - at.y)).toBeLessThan(4);
+});
+
+test("History's latest session shows its next steps, one replying in it, and + New starts another", async ({
+  page,
+}) => {
+  const name = `Road bikes ${Date.now()}`;
+  await newWorkspace(page, name);
+  await addBike(page, name);
+
+  await openTab(page, "History");
+  const sessions = page.getByRole("region", { name: "Sessions" });
+  await sessions
     .getByRole("list", { name: "Next steps" })
     .getByRole("button", { name: "Which lights?" })
     .click();
@@ -168,11 +210,8 @@ test("a next step replies in the last question's session, and + New starts anoth
   await expect(session).toContainText("You said: thing add");
 
   await page.getByRole("link", { name: `Back to ${name}` }).click();
-  await expect(
-    page.getByRole("link", { name: /^Your last question: Which lights\?/ }),
-  ).toBeVisible();
   await page.getByRole("button", { name: "+ New" }).click();
-  const box = page.getByLabel("Message", { exact: true });
+  const box = messageBox(page);
   await expect(box).toBeFocused();
   await box.fill("Where do I ride this weekend?");
   await page.getByRole("button", { name: "Start" }).click();
@@ -182,7 +221,9 @@ test("a next step replies in the last question's session, and + New starts anoth
   await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(2);
 });
 
-test("with two pictures, the switch chips pick one, and the pick sticks", async ({ page }) => {
+test("with two Things broken down, the switch chips pick one, and the pick sticks", async ({
+  page,
+}) => {
   const name = `Road bikes ${Date.now()}`;
   await newWorkspace(page, name);
   await addBike(page, name);
@@ -190,8 +231,8 @@ test("with two pictures, the switch chips pick one, and the pick sticks", async 
   await attachPhoto(page);
   await startSaving(
     page,
-    // The bike's four Things are T1 to T4, so the road bike is T5.
-    "thing add: name Road bike | status have | photo 1\nthing add: name Saddle | status want | part of T5 | pin 40, 20",
+    // The bike's five Things are T1 to T5, so the road bike is T6.
+    "thing add: name Road bike | status have | photo 1\nthing add: name Bar tape | status want | part of T6 | pin 40, 20",
   );
   await page.getByRole("link", { name: `Back to ${name}` }).click();
 
@@ -205,7 +246,7 @@ test("with two pictures, the switch chips pick one, and the pick sticks", async 
   await expect(chips.getByRole("radio", { name: "Whyte T-140" })).toBeChecked();
 });
 
-test("the tabs appear as the workspace fills, and the chosen one goes back to Home", async ({
+test("the tabs appear as the workspace fills, and Home with nothing to break down is one quiet line", async ({
   page,
 }) => {
   const name = `Garage ${Date.now()}`;
@@ -225,8 +266,9 @@ test("the tabs appear as the workspace fills, and the chosen one goes back to Ho
 
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
   await expect(tabs.getByRole("link")).toHaveText(["History1", "Things1", "Docs1"]);
-  // Nothing to picture yet: Home is the last conversation and the Reply box.
-  await expect(page.getByRole("link", { name: /^Your last question: thing add/ })).toBeVisible();
+  const quiet = page.getByText("A Thing with a photo and parts shows here, part by part.");
+  await expect(quiet).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Your last question/ })).toHaveCount(0);
 
   await openTab(page, "Things");
   await expect(page.getByRole("region", { name: "Things" })).toContainText("Shelving");
@@ -235,7 +277,7 @@ test("the tabs appear as the workspace fills, and the chosen one goes back to Ho
   await openTab(page, "History");
   await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(1);
   await openTab(page, "Home");
-  await expect(page.getByRole("link", { name: /^Your last question: / })).toBeVisible();
+  await expect(quiet).toBeVisible();
 });
 
 test("What Courtyard knows holds the facts, plans and ideas, and a line is fixed by starting a session on it", async ({
@@ -281,13 +323,16 @@ test.describe("on the unfolded Fold", () => {
     return from;
   };
 
-  test("a pin moves only once held; a quick tap opens its card", async ({ page }) => {
+  test("a pin moves only once held; a quick tap opens its card; the box waits for Talk or + New", async ({
+    page,
+  }) => {
     const name = `Road bikes ${Date.now()}`;
     await newWorkspace(page, name);
     await addBike(page, name);
     await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+    await expect(messageBox(page)).toBeHidden();
 
-    const fork = () => view(page).getByRole("button", { name: "Fork", exact: true });
+    const fork = () => pin(page, "Fork");
     // A finger sliding over it at once is a scroll: the pin stays.
     const before = await touchDrag(fork(), { x: 30, y: 30 }, 0);
     expect(await middleOf(fork())).toEqual(before);
@@ -295,10 +340,14 @@ test.describe("on the unfolded Fold", () => {
     await touchDrag(fork(), { x: 30, y: 30 }, 700);
     await expect.poll(async () => (await middleOf(fork())).x).toBeGreaterThan(before.x + 20);
 
-    // A quick tap opens its card, over the page.
-    await view(page).getByRole("button", { name: "1: Chain" }).tap();
-    await expect(page.getByRole("dialog", { name: "Chain" })).toContainText(
+    // A quick tap opens its card, at the view's foot.
+    await pin(page, "Chain").tap();
+    await expect(view(page).getByRole("region", { name: "Chain's card" })).toContainText(
       "Replace: it's stretched",
     );
+
+    // + New opens the box, to start a session.
+    await page.getByRole("button", { name: "+ New" }).tap();
+    await expect(messageBox(page)).toBeVisible();
   });
 });

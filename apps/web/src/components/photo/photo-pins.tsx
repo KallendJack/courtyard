@@ -2,12 +2,15 @@ import type { PinnedPart, ThingPin, ThingSlug } from "@courtyard/contract";
 import {
   type PointerEvent,
   type ReactNode,
+  type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { classes } from "@/lib/classes";
+import { Button } from "../buttons/button.tsx";
 
 /** How long a finger holds a pin before it's picked up (#481): a quick tap opens its card. */
 const HOLD_MS = 450;
@@ -51,26 +54,32 @@ const pinAt = (frame: Frame, x: number, y: number): ThingPin => {
   };
 };
 
-/** A part on the photo, with its number when it's flagged. */
-export type NumberedPart = PinnedPart & { readonly number: number | undefined };
-
 /**
- * A Thing's photo with its parts pinned (#481; Paper, "Tablet · Home: the bike, parts pinned"), a
- * planning Home's picture view, and safe on the first load (ADR 0012):
- * each flagged part a numbered gold pin, the rest faint dots, the chosen one ringed in violet. A
+ * A Thing's photo with its parts pinned (#481, #565; Paper, "Tablet · Planning Home: the bike, part
+ * by part (#565)"), a planning Home's Breakdown view, and safe on the first load (ADR 0012): each
+ * part a dot, gold for one that needs something, the chosen one violet. Each pin is a button named
+ * "Pin: <part>", marked with its part (`data-pin`) so labels beside the photo can point to it. A
  * tap on a pin chooses it. A mouse drags a pin straight away; a finger holds it first, then drags
- * it, so a tap or a scroll never moves one. Where it's let go is kept at once, while `move` saves it;
- * one that couldn't be saved goes back.
+ * it, so a tap or a scroll never moves one. Where it's let go is kept at once, while `move` saves
+ * it; one that couldn't be saved goes back. While a part with no pin is `placing`, a tap on the
+ * photo puts its pin there, the same way.
  */
 export function PhotoWithPins(props: {
   src: string;
   alt: string;
-  parts: readonly NumberedPart[];
+  parts: readonly PinnedPart[];
   chosen: ThingSlug | undefined;
   choose: (part: ThingSlug) => void;
   /** Saves a pin where it was let go: whether it was saved. */
   move: (part: ThingSlug, pin: ThingPin) => Promise<boolean>;
-  /** The box's size and shape, which the layout sets. */
+  /** A part with no pin yet, which a tap on the photo places. */
+  placing?: ThingSlug;
+  /**
+   * Each placed part's name beside the photo, left or right by where its pin is, with a line to
+   * its pin; a tap on one chooses it, as on its pin. Without, the pins alone (the cover screen).
+   */
+  labelled?: boolean;
+  /** Its size and shape, which the layout sets: the photo's, or with labels, theirs and its. */
   className: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -117,7 +126,7 @@ export function PhotoWithPins(props: {
       ? undefined
       : frameOf(boxSize, photoSize);
 
-  const pointAt = (event: PointerEvent) => {
+  const pointAt = (event: { readonly clientX: number; readonly clientY: number }) => {
     const rect = box.current?.getBoundingClientRect();
     return frame === undefined || rect === undefined
       ? undefined
@@ -137,8 +146,39 @@ export function PhotoWithPins(props: {
     }
   };
 
-  return (
-    <div ref={box} className={classes("relative overflow-hidden bg-muted", props.className)}>
+  /** Where a part's pin is now: being dragged, just let go, or as the worker has it. */
+  const pinNow = (part: PinnedPart) =>
+    held?.part === part.thing ? held.pin : (placed.get(part.thing) ?? part.pin ?? undefined);
+  // A pin off what shows of the photo (cropped on a wide box) isn't drawn; its label still is.
+  const shown =
+    frame === undefined
+      ? []
+      : props.parts.flatMap((part) => {
+          const pin = pinNow(part);
+          if (pin === undefined) return [];
+          const at = placeOf(frame, pin);
+          return at.x < 0 || at.y < 0 || at.x > frame.box.width || at.y > frame.box.height
+            ? []
+            : [{ part, pin, at }];
+        });
+
+  const { placing, labelled } = props;
+  // Placing a pin is a pointer's: its part's label says how, and a keyboard moves none. A scroll
+  // that starts on the photo is cancelled, never let go, so it places nothing.
+  const photoBox = (
+    <div
+      ref={box}
+      onPointerUp={(event) => {
+        if (placing === undefined || event.target !== photo.current) return;
+        const pin = pointAt(event);
+        if (pin !== undefined) void letGo(placing, pin);
+      }}
+      className={classes(
+        "relative overflow-hidden bg-muted",
+        placing !== undefined && "cursor-crosshair",
+        labelled ? "aspect-3/4 h-full shrink-0 rounded-row" : props.className,
+      )}
+    >
       <img
         ref={photo}
         src={props.src}
@@ -152,40 +192,183 @@ export function PhotoWithPins(props: {
         }
         className="size-full object-cover select-none"
       />
-      {frame !== undefined &&
-        props.parts.map((part) => {
-          const pin =
-            held?.part === part.thing
-              ? held.pin
-              : (placed.get(part.thing) ?? part.pin ?? undefined);
-          if (pin === undefined) return null;
-          const at = placeOf(frame, pin);
-          // A pin off what shows of the photo (cropped on a wide box) isn't drawn; its row still is.
-          if (at.x < 0 || at.y < 0 || at.x > frame.box.width || at.y > frame.box.height)
-            return null;
+      {shown.map(({ part, pin, at }) => (
+        <Pin
+          key={part.thing}
+          part={part}
+          at={at}
+          chosen={props.chosen === part.thing}
+          lifted={held?.part === part.thing && held.lifted}
+          tap={() => props.choose(part.thing)}
+          lift={() => setHeld({ part: part.thing, pin, lifted: true })}
+          drag={(event) => {
+            const now = pointAt(event);
+            if (now !== undefined) setHeld({ part: part.thing, pin: now, lifted: true });
+          }}
+          drop={(event) => {
+            const now = pointAt(event);
+            if (now !== undefined) void letGo(part.thing, now);
+            else setHeld(undefined);
+          }}
+          cancel={() => setHeld(undefined)}
+        />
+      ))}
+    </div>
+  );
+  if (!labelled) return photoBox;
+  return (
+    <Labelled
+      parts={props.parts}
+      pinOf={pinNow}
+      shown={shown}
+      box={box}
+      photoBox={photoBox}
+      chosen={props.chosen}
+      choose={props.choose}
+      className={props.className}
+    />
+  );
+}
+
+type Point = { readonly x: number; readonly y: number };
+
+/** Each label's end nearest the photo, in the labelled box, so a line runs from it to its pin. */
+type Ends = ReadonlyMap<ThingSlug, Point>;
+
+const sameEnds = (one: Ends, other: Ends) =>
+  one.size === other.size &&
+  [...one].every(([part, end]) => {
+    const was = other.get(part);
+    return was !== undefined && Math.abs(was.x - end.x) < 0.5 && Math.abs(was.y - end.y) < 0.5;
+  });
+
+/**
+ * The photo with each part's label beside it (#565), those pinned on its left half on the left,
+ * the rest on the right, each side in order down the photo so no two lines cross, and those with
+ * no pin yet at the foot of the shorter side; and a line from each label to its pin, violet for the
+ * chosen one, following a pin as it's dragged.
+ */
+function Labelled(props: {
+  parts: readonly PinnedPart[];
+  pinOf: (part: PinnedPart) => ThingPin | undefined;
+  /** The pins drawn, where they are in the photo's box. */
+  shown: readonly { part: PinnedPart; at: Point }[];
+  box: RefObject<HTMLDivElement | null>;
+  photoBox: ReactNode;
+  chosen: ThingSlug | undefined;
+  choose: (part: ThingSlug) => void;
+  className: string;
+}) {
+  const stage = useRef<HTMLDivElement>(null);
+  const labels = useRef(new Map<ThingSlug, HTMLElement>());
+  const [ends, setEnds] = useState<Ends>(new Map());
+  /** Where the photo's box is in the labelled box. */
+  const [boxAt, setBoxAt] = useState<Point>({ x: 0, y: 0 });
+
+  const down = (part: PinnedPart) => props.pinOf(part)?.y ?? 0;
+  const pinned = props.parts.filter((part) => props.pinOf(part) !== undefined);
+  const unpinned = props.parts.filter((part) => props.pinOf(part) === undefined);
+  const side = (left: boolean) =>
+    pinned
+      .filter((part) => (props.pinOf(part)?.x ?? 0) < 50 === left)
+      .sort((one, other) => down(one) - down(other));
+  const onLeft = side(true);
+  const onRight = side(false);
+  const leftShorter = onLeft.length <= onRight.length;
+  const left = leftShorter ? [...onLeft, ...unpinned] : onLeft;
+  const right = leftShorter ? onRight : [...onRight, ...unpinned];
+
+  const measure = useCallback(() => {
+    const whole = stage.current?.getBoundingClientRect();
+    const photo = props.box.current?.getBoundingClientRect();
+    if (whole === undefined || photo === undefined) return;
+    setBoxAt((was) => {
+      const now = { x: photo.left - whole.left, y: photo.top - whole.top };
+      return Math.abs(was.x - now.x) < 0.5 && Math.abs(was.y - now.y) < 0.5 ? was : now;
+    });
+    const now = new Map<ThingSlug, Point>();
+    for (const [part, label] of labels.current) {
+      const rect = label.getBoundingClientRect();
+      const onLeft = rect.right <= photo.left + 1;
+      now.set(part, {
+        x: (onLeft ? rect.right : rect.left) - whole.left,
+        y: rect.top + rect.height / 2 - whole.top,
+      });
+    }
+    setEnds((was) => (sameEnds(was, now) ? was : now));
+  }, [props.box]);
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (element === null) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [measure]);
+  // Labels come and go, and change sides, as parts are placed and moved.
+  useLayoutEffect(measure);
+
+  const label = (part: PinnedPart) => (
+    <li
+      key={part.thing}
+      ref={(element) => {
+        if (element === null) labels.current.delete(part.thing);
+        else labels.current.set(part.thing, element);
+      }}
+    >
+      <PartLabel part={part} chosen={props.chosen === part.thing} choose={props.choose} />
+    </li>
+  );
+  const column = "flex min-w-0 flex-1 flex-col justify-around gap-2 py-2";
+  return (
+    <div ref={stage} className={classes("relative flex justify-center gap-6", props.className)}>
+      <ul aria-label="Parts on the left" className={classes(column, "items-end")}>
+        {left.map(label)}
+      </ul>
+      {props.photoBox}
+      <ul aria-label="Parts on the right" className={classes(column, "items-start")}>
+        {right.map(label)}
+      </ul>
+      <svg aria-hidden className="pointer-events-none absolute inset-0 size-full overflow-visible">
+        {props.shown.map(({ part, at }) => {
+          const end = ends.get(part.thing);
+          if (end === undefined) return null;
           return (
-            <Pin
+            <line
               key={part.thing}
-              part={part}
-              at={at}
-              chosen={props.chosen === part.thing}
-              lifted={held?.part === part.thing && held.lifted}
-              tap={() => props.choose(part.thing)}
-              lift={() => setHeld({ part: part.thing, pin, lifted: true })}
-              drag={(event) => {
-                const now = pointAt(event);
-                if (now !== undefined) setHeld({ part: part.thing, pin: now, lifted: true });
-              }}
-              drop={(event) => {
-                const now = pointAt(event);
-                if (now !== undefined) void letGo(part.thing, now);
-                else setHeld(undefined);
-              }}
-              cancel={() => setHeld(undefined)}
+              x1={end.x}
+              y1={end.y}
+              x2={boxAt.x + at.x}
+              y2={boxAt.y + at.y}
+              strokeWidth={props.chosen === part.thing ? 1.5 : 1}
+              className={props.chosen === part.thing ? "stroke-primary" : "stroke-foreground/45"}
             />
           );
         })}
+      </svg>
     </div>
+  );
+}
+
+/**
+ * A part's label (#565): its name in a pill, with a gold dot when it needs something; filled
+ * violet once chosen. Pressed, as its pin is, while its card is open.
+ */
+function PartLabel(props: {
+  part: PinnedPart;
+  chosen: boolean;
+  choose: (part: ThingSlug) => void;
+}) {
+  const { part } = props;
+  return (
+    <Button
+      variant={props.chosen ? "primary" : "outline"}
+      size="sm"
+      aria-pressed={props.chosen}
+      onClick={() => props.choose(part.thing)}
+    >
+      {part.flagged && <span aria-hidden className="size-2 rounded-full bg-warning" />}
+      {part.name}
+    </Button>
   );
 }
 
@@ -200,9 +383,9 @@ type Gesture = {
   timer: ReturnType<typeof setTimeout> | undefined;
 };
 
-/** One pin: a numbered gold disc for a flagged part, else a faint dot in a tap-sized button. */
+/** One pin: a dot in a tap-sized button, gold for a flagged part, violet once chosen. */
 function Pin(props: {
-  part: NumberedPart;
+  part: PinnedPart;
   at: { x: number; y: number };
   chosen: boolean;
   lifted: boolean;
@@ -271,12 +454,12 @@ function Pin(props: {
     }
   };
 
-  const name = part.number === undefined ? part.name : `${part.number}: ${part.name}`;
   return (
     <button
       type="button"
-      aria-label={name}
+      aria-label={`Pin: ${part.name}`}
       aria-pressed={props.chosen}
+      data-pin={part.thing}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
@@ -298,22 +481,18 @@ function Pin(props: {
   );
 }
 
-function Disc(props: { part: NumberedPart; chosen: boolean }): ReactNode {
-  const ring = props.chosen ? "outline-2 outline-offset-2 outline-primary-text" : "";
-  return props.part.number === undefined ? (
-    <span
-      aria-hidden
-      className={classes("size-2.5 rounded-full bg-foreground/70 ring-2 ring-card", ring)}
-    />
-  ) : (
+function Disc(props: { part: PinnedPart; chosen: boolean }): ReactNode {
+  return (
     <span
       aria-hidden
       className={classes(
-        "flex size-6.5 items-center justify-center rounded-full bg-warning text-meta font-extrabold text-card ring-2 ring-card",
-        ring,
+        "rounded-full ring-2 ring-card",
+        props.chosen
+          ? "size-3.5 bg-primary outline-2 outline-offset-2 outline-primary-text"
+          : props.part.flagged
+            ? "size-3 bg-warning"
+            : "size-2.5 bg-foreground",
       )}
-    >
-      {props.part.number}
-    </span>
+    />
   );
 }

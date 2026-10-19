@@ -148,7 +148,6 @@ export {
   LastQuestion,
   PinnedPart,
   PlanningHome,
-  WantedItem,
 } from "./lib/planning-home.ts";
 export {
   PREVIEW_COMMAND_MAX_LENGTH,
