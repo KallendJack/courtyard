@@ -1363,6 +1363,7 @@ describe("documents (#145, ADR 0020)", () => {
       "save_to_context",
       "save_document",
       "save_thing",
+      "block_shop",
       "use_skill",
       "suggest_replies",
     ]);
@@ -1575,6 +1576,141 @@ describe("Things (#149, ADR 0020)", () => {
 
     expect(saver.framings[0]?.tools.map((one) => one.name)).not.toContain("save_thing");
     expect(saver.framings[0]?.instructions).not.toMatch(/Things|save_thing/);
+  });
+});
+
+describe("the wanted list (#245)", () => {
+  const things = () => join(root, "context", "garage-gym", "things");
+  const withWanted = async () => {
+    await mkdir(things(), { recursive: true });
+    await writeFile(join(things(), "power-rack.md"), "---\nname: Power rack\nstatus: have\n---\n");
+    await writeFile(
+      join(things(), "pull-up-bar.md"),
+      "---\nname: Pull-up bar\nstatus: replace\nbrand: Titan\nsize: 1.2 m\npart of: power-rack\n---\n",
+    );
+    await mkdir(join(root, "data", "wanted"), { recursive: true });
+    await writeFile(
+      join(root, "data", "wanted", "garage-gym.json"),
+      JSON.stringify({
+        picks: {
+          "pull-up-bar": [
+            {
+              kind: "best-value",
+              product: "Rogue bar",
+              why: "Fits the rack",
+              pence: 8500,
+              shop: "Rogue Fitness",
+              url: "https://rogue.example/bar",
+              checkedAt: "2026-10-01T09:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "context", "garage-gym", "workspace.json"),
+      JSON.stringify({
+        blockedShops: [{ shop: "Tredz", since: "2026-10-13T09:00:00.000Z" }],
+      }),
+    );
+  };
+
+  it("shows each wanted Thing's ★ pick on its line, and the shops the owner blocked", async () => {
+    await withWanted();
+
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(
+      "[T2] Pull-up bar, replace, Titan, size 1.2 m, ★ pick Rogue bar £85 at Rogue Fitness, part of [T1] (things/pull-up-bar.md)\n</things>\n\nThe owner blocked these shops for the wanted list: Tredz.",
+    );
+  });
+
+  it("offers the block shop tool beside the Things tool, with the rule for the wanted list", async () => {
+    const saver = await savingTurns([[]]);
+    const framing = saver.framings[0];
+
+    const offered = framing?.tools.find((one) => one.name === "block_shop");
+    expect(offered?.description).toBe(await quotedInGuide("Blocks a shop the owner said"));
+    expect(inputsOf(offered)).toBe(await quotedInGuide("- shop: The shop, by the name"));
+    expect(framing?.instructions).toContain(
+      `${await quotedInGuide("The owner's kit for this workspace")}\n\n${await quotedInGuide("The Things the owner wants or means to replace")}`,
+    );
+  });
+
+  it("tells a model the shop it blocked, with the guide's words", async () => {
+    const saver = await savingTurns([
+      [
+        { call: "block_shop", input: { shop: "Tredz", said: "not from Tredz" } },
+        { call: "block_shop", input: { shop: "Tredz" } },
+        { call: "block_shop", input: { name: "Tredz" } },
+      ],
+    ]);
+
+    expect(saver.replies[0]?.map(({ reply }) => reply)).toEqual([
+      await quotedInGuide("Blocked <shop>: picks and price checks", { shop: "Tredz" }),
+      "Tredz is blocked already.",
+      "That input doesn't fit this tool: it takes the shop's name, and what the owner said.",
+    ]);
+  });
+
+  it("gives a price check's model its instructions, the Things, the blocked shops and the picks tool, as the guide says", async () => {
+    await withWanted();
+    const saver = savingProvider([
+      [
+        { call: "save_picks", input: { thing: "W2", picks: [] } },
+        {
+          call: "save_picks",
+          input: {
+            thing: "W1",
+            picks: [
+              {
+                kind: "cheapest",
+                product: "Bar",
+                why: "Cheap",
+                price: 20,
+                shop: "Halfords",
+                url: "https://halfords.example/bar",
+              },
+            ],
+          },
+        },
+      ],
+    ]);
+    const now = Date.parse("2026-10-19T09:00:00.000Z");
+    const request = await asOwner(
+      testWorker({
+        root,
+        now: () => now,
+        providers: [
+          {
+            ...saver.provider,
+            errand: { model: ModelId.parse("one") },
+            capabilities: { ...saver.provider.capabilities, searchesWeb: true },
+          },
+        ],
+      }),
+    );
+
+    await postJson(request, "/api/workspaces/garage-gym/wanted/pull-up-bar/find", {});
+    await expect.poll(() => saver.replies[0]?.length ?? 0).toBe(2);
+
+    const [framing] = saver.framings;
+    expect(framing?.instructions).toBe(
+      await quotedInGuide("You find picks and check prices", {
+        workspace: '"garage-gym"',
+        today: "Monday, 19 October 2026",
+      }),
+    );
+    expect(framing?.newMessage).toBe(
+      `${await quotedInGuide("The Things to find picks for")}\n\n<wanted>\n[W1] Pull-up bar, to replace, now Titan, size 1.2 m, picks now: best-value Rogue bar £85 at Rogue Fitness (https://rogue.example/bar)\n</wanted>\n\n${await quotedInGuide("Leave out these shops", { shops: "Tredz" })}`,
+    );
+    const [tool] = framing?.tools ?? [];
+    expect(tool?.description).toBe(await quotedInGuide("Saves the picks for one Thing"));
+    expect(inputsOf(tool)).toBe(await quotedInGuide("- thing: The Thing's label, such as W1."));
+    expect(saver.replies[0]?.map(({ reply }) => reply.split("\n\n")[0])).toEqual([
+      await quotedInGuide("That input doesn't fit this tool: it takes a Thing's label and up"),
+      await quotedInGuide("A Thing's picks always have a best-value one"),
+    ]);
   });
 });
 

@@ -5,7 +5,7 @@ import { themeColour } from "./theme.ts";
 
 /** Starts a session with `message`; the fake model echoes it back, Markdown and all. */
 const ask = async (page: Page, message: string) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await openBox(page);
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
@@ -173,7 +173,7 @@ const RACKET_PRICES = [139, 95, 149, 110, 120, 99, 160, 105, 130, 115, 145, 125]
 
 /** Starts a session answered with a table of `RACKET_PRICES`: its answer, table and Price heading. */
 const askForRackets = async (page: Page) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page
     .getByLabel("Message", { exact: true })
     .fill(
@@ -410,7 +410,7 @@ test.describe("charts", () => {
   test("a chart still arriving shows as code, never as one that couldn't be drawn", async ({
     page,
   }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     // Long enough to be seen arriving.
     const labels = Array.from({ length: 24 }, (_, index) => `Week ${index + 1}`);
     const chart = {

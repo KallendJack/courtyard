@@ -69,7 +69,7 @@ test.describe("on the cover screen", () => {
   test.use({ viewport: COVER_SCREEN });
 
   test("is one column: workspaces across the top, the page below", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     const workspaces = page.getByRole("navigation", { name: "Workspaces" });
     const main = page.getByRole("main");
 
@@ -101,7 +101,7 @@ test.describe("on the cover screen", () => {
   });
 
   test("never pushes the page sideways with a long word", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await typeIn(page);
     await page
       .getByLabel("Message", { exact: true })
@@ -230,7 +230,7 @@ test("keeps every file the app is made of once installed, but Mermaid's only onc
     const path = new URL(request.url()).pathname;
     if (path.startsWith("/assets/") && path.endsWith(".js")) asked.push(path);
   });
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page
     .getByLabel("Message", { exact: true })
     .fill("A diagram:\n\n```mermaid\nflowchart TD\n  a[Measure] --> b[Keep riding]\n```");

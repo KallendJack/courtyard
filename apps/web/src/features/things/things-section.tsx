@@ -18,7 +18,7 @@ type Filter = "all" | ThingStatus;
 /**
  * A workspace's Things on its page (ADR 0020), below its context file: a row each, parts under the
  * Thing they're part of, filtered by status, and Add Thing. Hidden until there's one, so a new
- * workspace looks as it did, unless one was just deleted: that shows with Undo.
+ * workspace looks as it did, unless one was just deleted (that shows with Undo) or one's being added.
  */
 export function ThingsSection(props: {
   workspaceId: WorkspaceId;
@@ -27,13 +27,17 @@ export function ThingsSection(props: {
   deleted?: { readonly name: string; readonly change: ChangeId | undefined };
   /** Once a delete is undone: the page loads the list again. */
   onUndone: () => Promise<void>;
+  /** Opened with Add Thing's form open: from the rail's Add (#481), even with no Things yet. */
+  adding?: boolean;
 }) {
   const { workspaceId, list, deleted } = props;
   const { things } = list;
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
-  const [adding, setAdding] = useState(false);
-  if (things.length === 0 && list.problems.length === 0 && deleted === undefined) return null;
+  const [adding, setAdding] = useState(props.adding === true);
+  if (things.length === 0 && list.problems.length === 0 && deleted === undefined && !adding) {
+    return null;
+  }
 
   const count = (status: ThingStatus) => things.filter((thing) => thing.status === status).length;
   const options = [

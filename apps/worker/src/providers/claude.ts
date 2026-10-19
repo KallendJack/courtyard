@@ -81,6 +81,8 @@ const CAPABILITIES: Capabilities = {
 const LABEL = "Claude";
 /** Claude's own default (Opus 5.5 today) at High, as the owner chose it (#247). */
 const STARTING_DEFAULT = { model: ModelId.parse("default"), effort: Effort.parse("high") };
+/** Sonnet at Low, for a short errand such as checking the wanted list's prices (#245). */
+const ERRAND = { model: ModelId.parse("sonnet"), effort: Effort.parse("low") };
 
 /**
  * The two things the adapter needs from Claude Code, so tests can stand in for it. Answers come
@@ -1514,6 +1516,7 @@ export const createClaudeProvider = (
     id,
     capabilities: CAPABILITIES,
     startingDefault: STARTING_DEFAULT,
+    errand: ERRAND,
     status: keptStatus.status,
     readUsage,
 

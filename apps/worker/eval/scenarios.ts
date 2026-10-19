@@ -1,4 +1,4 @@
-import type { OwnerSection, PlacedLine } from "@courtyard/contract";
+import type { OwnerSection, PlacedLine, ThingDetailName } from "@courtyard/contract";
 import { pdfOf, pngOf, type TestFile } from "../test/testing.ts";
 
 /**
@@ -125,9 +125,7 @@ export type Turn = {
 export type ExpectedThing = {
   readonly action: "add" | "change" | "remove";
   readonly name: Words;
-  readonly fields?: Readonly<
-    Partial<Record<"status" | "brand" | "bought" | "price" | "condition" | "size" | "where", Words>>
-  >;
+  readonly fields?: Readonly<Partial<Record<"status" | ThingDetailName, Words>>>;
   readonly history?: Words;
   readonly partOf?: string;
 };

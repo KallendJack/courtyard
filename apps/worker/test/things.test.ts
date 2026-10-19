@@ -472,6 +472,53 @@ describe("a part's pin on its Thing's photo (#208)", () => {
   });
 });
 
+const markThing = (request: Requester, slug: string, body: unknown) =>
+  sendJson(request, `/api/workspaces/mountain-biking/things/${slug}/mark`, "PUT", body);
+
+describe("a part's card on Home: Done it and Add to wanted (#481)", () => {
+  it("marks a Thing done: what it needed goes, it's had again, and its history says so, as one change", async () => {
+    await withKit();
+    await writeFile(
+      join(thingsDir(), "chain.md"),
+      CHAIN.replace("status: have", "status: replace").replace(
+        "part of: whyte-t-140\n",
+        "part of: whyte-t-140\nneeds: Replace: it's stretched\n",
+      ),
+    );
+    const request = await owner();
+
+    const marked = await markThing(request, "chain", { mark: "done" });
+
+    expect(marked.status).toBe(200);
+    const saved = ThingChanged.parse(await marked.json());
+    expect(saved.thing).toMatchObject({ status: "have" });
+    expect(saved.thing.needs).toBeUndefined();
+    const file = await thingFile("chain");
+    expect(file).not.toContain("needs:");
+    expect(file).toMatch(/- \d{4}-\d{2}-\d{2}: Done: Replace: it's stretched\n/);
+    expect((await changesIn(contextDir))[0]?.title).toBe("Change Thing: Chain");
+  });
+
+  it("adds a Thing the owner has to the wanted list, as one to replace", async () => {
+    await withKit();
+    const request = await owner();
+
+    const marked = await markThing(request, "chain", { mark: "wanted" });
+
+    expect(marked.status).toBe(200);
+    expect(ThingChanged.parse(await marked.json()).thing.status).toBe("replace");
+    expect(await thingFile("chain")).toContain("status: replace\n");
+  });
+
+  it("refuses a mark it doesn't know, and a Thing that isn't there", async () => {
+    await withKit();
+    const request = await owner();
+
+    expect((await markThing(request, "chain", { mark: "sold" })).status).toBe(400);
+    expect((await markThing(request, "saddle", { mark: "done" })).status).toBe(404);
+  });
+});
+
 /** 9 October 2026, midday: the day the tool dates history lines. */
 const TODAY = Date.UTC(2026, 9, 9, 12);
 

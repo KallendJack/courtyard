@@ -59,6 +59,8 @@ export default function HandheldFrame(props: {
   field: TalkTarget | undefined;
   /** What the page listens for while the owner steers it by voice (step by step, #241). */
   commands: TalkTarget | undefined;
+  /** The page's Add, under Skills on a tablet's rail (#481), when it offers one. */
+  add: (() => void) | undefined;
   boxOpen: boolean;
   setBoxOpen: (open: boolean) => void;
   /** Where the Talk key or strip puts its tap, for the box's mic (#251). */
@@ -158,16 +160,21 @@ export default function HandheldFrame(props: {
   /** The page a new session starts on, and the box there was before going to it. */
   const arriving = useRef<{ page: string; from: MessageBox | undefined }>(undefined);
   const [focusBox, setFocusBox] = useState(false);
+  // A planning workspace's Home at `#new` starts one rather than replying to its last question (#481).
   const newSession = (workspace: WorkspaceSummary) => {
     const page = `/workspaces/${workspace.id}`;
     setSheet(undefined);
-    if (pathname === page) {
+    const there = pathname === page;
+    if (!there) arriving.current = { page, from: box };
+    void navigate({
+      to: "/workspaces/$workspaceId",
+      params: { workspaceId: workspace.id },
+      hash: "new",
+    });
+    if (there) {
       setBoxOpen(true);
       setFocusBox(true);
-      return;
     }
-    arriving.current = { page, from: box };
-    void navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: workspace.id } });
   };
   // Once there, and its page has offered its own box, the box opens.
   useEffect(() => {
@@ -325,6 +332,12 @@ export default function HandheldFrame(props: {
             >
               {!reading && model}
               {!reading && skills}
+              {!reading && props.add !== undefined && (
+                <FrameButton look="rail" aria-haspopup="dialog" onClick={props.add}>
+                  <Plus aria-hidden strokeWidth={1.8} />
+                  Add
+                </FrameButton>
+              )}
               {settings}
               <div className="flex-1" />
               {!reading && <TalkKey box={talkTo} type={type} talker={props.talker} />}

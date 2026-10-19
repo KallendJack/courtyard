@@ -174,6 +174,24 @@ a few words ("Pump it up before Saturday"), until it's done: the only part of it
 status (#208, #220).
 _Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
 
+**Wanted list**:
+A planning workspace's Things wanted or to replace (#245), each with up to three **picks** chosen for value: **★ Best
+value** (the one to buy), **Cheapest that does the job** and **Worth stretching for** (only when the extra money buys
+something real), each with one line of why, its price, how fresh that is, and its shop's one button. A sale shows only
+inside a pick's line; nothing nags.
+_Avoid_: shopping list, basket, cart, recommendations, deals
+
+**Price check**:
+The short background turn that finds a wanted Thing's picks or checks their prices on the web (#245), on a provider's
+**errand model** (its cheap model and effort for errands, Claude's Sonnet at Low): when the owner taps Find picks,
+opens the list with prices over a week old (at most once a day), or blocks a shop.
+_Avoid_: scrape, price watch, alert
+
+**Blocked shop**:
+A shop the owner said not to use for a workspace's wanted list ("not from Tredz"), kept in its `workspace.json`;
+picks and price checks leave it out until the owner unblocks it from the workspace's ⋯ (#245).
+_Avoid_: banned shop, blacklist
+
 **Pin**:
 Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, moved by the
 owner dragging it, and gone once the part moves to another Thing. A pinned part is **flagged** only when it needs

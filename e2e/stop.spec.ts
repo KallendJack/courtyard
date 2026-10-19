@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 const LONG_MESSAGE = `Tell me everything about ${"racks, benches, bars, plates, flooring, mirrors and lighting, ".repeat(8)}please.`;
 
 test("the owner stops a turn mid-answer, keeps what it wrote, and carries on", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(LONG_MESSAGE);
   await page.getByRole("button", { name: "Start" }).click();
 

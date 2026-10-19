@@ -45,15 +45,16 @@ export const STATUS_CHOICES = ThingStatus.options.map((status) => ({
 }));
 
 /**
- * A Thing's details on one line, for its row: its brand, when it was bought, its price and where
- * it is, those it has. A part shown away from its Thing (when a filter leaves that out) also says
- * what it's part of.
+ * A Thing's details on one line, for its row: its brand, when it was bought, its price, the shop
+ * it came from and where it is, those it has. A part shown away from its Thing (when a filter
+ * leaves that out) also says what it's part of.
  */
 export const thingLine = (thing: ThingSummary, partOf?: string) =>
   [
     thing.brand,
     thing.bought === undefined ? undefined : `bought ${boughtInWords(thing.bought)}`,
     thing.price,
+    thing.shop,
     thing.where,
     partOf === undefined ? undefined : `part of ${partOf}`,
   ]

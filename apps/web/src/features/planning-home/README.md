@@ -1,31 +1,39 @@
 # planning-home
 
-A planning workspace's page under its name (#300; Paper, "Tablet · Planning workspace Home" and its Sessions, Things
-and Docs tabs).
+A planning workspace's page under its name (#300, #481; Paper, "Tablet · Home: the bike, parts pinned (#481)" and its
+Desktop and Cover boards).
 
-**Example:** the Bike workspace opens on Home: Next up says "Pick up: Winter tyres", then What Courtyard knows, then
-the message box.
+**Example:** the Bike workspace opens on Home: "Is the bike ready for Saturday?" above the bike's photo, the chain and
+rear tyre pinned in gold beside what each needs, "Find a chain under £30" and "Which lights?" under it, and Reply at the
+foot.
 
-- **Uses:** `features/sessions/`, `features/things/`, `features/documents/`, `components/layout/home-block.tsx`,
-  `components/workspace/`. The worker's side is `GET /api/workspaces/:id` and its `duePlans`
-  ([`context-file/`](../../../../worker/src/features/context-file/README.md)).
+- **Uses:** `features/sessions/` (the message box, Reply and Start), `features/things/`, `features/documents/`,
+  `components/photo/` (the photo with its pins, the header's ring), `components/workspace/` (its pills),
+  `components/forms/segmented-choice.tsx` (the view chips), `components/chat/suggested-replies.tsx` (the next steps).
+  The worker's side is `GET /api/workspaces/:id/home`, `PUT …/home/showing`, and a Thing's `PUT …/pin` and
+  `PUT …/mark` ([`planning-home/`](../../../../worker/src/features/planning-home/README.md),
+  [`things/`](../../../../worker/src/features/things/README.md)).
 - **Used by:** a workspace's page (`routes/_app/workspaces.$workspaceId.index.tsx`), loaded only for a planning one.
 
 ## Screens
 
-- **Its name**, with the same quiet ⋯ as a code workspace's (Rename, Change icon, Allowed commands, Archive), and
-  from a tablet up its tabs on the name's row (#503).
-- **Tabs:** Home · Sessions · Things · Docs, each but Home shown once it has something, with its count, by the
-  address's hash (`#sessions`, `#things`, `#docs`; a document or Thing deleted from its page comes back to its tab,
-  with Undo).
-- **Home:** Next up (`next-up.tsx`: the session to pick up again, one the worker says waits on the owner, else the
-  last used in the past week, then the worker's `duePlans`; hidden with neither), then the one row for What
-  Courtyard knows (`knows.tsx`, `#knows`: the facts, plans and ideas, each line with Fix, which shows then starts a
-  session on it, each plan with Grill this plan; Get to know while there are no lines; what else models read, Recent
-  changes, Tidy, and the skills), then the message box pinned at the foot.
-- An empty workspace shows only its name, one line and the box.
+- **Its header:** the name with its ⋯ (Rename, Change icon, What Courtyard knows, Allowed commands, Archive), the
+  workspace's photo top right (`header-photo.tsx`: its main Thing's, opening its card; with none, the workspace's icon
+  in the same ring, offering to take or pick one), and the pills: + New · History · Things · Docs, each tab once it has
+  something, with its count, by the address's hash. The chosen pill leads back to Home.
+- **Home** (`home-now.tsx`): the owner's last question, opening its session; the view showing, with a chip for each
+  when there are several, the pick kept by the worker; the next steps its answer suggested, once it's finished, each
+  replying in that session; and the Reply box at the foot carrying it on. + New (`#new`), or a photo or doc from Add,
+  starts a new session instead.
+- **The picture view** (`picture-view.tsx`): a Thing's photo with its parts pinned, numbered gold where they need
+  something, faint dots otherwise; beside it on a tablet, under it on the cover screen, only what needs doing, never
+  brands or sizes (#220). A tap on a pin or a row opens the part's card (`part-card.tsx`: Done it, Add to wanted, its
+  Thing's card): beside them on a wide screen, over the page otherwise. A mouse drags a pin; a finger holds it first.
+- **Add** on the frame's rail: a Thing, a photo or a doc.
+- An empty workspace shows only its name, one line and the box. The wanted list view comes whole with #245.
 
 ## How it works
 
-- A stylesheet of its own (`planning-home.css`, holding the tabs' and Home's blocks' classes too), like `code-home/`.
-- Drawn blocks (#257, #152, #294) and the page choices that pin and hide them come with their own issues.
+- A stylesheet of its own (`planning-home.css`, holding the pills' and Home's classes too), like `code-home/`.
+- Home comes with the page (`api/workspace-page.ts`), kept for the next visit, and stays fresh the shared way, faster
+  while its last question is being answered.

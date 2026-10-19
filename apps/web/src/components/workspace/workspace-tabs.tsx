@@ -39,7 +39,13 @@ export function WorkspaceTabs(props: {
   tabs: readonly WorkspaceTab[];
   /** The chosen tab's hash. */
   chosen: string;
+  /**
+   * A planning workspace's pills (#481; Paper, "Tablet · Home: the bike, parts pinned"): an
+   * action first, in a tab's look (+ New), and no Home tab, the chosen tab leading back to Home.
+   */
+  pills?: { readonly action: { readonly label: string; readonly onClick: () => void } };
 }) {
+  const { pills } = props;
   return (
     <Scroller
       as="nav"
@@ -47,6 +53,15 @@ export function WorkspaceTabs(props: {
       aria-label="Workspace tabs"
       className="-mx-4 flex gap-2 px-4 md:mx-0 md:px-0"
     >
+      {pills !== undefined && (
+        <button
+          type="button"
+          onClick={pills.action.onClick}
+          className="flex h-11 shrink-0 items-center rounded-full bg-secondary px-4.5 text-interface font-semibold text-foreground/85 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {pills.action.label}
+        </button>
+      )}
       {props.tabs.map((tab) => {
         const chosen = tab.hash === props.chosen;
         if (tab.held === true) {
@@ -66,7 +81,9 @@ export function WorkspaceTabs(props: {
             key={tab.hash}
             to="/workspaces/$workspaceId"
             params={{ workspaceId: props.workspaceId }}
-            hash={tab.hash}
+            hash={chosen && pills !== undefined ? "" : tab.hash}
+            // Only the chosen tab is the page: every tab is the same page by its path.
+            activeOptions={{ includeHash: true }}
             {...(chosen ? { "aria-current": "page" } : {})}
             className={classes(
               "flex h-11 shrink-0 items-center gap-2 rounded-full px-4.5 text-interface outline-none focus-visible:ring-3 focus-visible:ring-ring/50",

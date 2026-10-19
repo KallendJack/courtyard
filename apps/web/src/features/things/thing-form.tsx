@@ -20,6 +20,7 @@ const DETAIL_LABELS: Readonly<Record<ThingDetailName, string>> = {
   brand: "Brand",
   bought: "Bought",
   price: "Price",
+  shop: "Shop",
   condition: "Condition",
   size: "Size",
   where: "Where",
@@ -52,6 +53,7 @@ export function ThingForm(props: {
     brand: thing?.brand ?? "",
     bought: thing?.bought === undefined ? "" : boughtInWords(thing.bought),
     price: thing?.price ?? "",
+    shop: thing?.shop ?? "",
     condition: thing?.condition ?? "",
     size: thing?.size ?? "",
     where: thing?.where ?? "",
@@ -126,13 +128,14 @@ export function ThingForm(props: {
       </Pair>
       <Pair>
         {detail("price")}
+        {detail("shop")}
+      </Pair>
+      <Pair>
         {detail("condition")}
-      </Pair>
-      <Pair>
         {detail("size")}
-        {detail("where")}
       </Pair>
       <Pair>
+        {detail("where")}
         {props.hasParts ? (
           <p className="self-end pb-3 text-meta text-muted-foreground">
             It has parts, so it can't be part of another Thing.
@@ -149,6 +152,8 @@ export function ThingForm(props: {
             onChange={setPartOf}
           />
         )}
+      </Pair>
+      <Pair>
         <FileField
           label="Photo"
           accept="image/*"

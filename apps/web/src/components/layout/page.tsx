@@ -69,8 +69,11 @@ export function Page(props: {
   );
 }
 
-/** What a workspace's Home puts on its title's row: a line under the name, and its tabs. */
-export type TitleBeside = { under?: ReactNode; tabs?: ReactNode };
+/**
+ * What a workspace's Home puts on its title's row: a line under the name, its tabs, and a planning
+ * workspace's photo in the top right corner (#481).
+ */
+export type TitleBeside = { under?: ReactNode; tabs?: ReactNode; photo?: ReactNode };
 
 /**
  * A page's title, with an optional line above it (a workspace chip, say), buttons beside it
@@ -83,32 +86,42 @@ export function PageTitle(
   props: { children: ReactNode; above?: ReactNode; actions?: ReactNode } & TitleBeside,
 ) {
   const tabbed = props.tabs !== undefined && props.tabs !== false;
+  const title = (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start md:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <h1 className="display-title col-start-1 row-start-1 text-title wrap-anywhere md:text-3xl xl:text-4xl/10.5">
+        {props.children}
+      </h1>
+      {props.under && (
+        <div className="col-span-2 row-start-2 mt-2 md:col-span-1 md:mt-1.5">{props.under}</div>
+      )}
+      {tabbed && (
+        <div className="col-span-2 row-start-3 mt-3.5 min-w-0 md:col-span-1 md:col-start-2 md:row-span-2 md:row-start-1 md:mt-0 md:self-end md:pl-4">
+          {props.tabs}
+        </div>
+      )}
+      {props.actions && (
+        <div
+          className={classes(
+            "col-start-2 row-start-1 flex shrink-0 gap-1 pl-3 md:col-start-3",
+            tabbed ? "md:row-span-2 md:self-end md:pl-1" : "md:pt-1",
+          )}
+        >
+          {props.actions}
+        </div>
+      )}
+    </div>
+  );
   return (
     <div className="flex flex-col gap-2">
       {props.above}
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start md:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <h1 className="display-title col-start-1 row-start-1 text-title wrap-anywhere md:text-3xl xl:text-4xl/10.5">
-          {props.children}
-        </h1>
-        {props.under && (
-          <div className="col-span-2 row-start-2 mt-2 md:col-span-1 md:mt-1.5">{props.under}</div>
-        )}
-        {tabbed && (
-          <div className="col-span-2 row-start-3 mt-3.5 min-w-0 md:col-span-1 md:col-start-2 md:row-span-2 md:row-start-1 md:mt-0 md:self-end md:pl-4">
-            {props.tabs}
-          </div>
-        )}
-        {props.actions && (
-          <div
-            className={classes(
-              "col-start-2 row-start-1 flex shrink-0 gap-1 pl-3 md:col-start-3",
-              tabbed ? "md:row-span-2 md:self-end md:pl-1" : "md:pt-1",
-            )}
-          >
-            {props.actions}
-          </div>
-        )}
-      </div>
+      {props.photo === undefined ? (
+        title
+      ) : (
+        <div className="flex items-start gap-3 md:gap-4">
+          <div className="min-w-0 grow">{title}</div>
+          {props.photo}
+        </div>
+      )}
     </div>
   );
 }

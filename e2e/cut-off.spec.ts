@@ -18,14 +18,13 @@ const SESSION = `/workspaces/reading-list/sessions/${CUT_OFF_SESSION_ID}`;
 test("a cut-off turn says when and what it was doing, and Continue carries it on", async ({
   page,
 }) => {
-  // Its workspace's Next up offers it to pick up again.
+  // Its workspace's Home offers it as the last question, to open again (#481).
   await page.setViewportSize({ width: 950, height: 712 });
   await page.goto("/workspaces/reading-list");
-  await expect(page.getByRole("link", { name: /^Pick up: Sort the reading list/ })).toContainText(
-    "Cut off ·",
-  );
-
-  await page.goto(SESSION);
+  await page
+    .getByRole("link", { name: "Your last question: Sort the list into this month and later" })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`${SESSION}$`));
   const card = page.getByRole("region", { name: "Cut off" });
   await expect(card).toContainText(/^Cut off · Courtyard restarted at \d{1,2}:\d\d/);
   await expect(card).toContainText(

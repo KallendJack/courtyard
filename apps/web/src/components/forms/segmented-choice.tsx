@@ -19,6 +19,13 @@ const LOOKS = {
     chosen: "border-primary/35 bg-primary/12 text-primary-text",
     other: "border-input text-foreground hover:bg-muted",
   },
+  /** Small chips that wrap, the chosen one filled (a planning Home's views, #481). */
+  chips: {
+    set: "flex-wrap gap-1.5",
+    choice: "flex h-7.5 items-center px-3 text-meta",
+    chosen: "bg-primary-text font-bold text-background",
+    other: "border border-input bg-secondary font-semibold text-foreground/80 hover:bg-muted",
+  },
   /** A thumb-sized switch, the chosen side filled violet (New workspace's Planning / Code, #258). */
   switch: {
     set: "gap-1 rounded-full border bg-surface p-1",
@@ -47,7 +54,7 @@ export function SegmentedChoice<T extends string>(props: {
   }[];
   value: T;
   onChange: (value: T) => void;
-  /** In a track (the default), or apart. */
+  /** In a track (the default), apart, as chips, or a switch. */
   look?: keyof typeof LOOKS;
 }) {
   const name = useId();

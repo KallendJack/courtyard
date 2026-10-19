@@ -66,6 +66,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
     ["Brand", thing.brand],
     ["Bought", thing.bought === undefined ? undefined : boughtInWords(thing.bought)],
     ["Price", thing.price],
+    ["Shop", thing.shop],
     ["Condition", thing.condition],
     ["Size", thing.size],
     ["Where", thing.where],

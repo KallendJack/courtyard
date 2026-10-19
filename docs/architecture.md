@@ -104,6 +104,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`owner-context/`](../apps/worker/src/features/owner-context/README.md): `OWNER.md`.
 - [`workspaces/`](../apps/worker/src/features/workspaces/README.md): the workspaces, their icons and order.
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
+- [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
+  provider's errand model, and blocked shops (#245).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
@@ -204,9 +206,12 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
-  - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page and its tabs.
+  - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
+    and Home now: the last question, the view showing (a photo with its parts pinned), its next steps.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
+  - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one
+    button (#245).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
   - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
@@ -232,7 +237,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
   (#459; [its README](../apps/web/src/components/README.md) lists them): `layout/`, `buttons/`, `forms/`, `sheets/`,
-  `frame/`, `chat/`, `code/`, `workspace/` and `rich-blocks/`. One, a table
+  `frame/`, `chat/`, `code/`, `workspace/`, `photo/` (a photo with its parts pinned, #481) and `rich-blocks/`. One, a table
   heading's sort button (`buttons/sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
   #168) have a stylesheet of their own too (`chat/chat-flow.css`), added when one first shows and applying only inside a
@@ -298,7 +303,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   the theme's violet and chart colours by name, its values written on it, and scrolling sideways when crowded; `chart-scale.ts` works
   out its value axis. A `mermaid` block (`mermaid.tsx`) is drawn as a diagram by Mermaid once it has all arrived,
   one at a time, in the colours read from the theme, at its
-  own size so a wide one scrolls sideways. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+  own size so a wide one scrolls sideways. A `product` block (`product.tsx`, #245) is the JSON the contract's
+  `ProductBlock` accepts, drawn as a card with + Add to wanted, which adds a Thing of that name, wanted, through
+  `features/things/`'s call, or ✓ In Wanted once one is. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
   changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
   script, load something or go somewhere (links keep their words) before it goes in the page, the one place
   Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
@@ -431,6 +438,12 @@ Where the rest fits:
   (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
   workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
+- **The wanted list** (#245). A planning turn's Things show each wanted one's ★ pick, and its model blocks a shop
+  with the block shop tool, a change to `workspace.json`, after which `wanted/` finds new picks elsewhere. Picks are
+  found and priced outside any session: `wanted/` runs one turn through the provider seam on the first provider's
+  `errand` model (its cheap model and effort: Claude's Sonnet at Low), with web search and only the picks tool, in
+  the background, when the owner taps Find picks, opens the list with prices over a week old (once a day), or blocks
+  a shop.
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -603,7 +616,8 @@ things live only in the worker's memory and go when it restarts.
   ones and code ones each keep their own group.
 - `<workspace>/CONTEXT.md`: a planning workspace's context file; a code workspace has none (ADR 0026).
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
-  `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
+  `description`, allowlist changes and Paper connection, with the file's name once connected from its page; a
+  planning workspace's blocked shops for its wanted list, #245).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
@@ -637,6 +651,8 @@ things live only in the worker's memory and go when it restarts.
   resets.
 - `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
   it's there.
+- `wanted/<workspace>.json`: a planning workspace's wanted list's picks, by each Thing's file name, and the day its
+  prices were last checked (#245). Found again on the web, so no change to the context folder.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
