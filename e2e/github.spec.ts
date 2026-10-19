@@ -1499,6 +1499,43 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
+    // Owner, 2026-10-19: with an issue to grill on top there was no way to start the Lead (#550;
+    // Paper, "Code Home: Grill on top, Run the build order" and "…Lead running").
+    test("with Grill on top, Run the build order sits under the small Build, which says the Lead starts it next once it runs", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      await page.goto(HOME);
+      const { nextUp } = blocks(page);
+      await expect(nextUp.getByRole("region", { name: "Grill #117" })).toBeVisible();
+      const build = nextUp.getByRole("region", { name: "Build #197" });
+      await expect(build).toContainText("Ready");
+      await nextUp.getByRole("button", { name: "Run the build order" }).click();
+      const dialog = page.getByRole("dialog", { name: "Run the build order" });
+      await expect(dialog).toContainText("beginning with #197 The rail on desktop");
+      await expect(dialog).toContainText("Issues that need grilling wait for you.");
+      await expect(dialog.getByRole("switch", { name: "Allow all for builders" })).toBeVisible();
+      await shot(page, "tablet-code-home-grill-on-top-run-the-build-order");
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+
+      // Once the Lead runs, the small Build never races it: the Lead starts it next.
+      await page.route("**/api/workspaces/workbench/lead", async (route) => {
+        const response = await route.fetch();
+        const lead = (await response.json()) as object;
+        await route.fulfill({ response, json: { ...lead, state: "running" } });
+      });
+      await page.goto(HOME);
+      await expect(build).toContainText("The Lead starts this next");
+      await expect(nextUp).toContainText("Lead is running the order");
+      await expect(build.getByRole("button", { name: "Build" })).toHaveCount(0);
+      await expect(nextUp.getByRole("button", { name: "Run the build order" })).toHaveCount(0);
+      await shot(page, "tablet-code-home-grill-on-top-lead-running");
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
     // Owner, 2026-10-18: GitHub's limit ran out and Next up said Nothing ready to build (#519;
     // Paper, "Tablet · Code Home: Next up can't reach GitHub").
     test("when GitHub refuses the read, Next up keeps the last list, says why and as of when, and doesn't move", async ({
