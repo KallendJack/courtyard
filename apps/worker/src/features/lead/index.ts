@@ -18,6 +18,7 @@ import {
   type NextUpIssue,
   type SessionEvent,
   SessionId,
+  tasksIn,
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -177,10 +178,29 @@ type Listed = CodeSessionList["sessions"][number];
 
 /**
  * What a builder with no pull request has done, as the Lead reads it each look (#474): its latest
- * event, whether its last turn failed or was stopped, and how many approvals it waits on that
- * Allow all would allow (#551).
+ * event, whether its last turn failed or was stopped, how many approvals it waits on that Allow
+ * all would allow (#551), and whether something of the machine's is in hand for it (#574).
  */
-type Heard = { readonly seq: number; readonly stopped: boolean; readonly allowable: number };
+type Heard = {
+  readonly seq: number;
+  readonly stopped: boolean;
+  readonly allowable: number;
+  readonly inHand: boolean;
+};
+
+/**
+ * Whether something of the machine's is in hand for a session (#574): a task the model started
+ * still runs, or its latest event is a command it's running or one waiting for the build turn,
+ * which nothing has followed yet.
+ */
+const inHandIn = (events: readonly SessionEvent[]) => {
+  const last = events.at(-1);
+  return (
+    (last?.type === "activity" &&
+      (last.activity.kind === "ran-command" || last.activity.kind === "waiting-for-build")) ||
+    tasksIn(events).some((task) => !task.preview && task.ended === undefined)
+  );
+};
 
 /** How many approvals a session waits on that Allow all covers (#551): asked, not yet answered. */
 const allowableIn = (events: readonly SessionEvent[]) => {
@@ -347,6 +367,7 @@ export const createLead = (options: {
         stopped: endedBadly(events.value),
         // Only while its turn waits on one: a turn that ended asks nothing any more.
         allowable: each.waiting === "approval" ? allowableIn(events.value) : 0,
+        inHand: inHandIn(events.value),
       });
     }
     return heard;
@@ -592,8 +613,9 @@ export const createLead = (options: {
    * Watches its builders' silence (#474): one still building with no pull request, silent (no
    * turn, commit or event) for `STALLS_AFTER_MS`, is stalled. Its session is marked so, which
    * waits on the owner and frees its slot, the owner is told, and its session is kept, its claim
-   * standing, for the owner to look at. Time it waits on the owner or for a place doesn't count;
-   * one with a pull request waits on the owner or CI, so never stalls.
+   * standing, for the owner to look at. Time it waits on the owner or for a place doesn't count,
+   * nor time something of the machine's is in hand for it (#574): its silence starts again once
+   * that ends. One with a pull request waits on the owner or CI, so never stalls.
    */
   const watchQuiet = async (
     was: Kept,
@@ -612,7 +634,7 @@ export const createLead = (options: {
         built.push(unwatched);
         continue;
       }
-      if (each.waiting !== "nothing" || each.queued || quiet?.seq !== latest.seq) {
+      if (each.waiting !== "nothing" || each.queued || latest.inHand || quiet?.seq !== latest.seq) {
         built.push({ ...unwatched, quiet: { seq: latest.seq, since: at } });
         continue;
       }
