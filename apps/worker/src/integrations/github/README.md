@@ -20,6 +20,10 @@ Courtyard's own sign-in, never the machine's.
   runs out, and forgotten when GitHub stops taking it.
 - **GitHub itself** is a dependency passed in: `api.ts`, the one real one; `fake.ts` holds it in memory for the tests
   and the browser tests.
+- **GitHub's hourly allowance** (5,000 requests, #520): the worker asks the same things every 30 s or so (Next up and
+  each issue's comments for the Lead, each session's pull request and its checks), so `api.ts` keeps its last 1,000
+  answers with their ETags and asks again with them. GitHub answers an unchanged one 304 and doesn't count it, so only
+  what changed costs a request. `test/github-requests.test.ts` counts them against a stand-in GitHub.
 - **Code sessions' environment** (`commandEnv`): `gh` reading Courtyard's own config folder, git's credential helpers
   replaced by `gh`'s and GitHub's SSH addresses turned to HTTPS, and every variable naming the machine's own login
   unset. While no one is signed in, that folder holds a stand-in that works nowhere, since `gh` would otherwise fall
