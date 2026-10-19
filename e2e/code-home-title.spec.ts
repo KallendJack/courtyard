@@ -75,6 +75,7 @@ const titleAsTheBoards = async (page: Page) => {
     "Rename",
     "Change icon",
     "Allowed commandsWhat sessions run without asking",
+    "Notify meWhich notifications you get",
     "ArchiveHidden, never deleted",
   ]);
 
@@ -98,6 +99,13 @@ const titleAsTheBoards = async (page: Page) => {
   await expect(allowed.getByRole("heading", { name: "Allowed commands" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(allowed).toBeHidden();
+
+  // Notify me (#493): a code workspace starts on Everything.
+  await (await openMenu(page)).getByRole("button", { name: /^Notify me/ }).click();
+  const notify = page.getByRole("dialog", { name: `Notify me · ${NAME}` });
+  await expect(notify.getByRole("radio", { name: /^Everything/ })).toBeChecked();
+  await page.keyboard.press("Escape");
+  await expect(notify).toBeHidden();
 
   // Archive: the confirm step, as before.
   await (await openMenu(page)).getByRole("button", { name: /^Archive/ }).click();

@@ -585,6 +585,12 @@ _Avoid_: rebase, sync, update branch
 A push message to the owner's devices saying a session needs them or has finished.
 _Avoid_: alert, ping
 
+**Notify me**:
+What a workspace's notifications tell the owner of, picked from its ⋯: Everything, Only what needs me (an approval,
+a failure, a pull request ready to merge, a question to answer) or Nothing. Code workspaces start on Everything,
+planning ones on Only what needs me.
+_Avoid_: mute, do not disturb, notification level
+
 ### Tools
 
 **Tool connection**:

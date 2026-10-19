@@ -1,20 +1,22 @@
 import type { WorkspaceIcon as Icon, WorkspaceId, WorkspaceMode } from "@courtyard/contract";
-import { Archive, Ban, BookOpen, Pencil, SquareTerminal } from "lucide-react";
+import { Archive, Ban, Bell, BookOpen, Pencil, SquareTerminal } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { OptionsMenu } from "../buttons/options-menu.tsx";
 import { useAnchorName } from "../layout/place-under.ts";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 
-// Loaded when the owner first picks Change icon, Allowed commands or Blocked shops.
+// Loaded when the owner first picks Change icon, Allowed commands, Notify me or Blocked shops.
 const IconSheet = lazy(() => import("../sheets/icon-sheet.tsx"));
 const AllowedCommandsSheet = lazy(() => import("../sheets/allowed-commands-sheet.tsx"));
 const BlockedShopsSheet = lazy(() => import("../sheets/blocked-shops-sheet.tsx"));
+const NotifyMeSheet = lazy(() => import("../sheets/notify-me-sheet.tsx"));
 
 /**
  * One quiet ⋯ beside a code workspace's name (#333; Paper, "Tablet · Workspace ⋯: rename, icon,
  * archive"), opening a small sheet under it: a planning workspace's What Courtyard knows (#481),
- * Rename, Change icon (the Icon sheet), Allowed commands (what the owner allowed always, #185), in a
- * planning workspace Blocked shops (its wanted list's, #245), and Archive, so the title area keeps
+ * Rename, Change icon (the Icon sheet), Allowed commands (what the owner allowed always, #185),
+ * Notify me (what its notifications tell of, #493), in a planning workspace Blocked shops (its
+ * wanted list's, #245), and Archive, so the title area keeps
  * only the name while nothing the page could do goes away. `choose` returns an error to show, or
  * nothing once the icon is kept.
  */
@@ -35,6 +37,8 @@ export function WorkspaceMenu(props: {
   const [allowed, setAllowed] = useState<boolean>();
   /** Whether Blocked shops is open, or has never been, so it isn't loaded until it's wanted. */
   const [blocked, setBlocked] = useState<boolean>();
+  /** Whether Notify me is open, or has never been, so it isn't loaded until it's wanted. */
+  const [notifying, setNotifying] = useState<boolean>();
   /** The ⋯'s, so Allowed commands and Blocked shops open under it, where the menu was. */
   const anchor = useAnchorName();
   return (
@@ -66,6 +70,12 @@ export function WorkspaceMenu(props: {
             name: "Allowed commands",
             note: "What sessions run without asking",
             onPick: () => setAllowed(true),
+          },
+          {
+            icon: <Bell />,
+            name: "Notify me",
+            note: "Which notifications you get",
+            onPick: () => setNotifying(true),
           },
           ...(props.mode === "planning"
             ? [
@@ -104,6 +114,16 @@ export function WorkspaceMenu(props: {
             anchor={anchor}
             open={blocked}
             onClose={() => setBlocked(false)}
+          />
+        </Suspense>
+      )}
+      {notifying !== undefined && (
+        <Suspense>
+          <NotifyMeSheet
+            workspaceId={props.workspaceId}
+            workspaceName={props.workspaceName}
+            open={notifying}
+            onClose={() => setNotifying(false)}
           />
         </Suspense>
       )}

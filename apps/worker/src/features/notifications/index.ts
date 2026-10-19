@@ -74,7 +74,9 @@ const CLOSING_MARKS = /[\s*_)"'”’]+$/;
  */
 const endsAsking = (events: readonly SessionEvent[], ended: number) => {
   const ending = (event: SessionEvent) =>
-    event.type === "turn-completed" || event.type === "turn-failed" || event.type === "turn-stopped";
+    event.type === "turn-completed" ||
+    event.type === "turn-failed" ||
+    event.type === "turn-stopped";
   const ends = events.findIndex((event) => event.seq === ended);
   if (ends === -1) return false;
   const before = events.findLastIndex((event, index) => index < ends && ending(event));
@@ -107,7 +109,10 @@ const needOf = async (
       return { says: approvalNeed(event.ask), needsYou: true };
     case "turn-completed":
       if (pullRequest?.state === "open" && pullRequest.checks.kind === "failed") {
-        return { says: `Checks still failing: ${pullRequest.checks.failed.join(", ")}`, needsYou: true };
+        return {
+          says: `Checks still failing: ${pullRequest.checks.failed.join(", ")}`,
+          needsYou: true,
+        };
       }
       return (await asks())
         ? { says: "Has a question for you", needsYou: true }
@@ -143,7 +148,8 @@ const newKeys = (): PushKeys => {
  * Notifications (#173): web push to the devices the owner turned them on for, when a session
  * needs an approval and when a turn finishes or fails. The worker's keys are made on its first
  * run, and each device's subscription is kept by its device login in the data folder, so a
- * device that logs out gets no more.
+ * device that logs out gets no more. Which go is decided here, by each session's workspace's
+ * Notify me (#493).
  */
 export const createNotifications = (options: {
   dataDir: string;
@@ -285,11 +291,7 @@ export const createNotifications = (options: {
       changeDevices((devices) => devices.filter((kept) => kept.subscription.endpoint !== endpoint)),
 
     /** Sends a notification when a session's event is one the owner hears about. */
-    sessionEvent: (
-      session: SessionId,
-      event: SessionEvent,
-      pullRequest: PullRequest | undefined,
-    ) =>
+    sessionEvent: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) =>
       notice(session, () =>
         needOf(event, pullRequest, async () => {
           const events = await options.eventsOf(session);

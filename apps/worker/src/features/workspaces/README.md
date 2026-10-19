@@ -29,5 +29,7 @@ All in `worker.ts`:
 - **Order** (#321): planning ones first, then code ones, each group in the owner's order: one list of ids in
   `workspace-order.json` at the context folder's top, kept by `arrangeWorkspaces`, which refuses an order that mixes
   the groups. A workspace the order doesn't name goes at the end of its group, by name.
+- **Notify me** (#493): what the workspace notifies of, `notify` in its config (`keepNotify`), read as `everything`
+  in a code workspace and `needs-me` in a planning one until the owner picks; `notifications/` serves and reads it.
 - It reads a code workspace's allowlist changes (`allowlist: { add, remove }`) and Paper settings for `code/` and
   `paper/`, and writes `{ mode: "code", repoPath }` for a new code workspace.

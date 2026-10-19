@@ -600,7 +600,10 @@ Where the rest fits:
   `notifications/`, which pushes one to each device logged in that turned them on (a stopped turn, and an
   interrupted one found by the next worker, send none of their own: one "Courtyard restarted" names them all, #186). A code turn's end waits for its PR to be followed, so one
   ending with the PR's checks still failing says "Checks still failing: e2e", not "Turn finished" (story 31). The
-  service worker shows it and opens the session on a tap.
+  service worker shows it and opens the session on a tap. What goes depends on the session's workspace's Notify me
+  (#493, `notify` in its `workspace.json`), decided in `notifications/` alone: Everything; Only what needs me, which
+  leaves out a turn that just finished unless its answer ends asking the owner something ("Has a question for
+  you"); or Nothing.
 
 ## Where things live
 
