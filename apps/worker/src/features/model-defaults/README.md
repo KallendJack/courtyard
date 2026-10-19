@@ -27,4 +27,5 @@ from then on.
   context folder: it's Courtyard's setting, not something a model knows. Courtyard never learns a default from what
   was last picked.
 - **When one can't be used:** its model gone from the provider's list, or at its usage limit, the provider's default
-  is its first model not at its limit, at its own effort, until it can be used again.
+  is its first model not at its limit, at its own effort, until it can be used again. With every model at its
+  limit, the default stays as it is.
