@@ -65,6 +65,8 @@ const VARIANTS = {
   primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
   /** The main action on something that needs the owner first, in gold (Grill, #363). */
   needs: "border-transparent bg-warning text-background hover:bg-warning/85",
+  /** A quiet action on something gold, such as Turn off on the Lead's row allowing all (#551). */
+  needsOutline: "border-warning/40 bg-transparent text-warning hover:bg-warning/10",
   /** Any other action, such as Cancel. */
   outline: "border-input bg-input/30 text-foreground hover:bg-input/50",
   /** Archiving, deleting, logging out. */
