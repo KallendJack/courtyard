@@ -14,6 +14,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - `GET`, `PUT`, `DELETE /api/workspaces/:id/things/:slug`: one Thing.
 - `GET`, `POST /api/workspaces/:id/things/:slug/photo`: its photo.
 - `PUT /api/workspaces/:id/things/:slug/pin`: a part's pin, where the owner dragged it on its Thing's photo (#208).
+- `PUT /api/workspaces/:id/things/:slug/mark`: a part's card on Home (#481), `ThingMark`: `done` clears what it
+  needs and has it again, its history saying "Done: …"; `wanted` makes one the owner has one to replace.
 
 ## How it works
 

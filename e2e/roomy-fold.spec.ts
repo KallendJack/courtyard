@@ -70,7 +70,7 @@ test.describe("on the unfolded Fold", () => {
     expect(button.y + button.height).toBeGreaterThan(line.y);
   });
 
-  test("a planning workspace's Home: its tabs beside its title, and rename, icon and archive behind ⋯", async ({
+  test("a planning workspace's Home: its pills under its title, and rename, icon and archive behind ⋯", async ({
     page,
   }) => {
     await page.goto("/workspaces/garage-gym");
@@ -78,9 +78,9 @@ test.describe("on the unfolded Fold", () => {
     await expect(tabs(page)).toBeVisible();
     const more = page.getByRole("button", { name: "Workspace options" });
     await expect(more).toBeVisible();
-    // The tabs and the ⋯ share the title's row.
+    // The ⋯ shares the title's row; the pills sit under it, beside the photo (#481's Tablet board).
     const name = title(page);
-    expect(await besideTheTitle(page, name)).toBe(true);
+    expect(await besideTheTitle(page, name)).toBe(false);
     expect((await boxOf(more)).y).toBeLessThan((await boxOf(name)).y + (await boxOf(name)).height);
     // No line above the name, and nothing of its own beside it but the ⋯.
     await expect(page.getByText("Workspace", { exact: true })).toHaveCount(0);
@@ -89,6 +89,7 @@ test.describe("on the unfolded Fold", () => {
     }
     await more.click();
     await expect(page.getByRole("dialog", { name: "Garage gym" }).getByRole("button")).toHaveText([
+      "What Courtyard knowsFacts, plans, ideas and skills",
       "Rename",
       "Change icon",
       "Allowed commandsWhat sessions run without asking",

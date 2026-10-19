@@ -83,7 +83,7 @@ test("a tile names the newest session waiting, and the list marks them and puts 
   await expect(tile(page, workspace.name)).toContainText("New reply · Saturday Shops and 1 more");
   await tile(page, workspace.name).click();
   await expect(page.getByRole("heading", { level: 1, name: workspace.name })).toBeVisible();
-  await openTab(page, "Sessions");
+  await openTab(page, "History");
   await expect(sessionRows(page)).toHaveCount(3);
   await expect(sessionRows(page).nth(0)).toContainText("Saturday Shops");
   await expect(
@@ -114,7 +114,7 @@ test("a tile names the newest session waiting, and the list marks them and puts 
   await expect(page.getByRole("heading", { level: 1, name: "Brake Pads" })).toBeVisible();
   await seen(request, workspace.id, "Brake Pads");
   await page.goto(`/workspaces/${workspace.id}`);
-  await openTab(page, "Sessions");
+  await openTab(page, "History");
   await expect(sessionRows(page).filter({ has: newReplyMark(page) })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Mark all read" })).toHaveCount(0);
 });
@@ -125,7 +125,7 @@ test("Mark all read sees every new reply in the workspace", async ({ page, reque
   await answered(request, workspace.id, "Saturday shops");
 
   await page.goto(`/workspaces/${workspace.id}`);
-  await openTab(page, "Sessions");
+  await openTab(page, "History");
   await expect(sessionRows(page).filter({ has: newReplyMark(page) })).toHaveCount(2);
   await page.getByRole("button", { name: "Mark all read" }).click();
 
@@ -155,7 +155,7 @@ test.describe("on a tablet", () => {
 
     await page.goto(`/workspaces/${workspace.id}`);
     await expect(railTile).toHaveText(`${workspace.name}2`);
-    await openTab(page, "Sessions");
+    await openTab(page, "History");
     await page.getByRole("button", { name: "Mark all read" }).click();
 
     await expect(railTile).toHaveText(workspace.name);

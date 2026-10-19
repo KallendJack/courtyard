@@ -15,7 +15,7 @@ const words = (count: number) => Array.from({ length: count }, (_, i) => `word${
  * Fake, or on `model` ("fake-two/echo" for one that can't steer, #252).
  */
 const startSession = async (page: Page, text: string, model?: string) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await openBox(page);
   if (model !== undefined) await chooseModel(page, model);
   await page.getByLabel("Message", { exact: true }).fill(text);

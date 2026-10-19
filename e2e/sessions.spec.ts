@@ -5,7 +5,7 @@ import { openTab } from "./workspace-page.ts";
 test("the owner starts a session, watches the answer stream in, and finds it again later", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
 
   await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
   await page.getByRole("button", { name: "Start" }).click();
@@ -27,7 +27,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
   await expect(session.getByRole("alert")).toHaveCount(2);
 
   await page.getByRole("link", { name: "Back to Garage gym" }).click();
-  await openTab(page, "Sessions");
+  await openTab(page, "History");
   // By its first line, or the title a model gave it after the first answer.
   await expect(page.getByRole("region", { name: "Sessions" })).toContainText(
     /where should the rack go/i,
@@ -35,7 +35,7 @@ test("the owner starts a session, watches the answer stream in, and finds it aga
 });
 
 test("the owner sees which files the model read", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill("please read the context file first");
   await page.getByRole("button", { name: "Start" }).click();
 
@@ -47,7 +47,7 @@ test("the owner sees which files the model read", async ({ page }) => {
 test("what the model writes between what it does shows apart, between its activities, live and on reopening", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page
     .getByLabel("Message", { exact: true })
     .fill("write: Now the contract.\nread file: docs/notes.md\nwrite: Good, it's imported.");
@@ -79,7 +79,7 @@ test("a new session takes the model's title once its first answer is in", async 
   const stamp = Date.now();
   const message = `plan the garage lighting ${stamp} please`;
   const titled = `Plan The Garage Lighting ${stamp}`;
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);
@@ -96,7 +96,7 @@ test("a session's conversation keeps its place until it comes, and shows at once
   page,
 }) => {
   const message = `chalk the bar ${Date.now()}`;
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   const session = page.getByRole("list", { name: "Session" });
@@ -137,7 +137,7 @@ test("a session's conversation keeps its place until it comes, and shows at once
 // tile opens (#197), show at once, kept from the rail's own ask, and at once on coming back.
 test("the recent sessions show at once, and at once on coming back", async ({ page }) => {
   const message = `rack the plates ${Date.now()}`;
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(message);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(`You said: ${message}`);

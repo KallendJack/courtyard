@@ -16,7 +16,7 @@ const skillsSheet = async (page: Page) => {
 test("the owner picks a skill on the Skills sheet and starts a session with it, shown as a tag", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   const sheet = await skillsSheet(page);
   await expect(sheet.getByRole("list", { name: "Skills" }).getByRole("button")).toHaveText([
     /^Get to know/,
@@ -57,7 +57,7 @@ test("a skill picked on the Skills sheet can be taken off again", async ({ page 
 test("the chat says which skill the model used, and which of its files it read, after a reload too", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page
     .getByLabel("Message", { exact: true })
     .fill("use skill programme-check\nuse skill programme-check references/deload-weeks.md");
@@ -95,7 +95,7 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("the bar's Skills picks one for the next message, which goes with it", async ({ page }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await page.getByRole("button", { name: "Type" }).click();
     await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();

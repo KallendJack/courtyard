@@ -70,7 +70,7 @@ test("near a limit, a session warns above the Reply box: Switch sends the next m
   page,
 }) => {
   const putOff = await usageAnswers(page);
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await chooseModel(page, "fake/echo");
   await page.getByLabel("Message", { exact: true }).fill("Which plates for the rack?");
   await page.getByRole("button", { name: "Start" }).click();

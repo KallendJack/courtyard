@@ -195,6 +195,47 @@ describe("a planning workspace's Home (#208)", () => {
       at: expect.any(String),
       nextSteps: ["Find a chain under £30", "Which lights?"],
       answering: false,
+      // A reply from Home carries on with the model it was asked with (#481).
+      model: SAVING_MODEL,
+    });
+  });
+
+  it("keeps the next steps back while the answer is still being written", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      holding = resolve;
+    });
+    const saver = savingProvider([
+      [
+        {
+          call: "suggest_replies",
+          input: { replies: ["Find a chain under £30", "Which lights?"] },
+        },
+        async () => {
+          holding();
+          await gate;
+        },
+      ],
+    ]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/mountain-biking/sessions", {
+      text: "Is the bike ready for Saturday?",
+      model: SAVING_MODEL,
+    });
+    const session = SessionSummary.parse(await started.json());
+    await held;
+
+    const whileAnswering = (await home(request)).question;
+    release();
+    expect(whileAnswering).toMatchObject({ answering: true, nextSteps: [] });
+    await followSession(request, { sessionId: session.id, until: "turn-completed" });
+    expect((await home(request)).question).toMatchObject({
+      answering: false,
+      nextSteps: ["Find a chain under £30", "Which lights?"],
     });
   });
 

@@ -11,7 +11,7 @@ const workerDown = (page: Page) =>
 const workerBack = (page: Page) => page.unroute("**/api/**");
 
 test("reloading mid-answer carries on with nothing missing or repeated", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill(LONG_MESSAGE);
   await page.getByRole("button", { name: "Start" }).click();
 
@@ -71,7 +71,7 @@ test("an offline page whose worker is back by its first check recovers at once",
 test("a session page opened while the worker is down recovers with its whole session", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page.getByLabel("Message", { exact: true }).fill("Survive the outage");
   await page.getByRole("button", { name: "Start" }).click();
   const session = page.getByRole("list", { name: "Session" });

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const DESKTOP = { width: 1440, height: 900 };
 
 test("shows an answer's Markdown formatted, not as raw marks", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   // The fake model echoes the message back, Markdown and all.
   await page
     .getByLabel("Message", { exact: true })
@@ -56,7 +56,7 @@ test("never loads an image an answer points to, so an answer can't send data awa
   page.on("request", (request) => {
     if (request.url().includes("courtyard.example")) requested.push(request.url());
   });
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await page
     .getByLabel("Message", { exact: true })
     .fill("![the plan](https://courtyard.example/plan.png?secret=1)");

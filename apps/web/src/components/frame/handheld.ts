@@ -119,6 +119,11 @@ export type Dock = {
    * until the returned function is called.
    */
   offerCommands: (commands: TalkTarget) => () => void;
+  /**
+   * What the rail's Add does on this page (a planning workspace's Home, #481: add a Thing, a photo
+   * or a doc), offered until the returned function is called. Only a tablet's rail shows it.
+   */
+  offerAdd: (add: () => void) => () => void;
   open: () => void;
   close: () => void;
   /**

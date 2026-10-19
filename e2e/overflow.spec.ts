@@ -8,7 +8,7 @@ import { chooseModel, chosen, modelSheet } from "./frame.ts";
 test("after a usage limit, Carry on answers with the other provider and a line marks the change", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   // By its value: once Fake two is at its limit (on a retry, say), its label says so.
   await chooseModel(page, "fake-two/echo");
   await page.getByLabel("Message", { exact: true }).fill("please hit Fake two's limit");
@@ -39,7 +39,7 @@ test("after a usage limit, Carry on answers with the other provider and a line m
 test("a session whose provider shows as unavailable keeps its model, and Send waits for the owner", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await chooseModel(page, "fake-two/echo");
   await page.getByLabel("Message", { exact: true }).fill("Which bar for deadlifts?");
   await page.getByRole("button", { name: "Start" }).click();
