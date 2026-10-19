@@ -1405,8 +1405,27 @@ const attachmentsPart = (attachments: readonly TurnAttachment[]) => {
   return `${ATTACHMENTS_INTRO}\n\n<attachments>\n${each.join("\n")}\n</attachments>`;
 };
 
+/** How many earlier exchanges a Lead's turn is given (#518): the latest, so it stays a fixed size. */
+const LEAD_EXCHANGES_KEPT = 10;
+
+/**
+ * The latest `kept` exchanges of what was said, each from an owner message (not one added while
+ * an answer was written, #252) to the next, and whether older ones were left out.
+ */
+const latestExchanges = (said: readonly Said[], kept: number) => {
+  const starts = said.flatMap((each, at) =>
+    each.speaker === "owner" && each.added === undefined ? [at] : [],
+  );
+  const from = starts.at(-kept);
+  return from === undefined || starts.length <= kept
+    ? { said, cut: false }
+    : { said: said.slice(from), cut: true };
+};
+
 const messageFor = (turn: {
   earlier: readonly Said[];
+  /** Whether older exchanges were left out of `earlier` (#518). */
+  cut: boolean;
   newest: string;
   /** The names of the files the new message attached. */
   attached: readonly string[];
@@ -1419,7 +1438,7 @@ const messageFor = (turn: {
     ...(earlier.length === 0
       ? []
       : [
-          `Earlier in this session:\n\n<conversation>\n${earlier.map((said) => contained(lineFor(said))).join("\n\n")}\n</conversation>`,
+          `${turn.cut ? EARLIER_CUT : "Earlier in this session:"}\n\n<conversation>\n${earlier.map((said) => contained(lineFor(said))).join("\n\n")}\n</conversation>`,
         ]),
   ];
   if (newest === "") return [...parts, onlyAttached(turn.attached)].join("\n\n");
@@ -1428,6 +1447,8 @@ const messageFor = (turn: {
     "\n\n",
   );
 };
+
+const EARLIER_CUT = "Earlier in this session, its latest exchanges only (older ones are left out):";
 
 /** The new message when it's only attachments (#164), with nothing put in place of the words. */
 const onlyAttached = (names: readonly string[]) =>
@@ -1481,10 +1502,17 @@ export const framingFor = (turn: {
       ? startedNow
       : undefined,
   });
+  const before = newest?.speaker === "owner" ? said.slice(0, -1) : said;
+  // A Lead takes a turn after every merge (#518), so it's given only its latest exchanges.
+  const earlier =
+    turn.lead === undefined
+      ? { said: before, cut: false }
+      : latestExchanges(before, LEAD_EXCHANGES_KEPT);
   return {
     instructions,
     message: messageFor({
-      earlier: newest?.speaker === "owner" ? said.slice(0, -1) : said,
+      earlier: earlier.said,
+      cut: earlier.cut,
       newest: newMessage,
       attached: newest?.speaker === "owner" ? newest.attached : [],
       attachments: turn.attachments,

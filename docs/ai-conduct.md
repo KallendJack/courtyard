@@ -630,6 +630,12 @@ owner's:
 > replace to Archive. If the repository keeps a plan issue or notes beside its build order, bring them up to date with
 > gh. Then say in a line or two what merged and what the order does next.
 
+The Lead takes a turn after every merge, so its turns are given only its latest ten exchanges (#518), each an owner
+or worker message and the answer to it, as a quick question keeps its last ten. Once older ones are left out, the
+conversation opens "Earlier in this session, its latest exchanges only (older ones are left out):" in place of
+"Earlier in this session:". Its chat still shows everything; only what the model is given is cut, and the build
+order it's told each turn stands in for the rest.
+
 Like every code session, the Lead names issues and pull requests by what they are, numbers only beside them (#361).
 The Lead changes no context, so a change here doesn't run the eval set.
 

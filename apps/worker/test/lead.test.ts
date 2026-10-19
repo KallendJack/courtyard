@@ -841,6 +841,31 @@ describe("talking to the Lead (#347)", () => {
     expect(first?.instructions).toContain("<build_order>");
   });
 
+  it("gives its turns only its latest ten exchanges, while its chat keeps them all (#518)", async () => {
+    const saver = savingProvider([], { codes: true });
+    const { request } = await signedInWith(ISSUES, { providers: [saver.provider] });
+    await run(request, SAVING_MODEL);
+    await settled(request);
+    const asked = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    for (const word of asked) await tell(request, `Question ${word}?`);
+
+    await tell(request, "What's next?");
+
+    const message = saver.framings.at(-1)?.message ?? "";
+    expect(message).not.toContain("Run the build order.");
+    expect(message).toContain(
+      "Earlier in this session, its latest exchanges only (older ones are left out):",
+    );
+    for (const word of asked) expect(message).toContain(`Owner: Question ${word}?`);
+    expect(message).toMatch(/What's next\?$/);
+    const lead = await leadOf(request);
+    const chat = (await eventsSoFar(request, lead.session ?? "")).flatMap((event) =>
+      event.type === "owner-message" ? [event.text] : [],
+    );
+    expect(chat).toHaveLength(12);
+    expect(chat[0]).toBe("Run the build order.");
+  });
+
   it("keeps an issue's title inside the build order's markers, however a closing marker is spelt", async () => {
     const saver = savingProvider([], { codes: true });
     const { request } = await signedInWith(
