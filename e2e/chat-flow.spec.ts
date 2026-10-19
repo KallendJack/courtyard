@@ -78,6 +78,62 @@ test.describe("whose turn it is", () => {
   });
 });
 
+test.describe("the Reply box as it sends (#533)", () => {
+  /**
+   * Holds the session's next message on its way to the worker until the returned release, then
+   * lets it through, or answers it with a failure.
+   */
+  const holdNextSend = async (page: Page, fails = false) => {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      "**/api/sessions/*/messages",
+      async (route) => {
+        await released;
+        if (fails) await route.fulfill({ status: 500, json: { error: "The worker fell over" } });
+        else await route.fallback();
+      },
+      { times: 1 },
+    );
+    return release;
+  };
+
+  test("empties of what it sends at once, keeping what's typed while it goes", async ({ page }) => {
+    await startSession(page, words(3));
+    await expect(sessionOn(page)).toContainText("Your turn · finished");
+    const message = page.getByRole("textbox", { name: "Message" });
+
+    const release = await holdNextSend(page);
+    await message.fill("Where should the rack go?");
+    await message.press("Enter");
+    await expect(message).toHaveValue("");
+    await message.pressSequentially("And the bench");
+    release();
+
+    await expect(sessionOn(page)).toContainText("You said: Where should the rack go?");
+    await expect(message).toHaveValue("And the bench");
+  });
+
+  test("puts what it sent back, in front of what's typed since, when the send fails", async ({
+    page,
+  }) => {
+    await startSession(page, words(3));
+    await expect(sessionOn(page)).toContainText("Your turn · finished");
+    const message = page.getByRole("textbox", { name: "Message" });
+
+    const release = await holdNextSend(page, true);
+    await message.fill("Where should the rack go?");
+    await message.press("Enter");
+    await expect(message).toHaveValue("");
+    await message.pressSequentially("And the bench");
+    release();
+
+    await expect(message).toHaveValue("Where should the rack go? And the bench");
+  });
+});
+
 test.describe("messages sent while a turn runs, on a model that can't steer", () => {
   test("queue under the Working line, can be removed or edited, and go in order once the turn ends", async ({
     page,
