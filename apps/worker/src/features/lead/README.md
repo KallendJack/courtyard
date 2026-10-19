@@ -11,7 +11,8 @@ because it changes the same file, and starts it once the first one's PR merges.
 
 ## API
 
-- `GET /api/workspaces/:id/lead`; `POST …/lead/run`, `…/lead/merge-in-order` and `…/lead/pause`.
+- `GET /api/workspaces/:id/lead`; `POST …/lead/run`, `…/lead/merge-in-order`, `…/lead/allow-all` (`{ on }`) and
+  `…/lead/pause`.
 
 ## How it works
 
@@ -42,4 +43,7 @@ because it changes the same file, and starts it once the first one's PR merges.
   session carries on, and neither has its issue started afresh. One with a pull request waits on the owner or CI, so
   never stalls.
 - **Allow all:** it keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
-  order with it on) and starts each builder with it until then.
+  order with it on) and starts each builder with it until then. The owner can switch it from the Lead's row while it
+  runs, is paused or rests (#551): on gives it, for 12 hours, to its builders still building (no pull request yet) and
+  any it starts, answering the approvals they wait on that it covers (`LeadStatus.allowAllReaches` counts both, for
+  the sheet); off ends it on the builders the Lead gave it to (`byLead`), never one the owner turned on themselves.

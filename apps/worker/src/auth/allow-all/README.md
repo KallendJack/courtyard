@@ -15,8 +15,8 @@ None of its own: `sessions/`' `POST /api/sessions/:id/allow-all` (for `1h`, `4h`
 
 ## How it works
 
-- On from `allow-all-started` (the owner's turning it on, or a Lead's builder started with it), which stores its end
-  time.
+- On from `allow-all-started` (the owner's turning it on, or the Lead giving it to a builder at its start or from its
+  row, #551, marked `byLead`), which stores its end time.
 - Off at that time, at `allow-all-ended` (Turn off), when its pull request merges or closes, or, for `task`, when a
   pull request opens.
 - It's never extended while on.

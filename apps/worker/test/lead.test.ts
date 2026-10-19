@@ -330,6 +330,159 @@ describe("Run the build order (#347)", () => {
   });
 });
 
+describe("Allow all for builders from the Lead's row (#551)", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  /** Allow all for builders switched on or off, as the Lead's row does. */
+  const allowAllForBuilders = async (request: Requester, on: boolean) => {
+    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
+      on,
+    });
+    expect(response.status).toBe(200);
+    return LeadStatus.parse(await response.json());
+  };
+
+  it("turns on for 12 hours for the builders still building, those it starts later, and says so in its chat", async () => {
+    const { request } = await signedInWith(ISSUES);
+    await run(request);
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 0 });
+
+    const lead = await allowAllForBuilders(request, true);
+
+    const until = lead.buildersAllowedAll;
+    if (until === undefined) throw new Error("builders aren't allowed all");
+    expect(Date.parse(until) - Date.now()).toBeGreaterThan(11.9 * HOUR);
+    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(12 * HOUR);
+    for (const issue of [22, 23]) {
+      expect((await builderOf(request, issue)).allowingAll).toEqual({ until, task: true });
+    }
+    expect(
+      (await sessionsOf(request)).find((session) => session.lead === true)?.allowingAll,
+    ).toBeUndefined();
+    expect(await notesIn(request)).toContain(
+      "Allow all for builders is on for 12 hours: 2 builders now, and any it starts.",
+    );
+  });
+
+  it("can be switched on while the Lead is paused", async () => {
+    const { request } = await signedInWith(ISSUES);
+    await run(request);
+    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
+
+    const lead = await allowAllForBuilders(request, true);
+
+    expect(lead.state).toBe("paused");
+    expect(lead.buildersAllowedAll).toBeDefined();
+    expect((await builderOf(request, 22)).allowingAll).toBeDefined();
+  });
+
+  it("leaves a builder with an open pull request alone, and one allowed all by hand keeps its own end", async () => {
+    const { github, request } = await signedInWith(ISSUES);
+    await run(request);
+    const withPullRequest = await builderOf(request, 22);
+    github.openPullRequest({
+      repo: onGitHub,
+      branch: withPullRequest.branch ?? "",
+      head: "c0ffee1",
+    });
+    await runJobs();
+    const byHand = await builderOf(request, 23);
+    const handOn = await postJson(request, `/api/sessions/${byHand.id}/allow-all`, { lasts: "1h" });
+    expect(handOn.status).toBe(200);
+    const handUntil = (await builderOf(request, 23)).allowingAll?.until;
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 1, approvals: 0 });
+
+    await allowAllForBuilders(request, true);
+
+    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
+    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
+
+    // Turn off leaves the one switched on by hand on.
+    await allowAllForBuilders(request, false);
+
+    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
+  });
+
+  it("Turn off takes it from the builders the Lead gave it to, and new builders start without it", async () => {
+    const { github, request } = await signedInWith(ISSUES);
+    await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      allowAll: true,
+    });
+    const fromTheRow = await allowAllForBuilders(request, true);
+    expect(fromTheRow.buildersAllowedAll).toBeDefined();
+
+    const lead = await allowAllForBuilders(request, false);
+
+    expect(lead.buildersAllowedAll).toBeUndefined();
+    for (const issue of [22, 23]) {
+      expect((await builderOf(request, issue)).allowingAll).toBeUndefined();
+    }
+    expect(await notesIn(request)).toContain(
+      "Allow all for builders is off: its builders ask again.",
+    );
+    // The next builder starts asking as usual.
+    const first = await builderOf(request, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: first.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    await runJobs();
+    expect((await builderOf(request, 24)).allowingAll).toBeUndefined();
+  });
+
+  it("allows at once the approvals its builders wait on that Allow all covers", async () => {
+    const { request } = await signedInWith(ISSUES, {
+      providers: [codingProvider([{ run: "pnpm add left-pad" }]).provider],
+    });
+    await run(request, CODING_MODEL);
+    await expect
+      .poll(async () =>
+        (await sessionsOf(request)).filter(
+          (each) => each.byLead === true && each.waiting === "approval",
+        ),
+      )
+      .toHaveLength(2);
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 2 });
+
+    await allowAllForBuilders(request, true);
+
+    await expect
+      .poll(async () =>
+        (await sessionsOf(request)).filter(
+          (each) => each.byLead === true && each.waiting === "approval",
+        ),
+      )
+      .toHaveLength(0);
+    const builder = await builderOf(request, 22);
+    expect(
+      (await eventsSoFar(request, builder.id)).find((event) => event.type === "approval-answered"),
+    ).toMatchObject({ answer: "allow", allowedAll: true });
+    // The Lead itself isn't allowed all: it still asks.
+    const lead = (await sessionsOf(request)).find((each) => each.lead === true);
+    if (lead?.now.kind === "needs-you") {
+      await postJson(request, `/api/sessions/${lead.id}/approvals/${lead.now.approval}`, {
+        answer: "deny",
+      });
+    }
+    await expect
+      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
+      .toHaveLength(0);
+  });
+
+  it("is for a Lead that has run: before that there's nothing to switch", async () => {
+    const { request } = await signedInWith(ISSUES);
+
+    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
+      on: true,
+    });
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe("keeping going for a window (#457)", () => {
   const HOUR = 60 * 60 * 1000;
   /** #22 claimed by someone else, and #23 blocked by it: nothing ready until #22 closes. */

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { LeadStatus } from "../packages/contract/index.ts";
+import { CodeSessionList, LeadStatus } from "../packages/contract/index.ts";
 
 // A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, Lead
 // running, the Lead's chat, Lead resting), on start-worker.mjs's Toolshed: three ready issues on
@@ -105,13 +105,68 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await page.goto(HOME);
   const lead = running.getByRole("listitem").first();
   await expect(lead).toContainText("Paused");
-  await expect(lead).toContainText("Builders carry on · nothing new starts");
+  // Its builders allow all, as the first test turned on: in gold, in place of "Builders carry on"
+  // (#551).
+  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await shot(page, "lead-paused");
 
   await lead.getByRole("button", { name: "Run" }).click();
-  // Woken, its builders still allow all, as the first test turned on (#428): that's its line.
+  // Woken, its builders still allow all (#428): that's still its line.
+  await expect(lead).toContainText("building");
   await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
+});
+
+// Allow all for builders from the Lead's row (#551; Paper, "Lead row: Allow all for builders, off",
+// "Allow all sheet" and "on"), on since the first test.
+test("Allow all for builders is switched off and on again from the Lead's row", async ({
+  page,
+  request,
+}) => {
+  /** How many of the Lead's builders allow all, as the worker lists them. */
+  const allowing = async () =>
+    CodeSessionList.parse(await (await request.get(`/api${HOME}/sessions`)).json()).sessions.filter(
+      (session) => session.byLead === true && session.allowingAll !== undefined,
+    ).length;
+  await page.goto(HOME);
+  const running = page.getByRole("region", { name: "Running" });
+  const lead = running.getByRole("listitem", { name: "Lead" });
+  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
+  expect(await allowing()).toBe(2);
+
+  await lead.getByRole("button", { name: "Turn off" }).click();
+
+  await expect(lead).toContainText("Running the build order");
+  expect(await allowing()).toBe(0);
+  await shot(page, "tablet-lead-row-allow-all-off");
+
+  await lead.getByRole("button", { name: "Allow all for builders…" }).click();
+  const sheet = page.getByRole("dialog", { name: "Allow all for builders" });
+  await expect(sheet).toContainText("2 builders now, and any it starts");
+  await expect(sheet).toContainText("or as each one's PR opens");
+  await shot(page, "tablet-lead-row-allow-all-sheet");
+  await sheet.getByRole("button", { name: "Turn on for 12 hours" }).click();
+
+  await expect(sheet).toBeHidden();
+  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
+  expect(await allowing()).toBe(2);
+  await shot(page, "tablet-lead-row-allow-all-on");
+
+  // On the Fold's cover screen the sheet rises from the bottom.
+  await page.setViewportSize({ width: 400, height: 900 });
+  await lead.scrollIntoViewIfNeeded();
+  await shot(page, "cover-lead-row-allow-all-on");
+  await lead.getByRole("button", { name: "Turn off" }).click();
+  await expect(lead.getByRole("button", { name: "Allow all for builders…" })).toBeVisible();
+  await shot(page, "cover-lead-row-allow-all-off");
+  await lead.getByRole("button", { name: "Allow all for builders…" }).click();
+  await expect(sheet).toBeVisible();
+  const box = await sheet.boundingBox();
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeCloseTo(900, 0);
+  await shot(page, "cover-lead-row-allow-all-sheet");
+  await sheet.getByRole("button", { name: "Turn on for 12 hours" }).click();
+  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
+  await page.setViewportSize({ width: 950, height: 712 });
 });
 
 // Merge in order and holding back (#423; Paper, "Code Home, Merge in order", "Lead chat, merging
@@ -206,8 +261,10 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
 test("a resting Lead's row says until when it wakes for new work", async ({ page, request }) => {
   const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
   const wakesUntil = new Date(2026, 9, 17, 22, 0).toISOString();
+  // Without Allow all for builders, whose time left would take its second line (#551).
+  const { buildersAllowedAll: _, ...resting } = real;
   await page.route(`**/api${HOME}/lead`, (route) =>
-    route.fulfill({ json: { ...real, state: "resting", building: [], wakesUntil } }),
+    route.fulfill({ json: { ...resting, state: "resting", building: [], wakesUntil } }),
   );
 
   await page.goto(HOME);
