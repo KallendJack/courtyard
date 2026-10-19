@@ -12,7 +12,7 @@ import type {
 import { hasLines } from "@courtyard/contract";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ChevronRight, FileText, Image, Tag } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { useFilePicker } from "@/components/forms/file-picker";
 import { CardDialog } from "@/components/layout/card-dialog";
@@ -161,8 +161,9 @@ export default function PlanningHome(props: {
   };
   const photoPicker = useFilePicker({ accept: "image/*", onPick: toSend });
   const docPicker = useFilePicker({ accept: "application/pdf,image/*", onPick: toSend });
-  // The rail's Add (#481): a Thing, a photo or a doc.
-  useEffect(() => {
+  // The rail's Add (#481): a Thing, a photo or a doc. On the rail before the first paint, so
+  // Settings under it never moves (#398).
+  useLayoutEffect(() => {
     if (offline !== undefined) return;
     return dock?.offerAdd(() => setAdding(true));
   }, [dock, offline]);

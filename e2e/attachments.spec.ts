@@ -269,7 +269,7 @@ test("with no words and nothing attached, there's no Start and Enter sends nothi
   await page.goto("/workspaces/garage-gym#new");
   await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
   await page.getByLabel("Message", { exact: true }).press("Enter");
-  await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+  await expect(page).toHaveURL(/\/workspaces\/garage-gym#new$/);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 

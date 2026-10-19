@@ -16,7 +16,7 @@ const skillsSheet = async (page: Page) => {
 test("the owner picks a skill on the Skills sheet and starts a session with it, shown as a tag", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   const sheet = await skillsSheet(page);
   await expect(sheet.getByRole("list", { name: "Skills" }).getByRole("button")).toHaveText([
     /^Get to know/,

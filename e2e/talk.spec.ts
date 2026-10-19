@@ -126,7 +126,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       if (says.strip) await expect(page.getByRole("button", { name: "Type" })).toBeVisible();
       await expect.poll(() => micOn(page)).toBe(false);
       await page.waitForTimeout(500);
-      await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+      await expect(page).toHaveURL(/\/workspaces\/garage-gym#new$/);
       await expect(message(page)).toHaveValue(
         "About the bench: Could the bench go sideways instead?",
       );
@@ -234,7 +234,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
       page,
       request,
     }) => {
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await expect(talking(page, says.idle)).toBeEnabled();
       expect(await screenKeptAwake(page)).toBe(false);
 
@@ -415,7 +415,7 @@ test.describe("the tablet's Talk key", () => {
     page,
   }) => {
     await standInSpeechRecognition(page);
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     const key = page.getByRole("button", { name: "Talk", exact: true });
     await expect(key).toHaveText("TalkHold to speak");
     await expect(key).toHaveAccessibleDescription("Talk Hold to speak");
@@ -437,7 +437,7 @@ test.describe("the tablet's Talk key", () => {
     page,
   }) => {
     await standInSpeechRecognition(page);
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     const key = page.getByRole("button", { name: "Talk", exact: true });
     const box = page.locator("form", { has: message(page) });
     const away = box.getByRole("button", { name: "Throw away what you said" });

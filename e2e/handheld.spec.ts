@@ -310,7 +310,7 @@ const everywhere = (screen: Screen) => {
     const recent = page.getByRole("dialog", { name: "Garage gym" });
     await recent.getByRole("button", { name: "New session" }).click();
 
-    await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
+    await expect(page).toHaveURL(/\/workspaces\/garage-gym#new$/);
     await expect(recent).toBeHidden();
     await expect(message(page)).toBeFocused();
     await expect(page.getByRole("button", { name: "Talk into the box" })).toBeVisible();
@@ -373,8 +373,8 @@ const everywhere = (screen: Screen) => {
     ).toBeChecked();
     await page.keyboard.press("Escape");
 
-    // A photo or a file: the Reply box's + (#251), not the frame's.
-    await expect(page.getByRole("button", { name: "Add", exact: true })).toHaveCount(0);
+    // A photo or a file: the Reply box's + (#251), not the frame's. (A planning Home's rail has
+    // Add, for a Thing: planning-home.spec.ts.)
     await expect(page.getByRole("button", { name: "Photo", exact: true })).toHaveCount(0);
     await typeIn(page, screen);
     const chooser = page.waitForEvent("filechooser");
@@ -387,7 +387,7 @@ const everywhere = (screen: Screen) => {
   }) => {
     // A workspace's box, which starts a session, and a session's.
     for (const [where, button] of [
-      ["/workspaces/garage-gym", "Start"],
+      ["/workspaces/garage-gym#new", "Start"],
       [`/workspaces/garage-gym/sessions/${READING_SESSION_ID}`, "Send"],
     ] as const) {
       await page.goto(where);
