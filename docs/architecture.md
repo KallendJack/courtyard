@@ -92,6 +92,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`sources/`](../apps/worker/src/features/sources/README.md): a turn's sources, the same for every provider.
 - [`limits/`](../apps/worker/src/features/limits/README.md): each provider's usage limit until its reset, and its
   plan usage at a glance (#66).
+- [`model-defaults/`](../apps/worker/src/features/model-defaults/README.md): each provider's default model and
+  effort, which a new session, a switch of provider and Carry on use (#247).
 - [`waiting/`](../apps/worker/src/features/waiting/README.md): what waits on the owner, decided once, and listed
   from every workspace (`GET /api/needs-you`, #492).
 

@@ -5,20 +5,28 @@ import {
   USAGE_WARNS_AT,
   type UsageList,
 } from "@courtyard/contract";
-import type { ReactNode } from "react";
+import { useRouter } from "@tanstack/react-router";
+import { type ReactNode, useState } from "react";
+import { saveModelDefault } from "@/api/worker-calls";
+import { FormError } from "@/components/forms/form-error";
+import { describeProblem } from "@/components/layout/problems";
 import { HandheldSheet } from "@/components/sheets/handheld-sheet";
 import {
   SheetChoices,
+  SheetFold,
+  SheetMakeDefault,
   type SheetModel,
   SheetModelLine,
   SheetModels,
+  SheetQuickSwitch,
   SheetSkills,
 } from "@/components/sheets/sheet-choices";
+import { useAction } from "@/hooks/use-action";
 import { useUsage } from "../../limits/api.ts";
 import { ModelMeter, PlanMeters } from "../../limits/plan-meters.tsx";
 import { limitLabel } from "./limits.ts";
 import { type ModelChoice, modelKey } from "./model-pickers.tsx";
-import type { OfferedModel } from "./models.ts";
+import { isDefault, type OfferedModel, type ProviderDefault } from "./models.ts";
 
 /** The effort row's value for a model's default: never a level's name, which can't be empty. */
 const DEFAULT = "";
@@ -26,14 +34,30 @@ const DEFAULT = "";
 /** The levels whose names don't fit a tile in the effort row, as they're shortened there. */
 const SHORT: Partial<Record<string, string>> = { medium: "Med", xhigh: "XHigh", minimal: "Min" };
 
+/** An effort as the Model sheet says it, short: "Med". */
+const shortEffort = (model: OfferedModel, effort: Effort | undefined) => {
+  const level = model.efforts.find((known) => known.id === effort);
+  return level === undefined ? undefined : (SHORT[level.id] ?? level.label);
+};
+
+/** A model and its effort in a few words, as a chip says them: "Opus 5.5 · High". */
+const inWords = (model: OfferedModel, effort: Effort | undefined) => {
+  const level = shortEffort(model, effort);
+  return level === undefined ? model.name : `${model.name} · ${level}`;
+};
+
 /**
  * The models on offer as the Model sheet lists them (#201): by provider, each once, under its plan
- * meters (#66), and a model past the warning on its own weekly limit with that meter under it. A
- * provider's default isn't a row of its own: the model it resolves to says it's the default, and
- * picking that row picks the default. `same` gives the row a model shows as, which differs only
- * for that one.
+ * meters (#66), and a model past the warning on its own weekly limit with that meter under it. The
+ * provider's own default ("Default (recommended)") isn't a row of its own: picking the model it
+ * resolves to picks it. `same` gives the row a model shows as, which differs only for that one.
+ * The provider's default in Courtyard (#247) says so under it: "Claude's default · High".
  */
-const listed = (models: readonly OfferedModel[], usage: UsageList | undefined) => {
+const listed = (
+  models: readonly OfferedModel[],
+  defaults: readonly ProviderDefault[],
+  usage: UsageList | undefined,
+) => {
   type Listed = { name: string; models: SheetModel<string>[]; above?: ReactNode };
   const providers = new Map<string, Listed>();
   const usageOf = (provider: string) =>
@@ -61,8 +85,18 @@ const listed = (models: readonly OfferedModel[], usage: UsageList | undefined) =
     const key = modelKey(model.ref);
     const twin = model.followsDefault ? twinOf(model) : undefined;
     if (twin !== undefined) same.set(modelKey(twin.ref), key);
+    const asDefault = defaults.find(
+      (each) =>
+        each.model.ref.provider === model.ref.provider && each.model.ref.model === model.ref.model,
+    );
     const notes = [
-      ...(model.followsDefault ? [`${model.providerLabel}'s default`] : []),
+      ...(asDefault === undefined
+        ? []
+        : [
+            [`${model.providerLabel}'s default`, shortEffort(model, asDefault.effort)]
+              .filter((part) => part !== undefined)
+              .join(" · "),
+          ]),
       ...(model.limit === undefined ? [] : [limitLabel(model.limit)]),
     ];
     const plan = usageOf(model.ref.provider);
@@ -112,13 +146,63 @@ export default function HandheldChoices(props: {
   pick: (name: SkillName) => void;
 }) {
   const { choice } = props;
-  const { model } = choice;
+  const { model, defaults } = choice;
   // Read afresh while the Model sheet is open (#66), at most once a minute.
   const choosingModel = props.choosing === "model";
   const usage = useUsage({ reading: choosingModel, asking: choosingModel });
-  const { providers, same } = listed(props.models, usage);
+  const { providers, same } = listed(props.models, defaults, usage);
   const chosen = model === undefined ? undefined : modelKey(model.ref);
   const aside = props.skills === undefined ? {} : { aside: props.skills.workspaceName };
+  /** "More models": the full list and the effort, folded shut until the owner opens it. */
+  const [more, setMore] = useState(false);
+  const lit = defaults.find((each) => isDefault(each, choice));
+  const router = useRouter();
+  const makeDefault = useAction(async () => {
+    if (model === undefined) return undefined;
+    const saved = await saveModelDefault(model.ref.provider, {
+      model: model.ref.model,
+      ...(choice.effort === undefined ? {} : { effort: choice.effort }),
+    });
+    if (saved.kind !== "loaded") return describeProblem(saved).body;
+    // The chips, and what a new session starts on, from the worker's list.
+    await router.invalidate();
+    return undefined;
+  });
+  /** Make this the default, while the full list is open and the pick isn't its provider's default. */
+  const offerDefault = more && model !== undefined && !choice.unavailable && lit === undefined;
+  const effortFoot =
+    more && model !== undefined && model.efforts.length > 0 ? (
+      <SheetChoices
+        label="Effort"
+        options={[
+          { value: DEFAULT, label: "Default" },
+          ...model.efforts.map((level) => ({
+            value: level.id,
+            label: SHORT[level.id] ?? level.label,
+            name: level.label,
+          })),
+        ]}
+        value={choice.effort ?? DEFAULT}
+        onChange={(value) => {
+          const level = Effort.safeParse(value);
+          choice.pickEffort(level.success ? level.data : undefined);
+        }}
+      />
+    ) : undefined;
+  const modelFoot =
+    effortFoot === undefined && !offerDefault ? undefined : (
+      <div className="flex flex-col gap-3">
+        {effortFoot}
+        {offerDefault && (
+          <SheetMakeDefault
+            detail={`${model.providerLabel} starts on ${inWords(model, choice.effort)} from now on`}
+            busy={makeDefault.busy}
+            make={() => void makeDefault.run()}
+          />
+        )}
+        {makeDefault.error !== undefined && <FormError message={makeDefault.error} />}
+      </div>
+    );
   return (
     <>
       {props.skills !== undefined && (
@@ -147,37 +231,38 @@ export default function HandheldChoices(props: {
         {...aside}
         open={props.choosing === "model"}
         onClose={props.close}
-        {...(model === undefined || model.efforts.length === 0
-          ? {}
-          : {
-              foot: (
-                <SheetChoices
-                  label="Effort"
-                  options={[
-                    { value: DEFAULT, label: "Default" },
-                    ...model.efforts.map((level) => ({
-                      value: level.id,
-                      label: SHORT[level.id] ?? level.label,
-                      name: level.label,
-                    })),
-                  ]}
-                  value={choice.effort ?? DEFAULT}
-                  onChange={(value) => {
-                    const level = Effort.safeParse(value);
-                    choice.pickEffort(level.success ? level.data : undefined);
-                  }}
-                />
-              ),
-            })}
+        {...(modelFoot === undefined ? {} : { foot: modelFoot })}
       >
         {providers.length === 0 ? (
           <p className="text-sm text-muted-foreground">No models available</p>
         ) : (
-          <SheetModels
-            providers={providers}
-            value={chosen === undefined ? undefined : (same.get(chosen) ?? chosen)}
-            onChange={choice.pickModel}
-          />
+          <div className="flex flex-col gap-3">
+            <SheetQuickSwitch
+              chips={defaults.map((each) => ({
+                value: each.provider,
+                name: each.label,
+                choice: inWords(each.model, each.effort),
+              }))}
+              value={lit?.provider}
+              onChange={(provider) => {
+                choice.pickProvider(provider);
+                props.close();
+              }}
+            />
+            <SheetFold
+              title="More models"
+              detail="Every model and effort, with how much of each plan is used"
+              open={more}
+              onToggle={() => setMore((was) => !was)}
+            />
+            {more && (
+              <SheetModels
+                providers={providers}
+                value={chosen === undefined ? undefined : (same.get(chosen) ?? chosen)}
+                onChange={choice.pickModel}
+              />
+            )}
+          </div>
         )}
       </HandheldSheet>
     </>

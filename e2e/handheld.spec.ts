@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { modelSheet } from "./frame.ts";
 import { READING_SESSION_ID } from "./long-session.ts";
 import { fromTheEnd, pageScroll, scrollPageTo, scrollPageToMiddle } from "./page-scroll.ts";
 import { fromWorkspaceMenu } from "./workspace-page.ts";
@@ -357,8 +358,7 @@ const everywhere = (screen: Screen) => {
       (await modelButton.getAttribute("aria-label")) === "Model: Fake two"
         ? { radio: /^Fake echoes/, name: "Model: Fake" }
         : { radio: /^Fake two/, name: "Model: Fake two" };
-    await modelButton.click();
-    const model = page.getByRole("dialog", { name: "Model" });
+    const model = await modelSheet(page);
     // Each choice is a row or a tile to tap, holding its radio button.
     const tile = (group: string, name: string | RegExp) =>
       choiceIn(model.getByRole("radiogroup", { name: group }), name);
@@ -448,6 +448,7 @@ const everywhere = (screen: Screen) => {
     await expect(skills).toBeHidden();
     const sheet = page.getByRole("dialog", { name: "Model" });
     await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: /^More models/ }).click();
     const models = sheet.getByRole("radiogroup", { name: "Model" });
 
     // Claude Code's default is the model it resolves to, once, saying so, and chosen.
@@ -608,7 +609,7 @@ test.describe("unfolded", () => {
       ["GPT-6.1-Sol", "G6.1S"],
       ["Fake", "F"],
     ] as const) {
-      await button.click();
+      await modelSheet(page);
       await sheet
         .getByRole("radiogroup", { name: "Model" })
         .locator("label", { has: page.getByRole("radio", { name: new RegExp(`^${name}`) }) })
