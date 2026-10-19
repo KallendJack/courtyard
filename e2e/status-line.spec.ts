@@ -31,7 +31,9 @@ test("a session's turn moves the line along under the workspace's name", async (
   await expect(items.nth(2).getByRole("button")).toHaveAccessibleName("Next: Shoes");
 });
 
-test("Done on now moves the line along at once: now is just done, next is now", async ({ page }) => {
+test("Done on now moves the line along at once: now is just done, next is now", async ({
+  page,
+}) => {
   await withLine(page);
 
   await statusLine(page).getByRole("button", { name: "Now: Lights" }).click();
