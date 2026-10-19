@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NotificationsStatus } from "@courtyard/contract";
+import { NotificationsStatus, type NotifyMe, NotifyMeSetting } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "../src/providers/index.ts";
 import {
   CODING_MODEL,
+  changesIn,
   codeRepo,
   codeWorkspace,
   codingProvider,
@@ -93,6 +94,40 @@ const stopFirstTurn = async (request: Requester, id: string) => {
 /** The endpoints each notification went to. */
 const sentTo = (push: FakePush) => push.sent.map(({ endpoint }) => endpoint);
 
+/** A workspace's Notify me, as its sheet reads it. */
+const notifyOf = async (request: Requester, workspace: string) => {
+  const response = await request(`/api/workspaces/${workspace}/notify`);
+  expect(response.status).toBe(200);
+  return NotifyMeSetting.parse(await response.json()).notify;
+};
+
+/** Picks a workspace's Notify me, as its sheet does. */
+const notifyMe = async (request: Requester, workspace: string, notify: NotifyMe) => {
+  const response = await postJson(request, `/api/workspaces/${workspace}/notify`, { notify });
+  expect(response.status).toBe(200);
+  return NotifyMeSetting.parse(await response.json()).notify;
+};
+
+/**
+ * Sends a session another message, after event `after`, and waits for its turn to end as `until`:
+ * the last event's number, for the next.
+ */
+const sendAndWait = async (
+  request: Requester,
+  sent: { session: string; after: number; text: string; until: "turn-completed" | "turn-failed" },
+) => {
+  await postJson(request, `/api/sessions/${sent.session}/messages`, {
+    text: sent.text,
+    model: { provider: "fake", model: "echo" },
+  });
+  const events = await followSession(request, {
+    sessionId: sent.session,
+    after: sent.after,
+    until: sent.until,
+  });
+  return events.at(-1)?.seq ?? sent.after;
+};
+
 describe("the worker's keys", () => {
   it("are made on first run and kept in the data folder, so a restart keeps them", async () => {
     const push = createFakePush();
@@ -149,6 +184,7 @@ describe("a turn ending", () => {
     const push = createFakePush();
     const { request } = await start(push, codingProvider([]).provider);
     await turnOn(request, "fold");
+    await notifyMe(request, "garage-gym", "everything");
 
     // The fake leaves this one's title as its first line.
     const session = await startSession(request, "no title please");
@@ -164,6 +200,86 @@ describe("a turn ending", () => {
       { title: "no title please", body: "Turn finished", session: session.id },
       { title: "no title please", body: "Turn failed", session: session.id },
     ]);
+  });
+});
+
+describe("Notify me, per workspace (#493)", () => {
+  it("starts a code workspace on Everything and a planning one on Only what needs me", async () => {
+    const push = createFakePush();
+    const { request } = await start(push, codingProvider([]).provider);
+
+    expect(await notifyOf(request, "side-project")).toBe("everything");
+    expect(await notifyOf(request, "garage-gym")).toBe("needs-me");
+  });
+
+  it("on Only what needs me, sends a failed turn and one ending in a question, never a plain finished one", async () => {
+    const push = createFakePush();
+    const { request } = await start(push, codingProvider([]).provider);
+    await turnOn(request, "fold");
+
+    const session = await startSession(request, "no title please");
+    const first = await followSession(request, { sessionId: session.id, until: "turn-completed" });
+    const asked = await sendAndWait(request, {
+      session: session.id,
+      after: first.at(-1)?.seq ?? 0,
+      text: "Which tyres for winter?",
+      until: "turn-completed",
+    });
+    await sendAndWait(request, {
+      session: session.id,
+      after: asked,
+      text: "please fail",
+      until: "turn-failed",
+    });
+
+    await expect.poll(() => push.sent).toHaveLength(2);
+    expect(push.sent.map(({ payload }) => payload)).toEqual([
+      { title: "no title please", body: "Has a question for you", session: session.id },
+      { title: "no title please", body: "Turn failed", session: session.id },
+    ]);
+  });
+
+  it("on Nothing, sends nothing from that workspace while others still send", async () => {
+    const push = createFakePush();
+    const { request } = await start(push, codingProvider([{ run: "pnpm add left-pad" }]).provider);
+    await turnOn(request, "fold");
+    expect(await notifyMe(request, "garage-gym", "nothing")).toBe("nothing");
+
+    const session = await startSession(request, "please fail");
+    await followSession(request, { sessionId: session.id, until: "turn-failed" });
+    const id = await untilApproval(request, "Talk into the message box");
+
+    await expect.poll(() => push.sent).toHaveLength(1);
+    expect(push.sent[0]?.payload).toMatchObject({ session: id });
+    await stopFirstTurn(request, id);
+  });
+
+  it("keeps the choice in the workspace's config, beside what's there, as a change with Undo", async () => {
+    const push = createFakePush();
+    const { request } = await start(push, codingProvider([]).provider);
+
+    await notifyMe(request, "side-project", "needs-me");
+
+    const config = JSON.parse(
+      await readFile(join(root, "context", "side-project", "workspace.json"), "utf8"),
+    );
+    expect(config).toMatchObject({ mode: "code", notify: "needs-me" });
+    expect(await notifyOf(request, "side-project")).toBe("needs-me");
+    expect((await changesIn(join(root, "context")))[0]?.title).toBe(
+      "Notify me: Only what needs me",
+    );
+  });
+
+  it("refuses a choice that isn't one of the three, and a workspace that isn't there", async () => {
+    const push = createFakePush();
+    const { request } = await start(push, codingProvider([]).provider);
+
+    const odd = await postJson(request, "/api/workspaces/garage-gym/notify", { notify: "some" });
+    const missing = await postJson(request, "/api/workspaces/nowhere/notify", {
+      notify: "nothing",
+    });
+
+    expect([odd.status, missing.status]).toEqual([400, 404]);
   });
 });
 
@@ -226,6 +342,7 @@ describe("turning notifications on and off per device", () => {
     const push = createFakePush();
     const { request, another } = await start(push, codingProvider([]).provider);
     await turnOn(request, "fold");
+    await notifyMe(request, "garage-gym", "everything");
     push.unsubscribe("https://push.example/fold");
 
     const session = await startSession(request, "no title please");

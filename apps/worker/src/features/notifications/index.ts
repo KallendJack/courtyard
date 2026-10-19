@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   type ApprovalAsk,
   NotificationSubscription,
+  type NotifyMe,
   type PullRequest,
   type PushNotice,
   type SessionEvent,
@@ -57,28 +58,70 @@ const approvalNeed = (ask: ApprovalAsk) => {
 };
 
 /**
- * What a session needs, as a notification says it, for the events that send one: a turn that
- * ends with its code session's pull request still failing checks says which (story 31), and a
- * pull request whose checks failed again after a re-run asks the owner what to do (#356).
+ * What a notification says a session needs, and whether it needs the owner (#493): an approval,
+ * a failure, a pull request ready to merge or a question to answer does; a turn that just
+ * finished is news, sent only to a workspace on Everything.
  */
-const needOf = (event: SessionEvent, pullRequest: PullRequest | undefined) => {
+type Need = { readonly says: string; readonly needsYou: boolean };
+
+/** Marks a reply may close on after its question: bold, italics, a bracket or quotes. */
+const CLOSING_MARKS = /[\s*_)"'”’]+$/;
+
+/**
+ * Whether the turn a session's event `ended` ended was asking the owner something: replies were
+ * suggested for its question (ADR 0017), or its answer's last words end in a question mark. By
+ * that event, since the next turn may have ended too by the time the events are read.
+ */
+const endsAsking = (events: readonly SessionEvent[], ended: number) => {
+  const ending = (event: SessionEvent) =>
+    event.type === "turn-completed" || event.type === "turn-failed" || event.type === "turn-stopped";
+  const ends = events.findIndex((event) => event.seq === ended);
+  if (ends === -1) return false;
+  const before = events.findLastIndex((event, index) => index < ends && ending(event));
+  const turn = events.slice(before + 1, ends);
+  if (turn.some((event) => event.type === "suggested-replies")) return true;
+  const answer = turn.flatMap((event) => (event.type === "text-delta" ? [event.text] : []));
+  return answer.join("").replace(CLOSING_MARKS, "").endsWith("?");
+};
+
+/**
+ * What a session needs, as a notification says it, for the events that send one: a turn that
+ * ends with its code session's pull request still failing checks says which (story 31), one that
+ * ends asking the owner something says so (#493), and a pull request whose checks failed again
+ * after a re-run asks the owner what to do (#356).
+ */
+const needOf = async (
+  event: SessionEvent,
+  pullRequest: PullRequest | undefined,
+  asks: () => Promise<boolean>,
+): Promise<Need | undefined> => {
   switch (event.type) {
     case "pull-request":
       return event.pullRequest.checks.kind === "failed"
-        ? `Failed again after a re-run: ${event.pullRequest.checks.failed.join(", ")}. Flaky, or does it need fixing?`
+        ? {
+            says: `Failed again after a re-run: ${event.pullRequest.checks.failed.join(", ")}. Flaky, or does it need fixing?`,
+            needsYou: true,
+          }
         : undefined;
     case "approval-requested":
-      return approvalNeed(event.ask);
+      return { says: approvalNeed(event.ask), needsYou: true };
     case "turn-completed":
-      return pullRequest?.state === "open" && pullRequest.checks.kind === "failed"
-        ? `Checks still failing: ${pullRequest.checks.failed.join(", ")}`
-        : "Turn finished";
+      if (pullRequest?.state === "open" && pullRequest.checks.kind === "failed") {
+        return { says: `Checks still failing: ${pullRequest.checks.failed.join(", ")}`, needsYou: true };
+      }
+      return (await asks())
+        ? { says: "Has a question for you", needsYou: true }
+        : { says: "Turn finished", needsYou: false };
     case "turn-failed":
-      return "Turn failed";
+      return { says: "Turn failed", needsYou: true };
     default:
       return undefined;
   }
 };
+
+/** Whether a workspace on `notify` hears of a need. */
+const hears = (notify: NotifyMe, need: Need) =>
+  notify === "everything" || (notify === "needs-me" && need.needsYou);
 
 /** A new pair of P-256 keys, in the base64url form browsers and push services take. */
 const newKeys = (): PushKeys => {
@@ -107,8 +150,12 @@ export const createNotifications = (options: {
   send: SendPush;
   /** The devices logged in now: only these are sent to. */
   devicesLoggedIn: () => Promise<Result<ReadonlySet<DeviceLogin>, StorageError>>;
-  /** A session's title, as a notification says it. */
-  titleOf: (session: SessionId) => Promise<string | undefined>;
+  /** A session's title, as a notification says it, and what its workspace notifies of (#493). */
+  sessionOf: (
+    session: SessionId,
+  ) => Promise<{ readonly title: string; readonly notify: NotifyMe } | undefined>;
+  /** A session's events so far, to tell whether its last turn asked the owner something. */
+  eventsOf: (session: SessionId) => Promise<readonly SessionEvent[] | undefined>;
 }) => {
   const folder = join(options.dataDir, "notifications");
   const keysPath = join(folder, "keys.json");
@@ -202,11 +249,18 @@ export const createNotifications = (options: {
     );
   };
 
-  /** Sends a notification of what a session needs, with its title. */
-  const notice = (session: SessionId, need: string) =>
+  /**
+   * Sends a notification of what a session needs, with its title, when its workspace hears of it
+   * (#493). `need` is worked out only once there's a device to send to.
+   */
+  const notice = (session: SessionId, need: () => Promise<Need | undefined>) =>
     send(async () => {
-      const title = await options.titleOf(session);
-      return title === undefined ? undefined : { title, body: need, session };
+      const found = await options.sessionOf(session);
+      if (found === undefined || found.notify === "nothing") return undefined;
+      const needs = await need();
+      return needs !== undefined && hears(found.notify, needs)
+        ? { title: found.title, body: needs.says, session }
+        : undefined;
     });
 
   return {
@@ -235,28 +289,38 @@ export const createNotifications = (options: {
       session: SessionId,
       event: SessionEvent,
       pullRequest: PullRequest | undefined,
-    ) => {
-      const need = needOf(event, pullRequest);
-      return need === undefined ? Promise.resolve() : notice(session, need);
-    },
+    ) =>
+      notice(session, () =>
+        needOf(event, pullRequest, async () => {
+          const events = await options.eventsOf(session);
+          return events !== undefined && endsAsking(events, event.seq);
+        }),
+      ),
 
     /**
      * Sends a notification saying what a session needs, with no event of its own: a Lead's
-     * builder's pull request ready to merge (#347).
+     * builder's pull request ready to merge or stalled (#347), or a plan's usage nearing its
+     * limit (#66). Each needs the owner, so a workspace on Nothing alone hears none.
      */
-    notice,
+    needs: (session: SessionId, says: string) =>
+      notice(session, async () => ({ says, needsYou: true })),
 
     /**
      * The one notification after a crash or a restart of the PC (#186): which sessions' turns it
-     * cut off, waiting for Continue. A tap opens the first; the rest wait in Needs you.
+     * cut off, waiting for Continue, but those of workspaces on Nothing (#493). A tap opens the
+     * first; the rest wait in Needs you.
      */
-    restarted: (cutOff: readonly { readonly id: SessionId; readonly title: string }[]) => {
-      const [first] = cutOff;
-      if (first === undefined) return Promise.resolve();
-      const turns = cutOff.length === 1 ? "1 turn" : `${cutOff.length} turns`;
+    restarted: async (cutOff: readonly { readonly id: SessionId; readonly title: string }[]) => {
+      const heard = await Promise.all(
+        cutOff.map(async (session) => (await options.sessionOf(session.id))?.notify !== "nothing"),
+      );
+      const told = cutOff.filter((_, index) => heard[index]);
+      const [first] = told;
+      if (first === undefined) return;
+      const turns = told.length === 1 ? "1 turn" : `${told.length} turns`;
       return send({
         title: `Courtyard restarted · ${turns} stopped`,
-        body: `${cutOff.map((session) => session.title).join(", ")}. Tap to continue ${cutOff.length === 1 ? "it" : "them"}.`,
+        body: `${told.map((session) => session.title).join(", ")}. Tap to continue ${told.length === 1 ? "it" : "them"}.`,
         session: first.id,
       });
     },

@@ -133,6 +133,8 @@ export {
   NotificationSubscription,
   NotificationsOff,
   NotificationsStatus,
+  NotifyMe,
+  NotifyMeSetting,
   PushNotice,
 } from "./lib/notifications.ts";
 export {
