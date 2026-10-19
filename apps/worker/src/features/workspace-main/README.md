@@ -5,7 +5,7 @@ A code workspace's main, for its Home's Main row (#301).
 **Example:** the Main row shows main's newest commit, "Fix the scroll fade", with its build running in stages.
 
 - **Uses:** `code/` (fetching), `github/` (`mainBuild`, #249), `workspaces/`.
-- **Used by:** `worker.ts`; in the web app, `features/code-home/` (`main-row.tsx`).
+- **Used by:** `worker.ts`, `friction/` (`liveRepo`, the live copy's repository); in the web app, `features/code-home/` (`main-row.tsx`).
 
 ## API
 

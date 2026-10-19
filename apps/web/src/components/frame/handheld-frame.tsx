@@ -1,11 +1,14 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
 import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { LogOut, Plus, Settings, Sparkle } from "lucide-react";
+import { Flag, LogOut, Plus, Settings, Sparkle } from "lucide-react";
 import {
   type ComponentProps,
+  lazy,
   type ReactNode,
   type Ref,
   type RefObject,
+  Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -14,6 +17,7 @@ import {
 import { flushSync } from "react-dom";
 import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
+import { type FilledIn, fillIn } from "../../features/friction/filled-in.ts";
 import { LiveUpdate } from "../../features/live/live-update.tsx";
 import { useKeptSessions } from "../../features/sessions/kept-sessions.ts";
 import { useNeedsYou } from "../../features/waiting/api.ts";
@@ -33,17 +37,36 @@ import { TalkBar, TalkKey } from "./talk-strip.tsx";
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
 addStylesheet("handheld-frame", css);
 
-/** The frame's pieces, set on the page so the page keeps clear of them (handheld-frame.css). */
-const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"] as const;
+/**
+ * The frame's pieces, set on the page so the page keeps clear of them (handheld-frame.css); and
+ * how far up the cover screen's talk row reaches, which Something's off's sheet floats above.
+ */
+const INSETS = [
+  "--frame-left",
+  "--frame-right",
+  "--frame-bar",
+  "--frame-bottom",
+  "--frame-talk",
+] as const;
+
+/** Something's off's sheet (#554), loaded when it first opens. */
+const FrictionSheet = lazy(() => import("../sheets/friction-sheet.tsx"));
+
+/** Takes the screen as it is (#554), its code loaded only on the tap; nothing when it can't. */
+const takeScreen = () =>
+  import("../../features/friction/capture.ts")
+    .then((capture) => capture.takeScreen())
+    .catch(() => undefined);
 
 /**
  * The Handheld frame (#193, Paper boards Handheld · 00, 03, 10, 11), in place of the sidebar on a
  * touch screen. On a tablet or the unfolded Fold (#206, the agreed tablet boards): workspace tiles
  * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, and a
- * quieter Settings), then room, and the Talk key in the bottom corner (the sessions list there,
- * #492, came out in #521); the page's message box, the Reply box,
+ * quieter Settings), then room, Something's off (#554) and the Talk key in the bottom corner (the
+ * sessions list there, #492, came out in #521); the page's message box, the Reply box,
  * is always there at the foot of the page between them. On a phone or the folded Fold: tiles
- * across the top, and the buttons in a row above Type and the talk strip, Type opening the
+ * across the top, and the buttons (Something's off's flag first) in a row above Type and the
+ * talk strip, Type opening the
  * message box above the bar. The key and the strip listen (talk-strip.tsx, #79). Loaded only on
  * a touch screen.
  */
@@ -77,10 +100,16 @@ export default function HandheldFrame(props: {
   const { pathname } = useLocation();
   const here = props.workspaces.find((workspace) => workspace.id === workspaceId);
   const [sheet, setSheet] = useState<"settings" | "recent">();
+  /** Something's off, once tapped (#554): what it filled in and the screen being taken. */
+  const [friction, setFriction] = useState<{
+    filled: FilledIn;
+    screen: Promise<Blob | undefined>;
+  }>();
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const talkRow = useRef<HTMLDivElement>(null);
 
   // The page keeps clear of the rails and the bottom bar, and of the message box when it's open.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the pieces to measure change with the layout
@@ -92,6 +121,8 @@ export default function HandheldFrame(props: {
       root.setProperty("--frame-right", `${r?.offsetWidth ?? 0}px`);
       root.setProperty("--frame-bar", `${b?.offsetHeight ?? 0}px`);
       root.setProperty("--frame-bottom", `${all?.offsetHeight ?? 0}px`);
+      const talk = talkRow.current?.getBoundingClientRect().top;
+      root.setProperty("--frame-talk", `${talk === undefined ? 0 : window.innerHeight - talk}px`);
       document.documentElement.dataset.frameMeasured = "";
     };
     const observer = new ResizeObserver(measure);
@@ -123,18 +154,54 @@ export default function HandheldFrame(props: {
   useEffect(() => {
     setBoxOpen(false);
     setSheet(undefined);
+    setFriction(undefined);
   }, [pathname, setBoxOpen]);
 
+  // Something's off (#554): what the page last had a finger or the mouse on, to name the part of
+  // the screen; and, once tapped, what it filled in and the screen being taken, till it closes.
+  const touched = useRef<Element>(undefined);
+  useEffect(() => {
+    const touch = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-handheld], [data-frame-bottom], dialog, [data-friction]")) return;
+      touched.current = target;
+    };
+    document.addEventListener("pointerdown", touch, { capture: true });
+    return () => document.removeEventListener("pointerdown", touch, { capture: true });
+  }, []);
+  const somethingOff = () => {
+    if (friction !== undefined) return setFriction(undefined);
+    setBoxOpen(false);
+    setSheet(undefined);
+    const filled = fillIn({
+      pathname,
+      search: window.location.search,
+      workspaces: props.workspaces,
+      touched: touched.current,
+    });
+    setFriction({ filled, screen: takeScreen() });
+  };
+  const closeFriction = useCallback(() => setFriction(undefined), []);
+  /** What the open sheet takes from talking, ahead of everything else while it's open. */
+  const [reportTalk, setReportTalk] = useState<TalkTarget>();
+  const offerReportTalk = useCallback((offered: TalkTarget) => {
+    setReportTalk(offered);
+    return () => setReportTalk((now) => (now === offered ? undefined : now));
+  }, []);
+
   /**
-   * Where talking goes: what the page listens for while the owner steers it by voice (#241), else
-   * the page's message box, or else the field it offers (#264).
+   * Where talking goes: Something's off's sheet while it's open (#554), else what the page listens
+   * for while the owner steers it by voice (#241), else the page's message box, or else the field
+   * it offers (#264).
    */
-  const talkTo = props.commands ?? box ?? props.field;
+  const talkTo = reportTalk ?? props.commands ?? box ?? props.field;
   /**
    * Opens the box with the keyboard in it, while the tap is still the browser's to act on; or puts
-   * the keyboard in the page's field.
+   * the keyboard in the sheet's or the page's field.
    */
   const type = () => {
+    if (reportTalk !== undefined) return reportTalk.focus();
     if (box === undefined) return props.field?.focus();
     flushSync(() => setBoxOpen(true));
     box.focus();
@@ -286,6 +353,20 @@ export default function HandheldFrame(props: {
     </QuickAction>
   );
 
+  const report = (
+    <FrameButton
+      look={tablet ? "report" : "reportKey"}
+      lit={friction !== undefined}
+      aria-label="Something's off"
+      aria-haspopup="dialog"
+      aria-expanded={friction !== undefined}
+      onClick={somethingOff}
+    >
+      <Flag aria-hidden strokeWidth={1.6} />
+      {tablet && "Something's off"}
+    </FrameButton>
+  );
+
   // Only the frame's own pieces are in its stylesheet's scope: the message box and the sheets keep
   // the theme's classes as they are everywhere else.
   return (
@@ -340,6 +421,7 @@ export default function HandheldFrame(props: {
               )}
               {settings}
               <div className="flex-1" />
+              {!reading && report}
               {!reading && <TalkKey box={talkTo} type={type} talker={props.talker} />}
             </Scroller>
           </>
@@ -373,10 +455,11 @@ export default function HandheldFrame(props: {
               className="flex flex-col gap-2.5 bg-background pt-2.5 pr-[calc(--spacing(4)+env(safe-area-inset-right))] pb-[calc(--spacing(4)+env(safe-area-inset-bottom))] pl-[calc(--spacing(4)+env(safe-area-inset-left))]"
             >
               <div className="flex gap-2">
+                {report}
                 {skills}
                 {model}
               </div>
-              <div className="flex h-16 gap-2">
+              <div ref={talkRow} className="flex h-16 gap-2">
                 <TalkBar
                   where={here?.name ?? (pathname === "/" ? "Home" : "Courtyard")}
                   box={talkTo}
@@ -389,6 +472,17 @@ export default function HandheldFrame(props: {
         )}
       </div>
 
+      {friction !== undefined && (
+        <Suspense>
+          <FrictionSheet
+            layout={layout}
+            filled={friction.filled}
+            screen={friction.screen}
+            offerTalk={offerReportTalk}
+            onClose={closeFriction}
+          />
+        </Suspense>
+      )}
       <HandheldSheet
         title="Settings"
         open={sheet === "settings"}

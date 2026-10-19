@@ -92,6 +92,7 @@ export {
   FreshStartSummary,
   RunningTurn,
 } from "./lib/fresh-start.ts";
+export { FrictionPlace, FrictionReport } from "./lib/friction.ts";
 export { GitHubConnection } from "./lib/github.ts";
 export { GitHubRepoName } from "./lib/github-repo-name.ts";
 export {

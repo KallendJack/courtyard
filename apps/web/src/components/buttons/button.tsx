@@ -98,6 +98,8 @@ const SIZES = {
   md: classes(ONE_LINE, "h-9 px-5 text-sm"),
   /** A form's only action on its own page (logging in). */
   lg: classes(ONE_LINE, "h-11 px-5 text-sm"),
+  /** A sheet's actions in the thumb's reach (Something's off's File it and Cancel, #554). */
+  thumb: classes(ONE_LINE, "h-13 px-6 text-base"),
   /** Words that wrap when they're long, as tall as they need (a suggested reply). */
   wraps: "max-w-full px-4 py-2 text-left text-sm font-medium wrap-anywhere",
 } as const;

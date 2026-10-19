@@ -44,6 +44,27 @@ const LOOKS = {
     off: "",
     on: "",
   },
+  /**
+   * Something's off (#554) in a tablet's right rail, in its free space above Talk: its flag over
+   * its name, quiet until its sheet is open.
+   */
+  report: {
+    base: classes(
+      PRESS,
+      "flex h-18 w-full shrink-0 flex-col items-center justify-center gap-2 rounded-lg text-sm font-medium text-foreground/65 ring-inset [&_svg]:size-5 [&_svg]:text-foreground/85",
+    ),
+    off: "ring-1 ring-input",
+    on: "bg-primary/10 ring-1 ring-primary",
+  },
+  /** Something's off on the cover screen: a quiet flag key left of Skills, in Type's lane. */
+  reportKey: {
+    base: classes(
+      PRESS,
+      "flex h-12 w-16 shrink-0 items-center justify-center rounded-lg ring-inset [&_svg]:size-5 [&_svg]:text-foreground/85",
+    ),
+    off: "ring-1 ring-input",
+    on: "bg-primary/10 ring-1 ring-primary",
+  },
   /** Settings, beside the cover screen's tiles. */
   square: {
     base: classes(

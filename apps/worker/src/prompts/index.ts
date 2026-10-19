@@ -6,6 +6,7 @@ import {
   DOCUMENT_MAX_CHARACTERS,
   type DocumentSave,
   type DocumentSummary,
+  type FrictionReport,
   hasLines,
   LinePlace,
   type OwnerContextShared,
@@ -1703,6 +1704,32 @@ export const buildIssueMessage = (issue: { number: number; title: string }) =>
  */
 export const grillIssueMessage = (issue: { number: number; title: string }) =>
   `Grill issue #${issue.number}, ${quoted(issue.title)}, so it can be built. Read it first with gh issue view ${issue.number} --comments, then grill the owner on it until it's clear enough to build. Once you agree, put the decisions on the issue as a comment, and label it ready-for-agent in place of needs-triage or needs-info; when it changes what the owner sees, draw it on the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next up offers Build once it's ready.`;
+
+/** How Something's off names the screen a report came from (#554), by the sizes boards are drawn at. */
+const SCREEN_WORDS = {
+  cover: "the Fold's cover screen",
+  unfolded: "the Fold open",
+  desktop: "a desktop",
+} as const satisfies Record<FrictionReport["size"]["device"], string>;
+
+/**
+ * The first message of the session Something's off starts (#554; docs/ai-conduct.md, Coding):
+ * what the owner said and what the sheet filled in, to file as an issue, with the screen attached
+ * when it could be taken.
+ */
+export const frictionMessage = (report: FrictionReport & { picture: boolean }) => {
+  const { size } = report;
+  const where = [
+    `on ${SCREEN_WORDS[size.device]}`,
+    `${size.width} × ${size.height}`,
+    ...(report.version === null ? [] : [`version ${report.version}`]),
+    ...(report.part === null ? [] : [`around ${report.part}`]),
+  ].join(", ");
+  const picture = report.picture
+    ? "The picture attached is the screen as I saw it when I tapped Something's off: say in the issue what it shows, in words, since the repository is public and neither the picture nor anything personal in it goes on GitHub."
+    : "The screen couldn't be taken, so there's no picture.";
+  return `Something's off in Courtyard, and I'd like it filed. I said: ${quoted(report.said)}. It was on ${report.page} (${report.path}), ${where}. ${picture} File it as an issue in the Later milestone, the way this repository's docs/agents say, with the page, the screen size and the version. When fixing it would change what I see, draw the fix on the Paper file's Drafts page and name the board in the issue. Don't build anything: nothing is built until I agree it. Then tell me in a line or two what you filed.`;
+};
 
 /**
  * What Continue sends (#186; docs/ai-conduct.md, Every turn): the turn before was cut off by a
