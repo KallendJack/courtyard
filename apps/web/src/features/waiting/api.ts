@@ -29,10 +29,14 @@ export const useNeedsYou = (again?: unknown, asking = true) =>
     busy: (known) => (known.busy ? BUSY_EVERY_MS : undefined),
   });
 
-/** What the owner does about it, in a word or two: Needs you's label, and the Next pill's. */
+/**
+ * What the owner does about it, in a word or two: Needs you's label, and the Next pill's. A
+ * stalled builder (#474) is only to look at, so it says what it is.
+ */
 export const NEED_WORDS: Readonly<Record<NeedYou["kind"], string>> = {
   approval: "Approve",
   "cut-off": "Continue",
+  stalled: "Stalled",
   failed: "Review",
   reply: "Reply",
   merge: "Merge",

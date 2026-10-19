@@ -44,11 +44,18 @@ export type TurnNow = z.infer<typeof TurnNow>;
 /**
  * What a session waits on the owner for (#334; AGENTS.md), decided once, by the worker, so every
  * screen and device agrees: the approval its turn asked for; its last turn, cut off by a restart in
- * the last day, for Continue (#186); a new reply, an answer from the last day that the owner hasn't
- * seen; or nothing.
+ * the last day, for Continue (#186); a Lead's builder stalled, silent for
+ * `BUILDER_STALLS_AFTER_MINUTES` with nothing waiting on the owner or CI (#474), until it carries
+ * on; a new reply, an answer from the last day that the owner hasn't seen; or nothing.
  */
-export const SessionWaiting = z.enum(["approval", "cut-off", "reply", "nothing"]);
+export const SessionWaiting = z.enum(["approval", "cut-off", "stalled", "reply", "nothing"]);
 export type SessionWaiting = z.infer<typeof SessionWaiting>;
+
+/**
+ * How long a Lead's builder may be silent (no turn, commit or event) before it's stalled (#474):
+ * time waiting on the owner or on CI doesn't count.
+ */
+export const BUILDER_STALLS_AFTER_MINUTES = 20;
 
 /**
  * A session as a workspace's lists show it: its summary, whose turn it is, and what it waits on
@@ -62,12 +69,13 @@ export type SessionList = z.infer<typeof SessionList>;
 
 /**
  * One thing waiting on the owner (#492), in any workspace: a session's approval, its turn cut off
- * by a restart, or its new reply; or its pull request's failing checks, merge or conflict. Each
- * names its workspace and session, so a row or the Next pill opens it in one tap.
+ * by a restart, its builder stalled (#474), or its new reply; or its pull request's failing
+ * checks, merge or conflict. Each names its workspace and session, so a row or the Next pill opens
+ * it in one tap.
  */
 export const NeedYou = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.enum(["approval", "cut-off", "reply"]),
+    kind: z.enum(["approval", "cut-off", "stalled", "reply"]),
     workspace: z.object({ id: WorkspaceId, name: z.string() }),
     session: z.object({ id: SessionId, title: z.string() }),
     since: z.iso.datetime(),
@@ -84,8 +92,8 @@ export type NeedYou = z.infer<typeof NeedYou>;
 
 /**
  * Everything waiting on the owner, in every workspace (#492), in Needs you's order (#301):
- * approvals, turns cut off, failing checks, new replies, merges, then conflicts, the newest first
- * in each. `busy` while a turn runs anywhere, so whatever shows it asks again sooner.
+ * stalled builders (#474), approvals, turns cut off, failing checks, new replies, merges, then
+ * conflicts, the newest first in each. `busy` while a turn runs anywhere, so whatever shows it asks again sooner.
  */
 export const NeedsYou = z.object({ needs: z.array(NeedYou), busy: z.boolean() });
 export type NeedsYou = z.infer<typeof NeedsYou>;

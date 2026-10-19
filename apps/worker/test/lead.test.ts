@@ -1,7 +1,13 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CodeSessionList, GitHubConnection, LeadStatus, SessionEvent } from "@courtyard/contract";
+import {
+  CodeSessionList,
+  GitHubConnection,
+  LeadStatus,
+  NeedsYou,
+  SessionEvent,
+} from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { Provider } from "../src/providers/index.ts";
@@ -643,6 +649,116 @@ describe("watching its builders (#347)", () => {
     expect(lead.building.map((each) => each.issue)).toEqual([40]);
     expect(lead.why).toBe("main is red, so only its fix starts.");
     expect(await notesIn(request)).toContain("Holding back: main is red, so only its fix starts.");
+  });
+});
+
+describe("builders that stop, fail or go quiet (#474)", () => {
+  const MINUTE = 60 * 1000;
+
+  /** Waits until no turn runs in the workspace. */
+  const settled = async (request: Requester) =>
+    expect
+      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
+      .toHaveLength(0);
+
+  /** The owner opens a session's page, which shows them all of it. */
+  const see = async (request: Requester, sessionId: string) => {
+    const response = await postJson(request, `/api/sessions/${sessionId}/seen`, { upTo: 1000 });
+    expect(response.status).toBe(204);
+  };
+
+  it("takes a builder whose turn failed off Building at once, and starts the next issue in its slot", async () => {
+    const { github, request } = await signedInWith([
+      { number: 22, title: "please fail", milestone: "4 · Code workspaces" },
+      ...ISSUES.slice(1),
+    ]);
+    await run(request);
+    await settled(request);
+
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.building.map((each) => each.issue)).toEqual([23, 24]);
+    expect(lead.next.map((issue) => issue.number)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 22)).toEqual([
+      expect.stringMatching(/^Building this/),
+      expect.stringMatching(/^Stopped/),
+    ]);
+  });
+
+  it("marks a builder silent for 20 minutes Stalled: Needs you, the owner told once, its slot free, its session kept", async () => {
+    const push = createFakePush();
+    const clock = { now: Date.parse("2026-10-17T09:00:00") };
+    const { github, request } = await signedInWith(ISSUES, {
+      sendPush: push.send,
+      now: () => clock.now,
+    });
+    await postJson(request, "/api/notifications/on", {
+      endpoint: "https://push.example/fold",
+      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+    });
+    await run(request);
+    await settled(request);
+    await runJobs();
+    // The owner has read #22's builder's answer; #23's waits on them, which isn't silence.
+    const quiet = await builderOf(request, 22);
+    await see(request, quiet.id);
+
+    clock.now += 19 * MINUTE;
+    await runJobs();
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
+
+    clock.now += 2 * MINUTE;
+    await runJobs();
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.building.map((each) => each.issue)).toEqual([23, 24]);
+    expect(lead.next.map((issue) => issue.number)).toEqual([]);
+    expect((await builderOf(request, 22)).waiting).toBe("stalled");
+    expect((await builderOf(request, 23)).waiting).toBe("reply");
+    const needs = NeedsYou.parse(await (await request("/api/needs-you")).json()).needs;
+    expect(needs[0]).toMatchObject({ kind: "stalled", session: { id: quiet.id } });
+    await expect
+      .poll(() => push.sent.map(({ payload }) => payload))
+      .toContainEqual({ title: quiet.title, body: "Stalled", session: quiet.id });
+    expect(
+      push.sent.filter(
+        ({ payload }) =>
+          typeof payload === "object" &&
+          payload !== null &&
+          "body" in payload &&
+          payload.body === "Stalled",
+      ),
+    ).toHaveLength(1);
+    expect(await notesIn(request)).toContain(
+      "Which session waits stalled: silent 20 min, so its slot is free.",
+    );
+    // Nothing is posted on the issue: its claim stands, so nobody else starts it.
+    expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
+  });
+
+  it("counts a stalled builder as Building again once its session carries on", async () => {
+    const clock = { now: Date.parse("2026-10-17T09:00:00") };
+    const { request } = await signedInWith(ISSUES.slice(0, 2), { now: () => clock.now });
+    await run(request);
+    await settled(request);
+    await runJobs();
+    const quiet = await builderOf(request, 22);
+    await see(request, quiet.id);
+    clock.now += 21 * MINUTE;
+    await runJobs();
+    expect((await builderOf(request, 22)).waiting).toBe("stalled");
+
+    await postJson(request, `/api/sessions/${quiet.id}/messages`, {
+      text: "Carry on",
+      model: FAKE_MODEL,
+    });
+    await settled(request);
+    await runJobs();
+
+    expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+    expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
   });
 });
 

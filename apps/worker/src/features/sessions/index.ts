@@ -312,6 +312,11 @@ const SessionFile = z.object({
    * claim stands: it's released when the session stops before a pull request.
    */
   claim: z.object({ issue: z.number().int().positive(), standing: z.boolean() }).optional(),
+  /**
+   * A Lead's builder its Lead found stalled (#474), at its latest event then: it waits on the
+   * owner as stalled until anything new happens in it.
+   */
+  stalled: z.object({ seq: z.number().int().nonnegative() }).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -932,7 +937,7 @@ export const createSessions = (options: {
    */
   const updateFile = (
     id: SessionId,
-    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt" | "claim">>,
+    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt" | "claim" | "stalled">>,
   ) =>
     inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
@@ -2228,7 +2233,7 @@ export const createSessions = (options: {
     return session === undefined ? undefined : allowingAllAt(session.allowAll, options.now());
   };
 
-  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => {
+  const summaryOf = ({ titledBy: _, stalled: _stalled, ...file }: SessionFile): SessionSummary => {
     const allowingAll = allowingAllOf(file.id);
     return {
       ...file,
@@ -2283,6 +2288,26 @@ export const createSessions = (options: {
     return known ?? undefined;
   };
 
+  /** A session's latest event number, 0 before its first. */
+  const lastSeqOf = async (
+    id: SessionId,
+    session: RunningSession,
+  ): Promise<Result<number, SessionError>> => {
+    if (session.nextSeq !== undefined) return ok(session.nextSeq - 1);
+    const events = await readEvents(id);
+    return events.ok ? ok(events.value.length) : events;
+  };
+
+  /** Whether a builder its Lead found stalled (#474) still is: nothing has happened in it since. */
+  const stillStalled = async (
+    file: SessionFile,
+    session: RunningSession,
+  ): Promise<Result<boolean, SessionError>> => {
+    if (file.stalled === undefined) return ok(false);
+    const last = await lastSeqOf(file.id, session);
+    return last.ok ? ok(last.value === file.stalled.seq) : last;
+  };
+
   /**
    * A workspace's sessions, most recently active first, each with whose turn it is, whether it's
    * waiting for a code session to end, and what it waits on the owner for (#334).
@@ -2307,6 +2332,8 @@ export const createSessions = (options: {
       const session = runningSession(file.value.id);
       const seen = await seenOf(file.value.id, session);
       if (!seen.ok) return seen;
+      const stalled = await stillStalled(file.value, session);
+      if (!stalled.ok) return stalled;
       summaries.push({
         ...summaryOf(file.value),
         now: now.value,
@@ -2316,6 +2343,7 @@ export const createSessions = (options: {
           pullRequest,
           answer: session.answered.answer,
           cutOff: session.answered.cutOff,
+          stalled: stalled.value,
           seen: seen.value,
           clock: options.now(),
         }),
@@ -3811,6 +3839,15 @@ export const createSessions = (options: {
       if (session?.turn.kind !== "running") return;
       session.turn.stopper.abort();
       await session.ended;
+    },
+
+    /**
+     * Marks a Lead's builder stalled (#474), at its latest event `seq` as the Lead last saw it: it
+     * waits on the owner as stalled until anything new happens in it. Nothing is stopped.
+     */
+    markStalled: async (id: SessionId, seq: number): Promise<Result<null, SessionError>> => {
+      const marked = await updateFile(id, { stalled: { seq } });
+      return marked.ok ? ok(null) : marked;
     },
 
     /**

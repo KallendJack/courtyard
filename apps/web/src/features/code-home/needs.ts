@@ -26,6 +26,8 @@ export const agoWords = (iso: string, now = Date.now()) => {
 
 /** One thing waiting on the owner (AGENTS.md): each a row of Needs you. */
 export type Need =
+  /** A Lead's builder stalled (#474): its slot is free, and its session kept to look at. */
+  | { readonly kind: "stalled"; readonly session: Listed }
   | { readonly kind: "approval"; readonly session: Listed }
   /** Its last turn, cut off by a restart, waits for Continue (#186). */
   | { readonly kind: "cut-off"; readonly session: Listed }
@@ -46,8 +48,9 @@ export type Need =
   | { readonly kind: "setup"; readonly missing: number };
 
 /**
- * What waits on the owner, as the worker says, in the order the grill set (#301): approvals,
- * turns cut off by a restart (#186), failing checks, new replies, pull requests ready to merge,
+ * What waits on the owner, as the worker says, in the order the grill set (#301): stalled
+ * builders (#474), approvals, turns cut off by a restart (#186), failing checks, new replies, pull
+ * requests ready to merge,
  * conflicts, then Matt's setup. The Lead's builders' pull requests it says are ready (#347) are
  * one row with Merge in order (#423), as the Lead's chat offers it, saying how it stands while
  * it's merging or stopped.
@@ -67,6 +70,10 @@ export const needsOf = (given: {
     given.sessions.filter((session) => session.waiting === on);
   const pullsWaiting = (on: OpenPullRequest["waiting"]) =>
     given.pulls.filter((pull) => pull.waiting === on);
+  const stalled: Need[] = sessionsWaiting("stalled").map((session) => ({
+    kind: "stalled",
+    session,
+  }));
   const approvals: Need[] = sessionsWaiting("approval").map((session) => ({
     kind: "approval",
     session,
@@ -106,17 +113,29 @@ export const needsOf = (given: {
     given.setup.state === "offered"
       ? [{ kind: "setup", missing: setupLines(given.setup.card) }]
       : [];
-  return [...approvals, ...cutOff, ...failed, ...replies, ...merges, ...conflicts, ...setup];
+  return [
+    ...stalled,
+    ...approvals,
+    ...cutOff,
+    ...failed,
+    ...replies,
+    ...merges,
+    ...conflicts,
+    ...setup,
+  ];
 };
 
-/** A session waiting on the owner: an approval, a turn cut off, or a new reply. */
-export type SessionNeed = Extract<Need, { kind: "approval" | "cut-off" | "reply" }>;
+/** A session waiting on the owner: a builder stalled, an approval, a turn cut off, or a new reply. */
+export type SessionNeed = Extract<Need, { kind: "stalled" | "approval" | "cut-off" | "reply" }>;
 
 /** The newest session waiting on the owner, which a workspace's tile names (#345). */
 export const newestSessionNeed = (needs: readonly Need[]) =>
   needs.reduce<SessionNeed | undefined>(
     (newest, need) =>
-      (need.kind === "approval" || need.kind === "cut-off" || need.kind === "reply") &&
+      (need.kind === "stalled" ||
+        need.kind === "approval" ||
+        need.kind === "cut-off" ||
+        need.kind === "reply") &&
       (newest === undefined || need.session.updatedAt > newest.session.updatedAt)
         ? need
         : newest,

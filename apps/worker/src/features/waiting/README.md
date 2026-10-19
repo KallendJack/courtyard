@@ -23,6 +23,7 @@ Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id
 ## How it works
 
 - **A session** waits for its approval while one is asked for.
+- Else, a Lead's builder its Lead found **stalled** (#474), until anything new happens in its session.
 - Else as a **new reply** while its latest answer (the last turn that completed or failed) is under a day old, no
   turn runs or waits for a slot, it has no pull request, and the owner hasn't **seen** it.
 - **Seen:** the session page tells the worker the last event it showed once no turn runs and it's in view, kept as
@@ -37,5 +38,5 @@ Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id
   no warning, as the limit card after the turn says it.
 - **Needs you, everywhere** (#492): each workspace's sessions, and the pull request each one opened as the worker
   last followed it, so it never asks GitHub. A pull request no session opened shows on its code workspace's own
-  Needs you. In order: approvals, turns cut off, failing checks, new replies, merges, conflicts, the newest first in
+  Needs you. In order: stalled builders, approvals, turns cut off, failing checks, new replies, merges, conflicts, the newest first in
   each.

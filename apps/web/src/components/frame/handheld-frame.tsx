@@ -443,9 +443,7 @@ function Tile(props: {
   const { pathname } = useLocation();
   const sessions = useKeptSessions(workspace.id, pathname)?.sessions ?? [];
   const waiting = sessions.filter((session) => session.waiting !== "nothing");
-  const needsYou = waiting.some(
-    (session) => session.waiting === "approval" || session.waiting === "cut-off",
-  );
+  const needsYou = waiting.some((session) => session.waiting !== "reply");
   const held = (event: { preventDefault: () => void }) => {
     if (!open) return;
     event.preventDefault();

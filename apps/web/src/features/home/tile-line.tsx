@@ -40,6 +40,7 @@ const counted = (count: number, one: string, more: string) =>
 const needsWords = (needs: readonly Need[], short: boolean) => {
   const of = (kind: Need["kind"]) => needs.filter((need) => need.kind === kind).length;
   return [
+    [of("stalled"), "stalled", "stalled"],
     [of("approval"), "to approve", "to approve"],
     [of("cut-off"), "cut off", "cut off"],
     [of("failed"), "failing", "failing"],
@@ -53,6 +54,7 @@ const needsWords = (needs: readonly Need[], short: boolean) => {
 const NAMED: Readonly<Record<SessionNeed["kind"], string>> = {
   approval: "Approve",
   "cut-off": "Cut off",
+  stalled: "Stalled",
   reply: "New reply",
 };
 
