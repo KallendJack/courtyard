@@ -23,8 +23,7 @@ const thingOf = (workspaceId: WorkspaceId, slug: ThingSlug) =>
 export const KEPT_HOME = createKept<PlanningHome>();
 
 /** A planning workspace's Home: its views, the one showing, its photo and the last question. */
-export const loadHome = (workspaceId: WorkspaceId) =>
-  fromWorker(homeOf(workspaceId), PlanningHome);
+export const loadHome = (workspaceId: WorkspaceId) => fromWorker(homeOf(workspaceId), PlanningHome);
 
 /** Home again, kept for the next visit: nothing when the worker didn't answer. */
 export const loadKeptHome = async (workspaceId: WorkspaceId) => {

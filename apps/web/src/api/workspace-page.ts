@@ -101,17 +101,18 @@ export const loadWorkspacePage = async (
     detail,
     home: await homeOf(detail),
   }));
-  const [{ detail, home }, sessions, providers, skills, documents, things, planningHome] = await Promise.all([
-    detailAndHome,
-    fromWorker(`/workspaces/${id}/sessions`, CodeSessionList),
-    loadProviders(),
-    workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
-    workspaceId.success ? loadDocuments(workspaceId.data) : NOT_FOUND,
-    workspaceId.success ? loadThings(workspaceId.data) : NOT_FOUND,
-    // A planning workspace's Home (#481) comes with the page, so its view never jumps in; a code
-    // workspace has none, and its answer is passed over.
-    workspaceId.success ? loadHome(workspaceId.data) : NOT_FOUND,
-  ]);
+  const [{ detail, home }, sessions, providers, skills, documents, things, planningHome] =
+    await Promise.all([
+      detailAndHome,
+      fromWorker(`/workspaces/${id}/sessions`, CodeSessionList),
+      loadProviders(),
+      workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
+      workspaceId.success ? loadDocuments(workspaceId.data) : NOT_FOUND,
+      workspaceId.success ? loadThings(workspaceId.data) : NOT_FOUND,
+      // A planning workspace's Home (#481) comes with the page, so its view never jumps in; a code
+      // workspace has none, and its answer is passed over.
+      workspaceId.success ? loadHome(workspaceId.data) : NOT_FOUND,
+    ]);
   if (planningHome.kind === "loaded" && workspaceId.success) {
     KEPT_HOME.set(workspaceId.data, planningHome.data);
   }

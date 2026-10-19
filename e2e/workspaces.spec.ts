@@ -37,7 +37,7 @@ test("warns in What Courtyard knows when a context file grows long enough to cro
   const warning = page.getByRole("status").filter({ hasText: "long" });
   // Home stays calm: no warning there (#300).
   await page.goto("/workspaces/reading-list");
-  await expect(page.getByRole("link", { name: "What Courtyard knows" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Reading list" })).toBeVisible();
   await expect(warning).toHaveCount(0);
   await openWhatCourtyardKnows(page);
   await expect(warning).toBeVisible();

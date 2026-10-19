@@ -92,7 +92,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
     test("a tap listens hands-free and puts the words in the message box as they're heard, after anything typed; a second tap stops, and nothing is sent until Send", async ({
       page,
     }) => {
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await typeIn(page);
       await message(page).fill("About the bench:");
       await expect(talking(page, says.idle)).toHaveAttribute("aria-pressed", "false");
@@ -160,7 +160,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
     });
 
     test("Send while it listens sends what's in the box and stops listening", async ({ page }) => {
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await talking(page, says.idle).click();
       await hear(page, "Pegs on the wall");
       await expect(message(page)).toHaveValue("Pegs on the wall");
@@ -190,7 +190,7 @@ for (const [screen, says] of Object.entries(SCREENS)) {
     });
 
     test("while it answers, what's said and sent goes into the answer (#252)", async ({ page }) => {
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await typeIn(page);
       // The fake waits for what the owner adds.
       await message(page).fill("wait for more");
@@ -514,7 +514,7 @@ test.describe("the tablet's Talk key", () => {
     page,
   }) => {
     await standInSpeechRecognition(page);
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     const box = page.locator("form", { has: message(page) });
     await box.getByRole("button", { name: "Talk into the box" }).click();
     await expect(talking(page, /Tap to stop/)).toBeVisible();

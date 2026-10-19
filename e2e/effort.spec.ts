@@ -4,7 +4,7 @@ import { chooseEffort, chosen } from "./frame.ts";
 // Effort, on the frame's Model sheet beside the model (#194; on every screen since #197).
 
 test("the owner picks an effort beside the model, and the session keeps it", async ({ page }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
 
   // A new session starts at the model's default.
   expect((await chosen(page)).effort).toBe("");
@@ -26,7 +26,7 @@ test.describe("on a phone", () => {
   test("the frame's Model sets the effort for the next message, and the session follows it", async ({
     page,
   }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await page.getByRole("button", { name: "Type" }).click();
     await page.getByLabel("Message", { exact: true }).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();

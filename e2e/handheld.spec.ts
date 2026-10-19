@@ -407,7 +407,7 @@ const everywhere = (screen: Screen) => {
   test("a / in the empty box opens the Skills sheet, narrowing as the owner types, and Enter picks", async ({
     page,
   }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await typeIn(page, screen);
     await page.keyboard.type("/");
     const skills = page.getByRole("dialog", { name: "Skills" });
@@ -690,7 +690,7 @@ test.describe("unfolded", () => {
     }
 
     // Sent, or tapped away from, it stays.
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await message(page).fill("Where should the rack go?");
     await page.getByRole("button", { name: "Start" }).click();
     await expect(session(page)).toContainText("You said: Where should the rack go?");
@@ -952,7 +952,7 @@ test.describe("on the cover screen", () => {
   test("Type opens the message box, which closes once the message is sent or the owner taps away", async ({
     page,
   }) => {
-    await page.goto("/workspaces/garage-gym");
+    await page.goto("/workspaces/garage-gym#new");
     await expect(message(page)).toBeHidden();
 
     await page.getByRole("button", { name: "Type" }).click();

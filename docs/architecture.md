@@ -204,7 +204,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
-  - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page and its tabs.
+  - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
+    and Home now: the last question, the view showing (a photo with its parts pinned), its next steps.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
@@ -232,7 +233,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
   (#459; [its README](../apps/web/src/components/README.md) lists them): `layout/`, `buttons/`, `forms/`, `sheets/`,
-  `frame/`, `chat/`, `code/`, `workspace/` and `rich-blocks/`. One, a table
+  `frame/`, `chat/`, `code/`, `workspace/`, `photo/` (a photo with its parts pinned, #481) and `rich-blocks/`. One, a table
   heading's sort button (`buttons/sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
   #168) have a stylesheet of their own too (`chat/chat-flow.css`), added when one first shows and applying only inside a

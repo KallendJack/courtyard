@@ -211,7 +211,10 @@ describe("a planning workspace's Home (#208)", () => {
     });
     const saver = savingProvider([
       [
-        { call: "suggest_replies", input: { replies: ["Find a chain under £30", "Which lights?"] } },
+        {
+          call: "suggest_replies",
+          input: { replies: ["Find a chain under £30", "Which lights?"] },
+        },
         async () => {
           holding();
           await gate;

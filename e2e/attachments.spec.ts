@@ -35,7 +35,7 @@ const tray = (page: Page) => page.getByRole("list", { name: "Attachments" });
 test("photos and PDFs go with a message, show in it after a reload, and open full size", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await attach(page, [photo("garage.png"), MANUAL, photo("hooks.png")]);
 
   // Photos are shrunk and sent as JPEG, so their names say so.
@@ -106,7 +106,7 @@ test("five is the most: a sixth is left out", async ({ page }) => {
 test("a PDF with no text is refused by the worker, and the attachments stay to fix", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await attach(page, [
     { name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdfOf([])) },
   ]);
@@ -196,7 +196,7 @@ for (const screen of [
 
     test("a finger swiped across a photo shows the next one, and back", async ({ page }) => {
       // Photos from the Reply box's + (#251): the box from Type on a phone, always there on a tablet.
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await attach(page, [photo("garage.png"), photo("hooks.png")]);
       await page.getByLabel("Message", { exact: true }).fill("please look");
       await page.getByRole("button", { name: "Start" }).click();
@@ -236,7 +236,7 @@ for (const screen of [
 test("a photo goes with no words, from a workspace's box and a session's, picked or pasted", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await attach(page, [photo("no-words-plan.png")]);
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/sessions\//);
@@ -266,7 +266,7 @@ test("a photo goes with no words, from a workspace's box and a session's, picked
 test("with no words and nothing attached, there's no Start and Enter sends nothing", async ({
   page,
 }) => {
-  await page.goto("/workspaces/garage-gym");
+  await page.goto("/workspaces/garage-gym#new");
   await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
   await page.getByLabel("Message", { exact: true }).press("Enter");
   await expect(page).toHaveURL(/\/workspaces\/garage-gym$/);
@@ -286,7 +286,7 @@ for (const screen of [
         await attach(page, files);
         await expect(tray(page)).toBeVisible();
       };
-      await page.goto("/workspaces/garage-gym");
+      await page.goto("/workspaces/garage-gym#new");
       await pick([photo("fold-floor-plan.png")]);
       await page.getByRole("button", { name: "Start" }).click();
       const session = page.getByRole("list", { name: "Session" });

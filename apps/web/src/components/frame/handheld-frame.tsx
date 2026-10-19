@@ -160,16 +160,21 @@ export default function HandheldFrame(props: {
   /** The page a new session starts on, and the box there was before going to it. */
   const arriving = useRef<{ page: string; from: MessageBox | undefined }>(undefined);
   const [focusBox, setFocusBox] = useState(false);
+  // A planning workspace's Home at `#new` starts one rather than replying to its last question (#481).
   const newSession = (workspace: WorkspaceSummary) => {
     const page = `/workspaces/${workspace.id}`;
     setSheet(undefined);
-    if (pathname === page) {
+    const there = pathname === page;
+    if (!there) arriving.current = { page, from: box };
+    void navigate({
+      to: "/workspaces/$workspaceId",
+      params: { workspaceId: workspace.id },
+      hash: "new",
+    });
+    if (there) {
       setBoxOpen(true);
       setFocusBox(true);
-      return;
     }
-    arriving.current = { page, from: box };
-    void navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: workspace.id } });
   };
   // Once there, and its page has offered its own box, the box opens.
   useEffect(() => {
