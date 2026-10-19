@@ -176,6 +176,13 @@ export type ThingForm = z.infer<typeof ThingForm>;
 export const ThingPinMove = z.object({ pin: ThingPin });
 export type ThingPinMove = z.infer<typeof ThingPinMove>;
 
+/**
+ * A part's card on Home (#481): Done it (what it needed is done, and it's had again), or Add to
+ * wanted (one the owner has, to replace).
+ */
+export const ThingMark = z.object({ mark: z.enum(["done", "wanted"]) });
+export type ThingMark = z.infer<typeof ThingMark>;
+
 /** The multipart field a Thing's new photo is uploaded in. */
 export const THING_PHOTO_FIELD = "photo";
 
