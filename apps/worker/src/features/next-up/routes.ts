@@ -47,9 +47,9 @@ export const nextUpRoutes = (nextUp: NextUpModule) => {
   const routes = new Hono();
 
   routes.get("/workspaces/:id/next-up", async (c) => {
-    const listed = await nextUp.list(c.req.param("id"));
-    if (!listed.ok) return nextUpProblem(c, listed.error);
-    return c.json({ issues: listed.value } satisfies NextUp);
+    const shown = await nextUp.shown(c.req.param("id"));
+    if (!shown.ok) return nextUpProblem(c, shown.error);
+    return c.json(shown.value satisfies NextUp);
   });
 
   routes.post("/workspaces/:id/next-up/:number/build", async (c) => {

@@ -2,6 +2,7 @@ import {
   type BuildIssue,
   buildable,
   type NextUpIssue,
+  type NextUp as NextUpShown,
   SESSION_TITLE_MAX_LENGTH,
   type SessionSummary,
   SkillName,
@@ -234,6 +235,30 @@ export const createNextUp = (options: {
       const last = kept.get(found.value.repo);
       if (last !== undefined && now() - last.at < KEEP_MS) return ok(last.issues);
       return read(found.value.repo);
+    },
+
+    /**
+     * A code workspace's Next up as its Home shows it: as `list` gives it, or, when GitHub refuses
+     * the read or fails, the last known and why (#519), so a refused read never looks like no work.
+     */
+    shown: async (rawId: string): Promise<Result<NextUpShown, NextUpProblem>> => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return found;
+      const last = kept.get(found.value.repo);
+      if (last !== undefined && now() - last.at < KEEP_MS) return ok({ issues: last.issues });
+      const fresh = await read(found.value.repo);
+      if (fresh.ok) return ok({ issues: fresh.value });
+      if (fresh.error.kind !== "github") return fresh;
+      const asOf = last === undefined ? null : new Date(last.at).toISOString();
+      const { problem } = fresh.error;
+      if (problem.kind === "github") {
+        return ok({ issues: last?.issues ?? [], unread: { kind: "unreachable", asOf } });
+      }
+      if (problem.kind === "rate-limited") {
+        const unread = { kind: "rate-limited", backAt: problem.backAt, asOf } as const;
+        return ok({ issues: last?.issues ?? [], unread });
+      }
+      return fresh;
     },
 
     /**

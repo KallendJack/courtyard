@@ -24,6 +24,11 @@ gets "Building this: …" with the session's branch.
   milestone, the order its description's `Build order:` line lists, the rest by number (#336). The line only
   orders: it never decides what shows (#463).
 - Asked of GitHub only when a page asks, and kept two minutes.
+- **GitHub refuses** (#519): when GitHub's hourly allowance is used up, or the read fails another way, `GET …/next-up`
+  still answers 200 with the last list known and `unread`: `rate-limited` with `backAt` (from GitHub's
+  `x-ratelimit-reset` or `retry-after`), or `unreachable`, each with `asOf`, when that list was read (`null` when
+  none is known yet). Home shows it as one grey line and "As of …"; a refused read is never shown as no work. The
+  Lead reads through `list` and `fresh`, which still fail.
 - **Build** (#298) asks again and starts a code session through `sessions/` on the issue, whose first message is the
   issue (`buildIssueMessage`, worded by `prompts/`).
 - **Claims** (#324): every session started on an issue has its claim posted here. `sessions/` is handed `named`,

@@ -2,7 +2,7 @@ import type {
   CodeSessionList,
   LeadStatus,
   MattSetup,
-  NextUpIssue,
+  NextUp as NextUpAnswer,
   ProviderList,
   SkillList,
   WorkspaceConnections,
@@ -65,7 +65,7 @@ const tabIn = (hash: string): Tab => (hash === "sessions" || hash === "prs" ? ha
 /** Each workspace's connections, setup check and Next up as last known, for the tab's lifetime. */
 const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
 const KEPT_SETUP = createKept<MattSetup>();
-const KEPT_NEXT_UP = createKept<readonly NextUpIssue[]>();
+const KEPT_NEXT_UP = createKept<NextUpAnswer>();
 const KEPT_LEAD = createKept<LeadStatus>();
 
 const NO_SETUP: MattSetup = { state: "none" };
@@ -116,12 +116,13 @@ export default function CodeHome(props: {
     key: workspace.id,
     load: async () => {
       const loaded = await loadNextUp(workspace.id);
-      // Not signed in, say: there's no Next up, so its block goes.
+      // Not signed in, say: there's nothing to offer. A read GitHub refused comes as an answer,
+      // the last list known with why (#519).
       return loaded.kind === "offline"
         ? undefined
         : loaded.kind === "loaded"
-          ? loaded.data.issues
-          : [];
+          ? loaded.data
+          : { issues: [] };
     },
     again: list.sessions.length,
   });
@@ -305,7 +306,8 @@ export default function CodeHome(props: {
               {providers.kind === "loaded" && (
                 <NextUp
                   workspaceId={workspace.id}
-                  issues={nextUp}
+                  issues={nextUp?.issues}
+                  {...(nextUp?.unread === undefined ? {} : { unread: nextUp.unread })}
                   providers={providers.data.providers}
                   lead={lead}
                   onLead={leadChanged}
