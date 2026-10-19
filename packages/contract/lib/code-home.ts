@@ -79,29 +79,74 @@ export type NextUpIssue = z.infer<typeof NextUpIssue>;
 export const buildable = (issue: NextUpIssue) => issue.ready && issue.after === null;
 
 /**
+ * Why GitHub couldn't be read just now (#519), when it couldn't: what's shown is then the last
+ * known, read `asOf` (`null` when none is known yet).
+ */
+export const GitHubUnread = z.discriminatedUnion("kind", [
+  /** GitHub's hourly allowance is used up, until `backAt`. */
+  z.object({
+    kind: z.literal("rate-limited"),
+    backAt: z.iso.datetime(),
+    asOf: z.iso.datetime().nullable(),
+  }),
+  /** It failed some other way. */
+  z.object({ kind: z.literal("unreachable"), asOf: z.iso.datetime().nullable() }),
+]);
+export type GitHubUnread = z.infer<typeof GitHubUnread>;
+
+/**
  * A code workspace's Next up (#301): its unclaimed ready issues and every one that needs grilling
  * first (#363, #463), in milestone order.
  */
 export const NextUp = z.object({
   issues: z.array(NextUpIssue),
-  /**
-   * Why GitHub couldn't be read just now (#519), when it couldn't: `issues` are then the last
-   * known, read `asOf` (`null` when none is known yet).
-   */
-  unread: z.optional(
-    z.discriminatedUnion("kind", [
-      /** GitHub's hourly allowance is used up, until `backAt`. */
-      z.object({
-        kind: z.literal("rate-limited"),
-        backAt: z.iso.datetime(),
-        asOf: z.iso.datetime().nullable(),
-      }),
-      /** It failed some other way. */
-      z.object({ kind: z.literal("unreachable"), asOf: z.iso.datetime().nullable() }),
-    ]),
-  ),
+  /** Why GitHub couldn't be read just now (#519): `issues` are then the last known. */
+  unread: z.optional(GitHubUnread),
 });
 export type NextUp = z.infer<typeof NextUp>;
+
+/**
+ * Where an issue on the Roadmap stands (#532), worked out once in the worker as Next up does:
+ * closed (`done`); claimed, or closed by an open pull request (`building`); needing grilling first
+ * (`to-grill`); waiting on the open issue titled `after` (`blocked`); else `ready`.
+ */
+export const RoadmapState = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("building") }),
+  z.object({ kind: z.literal("ready") }),
+  z.object({ kind: z.literal("to-grill") }),
+  z.object({ kind: z.literal("blocked"), after: z.string() }),
+  z.object({ kind: z.literal("done") }),
+]);
+export type RoadmapState = z.infer<typeof RoadmapState>;
+
+/**
+ * One issue on the Roadmap (#532): its state, its summary (its description's first paragraph,
+ * empty when it has none), and the Paper boards its description's Boards section names.
+ */
+export const RoadmapIssue = z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  url: z.url({ protocol: /^https$/ }),
+  state: RoadmapState,
+  summary: z.string(),
+  boards: z.array(z.string()),
+});
+export type RoadmapIssue = z.infer<typeof RoadmapIssue>;
+
+/** One open milestone on the Roadmap (#532): its issues in its Build order, done ones last. */
+export const RoadmapMilestone = z.object({
+  title: z.string(),
+  issues: z.array(RoadmapIssue),
+});
+export type RoadmapMilestone = z.infer<typeof RoadmapMilestone>;
+
+/** A code workspace's Roadmap (#532): every open milestone in the roadmap's order, Later last. */
+export const Roadmap = z.object({
+  milestones: z.array(RoadmapMilestone),
+  /** Why GitHub couldn't be read just now (#519): `milestones` are then the last known. */
+  unread: z.optional(GitHubUnread),
+});
+export type Roadmap = z.infer<typeof Roadmap>;
 
 /**
  * A code workspace's main (#301's Main row): its newest commit on the default branch, and that

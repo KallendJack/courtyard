@@ -1,4 +1,4 @@
-import { BuildIssue, type NextUp, type SessionSummary } from "@courtyard/contract";
+import { BuildIssue, type NextUp, type Roadmap, type SessionSummary } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { gitHubProblem } from "../../integrations/github/routes.ts";
@@ -42,7 +42,10 @@ const nextUpProblem = (c: Context, problem: NextUpProblem) => {
   }
 };
 
-/** A code workspace's Next up, Build and Grill (#301, #298, #363), mounted under `/api`. */
+/**
+ * A code workspace's Next up, Build and Grill (#301, #298, #363), and its Roadmap (#532), mounted
+ * under `/api`.
+ */
 export const nextUpRoutes = (nextUp: NextUpModule) => {
   const routes = new Hono();
 
@@ -50,6 +53,12 @@ export const nextUpRoutes = (nextUp: NextUpModule) => {
     const shown = await nextUp.shown(c.req.param("id"));
     if (!shown.ok) return nextUpProblem(c, shown.error);
     return c.json(shown.value satisfies NextUp);
+  });
+
+  routes.get("/workspaces/:id/roadmap", async (c) => {
+    const roadmap = await nextUp.roadmap(c.req.param("id"));
+    if (!roadmap.ok) return nextUpProblem(c, roadmap.error);
+    return c.json(roadmap.value satisfies Roadmap);
   });
 
   routes.post("/workspaces/:id/next-up/:number/build", async (c) => {

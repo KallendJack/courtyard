@@ -1,8 +1,11 @@
 import {
   type BuildIssue,
   buildable,
+  type GitHubUnread,
   type NextUpIssue,
   type NextUp as NextUpShown,
+  type Roadmap,
+  type RoadmapMilestone,
   SESSION_TITLE_MAX_LENGTH,
   type SessionSummary,
   SkillName,
@@ -14,6 +17,7 @@ import { buildIssueMessage, grillIssueMessage } from "../../prompts/index.ts";
 import type { Code } from "../code/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
+import { roadmapOf } from "./roadmap.ts";
 
 /**
  * A code workspace's Next up (#301): its repository's `ready-for-agent` issues nobody has claimed,
@@ -32,7 +36,7 @@ export const READY_LABEL = "ready-for-agent";
  * The labels of an issue that needs grilling before it's built (Matt Pocock's triage labels):
  * Next up offers Grill for every one (#363, #463).
  */
-const GRILL_LABELS = ["needs-triage", "needs-info"] as const;
+export const GRILL_LABELS = ["needs-triage", "needs-info"] as const;
 
 /** The skill a Grill starts: Matt Pocock's grilling in a code workspace, else the house one. */
 const GRILLING = SkillName.parse("grilling");
@@ -63,7 +67,7 @@ const CLAIM = /^\s*building this\b/im;
 const RELEASED = /^\s*stopped\b/im;
 
 /** Whether an issue's comments, oldest first, leave it claimed: a claim not released since. */
-const claimedIn = (comments: readonly string[]) => {
+export const claimedIn = (comments: readonly string[]) => {
   const claim = comments.findLastIndex((comment) => CLAIM.test(comment));
   return claim !== -1 && !comments.slice(claim + 1).some((comment) => RELEASED.test(comment));
 };
@@ -99,7 +103,7 @@ const issuesNamedIn = (text: string) => [
 ];
 
 /** Whether a pull request's title or description closes issue `number` when it merges. */
-const closes = (number: number, text: string) =>
+export const closes = (number: number, text: string) =>
   new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s*:?\\s+#${number}\\b`, "i").test(text);
 
 /**
@@ -145,6 +149,20 @@ const inOrder = (a: FoundIssue, b: FoundIssue) => {
   );
 };
 
+/**
+ * Why a read GitHub refused shows the last known (#519): its hourly allowance used up, or any
+ * other failure, with when the last known was read (`at`; none yet when `undefined`). `undefined`
+ * for a problem that isn't a refused read, such as no one signed in.
+ */
+const unreadOf = (problem: NextUpProblem, at: number | undefined): GitHubUnread | undefined => {
+  if (problem.kind !== "github") return undefined;
+  const asOf = at === undefined ? null : new Date(at).toISOString();
+  const { problem: github } = problem;
+  if (github.kind === "github") return { kind: "unreachable", asOf };
+  if (github.kind === "rate-limited") return { kind: "rate-limited", backAt: github.backAt, asOf };
+  return undefined;
+};
+
 /** A session's title from what it does (Build, Grill) and its issue, kept to a title's length. */
 const titleFor = (does: "Build" | "Grill", issue: NextUpIssue) => {
   const title = `${does} #${issue.number}: ${issue.title}`;
@@ -156,13 +174,18 @@ const titleFor = (does: "Build" | "Grill", issue: NextUpIssue) => {
 export const createNextUp = (options: {
   contextDir: string;
   code: Pick<Code, "onGitHub">;
-  github: Pick<GitHub, "openIssues" | "openPullRequestTexts" | "commentOnIssue">;
+  github: Pick<GitHub, "openIssues" | "openPullRequestTexts" | "commentOnIssue" | "roadmap">;
   sessions: Pick<Sessions, "create">;
   now: () => number;
 }) => {
   const { code, github, sessions, now } = options;
   /** Each repository's Next up as last read, and when. */
   const kept = new Map<string, { readonly at: number; readonly issues: NextUpIssue[] }>();
+  /** Each repository's Roadmap as last read, and when (#532). */
+  const roadmaps = new Map<
+    string,
+    { readonly at: number; readonly milestones: RoadmapMilestone[] }
+  >();
   /** The files each ready issue names (#423), by repository then number, as last read. */
   const named = new Map<string, ReadonlyMap<number, readonly string[]>>();
 
@@ -248,17 +271,40 @@ export const createNextUp = (options: {
       if (last !== undefined && now() - last.at < KEEP_MS) return ok({ issues: last.issues });
       const fresh = await read(found.value.repo);
       if (fresh.ok) return ok({ issues: fresh.value });
-      if (fresh.error.kind !== "github") return fresh;
-      const asOf = last === undefined ? null : new Date(last.at).toISOString();
-      const { problem } = fresh.error;
-      if (problem.kind === "github") {
-        return ok({ issues: last?.issues ?? [], unread: { kind: "unreachable", asOf } });
-      }
-      if (problem.kind === "rate-limited") {
-        const unread = { kind: "rate-limited", backAt: problem.backAt, asOf } as const;
-        return ok({ issues: last?.issues ?? [], unread });
-      }
-      return fresh;
+      const unread = unreadOf(fresh.error, last?.at);
+      return unread === undefined ? fresh : ok({ issues: last?.issues ?? [], unread });
+    },
+
+    /**
+     * A code workspace's Roadmap (#532): every open milestone with all its issues, each in one
+     * plain state, kept as Next up is; when GitHub refuses the read, the last known and why.
+     */
+    roadmap: async (rawId: string): Promise<Result<Roadmap, NextUpProblem>> => {
+      const found = await repoOf(rawId);
+      if (!found.ok) return found;
+      const { repo } = found.value;
+      const last = roadmaps.get(repo);
+      if (last !== undefined && now() - last.at < KEEP_MS)
+        return ok({ milestones: last.milestones });
+      const [milestones, pulls] = await Promise.all([
+        github.roadmap({ repo }),
+        github.openPullRequestTexts({ repo }),
+      ]);
+      /** GitHub refused: the last known and why, when it's a read it refused (#519). */
+      const refused = (problem: GitHubProblem): Result<Roadmap, NextUpProblem> => {
+        const unread = unreadOf({ kind: "github", problem }, last?.at);
+        return unread === undefined
+          ? err({ kind: "github", problem })
+          : ok({ milestones: last?.milestones ?? [], unread });
+      };
+      if (!milestones.ok) return refused(milestones.error);
+      if (!pulls.ok) return refused(pulls.error);
+      const shown = roadmapOf(
+        milestones.value,
+        pulls.value.map((pull) => `${pull.title}\n${pull.body}`),
+      );
+      roadmaps.set(repo, { at: now(), milestones: shown });
+      return ok({ milestones: shown });
     },
 
     /**

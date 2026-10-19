@@ -8,6 +8,7 @@ import {
   LiveStatus,
   NextUp,
   PaperFileList,
+  Roadmap,
   SessionSummary,
   WorkspaceConnections,
   WorkspaceDetail,
@@ -565,6 +566,116 @@ describe("Grill (#363)", () => {
     expect(await errorOf(response)).toMatch(/doesn't need grilling/);
     const listed = await request("/api/workspaces/side-project/sessions");
     expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+  });
+});
+
+const roadmapOf = async (request: Requester) => {
+  const response = await request("/api/workspaces/side-project/roadmap");
+  expect(response.status).toBe(200);
+  return Roadmap.parse(await response.json());
+};
+
+describe("the Roadmap (#532)", () => {
+  it("lists every open milestone in the roadmap's order, Later last, each issue in its Build order with one plain state", async () => {
+    const { github, request } = await signedInWith(
+      [
+        { number: 40, title: "Later idea", milestone: "Later", labels: ["needs-triage"] },
+        { number: 12, title: "Tablet hub", milestone: "5 · Tablet hub" },
+        { number: 20, title: "Being built", milestone: "4 · Code workspaces" },
+        { number: 21, title: "Ready one", milestone: "4 · Code workspaces" },
+        {
+          number: 22,
+          title: "To grill",
+          milestone: "4 · Code workspaces",
+          labels: ["needs-triage"],
+        },
+        { number: 23, title: "Blocked", milestone: "4 · Code workspaces", blockedBy: [21] },
+        { number: 24, title: "Shipped", milestone: "4 · Code workspaces", state: "closed" },
+        { number: 25, title: "Built by a PR", milestone: "4 · Code workspaces" },
+      ],
+      {
+        milestones: {
+          "5 · Tablet hub": "Next.",
+          Later: "Ideas.",
+          "4 · Code workspaces": "Build order: #23 → #20 → #22 → #24. Notes.",
+        },
+      },
+    );
+    github.comment(onGitHub, 20, "Building this: Courtyard session (courtyard/abcd1234)");
+    github.openPullRequest({ repo: onGitHub, branch: "25", head: "c0ffee1", body: "Closes #25" });
+
+    const roadmap = await roadmapOf(request);
+
+    expect(
+      roadmap.milestones.map((milestone) => [
+        milestone.title,
+        milestone.issues.map((issue) => [
+          issue.number,
+          issue.state.kind === "blocked" ? `after ${issue.state.after}` : issue.state.kind,
+        ]),
+      ]),
+    ).toEqual([
+      [
+        "4 · Code workspaces",
+        [
+          [23, "after Ready one"],
+          [20, "building"],
+          [22, "to-grill"],
+          [21, "ready"],
+          [25, "building"],
+          [24, "done"],
+        ],
+      ],
+      ["5 · Tablet hub", [[12, "ready"]]],
+      ["Later", [[40, "to-grill"]]],
+    ]);
+  });
+
+  it("gives each issue its summary, the first paragraph of its description, and the boards it names", async () => {
+    const { request } = await signedInWith(
+      [
+        {
+          number: 7,
+          title: "A Roadmap page",
+          milestone: "4 · Code workspaces",
+          body: [
+            "In a code workspace it is hard to see what is coming up.",
+            "",
+            "## Boards",
+            "",
+            'Drafts: "Tablet · Roadmap (#7)", "Cover · Roadmap (#7)".',
+          ].join("\n"),
+        },
+      ],
+      { milestones: { "4 · Code workspaces": "" } },
+    );
+
+    const [issue] = (await roadmapOf(request)).milestones[0]?.issues ?? [];
+
+    expect(issue).toMatchObject({
+      summary: "In a code workspace it is hard to see what is coming up.",
+      boards: ["Tablet · Roadmap (#7)", "Cover · Roadmap (#7)"],
+    });
+  });
+
+  it("keeps the last roadmap known when GitHub's limit is used up (#519)", async () => {
+    let clock = Date.parse("2026-10-18T21:52:00.000Z");
+    const { github, request } = await signedInWith(
+      [{ number: 3, title: "Three", milestone: "4 · Code workspaces" }],
+      { milestones: { "4 · Code workspaces": "" }, now: () => clock },
+    );
+    await roadmapOf(request);
+    github.limitUntil("2026-10-18T22:13:00.000Z");
+    clock += 5 * 60 * 1000;
+
+    const roadmap = await roadmapOf(request);
+
+    expect(roadmap.milestones.map((milestone) => milestone.title)).toEqual(["4 · Code workspaces"]);
+    expect(roadmap.unread).toEqual({
+      kind: "rate-limited",
+      backAt: "2026-10-18T22:13:00.000Z",
+      asOf: "2026-10-18T21:52:00.000Z",
+    });
   });
 });
 
