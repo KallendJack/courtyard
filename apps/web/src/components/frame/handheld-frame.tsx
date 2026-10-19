@@ -28,7 +28,6 @@ import { ARRANGE_HELD, ARRANGE_SLOT, type Held, useArrange } from "./arrange.ts"
 import { FrameButton, modelMark } from "./frame-button.tsx";
 import { type Layout, type MessageBox, type TalkTarget, typingIn } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
-import { RailSessions } from "./rail-sessions.tsx";
 import { TalkBar, TalkKey } from "./talk-strip.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
@@ -41,8 +40,8 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
  * The Handheld frame (#193, Paper boards Handheld · 00, 03, 10, 11), in place of the sidebar on a
  * touch screen. On a tablet or the unfolded Fold (#206, the agreed tablet boards): workspace tiles
  * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, and a
- * quieter Settings), the open workspace's latest sessions (#492), and the Talk key in the bottom
- * corner; the page's message box, the Reply box,
+ * quieter Settings), then room, and the Talk key in the bottom corner (the sessions list there,
+ * #492, came out in #521); the page's message box, the Reply box,
  * is always there at the foot of the page between them. On a phone or the folded Fold: tiles
  * across the top, and the buttons in a row above Type and the talk strip, Type opening the
  * message box above the bar. The key and the strip listen (talk-strip.tsx, #79). Loaded only on
@@ -327,11 +326,7 @@ export default function HandheldFrame(props: {
               {!reading && model}
               {!reading && skills}
               {settings}
-              {here === undefined || reading ? (
-                <div className="flex-1" />
-              ) : (
-                <RailSessions workspace={here} />
-              )}
+              <div className="flex-1" />
               {!reading && <TalkKey box={talkTo} type={type} talker={props.talker} />}
             </Scroller>
           </>

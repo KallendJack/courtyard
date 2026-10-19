@@ -31,7 +31,6 @@
 @source not "./components/sheets/handheld-sheet.tsx";
 @source not "./components/sheets/sheet-choices.tsx";
 @source not "./components/frame/frame-button.tsx";
-@source not "./components/frame/rail-sessions.tsx";
 @source not "./components/code/repo-picker.tsx";
 @source not "./features/new-workspace";
 @source not "./features/code-home";

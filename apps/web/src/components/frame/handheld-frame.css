@@ -11,7 +11,6 @@
 @source "../sheets/handheld-sheet.tsx";
 @source "../sheets/sheet-choices.tsx";
 @source "./frame-button.tsx";
-@source "./rail-sessions.tsx";
 
 :where([data-handheld]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
