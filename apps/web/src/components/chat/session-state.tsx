@@ -81,8 +81,9 @@ const NAMES = { working: "Working", "needs-you": "Needs you", "your-turn": "Your
 
 /**
  * A listed session's dot, as the worker says it waits (#492): gold while it needs the owner (an
- * approval, or a turn cut off by a restart), violet while it's working or has a new reply; none
- * otherwise. Its word, for a list with room to say it: Approve, Continue, Running, New reply.
+ * approval, a turn cut off by a restart, or a builder stalled, #474), violet while it's working or
+ * has a new reply; none otherwise. Its word, for a list with room to say it: Approve, Continue,
+ * Stalled, Running, New reply.
  */
 export const waitingMark = (session: { now: TurnNow; waiting: SessionWaiting }) => {
   if (session.waiting === "approval") {
@@ -90,6 +91,9 @@ export const waitingMark = (session: { now: TurnNow; waiting: SessionWaiting }) 
   }
   if (session.waiting === "cut-off") {
     return { tone: "needs-you", name: "Needs you", word: "Continue" } as const;
+  }
+  if (session.waiting === "stalled") {
+    return { tone: "needs-you", name: "Needs you", word: "Stalled" } as const;
   }
   if (session.now.kind === "working") {
     return { tone: "working", name: "Working", word: "Running" } as const;

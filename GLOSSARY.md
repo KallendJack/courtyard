@@ -248,6 +248,12 @@ A ready issue the Lead doesn't start yet because a builder still at work is chan
 (#423); it starts once that builder's pull request merges.
 _Avoid_: queued, paused, deferred
 
+**Stalled**:
+A Lead's builder with no pull request that has been silent (no turn, commit or event) for 20 minutes, not counting
+time waiting on the owner or for a place (#474). It leaves Running, its slot free, and waits in Needs you with Open;
+its session is kept, so the owner reads what happened and carries it on there if it should go on.
+_Avoid_: stuck, hung, dead, idle
+
 **Next up**:
 The first block on a workspace's Home. A code workspace's: its repository's `ready-for-agent` issues nobody has
 claimed, in milestone order (#301): three, then More. Its first has **Build** (#298): one tap shows the issue and the

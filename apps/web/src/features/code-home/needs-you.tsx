@@ -1,9 +1,10 @@
-import type {
-  ApprovalAsk,
-  CodeSessionList,
-  MattSetup,
-  OpenPullRequest,
-  WorkspaceId,
+import {
+  type ApprovalAsk,
+  BUILDER_STALLS_AFTER_MINUTES,
+  type CodeSessionList,
+  type MattSetup,
+  type OpenPullRequest,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -42,13 +43,16 @@ const askedWords = (ask: ApprovalAsk) => {
 /** How many pull requests are ready: "1 PR ready", "3 PRs ready". */
 const readyWords = (count: number) => `${count} ${count === 1 ? "PR" : "PRs"} ready`;
 
+/** A builder's name on a row (#474): its issue's number and title, "#183 Shared Scroller". */
+const builderTitle = (session: Listed) => session.title.replace(/^Build (#\d+): /, "$1 ");
+
 /** A pull request's name on a row: its number and title. */
 const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
- * Needs you (#301; Paper, "Code workspace Home"): every approval, turn cut off by a restart
- * (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
+ * Needs you (#301; Paper, "Code workspace Home"): every builder stalled (#474), approval, turn cut
+ * off by a restart (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
  * Merge in order, #423), conflict, and Matt's setup offer,
  * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
  * scrolling inside when there are more than fit (#335); with nothing waiting it says so.
@@ -114,6 +118,7 @@ export function NeedsYou(props: {
 
 const keyOf = (need: Need) => {
   switch (need.kind) {
+    case "stalled":
     case "approval":
     case "cut-off":
     case "reply":
@@ -154,6 +159,18 @@ function NeedRow(props: {
     </Link>
   );
   switch (need.kind) {
+    case "stalled":
+      // Open only opens the kept session: the owner reads what happened and taps Continue there
+      // if it should go on (#474, #186).
+      return (
+        <BlockRow
+          label={builderTitle(need.session)}
+          title={sessionLink(need.session, builderTitle(need.session))}
+          sub={`Stalled · silent ${BUILDER_STALLS_AFTER_MINUTES} min · its slot is free`}
+          tone="needs"
+          action={<OpenSession workspaceId={workspaceId} session={need.session} />}
+        />
+      );
     case "approval": {
       const { session } = need;
       if (session.now.kind !== "needs-you") return null;
@@ -207,17 +224,7 @@ function NeedRow(props: {
           title={sessionLink(need.session, need.session.title)}
           sub={`Your turn · replied ${agoWords(need.session.updatedAt)}`}
           tone="quiet"
-          action={
-            <ButtonLink
-              to="/workspaces/$workspaceId/sessions/$sessionId"
-              params={{ workspaceId, sessionId: need.session.id }}
-              variant="outline"
-              size="md"
-              aria-label={`Open ${need.session.title}`}
-            >
-              Open
-            </ButtonLink>
-          }
+          action={<OpenSession workspaceId={workspaceId} session={need.session} />}
         />
       );
     case "merge":
@@ -313,6 +320,21 @@ function RowLink(props: { pull: OpenPullRequest; workspaceId: WorkspaceId; label
       aria-label={`${props.label} ${pullTitle(props.pull)}`}
     >
       {props.label}
+    </ButtonLink>
+  );
+}
+
+/** Open: a row's link to its session's page. */
+function OpenSession(props: { workspaceId: WorkspaceId; session: Listed }) {
+  return (
+    <ButtonLink
+      to="/workspaces/$workspaceId/sessions/$sessionId"
+      params={{ workspaceId: props.workspaceId, sessionId: props.session.id }}
+      variant="outline"
+      size="md"
+      aria-label={`Open ${props.session.title}`}
+    >
+      Open
     </ButtonLink>
   );
 }

@@ -70,7 +70,8 @@ export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
 
 /**
  * What a session waits on the owner for: the approval its turn waits on; else its last turn, cut
- * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else its
+ * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else a
+ * Lead's builder its Lead found stalled (#474), until anything new happens in it; else its
  * latest answer, while the owner hasn't seen it (`seen`, the event number its page last showed up
  * to, on any device), it's under a day old, no turn runs or waits for a slot, and it has no pull
  * request (whose own rows say what waits); else nothing.
@@ -81,6 +82,8 @@ export const sessionWaiting = (session: {
   pullRequest: PullRequest | undefined;
   answer: Answer | undefined;
   cutOff: boolean;
+  /** Its Lead found it stalled, and nothing has happened in it since (#474). */
+  stalled: boolean;
   seen: number;
   clock: number;
 }): SessionWaiting => {
@@ -89,6 +92,7 @@ export const sessionWaiting = (session: {
   const recent = answer !== undefined && session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
   const free = session.now.kind === "your-turn" && !session.queued;
   if (free && recent && session.cutOff) return "cut-off";
+  if (session.stalled) return "stalled";
   const newReply =
     free &&
     recent &&
@@ -98,8 +102,12 @@ export const sessionWaiting = (session: {
   return newReply ? "reply" : "nothing";
 };
 
-/** Needs you's order (#301): approvals, turns cut off, failing checks, replies, merges, conflicts. */
+/**
+ * Needs you's order (#301): stalled builders (#474), approvals, turns cut off, failing checks,
+ * replies, merges, conflicts.
+ */
 const NEEDS_ORDER: readonly NeedYou["kind"][] = [
+  "stalled",
   "approval",
   "cut-off",
   "failed",

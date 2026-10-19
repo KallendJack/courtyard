@@ -225,6 +225,7 @@ export {
   tasksIn,
 } from "./lib/session-event.ts";
 export {
+  BUILDER_STALLS_AFTER_MINUTES,
   Doing,
   ListedSession,
   NeedsYou,

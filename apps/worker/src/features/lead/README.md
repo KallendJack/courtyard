@@ -5,7 +5,7 @@ A code workspace's Lead (#347): runs builders in the milestone's order, and merg
 **Example:** you tap Run the build order. The Lead starts a builder on the first ready issue, holds back the next one
 because it changes the same file, and starts it once the first one's PR merges.
 
-- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`), `allow-all/`,
+- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`, `markStalled`), `allow-all/`,
   `prompts/`, `providers/`, `workspaces/`; `code/`'s `changedFiles`.
 - **Used by:** `worker.ts` (one of its repeating jobs); `live/`'s `holding()` stops it starting new builders.
 
@@ -33,5 +33,13 @@ because it changes the same file, and starts it once the first one's PR merges.
 - **Brakes** (#457): no new builder while 2 of its builders' PRs wait on the owner's review (holding back, carrying on
   as they merge), and at most 4 builders a Run, after which it rests ("Built 4 this run · tap Run for more"), its
   window closed.
+- **Builders that stop, fail or go quiet** (#474): one whose last turn failed or was stopped (not cut off by a
+  restart, which waits for Continue) leaves Building at once, its slot free. One with no pull request silent for 20
+  minutes (`BUILDER_STALLS_AFTER_MINUTES`: no turn, commit or event; time waiting on the owner or for a place doesn't
+  count) is stalled: `sessions/`' `markStalled` marks its session, which then waits on the owner as `stalled` (Needs
+  you's "Stalled · silent 20 min · its slot is free", with Open), the owner is notified once, and its slot is free.
+  Its session is kept and its claim stands; nothing is posted on the issue. Either counts as Building again once its
+  session carries on, and neither has its issue started afresh. One with a pull request waits on the owner or CI, so
+  never stalls.
 - **Allow all:** it keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
   order with it on) and starts each builder with it until then.
