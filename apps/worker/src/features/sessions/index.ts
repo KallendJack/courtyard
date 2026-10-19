@@ -26,6 +26,7 @@ import {
   type NewMessage,
   type Overflow,
   overflowFrom,
+  type WantedPick,
   type PlacedLine,
   type ProviderId,
   type PullRequest,
@@ -39,6 +40,7 @@ import {
   SessionId,
   SessionSeen,
   type SessionSummary,
+  ShopName,
   type SkillName,
   SOURCES_MAX,
   type Source,
@@ -75,6 +77,8 @@ import {
 import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
+  BLOCK_SHOP_TOOL_NAME,
+  blockShopReply,
   bringUpToDateMessage,
   CONTINUE_MESSAGE,
   checksFailedMessage,
@@ -88,6 +92,7 @@ import {
   LEAD_TOOL_NAME,
   type LeadBrief,
   notOfferedReply,
+  PICKS_TOOL_NAME,
   PREVIEW_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
@@ -188,6 +193,7 @@ import {
 import { type Answered, answeredAfter, sessionWaiting } from "../waiting/index.ts";
 import {
   allowAlways,
+  blockShop,
   getWorkspace,
   isArchived,
   type PaperSettings,
@@ -670,6 +676,19 @@ export type PreviewHooks = {
   readonly tool: (session: SessionId, input: unknown) => Promise<ToolReply>;
 };
 
+/**
+ * What planning sessions' turns need from the wanted list (#245): each wanted Thing's picks, which
+ * its line in the Things shows, and word that a model blocked a shop, so the picks from it are
+ * found again elsewhere.
+ */
+export type WantedHooks = {
+  readonly picksOf: (workspaceId: WorkspaceId) => Promise<ReadonlyMap<string, readonly WantedPick[]>>;
+  readonly shopBlocked: (workspaceId: WorkspaceId, shop: string) => Promise<void>;
+};
+
+/** A shop a model blocks, as the block shop tool is sent it (#245). */
+const BlockShopInput = z.object({ shop: ShopName, said: z.string().trim().max(200).optional() });
+
 /** What a preview screenshot shows (#183): its page and size, by which the chat keeps the newest of each. */
 const PreviewShot = z.object({ path: z.string(), size: z.string() });
 
@@ -725,6 +744,11 @@ export const createSessions = (options: {
   claims?: ClaimHooks;
   /** Code sessions' previews (#183): each closes as its task ends, and takes the model's screenshots. */
   previews?: PreviewHooks;
+  /**
+   * The wanted list (#245): each wanted Thing's picks, which a turn's Things show, and a shop a
+   * model blocked, whose picks it finds again elsewhere.
+   */
+  wanted?: WantedHooks;
   /**
    * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
    * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
@@ -1047,6 +1071,12 @@ export const createSessions = (options: {
       ownerContext: ownerContext.value,
       documents: documents.value,
       things: things.value,
+      ...(summary.mode === "planning"
+        ? {
+            blockedShops: workspace.value.blockedShops,
+            picks: (await options.wanted?.picksOf(workspaceId)) ?? new Map(),
+          }
+        : {}),
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
       paper: workspace.value.paper,
@@ -1271,11 +1301,45 @@ export const createSessions = (options: {
             if (!recorded.ok) recordingLost = true;
           },
         });
+        /** The shops blocked: as the turn read them, then each this turn blocks. */
+        const blockedNow = (workspace.value.blockedShops ?? []).map(({ shop }) => shop);
+        /** Blocks a shop the owner said not to use (#245), as a change to the workspace's settings. */
+        const blockShopTool = async (input: unknown): Promise<ToolReply> => {
+          if (stopper.signal.aborted || recordingLost) {
+            return blockShopReply(err({ kind: "stopped" }));
+          }
+          const sent = BlockShopInput.safeParse(input);
+          if (!sent.success) return blockShopReply(err({ kind: "malformed" }));
+          const { shop, said } = sent.data;
+          const already = blockedNow.find(
+            (blocked) => blocked.localeCompare(shop, "en-GB", { sensitivity: "base" }) === 0,
+          );
+          if (already !== undefined) return blockShopReply(ok({ shop: already, already: true }));
+          const blocked = await options.contextFolder.change(
+            () =>
+              blockShop(options.contextDir, {
+                id: turn.workspaceId,
+                blocked: {
+                  shop,
+                  since: new Date(options.now()).toISOString(),
+                  ...(said === undefined || said === "" ? {} : { said }),
+                },
+              }),
+            () => workspaceChange(`Block shop: ${shop}`, turn.workspaceId),
+          );
+          if (!blocked.ok) return blockShopReply(err({ kind: "storage" }));
+          blockedNow.push(shop);
+          await options.wanted?.shopBlocked(turn.workspaceId, shop);
+          return blockShopReply(ok({ shop, already: false }));
+        };
         /** What answers each of Courtyard's tools, by name: every one a turn can offer. */
         const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [DOCUMENT_TOOL_NAME]: saveDocument,
           [THING_TOOL_NAME]: saveThingTool,
+          [BLOCK_SHOP_TOOL_NAME]: blockShopTool,
+          // Only a price check offers it, never a session's turn.
+          [PICKS_TOOL_NAME]: async () => notOfferedReply(PICKS_TOOL_NAME),
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
