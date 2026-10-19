@@ -569,12 +569,19 @@ const PAGE = 100;
 const OPEN_PAGE = 30;
 /** The most pages of a pull request's files read: GitHub lists up to 3,000, a review shows 300. */
 const FILE_PAGES = 3;
+/**
+ * The most of GitHub's answers kept to ask again with their ETags (#520): every Next up issue's
+ * comments, and each session's pull request and its checks, many times over.
+ */
+const ANSWERS_KEPT = 1000;
 
 /**
  * GitHub, through the GitHub App whose client ID the owner set (`COURTYARD_GITHUB_CLIENT_ID`).
  * A device sign-in needs only the client ID, never a secret, and so does refreshing its token.
+ * `fetch` is the network's, unless a test stands in for GitHub.
  */
-export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
+export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetch }): GitHubApi => {
+  const fetch = options.fetch ?? globalThis.fetch;
   /** Posts a form to github.com's sign-in, and reads the JSON answer. */
   const signInPost = async (path: string, fields: Record<string, string>, signal?: AbortSignal) => {
     const response = await fetch(`https://github.com${path}`, {
@@ -586,8 +593,16 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     return (await response.json()) as unknown;
   };
 
-  /** Asks GitHub's API as the account signed in with `token`, sending `body` as JSON if any. */
-  const apiRequest = (token: string, path: string, send?: { method: string; body: unknown }) =>
+  /**
+   * Asks GitHub's API as the account signed in with `token`, sending `body` as JSON if any, or,
+   * for a read, the `etag` of the answer kept from last time.
+   */
+  const apiRequest = (
+    token: string,
+    path: string,
+    send?: { method: string; body: unknown },
+    etag?: string,
+  ) =>
     fetch(`https://api.github.com${path}`, {
       ...(send === undefined
         ? {}
@@ -601,23 +616,55 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
         "user-agent": "Courtyard",
         "x-github-api-version": "2022-11-28",
         ...(send === undefined ? {} : { "content-type": "application/json" }),
+        ...(etag === undefined ? {} : { "if-none-match": etag }),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
+  /** GitHub's last answer to each read, by path, with its ETag (#520): the oldest asked goes first. */
+  const answers = new Map<string, { readonly etag: string; readonly body: unknown }>();
+
   /**
-   * Reads one of GitHub's API answers as the account signed in with `token`; throws `RateLimited`
-   * when its allowance is used up.
+   * Reads `path` as the account signed in with `token`: its answer, or `undefined` when GitHub has
+   * nothing there (404). It sends the ETag of the answer kept from last time, and GitHub answers
+   * one unchanged since with 304, which it doesn't count against the hourly allowance (#520): the
+   * kept answer is reused. Throws `RateLimited` when the allowance is used up, and on any other
+   * refusal.
    */
-  const apiGet = async <T>(token: string, path: string, schema: z.ZodType<T>) => {
-    const response = await apiRequest(token, path);
+  const apiRead = async (token: string, path: string): Promise<unknown> => {
+    const kept = answers.get(path);
+    const response = await apiRequest(token, path, undefined, kept?.etag);
+    if (response.status === 304 && kept !== undefined) {
+      answers.delete(path);
+      answers.set(path, kept);
+      return kept.body;
+    }
+    if (response.status === 404) return undefined;
     if (!response.ok) {
       const backAt = backAtOf(response);
       throw backAt === undefined
         ? new Error(`GitHub answered ${response.status}`)
         : new RateLimited(backAt);
     }
-    return schema.parse(await response.json());
+    const body: unknown = await response.json();
+    const etag = response.headers.get("etag");
+    answers.delete(path);
+    if (etag !== null) {
+      answers.set(path, { etag, body });
+      const [oldest] = answers.keys();
+      if (answers.size > ANSWERS_KEPT && oldest !== undefined) answers.delete(oldest);
+    }
+    return body;
+  };
+
+  /**
+   * Reads one of GitHub's API answers as the account signed in with `token`, as `apiRead` does;
+   * nothing there (404) is a refusal too.
+   */
+  const apiGet = async <T>(token: string, path: string, schema: z.ZodType<T>) => {
+    const body = await apiRead(token, path);
+    if (body === undefined) throw new Error("GitHub answered 404");
+    return schema.parse(body);
   };
 
   /** Why a read GitHub wouldn't answer failed, from what it threw (#519). */
@@ -733,10 +780,9 @@ export const createGitHubApi = (options: { clientId: string }): GitHubApi => {
     repo: string,
     number: number,
   ): Promise<FoundPullRequest | null> => {
-    const response = await apiRequest(accessToken, `/repos/${repo}/pulls/${number}`);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
-    const pull = Pull.parse(await response.json());
+    const answer = await apiRead(accessToken, `/repos/${repo}/pulls/${number}`);
+    if (answer === undefined) return null;
+    const pull = Pull.parse(answer);
     const { check_runs } = await apiGet(
       accessToken,
       `/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=${PAGE}`,
