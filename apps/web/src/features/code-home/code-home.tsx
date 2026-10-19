@@ -27,6 +27,7 @@ import PullRequests, { useOpenPullRequests } from "../pull-requests/pull-request
 import { Composer } from "../sessions/composer/composer.tsx";
 import { startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
+import { WorkspaceStatusLine } from "../status-line/status-line.tsx";
 import { loadConnections, loadLead, loadNextUp } from "./api.ts";
 import css from "./code-home.css?inline";
 import { ConnectionsSheet } from "./connections.tsx";
@@ -190,10 +191,15 @@ export default function CodeHome(props: {
   const chosen = tabs.some((each) => each.hash === tab && each.held !== true) ? tab : "";
 
   // Its own classes apply inside each part (code-home.css), but not to the page's title around
-  // them: the connections line under the name, and the tabs beside it (#503).
+  // them: the status line (#256) and the connections line under the name, and the tabs beside it
+  // (#503).
   const under = (
     <div data-code-home="">
       <div className="flex flex-col gap-2">
+        <WorkspaceStatusLine
+          workspaceId={workspace.id}
+          again={`${list.sessions.length}-${list.sessions.filter(({ busy }) => busy).length}`}
+        />
         {connections === undefined ? (
           <PlaceholderRows count={1} size="text" />
         ) : (

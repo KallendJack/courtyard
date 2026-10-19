@@ -7,7 +7,7 @@ its photo, and the latest session's next steps, which History shows. Decided her
 photo, the stretched chain and the soft rear tyre flagged first, then the fork) and "Road bike". The road bike changed
 last, so it shows, until you tap the Whyte, which then stays.
 
-- **Uses:** `things/` (the Things, read), `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
+- **Uses:** `things/` (the Things, read), `floor-plans/` (its plan views), `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/planning-home/` once its screens are built.
 
 ## API
@@ -20,8 +20,9 @@ last, so it shows, until you tap the Whyte, which then stays.
 ## How it works
 
 - **Views** (`homeViews`): the Breakdown view for each Thing that isn't a part and has a photo and parts, its parts
-  that need something first (flagged), then the rest, each with its pin. The wanted list is the Things tab's, not a
-  view (#565). A view's `changedAt` is the newest of its Things' files.
+  that need something first (flagged), then the rest, each with its pin; then each room's floor plan, saved as its
+  document (#257), newest first. The wanted list is the Things tab's, not a view (#565). A view's `changedAt` is the
+  newest of its Things' files, or its plan's document's.
 - **Showing:** the owner's pick while that view is there, else the view last changed; a pick whose view has gone is
   passed over, never refused.
 - **The pick** is Courtyard's own state, kept in the data folder (`planning-home/<workspace>.json`), not a change to

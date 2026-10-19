@@ -166,6 +166,14 @@ context file. The owner saves one from an answer, or asks a model to save or upd
 unasked. Every model is told which documents there are and reads one when it helps (ADR 0020).
 _Avoid_: note, page, file (on its own), artifact
 
+**Floor plan**:
+A room drawn top-down and to scale from data a model writes in a `plan` block (#257): its walls in centimetres, doors
+and windows, zones, inner walls and the things in it, solid when the owner has them and dashed when they want them,
+always seen from the front of the house with the front at the bottom. Courtyard keeps each room's last one as a
+document of its own, saved the moment its answer ends (the one document nobody asks to save), so a redraw replaces
+it, and Home shows it.
+_Avoid_: layout diagram, ASCII plan, map, blueprint
+
 **Thing**:
 One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
 with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
@@ -200,10 +208,10 @@ _Avoid_: marker, hotspot, label (that's a model's `T2`, or a part's name beside 
 
 **Home view**:
 The one big panel a planning workspace's Home shows (#208, #565), filled by the worker from the workspace's data, and
-nothing else: no chat. So far the **Breakdown view**, a Thing with a photo and parts, every part labelled beside the
-photo with a line to its pin, a tap on one opening its card under it. The one showing is the one last changed, unless
-the owner picked one, whose pick sticks. A Thing's drawing (#566) and the workspace's plans (#567) come as further
-kinds; the wanted list is the Things tab's.
+nothing else: no chat. The **Breakdown view**, a Thing with a photo and parts, every part labelled beside the photo
+with a line to its pin, a tap on one opening its card under it; or a room's floor plan (#257). The one showing is the
+one last changed, unless the owner picked one, whose pick sticks. A Thing's drawing (#566), the rest of the
+workspace's plans (#567), renders and phases come as further kinds; the wanted list is the Things tab's.
 _Avoid_: block (that's a fixed piece of the code Home), card, widget, dashboard
 
 **Planning workspace**:
@@ -484,8 +492,8 @@ The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
 **Rich block**:
-A table, chart or diagram in an answer or a document that Courtyard draws itself from what the model wrote, never
-HTML from a model (ADR 0021).
+A table, chart, diagram or floor plan in an answer or a document that Courtyard draws itself from what the model
+wrote, never HTML from a model (ADR 0021).
 _Avoid_: artifact, canvas, widget, embed
 
 **Activity**:

@@ -397,6 +397,8 @@ export const SessionEvent = z.discriminatedUnion("type", [
     type: z.literal("allow-all-started"),
     until: z.iso.datetime(),
     task: z.boolean(),
+    /** The Lead gave it, at the builder's start or from its row (#551), so its Turn off takes it. */
+    byLead: z.literal(true).optional(),
   }),
   /** The owner turned Allow all for this task off (#428) before it ran out. */
   z.object({ ...eventBase, type: z.literal("allow-all-ended") }),

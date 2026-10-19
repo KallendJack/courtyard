@@ -47,12 +47,15 @@ const withParts = (things: readonly ThingSummary[]) => {
 };
 
 /**
- * Home's views from a workspace's Things, in list order: each Thing with a photo and parts, broken
- * down into every part, those that need something first. The wanted list is the Things tab's
- * (#565).
+ * Home's views from a workspace's Things and its saved floor plans, in list order: each Thing with
+ * a photo and parts, broken down into every part, those that need something first; then each
+ * room's plan, newest first. The wanted list is the Things tab's (#565).
  */
-export const homeViews = (things: readonly ThingSummary[]): HomeView[] =>
-  withParts(things).flatMap(({ top, parts }): HomeView[] =>
+export const homeViews = (
+  things: readonly ThingSummary[],
+  plans: readonly HomeView[] = [],
+): HomeView[] => {
+  const pictures = withParts(things).flatMap(({ top, parts }): HomeView[] =>
     top.photo && parts.length > 0
       ? [
           {
@@ -69,6 +72,8 @@ export const homeViews = (things: readonly ThingSummary[]): HomeView[] =>
         ]
       : [],
   );
+  return [...pictures, ...plans];
+};
 
 /** The workspace's photo: its main Thing's, the one with a photo and the most parts. */
 const mainPhoto = (things: readonly ThingSummary[]) =>
@@ -83,8 +88,10 @@ const mainPhoto = (things: readonly ThingSummary[]) =>
 export const homeOf = (
   things: readonly ThingSummary[],
   pick: HomeViewId | undefined,
+  /** Its saved floor plans' views (#257). */
+  plans: readonly HomeView[] = [],
 ): Omit<PlanningHome, "question"> => {
-  const views = homeViews(things);
+  const views = homeViews(things, plans);
   const picked = views.find(({ id }) => id === pick);
   const lastChanged = views.reduce<HomeView | undefined>(
     (last, view) => (last === undefined || view.changedAt > last.changedAt ? view : last),

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { DocumentSlug } from "./documents.ts";
+import { FloorPlan } from "./floor-plan.ts";
 import { Effort, ModelRef, SessionId } from "./session.ts";
 import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 
@@ -6,10 +8,13 @@ import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 // the worker from the workspace's data, and nothing else: no chat. Each view is general, filled from
 // any workspace's Things, never made for one workspace.
 
-/** A view on Home, by what it shows: `picture:<slug>` for that Thing broken down on its photo. */
+/**
+ * A view on Home, by what it shows: `picture:<slug>` for that Thing broken down on its photo, or
+ * `plan:<slug>` for the floor plan saved as that document.
+ */
 export const HomeViewId = z
   .string()
-  .regex(/^picture:[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  .regex(/^(?:picture|plan):[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .brand<"HomeViewId">();
 export type HomeViewId = z.infer<typeof HomeViewId>;
 
@@ -36,10 +41,19 @@ const viewBase = {
 
 /**
  * One of Home's views: the Breakdown view, a Thing's photo with every part pinned and labelled,
- * those that need something first. Plans (#567) and a Thing's drawing (#566) come with their own
- * issues, as further kinds here.
+ * those that need something first; or a room's floor plan, as last drawn in an answer (#257). The
+ * rest of the Plans view (#567) and a Thing's drawing (#566) come with their own issues, as further
+ * kinds here.
  */
 export const HomeView = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("plan"),
+    id: HomeViewId,
+    ...viewBase,
+    /** The document it's saved as. */
+    document: DocumentSlug,
+    plan: FloorPlan,
+  }),
   z.object({
     kind: z.literal("picture"),
     id: HomeViewId,
@@ -71,7 +85,7 @@ export type LastQuestion = z.infer<typeof LastQuestion>;
 
 /** A planning workspace's Home, as `GET /api/workspaces/:id/home` gives it. */
 export const PlanningHome = z.object({
-  /** Its views: each Thing with a photo and parts, in list order. */
+  /** Its views: each Thing with a photo and parts, in list order, then each room's floor plan. */
   views: z.array(HomeView),
   /** The view showing: the owner's pick while it's there, else the one last changed. */
   showing: HomeViewId.nullable(),

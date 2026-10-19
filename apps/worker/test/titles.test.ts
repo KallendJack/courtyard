@@ -33,9 +33,10 @@ afterEach(async () => {
 });
 
 /**
- * A provider whose one-off questions are kept, and answered by `answer` (the provider's own when
- * left out). `answered(n)` resolves once n have been answered and the worker has queued what it
- * does with the answer.
+ * A provider whose titling questions are kept, and answered by `answer` (the provider's own when
+ * left out); other one-off questions, such as moving the status line along (#256), it answers as
+ * the provider does. `answered(n)` resolves once n have been answered and the worker has queued
+ * what it does with the answer.
  */
 const watching = (
   provider: Provider,
@@ -47,6 +48,7 @@ const watching = (
   const watched: Provider = {
     ...provider,
     answerOnce: async (input) => {
+      if (input.purpose !== "title") return provider.answerOnce(input);
       asked.push(input);
       const answered = await answer(input);
       // A moment later, so the worker has had the answer and queued its write.

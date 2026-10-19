@@ -33,6 +33,9 @@ photo: "RockShox · 120 mm", with Open and Ask about it.
   about it opens it (`tucked`, `components/frame/handheld.ts`); with no view it stays under the quiet line. A photo or
   doc from Add goes in it.
 - **History:** the latest session's row has the next steps its last answer suggested, each replying in that session.
+- **The plan view** (#257; Paper, "Tablet · Floor plan in an answer (#257)"): a room's floor plan, drawn by the same
+  rich block as in an answer (`components/rich-blocks/floor-plan.tsx`, told it's `OnHome`), its list of things
+  scrolling inside the block, which keeps its size.
 - **Add** on the frame's rail: a Thing, a photo or a doc.
 - An empty workspace shows only its name, one line and the box.
 

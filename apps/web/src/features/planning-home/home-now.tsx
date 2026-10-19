@@ -2,14 +2,19 @@ import type { HomeViewId, PlanningHome, ThingSummary, WorkspaceId } from "@court
 import { useState } from "react";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { describeProblem } from "../../components/layout/problems.tsx";
+import { FencedBlock, fencedKind, OnHome } from "../../components/rich-blocks/fenced.tsx";
 import { KEPT_HOME, pickView } from "./api.ts";
 import { BreakdownView } from "./breakdown-view.tsx";
+
+/** A floor plan is drawn as in an answer, by its rich block, loaded only when Home has one. */
+const PLAN = fencedKind("plan");
 
 /**
  * A planning workspace's Home now (#565; Paper, "Tablet · Planning Home: the bike, part by part
  * (#565)"): a view of the workspace's main subject in one big panel, and nothing else: no chat. A
- * chip for each view when there are several, the owner's pick sticking. With nothing to show, the
- * panel keeps its size with one quiet line (#398).
+ * Thing broken down part by part, or a room's floor plan (#257). A chip for each view when there
+ * are several, the owner's pick sticking. With nothing to show, the panel keeps its size with one
+ * quiet line (#398).
  */
 export function HomeNow(props: {
   workspaceId: WorkspaceId;
@@ -60,6 +65,17 @@ export function HomeNow(props: {
             A Thing with a photo and parts shows here, part by part.
           </p>
         </div>
+      ) : showing.kind === "plan" ? (
+        PLAN !== undefined && (
+          <OnHome value={true}>
+            <FencedBlock
+              key={showing.id}
+              kind={PLAN}
+              language="plan"
+              source={JSON.stringify(showing.plan)}
+            />
+          </OnHome>
+        )
       ) : (
         <BreakdownView
           key={showing.id}

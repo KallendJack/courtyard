@@ -171,6 +171,8 @@ export type DocumentSaved = { readonly save: DocumentSave; readonly change: Chan
 export const saveNewDocument = async (
   target: PlanningFilesTarget,
   markdown: string,
+  /** What the change is called, when it isn't "Save document: <name>". */
+  title?: string,
 ): Promise<Result<DocumentSaved, DocumentRefusal>> => {
   const named = namedText(markdown);
   if (!named.ok) return named;
@@ -192,7 +194,7 @@ export const saveNewDocument = async (
     () =>
       planningChange(target, {
         kind: "document",
-        title: `Save document: ${name}`,
+        title: title ?? `Save document: ${name}`,
         paths: [documentPath(slug)],
       }),
   );
@@ -255,6 +257,30 @@ const replaceDocument = async (
       }),
   );
   return saved.ok ? ok({ save: saved.value.value, change: saved.value.id }) : saved;
+};
+
+/**
+ * Saves a document Courtyard writes itself (a floor plan, #257) by its name, as one change: a new
+ * one, or in place of the one with its name, whoever wrote that. Nothing is saved, and `undefined`
+ * returned, when that one's text is the same already. `title` names the change.
+ */
+export const putDocument = async (
+  target: PlanningFilesTarget,
+  put: { markdown: string; title: (action: DocumentSave["action"]) => string },
+): Promise<Result<DocumentSaved | undefined, DocumentRefusal>> => {
+  const named = namedText(put.markdown);
+  if (!named.ok) return named;
+  const folder = await planningFolder(target);
+  if (!folder.ok) return folder;
+  const there = await readDocumentText(folder.value, named.value.slug);
+  if (!there.ok) return there;
+  if (there.value === undefined) return saveNewDocument(target, put.markdown, put.title("save"));
+  if (sameFileText(there.value, asFile(put.markdown))) return ok(undefined);
+  return replaceDocument(target, {
+    slug: named.value.slug,
+    markdown: put.markdown,
+    title: () => put.title("update"),
+  });
 };
 
 /** One document for its page: what lists show, and its text below its heading. */
