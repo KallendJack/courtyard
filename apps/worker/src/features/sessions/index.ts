@@ -3906,6 +3906,8 @@ export const createSessions = (options: {
           at: asked.at,
           nextSteps: replies?.type === "suggested-replies" ? replies.replies : [],
           answering: listed.busy,
+          model: asked.model,
+          ...(asked.effort === undefined ? {} : { effort: asked.effort }),
         });
       }
       return ok(null);

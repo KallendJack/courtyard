@@ -1,5 +1,5 @@
 import type { WorkspaceIcon as Icon, WorkspaceId } from "@courtyard/contract";
-import { Archive, Pencil, SquareTerminal } from "lucide-react";
+import { Archive, BookOpen, Pencil, SquareTerminal } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { OptionsMenu } from "../buttons/options-menu.tsx";
 import { useAnchorName } from "../layout/place-under.ts";
@@ -11,7 +11,8 @@ const AllowedCommandsSheet = lazy(() => import("../sheets/allowed-commands-sheet
 
 /**
  * One quiet ⋯ beside a code workspace's name (#333; Paper, "Tablet · Workspace ⋯: rename, icon,
- * archive"), opening a small sheet under it: Rename, Change icon (the Icon sheet), Allowed commands
+ * archive"), opening a small sheet under it: a planning workspace's What Courtyard knows (#481),
+ * Rename, Change icon (the Icon sheet), Allowed commands
  * (what the owner allowed always, #185) and Archive, so the title area keeps only the name while
  * nothing the page could do goes away. `choose` returns an error to show, or nothing once the icon
  * is kept.
@@ -23,6 +24,8 @@ export function WorkspaceMenu(props: {
   choose: (icon: Icon) => Promise<string | undefined>;
   onRename: () => void;
   onArchive: () => void;
+  /** A planning workspace's What Courtyard knows (#481), first in the menu. */
+  onKnows?: () => void;
 }) {
   /** Whether the Icon sheet is open, or has never been, so it isn't loaded until it's wanted. */
   const [picking, setPicking] = useState<boolean>();
@@ -38,6 +41,16 @@ export function WorkspaceMenu(props: {
         square
         anchor={anchor}
         choices={[
+          ...(props.onKnows === undefined
+            ? []
+            : [
+                {
+                  icon: <BookOpen />,
+                  name: "What Courtyard knows",
+                  note: "Facts, plans, ideas and skills",
+                  onPick: props.onKnows,
+                },
+              ]),
           { icon: <Pencil />, name: "Rename", onPick: props.onRename },
           {
             icon: <WorkspaceIcon icon={props.icon} size="md" />,

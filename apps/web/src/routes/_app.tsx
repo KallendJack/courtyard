@@ -81,6 +81,12 @@ function LoggedIn() {
     setCommands(offered);
     return () => setCommands((now) => (now === offered ? undefined : now));
   }, []);
+  /** The page's Add, for the rail (a planning workspace's: a Thing, a photo or a doc, #481). */
+  const [add, setAdd] = useState<() => void>();
+  const offerAdd = useCallback((offered: () => void) => {
+    setAdd(() => offered);
+    return () => setAdd((now) => (now === offered ? undefined : now));
+  }, []);
   const open = useCallback(() => setBoxOpen(true), []);
   const close = useCallback(() => setBoxOpen(false), []);
   /** The frame's Talk, for the box's mic: set by the Talk key or strip once the frame is there. */
@@ -99,12 +105,13 @@ function LoggedIn() {
             offer,
             offerField,
             offerCommands,
+            offerAdd,
             open,
             close,
             talk,
             chooseModel,
           },
-    [dockElement, offer, offerField, offerCommands, open, close, talk, chooseModel],
+    [dockElement, offer, offerField, offerCommands, offerAdd, open, close, talk, chooseModel],
   );
 
   return (
@@ -128,6 +135,7 @@ function LoggedIn() {
               box={box}
               field={field}
               commands={commands}
+              add={add}
               boxOpen={boxOpen}
               setBoxOpen={setBoxOpen}
               talker={talker}

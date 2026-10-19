@@ -5,13 +5,19 @@ import { type ReactNode, useId, useRef } from "react";
  * card, its form's Photo field): `picker` is a hidden file box to put anywhere on the page, and
  * `open` opens it. A pick is passed on, and the box emptied so the same file can be picked again.
  */
-export const useFilePicker = (props: { accept: string; onPick: (file: File) => void }) => {
+export const useFilePicker = (props: {
+  accept: string;
+  /** Straight to the camera on a phone or tablet (Take a photo, #481), rather than the files. */
+  camera?: boolean;
+  onPick: (file: File) => void;
+}) => {
   const box = useRef<HTMLInputElement>(null);
   const picker = (
     <input
       ref={box}
       type="file"
       accept={props.accept}
+      {...(props.camera === true ? { capture: "environment" } : {})}
       hidden
       tabIndex={-1}
       onChange={(event) => {

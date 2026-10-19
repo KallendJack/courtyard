@@ -195,6 +195,8 @@ describe("a planning workspace's Home (#208)", () => {
       at: expect.any(String),
       nextSteps: ["Find a chain under £30", "Which lights?"],
       answering: false,
+      // A reply from Home carries on with the model it was asked with (#481).
+      model: SAVING_MODEL,
     });
   });
 

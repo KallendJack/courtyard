@@ -28,5 +28,6 @@ changed last, so Wanted shows, until you tap the bike, which then stays.
   the context folder.
 - **The photo:** the main Thing's, the one with a photo and the most parts.
 - **The question:** the owner's last message in the session they last used (not one the worker sent for them), with
-  the suggested replies its answer made, and whether it's being answered now.
+  the suggested replies its answer made, whether it's being answered now, and the model and effort it was asked
+  with, which a reply from Home carries on with (#481).
 - Code workspaces have none: 409, as their Things do.

@@ -11,6 +11,7 @@ import {
 } from "@courtyard/contract";
 import type CodeHome from "../features/code-home/code-home.tsx";
 import { loadDocuments } from "../features/documents/api.ts";
+import { KEPT_HOME, loadHome } from "../features/planning-home/api.ts";
 import type PlanningHome from "../features/planning-home/planning-home.tsx";
 import { loadThings } from "../features/things/api.ts";
 import { type FromWorker, fromWorker, NOT_FOUND } from "./worker.ts";
@@ -100,13 +101,19 @@ export const loadWorkspacePage = async (
     detail,
     home: await homeOf(detail),
   }));
-  const [{ detail, home }, sessions, providers, skills, documents, things] = await Promise.all([
+  const [{ detail, home }, sessions, providers, skills, documents, things, planningHome] = await Promise.all([
     detailAndHome,
     fromWorker(`/workspaces/${id}/sessions`, CodeSessionList),
     loadProviders(),
     workspaceId.success ? loadSkills(workspaceId.data) : NOT_FOUND,
     workspaceId.success ? loadDocuments(workspaceId.data) : NOT_FOUND,
     workspaceId.success ? loadThings(workspaceId.data) : NOT_FOUND,
+    // A planning workspace's Home (#481) comes with the page, so its view never jumps in; a code
+    // workspace has none, and its answer is passed over.
+    workspaceId.success ? loadHome(workspaceId.data) : NOT_FOUND,
   ]);
+  if (planningHome.kind === "loaded" && workspaceId.success) {
+    KEPT_HOME.set(workspaceId.data, planningHome.data);
+  }
   return { detail, home, sessions, providers, skills, documents, things, offline: undefined };
 };

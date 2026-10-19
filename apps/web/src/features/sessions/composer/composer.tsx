@@ -104,9 +104,10 @@ export const Composer = memo(function Composer(props: {
   steers?: boolean;
   /**
    * Words to put back in the box, after anything typed, such as a queued message taken back to
-   * edit (#252): once for each `key`, then `onDrafted` says they're in.
+   * edit (#252), and files to attach: once for each `key`, then `onDrafted` says they're in. The
+   * box opens, with the keyboard in it.
    */
-  draft?: { readonly text: string; readonly key: number };
+  draft?: { readonly text: string; readonly files?: readonly File[]; readonly key: number };
   onDrafted?: () => void;
   placeholder: string;
   /** The button's name; "Send" unless the box starts something. */
@@ -316,13 +317,19 @@ export const Composer = memo(function Composer(props: {
   const hasSkills = skills !== undefined;
   const answering = props.stop !== undefined;
   const steers = answering && props.steers === true;
-  // Words taken back to edit go in the box, once each, and it opens to them (#252).
+  // Words taken back to edit go in the box, once each, and it opens to them (#252); so do photos
+  // given it, such as one picked from a planning workspace's photo (#481).
   const { draft, onDrafted } = props;
   const drafted = useRef<number>(undefined);
+  const attachNow = useRef(attach);
+  attachNow.current = attach;
   useEffect(() => {
     if (draft === undefined || drafted.current === draft.key) return;
     drafted.current = draft.key;
-    setText((typed) => (typed.trim() === "" ? draft.text : `${typed.trimEnd()}\n${draft.text}`));
+    if (draft.text !== "") {
+      setText((typed) => (typed.trim() === "" ? draft.text : `${typed.trimEnd()}\n${draft.text}`));
+    }
+    if (draft.files !== undefined) void attachNow.current(draft.files);
     dock?.open();
     box.current?.focus();
     onDrafted?.();
