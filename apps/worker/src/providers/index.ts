@@ -379,7 +379,7 @@ export type AddedMessages = {
  */
 export type OneOffInput = {
   /** What it's for, so the fake can script its answer. */
-  readonly purpose: "tidy" | "title" | "quick-question";
+  readonly purpose: "tidy" | "title" | "quick-question" | "status-line";
   readonly model: ModelId;
   /** One of the levels of effort the model takes; left out for the model's default. */
   readonly effort?: Effort;
@@ -450,6 +450,27 @@ export const offerFor = async (
   const status = await provider.status();
   const model = status.available ? status.models.find((m) => m.id === ref.model) : undefined;
   return model === undefined ? undefined : { provider, model };
+};
+
+/**
+ * The first errand model (#245) on offer with room, on a provider `fits` takes: the provider, the
+ * model and its errand's effort, when the model takes it.
+ */
+export const errandModel = async (
+  providers: readonly Provider[],
+  fits: (provider: Provider) => boolean = () => true,
+) => {
+  for (const provider of providers) {
+    const { errand } = provider;
+    if (errand === undefined || !fits(provider)) continue;
+    const offer = await offerFor(providers, { provider: provider.id, model: errand.model });
+    if (offer === undefined || offer.model.limit !== undefined) continue;
+    const effort = offer.model.efforts.some(({ id }) => id === errand.effort)
+      ? errand.effort
+      : undefined;
+    return { provider, model: offer.model.id, effort };
+  }
+  return undefined;
 };
 
 /** Every model these providers offer right now, in order, each with its provider. */

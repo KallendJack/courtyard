@@ -267,6 +267,14 @@ export {
   UsableSkillSummary,
 } from "./lib/skills.ts";
 export {
+  STATUS_ITEM_MAX_LENGTH,
+  StatusItem,
+  StatusItemText,
+  StatusLine,
+  StatusLineChange,
+  StatusPlace,
+} from "./lib/status-line.ts";
+export {
   RunningTask,
   RunningTasks,
   TASK_OUTPUT_MAX_CHARACTERS,

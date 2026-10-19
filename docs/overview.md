@@ -80,10 +80,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `wanted` ·
-`documents` · `floor-plans` · `planning-files` · `planning-home` · `tidy` · `changes` · `attachments`
+`status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` · `tidy` · `changes` ·
+`attachments`
 
-**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `wanted` · `documents` · `changes` · `tidy`
-· `settings`
+**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `wanted` · `status-line` · `documents` ·
+`changes` · `tidy` · `settings`
 
 You say "swapped the chain today":
 
@@ -97,6 +98,8 @@ the chain  a time            changed                   Undo
 - **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
 - **`wanted`** keeps the wanted list: up to three picks for each Thing wanted, found and priced on the web by a short
   background turn on a cheap model, and the shops you blocked.
+- **`status-line`** keeps the line under a workspace's name, ✓ just done · ● now · ○ next: moved along by a cheap
+  model as a planning session's turn ends, or built from a code workspace's pull requests and issues.
 
 ### 🛠️ Building code
 

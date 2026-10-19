@@ -425,6 +425,27 @@ const firstAnswer = (events: readonly SessionEvent[]) => {
   return undefined;
 };
 
+/** How many of a session's latest exchanges its workspace's status line is moved along from (#256). */
+const STATUS_EXCHANGES = 3;
+
+/** A session's latest messages and their answers, oldest first: each turn that completed. */
+const latestExchanges = (events: readonly SessionEvent[]) => {
+  const exchanges: { message: string; answer: string }[] = [];
+  let message: string | undefined;
+  let answer = "";
+  for (const event of events) {
+    if (event.type === "owner-message") {
+      message = event.text;
+      answer = "";
+    }
+    if (event.type === "text-delta") answer += event.text;
+    if (event.type === "turn-completed" && message !== undefined) {
+      exchanges.push({ message, answer });
+    }
+  }
+  return exchanges.slice(-STATUS_EXCHANGES);
+};
+
 const STORAGE_ERROR: SessionError = {
   kind: "storage",
   message: "A session's files in Courtyard's data folder can't be read or written.",
@@ -689,6 +710,18 @@ export type WantedHooks = {
   readonly shopBlocked: (workspaceId: WorkspaceId, shop: string) => Promise<void>;
 };
 
+/**
+ * What planning sessions' turns tell the status line (#256): a turn completed with nothing more
+ * queued, with the session's latest messages, so the line under the workspace's name moves along.
+ */
+export type StatusLineHooks = {
+  readonly turnEnded: (ended: {
+    workspaceId: WorkspaceId;
+    session: SessionId;
+    conversation: readonly { message: string; answer: string }[];
+  }) => void;
+};
+
 /** A shop a model blocks, as the block shop tool is sent it (#245). */
 const BlockShopInput = z.object({ shop: ShopName, said: z.string().trim().max(200).optional() });
 
@@ -752,6 +785,8 @@ export const createSessions = (options: {
    * model blocked, whose picks it finds again elsewhere.
    */
   wanted?: WantedHooks;
+  /** The status line under a workspace's name (#256), moved along as a planning session's turn ends. */
+  statusLine?: StatusLineHooks;
   /**
    * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
    * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
@@ -1901,6 +1936,18 @@ export const createSessions = (options: {
       const stillFailing = pullRequest?.state === "open" && pullRequest.checks.kind === "failed";
       if (!quiet || ending.type !== "turn-completed" || stillFailing) {
         options.notify?.(turn.id, ended.value, pullRequest);
+      }
+    }
+    // A planning session that's had its say, with nothing more to send, moves its workspace's
+    // status line along (#256).
+    if (ended.ok && !turn.coding && !queuedGoes && ending.type === "turn-completed") {
+      const events = await readEvents(turn.id);
+      if (events.ok) {
+        options.statusLine?.turnEnded({
+          workspaceId: turn.workspaceId,
+          session: turn.id,
+          conversation: latestExchanges(events.value),
+        });
       }
     }
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
