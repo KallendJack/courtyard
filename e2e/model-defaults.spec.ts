@@ -56,7 +56,9 @@ test("the other provider's chip sends the next message to its default", async ({
   await expect(chips).toHaveCount(2);
   await expect(chips.first()).toHaveAttribute("aria-pressed", "true");
 
-  await quickSwitch(sheet).getByRole("button", { name: /^Fake two/ }).click();
+  await quickSwitch(sheet)
+    .getByRole("button", { name: /^Fake two/ })
+    .click();
 
   await expect(sheet).toBeHidden();
   await expect(page.getByRole("button", { name: "Model: Fake two" })).toBeVisible();
@@ -105,7 +107,9 @@ test.describe("Make this the default", () => {
     // A new session's page, loaded afresh: its Fake two chip goes to Low.
     await page.goto("/workspaces/garage-gym");
     const again = await modelSheet(page, { more: false });
-    await quickSwitch(again).getByRole("button", { name: /^Fake two/ }).click();
+    await quickSwitch(again)
+      .getByRole("button", { name: /^Fake two/ })
+      .click();
     expect(await chosen(page)).toEqual({ model: "fake-two/echo", effort: "low" });
   });
 });
