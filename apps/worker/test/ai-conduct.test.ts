@@ -1615,18 +1615,27 @@ describe("web search (#108, ADR 0019)", () => {
     });
   });
 
-  it("isn't offered in a code workspace, or to a provider that doesn't search", async () => {
-    const { provider: without, turns: withoutTurns } = recorder(READS_FILES);
-    await (await sessionOn(without)).say("What does a J-hook cost?");
-    await rm(join(root, "data"), { recursive: true, force: true });
+  it("is offered in a code session on the same terms, its helpers told the same (#517)", async () => {
     await asCode();
-    const { provider: inCode, turns: codeTurns } = recorder({ ...SEARCHES, codes: true });
-    await (await sessionOn(inCode)).say("What does a J-hook cost?");
+    const { provider, turns } = recorder({ ...SEARCHES, codes: true });
+    await (await sessionOn(provider)).say(
+      "Is the latest Vitest out yet? https://vitest.example/blog",
+    );
 
-    for (const framing of [withoutTurns[0]?.framing, codeTurns[0]?.framing]) {
-      expect(framing?.webSearch).toBeNull();
-      expect(framing?.instructions).not.toMatch(/search the web/);
-    }
+    const framing = turns[0]?.framing;
+    expect(framing?.instructions).toContain(await quotedInGuide("You can search the web"));
+    expect(framing?.webSearch).toEqual({ ownerLinks: ["https://vitest.example/blog"] });
+    expect(framing?.codeTools?.helperInstructions).toContain(
+      await quotedInGuide("You can search the web"),
+    );
+  });
+
+  it("isn't offered to a provider that doesn't search", async () => {
+    const { provider, turns } = recorder(READS_FILES);
+    await (await sessionOn(provider)).say("What does a J-hook cost?");
+
+    expect(turns[0]?.framing.webSearch).toBeNull();
+    expect(turns[0]?.framing.instructions).not.toMatch(/search the web/);
   });
 
   it("refuses a page outside the search results and the owner's links with the guide's reason", async () => {

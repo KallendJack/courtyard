@@ -17,8 +17,10 @@ pages, on these terms:
 - **Nothing from context goes into a search or an address** beyond what the question needs. The fetch rule above
   makes that hold for addresses; for searches it's a rule in `docs/ai-conduct.md`, since a search's words are the
   model's.
-- **Planning workspaces only, always on.** The model decides when to search. A code workspace, whose models will work
-  on repositories, gets none until phase 4 decides what its models may reach.
+- **Every workspace, always on.** The model decides when to search. Planning workspaces had it first (#108); code
+  workspaces got it on exactly the same terms with #517, since building means checking libraries, APIs and release
+  notes newer than the model: the Lead, session turns and their helpers, each helper's searches and fetches checked
+  by the same `confineTo` hook as the model's.
 - **Sources** are recorded as an event and listed under the answer, so the owner can check where facts came from.
   They are the pages the turn used: those its answer links to, then those it read. A Claude turn that searched but
   used none lists its search results instead: the ones whose site the answer names ("Screwfix", "Titan Fitness"),
@@ -42,4 +44,9 @@ pages, on these terms:
 - **Codex can't read a page the owner pastes** unless its cached index has it; ai-conduct says "if you can".
 - **Codex gives no list of results,** so its sources are the links its answer gives; Claude's take their titles from
   its search results, and fall back to them when its answer neither links nor reads a page.
-- **The real-Codex check** covers the per-thread search setting (`docs/real-codex-check.md`).
+- **A page could talk a code session into a bad change.** That change stays on its session branch: anything outside
+  the branch, and any command off the workspace's allowlist (a `curl`, say), still waits for an approval (ADRs 0007,
+  0008), and the owner reviews every pull request. A fetch still can't carry the repository anywhere, since the model
+  can't make up an address.
+- **The real-Codex check** covers the per-thread search setting (`docs/real-codex-check.md`), in a planning workspace
+  and a code session.

@@ -80,17 +80,32 @@ describe("a turn that searches the web", () => {
     }
   });
 
-  it("searches nothing in a code workspace", async () => {
+  it("searches in a code session too, on the same terms (#517)", async () => {
     const { repo } = await codeRepo(root);
     await codeWorkspace(root, "garage-gym", repo);
     const request = await asOwner(
       testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
     );
-    const session = await startSession(request, SEARCHING);
+    const session = await startSession(
+      request,
+      [
+        "Is Vitest 5 out?",
+        "search the web for: Vitest latest release",
+        "read page: https://vitest.example/releases",
+        "cite: [Releases | Vitest](https://vitest.example/releases)",
+      ].join("\n"),
+    );
 
     const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
 
-    expect(events.map((event) => event.type)).not.toContain("activity");
-    expect(events.map((event) => event.type)).not.toContain("sources");
+    expect(
+      events.flatMap((event) =>
+        event.type === "activity" || event.type === "sources" ? [event] : [],
+      ),
+    ).toMatchObject([
+      { activity: { kind: "web-searched", query: "Vitest latest release" } },
+      { activity: { kind: "page-read", url: "https://vitest.example/releases" } },
+      { type: "sources", sources: [{ site: "Vitest", url: "https://vitest.example/releases" }] },
+    ]);
   });
 });

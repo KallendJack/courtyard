@@ -62,10 +62,12 @@ a file just outside the workspace folder (in the context folder, next to it) hol
       skills aren't listed either.
 
 - [ ] **Web search is cached, and only where it's offered** (ADR 0019). With the app-server started as Courtyard
-      starts it (`web_search="disabled"`), a turn in a planning workspace, whose thread starts with
-      `web_search: "cached"` in `thread/start`'s `config`, searches for a current-facts question: the chat shows
-      "Searched the web for …" and the answer lists sources. A turn whose thread starts without it (a code
-      workspace) doesn't search.
+      starts it (`web_search="disabled"`), a turn whose thread starts with `web_search: "cached"` in
+      `thread/start`'s `config` searches for a current-facts question: the chat shows "Searched the web for …" and
+      the answer lists sources. Check it in a planning workspace, and in a code session (#517), whose thread
+      starts with the same setting beside the repository's instructions: asked for a library's latest release, it
+      searches on cached mode with no live fetching. A turn whose thread starts without it (a provider
+      that doesn't search) doesn't search.
 
 - [ ] **Helpers through Courtyard's tool** (#470, ADR 0027). In a Codex code session, asked to review the branch
       with the code-review skill, Codex starts its two helpers with `start_helper`: the chat shows a line for each,
