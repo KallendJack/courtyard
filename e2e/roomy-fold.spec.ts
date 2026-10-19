@@ -93,6 +93,7 @@ test.describe("on the unfolded Fold", () => {
       "Rename",
       "Change icon",
       "Allowed commandsWhat sessions run without asking",
+      "Blocked shopsShops the wanted list skips",
       "ArchiveHidden, never deleted",
     ]);
   });
