@@ -15,6 +15,7 @@ import {
   type CodeSessionList,
   type ContinueRequest,
   type Doing,
+  defaultOf,
   type Effort,
   endsTurn,
   type FailureReason,
@@ -2214,16 +2215,23 @@ export const createSessions = (options: {
   const statuses = () => Promise.all(options.providers.map((provider) => provider.status()));
 
   /**
-   * A first message with its model: the one it names, or else the first model on offer that isn't
-   * at its usage limit (the first of all when every one is).
+   * A first message with its model: the one it names, or else the first provider's default (#247)
+   * that isn't at its usage limit, at its effort (the first of all when every one is).
    */
   const withModel = async (message: FirstMessage): Promise<Result<NewMessage, SessionError>> => {
     const { model } = message;
     if (model !== undefined) return ok({ ...message, model });
-    const offered = await modelsOnOffer(options.providers);
-    const chosen = firstWithRoom(offered) ?? offered[0];
+    const defaults = (await statuses()).flatMap((status) => {
+      const chosen = status.available ? defaultOf(status) : undefined;
+      return chosen === undefined ? [] : [{ provider: status.id, ...chosen }];
+    });
+    const chosen = defaults.find((each) => each.model.limit === undefined) ?? defaults[0];
     return chosen
-      ? ok({ text: message.text, model: { provider: chosen.provider.id, model: chosen.model.id } })
+      ? ok({
+          text: message.text,
+          model: { provider: chosen.provider, model: chosen.model.id },
+          ...(chosen.effort === undefined ? {} : { effort: chosen.effort }),
+        })
       : err({ kind: "model-unavailable" });
   };
 
@@ -3376,8 +3384,8 @@ export const createSessions = (options: {
 
     /**
      * Carry on (spec, Overflow): after the session's last turn hit a usage limit, records the move
-     * to another provider's default model and sends the turn's message to it again, at its default
-     * effort. Only ever because the owner asked.
+     * to another provider's default and sends the turn's message to it again, at the default's
+     * effort (#247). Only ever because the owner asked.
      */
     carryOn: async (
       rawId: string,
@@ -3411,6 +3419,7 @@ export const createSessions = (options: {
         message: {
           text: message.text,
           model: overflow.model,
+          ...(overflow.effort === undefined ? {} : { effort: overflow.effort }),
           ...(message.skill === undefined ? {} : { skill: message.skill }),
         },
         carryingOn: { turn: request.turn },

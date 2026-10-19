@@ -1,7 +1,9 @@
 import {
   ContextBackup,
   type GetToKnowRequest,
+  ModelDefault,
   OwnerContextDetail,
+  type ProviderId,
   ProviderList,
   type SessionChange,
   type SessionId,
@@ -21,6 +23,15 @@ export const loadSkills = (workspaceId: WorkspaceId): Promise<FromWorker<SkillLi
 
 /** The providers and their models, for the model picker. */
 export const loadProviders = () => fromWorker("/providers", ProviderList);
+
+/** Make this the default (#247): a provider's default model and effort from now on. */
+export const saveModelDefault = (provider: ProviderId, chosen: ModelDefault) =>
+  sendJson({
+    path: `/providers/${encodeURIComponent(provider)}/default`,
+    method: "PUT",
+    body: chosen,
+    schema: ModelDefault,
+  });
 
 /** Whether the context folder's backup has every change. */
 export const loadBackup = () => fromWorker("/backup", ContextBackup);

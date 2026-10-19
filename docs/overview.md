@@ -57,7 +57,8 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 
 ### 🤖 Talking to the models
 
-**Worker features:** `sessions` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` · `waiting`
+**Worker features:** `sessions` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` ·
+`model-defaults` · `waiting`
 
 **Web features:** `sessions` · `step-by-step` · `limits` · `waiting`
 
@@ -73,6 +74,8 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 - **`waiting`** decides, once, what waits on you, and lists it from every workspace for Home's Needs you, the
   Courtyard mark's gold count and a session's Next pill. Every screen reads it.
 - **`limits`** keeps each plan's usage at a glance: its meters in the Model sheet, and a gold warning from 80%.
+- **`model-defaults`** keeps one default model and effort per provider (Claude on Opus 5.5 · High, Codex on
+  Astra · High): the Model sheet's chips, and where a new session, a switch and Carry on go.
 
 ### 🗂️ What Courtyard knows
 

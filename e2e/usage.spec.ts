@@ -115,6 +115,8 @@ test("near a limit, a code workspace's Home has a gold usage line above Main, wh
 
   await line.getByRole("button").click();
 
+  // The quick switch first; the plans' meters are under More models (#247).
   const sheet = page.getByRole("dialog", { name: "Model" });
+  await sheet.getByRole("button", { name: /^More models/ }).click();
   await expect(sheet.getByRole("region", { name: "Fake's plan limits" })).toContainText("82%");
 });

@@ -79,6 +79,8 @@ const CAPABILITIES: Capabilities = {
   steers: true,
 };
 const LABEL = "Claude";
+/** Claude's own default (Opus 5.5 today) at High, as the owner chose it (#247). */
+const STARTING_DEFAULT = { model: ModelId.parse("default"), effort: Effort.parse("high") };
 
 /**
  * The two things the adapter needs from Claude Code, so tests can stand in for it. Answers come
@@ -1511,6 +1513,7 @@ export const createClaudeProvider = (
   return {
     id,
     capabilities: CAPABILITIES,
+    startingDefault: STARTING_DEFAULT,
     status: keptStatus.status,
     readUsage,
 

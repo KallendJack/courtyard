@@ -3,11 +3,19 @@ import { expect, type Page } from "@playwright/test";
 // The Handheld frame's ways in, on every screen since #197: the model and effort a message goes
 // with are on the rail's Model sheet, not in the message box.
 
-/** Opens the frame's Model sheet and gives it. */
-export const modelSheet = async (page: Page) => {
+/**
+ * Opens the frame's Model sheet and gives it, with every model and effort open under More models
+ * (#247) unless `more` is false, which leaves it as it was: the quick switch, and More models shut
+ * the first time.
+ */
+export const modelSheet = async (page: Page, options: { more?: boolean } = {}) => {
   await page.getByRole("button", { name: /^Model: / }).click();
   const sheet = page.getByRole("dialog", { name: "Model" });
   await expect(sheet).toBeVisible();
+  const more = sheet.getByRole("button", { name: /^More models/ });
+  if (options.more !== false && (await more.getAttribute("aria-expanded")) === "false") {
+    await more.click();
+  }
   return sheet;
 };
 
