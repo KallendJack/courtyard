@@ -109,7 +109,7 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
-  showing, and the last question with its next steps.
+  showing, and its latest session's next steps, which History shows.
 - [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
@@ -207,7 +207,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
-    and Home now: the last question, the view showing (a photo with its parts pinned), its next steps.
+    and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled), no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one

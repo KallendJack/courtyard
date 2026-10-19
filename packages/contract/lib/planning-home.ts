@@ -53,7 +53,8 @@ export type HomeView = z.infer<typeof HomeView>;
 
 /**
  * The owner's last message in the workspace, in the session they last used, and the replies its
- * answer suggested as next steps (none while it's being answered).
+ * answer suggested as next steps (none while it's being answered), which History shows under that
+ * session's row (#565).
  */
 export const LastQuestion = z.object({
   session: SessionId,
@@ -62,7 +63,7 @@ export const LastQuestion = z.object({
   nextSteps: z.array(z.string()),
   /** Whether its answer is being written now. */
   answering: z.boolean(),
-  /** The model and effort it was asked with, which a reply from Home carries on with (#481). */
+  /** The model and effort it was asked with, which a next step tapped carries on with (#481). */
   model: ModelRef,
   effort: Effort.optional(),
 });
@@ -70,7 +71,7 @@ export type LastQuestion = z.infer<typeof LastQuestion>;
 
 /** A planning workspace's Home, as `GET /api/workspaces/:id/home` gives it. */
 export const PlanningHome = z.object({
-  /** Its views, each Thing's photo in list order, then the wanted list. */
+  /** Its views: each Thing with a photo and parts, in list order. */
   views: z.array(HomeView),
   /** The view showing: the owner's pick while it's there, else the one last changed. */
   showing: HomeViewId.nullable(),

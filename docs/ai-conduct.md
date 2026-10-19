@@ -1173,9 +1173,10 @@ tool is offered beside the document tool.
 > each part where it is on that photo, by looking at it, and leave out a part you can't see there. The owner sees
 > each Thing you save as a note under your answer, so leave saves unmentioned.
 
-**What goes on a page (#208, #220).** Whatever a model puts where the workspace's page shows it (today a Thing's
-needs and its pin, which its Home's views show) is the next action and what it needs, never background: brands,
-sizes, specs and the owner's level and goals stay in the context file or on the Thing's card, one tap away.
+**What goes on a page (#208, #220, #565).** Whatever a model puts where the workspace's page shows it (today a
+Thing's needs and its pin, which Home's Breakdown view shows) is the next action and what it needs, never background:
+brands, sizes, specs and the owner's level and goals stay in the context file or on the Thing's card, one tap away
+(on Home, a part's card under the view).
 
 **The save_thing tool,** as a model reads it, and its inputs:
 

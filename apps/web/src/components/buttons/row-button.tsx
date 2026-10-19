@@ -23,8 +23,8 @@ type RowButtonProps = Omit<
 
 /**
  * A whole row of a list as one button. Either it opens or folds what's under it (#532; Paper,
- * "Tablet · Roadmap"): a milestone, an issue, "6 more open · 113 done". Or it picks the row (#481;
- * Paper, "Tablet · Home: the bike, parts pinned"): what needs doing beside a photo. Its content is
+ * "Tablet · Roadmap"): a milestone, an issue, "6 more open · 113 done". Or it picks the row (#565;
+ * Paper, "Cover · Planning Home: the bike, part by part"): a part under its Thing's photo. Its content is
  * laid out by the row it's in; it brings the tap, the hover and the focus ring. Safe on the first
  * load (ADR 0012).
  */
