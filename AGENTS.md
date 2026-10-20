@@ -80,7 +80,7 @@ Real temporary folders and real git, not mocks of them. Write the failing test f
 
 Before pushing, run `pnpm check`, `pnpm typecheck` and the unit test files and e2e specs for what you changed, naming
 each (`pnpm -C apps/worker exec vitest run test/<file>.test.ts`, `pnpm exec playwright test e2e/<spec>.spec.ts`).
-CI runs the full unit and e2e suites on every PR, across four shards, so don't run them locally: they take the
+CI runs the full unit and e2e suites on every PR, across five shards, so don't run them locally: they take the
 machine's one build turn for many minutes, and a Lead's builder is refused them (#589). `pnpm verify` stays for a
 full local run when the owner asks for one.
 
