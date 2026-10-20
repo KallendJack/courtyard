@@ -1,10 +1,9 @@
-import {
-  type ApprovalAsk,
-  BUILDER_STALLS_AFTER_MINUTES,
-  type CodeSessionList,
-  type MattSetup,
-  type OpenPullRequest,
-  type WorkspaceId,
+import type {
+  ApprovalAsk,
+  CodeSessionList,
+  MattSetup,
+  OpenPullRequest,
+  WorkspaceId,
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -51,7 +50,7 @@ const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
- * Needs you (#301; Paper, "Code workspace Home"): every builder stalled (#474), approval, turn cut
+ * Needs you (#301; Paper, "Code workspace Home"): every builder stuck (#590), approval, turn cut
  * off by a restart (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
  * Merge in order, #423), conflict, and Matt's setup offer,
  * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
@@ -118,7 +117,7 @@ export function NeedsYou(props: {
 
 const keyOf = (need: Need) => {
   switch (need.kind) {
-    case "stalled":
+    case "stuck":
     case "approval":
     case "cut-off":
     case "reply":
@@ -159,14 +158,14 @@ function NeedRow(props: {
     </Link>
   );
   switch (need.kind) {
-    case "stalled":
-      // Open only opens the kept session: the owner reads what happened and taps Continue there
-      // if it should go on (#474, #186).
+    case "stuck":
+      // Open only opens the kept session: the owner reads what happened and says there how it
+      // should go on (#590).
       return (
         <BlockRow
           label={builderTitle(need.session)}
           title={sessionLink(need.session, builderTitle(need.session))}
-          sub={`Stalled · silent ${BUILDER_STALLS_AFTER_MINUTES} min · its slot is free`}
+          sub={need.session.stuck === undefined ? "Stuck" : `Stuck · ${need.session.stuck}`}
           tone="needs"
           action={<OpenSession workspaceId={workspaceId} session={need.session} />}
         />

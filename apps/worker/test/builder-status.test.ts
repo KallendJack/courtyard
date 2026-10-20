@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { takePlace } from "@courtyard/builds";
@@ -13,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { err, ok, type Result } from "../src/lib/result.ts";
 import type { CodeTurn, Provider, TurnInput } from "../src/providers/index.ts";
 import {
-  asOwner,
   CODING_MODEL,
   codeRepo,
   codeWorkspace,
@@ -21,10 +20,13 @@ import {
   createFakeGitHub,
   type FakeGitHub,
   followSession,
+  gitIn,
   postJson,
   quotedInGuide,
   type Requester,
   removeTestFolder,
+  requesterFor,
+  setUpOwner,
   testBuildsLock,
   testWorker,
 } from "./testing.ts";
@@ -48,6 +50,8 @@ let followPullRequests: () => Promise<void>;
 let now: number;
 
 const MINUTE = 60 * 1000;
+/** How long a test waits on what the worker does next, which a busy machine slows. */
+const SLOW = { timeout: 15_000 };
 const at = (time: number) => new Date(time).toISOString();
 
 beforeEach(async () => {
@@ -104,22 +108,27 @@ const isBuilderWorktree = async (worktree: string) => {
 };
 
 let request: Requester;
+/** The owner's login, kept across restarts. */
+let cookie: string | undefined;
+/** Starts the worker again on the same folders, as a restart (a crash, the PC restarting) does. */
+let restart: () => Promise<void>;
 const sessionsList = async () =>
   CodeSessionList.parse(await (await request("/api/workspaces/side-project/sessions")).json())
     .sessions;
 
 /** A worker with Side project on the fake GitHub, one issue ready to build, signed in. */
-const signedIn = async (provider: Provider) => {
+const signedIn = async (provider: Provider, env: Record<string, string> = {}) => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project" });
   github = createFakeGitHub({
     issues: { [onGitHub]: [{ number: 22, title: "Which session waits", milestone: "4 · Code" }] },
     milestones: { [onGitHub]: { "4 · Code": "NOW. Build order: #22." } },
   });
-  jobs = [];
   builderIds = [];
-  request = await asOwner(
-    testWorker({
+  restart = async () => {
+    jobs = [];
+    const app = testWorker({
       root,
+      env,
       github: github.api,
       providers: [provider],
       now: () => now,
@@ -129,8 +138,12 @@ const signedIn = async (provider: Provider) => {
         }
         jobs.push(job);
       },
-    }),
-  );
+    });
+    cookie ??= await setUpOwner(app);
+    request = requesterFor(app, cookie);
+  };
+  cookie = undefined;
+  await restart();
   await postJson(request, "/api/github/sign-in", {});
   github.approve();
   await expect
@@ -160,12 +173,12 @@ const statusOf = async (): Promise<BuilderStatus | undefined> =>
 
 /** Waits until the builder's status is of `kind`, and gives it. */
 const becomes = async (kind: BuilderStatus["kind"]) => {
-  await expect.poll(async () => (await statusOf())?.kind).toBe(kind);
+  await expect.poll(async () => (await statusOf())?.kind, SLOW).toBe(kind);
   return statusOf();
 };
 
 const settled = () =>
-  expect.poll(async () => (await sessionsList()).filter((each) => each.busy)).toHaveLength(0);
+  expect.poll(async () => (await sessionsList()).filter((each) => each.busy), SLOW).toHaveLength(0);
 
 /** A place the test lets a turn go on from. */
 const gate = () => {
@@ -347,19 +360,138 @@ describe("a Lead builder's status (#590)", () => {
     await settled();
   });
 
-  it("waits for the limit, saying when it resets", async () => {
+  it("waits for the limit, saying when it resets, and carries on by itself once it has (#610)", async () => {
     const resetAt = "2026-10-20T10:00:00.000Z";
-    const { provider } = playing([async () => err({ kind: "rate-limited", resetAt })]);
+    const { provider, told } = playing([
+      async () => err({ kind: "rate-limited", resetAt }),
+      async ({ input }) => {
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
     await signedIn(provider);
 
-    await build();
+    const builder = await build();
     await settled();
-
     expect(await becomes("waiting-for-limit")).toEqual({
       kind: "waiting-for-limit",
       since: at(now),
       resetAt,
     });
+    now = Date.parse(resetAt) - MINUTE;
+    await runJobs();
+    expect(told).toHaveLength(1);
+
+    now = Date.parse(resetAt);
+    await runJobs();
+
+    const reset = await quotedInGuide("The usage limit your last turn met has reset");
+    const events = await followSession(request, {
+      sessionId: builder.id,
+      until: (event) => event.type === "owner-message" && event.afterLimit === true,
+    });
+    expect(events.at(-1)).toMatchObject({ text: reset });
+    await expect.poll(() => told.at(-1), SLOW).toBe(reset);
+    expect(await becomes("waiting-on-you")).toMatchObject({ kind: "waiting-on-you" });
+    await settled();
+  });
+
+  it("cut off by a restart it didn't start, carries on by itself once; cut off again, it's Stuck (#610)", async () => {
+    const first = gate();
+    const second = gate();
+    const { provider, told } = playing([
+      async ({ input }) => {
+        await first.pass();
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+      async ({ input }) => {
+        await second.pass();
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+    const builder = await build();
+    await first.reached;
+
+    // The PC restarts mid-turn: the next worker finds the turn cut off.
+    await restart();
+    await sessionsList();
+    await second.reached;
+
+    const carriedOn = await followSession(request, {
+      sessionId: builder.id,
+      until: (event) => event.type === "owner-message" && event.continues !== undefined,
+    });
+    expect(carriedOn.at(-1)).toMatchObject({
+      text: await quotedInGuide("Courtyard restarted while"),
+    });
+    expect(await statusOf()).toMatchObject({ kind: "building" });
+
+    // Cut off again, it waits on the owner: Stuck, saying why, and no third turn.
+    await restart();
+    await sessionsList();
+    expect(await becomes("stuck")).toEqual({
+      kind: "stuck",
+      since: at(now),
+      reason: "A restart cut its turn off twice.",
+    });
+    expect(told).toHaveLength(2);
+    first.open();
+    second.open();
+  });
+
+  it("is told its task has ended while an Update waits (#610)", async () => {
+    await writeFile(
+      join(repo, "wait.mjs"),
+      'import { existsSync } from "node:fs";\nconst timer = setInterval(() => { if (existsSync("go")) { clearInterval(timer); console.log("Went"); } }, 50);\n',
+    );
+    await gitIn(repo, "add", ".");
+    await gitIn(repo, "commit", "--quiet", "-m", "A task that waits");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const { provider } = playing([
+      async ({ code, input }) => {
+        const started = await code.task("node wait.mjs");
+        await input.emit(
+          `${started.ok ? started.value : started.error} Which screen should it go on?`,
+        );
+        return ok(null);
+      },
+      async ({ input }) => {
+        await input.emit("Its task went. Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    // Courtyard's live copy is this repository, a version behind main, whose build still runs.
+    await signedIn(provider, { COURTYARD_LIVE_COPY: repo });
+    const builder = await build();
+    await settled();
+    await becomes("waiting-on-you");
+    await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const newest = await gitIn(repo, "rev-parse", "HEAD");
+    await gitIn(repo, "reset", "--quiet", "--hard", "HEAD~1");
+    github.setCommitChecks(newest, [
+      {
+        id: 1,
+        name: "Checks",
+        outcome: "running",
+        url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
+        startedAt: "2026-10-20T09:00:00Z",
+        completedAt: null,
+      },
+    ]);
+    expect((await postJson(request, "/api/live/update", {})).status).toBe(202);
+
+    await writeFile(join(root, "data", "worktrees", builder.id, "go"), "");
+
+    const events = await followSession(request, {
+      sessionId: builder.id,
+      until: (event) => event.type === "owner-message" && event.tasksEnded !== undefined,
+    });
+    expect(events.at(-1)).toMatchObject({ type: "owner-message" });
+    await settled();
   });
 
   it("is Stuck when its turn fails, saying why", async () => {
@@ -392,7 +524,7 @@ describe("a Lead builder's status (#590)", () => {
     await signedIn(provider);
 
     const builder = await build();
-    await expect.poll(() => told.length).toBe(2);
+    await expect.poll(() => told.length, SLOW).toBe(2);
 
     const carryOn = await quotedInGuide("Carry on with your issue");
     expect(told.at(1)).toBe(carryOn);

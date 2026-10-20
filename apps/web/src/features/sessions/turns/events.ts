@@ -365,7 +365,8 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               event.checksFailed !== undefined ||
               event.merged !== undefined ||
               event.tasksEnded !== undefined ||
-              event.carriesOn === true,
+              event.carriesOn === true ||
+              event.afterLimit === true,
             leadNotes: [],
             startedAt: event.at,
             doing: { kind: "thinking" },

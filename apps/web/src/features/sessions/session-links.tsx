@@ -174,8 +174,8 @@ function WaitingMark(props: { on: Exclude<Listed["waiting"], "nothing"> }) {
           ? "New reply"
           : props.on === "cut-off"
             ? "Cut off"
-            : props.on === "stalled"
-              ? "Stalled"
+            : props.on === "stuck"
+              ? "Stuck"
               : "Needs you"
       }
       className={classes(

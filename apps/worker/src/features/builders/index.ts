@@ -1,11 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  BuilderStatus,
-  type FailureReason,
-  PullRequest,
-  type SessionId,
-} from "@courtyard/contract";
+import { BuilderStatus, type FailureReason, PullRequest, SessionId } from "@courtyard/contract";
 import { z } from "zod";
 import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
 import { createOneAtATime } from "../../lib/one-at-a-time.ts";
@@ -17,6 +12,9 @@ import { createOneAtATime } from "../../lib/one-at-a-time.ts";
  * heard of), and each moves the status on, kept in the data folder beside `leads.json` with when it
  * began. Nothing re-reads an event log to work it out.
  */
+
+/** How long a builder at the usage limit waits when the limit didn't say when it resets. */
+const LIMIT_UNSAID_MS = 60 * 60 * 1000;
 
 /** Where every builder's status is kept, in the data folder. */
 const FILE = "builders.json";
@@ -33,6 +31,11 @@ const Kept = z.object({
    * question; ending so again, it's stuck.
    */
   carriedOn: z.boolean(),
+  /**
+   * A restart cut its last turn off (#610), so it carries on by itself; cut off again before a
+   * turn ends otherwise, it's stuck.
+   */
+  cutOff: z.boolean().default(false),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -64,6 +67,7 @@ export type Happening =
 /** Why a builder is stuck, in plain words. */
 const STUCK = {
   twice: "It ended two turns in a row with no pull request and no question.",
+  cutOffTwice: "A restart cut its turn off twice.",
   stopped: "Its turn was stopped.",
   closed: "Its pull request was closed without merging.",
   failed: (message: string) => `Its turn failed: ${message}`,
@@ -98,7 +102,7 @@ const fromFailure = (reason: FailureReason): Unstamped => {
         ...(reason.resetAt === undefined ? {} : { resetAt: reason.resetAt }),
       };
     case "interrupted":
-      // Cut off by a restart, it waits for the owner's Continue (#186).
+      // Cut off by a restart: it carries on by itself (`turn-ended`, #610).
       return { kind: "waiting-on-you" };
     case "provider-unavailable":
     case "unknown":
@@ -137,6 +141,7 @@ const next = (
     turning: was?.turning ?? false,
     ...(was?.pullRequest === undefined ? {} : { pullRequest: was.pullRequest }),
     carriedOn: was?.carriedOn ?? false,
+    cutOff: was?.cutOff ?? false,
   };
   const status = was?.status;
   const stays = { kept: { ...base, status }, carryOn: false };
@@ -173,8 +178,14 @@ const next = (
       return to(fromPullRequest(pullRequest), { pullRequest });
     }
     case "turn-ended": {
-      const ended = { turning: false };
       const { ending } = happening;
+      if (ending.kind === "failed" && ending.reason.kind === "interrupted") {
+        // Cut off by a restart, it carries on by itself once (#610); cut off again, it's stuck.
+        return base.cutOff
+          ? to({ kind: "stuck", reason: STUCK.cutOffTwice }, { turning: false })
+          : to({ kind: "waiting-on-you" }, { turning: false, cutOff: true });
+      }
+      const ended = { turning: false, cutOff: false };
       if (ending.kind === "stopped") return to({ kind: "stuck", reason: STUCK.stopped }, ended);
       if (ending.kind === "failed") return to(fromFailure(ending.reason), ended);
       if (base.pullRequest !== undefined) {
@@ -235,6 +246,35 @@ export const createBuilders = (options: { dataDir: string; now: () => number }) 
 
     /** A builder's status, once anything has happened in it. */
     statusOf: (session: SessionId) => oneAtATime(async () => (await read())[session]?.status),
+
+    /**
+     * Whether a builder a restart has just cut off carries on by itself (#610): the first time
+     * since a turn of its ended otherwise.
+     */
+    carriesOnAfterRestart: (session: SessionId) =>
+      oneAtATime(async () => {
+        const kept = (await read())[session];
+        return kept?.cutOff === true && kept.status.kind === "waiting-on-you";
+      }),
+
+    /**
+     * The builders waiting for the usage limit whose reset has come (#610): at `resetAt`, or an
+     * hour after the limit when it wasn't said.
+     */
+    dueAtReset: () =>
+      oneAtATime(async () => {
+        const now = options.now();
+        return Object.entries(await read()).flatMap(([session, kept]) => {
+          const { status } = kept;
+          if (status.kind !== "waiting-for-limit") return [];
+          const resets =
+            status.resetAt === undefined
+              ? Date.parse(status.since) + LIMIT_UNSAID_MS
+              : Date.parse(status.resetAt);
+          const id = SessionId.safeParse(session);
+          return now >= resets && id.success ? [id.data] : [];
+        });
+      }),
   };
 };
 

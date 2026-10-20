@@ -71,7 +71,7 @@ export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
 /**
  * What a session waits on the owner for: the approval its turn waits on; else its last turn, cut
  * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else a
- * Lead's builder its Lead found stalled (#474), until anything new happens in it; else its
+ * Lead's builder that's stuck (#590), until it carries on; else its
  * latest answer, while the owner hasn't seen it (`seen`, the event number its page last showed up
  * to, on any device), it's under a day old, no turn runs or waits for a slot, and it has no pull
  * request (whose own rows say what waits); else nothing.
@@ -82,8 +82,8 @@ export const sessionWaiting = (session: {
   pullRequest: PullRequest | undefined;
   answer: Answer | undefined;
   cutOff: boolean;
-  /** Its Lead found it stalled, and nothing has happened in it since (#474). */
-  stalled: boolean;
+  /** It's a Lead's builder that's stuck (#590). */
+  stuck: boolean;
   seen: number;
   clock: number;
 }): SessionWaiting => {
@@ -92,7 +92,7 @@ export const sessionWaiting = (session: {
   const recent = answer !== undefined && session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
   const free = session.now.kind === "your-turn" && !session.queued;
   if (free && recent && session.cutOff) return "cut-off";
-  if (session.stalled) return "stalled";
+  if (session.stuck) return "stuck";
   const newReply =
     free &&
     recent &&
@@ -103,11 +103,11 @@ export const sessionWaiting = (session: {
 };
 
 /**
- * Needs you's order (#301): stalled builders (#474), approvals, turns cut off, failing checks,
+ * Needs you's order (#301): stuck builders (#590), approvals, turns cut off, failing checks,
  * replies, merges, conflicts.
  */
 const NEEDS_ORDER: readonly NeedYou["kind"][] = [
-  "stalled",
+  "stuck",
   "approval",
   "cut-off",
   "failed",
@@ -135,7 +135,16 @@ export const needsYouOf = (
       };
       const since = session.now.kind === "needs-you" ? session.now.since : session.updatedAt;
       const own: NeedYou[] =
-        session.waiting === "nothing" ? [] : [{ kind: session.waiting, ...where, since }];
+        session.waiting === "nothing"
+          ? []
+          : [
+              {
+                kind: session.waiting,
+                ...where,
+                since,
+                ...(session.stuck === undefined ? {} : { reason: session.stuck }),
+              },
+            ];
       const { pullRequest } = session;
       const pull = pullRequest === undefined ? "nothing" : pullRequestWaiting(pullRequest, session);
       if (pullRequest === undefined || pull === "nothing") return own;

@@ -931,7 +931,10 @@ export const createFakeProvider = (
       }
       const saw = /please look/i.test(last) || last === "" ? seen(framing.attachments) : "";
       // A message of only attachments has nothing to echo (#164).
-      const said = last === "" ? "" : `You said: ${last}`;
+      // A Lead's builder's first message (#590) is answered by asking the owner something, as a
+      // builder does that needs them, so it waits on them rather than going Stuck.
+      const asks = /^Build issue #/.test(last) ? " Which part should I start with?" : "";
+      const said = last === "" ? "" : `You said: ${last}${asks}`;
       for (const word of `${coded}${drew}${looked}${saw}${said}`.trimEnd().split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
