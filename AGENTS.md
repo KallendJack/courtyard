@@ -51,6 +51,11 @@ how the parts connect.
   workspace can use. The test, in designs and in code: before adding a block, name three unrelated workspaces that
   would use it. If you can't, it isn't a new block; it's that workspace's data in an existing one (a tyre pressure is
   a value on a pin, a lift's weight week by week is a chart).
+- **A planning feature earns its place** (ADR 0032). Before it's grilled it must take friction out of a job the owner
+  really does (doing a task, choosing what to buy, carrying a project, keeping a guide), live where that job happens
+  (a part, the space's plan, a project, the answer; never a new block on Home), and replace something or be too small
+  to need to. Planning and code workspaces share the session engine, the frame and Talk, and differ on purpose in what
+  models are told, what they keep and what Home shows.
 - **Familiar folders, the same in both apps** (#453). The worker's `src` has `features/`, `providers/`, `prompts/`,
   `auth/`, `integrations/`, `config/` and `lib/`; the web app's has `features/`, `components/`, `hooks/`, `api/`,
   `routes/` and `lib/`. A feature has one name in both apps (`features/things/`). A new feature is listed in
@@ -106,6 +111,12 @@ when a change needs a board): `docs/agents/process.md`.
 - **One `ready-for-agent` issue per PR**, taken in milestone order (`docs/agents/roadmap.md`). Work without an issue
   gets one first, in a milestone (`Later` when unsure) with a category and a triage label; docs or CI only needs none.
   Bundle issues only when the owner says so, and keep an open PR to the work it was opened for.
+- **One feature at a time in an area.** The next feature in an area (a workspace kind, the Lead) starts once the owner
+  has used the last one there, or said to skip it; a PR the owner will see says how to try it.
+- **How sessions, builders and the Lead run is decided in an ADR first** (ADR 0031): no rule is added to that machinery
+  for one incident without writing down how it fits the rest.
+- **Removal is the default.** A feature unused after its trial, or one models keep misusing, is removed unless the
+  owner keeps it; every model mistake found becomes a context-eval scenario (`docs/agents/process.md`, Reviewing use).
 - **Claim before building.** With no claim in the issue's comments or open PRs, comment
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
 - **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
