@@ -97,6 +97,9 @@ type Choice = {
   readonly effort: Effort | undefined;
 };
 
+/** A session's note's lines (#601), as its `note.json` keeps them, for printing. */
+const SessionNoteLines = z.object({ done: z.string(), decided: z.string(), next: z.string() });
+
 /** The longest one turn may take before the scenario counts as not run. */
 const TURN_TIMEOUT_MINUTES = 5;
 
@@ -784,6 +787,12 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
     let sessionId: SessionId | undefined;
     let after = 0;
     for (const [index, turn] of scenario.turns.entries()) {
+      // A new session in the workspace (#601): the one before it leaves its note as this starts.
+      const before = turn.newSession === true ? sessionId : undefined;
+      if (turn.newSession === true) {
+        sessionId = undefined;
+        after = 0;
+      }
       sessionId = await send(request, {
         workspaceId: workspace.id,
         sessionId,
@@ -827,6 +836,12 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         .map((event) => (event.type === "text-delta" ? event.text : ""))
         .join("");
       const prefix = scenario.turns.length === 1 ? "" : `turn ${index + 1}: `;
+      if (before !== undefined) {
+        const note = await readFile(join(root, "data", "sessions", before, "note.json"), "utf8")
+          .then((text) => JSON.stringify(SessionNoteLines.parse(JSON.parse(text))))
+          .catch(() => "none");
+        notes.push(`${prefix}the session before left the note ${note}`);
+      }
       const loaded = events.flatMap((event) =>
         event.type === "activity" && event.activity.kind === "skill-loaded"
           ? [event.activity.name]
