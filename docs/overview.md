@@ -98,8 +98,8 @@ the chain  a time            changed                   Undo
 - **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
 - **`wanted`** keeps the wanted list: up to three picks for each Thing wanted, found and priced on the web by a short
   background turn on a cheap model, and the shops you blocked.
-- **`status-line`** keeps the line under a workspace's name, ✓ just done · ● now · ○ next: moved along by a cheap
-  model as a planning session's turn ends, or built from a code workspace's pull requests and issues.
+- **`status-line`** builds the line under a code workspace's name, ✓ just done · ● now · ○ next, from its pull
+  requests and issues.
 
 ### 🛠️ Building code
 

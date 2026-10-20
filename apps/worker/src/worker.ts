@@ -378,14 +378,10 @@ export const createWorker = (options: {
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github, connections });
   // The wanted list (#245): its picks show in a turn's Things, and a shop blocked finds them again.
   const wanted = createWanted({ contextDir, dataDir, providers, now, background });
-  // The status line under a workspace's name (#256).
+  // The status line under a code workspace's name (#256).
   // Its code lines come from the sessions and Next up, made below.
   const statusLines = createStatusLine({
     contextDir,
-    dataDir,
-    providers,
-    now,
-    background,
     code: {
       sessions: (workspaceId) => sessions.list(workspaceId),
       nextUp: (workspaceId) => nextUp.shown(workspaceId),
@@ -400,7 +396,6 @@ export const createWorker = (options: {
     contextDir,
     contextFolder,
     wanted,
-    statusLine: statusLines,
     houseSkills,
     matt,
     code,

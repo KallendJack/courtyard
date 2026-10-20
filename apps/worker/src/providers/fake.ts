@@ -419,28 +419,6 @@ const scriptedQuickAnswer = (message: string): Result<unknown, FailureReason> =>
   return ok({ answer: `You asked: ${question}`, lines });
 };
 
-const STATUS_ITEM = /\b(just done|now|next): ([^;\n]+)/gi;
-
-/**
- * The status line a message scripts (#256): each place as the message last names it, "just done:
- * …", "now: …" and "next: …" ending at a semicolon or the line's end, so the session's words
- * win over the line it was given; "none" for none, and the owner's own words without saying so.
- */
-const scriptedStatusLine = (message: string) => {
-  const line: Record<"done" | "now" | "next", string | null> = {
-    done: null,
-    now: null,
-    next: null,
-  };
-  for (const [, place = "", text = ""] of message.matchAll(STATUS_ITEM)) {
-    const words = text.replace(" (the owner's own words)", "").trim();
-    line[
-      place.toLowerCase() === "just done" ? "done" : place.toLowerCase() === "now" ? "now" : "next"
-    ] = words === "none" ? null : words;
-  }
-  return line;
-};
-
 /**
  * A pretend sign-in, starting signed out, so signing in can be seen and tested with no real
  * provider: its link and code are made up, and it finishes after `finishAfterMs`, or never.
@@ -960,8 +938,6 @@ export const createFakeProvider = (
           return scriptedTitle(message);
         case "quick-question":
           return scriptedQuickAnswer(message);
-        case "status-line":
-          return ok(scriptedStatusLine(message));
       }
     },
   };
