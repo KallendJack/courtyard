@@ -22,6 +22,10 @@ from the Fold, "it is annoying that…"), turn it into a small Paper draft or an
 goes in the order, usually ahead of features nobody has missed yet. Invented features wait in `Later` until real use
 asks for them.
 
+**One at a time in an area.** A milestone's features are built in order, each tried by the owner before the next in the
+same area starts (2026-10-20, after planning shipped five features in one evening, none of them tried). The Lead's budget
+of pull requests waiting for review keeps that pace; a build order names which issues are user-facing.
+
 ## Keeping it current
 
 Whoever files, finishes or moves work updates the roadmap in the same step:
