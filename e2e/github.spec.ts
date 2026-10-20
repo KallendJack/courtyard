@@ -30,11 +30,14 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
 
   await expect(github).toContainText("Waiting for you");
   await expect(github).toContainText("Open github.com/login/device and enter this code");
-  await expect(github).toContainText("FAKE-0001");
+  // The fake's codes count up from FAKE-0001: other specs on the same worker may have signed in
+  // first, depending on how CI shards them.
+  await expect(github).toContainText(/FAKE-\d{4}/);
+  const code = /FAKE-\d{4}/.exec(await github.innerText())?.[0];
   const opened = page.waitForEvent("popup");
   await github.getByRole("link", { name: "Copy, open GitHub" }).click();
   expect((await opened).url()).toBe("https://github.com/login/device");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("FAKE-0001");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
 
   // The page carries on by itself once the owner has said yes on GitHub. It says how many repos
   // the GitHub App reaches, never their names (#286): picking one is New workspace's.

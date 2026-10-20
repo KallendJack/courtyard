@@ -7,6 +7,7 @@ import {
   NeedsYou,
   NextUp,
 } from "../packages/contract/index.ts";
+import { shiftsOn } from "./shifts.ts";
 
 // The Builders board (#592; Paper, "2 · Agreed", code workspace row: "Tablet · Builders board,
 // running", "… waits on you, Stuck, limit", "Tablet · Home: builders in Needs you, the tile line",
@@ -83,6 +84,8 @@ const issue = (number: number, title: string, ready = true) => ({
 const given = async (
   page: Page,
   state: { lead: object; sessions: object[]; issues?: object[] },
+  /** How long the Lead's answer takes, so the board loads after the page. */
+  leadAfterMs = 0,
 ) => {
   const lead = LeadStatus.parse({
     state: "running",
@@ -97,7 +100,10 @@ const given = async (
   });
   const list = CodeSessionList.parse({ running: 0, sessions: state.sessions });
   const nextUp = NextUp.parse({ issues: state.issues ?? [] });
-  await page.route(`**${API}/lead`, (route) => route.fulfill({ json: lead }));
+  await page.route(`**${API}/lead`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, leadAfterMs));
+    await route.fulfill({ json: lead });
+  });
   await page.route(`**${API}/sessions`, (route) => route.fulfill({ json: list }));
   await page.route(`**${API}/next-up`, (route) => route.fulfill({ json: nextUp }));
   await page.route(`**${API}/pull-requests`, (route) =>
@@ -188,6 +194,24 @@ test("the board's rows say each builder's status, since when and what it's doing
   await ideas.getByRole("link").first().click();
   await expect(page).toHaveURL(new RegExp(`/workspaces/toolshed/sessions/${IDEAS}$`));
 });
+
+// Nothing moves once drawn (#283): the board holds its place, at its final size, while its Lead's
+// answer comes late, on the Fold, the cover screen and a desktop.
+for (const [screen, viewport] of [
+  ["the unfolded Fold", { width: 950, height: 712 }],
+  ["the cover screen", { width: 400, height: 900 }],
+  ["a desktop", { width: 1440, height: 900 }],
+] as const) {
+  test(`the board loading late moves nothing, on ${screen}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await given(page, RUNNING, 600);
+    const shifts = await shiftsOn(page, HOME, (opened) =>
+      expect(row(opened, "Notify me")).toContainText("Ready for review"),
+    );
+    const total = shifts.reduce((sum, shift) => sum + shift.value, 0);
+    expect(total, JSON.stringify(shifts, null, 2)).toBeLessThan(0.001);
+  });
+}
 
 test("on the cover screen, the board comes first, then Needs you, then Next up", async ({
   page,
