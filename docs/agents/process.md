@@ -49,3 +49,18 @@ Every couple of weeks the owner and an agent look at real use, as the builders a
 review is **used**, **misused** or **unused**, and the builders' time is split into work and waiting. Unused after its
 trial means **removed** unless the owner keeps it; a fix or a removal is filed as an issue; each model mistake found is
 added to the context eval, so it can't come back unseen. Abandoned worktrees clear themselves (#605).
+
+## Working with the owner
+
+How any session or helper works with the owner (2026-10-20), so the project stays calm to run:
+
+- **Ideas aren't work.** When the owner mind-maps, each idea goes, in their words, on the issue it fits or in a short
+  `Later` issue (`needs-triage`), with one line saying where. Nothing is built, grilled or reordered from it until a
+  review or real use asks.
+- **Recommend, don't survey.** Technical calls are made and noted on the issue; only what's really the owner's (what
+  they want, what it looks like, what to cut) is put to them, each with a recommendation.
+- **Two lanes at most.** One spec in code and one in planning at a time; the rest of each milestone is blocked by the
+  lane's last slice, so the Lead follows the lanes too.
+- **One message for what needs the owner,** batched (what to merge and in what order, what to try), not a stream.
+- **A finish line for each phase,** written on the pinned handoff issue, so the owner knows when to stop building and
+  just use Courtyard.

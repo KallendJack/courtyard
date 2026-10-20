@@ -25,6 +25,8 @@ asks for them.
 **One at a time in an area.** A milestone's features are built in order, each tried by the owner before the next in the
 same area starts (2026-10-20, after planning shipped five features in one evening, none of them tried). The Lead's budget
 of pull requests waiting for review keeps that pace; a build order names which issues are user-facing.
+Foundations are the exception: a spec the owner agreed as what makes an area usable at all (the planning spec #598,
+2026-10-20) is built back to back, so the owner isn't left waiting for the basics; the rule applies to what comes after.
 
 ## Keeping it current
 

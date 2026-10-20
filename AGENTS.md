@@ -112,11 +112,14 @@ when a change needs a board): `docs/agents/process.md`.
   gets one first, in a milestone (`Later` when unsure) with a category and a triage label; docs or CI only needs none.
   Bundle issues only when the owner says so, and keep an open PR to the work it was opened for.
 - **One feature at a time in an area.** The next feature in an area (a workspace kind, the Lead) starts once the owner
-  has used the last one there, or said to skip it; a PR the owner will see says how to try it.
+  has used the last one there, or said to skip it; a PR the owner will see says how to try it. Foundations the owner
+  agreed as one spec (what makes an area usable at all) go back to back, the owner using each as it lands.
 - **How sessions, builders and the Lead run is decided in an ADR first** (ADR 0031): no rule is added to that machinery
   for one incident without writing down how it fits the rest.
 - **Removal is the default.** A feature unused after its trial, or one models keep misusing, is removed unless the
   owner keeps it; every model mistake found becomes a context-eval scenario (`docs/agents/process.md`, Reviewing use).
+- **Working with the owner:** ideas are captured, not built; recommend rather than survey; two lanes at most; one
+  message for what needs them (`docs/agents/process.md`).
 - **Claim before building.** With no claim in the issue's comments or open PRs, comment
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
 - **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
