@@ -112,7 +112,8 @@ when a change needs a board): `docs/agents/process.md`.
   gets one first, in a milestone (`Later` when unsure) with a category and a triage label; docs or CI only needs none.
   Bundle issues only when the owner says so, and keep an open PR to the work it was opened for.
 - **One feature at a time in an area.** The next feature in an area (a workspace kind, the Lead) starts once the owner
-  has used the last one there, or said to skip it; a PR the owner will see says how to try it.
+  has used the last one there, or said to skip it; a PR the owner will see says how to try it. Foundations the owner
+  agreed as one spec (what makes an area usable at all) go back to back, the owner using each as it lands.
 - **How sessions, builders and the Lead run is decided in an ADR first** (ADR 0031): no rule is added to that machinery
   for one incident without writing down how it fits the rest.
 - **Removal is the default.** A feature unused after its trial, or one models keep misusing, is removed unless the
