@@ -7,7 +7,7 @@ For the live copy only: whether `main` has moved on, updating, and how the last 
 updates and restarts, and the cut-off turns carry on.
 
 - **Uses:** the update command, passed in; `github/` and `code/` for main's build, through `worker.ts`.
-- **Used by:** `worker.ts`; `sessions/` and `lead/` read its `holding()`; in the web app, `features/live/`.
+- **Used by:** `worker.ts`; `sessions/` reads its `holding()`; in the web app, `features/live/`.
 
 ## API
 
@@ -22,8 +22,9 @@ All in `worker.ts`:
   approval waiting counted), it waits, kept in the data folder (`live-update-waiting.json`) so a crash keeps it.
   A repeating job runs it once both are clear, or drops it when main's build fails meanwhile. Update now runs it at
   once; Cancel drops it, even while the job is reading main's build (that look then does nothing, #586).
-- **Holding:** while one waits, `holding()` tells `sessions/` and `lead/` that nothing new starts on its own (queued
-  messages hold, no fixing turn, no new builder); the owner's own messages still start.
+- **Holding:** while one waits, `holding()` tells `sessions/` that nothing new starts on its own (queued messages
+  hold, no fixing turn); the owner's own messages still start, a Lead's builder is still told its tasks have
+  ended (#610), and the Lead still starts its builders (#591).
 - **After a restart:** an update the worker starts itself leaves a note (`live-update-restart.json`), so the next
   worker continues the turns it cut off.
 - **Main's build** (#249), while main has moved on: CI on main's newest commit, asked of GitHub through `github/` (on

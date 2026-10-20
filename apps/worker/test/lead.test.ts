@@ -9,6 +9,7 @@ import {
   SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { err, ok } from "../src/lib/result.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { Provider } from "../src/providers/index.ts";
 import {
@@ -195,49 +196,35 @@ describe("Run the build order (#347)", () => {
     expect(github.commentsOn(onGitHub, 24)).toEqual([]);
   });
 
-  it("starts its builders allowing all until each one's pull request opens, 12 hours at most, only when the owner says (#428)", async () => {
+  it("starts every builder allowing all until its pull request opens, 12 hours at most (#591)", async () => {
     const { request } = await signedInWith(ISSUES);
 
-    const response = await postJson(request, "/api/workspaces/side-project/lead/run", {
-      model: FAKE_MODEL,
-      allowAll: true,
-    });
+    await run(request);
 
-    expect(response.status).toBe(200);
-    const until = LeadStatus.parse(await response.json()).buildersAllowedAll;
-    if (until === undefined) throw new Error("builders aren't allowed all");
-    expect(Date.parse(until) - Date.now()).toBeGreaterThan(11.9 * 60 * 60 * 1000);
-    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
     for (const issue of [22, 23]) {
-      expect((await builderOf(request, issue)).allowingAll).toEqual({ until, task: true });
+      const allowing = (await builderOf(request, issue)).allowingAll;
+      expect(allowing).toMatchObject({ task: true });
+      const left = Date.parse(allowing?.until ?? "") - Date.now();
+      expect(left).toBeGreaterThan(11.9 * 60 * 60 * 1000);
+      expect(left).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
     }
     // The Lead itself doesn't allow all, only its builders.
     const listed = await sessionsOf(request);
     expect(listed.find((session) => session.lead === true)?.allowingAll).toBeUndefined();
     const leadId = listed.find((each) => each.lead === true)?.id ?? "";
-    const lead = await eventsSoFar(request, leadId);
-    expect(lead.filter((event) => event.type === "allow-all-started")).toEqual([]);
-    // Nor can it be turned on for the Lead's own session.
     const refused = await postJson(request, `/api/sessions/${leadId}/allow-all`, { lasts: "1h" });
     expect(refused.status).toBe(409);
-
-    // Woken without saying, it keeps it; Run the build order with it off ends it.
-    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
-    expect((await run(request)).buildersAllowedAll).toBe(until);
-    const off = await postJson(request, "/api/workspaces/side-project/lead/run", {
-      model: FAKE_MODEL,
-      allowAll: false,
-    });
-    expect(LeadStatus.parse(await off.json()).buildersAllowedAll).toBeUndefined();
   });
 
-  it("starts its builders asking as usual unless the owner turns on Allow all for builders", async () => {
-    const { request } = await signedInWith(ISSUES);
+  it("lets a builder watch a run's checks without asking (#591)", async () => {
+    const coder = codingProvider([{ run: "gh run watch 123" }]);
+    const { request } = await signedInWith(ISSUES.slice(0, 1), { providers: [coder.provider] });
 
-    const lead = await run(request);
+    await run(request, CODING_MODEL);
+    await expect.poll(async () => (await builderOf(request, 22)).waiting).not.toBe("approval");
 
-    expect(lead.buildersAllowedAll).toBeUndefined();
-    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
+    expect(coder.answers).toContainEqual(ok(null));
+    expect(coder.answers.every((answer) => answer.ok)).toBe(true);
   });
 
   it("rests when what's left waits on an open issue, saying how many (#377)", async () => {
@@ -330,247 +317,7 @@ describe("Run the build order (#347)", () => {
   });
 });
 
-describe("Allow all for builders from the Lead's row (#551)", () => {
-  const HOUR = 60 * 60 * 1000;
-
-  /** Allow all for builders switched on or off, as the Lead's row does. */
-  const allowAllForBuilders = async (request: Requester, on: boolean) => {
-    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
-      on,
-    });
-    expect(response.status).toBe(200);
-    return LeadStatus.parse(await response.json());
-  };
-
-  it("turns on for 12 hours for the builders still building, those it starts later, and says so in its chat", async () => {
-    const { request } = await signedInWith(ISSUES);
-    await run(request);
-    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 0 });
-
-    const lead = await allowAllForBuilders(request, true);
-
-    const until = lead.buildersAllowedAll;
-    if (until === undefined) throw new Error("builders aren't allowed all");
-    expect(Date.parse(until) - Date.now()).toBeGreaterThan(11.9 * HOUR);
-    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(12 * HOUR);
-    for (const issue of [22, 23]) {
-      expect((await builderOf(request, issue)).allowingAll).toEqual({ until, task: true });
-    }
-    expect(
-      (await sessionsOf(request)).find((session) => session.lead === true)?.allowingAll,
-    ).toBeUndefined();
-    expect(await notesIn(request)).toContain(
-      "Allow all for builders is on for 12 hours: 2 builders now, and any it starts.",
-    );
-  });
-
-  it("can be switched on while the Lead is paused", async () => {
-    const { request } = await signedInWith(ISSUES);
-    await run(request);
-    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
-
-    const lead = await allowAllForBuilders(request, true);
-
-    expect(lead.state).toBe("paused");
-    expect(lead.buildersAllowedAll).toBeDefined();
-    expect((await builderOf(request, 22)).allowingAll).toBeDefined();
-  });
-
-  it("leaves a builder with an open pull request alone, and one allowed all by hand keeps its own end", async () => {
-    const { github, request } = await signedInWith(ISSUES);
-    await run(request);
-    const withPullRequest = await builderOf(request, 22);
-    github.openPullRequest({
-      repo: onGitHub,
-      branch: withPullRequest.branch ?? "",
-      head: "c0ffee1",
-    });
-    await runJobs();
-    const byHand = await builderOf(request, 23);
-    const handOn = await postJson(request, `/api/sessions/${byHand.id}/allow-all`, { lasts: "1h" });
-    expect(handOn.status).toBe(200);
-    const handUntil = (await builderOf(request, 23)).allowingAll?.until;
-    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 1, approvals: 0 });
-
-    await allowAllForBuilders(request, true);
-
-    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
-    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
-
-    // Turn off leaves the one switched on by hand on.
-    await allowAllForBuilders(request, false);
-
-    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
-  });
-
-  it("Turn off takes it from the builders the Lead gave it to, and new builders start without it", async () => {
-    const { github, request } = await signedInWith(ISSUES);
-    await postJson(request, "/api/workspaces/side-project/lead/run", {
-      model: FAKE_MODEL,
-      allowAll: true,
-    });
-    const fromTheRow = await allowAllForBuilders(request, true);
-    expect(fromTheRow.buildersAllowedAll).toBeDefined();
-
-    const lead = await allowAllForBuilders(request, false);
-
-    expect(lead.buildersAllowedAll).toBeUndefined();
-    for (const issue of [22, 23]) {
-      expect((await builderOf(request, issue)).allowingAll).toBeUndefined();
-    }
-    expect(await notesIn(request)).toContain(
-      "Allow all for builders is off: its builders ask again.",
-    );
-    // The next builder starts asking as usual.
-    const first = await builderOf(request, 22);
-    const number = github.openPullRequest({
-      repo: onGitHub,
-      branch: first.branch ?? "",
-      head: "c0ffee1",
-    });
-    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
-    await runJobs();
-    expect((await builderOf(request, 24)).allowingAll).toBeUndefined();
-  });
-
-  it("allows at once the approvals its builders wait on that Allow all covers", async () => {
-    const { request } = await signedInWith(ISSUES, {
-      providers: [codingProvider([{ run: "pnpm add left-pad" }]).provider],
-    });
-    await run(request, CODING_MODEL);
-    await expect
-      .poll(async () =>
-        (await sessionsOf(request)).filter(
-          (each) => each.byLead === true && each.waiting === "approval",
-        ),
-      )
-      .toHaveLength(2);
-    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 2 });
-
-    await allowAllForBuilders(request, true);
-
-    await expect
-      .poll(async () =>
-        (await sessionsOf(request)).filter(
-          (each) => each.byLead === true && each.waiting === "approval",
-        ),
-      )
-      .toHaveLength(0);
-    const builder = await builderOf(request, 22);
-    expect(
-      (await eventsSoFar(request, builder.id)).find((event) => event.type === "approval-answered"),
-    ).toMatchObject({ answer: "allow", allowedAll: true });
-    // The Lead itself isn't allowed all: it still asks.
-    const lead = (await sessionsOf(request)).find((each) => each.lead === true);
-    if (lead?.now.kind === "needs-you") {
-      await postJson(request, `/api/sessions/${lead.id}/approvals/${lead.now.approval}`, {
-        answer: "deny",
-      });
-    }
-    await expect
-      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
-      .toHaveLength(0);
-  });
-
-  it("is for a Lead that has run: before that there's nothing to switch", async () => {
-    const { request } = await signedInWith(ISSUES);
-
-    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
-      on: true,
-    });
-
-    expect(response.status).toBe(404);
-  });
-});
-
-describe("keeping going for a window (#457)", () => {
-  const HOUR = 60 * 60 * 1000;
-  /** #22 claimed by someone else, and #23 blocked by it: nothing ready until #22 closes. */
-  const WAITING: readonly FakeIssue[] = [
-    { number: 22, title: "One loading state", milestone: "4 · Code workspaces" },
-    {
-      number: 23,
-      title: "Nothing moves once drawn",
-      milestone: "4 · Code workspaces",
-      blockedBy: [22],
-    },
-  ];
-
-  /** A worker whose clock a test moves on, with #22 claimed elsewhere. */
-  const waitingWorker = async (issues: readonly FakeIssue[] = WAITING) => {
-    const clock = { now: Date.parse("2026-10-17T09:00:00") };
-    const worker = await signedInWith(issues, { now: () => clock.now });
-    worker.github.comment(
-      onGitHub,
-      22,
-      "Building this: Claude Code helper (22-thing), next in order",
-    );
-    return { ...worker, clock };
-  };
-
-  const runFor = async (request: Requester, window: string) => {
-    const response = await postJson(request, "/api/workspaces/side-project/lead/run", {
-      model: FAKE_MODEL,
-      window,
-    });
-    expect(response.status).toBe(200);
-    return LeadStatus.parse(await response.json());
-  };
-
-  it("wakes from its rest for an issue made buildable within its window, saying so in its chat", async () => {
-    const { github, request, clock } = await waitingWorker();
-    const rested = await runFor(request, "4-hours");
-    expect(rested).toMatchObject({ state: "resting" });
-    expect(rested.wakesUntil).toBe(new Date(clock.now + 4 * HOUR).toISOString());
-
-    clock.now += 3 * HOUR;
-    github.closeIssue(onGitHub, 22);
-    await runJobs();
-
-    const lead = await leadOf(request);
-    expect(lead.state).toBe("running");
-    expect(lead.building.map((builder) => builder.issue)).toEqual([23]);
-    expect(await notesIn(request)).toContain("Woke: #23 is ready, started building.");
-  });
-
-  it("rests until the owner runs it again once its window has passed", async () => {
-    const { github, request, clock } = await waitingWorker();
-    await runFor(request, "4-hours");
-
-    clock.now += 4 * HOUR + 1;
-    github.closeIssue(onGitHub, 22);
-    await runJobs();
-
-    const lead = await leadOf(request);
-    expect(lead).toMatchObject({ state: "resting", building: [] });
-    expect(lead.wakesUntil).toBeUndefined();
-  });
-
-  it("never wakes when the owner ran just what's ready now", async () => {
-    const { github, request } = await waitingWorker();
-    expect((await runFor(request, "ready-now")).wakesUntil).toBeUndefined();
-
-    github.closeIssue(onGitHub, 22);
-    await runJobs();
-
-    expect(await leadOf(request)).toMatchObject({ state: "resting", building: [] });
-  });
-
-  it("keeps going until 22:00 when the owner says until tonight, and for 4 hours unless they say", async () => {
-    const { request, clock } = await waitingWorker();
-
-    expect((await runFor(request, "tonight")).wakesUntil).toBe(
-      new Date(Date.parse("2026-10-17T22:00:00")).toISOString(),
-    );
-    expect((await run(request)).wakesUntil).toBe(
-      new Date(Date.parse("2026-10-17T22:00:00")).toISOString(),
-    );
-    clock.now = Date.parse("2026-10-17T23:00:00");
-    expect((await run(request)).wakesUntil).toBe(new Date(clock.now + 4 * HOUR).toISOString());
-  });
-});
-
-describe("the brakes on a Run (#457)", () => {
+describe("the Lead's rules (#591)", () => {
   const SIX: readonly FakeIssue[] = [
     ...ISSUES,
     { number: 25, title: "Fourth", milestone: "4 · Code workspaces" },
@@ -590,53 +337,150 @@ describe("the brakes on a Run (#457)", () => {
     return number;
   };
 
-  it("starts no builder while 2 PRs wait on the owner's review, and carries on as one merges", async () => {
+  it("starts the next issue while a builder waits on the owner's approval: it holds back only itself", async () => {
+    // #22's builder asks for an approval; the others end with nothing to show, so they go Stuck.
+    const { provider: coder } = codingProvider([]);
+    const asker: Provider = {
+      ...coder,
+      runTurn: async (input) => {
+        if (input.code !== null && input.framing.newMessage.startsWith("Build issue #22")) {
+          await input.code.run("gh pr merge 1");
+        }
+        await input.emit("Done.");
+        return ok(null);
+      },
+    };
+    const { github, request } = await signedInWith(
+      [{ number: 22, title: "Asks first", milestone: "4 · Code workspaces" }, ...ISSUES.slice(1)],
+      { providers: [asker] },
+    );
+    await run(request, CODING_MODEL);
+    await expect.poll(async () => (await builderOf(request, 22)).waiting).toBe("approval");
+    await expect.poll(async () => (await builderOf(request, 23)).waiting).not.toBe("approval");
+
+    await runJobs();
+
+    expect(github.commentsOn(onGitHub, 24)).toEqual([expect.stringMatching(/^Building this/)]);
+    expect((await leadOf(request)).why).toBeUndefined();
+    const waiting = await builderOf(request, 22);
+    if (waiting.now.kind !== "needs-you") throw new Error("#22's builder isn't asking");
+    await postJson(request, `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`, {
+      answer: "deny",
+    });
+    await settledAll(request);
+  });
+
+  it("runs at most 2 builders, and holds back while 4 pull requests wait for review, starting again as one merges", async () => {
     const { github, request } = await signedInWith(SIX);
     await run(request);
-    const first = await readyToMerge(github, request, 22);
+    expect((await leadOf(request)).building).toHaveLength(2);
+    await readyToMerge(github, request, 22);
     await readyToMerge(github, request, 23);
-
+    await runJobs();
+    await readyToMerge(github, request, 24);
+    const fourth = await readyToMerge(github, request, 25);
     await runJobs();
 
     const holding = await leadOf(request);
+    expect(holding.ready).toHaveLength(4);
     expect(holding.building).toEqual([]);
     expect(holding.why).toBe(
-      "2 PRs wait on your review, so the next builder starts once one merges.",
+      "4 pull requests wait for your review, so the next builder starts once one merges.",
     );
-    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
 
-    github.merge(first);
+    github.merge(fourth);
     await runJobs();
 
-    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([24, 25]);
-    expect(await notesIn(request)).toContain(
-      "Holding back: 2 PRs wait on your review, so the next builder starts once one merges.",
-    );
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([26, 27]);
+    await settledAll(request);
   });
 
-  it("rests once it has started 4 builders this Run, until the owner runs it again", async () => {
-    const { github, request } = await signedInWith(SIX);
-    await run(request);
-    github.merge(await readyToMerge(github, request, 22));
-    await runJobs();
+  it("starts no builder while its model is at its usage limit, and one once it has reset", async () => {
+    const clock = { now: Date.parse("2026-10-20T09:00:00Z") };
+    const resetAt = "2026-10-20T10:00:00.000Z";
+    const { provider: coder } = codingProvider([]);
+    let limited = true;
+    const limiting: Provider = {
+      ...coder,
+      runTurn: async (input) => {
+        if (input.framing.newMessage.startsWith("Build issue #22") && limited) {
+          limited = false;
+          return err({ kind: "rate-limited", resetAt });
+        }
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    };
+    const { github, request } = await signedInWith(ISSUES, {
+      providers: [limiting],
+      now: () => clock.now,
+    });
+    await run(request, CODING_MODEL);
+    await settledAll(request);
+    // #23's builder's pull request merges, which frees its place.
     github.merge(await readyToMerge(github, request, 23));
     await runJobs();
 
-    const rested = await leadOf(request);
-    expect(rested).toMatchObject({ state: "resting", why: "Built 4 this run · tap Run for more" });
-    expect(rested.wakesUntil).toBeUndefined();
-    expect(rested.building.map((each) => each.issue)).toEqual([24, 25]);
-    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
-    await runJobs();
-    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+    expect((await leadOf(request)).why).toMatch(/^its model is at its usage limit until /);
 
-    expect((await run(request)).state).toBe("running");
-    github.merge(await readyToMerge(github, request, 24));
+    clock.now = Date.parse(resetAt);
+    await runJobs();
     await runJobs();
 
-    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([25, 26]);
+    expect(github.commentsOn(onGitHub, 24)).toEqual([expect.stringMatching(/^Building this/)]);
+    await settledAll(request);
+  });
+
+  it("never starts an issue in Later, or in no milestone, and rests saying nothing is ready", async () => {
+    const { github, request } = await signedInWith(
+      [
+        { number: 40, title: "Some day", milestone: "Later" },
+        { number: 41, title: "Unplaced" },
+      ],
+      { milestones: { Later: "Build order: #40." } },
+    );
+
+    await run(request);
+
+    expect(await leadOf(request)).toMatchObject({ state: "resting", building: [] });
+    expect(github.commentsOn(onGitHub, 40)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 41)).toEqual([]);
+  });
+
+  it("paused, takes no turn when a builder's pull request merges, says what's left to tidy, and tidies it once it runs again", async () => {
+    const { github, request } = await signedInWith(ISSUES);
+    const lead = await run(request);
+    const number = await readyToMerge(github, request, 22);
+    await runJobs();
+    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
+
+    github.merge(number);
+    await runJobs();
+
+    const paused = await leadOf(request);
+    expect(paused).toMatchObject({ state: "paused", toTidy: 1 });
+    const before = await eventsSoFar(request, lead.session ?? "");
+    expect(before.filter((event) => event.type === "owner-message" && event.merged)).toEqual([]);
+
+    await run(request);
+
+    const events = await followSession(request, {
+      sessionId: lead.session ?? "",
+      until: (event) => event.type === "owner-message" && event.merged !== undefined,
+    });
+    expect(events.at(-1)).toMatchObject({ merged: { pullRequest: number } });
+    await settledAll(request);
+    expect((await leadOf(request)).toTidy).toBe(0);
   });
 });
+
+/** Waits until no turn runs in the workspace. */
+const settledAll = (request: Requester) =>
+  expect
+    .poll(async () => (await sessionsOf(request)).filter((each) => each.busy), { timeout: 15_000 })
+    .toHaveLength(0);
 
 describe("watching its builders (#347)", () => {
   it("tells the owner a builder's pull request is ready to merge, once, and starts the next issue in its place", async () => {
@@ -738,58 +582,6 @@ describe("watching its builders (#347)", () => {
     expect(
       (await notesIn(request)).filter((note) => note.startsWith("Which session waits merged")),
     ).toEqual([`Which session waits merged (#${number}).`]);
-  });
-
-  it("holds back while a builder waits on the owner's decision, and starts the next once both are Stuck", async () => {
-    const { github, request } = await signedInWith(ISSUES, {
-      providers: [codingProvider([{ run: "pnpm add left-pad" }]).provider],
-    });
-    await run(request, CODING_MODEL);
-    await expect
-      .poll(async () =>
-        (await sessionsOf(request)).filter(
-          (each) => each.byLead === true && each.waiting === "approval",
-        ),
-      )
-      .toHaveLength(2);
-
-    await runJobs();
-
-    expect(await leadOf(request)).toMatchObject({
-      state: "running",
-      why: "Which session waits waits on your decision.",
-    });
-    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
-    // Each approval its builders ask is denied, including those a builder told to carry on asks
-    // again (#590), until those `count` builders are stuck and nothing runs.
-    const denyUntilStuck = (count: number) =>
-      expect
-        .poll(
-          async () => {
-            const sessions = await sessionsOf(request);
-            for (const waiting of sessions) {
-              if (waiting.now.kind !== "needs-you") continue;
-              await postJson(
-                request,
-                `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`,
-                { answer: "deny" },
-              );
-            }
-            const stuck = (await leadOf(request)).statuses.filter(
-              (each) => each.status.kind === "stuck",
-            );
-            return sessions.filter((each) => each.busy).length === 0 && stuck.length === count;
-          },
-          { timeout: 30_000 },
-        )
-        .toBe(true);
-    await denyUntilStuck(2);
-    await runJobs();
-
-    // Both Stuck, their places are free: the next issue starts, and its builder asks too.
-    expect(await notesIn(request)).toContain("Started building Nothing jumps in (#24).");
-    expect(github.commentsOn(onGitHub, 24)).toEqual([expect.stringMatching(/^Building this/)]);
-    await denyUntilStuck(3);
   });
 
   it("starts only main's fix while main is red", async () => {
@@ -915,7 +707,7 @@ describe("builders that fail or go Stuck (#474, #590)", () => {
 });
 
 describe("while Courtyard waits to update (#186)", () => {
-  it("starts no builder until the Update has run", async () => {
+  it("starts its builders all the same: an Update holds nothing back (#591)", async () => {
     // Courtyard's live copy is this repository, a version behind main, whose build still runs.
     const { github, request } = await signedInWith(ISSUES, { env: { COURTYARD_LIVE_COPY: repo } });
     await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
@@ -937,8 +729,9 @@ describe("while Courtyard waits to update (#186)", () => {
     await run(request);
 
     const lead = await leadOf(request);
-    expect(lead.building).toEqual([]);
-    expect(lead.why).toBe("Courtyard waits to update, so the next builder starts after it.");
+    expect(lead.building.map((each) => each.issue)).toEqual([22, 23]);
+    expect(lead.why).toBeUndefined();
+    expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
   });
 });
 
@@ -1074,14 +867,13 @@ describe("talking to the Lead (#347)", () => {
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23, 24]);
   });
 
-  it("pauses, and runs three builders, when the owner asks", async () => {
+  it("runs no third builder, and pauses, when the owner asks (#591)", async () => {
     const saver = savingProvider(
       [
         [],
         [],
         [],
         [{ call: "build_order", input: { action: "builders", count: 3 } }],
-        [],
         [{ call: "build_order", input: { action: "pause" } }],
       ],
       ASKS,
@@ -1095,13 +887,14 @@ describe("talking to the Lead (#347)", () => {
     await settled(request);
     await tell(request, "Pause the order.");
 
-    expect((await leadOf(request)).builders).toBe(3);
-    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23, 24]);
+    expect(saver.replies[3]?.[0]?.reply).toBe("Builders run 1 or 2 at once, not 3.");
+    expect((await leadOf(request)).builders).toBe(2);
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
     expect(saver.replies.at(-1)?.[0]?.reply).toBe(
       "Paused: builders already running carry on, and nothing new starts until the owner runs the order again.",
     );
     expect((await leadOf(request)).state).toBe("paused");
-    expect(github.commentsOn(onGitHub, 25)).toEqual([]);
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
   });
 
   it("asks the owner before it files an issue", async () => {

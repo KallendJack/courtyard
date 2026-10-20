@@ -247,7 +247,8 @@ export const Composer = memo(function Composer(props: {
 
   /**
    * Sends `message` with the box's model, effort, skill and attachments, and says whether it went.
-   * Once it has, the box empties of what was `typed` for it.
+   * The box empties of what was `typed` for it at once, keeping anything typed while it goes
+   * (#533), and gets it back in front of that if it doesn't go.
    */
   const sendText = async (message: string, typed: string) => {
     const { model, effort } = choice;
@@ -259,6 +260,9 @@ export const Composer = memo(function Composer(props: {
     if (choice.unavailable) return false;
     // Words, attachments or both: a photo or PDF can go on its own (#164).
     if (message.trim() === "" && attaching.length === 0) return false;
+    const emptied = textNow.current.startsWith(typed);
+    if (emptied)
+      setText((now) => (now.startsWith(typed) ? now.slice(typed.length).trimStart() : now));
     const sent = await send.run(
       {
         text: message,
@@ -268,9 +272,10 @@ export const Composer = memo(function Composer(props: {
       },
       attaching.map((each) => each.file),
     );
+    if (!sent && emptied) {
+      setText((now) => (now === "" ? typed : `${typed.trimEnd()} ${now}`));
+    }
     if (sent) {
-      // Unless the owner has typed the next one meanwhile, as they may while a turn runs (#177).
-      setText((now) => (now === typed ? "" : now));
       setSkill(undefined);
       releasePreviews(attaching);
       setAttaching([]);

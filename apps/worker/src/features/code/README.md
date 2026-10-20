@@ -46,7 +46,7 @@ Code sessions' git, and what they may do
 - **The default allowlist:** the shell commands that look around the worktree (`cat`, `ls`, `grep`, `rg` and the
   like; #178); the package scripts (in the packages pnpm's `--filter`, `-C` or `-r` pick too, when the script alone
   would match) and the test tools they run, run directly (`vitest run`, `playwright test`, `tsc --noEmit`,
-  `biome check`; #202); git and gh commands that only look; adding and committing; pushing the session branch (only
+  `biome check`, `biome format`; #202, #591); git and gh commands that only look (`gh run watch` among them, #591); adding and committing; pushing the session branch (only
   to `origin`, under its own name, never forced); and `gh pr create`/`gh pr edit` on the session's own PR (#172).
   Their flags are read, so one naming another branch, repository or PR, or one it doesn't know, asks.
 - **Issues:** it files, edits, comments on and closes the repository's issues and makes and lists its labels, never

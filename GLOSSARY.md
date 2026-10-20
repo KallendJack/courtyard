@@ -537,7 +537,7 @@ _Avoid_: don't ask again, trust, auto-approve
 One code session, for 1, 4 or 12 hours or until its task is done (its PR opens, 12 hours at most), runs commands
 off the allowlist and edits setup files without asking, each step marked "ran under Allow all", under a gold strip
 with Turn off. What must always ask still does. Turned on from an approval or the session's ⋯, never extended
-while on; the Lead's **Allow all for builders** starts its builders with it.
+while on; every Lead's builder starts with it, until its pull request opens (#591).
 _Avoid_: yolo mode, skip permissions, auto-approve
 
 **Session branch**:

@@ -461,8 +461,6 @@ export const createWorker = (options: {
       const main = await workspaceMain.of(workspaceId);
       return main.ok && main.value.build?.kind === "failed";
     },
-    // While an Update waits, no builder starts (#186).
-    updating: () => live.holding(),
     // What a builder changes, so the Lead holds back an issue that would clash (#423).
     changedFiles: async (workspaceId, session) => {
       const workspace = await getWorkspace(contextDir, workspaceId);
