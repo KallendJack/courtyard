@@ -276,6 +276,27 @@ const firstDiagram = (answer: string) => {
   return { before: answer.slice(0, found.index).trim(), kind };
 };
 
+/** How many words an answer has: each run of text with a letter or a number in it (#599). */
+const wordsIn = (answer: string) =>
+  answer.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+
+/** The steps an answer gives: its numbered list items and its "Step 1" lines (#599). */
+const stepsIn = (answer: string) =>
+  answer.match(/^[ \t]*(?:\d+[.)][ \t]|[*_]*step \d+\b)/gim)?.length ?? 0;
+
+/**
+ * The list items and table rows of an answer with a price in them that link nowhere (#599): a
+ * product named with its price, but not where it was found.
+ */
+const unlinkedPrices = (answer: string) =>
+  answer
+    .split("\n")
+    .filter(
+      (line) =>
+        /^[ \t]*(?:[-*•|]|\d+[.)])/.test(line) && /£\s?\d/.test(line) && !/https?:\/\//.test(line),
+    )
+    .map((line) => line.trim());
+
 /**
  * One turn's checks: one for each expected save, one for saving nothing else, and one for the
  * question the answer should ask. Every exact match is paired up before any near one, so a save
@@ -444,6 +465,43 @@ const judgeTurn = (judge: {
                 : `expected no diagram; it has a ${diagram.kind}`,
           },
         ];
+  const words = wordsIn(answer);
+  const brief: Check[] =
+    turn.words === undefined
+      ? []
+      : [
+          {
+            miss:
+              words <= turn.words.atMost
+                ? null
+                : `expected at most ${turn.words.atMost} words; it has ${words}: "${answer.trim().replace(/\s+/g, " ").slice(0, 1500)}"`,
+          },
+        ];
+  const steps = stepsIn(answer);
+  const stepped: Check[] =
+    turn.steps === undefined
+      ? []
+      : [
+          {
+            miss:
+              steps <= turn.steps.atMost
+                ? null
+                : `expected at most ${turn.steps.atMost} steps; it gives ${steps}: "${answer.trim().replace(/\s+/g, " ").slice(0, 1500)}"`,
+          },
+        ];
+  const unlinked = unlinkedPrices(answer);
+  const linked: Check[] =
+    turn.links === undefined
+      ? []
+      : [
+          {
+            miss: !/https?:\/\//.test(answer)
+              ? `expected links to the products it names; it has none, starting "${answer.trim().slice(0, 160)}"`
+              : unlinked.length > 0
+                ? `expected every priced product linked; these aren't: ${unlinked.join(" / ")}`
+                : null,
+          },
+        ];
   const topics = listItemsIn(answer);
   const listed: Check[] =
     turn.listsTopics === undefined
@@ -484,6 +542,9 @@ const judgeTurn = (judge: {
     ...tabled,
     ...charted,
     ...diagrammed,
+    ...brief,
+    ...stepped,
+    ...linked,
     ...listed,
     ...avoided,
   ];

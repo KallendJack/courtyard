@@ -786,7 +786,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
 - **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
-  titling. Get to know and Get to know me are house skills in `packages/skills`.
+  titling. A planning turn's framing and a code turn's differ on purpose (ADR 0032): planning gets its own way of
+  answering (Planning answers in the guide) and floor plans; a code turn gets diagrams and the house process. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.
 - **Each provider passes it on unchanged:**
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
