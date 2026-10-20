@@ -22,7 +22,7 @@ import {
   priceCheckInstructions,
   priceCheckMessage,
 } from "../../prompts/index.ts";
-import { offerFor, type Provider, type ToolReply } from "../../providers/index.ts";
+import { errandModel, type Provider, type ToolReply } from "../../providers/index.ts";
 import { readThings, type ThingRefusal } from "../things/index.ts";
 import { getWorkspace } from "../workspaces/index.ts";
 
@@ -186,19 +186,11 @@ export const createWanted = (options: {
   };
 
   /** The first errand model on offer with room, on a provider that searches and takes Courtyard's tools. */
-  const errandModel = async () => {
-    for (const provider of providers) {
-      const { errand, capabilities } = provider;
-      if (errand === undefined || !capabilities.searchesWeb || !capabilities.savesContext) continue;
-      const offer = await offerFor(providers, { provider: provider.id, model: errand.model });
-      if (offer === undefined || offer.model.limit !== undefined) continue;
-      const effort = offer.model.efforts.some(({ id }) => id === errand.effort)
-        ? errand.effort
-        : undefined;
-      return { provider, model: offer.model.id, effort };
-    }
-    return undefined;
-  };
+  const errand = () =>
+    errandModel(
+      providers,
+      ({ capabilities }) => capabilities.searchesWeb && capabilities.savesContext,
+    );
 
   /** The wanted Things now, as a price check is given them, with the shops the owner blocked. */
   const wantedNow = async (
@@ -240,7 +232,7 @@ export const createWanted = (options: {
   const runCheck = async (check: {
     workspaceId: WorkspaceId;
     workspace: string;
-    errand: NonNullable<Awaited<ReturnType<typeof errandModel>>>;
+    errand: NonNullable<Awaited<ReturnType<typeof errand>>>;
     things: readonly CheckedThing[];
     blocked: readonly string[];
     folder: string;
@@ -312,8 +304,8 @@ export const createWanted = (options: {
     slugs: readonly ThingSlug[] | "stale";
   }): Promise<Result<null, FindRefusal>> => {
     const { workspaceId } = start;
-    const errand = await errandModel();
-    if (errand === undefined) return err({ kind: "no-model" });
+    const model = await errand();
+    if (model === undefined) return err({ kind: "no-model" });
     const wanted = await wantedNow(workspaceId);
     if (!wanted.ok) return wanted;
     const workspace = await getWorkspace(contextDir, workspaceId);
@@ -330,7 +322,7 @@ export const createWanted = (options: {
       runCheck({
         workspaceId,
         workspace: workspace.value.summary.name,
-        errand,
+        errand: model,
         things,
         blocked: wanted.value.blocked,
         folder: wanted.value.folder,

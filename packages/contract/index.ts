@@ -88,6 +88,18 @@ export {
   SaveAsDocument,
 } from "./lib/documents.ts";
 export {
+  FLOOR_PLAN_MAX_ITEMS,
+  FloorPlan,
+  PlanFloorItem,
+  PlanItem,
+  PlanOpening,
+  PlanPartition,
+  PlanWall,
+  PlanWallItem,
+  PlanZone,
+  wallLength,
+} from "./lib/floor-plan.ts";
+export {
   FRESH_START_WORDS,
   FreshStartRequest,
   FreshStartSummary,
@@ -151,7 +163,6 @@ export {
   LastQuestion,
   PinnedPart,
   PlanningHome,
-  WantedItem,
 } from "./lib/planning-home.ts";
 export {
   PREVIEW_COMMAND_MAX_LENGTH,
@@ -256,6 +267,14 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
+export {
+  STATUS_ITEM_MAX_LENGTH,
+  StatusItem,
+  StatusItemText,
+  StatusLine,
+  StatusLineChange,
+  StatusPlace,
+} from "./lib/status-line.ts";
 export {
   RunningTask,
   RunningTasks,

@@ -9,6 +9,7 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/buttons/button";
 import { ListedSessionText } from "@/components/chat/session-state";
+import { SuggestedReplies } from "@/components/chat/suggested-replies";
 import { ByLead, LeadMark } from "@/components/code/lead-mark";
 import { FormError } from "@/components/forms/form-error";
 import { CARD, LIST_ROW, SectionTitle } from "@/components/layout/page";
@@ -26,13 +27,22 @@ type Listed = CodeSessionList["sessions"][number];
 export const sessionEnded = (session: Listed) =>
   session.pullRequest !== undefined && session.pullRequest.state !== "open";
 
+/** The next steps a session's last answer suggested, each replying in it with a tap (#565). */
+export type NextSteps = {
+  readonly session: SessionId;
+  readonly replies: readonly string[];
+  /** Sends one as the owner's message in that session: whether it was sent. */
+  readonly pick: (reply: string) => Promise<boolean>;
+};
+
 /**
  * The workspace's sessions, latest first, each saying whose turn it is (#179); those waiting on the
  * owner come first, marked for a new reply or an approval, with Mark all read while any new reply
  * waits (#345). In a code workspace, how many code sessions are running across the worker, and any
  * session waiting for one of them to end, which can be removed (#174). A planning workspace's page
- * shows them as a card; a code workspace's, on its Sessions tab (#301), its Lead pinned at the
- * top with its mark and its builders marked "by Lead" (#347).
+ * shows them as a card, its latest session with the next steps its last answer suggested (#565);
+ * a code workspace's, on its Sessions tab (#301), its Lead pinned at the top with its mark and its
+ * builders marked "by Lead" (#347).
  */
 export function SessionLinks(props: {
   list: CodeSessionList;
@@ -42,9 +52,11 @@ export function SessionLinks(props: {
    * listed, faint, and say they're not kept; nothing says whose turn it is or what's running.
    */
   kept?: ReadonlySet<SessionId>;
+  /** A planning workspace's latest session's next steps, under its row. */
+  nextSteps?: NextSteps;
 }) {
   const { sessions, running } = props.list;
-  const { kept } = props;
+  const { kept, nextSteps } = props;
   if (sessions.length === 0) return null;
   // A session whose pull request was merged or closed has ended: it leaves the sessions for
   // History, so its place is free for a new one (#278).
@@ -71,7 +83,11 @@ export function SessionLinks(props: {
               {replies && <MarkAllRead workspaceId={sessions[0]?.workspaceId} />}
             </div>
           </div>
-          <SessionList sessions={current} kept={kept} />
+          <SessionList
+            sessions={current}
+            kept={kept}
+            {...(nextSteps === undefined ? {} : { nextSteps })}
+          />
         </section>
       )}
       {history.length > 0 && (
@@ -86,39 +102,61 @@ export function SessionLinks(props: {
 
 /**
  * Sessions, each a link with whose turn it is and what it waits on, and Remove for one queued; or,
- * read offline (`kept`), each with when it was last active, faint where it isn't kept.
+ * read offline (`kept`), each with when it was last active, faint where it isn't kept. Under the
+ * one the next steps are for, its next steps.
  */
 function SessionList(props: {
   sessions: readonly Listed[];
   kept: ReadonlySet<SessionId> | undefined;
+  nextSteps?: NextSteps;
 }) {
-  const { kept } = props;
+  const { kept, nextSteps } = props;
   return (
     <ul className="mt-2 divide-y">
       {props.sessions.map((session) => (
-        <li key={session.id} className="flex items-center gap-2">
-          <Link
-            to="/workspaces/$workspaceId/sessions/$sessionId"
-            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-            className={classes(LIST_ROW, "min-w-0 flex-1")}
-          >
-            <ListedSessionText
-              title={session.title}
-              now={session.now}
-              updatedAt={session.updatedAt}
-              when={describeWhen}
-              {...(kept === undefined
-                ? {}
-                : { offline: kept.has(session.id) ? "kept" : "not-kept" })}
-            />
-            {session.lead === true && <LeadMark />}
-            {session.byLead === true && <ByLead />}
-            {session.waiting !== "nothing" && <WaitingMark on={session.waiting} />}
-          </Link>
-          {session.queued && <RemoveQueued session={session} />}
+        <li key={session.id} className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <SessionRow session={session} kept={kept} />
+          </div>
+          {nextSteps?.session === session.id && nextSteps.replies.length > 0 && (
+            <div className="pb-3">
+              <SuggestedReplies
+                key={nextSteps.replies.join("\n")}
+                replies={nextSteps.replies}
+                onPick={nextSteps.pick}
+                row={{ label: "Next steps" }}
+              />
+            </div>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A session's row: its link, and Remove for one queued. */
+function SessionRow(props: { session: Listed; kept: ReadonlySet<SessionId> | undefined }) {
+  const { session, kept } = props;
+  return (
+    <>
+      <Link
+        to="/workspaces/$workspaceId/sessions/$sessionId"
+        params={{ workspaceId: session.workspaceId, sessionId: session.id }}
+        className={classes(LIST_ROW, "min-w-0 flex-1")}
+      >
+        <ListedSessionText
+          title={session.title}
+          now={session.now}
+          updatedAt={session.updatedAt}
+          when={describeWhen}
+          {...(kept === undefined ? {} : { offline: kept.has(session.id) ? "kept" : "not-kept" })}
+        />
+        {session.lead === true && <LeadMark />}
+        {session.byLead === true && <ByLead />}
+        {session.waiting !== "nothing" && <WaitingMark on={session.waiting} />}
+      </Link>
+      {session.queued && <RemoveQueued session={session} />}
+    </>
   );
 }
 

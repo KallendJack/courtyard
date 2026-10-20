@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { CUT_OFF_SESSION_ID, CUT_OFF_SESSION_TITLE } from "./cut-off-session.ts";
+import { openTab } from "./workspace-page.ts";
 
 // A turn a restart cut off (#186; Paper, "Tablet · Session: turn cut off, Continue" and
 // "Component · Cut-off turn: cover, desktop, push"): the worker finds it as it starts, the session
@@ -18,11 +19,13 @@ const SESSION = `/workspaces/reading-list/sessions/${CUT_OFF_SESSION_ID}`;
 test("a cut-off turn says when and what it was doing, and Continue carries it on", async ({
   page,
 }) => {
-  // Its workspace's Home offers it as the last question, to open again (#481).
+  // Its workspace's History lists it, to open again (#565).
   await page.setViewportSize({ width: 950, height: 712 });
   await page.goto("/workspaces/reading-list");
+  await openTab(page, "History");
   await page
-    .getByRole("link", { name: "Your last question: Sort the list into this month and later" })
+    .getByRole("region", { name: "Sessions" })
+    .getByRole("link", { name: new RegExp(CUT_OFF_SESSION_TITLE) })
     .click();
   await expect(page).toHaveURL(new RegExp(`${SESSION}$`));
   const card = page.getByRole("region", { name: "Cut off" });

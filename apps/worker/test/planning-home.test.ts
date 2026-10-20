@@ -93,7 +93,7 @@ describe("a planning workspace's Home (#208)", () => {
     });
   });
 
-  it("shows a Thing's photo with its parts pinned, flagged only when they need something, and the wanted list", async () => {
+  it("breaks a Thing with a photo down into its parts, flagged only when they need something, and leaves the wanted list to the Things tab", async () => {
     await withKit();
     const request = await asOwner(testWorker({ root }));
 
@@ -127,26 +127,27 @@ describe("a planning workspace's Home (#208)", () => {
           { thing: "fork", name: "Fork", status: "have", pin: { x: 20, y: 40 }, flagged: false },
         ],
       },
-      {
-        kind: "wanted",
-        id: "wanted",
-        title: "Wanted",
-        changedAt: "2026-09-30T23:50:00.000Z",
-        items: [
-          { thing: "lights", name: "Lights", status: "want", price: "about £40" },
-          { thing: "chain", name: "Chain", status: "replace", needs: "It's stretched" },
-        ],
-      },
     ]);
   });
 
+  /** A road bike with its photo and a saddle wanted for it, changed after the Whyte. */
+  const withRoadBike = async () => {
+    await thing(
+      "road-bike",
+      "---\nname: Road bike\nstatus: have\nphoto: photos/road-bike.jpg\n---\n",
+      5,
+    );
+    await thing("saddle", "---\nname: Saddle\nstatus: want\npart of: road-bike\n---\n", 5);
+  };
+
   it("shows the view last changed, until the owner picks one, whose pick then sticks", async () => {
     await withKit();
+    await withRoadBike();
     const request = await asOwner(testWorker({ root }));
-    expect(await home(request)).toMatchObject({ showing: "wanted", picked: false });
+    expect(await home(request)).toMatchObject({ showing: "picture:road-bike", picked: false });
 
     const picked = await pick(request, "picture:whyte-t-140");
-    await thing("pump", "---\nname: Pump\nstatus: want\n---\n", 1);
+    await thing("saddle", "---\nname: Saddle\nstatus: have\npart of: road-bike\n---\n", 1);
 
     expect(picked.status).toBe(200);
     expect(await home(request)).toMatchObject({ showing: "picture:whyte-t-140", picked: true });
@@ -154,12 +155,12 @@ describe("a planning workspace's Home (#208)", () => {
 
   it("refuses a view that isn't there, and goes back to the last changed once a picked one goes", async () => {
     await withKit();
+    await withRoadBike();
     const request = await asOwner(testWorker({ root }));
 
     const refused = await pick(request, "picture:lights");
-    await pick(request, "wanted");
-    await thing("lights", "---\nname: Lights\nstatus: have\n---\n", 5);
-    await thing("chain", "---\nname: Chain\nstatus: have\npart of: whyte-t-140\n---\n", 5);
+    await pick(request, "picture:road-bike");
+    await thing("saddle", "---\nname: Saddle\nstatus: want\n---\n", 5);
 
     expect([refused.status, await errorOf(refused)]).toEqual([
       404,

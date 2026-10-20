@@ -13,6 +13,7 @@ import { hasLines } from "@courtyard/contract";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ChevronRight, FileText, Image, Tag } from "lucide-react";
 import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/buttons/button";
 import { useFilePicker } from "@/components/forms/file-picker";
 import { CardDialog } from "@/components/layout/card-dialog";
@@ -31,6 +32,7 @@ import { DocumentsSection } from "../documents/documents-section.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
 import { sendMessage, startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
+import { WorkspaceStatusLine } from "../status-line/status-line.tsx";
 import { ThingsSection } from "../things/things-section.tsx";
 import { WantedList } from "../wanted/wanted-list.tsx";
 import { KEPT_HOME, loadKeptHome } from "./api.ts";
@@ -45,15 +47,14 @@ addStylesheet("planning-home", css);
 
 /**
  * The places a planning workspace's page shows by its hash: its tabs, and What Courtyard knows.
- * Home is `#new` too when its box starts a new session (+ New, the frame's New session) rather
- * than replying to the last question.
+ * Home is `#new` too, as the frame's New session opens it, with the box open.
  */
 type Place = "" | "sessions" | "things" | "docs" | "knows";
 
 const placeIn = (hash: string): Place =>
   hash === "sessions" || hash === "things" || hash === "docs" || hash === "knows" ? hash : "";
 
-/** How often Home asks again while its last question is being answered. */
+/** How often Home asks again while its latest session is being answered, for its next steps. */
 const ANSWERING_EVERY_MS = 3000;
 
 /** A document or a Thing just deleted from its page, which its tab offers to undo. */
@@ -72,13 +73,15 @@ export type PlanningLoaded = {
 };
 
 /**
- * A planning workspace's page under its name (#300, #481; Paper, "Tablet · Home: the bike, parts
- * pinned" and its Desktop and Cover boards). Its header: the name with its ⋯, the workspace's
- * photo top right, and pills for + New · History · Things · Docs, each tab once it has something,
- * with its count, by the address's hash. Home is the workspace now (`HomeNow`): the last question,
- * the view showing, its next steps, and the Reply box at the foot carrying that conversation on,
- * until + New or a photo starts another. An empty workspace shows only its name, one line and the
- * box. Nothing on it is a warning or a nudge: a planning workspace stays calm (AGENTS.md).
+ * A planning workspace's page under its name (#300, #565; Paper, "Tablet · Planning Home: the bike,
+ * part by part (#565)" and its Desktop and Cover boards). Its header: the name with its ⋯, the
+ * workspace's photo top right, and pills for + New · History · Things · Docs, each tab once it has
+ * something, with its count, by the address's hash. Home is a view of the workspace's main subject
+ * (`HomeNow`), not a chat: while it shows a view, the box that starts a new session is out of
+ * sight until Talk, + New or a part's Ask about it opens it, and the latest session's next steps
+ * are in History. An empty
+ * workspace shows only its name, one line and the box. Nothing on it is a warning or a nudge: a
+ * planning workspace stays calm (AGENTS.md).
  */
 export default function PlanningHome(props: {
   /** The page's title, given a line to put under the name, its tabs and its photo. */
@@ -109,10 +112,7 @@ export default function PlanningHome(props: {
     asking: offline === undefined,
     busy: (known) => (known.question?.answering === true ? ANSWERING_EVERY_MS : undefined),
   });
-  /** A photo or doc to send starts a new session, as `#new` does, rather than a reply. */
-  const [freshFor, setFresh] = useState(false);
-  const fresh = freshFor || props.hash === "new";
-  /** What's put in the box: nothing, to type in (+ New), or a photo or doc to send. */
+  /** What's put in the box: nothing, to type in (+ New), words to go on, or a photo or doc to send. */
   const [draft, setDraft] = useState<{ text: string; files?: readonly File[]; key: number }>();
   /** The rail's Add, asking what to add, and Add Thing's form, opened from it. */
   const [adding, setAdding] = useState(false);
@@ -149,6 +149,8 @@ export default function PlanningHome(props: {
         ? asked
         : "";
   const empty = tabs.length === 0 && (contextFile === null || !hasLines(contextFile));
+  /** Changes as a session starts or a turn ends, when the status line may have moved along (#256). */
+  const turnsEnded = `${list.sessions.length}-${list.sessions.filter(({ busy }) => busy).length}`;
   // Add Thing's form opens once, from Add: back on another tab, it's closed.
   useEffect(() => {
     if (place !== "things") setAddingThing(false);
@@ -157,8 +159,15 @@ export default function PlanningHome(props: {
   /** A photo or a doc goes in the box, for a new session about it. */
   const toSend = (file: File) => {
     setAdding(false);
-    setFresh(true);
     setDraft({ text: "", files: [file], key: Date.now() });
+  };
+  /**
+   * Opens the box with these words in it, to start a session: + New, or a part's Ask about it. It
+   * opens while the tap is still the browser's, so the keyboard can follow it in.
+   */
+  const startWith = (text: string) => {
+    flushSync(() => dock?.open());
+    setDraft({ text, key: Date.now() });
   };
   const photoPicker = useFilePicker({ accept: "image/*", onPick: toSend });
   const docPicker = useFilePicker({ accept: "application/pdf,image/*", onPick: toSend });
@@ -170,31 +179,43 @@ export default function PlanningHome(props: {
   }, [dock, offline]);
 
   const homeNow = offline === undefined ? home : undefined;
-  const question = homeNow?.question ?? null;
-  const replying = question !== null && !fresh;
+  const latest = homeNow?.question ?? null;
   const photoThing = allThings.find((thing) => thing.slug === homeNow?.photo);
+  /**
+   * While Home shows a view, the box is out of sight until it's asked for: the view needs the room.
+   * With nothing to show, it stays, under Home's quiet line. Known from the page's Things before
+   * Home loads (a Thing with a photo and parts is a view, as the worker's `homeViews` has it), so
+   * the box never comes and goes as Home arrives (#283).
+   */
+  const showsView =
+    homeNow?.views !== undefined
+      ? homeNow.views.length > 0
+      : allThings.some((top) => top.photo && allThings.some((part) => part.partOf === top.slug));
   const changed = async () => {
     await loadKeptHome(workspace.id);
     await router.invalidate();
   };
-  /** Into the last question's session, then there to read its answer. */
-  const replyWith = async (text: string, files: readonly File[], model = question?.model) => {
-    if (question === null || model === undefined) return "Nothing to reply to.";
+  /**
+   * One of the latest session's next steps, sent in it with the model it was asked with (#481),
+   * then there to read its answer: whether it was sent.
+   */
+  const replyWith = async (text: string) => {
+    if (latest === null) return false;
     const sent = await sendMessage({
-      sessionId: question.session,
+      sessionId: latest.session,
       message: {
         text,
-        model,
-        ...(question.effort === undefined ? {} : { effort: question.effort }),
+        model: latest.model,
+        ...(latest.effort === undefined ? {} : { effort: latest.effort }),
       },
-      files,
+      files: [],
     });
-    if (sent.kind !== "loaded") return describeProblem(sent).body;
+    if (sent.kind !== "loaded") return false;
     await navigate({
       to: "/workspaces/$workspaceId/sessions/$sessionId",
-      params: { workspaceId: workspace.id, sessionId: question.session },
+      params: { workspaceId: workspace.id, sessionId: latest.session },
     });
-    return undefined;
+    return true;
   };
 
   // Its own classes apply inside each part (planning-home.css), but not to the page's title around
@@ -215,7 +236,10 @@ export default function PlanningHome(props: {
           : {
               under: (
                 <div data-planning-home="">
-                  <div className="mt-2">
+                  {offline === undefined && (
+                    <WorkspaceStatusLine workspaceId={workspace.id} again={turnsEnded} />
+                  )}
+                  <div className="mt-3">
                     <WorkspaceTabs
                       workspaceId={workspace.id}
                       tabs={tabs}
@@ -224,7 +248,7 @@ export default function PlanningHome(props: {
                         action: {
                           label: "+ New",
                           onClick: () => {
-                            setDraft({ text: "", key: Date.now() });
+                            startWith("");
                             void navigate({
                               to: "/workspaces/$workspaceId",
                               params: { workspaceId: workspace.id },
@@ -269,18 +293,14 @@ export default function PlanningHome(props: {
         ) : providers.kind === "loaded" ? (
           <Composer
             providers={providers.data.providers}
-            {...(replying ? { initialModel: question.model } : {})}
-            {...(replying && question.effort !== undefined
-              ? { initialEffort: question.effort }
-              : {})}
-            placeholder={replying ? "Reply…" : "Talk or type to start a session…"}
-            {...(replying ? {} : { submitLabel: "Start" })}
+            placeholder="Talk or type to start a session…"
+            submitLabel="Start"
+            tucked={showsView}
             {...(draft === undefined ? {} : { draft })}
             {...(skills.kind === "loaded"
               ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
               : {})}
             send={async (message, files) => {
-              if (replying) return replyWith(message.text, files, message.model);
               const session = await startSession({ workspaceId: workspace.id, message, files });
               if (session.kind !== "loaded") return describeProblem(session).body;
               await navigate({
@@ -308,6 +328,15 @@ export default function PlanningHome(props: {
               list={list}
               mode="planning"
               {...(offline === undefined ? {} : { kept: offline.conversations })}
+              {...(latest === null || latest.answering
+                ? {}
+                : {
+                    nextSteps: {
+                      session: latest.session,
+                      replies: latest.nextSteps,
+                      pick: replyWith,
+                    },
+                  })}
             />
           ) : offline !== undefined && (place === "things" || place === "docs") ? (
             <NotKept />
@@ -358,7 +387,7 @@ export default function PlanningHome(props: {
                 workspaceId={workspace.id}
                 home={homeNow}
                 things={allThings}
-                reply={async (step) => (await replyWith(step, [])) === undefined}
+                ask={startWith}
                 changed={changed}
               />
             )

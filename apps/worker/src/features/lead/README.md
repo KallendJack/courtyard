@@ -37,7 +37,8 @@ because it changes the same file, and starts it once the first one's PR merges.
 - **Builders that stop, fail or go quiet** (#474): one whose last turn failed or was stopped (not cut off by a
   restart, which waits for Continue) leaves Building at once, its slot free. One with no pull request silent for 20
   minutes (`BUILDER_STALLS_AFTER_MINUTES`: no turn, commit or event; time waiting on the owner or for a place doesn't
-  count) is stalled: `sessions/`' `markStalled` marks its session, which then waits on the owner as `stalled` (Needs
+  count, nor, #574, time a task the model started still runs, or its latest event is a command running or waiting
+  for the build turn; its silence starts again once that ends) is stalled: `sessions/`' `markStalled` marks its session, which then waits on the owner as `stalled` (Needs
   you's "Stalled · silent 20 min · its slot is free", with Open), the owner is notified once, and its slot is free.
   Its session is kept and its claim stands; nothing is posted on the issue. Either counts as Building again once its
   session carries on, and neither has its issue started afresh. One with a pull request waits on the owner or CI, so

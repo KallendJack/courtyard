@@ -166,6 +166,14 @@ context file. The owner saves one from an answer, or asks a model to save or upd
 unasked. Every model is told which documents there are and reads one when it helps (ADR 0020).
 _Avoid_: note, page, file (on its own), artifact
 
+**Floor plan**:
+A room drawn top-down and to scale from data a model writes in a `plan` block (#257): its walls in centimetres, doors
+and windows, zones, inner walls and the things in it, solid when the owner has them and dashed when they want them,
+always seen from the front of the house with the front at the bottom. Courtyard keeps each room's last one as a
+document of its own, saved the moment its answer ends (the one document nobody asks to save), so a redraw replaces
+it, and Home shows it.
+_Avoid_: layout diagram, ASCII plan, map, blueprint
+
 **Thing**:
 One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
 with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
@@ -193,16 +201,17 @@ picks and price checks leave it out until the owner unblocks it from the workspa
 _Avoid_: banned shop, blacklist
 
 **Pin**:
-Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, moved by the
-owner dragging it, and gone once the part moves to another Thing. A pinned part is **flagged** only when it needs
-something (to get, to replace, or a next step).
-_Avoid_: marker, hotspot, label (that's a model's `T2`)
+Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, or by the
+owner tapping the part, then the photo (#565); moved by the owner dragging it, and gone once the part moves to another
+Thing. A pinned part is **flagged** only when it needs something (to get, to replace, or a next step).
+_Avoid_: marker, hotspot, label (that's a model's `T2`, or a part's name beside the photo)
 
 **Home view**:
-One big panel a planning workspace's Home shows (#208), filled by the worker from the workspace's data: a Thing's
-photo with its parts pinned, or the wanted list (the Things wanted or to replace). The one showing is the one last
-changed, unless the owner picked one, whose pick sticks; above it the owner's last question, under it the next steps
-its answer suggested. Floor plans, renders and phases come as further kinds.
+The one big panel a planning workspace's Home shows (#208, #565), filled by the worker from the workspace's data, and
+nothing else: no chat. The **Breakdown view**, a Thing with a photo and parts, every part labelled beside the photo
+with a line to its pin, a tap on one opening its card under it; or a room's floor plan (#257). The one showing is the
+one last changed, unless the owner picked one, whose pick sticks. A Thing's drawing (#566), the rest of the
+workspace's plans (#567), renders and phases come as further kinds; the wanted list is the Things tab's.
 _Avoid_: block (that's a fixed piece of the code Home), card, widget, dashboard
 
 **Planning workspace**:
@@ -231,9 +240,10 @@ A workspace page's first tab (#300, #301), beside the tabs that show once they h
 Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, **Needs you**,
 **Running**, **Next up** and **Main** (its repository's newest main commit with its build), the first three keeping
 their place when empty with one quiet line ("Nothing running"), then the message box; from a tablet up it fits the
-screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows **Next up**, then the one row for **What
-Courtyard knows**, then the message box, which starts a new session; an empty one shows only its name, one line and
-the box.
+screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows its **Home
+view** (#565); the message box, which starts a new session, is out of sight while there's a view, until Talk, + New
+or a part's Ask about it opens it, and the latest session's next steps are in History. With no view it shows one quiet
+line and the box; an empty workspace only its name, one line and the box.
 _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:
@@ -482,8 +492,8 @@ The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
 **Rich block**:
-A table, chart or diagram in an answer or a document that Courtyard draws itself from what the model wrote, never
-HTML from a model (ADR 0021).
+A table, chart, diagram or floor plan in an answer or a document that Courtyard draws itself from what the model
+wrote, never HTML from a model (ADR 0021).
 _Avoid_: artifact, canvas, widget, embed
 
 **Activity**:

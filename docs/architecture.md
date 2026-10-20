@@ -106,10 +106,14 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
 - [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
   provider's errand model, and blocked shops (#245).
+- [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a workspace's name,
+  ✓ just done · ● now · ○ next (#256): a planning one's kept and moved along, a code one's built from its data.
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
+- [`floor-plans/`](../apps/worker/src/features/floor-plans/README.md): each room's last floor plan from an answer,
+  saved as its document once the answer ends, and Home's plan views (#257).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
-  showing, and the last question with its next steps.
+  showing, and its latest session's next steps, which History shows.
 - [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
@@ -207,11 +211,13 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
-    and Home now: the last question, the view showing (a photo with its parts pinned), its next steps.
+    and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled), no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one
     button (#245).
+  - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a workspace's name,
+    and the card an item opens: Done, Edit, Remove (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
   - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
@@ -305,7 +311,12 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   one at a time, in the colours read from the theme, at its
   own size so a wide one scrolls sideways. A `product` block (`product.tsx`, #245) is the JSON the contract's
   `ProductBlock` accepts, drawn as a card with + Add to wanted, which adds a Thing of that name, wanted, through
-  `features/things/`'s call, or ✓ In Wanted once one is. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
+  `features/things/`'s call, or ✓ In Wanted once one is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
+  contract's `FloorPlan` accepts, a room in centimetres seen from the front, drawn top-down and to scale by our own
+  SVG (`plan-geometry.ts` places each part, and turns the plan when it says why) beside a list of its things by
+  side; a tap on a thing or its row lights both up. It says "On Home ✓" once the workspace's Home shows that very
+  plan, which the worker saved when the answer ended (`floor-plans/`), and Home draws its plan views with the same
+  block, `OnHome` telling it it's in a block whose size is set. Mermaid runs strict, with every one of its settings locked so a diagram's `%%{init}%%` or front matter
   changes nothing, laid out by dagre; `diagram-svg.ts` then takes out of its drawing anything that could still run
   script, load something or go somewhere (links keep their words) before it goes in the page, the one place
   Courtyard puts in markup it didn't write itself. Mermaid itself can still load a picture while drawing (a step
@@ -444,6 +455,10 @@ Where the rest fits:
   `errand` model (its cheap model and effort: Claude's Sonnet at Low), with web search and only the picks tool, in
   the background, when the owner taps Find picks, opens the list with prices over a week old (once a day), or blocks
   a shop.
+- **The status line** (#256). As a planning session's turn completes with nothing more queued, `sessions/` hands its
+  last exchanges to `status-line/`, which asks the first provider's `errand` model one one-off question (no tools) in
+  the background and keeps the line it gives, unless the owner changed it meanwhile. A code workspace's line is built
+  from `sessions/`' list and `next-up/` when asked, with no model.
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -656,6 +671,8 @@ things live only in the worker's memory and go when it restarts.
   it's there.
 - `wanted/<workspace>.json`: a planning workspace's wanted list's picks, by each Thing's file name, and the day its
   prices were last checked (#245). Found again on the web, so no change to the context folder.
+- `status-line/<workspace>.json`: a planning workspace's status line (#256), ✓ just done, ● now and ○ next, each
+  with the session that put it there or marked the owner's own words.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

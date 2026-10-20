@@ -13,8 +13,8 @@ export function SuggestedReplies(props: {
   /** Sends the reply as the owner's message: whether it was sent. */
   onPick: (reply: string) => Promise<boolean>;
   /**
-   * A planning workspace's next steps under its Home's view (#481): named so, in one row that
-   * scrolls sideways when it's wider than the screen.
+   * A planning workspace's next steps under its latest session in History (#481, #565): named so,
+   * in one row that scrolls sideways when it's wider than the screen.
    */
   row?: { readonly label: string };
 }) {
