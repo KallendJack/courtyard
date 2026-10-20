@@ -834,6 +834,48 @@ describe("Update when ready (#186)", () => {
     expect(started).toEqual([]);
   });
 
+  it("cancelled while main's build is being read, stays cancelled and nothing throws (#586)", async () => {
+    ciIs("running");
+    // GitHub answers about main's build only when the test lets it, the next time it's asked.
+    let reading: () => void = () => {};
+    const asked = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    let answer: () => void = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    let slow = false;
+    const real = github.api;
+    github = {
+      ...github,
+      api: {
+        ...real,
+        commitChecks: async (...args) => {
+          if (slow) {
+            reading();
+            await answered;
+          }
+          return real.commitChecks(...args);
+        },
+      },
+    };
+    const request = await start();
+    await startUpdate(request);
+
+    slow = true;
+    ciIs("passed");
+    later();
+    const watched = watchUpdate();
+    await asked;
+    expect((await cancel(request)).status).toBe(204);
+    answer();
+
+    await expect(watched).resolves.toBeUndefined();
+    expect(started).toEqual([]);
+    expect(await waitingOf(request)).toBeNull();
+  });
+
   it("is dropped when main's build fails while it waits, saying so with the log", async () => {
     ciIs("running");
     const request = await start();
