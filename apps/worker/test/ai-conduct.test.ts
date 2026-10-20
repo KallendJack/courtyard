@@ -415,14 +415,18 @@ describe("what every turn tells a model", () => {
 
     expect(instructions).toContain(`${await quotedInGuide("A room's layout")}\n\n${planning}`);
     for (const rule of [
-      "Keep answers brief",
-      "one short step at a time",
+      "Keep answers brief, under 100 words",
+      "offer the rest",
+      "give only the next step",
+      "with nothing before it",
       "wait for them to say it's done or send a photo",
       "Never assume the owner has a tool",
       "check what's saved here",
       "each linked",
       "say so rather than",
       "needs a pro",
+      // The eval's planning-needs-a-pro saved the job as a plan nobody agreed to (#599).
+      "isn't saved as a plan until the owner says",
       "Draw no diagram unless the owner asks for one",
     ]) {
       expect(planning).toContain(rule);
@@ -1115,6 +1119,10 @@ describe("getting to know a workspace (#127)", () => {
     expect(skill).toContain("at most five questions");
     expect(skill).toContain("answers the owner can tap");
     expect(skill).toContain("picked up as you go");
+    // The eval's get-to-know-five asked a sixth question to clear up the fifth answer (#599).
+    expect(skill).toContain("Ask nothing more, even to clear an answer up");
+    // And its get-to-know-workspace wrote its first question twice (#599).
+    expect(skill).toContain("never write the question again");
     expect(skill).not.toMatch(/topics/i);
   });
 

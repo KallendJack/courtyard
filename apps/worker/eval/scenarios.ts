@@ -1054,7 +1054,8 @@ export const SCENARIOS: readonly Scenario[] = [
       ),
       // The fifth answer: what it saves, then a wrap-up with no new question.
       {
-        say: "About £100 a year, give or take.",
+        // Whole on its own, whatever was asked: "About £100 a year" left Claude asking what for.
+        say: "We spend about £100 a year on the plot, all in.",
         expect: [{ action: "add", section: ["facts", "plans"], words: ["100"] }],
         questions: { atLeast: 0, atMost: 0 },
         suggests: false,
