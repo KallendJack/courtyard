@@ -454,6 +454,11 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
+- **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
+  (done · decided · next) once it has been quiet for 30 minutes (the worker's repeating job) or another session
+  starts in its workspace, and keeps it as the session's `note.json`. Each planning turn's framing gets the
+  workspace's latest five notes from `prompts/`, and its `read_session` tool opens an earlier session of the same
+  workspace, answered by `sessions/` from that session's event log.
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -661,7 +666,9 @@ things live only in the worker's memory and go when it restarts.
 
 - `sessions/<session>/`: `session.json` (title and times, and a code session's branch, with `keepsBranch` when the
   branch was in the repository before it, #326), `events.jsonl` (the event
-  log), `seen.json` (the last event the owner has seen, on any device, #334) and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
+  log), `seen.json` (the last event the owner has seen, on any device, #334), a planning session's `note.json` (the
+  note it leaves for the next sessions in its workspace, done · decided · next, and the last event it covers, #601)
+  and `attachments/`: each photo or PDF the owner attached, by its id, and each PDF's text beside it.
 - `matt-skills/<version>/`: Courtyard's copy of Matt Pocock's plugin at the pinned release (ADR 0024): his
   `plugin.json`, licence and skills, checked against `matt.json`'s checksum. `matt-setup.json`: each code workspace's
   answer to the setup check (#181).

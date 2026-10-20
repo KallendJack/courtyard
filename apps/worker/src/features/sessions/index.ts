@@ -91,6 +91,8 @@ import {
   type LeadBrief,
   notOfferedReply,
   PREVIEW_TOOL_NAME,
+  READ_SESSION_TOOL_NAME,
+  readSessionReply,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   saveReply,
@@ -200,6 +202,7 @@ import {
   withoutStarterHint,
 } from "../workspaces/index.ts";
 import { type AddedInbox, createAddedInbox } from "./added.ts";
+import { createSessionNotes } from "./notes.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
 const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
@@ -807,6 +810,33 @@ export const createSessions = (options: {
   const eventsPath = (id: SessionId) => join(folderOf(id), "events.jsonl");
   const seenPath = (id: SessionId) => join(folderOf(id), "seen.json");
 
+  /** Every session's own file, in every workspace. */
+  const allSessionFiles = async (): Promise<Result<SessionFile[], SessionError>> => {
+    const folders = await listFolder(sessionsDir);
+    if (!folders.ok) return err(STORAGE_ERROR);
+    const files: SessionFile[] = [];
+    for (const folder of folders.value) {
+      const id = SessionId.safeParse(folder);
+      if (!id.success) continue;
+      const file = await readJsonFile(sessionFilePath(id.data), SessionFile);
+      if (!file.ok) return err(STORAGE_ERROR);
+      if (file.value !== undefined) files.push(file.value);
+    }
+    return ok(files);
+  };
+
+  /** The note each planning session leaves for the next ones in its workspace (#601). */
+  const notes = createSessionNotes({
+    providers: options.providers,
+    contextDir: options.contextDir,
+    now: options.now,
+    folderOf,
+    sessions: allSessionFiles,
+    events: (id) => readEvents(id),
+    busy: (id) => (running.get(id)?.turn.kind ?? "idle") !== "idle",
+    background: options.background,
+  });
+
   /** The event number the owner has seen a session up to (#334), read from its folder once. */
   const seenOf = async (
     id: SessionId,
@@ -1044,11 +1074,13 @@ export const createSessions = (options: {
   };
 
   /**
-   * What a turn needs from its workspace: its name, mode and folder, its context file as written,
-   * the owner context, and its skills.
+   * What a turn in the session needs from its workspace: its name, mode and folder, its context
+   * file as written, the owner context, its skills, and in a planning workspace its documents,
+   * Things and the notes its other sessions left (#601).
    */
   const turnWorkspaceOf = async (
     workspaceId: WorkspaceId,
+    session: SessionId,
   ): Promise<
     Result<
       FramingWorkspace & {
@@ -1079,6 +1111,8 @@ export const createSessions = (options: {
         ? await readThings({ contextDir: options.contextDir, workspaceId })
         : ok({ things: [], problems: [] });
     if (!things.ok) return err("This session's workspace's Things can't be read.");
+    const sessionNotes =
+      summary.mode === "planning" ? await notes.forTurn(workspaceId, session) : [];
     return ok({
       name: summary.name,
       mode: summary.mode,
@@ -1087,6 +1121,7 @@ export const createSessions = (options: {
       ownerContext: ownerContext.value,
       documents: documents.value,
       things: things.value,
+      notes: sessionNotes,
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
       paper: workspace.value.paper,
@@ -1162,7 +1197,7 @@ export const createSessions = (options: {
     try {
       const [events, workspace, file] = await Promise.all([
         readEvents(turn.id),
-        turnWorkspaceOf(turn.workspaceId),
+        turnWorkspaceOf(turn.workspaceId, turn.id),
         readJsonFile(sessionFilePath(turn.id), SessionFile),
       ]);
       if (taken !== undefined && slot === undefined) {
@@ -1320,6 +1355,10 @@ export const createSessions = (options: {
           [SAVE_TOOL_NAME]: save,
           [DOCUMENT_TOOL_NAME]: saveDocument,
           [THING_TOOL_NAME]: saveThingTool,
+          [READ_SESSION_TOOL_NAME]: async (input) =>
+            readSessionReply(
+              await notes.read({ workspaceId: turn.workspaceId, session: turn.id, input }),
+            ),
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
@@ -3087,6 +3126,9 @@ export const createSessions = (options: {
     /** For the worker's repeating jobs (#610): carries on each builder whose usage limit has reset. */
     carryOnAtReset,
 
+    /** For the worker's repeating jobs (#601): writes the note of each planning session gone quiet. */
+    writeQuietNotes: notes.writeQuiet,
+
     /** A code session's tasks still running (#182), oldest first, each with its last line. */
     runningTasks: async (rawId: string): Promise<Result<RunningTasks, SessionError>> => {
       const found = await findSession(rawId);
@@ -3510,6 +3552,9 @@ export const createSessions = (options: {
               byLead: true,
             })
           : written;
+      // Another session starting in a planning workspace has the notes of the ones before it
+      // written now, which its first turn waits for (#601).
+      if (written.ok && sessionBranch === undefined) notes.started(start.workspaceId, id);
       const started =
         written.ok && allowing.ok
           ? await startTurn({

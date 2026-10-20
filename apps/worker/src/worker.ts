@@ -217,6 +217,9 @@ const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
 /** How often each provider's plan usage is read while no turn ends (#66), so Home's line stays fresh. */
 const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
 
+/** How often planning sessions are looked at for one quiet long enough to leave its note (#601). */
+const WRITE_NOTES_EVERY_MS = 5 * 60 * 1000;
+
 /** Runs a job now and every `everyMs`, never overlapping itself. */
 export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
 
@@ -539,6 +542,8 @@ export const createWorker = (options: {
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
   repeat(READ_USAGE_EVERY_MS, () => usage.read());
+  // Each planning session quiet for half an hour leaves its note for the next ones (#601).
+  repeat(WRITE_NOTES_EVERY_MS, sessions.writeQuietNotes);
 
   /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
