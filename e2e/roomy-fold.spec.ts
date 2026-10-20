@@ -47,11 +47,12 @@ test.describe("on the unfolded Fold", () => {
     expect(await besideTheTitle(page, line)).toBe(true);
     // The title starts near the top: no raised panel, no deep gap above it.
     expect((await boxOf(title(page))).y).toBeLessThanOrEqual(32);
-    // From Needs you's top to Main's: the board gives the blocks about 385 px.
-    const needs = page.getByRole("region", { name: /^Needs you/ });
+    // From the first block's top (the Builders board, #592) to Main's: the board gives the blocks
+    // about 385 px.
+    const first = page.getByRole("region", { name: "Builders" });
     const main = page.getByRole("region", { name: "Main" });
     await expect(main).toBeVisible();
-    const [top, foot] = [await boxOf(needs), await boxOf(main)];
+    const [top, foot] = [await boxOf(first), await boxOf(main)];
     expect(foot.y - top.y).toBeGreaterThanOrEqual(370);
   });
 

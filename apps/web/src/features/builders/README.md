@@ -28,7 +28,7 @@ book is "Checking · 2 min", history.test.ts 2nd in line; Notify me is "Ready fo
   Waiting on you, in gold; **Review** while Ready for review, in moss; **Retry** while Stuck, in red. A row that's only
   working (Building, Checking, In CI, Waiting for the limit) has a quiet › and opens its session. A merged one leaves
   at the end of the day.
-- It keeps its size whatever it holds (#283): from a tablet up three shares of the column's height to Needs you's one,
+- It keeps its size whatever it holds (#283): from a tablet up three shares of the column's height to Needs you's one (never less than a whole row there),
   on a phone three rows tall, its rows scrolling inside. Not started, one quiet line says Run the build order is in
   Next up.
 

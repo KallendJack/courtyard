@@ -42,6 +42,11 @@ export function Block(props: {
   fill?: boolean;
   /** Its size is its slot's, set by the page (Home's Needs you, #492); its rows scroll inside. */
   fillsSlot?: boolean;
+  /**
+   * From a tablet up, never shorter than one whole row (Needs you under the Builders board, #592),
+   * however little of the page's height its share is.
+   */
+  aRowAtLeast?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -50,7 +55,11 @@ export function Block(props: {
       className={classes(
         "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
         props.needs && "border-warning/25",
-        props.fill && "md:min-h-0 md:flex-1 max-md:h-46 max-md:shrink-0",
+        props.fill &&
+          classes(
+            "md:flex-1 max-md:h-46 max-md:shrink-0",
+            props.aRowAtLeast ? "md:min-h-30" : "md:min-h-0",
+          ),
         props.tall && "md:min-h-0 md:flex-3 max-md:h-88 max-md:shrink-0",
         props.fillsSlot && "h-full min-h-0",
       )}

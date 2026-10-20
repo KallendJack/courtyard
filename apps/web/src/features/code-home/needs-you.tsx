@@ -73,7 +73,7 @@ export function NeedsYou(props: {
   const opened = props.setup.state === "opened";
   if (props.needs.length === 0 && props.pending) {
     return (
-      <Block label="Needs you" needs fill>
+      <Block label="Needs you" needs fill aRowAtLeast>
         <PlaceholderRows count={2} />
       </Block>
     );
@@ -81,13 +81,13 @@ export function NeedsYou(props: {
   // Nothing waits: the block keeps its place, calm, with one quiet line (#283).
   if (props.needs.length === 0 && !opened) {
     return (
-      <Block label="Needs you" fill>
+      <Block label="Needs you" fill aRowAtLeast>
         <BlockEmpty>{props.nothing ?? "Nothing needs you"}</BlockEmpty>
       </Block>
     );
   }
   return (
-    <Block label="Needs you" count={props.needs.length} needs fill>
+    <Block label="Needs you" count={props.needs.length} needs fill aRowAtLeast>
       <BlockRows>
         <ul className="flex flex-col gap-1.5">
           {props.needs.map((need) => (
