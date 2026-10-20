@@ -33,6 +33,7 @@
 @source not "./components/code/repo-picker.tsx";
 @source not "./features/new-workspace";
 @source not "./features/code-home";
+@source not "./features/builders";
 @source not "./features/planning-home";
 @source not "./features/home";
 @source not "./components/workspace/workspace-tabs.tsx";
@@ -130,6 +131,7 @@
    * is named for where it shows.
    */
   --shadow-glow: 0 0 8px var(--primary); /* a live dot: working, Jump to latest */
+  --shadow-glow-needs: 0 0 6px color-mix(in oklab, var(--warning) 50%, transparent); /* a gold dot: a builder waiting on you (#592) */
   --shadow-glow-tile: 0 0 22px color-mix(in oklab, var(--primary) 40%, transparent); /* the open workspace's tile */
   /* A button on a tablet's right rail whose sheet is open: a soft violet ring and glow. */
   --shadow-lit:

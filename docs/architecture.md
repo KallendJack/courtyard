@@ -220,8 +220,10 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
   - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
-  - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
-    up, Main, and its Roadmap tab.
+  - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: the Builders board, Needs
+    you, Next up, Main, and its Roadmap tab.
+  - [`builders/`](../apps/web/src/features/builders/README.md): the Builders board (#592), every Lead builder's
+    status and since when, its Allow, Review and Retry, which Home's Needs you and tiles share.
   - [`tasks/`](../apps/web/src/features/tasks/README.md): a code session's running tasks above the Reply box, and
     each ended one's line.
   - [`preview/`](../apps/web/src/features/preview/README.md): a code session's Preview button, and the app beside
@@ -527,7 +529,13 @@ Where the rest fits:
   in `builders.json`. The Lead decides from it alone (Stuck frees a slot), `sessions/` lists a Stuck builder as
   waiting on the owner with why (Needs you, the Home tile), and the waits end on their own: one carry-on for a turn
   with nothing to show, a turn of the worker's at the usage limit's reset (`carryOnAtReset`), Continue by itself
-  once after any restart (`worker.ts`), and a task's end told even while an Update waits.
+  once after any restart (`worker.ts`), and a task's end told even while an Update waits. A Stuck one carries on
+  when the owner taps Retry (`POST /api/sessions/:id/retry`, #592), its one carry-on with it again.
+- **The Builders board** (#592, ADR 0031). The web app's `builders/` reads the Lead (`GET …/lead`): each builder's
+  status (`statuses`) beside its listed session (what it's doing now, its approval), and every reason the Lead starts
+  no more (`holding`, worked out in `lead/`'s look, not only the first) with what it holds back for a merge
+  (`heldBack`). On a code workspace's Home a builder's needs are on the board only; Home's Needs you (`waiting/`'s
+  `needsYouOf`) marks a builder's (`builder`) and carries an approval's number and ask, so Allow acts in place.
 - **Helpers** (#117, ADR 0027). A code turn's model can start helpers, its provider's own sub-agents, through
   `CodeTurn.helper`: `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
   running (recording it as `waiting` until then, and again once it has one), and hands back a `HelperTurn`, the

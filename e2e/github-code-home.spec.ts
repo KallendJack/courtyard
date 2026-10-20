@@ -11,8 +11,8 @@ const HOME = "/workspaces/workbench";
 
 /** Home's blocks, by their labels. */
 const blocks = (page: Page) => ({
+  builders: page.getByRole("region", { name: "Builders" }),
   needsYou: page.getByRole("region", { name: "Needs you" }),
-  running: page.getByRole("region", { name: "Running" }),
   nextUp: page.getByRole("region", { name: "Next up" }),
 });
 
@@ -25,13 +25,13 @@ const showsHome = async (page: Page) => {
   // Its one line stays in workspace.json, off the page (#333).
   await expect(page.getByText("Plan and code with AI models")).toHaveCount(0);
 
-  const { needsYou, running, nextUp } = blocks(page);
+  const { needsYou, builders, nextUp } = blocks(page);
   await expect(needsYou).toContainText(/Needs you · \d+/);
   const ready = needsYou.getByRole("listitem", { name: /Builds take turns/ });
   await expect(ready).toContainText("Checks passed · ready to merge");
   await expect(ready.getByRole("button", { name: /^Merge/ })).toBeVisible();
-  // Nothing runs yet: its block keeps its place with one quiet line (#283, #335).
-  await expect(running).toContainText("Nothing running");
+  // No Lead yet: the Builders board keeps its place with one quiet line (#283, #592).
+  await expect(builders).toContainText("No builders yet");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
   // issues nobody claimed, with Build; then only the next few titles and the way to the Roadmap,
@@ -285,7 +285,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
 
     // Owner, 2026-10-19: with an issue to grill on top there was no way to start the Lead (#550;
     // Paper, "Code Home: Grill on top, Run the build order" and "…Lead running").
-    test("with Grill on top, Run the build order sits under the small Build, which says the Lead starts it next once it runs", async ({
+    test("with Grill on top, Run the build order sits under the small Build, which says Next once the Lead runs", async ({
       page,
       request,
     }) => {
@@ -306,16 +306,16 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await dialog.getByRole("button", { name: "Cancel" }).click();
       await expect(dialog).toBeHidden();
 
-      // Once the Lead runs, the small Build never races it: the Lead starts it next.
+      // Once the Lead runs, the small Build is simply Next (#592; Paper, "Tablet · Builders board,
+      // running"): the Builders board says the Lead runs, so Run the build order goes.
       await page.route("**/api/workspaces/workbench/lead", async (route) => {
         const response = await route.fetch();
         const lead = (await response.json()) as object;
         await route.fulfill({ response, json: { ...lead, state: "running" } });
       });
       await page.goto(HOME);
-      await expect(build).toContainText("The Lead starts this next");
-      await expect(nextUp).toContainText("Lead is running the order");
-      await expect(build.getByRole("button", { name: "Build" })).toHaveCount(0);
+      await expect(build.getByText("Next", { exact: true })).toBeVisible();
+      await expect(build.getByRole("button", { name: "Build" })).toBeVisible();
       await expect(nextUp.getByRole("button", { name: "Run the build order" })).toHaveCount(0);
       await shot(page, "tablet-code-home-grill-on-top-lead-running");
       await page.unrouteAll({ behavior: "ignoreErrors" });
@@ -528,7 +528,8 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    test("an approval waiting is a row of Needs you, approved in one tap, and a working session shows in Running", async ({
+    // The owner's own sessions working now are in Sessions, not on Home (#592): Home shows builders.
+    test("an approval waiting is a row of Needs you, approved in one tap", async ({
       page,
       request,
     }) => {
@@ -540,74 +541,57 @@ test.describe("a code workspace's Home (#301, #308)", () => {
         },
       });
       expect(asks.status()).toBe(201);
-      // A long answer keeps its turn working for a while (the fake writes a word every 40 ms).
-      const works = await request.post("/api/workspaces/workbench/sessions", {
-        data: {
-          text: `Activity lines ${"word ".repeat(900)}`,
-          model: { provider: "fake", model: "echo" },
-        },
-      });
-      const working = ((await works.json()) as { id: string }).id;
 
       await page.goto(HOME);
-      const { needsYou, running } = blocks(page);
+      const { needsYou, builders } = blocks(page);
       const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
       await expect(approval).toContainText("asked", { timeout: 45_000 });
-      await expect(running.getByRole("listitem")).toContainText(/Activity lines/, {
-        timeout: 45_000,
-      });
-      await shot(page, "tablet-home-needs-you-running");
+      await expect(builders.getByRole("listitem")).toHaveCount(0);
+      await shot(page, "tablet-home-needs-you");
 
       await approval.getByRole("button", { name: /^Approve/ }).click();
       await expect(approval).toHaveCount(0);
-
-      await request.post(`/api/sessions/${working}/stop`, { data: { turn: 1 } });
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    // #398: a block's size is set by the layout, never by its rows. Needs you and Running share the
-    // column evenly, full or empty, and rows past that scroll inside.
-    test("Needs you and Running keep an even share of the column, however full", async ({
+    // #398: a block's size is set by the layout, never by its rows. The Builders board and Needs
+    // you keep their shares of the column (#592), full or empty, and rows past that scroll inside.
+    test("the Builders board and Needs you keep their shares of the column, however full", async ({
       page,
       request,
     }) => {
       await signIn(request);
       await page.goto(HOME);
-      const { needsYou, running } = blocks(page);
-      const heights = async (): Promise<[number, number]> => [
+      const { needsYou, builders } = blocks(page);
+      const heights = async () => [
+        (await builders.boundingBox())?.height ?? 0,
         (await needsYou.boundingBox())?.height ?? 0,
-        (await running.boundingBox())?.height ?? 0,
       ];
-      await expect(running).toBeVisible();
-      const [calmNeeds, calmRunning] = await heights();
-      expect(Math.abs(calmNeeds - calmRunning)).toBeLessThanOrEqual(2);
+      await expect(builders).toBeVisible();
+      await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+      const [calmBuilders = 0, calmNeeds = 0] = await heights();
+      // Three shares to one (Paper, "Tablet · Builders board").
+      expect(calmBuilders).toBeGreaterThan(calmNeeds * 2);
 
-      const asks = await request.post("/api/workspaces/workbench/sessions", {
-        data: {
-          text: "run command: git merge main (for: Bring the reply box up to date)",
-          model: { provider: "fake", model: "echo" },
-        },
-      });
-      expect(asks.status()).toBe(201);
-      const working = [((await asks.json()) as { id: string }).id];
-      for (const name of ["Activity lines", "Swipe between photos", "Paste on the Fold"]) {
-        const works = await request.post("/api/workspaces/workbench/sessions", {
+      const working: string[] = [];
+      for (const name of ["the reply box", "the talk key", "the rail", "the tiles"]) {
+        const asks = await request.post("/api/workspaces/workbench/sessions", {
           data: {
-            text: `${name} ${"word ".repeat(900)}`,
+            text: `run command: git merge main (for: Bring ${name} up to date)`,
             model: { provider: "fake", model: "echo" },
           },
         });
-        working.push(((await works.json()) as { id: string }).id);
+        expect(asks.status()).toBe(201);
+        working.push(((await asks.json()) as { id: string }).id);
       }
 
-      await expect(running.getByRole("listitem").nth(2)).toBeAttached({ timeout: 45_000 });
-      const approval = needsYou.getByRole("listitem", { name: "Run git merge main?" });
-      await expect(approval).toContainText("asked", { timeout: 45_000 });
-      await expect(approval).toBeInViewport({ ratio: 1 });
-      await expect(running.getByRole("listitem").first()).toBeInViewport({ ratio: 1 });
-      const [busyNeeds, busyRunning] = await heights();
-      // Full, the same even share as when calm: the rows scroll inside, never stretch their block.
-      expect(Math.abs(busyNeeds - busyRunning)).toBeLessThanOrEqual(2);
+      const approvals = needsYou.getByRole("listitem", { name: "Run git merge main?" });
+      await expect(approvals.nth(3)).toBeAttached({ timeout: 45_000 });
+      await expect(approvals.first()).toBeInViewport({ ratio: 1 });
+      const [busyBuilders = 0, busyNeeds = 0] = await heights();
+      // Full, the same as when calm: the rows scroll inside, never stretch their block.
+      expect(Math.abs(busyBuilders - calmBuilders)).toBeLessThanOrEqual(2);
+      expect(Math.abs(busyNeeds - calmNeeds)).toBeLessThanOrEqual(2);
       await shot(page, "tablet-home-fixed-blocks");
 
       for (const id of working)
@@ -631,11 +615,14 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       expect(nextBox?.y ?? 0).toBeGreaterThan((needsBox?.y ?? 0) + (needsBox?.height ?? 0));
       expect(Math.round(nextBox?.width ?? 0)).toBe(Math.round(needsBox?.width ?? 0));
       expect(await pageScrollsSideways(page)).toBe(false);
-      // #398: each block is the same fixed height, whatever it holds; the page scrolls between them.
+      // #398: each block is a fixed height, whatever it holds, the Builders board three rows tall
+      // (#592); the page scrolls between them.
+      const { builders } = blocks(page);
       const tall = await Promise.all(
-        Object.values(blocks(page)).map(async (block) => (await block.boundingBox())?.height ?? 0),
+        [needsYou, nextUp].map(async (block) => (await block.boundingBox())?.height ?? 0),
       );
       expect(Math.max(...tall) - Math.min(...tall)).toBeLessThanOrEqual(2);
+      expect((await builders.boundingBox())?.y ?? 0).toBeLessThan(needsBox?.y ?? 0);
       await shot(page, "cover-home");
       await request.post("/api/github/sign-out", { data: {} });
     });

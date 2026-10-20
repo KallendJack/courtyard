@@ -61,6 +61,8 @@ const PAGES: {
   name: string;
   path: string;
   ready: (page: Page) => Promise<void>;
+  /** What the page is given before it opens, as the worker would give it. */
+  given?: (page: Page) => Promise<unknown>;
   /** Still moves, and why, until it's fixed. */
   moves?: string;
 }[] = [
@@ -81,6 +83,44 @@ const PAGES: {
     ready: (page) => expect(page.getByRole("region", { name: "Next up" })).toBeVisible(),
   },
   {
+    // The Builders board loading late (#592): its Lead's builders, as the worker would give them.
+    name: "a code workspace with its Builders board",
+    path: "/workspaces/toolshed",
+    given: (page) =>
+      page.route("**/api/workspaces/toolshed/lead", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        const since = new Date(Date.now() - 6 * 60_000).toISOString();
+        const builder = (n: number, name: string) => ({
+          session: `${n}a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d`,
+          title: `Build #4${n}: ${name}`,
+          issue: 40 + n,
+        });
+        await route.fulfill({
+          json: {
+            state: "running",
+            builders: 2,
+            building: [builder(1, "Ideas, ranked by value"), builder(2, "Journey book")],
+            statuses: [
+              { ...builder(1, "Ideas, ranked by value"), status: { kind: "building", since } },
+              {
+                ...builder(2, "Journey book"),
+                status: { kind: "checking", since, command: "pnpm check", ahead: 1 },
+              },
+              {
+                ...builder(3, "Notify me"),
+                status: { kind: "ready-for-review", since, pullRequest: 612 },
+              },
+            ],
+            next: [],
+            ready: [{ ...builder(3, "Notify me"), pullRequest: 612 }],
+            toTidy: 0,
+          },
+        });
+      }),
+    ready: (page) =>
+      expect(page.getByRole("region", { name: "Builders" })).toContainText("Notify me"),
+  },
+  {
     name: "a pull request",
     path: "/workspaces/side-project#pr-4",
     ready: (page) => expect(page.getByRole("button", { name: /^Merge/ })).toBeVisible(),
@@ -99,6 +139,7 @@ for (const [screen, viewport, touch] of [
       test(`${each.name} loads without moving`, async ({ page, request }) => {
         test.fixme(each.moves !== undefined, each.moves);
         await signIn(request);
+        await each.given?.(page);
         const shifts = await shiftsOn(page, each.path, each.ready);
         const total = shifts.reduce((sum, shift) => sum + shift.value, 0);
         expect(total, JSON.stringify(shifts, null, 2)).toBeLessThan(0.001);

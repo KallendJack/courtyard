@@ -2,10 +2,10 @@
 
 A code workspace's page under its name (#301, #308; Paper, "Code workspace Home").
 
-**Example:** the Courtyard workspace opens on Home: Needs you has one PR ready to merge, Running shows two builders,
-and Next up offers Build on the next issue.
+**Example:** the Courtyard workspace opens on Home: the Builders board shows two builders and one ready for review,
+Needs you has the owner's own session's approval, and Next up offers Build on the next issue.
 
-- **Uses:** `features/pull-requests/`, `features/live/`, `features/matt-setup/`, `features/sessions/`,
+- **Uses:** `features/builders/` (the Builders board, #592), `features/pull-requests/`, `features/live/`, `features/matt-setup/`, `features/sessions/`,
   `components/layout/home-block.tsx`, `components/code/`, `components/workspace/`. The worker's side is
   [`waiting/`](../../../../worker/src/features/waiting/README.md),
   [`next-up/`](../../../../worker/src/features/next-up/README.md),
@@ -31,10 +31,14 @@ and Next up offers Build on the next issue.
   ones fold into one row. Tapping an issue opens its summary, the boards its description names (opening the
   workspace's Paper file when it has one) and its link on GitHub. Read-only.
 - **Home's blocks**, in a fixed order, each keeping its place when empty with one quiet line
-  (`components/layout/home-block.tsx`, shared with a planning workspace's Home): Needs you (`needs-you.tsx`: approvals
-  with Approve, failing checks, new replies, pull requests ready to merge with Merge, conflicts with Bring up to
-  date, and the setup check's offer), Running (`running.tsx`), Next up with Build, or Grill on top (`next-up.tsx`), the milestone beside its label,
-  then one faint Then line naming the next titles and Whole roadmap · N more, which opens the Roadmap tab (#532);
+  (`components/layout/home-block.tsx`, shared with a planning workspace's Home): the Builders board
+  (`features/builders/`, #592: every Lead builder, its status and since when, in Running's and the Lead's row's
+  place), Needs you (`needs-you.tsx`: everything else, the owner's own sessions' approvals with Approve, failing
+  checks, new replies, pull requests ready to merge with Merge, conflicts with Bring up to date, and the setup
+  check's offer; "Nothing else needs you" while a builder does), Next up with Build, or Grill on top (`next-up.tsx`),
+  the milestone beside its label, an issue the running Lead holds back for a builder's merge as a row, "Next · waits
+  for <name> to merge" (the next three in all), then one faint Then line naming the next titles and Whole roadmap ·
+  N more, which opens the Roadmap tab (#532);
   when GitHub refused the read, the last list known with one grey line saying why, as the worker says it, #519),
   Main (`main-row.tsx`: the repository's newest main commit with `live/`'s build bar, and Update only on the live
   copy's own repository), then the message box, pinned at the foot.
@@ -52,5 +56,6 @@ and Next up offers Build on the next issue.
 - That GitHub isn't connected comes with the connections line, from the workspace's own connections.
 - **What waits on the owner** is the worker's say (`waiting/`, on each listed session and open pull request), read in
   one place, `needs.ts`, with no React or styles, so the home page's tiles read it the same way; nothing in the web
-  app works it out.
+  app works it out. A need of one of the Lead's builders is on the Builders board, not in Needs you (`onTheBoard`).
+- The owner's own sessions working now are in the Sessions tab: Home shows builders only (#592).
 - Merge in order (`merge-in-order.ts`) hands the Lead the pull requests the screen showed.

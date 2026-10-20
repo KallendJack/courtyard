@@ -1,5 +1,7 @@
 import type {
+  BuilderStatus,
   CodeSessionList,
+  LeadStatus,
   MattSetup,
   OpenPullRequest,
   SessionId,
@@ -10,11 +12,13 @@ import { useLayout } from "@/components/frame/handheld";
 import { PlaceholderRows } from "@/components/layout/kept";
 import { classes } from "@/lib/classes";
 import { describeWhen } from "../../lib/when.ts";
+import { useLead } from "../builders/api.ts";
 import {
   agoWords,
   type Need,
   needsOf,
   newestSessionNeed,
+  onTheBoard,
   type SessionNeed,
 } from "../code-home/needs.ts";
 import { useOpenPullRequests } from "../pull-requests/open-pull-requests.ts";
@@ -68,6 +72,29 @@ const namedWords = (named: SessionNeed, needs: readonly Need[]) => {
   return needs.length > 1 ? `${what} and ${needs.length - 1} more` : what;
 };
 
+/**
+ * A code workspace's line while its Lead has builders (#592; Paper, "Tablet · Home: builders in
+ * Needs you, the tile line"): how many need the owner (its builders waiting on them or Stuck, and
+ * whatever else waits), how many are building, and how many wait for review: "2 need you · 1 for
+ * review", "2 building · 1 for review". `undefined` with no builder to tell of.
+ */
+const buildersWords = (lead: LeadStatus | undefined, needs: readonly Need[]) => {
+  const statuses = (lead?.statuses ?? []).map(({ status }) => status.kind);
+  if (statuses.length === 0) return undefined;
+  const of = (...kinds: BuilderStatus["kind"][]) =>
+    statuses.filter((kind) => kinds.includes(kind)).length;
+  const needYou =
+    of("waiting-on-you", "stuck") + needs.filter((need) => !onTheBoard(need, lead)).length;
+  const building = of("building", "checking", "in-ci", "waiting-for-limit");
+  const review = of("ready-for-review");
+  const words = [
+    ...(needYou > 0 ? [`${needYou} ${needYou === 1 ? "needs" : "need"} you`] : []),
+    ...(building > 0 ? [`${building} building`] : []),
+    ...(review > 0 ? [`${review} for review`] : []),
+  ];
+  return words.length === 0 ? undefined : { words: words.join(" · "), needsYou: needYou > 0 };
+};
+
 /** When the workspace was last used: its last session's title a day long, then only the day. */
 const usedWords = (sessions: readonly Listed[], now = Date.now()) => {
   const last = sessions.reduce<Listed | undefined>(
@@ -103,10 +130,34 @@ export default function TileLine(props: {
   const open = useOpenPullRequests(workspace.id, sessions, code && list !== undefined);
   const pulls: readonly OpenPullRequest[] = open?.pullRequests ?? [];
   const needs = needsOf({ sessions, pulls, setup: NO_SETUP });
+  const lead = useLead(workspace.id, undefined, code);
+  const builders = buildersWords(lead, needs);
   const named = newestSessionNeed(needs);
-  const only = needs.length === 1 ? named?.session.id : undefined;
+  const only = needs.length === 1 && builders === undefined ? named?.session.id : undefined;
   useEffect(() => onOpens(only), [onOpens, only]);
   if (list === undefined) return <PlaceholderRows count={1} size="meta" />;
+
+  // A code workspace whose Lead has builders says what they're doing (#592).
+  if (builders !== undefined) {
+    return (
+      <>
+        <span
+          className={classes(
+            "block truncate text-meta font-semibold",
+            builders.needsYou ? "text-warning" : "text-primary-text",
+          )}
+        >
+          {builders.words}
+        </span>
+        {builders.needsYou && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-tile ring-1 ring-warning/25 ring-inset"
+          />
+        )}
+      </>
+    );
+  }
 
   if (needs.length === 0) {
     return (

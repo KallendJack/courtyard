@@ -23,7 +23,7 @@ import { useMergeInOrder } from "./merge-in-order.ts";
 import { agoWords, type Need } from "./needs.ts";
 
 // Home reads what waits on the owner the same way (#102, #334).
-export { needsOf } from "./needs.ts";
+export { needsOf, onTheBoard } from "./needs.ts";
 
 type Listed = CodeSessionList["sessions"][number];
 
@@ -50,10 +50,11 @@ const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
- * Needs you (#301; Paper, "Code workspace Home"): every builder stuck (#590), approval, turn cut
- * off by a restart (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
- * Merge in order, #423), conflict, and Matt's setup offer,
- * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
+ * Needs you (#301; Paper, "Code workspace Home"): every approval, turn cut off by a restart (#186),
+ * failing check, new reply, pull request ready to merge, conflict, and Matt's setup offer, each a
+ * row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. The Lead's
+ * builders' are on the Builders board instead (#592), and while one needs the owner, with nothing
+ * else waiting, it says "Nothing else needs you". It takes the height the page leaves it, its rows
  * scrolling inside when there are more than fit (#335); with nothing waiting it says so.
  */
 export function NeedsYou(props: {
@@ -65,6 +66,8 @@ export function NeedsYou(props: {
   onSetup: (setup: MattSetup) => void;
   /** Something here changed (merged, approved): the page asks for its lists again. */
   onChanged: () => void;
+  /** What it says with nothing waiting: "Nothing else needs you" while builders do (#592). */
+  nothing?: string;
 }) {
   const [settingUp, setSettingUp] = useState(false);
   const opened = props.setup.state === "opened";
@@ -79,7 +82,7 @@ export function NeedsYou(props: {
   if (props.needs.length === 0 && !opened) {
     return (
       <Block label="Needs you" fill>
-        <BlockEmpty>Nothing needs you</BlockEmpty>
+        <BlockEmpty>{props.nothing ?? "Nothing needs you"}</BlockEmpty>
       </Block>
     );
   }
