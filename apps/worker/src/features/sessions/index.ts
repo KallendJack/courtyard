@@ -1163,6 +1163,8 @@ export const createSessions = (options: {
      * the owner hears only of what's ready to merge and what needs their decision.
      */
     let quiet = false;
+    /** It's one of the Lead's builders, which checks only what it changed (#589). */
+    let builder = false;
     /** Set when part of the turn couldn't be recorded, so it can't count as complete. */
     let recordingLost = false;
     /** Tool calls still under way (a save being written, say), which finish before the turn ends. */
@@ -1201,13 +1203,15 @@ export const createSessions = (options: {
         const { skills } = workspace.value;
         const inUse = skillsInUse(events.value);
         lead = file.value?.lead === true;
-        quiet = lead || file.value?.byLead === true;
+        builder = file.value?.byLead === true;
+        quiet = lead || builder;
         const brief = lead ? await options.lead?.brief(turn.id) : undefined;
         const framing = await withTasksOutput(
           turn.id,
           events.value,
           framingFor({
             ...(brief === undefined ? {} : { lead: brief }),
+            builder,
             workspace: workspace.value,
             capabilities: turn.provider.capabilities,
             events: events.value,
@@ -1421,8 +1425,9 @@ export const createSessions = (options: {
             /** It's allowed because the session is allowing all (#428), so it's marked so. */
             readonly allowedAll?: boolean | undefined;
             /**
-             * It's a command to run as a task (#182): it takes no place in the builds queue, and
-             * its start is recorded as the task's, not as an activity.
+             * It's a command to run as a task (#182): its start is recorded as the task's, not as
+             * an activity, and a heavy check takes its place in the builds queue as any does,
+             * keeping it until the task ends (#589).
              */
             readonly asTask?: boolean | undefined;
           },
@@ -1433,7 +1438,6 @@ export const createSessions = (options: {
           }
           if (!decided.ok) return err(codeRefusalReason(decided.error));
           const activity = decided.value;
-          if (by.asTask === true) return ok(null);
           const told = reportAs(helper);
           if (activity.kind === "ran-command" && isBuild(activity.command)) {
             const started = await options.code.builds.start({
@@ -1441,9 +1445,11 @@ export const createSessions = (options: {
               command: activity.command,
               signal: stopper.signal,
               ahead: (ahead) => void told({ kind: "waiting-for-build", ahead }),
+              task: by.asTask === true,
             });
             if (!started) return err(codeRefusalReason({ kind: "stopped" }));
           }
+          if (by.asTask === true) return ok(null);
           await told(activity, allowedAll);
           return ok(null);
         };
@@ -1604,6 +1610,7 @@ export const createSessions = (options: {
                   return own !== true || !OWN_BRANCH_ASKS.includes(words);
                 }),
                 asTask,
+                builder,
               },
               asked,
             );
@@ -1665,7 +1672,14 @@ export const createSessions = (options: {
               if (helper !== undefined) return err(HELPER_NO_TASKS);
               const allowed = await command(asked, why, true);
               if (!allowed.ok) return allowed;
+              // A heavy check has its place in the builds queue now, kept until the task ends
+              // (#589); anything else run by it takes its own place in the machine's lock.
+              const build = isBuild(asked);
+              const freeBuild = () => {
+                if (build) options.code.builds.taskEnded(turn.id, asked);
+              };
               if (stopper.signal.aborted || recordingLost) {
+                freeBuild();
                 return err(codeRefusalReason({ kind: "stopped" }));
               }
               const started = await tasks.start({
@@ -1673,16 +1687,21 @@ export const createSessions = (options: {
                 sessionFolder: folderOf(turn.id),
                 command: asked,
                 cwd: worktree,
-                // A heavy check it runs takes its own place in the machine's builds lock.
-                env: {
-                  ...env,
-                  ...Object.fromEntries(
-                    Object.keys(BUILD_HELD_ENV).map((name) => [name, undefined]),
-                  ),
+                env: build
+                  ? { ...env, ...BUILD_HELD_ENV }
+                  : {
+                      ...env,
+                      ...Object.fromEntries(
+                        Object.keys(BUILD_HELD_ENV).map((name) => [name, undefined]),
+                      ),
+                    },
+                ended: (task, ending) => {
+                  freeBuild();
+                  return taskEnded({ id: turn.id, task, ending });
                 },
-                ended: (task, ending) => taskEnded({ id: turn.id, task, ending }),
               });
               if (!started.ok) {
+                freeBuild();
                 return err(
                   started.error.kind === "too-many"
                     ? TOO_MANY_TASKS

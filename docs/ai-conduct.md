@@ -340,6 +340,18 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > words ("the PR page refreshes itself"), with its number after it only where a link helps; never a bare list of
 > numbers.
 
+A Lead's builder (#589, ADR 0031) gets the access line with "(a dev server or a preview)" in place of "(a dev
+server, a slow test run)", since its checks run in its turn, and after the house process:
+
+> You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time:
+> the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each
+> file. CI runs the full suite, the full browser suite and verify on your pull request, so they don't run here, nor
+> does a test run naming no file. A command still running after 10 minutes is ended: when a check is ended for
+> running too long, narrow it (fewer files, one spec), and never run it again as a task.
+
+Courtyard stops no check of its own: the provider's command tool ends any command at 10 minutes (Claude Code's
+`Bash`, Codex's and Courtyard's coding tools), and a builder can't run a check as a task, which has no such limit.
+
 Numbers are hard to know (#361), so a session leads with what an issue or pull request is whenever it tells the owner
 about one (an order, a status, what it built, what's next). Issue bodies, commit messages and a milestone's `Build
 order:` line keep their numbers, since Next up reads them.
@@ -465,6 +477,22 @@ line of Courtyard's:
 
 where `<how>` is "started", "passed", "failed with exit code <n>", "was stopped by the owner", "was stopped as the
 session ended" or "was stopped by a restart".
+
+**A Lead's builders check only what they changed (#589, ADR 0031).** Every heavy check, a turn's or a task's, takes
+its place in the machine's builds lock. A builder runs its checks in its turn: one it asks to run in the background
+(a test run or a build) is refused, before the owner is asked where it would ask, with:
+
+> Run your checks in your turn, in the foreground, where you'll see how they went: only a dev server or a preview
+> runs in the background.
+
+The full suite is CI's: a builder's `test`, `e2e` or `verify` package script, or a `vitest` or `playwright test` run,
+that names no test file (at the root or in a package, `verify` whatever it names) is refused the same way, with:
+
+> CI runs the full suite on your pull request, so the full test run, the full browser suite and verify don't run
+> here. Run the repository's lint and type checks and the test files and specs for what you changed, naming each
+> file.
+
+The owner's own sessions are refused neither.
 
 Each edit and each command that runs shows as an activity. Coding isn't saving, so a change here doesn't run the eval
 set.

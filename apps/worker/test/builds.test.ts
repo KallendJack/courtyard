@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { takePlace } from "@courtyard/builds";
-import type { SessionEvent } from "@courtyard/contract";
+import { RunningTasks, type SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok, type Result } from "../src/lib/result.ts";
-import type { Provider } from "../src/providers/index.ts";
+import { createFakeProvider, type Provider } from "../src/providers/index.ts";
 import type { Environment } from "../src/worker.ts";
 import {
   asOwner,
@@ -16,7 +16,9 @@ import {
   codeRepo,
   codeWorkspace,
   codingProvider,
+  FAKE_MODEL,
   followSession,
+  gitIn,
   heldBuilder,
   postJson,
   type Requester,
@@ -30,16 +32,23 @@ import {
 // machine up. With real git in temporary repositories.
 
 let root: string;
+let repo: string;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
-  const { repo } = await codeRepo(root);
+  ({ repo } = await codeRepo(root));
   await codeWorkspace(root, "side-project", repo);
 });
 
 afterEach(async () => {
   await removeTestFolder(root);
 });
+
+/**
+ * How long a test waits for a build to start: a session's turn first takes its slot and its
+ * worktree, which a busy machine makes slower than `vi.waitFor`'s one second (#548).
+ */
+const STARTS = { timeout: 10_000 };
 
 const start = async (providers: Provider[], env: Environment = {}) =>
   asOwner(testWorker({ root, providers, env }));
@@ -62,6 +71,10 @@ const activitiesIn = (events: readonly SessionEvent[]) =>
 const stop = (request: Requester, sessionId: string, turn = 1) =>
   postJson(request, `/api/sessions/${sessionId}/stop`, { turn });
 
+/** A session's tasks still running. */
+const tasksOf = async (request: Requester, sessionId: string) =>
+  RunningTasks.parse(await (await request(`/api/sessions/${sessionId}/tasks`)).json()).tasks;
+
 /** Follows a session until it says it's waiting with `ahead` builds ahead of it. */
 const waitingWith = (request: Requester, sessionId: string, ahead: number) =>
   followSession(request, {
@@ -77,7 +90,7 @@ describe("the builds queue (#281)", () => {
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider]);
     await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     const second = await startCoding(request, "Chat scrolling");
 
@@ -86,7 +99,7 @@ describe("the builds queue (#281)", () => {
 
     builds[0]?.finish();
 
-    await vi.waitFor(() => expect(builds).toHaveLength(2));
+    await vi.waitFor(() => expect(builds).toHaveLength(2), STARTS);
     builds[1]?.finish();
     const events = await followSession(request, { sessionId: second, until: "turn-completed" });
     expect(activitiesIn(events)).toEqual([
@@ -99,7 +112,7 @@ describe("the builds queue (#281)", () => {
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider]);
     await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
     const second = await startCoding(request, "Chat scrolling");
     await waitingWith(request, second, 1);
     const third = await startCoding(request, "A photo on its own");
@@ -111,7 +124,7 @@ describe("the builds queue (#281)", () => {
     // One fewer ahead of the third, which starts next.
     await waitingWith(request, third, 1);
     builds[0]?.finish();
-    await vi.waitFor(() => expect(builds).toHaveLength(2));
+    await vi.waitFor(() => expect(builds).toHaveLength(2), STARTS);
     builds[1]?.finish();
     const events = await followSession(request, { sessionId: third, until: "turn-completed" });
     expect(activitiesIn(events).at(-1)).toEqual({ kind: "ran-command", command: "pnpm verify" });
@@ -121,14 +134,14 @@ describe("the builds queue (#281)", () => {
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider]);
     const first = await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
     const second = await startCoding(request, "Chat scrolling");
     await waitingWith(request, second, 1);
 
     // Stopped mid-build, the held builder ends its turn without saying the build ended.
     await stop(request, first);
 
-    await vi.waitFor(() => expect(builds).toHaveLength(2));
+    await vi.waitFor(() => expect(builds).toHaveLength(2), STARTS);
     builds[1]?.finish();
     await followSession(request, { sessionId: second, until: "turn-completed" });
   });
@@ -146,7 +159,7 @@ describe("the builds queue (#281)", () => {
     const { provider: coder } = codingProvider([{ run: command }]);
     const request = await start([builder, coder]);
     await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     const second = await startCoding(request, "Chat scrolling", CODING_MODEL);
 
@@ -168,7 +181,7 @@ describe("the builds queue (#281)", () => {
     const { provider: coder, answers } = codingProvider(light.map((run) => ({ run })));
     const request = await start([builder, coder]);
     await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     const second = await startCoding(request, "Chat scrolling", CODING_MODEL);
 
@@ -190,7 +203,7 @@ describe("the builds queue (#281)", () => {
         if (code === null) return err({ kind: "unknown", message: "Only builds." });
         expect(await code.run("pnpm verify")).toEqual(ok(null));
         const second = code.run("pnpm verify").then((answer) => answers.push(answer));
-        await vi.waitFor(() => expect(waitingSeen).toBe(true));
+        await vi.waitFor(() => expect(waitingSeen).toBe(true), STARTS);
         // The first ends, and is heard ended again (a provider's hooks, a refused call of the
         // same command), while the second is still taking its place.
         code.ran("pnpm verify");
@@ -216,11 +229,11 @@ describe("the builds queue (#281)", () => {
     await startCoding(request, "Talk into the box");
     await startCoding(request, "Chat scrolling");
 
-    await vi.waitFor(() => expect(builds).toHaveLength(2));
+    await vi.waitFor(() => expect(builds).toHaveLength(2), STARTS);
     const third = await startCoding(request, "A photo on its own");
     await waitingWith(request, third, 2);
     for (const build of builds) build.finish();
-    await vi.waitFor(() => expect(builds).toHaveLength(3));
+    await vi.waitFor(() => expect(builds).toHaveLength(3), STARTS);
     builds[2]?.finish();
   });
 });
@@ -243,7 +256,7 @@ describe("the machine's builds lock (#306)", () => {
     await waitingWith(request, id, 1);
     expect(builds).toHaveLength(0);
     outside?.free();
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
     builds[0]?.finish();
     const events = await followSession(request, { sessionId: id, until: "turn-completed" });
     expect(activitiesIn(events)).toEqual([
@@ -256,7 +269,7 @@ describe("the machine's builds lock (#306)", () => {
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider]);
     const id = await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     expect(await outsideBuild(1, AbortSignal.timeout(1000))).toBeNull();
 
@@ -271,7 +284,7 @@ describe("the machine's builds lock (#306)", () => {
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider]);
     const id = await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     await stop(request, id);
 
@@ -286,7 +299,7 @@ describe("the machine's builds lock (#306)", () => {
     const request = await start([provider]);
     await startCoding(request, "Talk into the box");
 
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
     expect(builds[0]?.env.COURTYARD_BUILD_HELD).toBe("1");
     builds[0]?.finish();
   });
@@ -307,10 +320,69 @@ process.exit(0);`,
 
     const id = await startCoding(request, "Talk into the box");
 
-    await vi.waitFor(() => expect(started).toHaveLength(1));
+    await vi.waitFor(() => expect(started).toHaveLength(1), STARTS);
     started[0]?.finish();
     const events = await followSession(request, { sessionId: id, until: "turn-completed" });
     expect(activitiesIn(events)).toEqual([{ kind: "ran-command", command: "pnpm verify" }]);
+  });
+
+  it("has a task's package-level vitest run wait for a place a session's check holds (#589)", async () => {
+    const { provider: builder, builds } = heldBuilder("pnpm verify");
+    const request = await start([builder, createFakeProvider({ delayMs: 0 })]);
+    await startCoding(request, "Talk into the box");
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
+
+    const second = await startCoding(
+      request,
+      "start task: pnpm --filter app exec vitest run test/talk.test.ts",
+      FAKE_MODEL,
+    );
+
+    await waitingWith(request, second, 1);
+    expect(await tasksOf(request, second)).toEqual([]);
+    builds[0]?.finish();
+    const started = await followSession(request, {
+      sessionId: second,
+      until: (event) => event.type === "task-started",
+    });
+    expect(started.at(-1)).toMatchObject({
+      command: "pnpm --filter app exec vitest run test/talk.test.ts",
+    });
+    // It fails at once in a repository with no such package, and a turn tells the model.
+    await followSession(request, {
+      sessionId: second,
+      until: (event) => event.type === "owner-message" && event.tasksEnded !== undefined,
+    });
+    await followSession(request, {
+      sessionId: second,
+      until: (event) => event.type === "turn-completed" && event.seq > 3,
+    });
+  });
+
+  it("holds the machine's place while a task's check runs, its commands told so, and frees it when the task ends (#589)", async () => {
+    await writeFile(
+      join(repo, "held.mjs"),
+      'console.log("held=" + process.env.COURTYARD_BUILD_HELD);\nsetInterval(() => {}, 1000);\n',
+    );
+    await writeFile(
+      join(repo, "package.json"),
+      JSON.stringify({ name: "side-project", private: true, scripts: { test: "node held.mjs" } }),
+    );
+    await gitIn(repo, "add", ".");
+    await gitIn(repo, "commit", "--quiet", "-m", "A test that runs on");
+    await gitIn(repo, "push", "--quiet", "origin", "main");
+    const request = await start([createFakeProvider({ delayMs: 0 })]);
+
+    const id = await startCoding(request, "start task: pnpm test", FAKE_MODEL);
+
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    const [task] = await tasksOf(request, id);
+    await expect.poll(async () => (await tasksOf(request, id))[0]?.lastLine).toBe("held=1");
+    expect(await outsideBuild(1, AbortSignal.timeout(1000))).toBeNull();
+    await postJson(request, `/api/sessions/${id}/tasks/${task?.task}/stop`, {});
+    const after = await outsideBuild(1, AbortSignal.timeout(5000));
+    expect(after).not.toBeNull();
+    after?.free();
   });
 
   it("shares the machine's places with builds outside Courtyard when it allows more than one", async () => {
@@ -318,13 +390,13 @@ process.exit(0);`,
     const { provider, builds } = heldBuilder("pnpm verify");
     const request = await start([provider], { COURTYARD_BUILDS_AT_ONCE: "2" });
     await startCoding(request, "Talk into the box");
-    await vi.waitFor(() => expect(builds).toHaveLength(1));
+    await vi.waitFor(() => expect(builds).toHaveLength(1), STARTS);
 
     const second = await startCoding(request, "Chat scrolling");
 
     await waitingWith(request, second, 2);
     outside?.free();
-    await vi.waitFor(() => expect(builds).toHaveLength(2));
+    await vi.waitFor(() => expect(builds).toHaveLength(2), STARTS);
     for (const build of builds) build.finish();
   });
 });

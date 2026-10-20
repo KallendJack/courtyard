@@ -108,3 +108,13 @@ Code sessions' git, and what they may do
 - That order lives in the worker's memory only. The build at its front then takes a place in the machine's builds
   lock (`packages/builds`, #306), which the repo's own scripts take too, so sessions also wait behind builds started
   outside Courtyard, and those behind sessions.
+- **Tasks too** (#589): a heavy check run as a task waits for its place as any does, then keeps it past its turn,
+  until the task ends (`taskEnded`); its commands get the held mark. Nothing a session runs gets round the lock.
+
+### A Lead's builder's checks (#589, ADR 0031)
+
+- `commandAllowed` with `builder` (a session the Lead started, `byLead`) refuses, before anyone is asked, a heavy
+  check asked for as a task (`check-in-turn`: it runs in the turn) and one of a whole suite (`ci-runs-it`), which CI
+  runs: `checksEverything`, a `verify` package script, or a `test` or `e2e` one, `vitest` or `playwright test` that
+  names no test file (a `.ts`/`.js` file past the tool's options), at the root or in any package. Each refusal's
+  words are `prompts/`'. The owner's own sessions are refused neither.

@@ -29,6 +29,8 @@ screenshot shows in the chat.
 
 - **Where it serves** (`index.ts`): the first `http://localhost:<port>` in the first 64 KB of a running task's output,
   its colours taken out (Vite prints the port in bold). The first task that says one is the preview.
+- **It ends with its session** (#589): as its task does, once the session's pull request merges or closes, or the
+  session is deleted; so a Lead's builder's preview never runs on after the builder.
 - **The suggested command** (`index.ts`): the repository's `preview:session` script when it has one (Courtyard's own,
   whose `dev` points at the live worker), else its `dev` script, run by the package manager its lockfile names.
 - **The port** (`proxy.ts`): refuses anything without the owner's login cookie, which browsers send to every port on
