@@ -154,6 +154,8 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "Only the session's last turn can continue, once a restart has cut it off.",
       });
+    case "not-stuck":
+      return apiError(c, { status: 409, error: "Only a stuck builder can be retried." });
     case "no-overflow":
       return apiError(c, { status: 409, error: noOverflow(error.overflow) });
     case "save-not-found":
@@ -509,6 +511,13 @@ export const sessionRoutes = (options: {
     if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to continue" });
     const continued = await sessions.continue(c.req.param("id"), request.value);
     if (!continued.ok) return sessionError(c, continued.error);
+    return c.body(null, 202);
+  });
+
+  // Retry (#592): a Lead's builder that's Stuck carries on.
+  routes.post("/sessions/:id/retry", async (c) => {
+    const retried = await sessions.retry(c.req.param("id"));
+    if (!retried.ok) return sessionError(c, retried.error);
     return c.body(null, 202);
   });
 

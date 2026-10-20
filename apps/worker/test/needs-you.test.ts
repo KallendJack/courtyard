@@ -144,6 +144,14 @@ describe("Needs you", () => {
       ["approval", "side-project"],
       ["reply", "garage-gym"],
     ]);
+    // What it asks, and by which approval, so Home's row can Allow it in place (#592).
+    expect(waiting.needs[0]).toMatchObject({
+      approval: {
+        number: expect.any(Number),
+        ask: { kind: "command", command: "curl https://example.com" },
+      },
+    });
+    expect(waiting.needs[0]).not.toHaveProperty("builder");
     expect(waiting.busy).toBe(true);
     expect((await needsYou(request)).busy).toBe(false);
   });

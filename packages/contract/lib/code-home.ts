@@ -272,7 +272,27 @@ export const LeadMerge = z.discriminatedUnion("kind", [
 export type LeadMerge = z.infer<typeof LeadMerge>;
 
 /**
- * A code workspace's Lead (#347), as its Home's Running row and its chat's strip show it: not
+ * How many of its builders' pull requests wait for the owner's review before the Lead starts no
+ * more (#591).
+ */
+export const LEAD_REVIEWS_AT_MOST = 4;
+
+/**
+ * One reason a running Lead starts no more builders now (#592, ADR 0031), as the Builders board
+ * lists them, every one at once: `LEAD_REVIEWS_AT_MOST` of its builders' pull requests waiting for
+ * the owner's review; a builder's model at its usage limit, `until` its reset; main red, so only its
+ * fix starts; or the owner's own sessions using the machine's last place.
+ */
+export const LeadHolding = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("reviews"), waiting: z.number().int().positive() }),
+  z.object({ kind: z.literal("limit"), until: z.iso.datetime() }),
+  z.object({ kind: z.literal("main-red") }),
+  z.object({ kind: z.literal("own-sessions") }),
+]);
+export type LeadHolding = z.infer<typeof LeadHolding>;
+
+/**
+ * A code workspace's Lead (#347), as its Home's Builders board (#592) and its chat's strip show it: not
  * started yet; running the build order (`why` saying what it waits for while it holds itself back:
  * 4 pull requests waiting for the owner's review, a model at its usage limit, a red main, the
  * machine busy with the owner's own sessions; #591); paused by the owner; or resting, with nothing
@@ -299,6 +319,11 @@ export const LeadStatus = z.object({
   toTidy: z.number().int().nonnegative(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: LeadMerge.optional(),
+  /**
+   * While it runs, every reason it starts no more builders now (#592), never only the first; none
+   * while nothing holds it back.
+   */
+  holding: z.array(LeadHolding).optional(),
   /**
    * Ready issues it holds back (#423), each behind the builder's issue that changes the same
    * files: it starts once that one merges.

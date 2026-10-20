@@ -510,6 +510,41 @@ describe("a Lead builder's status (#590)", () => {
     });
   });
 
+  it("Stuck, Retry starts a turn telling it to try again: Building, with its one carry-on again (#592)", async () => {
+    const nothing: Plan = async ({ input }) => {
+      await input.emit("I've looked around the code.");
+      return ok(null);
+    };
+    const { provider, told } = playing([
+      nothing,
+      nothing,
+      nothing,
+      async ({ input }) => {
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+    const builder = await build();
+    await becomes("stuck");
+    await settled();
+
+    const retried = await postJson(request, `/api/sessions/${builder.id}/retry`, {});
+    expect(retried.status).toBe(202);
+    await expect
+      .poll(() => told.at(2), SLOW)
+      .toBe(await quotedInGuide("Try again with your issue"));
+    // Its turn ends with nothing to show: told to carry on once, as a fresh start is.
+    await expect.poll(() => told.length, SLOW).toBe(4);
+    expect(told.at(3)).toBe(await quotedInGuide("Carry on with your issue"));
+    expect(await becomes("waiting-on-you")).toMatchObject({ kind: "waiting-on-you" });
+    await settled();
+
+    const again = await postJson(request, `/api/sessions/${builder.id}/retry`, {});
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({ error: "Only a stuck builder can be retried." });
+  });
+
   it("ending a turn with no pull request and no question is told to carry on once, then is Stuck", async () => {
     const { provider, told } = playing([
       async ({ input }) => {
