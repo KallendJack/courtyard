@@ -52,6 +52,8 @@ export const createWorkspaceMain = (options: {
   };
 
   return {
+    /** The repository the live copy runs from, on GitHub (`owner/name`), when it's one (#554). */
+    liveRepo: liveRepoOf,
     of: async (rawId: string): Promise<Result<WorkspaceMain, WorkspaceMainProblem>> => {
       const workspace = await getWorkspace(options.contextDir, rawId);
       if (!workspace.ok) return err({ kind: "workspace", error: workspace.error });
