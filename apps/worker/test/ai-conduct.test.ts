@@ -417,7 +417,9 @@ describe("what every turn tells a model", () => {
     for (const rule of [
       "Keep answers brief, under 100 words",
       "offer the rest",
-      "give only the next step",
+      "give only the next step: one action",
+      // The eval's planning-hands-on gave one step as four numbered smaller ones (#599).
+      "never a numbered list of smaller steps",
       "with nothing before it",
       "wait for them to say it's done or send a photo",
       "Never assume the owner has a tool",

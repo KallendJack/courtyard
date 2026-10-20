@@ -474,7 +474,7 @@ const judgeTurn = (judge: {
             miss:
               words <= turn.words.atMost
                 ? null
-                : `expected at most ${turn.words.atMost} words; it has ${words}, starting "${answer.trim().slice(0, 160)}"`,
+                : `expected at most ${turn.words.atMost} words; it has ${words}: "${answer.trim().replace(/\s+/g, " ").slice(0, 1500)}"`,
           },
         ];
   const steps = stepsIn(answer);
@@ -486,7 +486,7 @@ const judgeTurn = (judge: {
             miss:
               steps <= turn.steps.atMost
                 ? null
-                : `expected at most ${turn.steps.atMost} steps; it gives ${steps}, starting "${answer.trim().slice(0, 160)}"`,
+                : `expected at most ${turn.steps.atMost} steps; it gives ${steps}: "${answer.trim().replace(/\s+/g, " ").slice(0, 1500)}"`,
           },
         ];
   const unlinked = unlinkedPrices(answer);

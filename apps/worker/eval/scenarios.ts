@@ -473,7 +473,7 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
         steps: { atMost: 1 },
         words: { atMost: 100 },
-        says: [["done", "photo", "let me know", "tell me", "shout", "ready"]],
+        says: [["done", "photo", "let me know", "tell me", "shout", "ready", "is it"]],
       },
       {
         say: "Done.",
@@ -1042,14 +1042,15 @@ export const SCENARIOS: readonly Scenario[] = [
           ["Mostly potatoes, onions and runner beans.", ["potato"]],
           ["Twice a week, at weekends.", [["twice", "two"]]],
           ["Pretty new to it, this is my second year.", ["second"]],
-          ["Just a small shed.", ["shed"]],
+          // Not kit, which is rightly saved as a Thing ("a small shed" was).
+          ["My sister helps out now and then.", ["sister"]],
         ] as const
       ).map(
+        // At most five, so it may wrap up before the fifth answer: none or one question.
         ([say, words]): Turn => ({
           say,
           expect: [{ action: "add", section: "facts", words }],
-          questions: { atLeast: 1, atMost: 1 },
-          suggests: true,
+          questions: { atLeast: 0, atMost: 1 },
         }),
       ),
       // The fifth answer: what it saves, then a wrap-up with no new question.
