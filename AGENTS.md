@@ -118,6 +118,8 @@ when a change needs a board): `docs/agents/process.md`.
   for one incident without writing down how it fits the rest.
 - **Removal is the default.** A feature unused after its trial, or one models keep misusing, is removed unless the
   owner keeps it; every model mistake found becomes a context-eval scenario (`docs/agents/process.md`, Reviewing use).
+- **Working with the owner:** ideas are captured, not built; recommend rather than survey; two lanes at most; one
+  message for what needs them (`docs/agents/process.md`).
 - **Claim before building.** With no claim in the issue's comments or open PRs, comment
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
 - **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
