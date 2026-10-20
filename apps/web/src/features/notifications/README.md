@@ -18,3 +18,5 @@ is ready.
 - It subscribes the browser with the worker's key and sends the subscription, sends it again each time the page opens
   (so it follows the device's login), and unsubscribes on off.
 - The service worker (`public/sw.js`) shows each one, and opens the session on a tap.
+- Which ones each workspace sends is its Notify me (#493), picked in the workspace ⋯'s sheet
+  (`components/sheets/notify-me-sheet.tsx`) and decided by the worker.

@@ -21,7 +21,7 @@ All in `worker.ts`:
 - **Update when ready** (#186): tapped while main's build runs or a session is mid-turn (`sessions/`' `midTurn`, an
   approval waiting counted), it waits, kept in the data folder (`live-update-waiting.json`) so a crash keeps it.
   A repeating job runs it once both are clear, or drops it when main's build fails meanwhile. Update now runs it at
-  once; Cancel drops it.
+  once; Cancel drops it, even while the job is reading main's build (that look then does nothing, #586).
 - **Holding:** while one waits, `holding()` tells `sessions/` and `lead/` that nothing new starts on its own (queued
   messages hold, no fixing turn, no new builder); the owner's own messages still start.
 - **After a restart:** an update the worker starts itself leaves a note (`live-update-restart.json`), so the next

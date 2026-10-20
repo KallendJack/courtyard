@@ -104,9 +104,9 @@ the chain  a time            changed                   Undo
 ### 🛠️ Building code
 
 **Worker features:** `code` · `tasks` · `preview` · `pull-requests` · `lead` · `next-up` · `red-main` ·
-`version-bumps` · `repos` · `matt-setup` · `matt-skills` · `workspace-main` · `skills` · `connections`
+`version-bumps` · `repos` · `matt-setup` · `matt-skills` · `workspace-main` · `skills` · `connections` · `friction`
 
-**Web features:** `code-home` · `tasks` · `preview` · `pull-requests` · `matt-setup`
+**Web features:** `code-home` · `tasks` · `preview` · `pull-requests` · `matt-setup` · `friction`
 
 You tap Build on an issue:
 
@@ -124,6 +124,8 @@ blocked     and worktree    waits on         checks
   when one ends.
 - **`preview`** shows a session's running app on your phone, through a port of the worker's own behind your login,
   and takes the model's screenshots of it.
+- **`friction`** is Something's off, on every screen: it takes the screen as you see it, you say what's wrong, and a
+  session in Courtyard's own code workspace files the issue.
 
 ### ⚙️ Running Courtyard
 

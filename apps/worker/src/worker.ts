@@ -50,6 +50,8 @@ import {
 import { documentRoutes } from "./features/documents/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
 import { freshStartRoutes } from "./features/fresh-start/routes.ts";
+import { createFriction } from "./features/friction/index.ts";
+import { FRICTION_ROUTE, frictionRoutes } from "./features/friction/routes.ts";
 import { createLead } from "./features/lead/index.ts";
 import { leadRoutes } from "./features/lead/routes.ts";
 import { rememberingLimits } from "./features/limits/index.ts";
@@ -160,11 +162,11 @@ const pathOf = (route: string) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[
 /** A request a multipart form may be sent with: its method, and its path as a pattern. */
 type FormRequest = { readonly method: string; readonly path: RegExp };
 
-/** The requests that take a message. */
-const MESSAGE_REQUESTS: readonly FormRequest[] = Object.values(MESSAGE_ROUTES).map((route) => ({
-  method: "POST",
-  path: pathOf(route),
-}));
+/** The requests that take a message, and Something's off's report with its screen (#554). */
+const MESSAGE_REQUESTS: readonly FormRequest[] = [
+  ...Object.values(MESSAGE_ROUTES),
+  FRICTION_ROUTE,
+].map((route) => ({ method: "POST", path: pathOf(route) }));
 
 /** The requests that may send a Thing's photo (ADR 0020). */
 const THING_PHOTO_REQUESTS: readonly FormRequest[] = THING_PHOTO_ROUTES.map(
@@ -340,9 +342,17 @@ export const createWorker = (options: {
     dataDir,
     send: options.sendPush ?? sendWebPush,
     devicesLoggedIn: owner.devices,
-    titleOf: async (id) => {
+    sessionOf: async (id) => {
       const session = await sessions.get(id);
-      return session.ok ? session.value.title : undefined;
+      if (!session.ok) return undefined;
+      const workspace = await getWorkspace(contextDir, session.value.workspaceId);
+      // One whose workspace can't be read is told of, as before there was a choice.
+      const notify = workspace.ok ? workspace.value.notify : "everything";
+      return { title: session.value.title, notify };
+    },
+    eventsOf: async (id) => {
+      const events = await sessions.events(id);
+      return events.ok ? events.value : undefined;
     },
   });
   const code = createCode({
@@ -432,7 +442,7 @@ export const createWorker = (options: {
     notify: (session, need) => {
       background(
         need()
-          .then((said) => notifications.notice(session, said))
+          .then((said) => notifications.needs(session, said))
           .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
       );
     },
@@ -473,7 +483,7 @@ export const createWorker = (options: {
     notify: (session, need) => {
       background(
         notifications
-          .notice(session, need)
+          .needs(session, need)
           .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
       );
     },
@@ -617,6 +627,12 @@ export const createWorker = (options: {
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(nextUp));
   api.route("/", leadRoutes(lead));
+  api.route(
+    "/",
+    frictionRoutes(
+      createFriction({ contextDir, liveCopy, liveRepo: workspaceMain.liveRepo, code, sessions }),
+    ),
+  );
   api.get("/workspaces/:id/main", async (c) => {
     const main = await workspaceMain.of(c.req.param("id"));
     if (main.ok) return c.json(main.value satisfies WorkspaceMain);
@@ -629,7 +645,7 @@ export const createWorker = (options: {
         return apiError(c, { status: 404, error: "This workspace's main can't be read now." });
     }
   });
-  api.route("/", notificationRoutes(notifications));
+  api.route("/", notificationRoutes({ notifications, contextDir, contextFolder }));
   api.route("/", usageRoutes(usage));
   api.route(
     "/",

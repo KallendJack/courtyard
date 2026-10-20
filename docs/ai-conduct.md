@@ -529,6 +529,27 @@ code sessions running (it gets no port slot). Its first message:
 > the Paper file's Drafts page first, and label it once the owner OKs the board. Don't claim it or build it here: Next
 > up offers Build once it's ready.
 
+Something's off (#554), on the rail or the cover screen's dock of every screen, files friction the owner hits in real
+use in Courtyard's own code workspace: the code workspace on the repository the live copy runs from. Once the owner
+has seen everything the sheet filled in and said what's off, File it starts a new session there, titled "Something's
+off: <what they said>". Its first message is the worker's, with the screen as the owner saw it at the tap attached
+as a photo (Attachments, above). Like a grill, it claims nothing and takes no place among the code sessions running,
+since it builds nothing:
+
+> Something's off in Courtyard, and I'd like it filed. I said: "<said>". It was on <page> (<path>), on <size>,
+> <width> × <height>, version <version>, around <part>. The picture attached is the screen as I saw it when I tapped
+> Something's off: say in the issue what it shows, in words, since the repository is public and neither the picture
+> nor anything personal in it goes on GitHub. File it as an issue in the Later milestone, the way this repository's
+> docs/agents say, with the page, the screen size and the version. When fixing it would change what I see, draw the
+> fix on the Paper file's Drafts page and name the board in the issue. Don't build anything: nothing is built until
+> I agree it. Then tell me in a line or two what you filed.
+
+`<size>` is "the Fold's cover screen", "the Fold open" or "a desktop"; ", version <version>" and ", around <part>"
+are left out when the sheet didn't know them. When the screen couldn't be taken, the picture's sentence is, in its
+place:
+
+> The screen couldn't be taken, so there's no picture.
+
 ### Courtyard's coding tools
 
 Built with #248, for a provider that codes through Courtyard (Codex, whose shell stays off; ADR 0029). Its access
