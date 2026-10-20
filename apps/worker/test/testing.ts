@@ -335,6 +335,8 @@ export const savingProvider = (
     holdAfterSaves?: boolean;
     /** Whether it codes, so it can work in a code workspace (ADR 0007); it never edits anything. */
     codes?: boolean;
+    /** What each turn's answer ends with: "Done." unless this says. */
+    answer?: string;
   } = {},
 ) => {
   const replies: ToolCallReply[][] = [];
@@ -385,7 +387,7 @@ export const savingProvider = (
         );
         return ok(null);
       }
-      await input.emit("Done.");
+      await input.emit(options.answer ?? "Done.");
       return ok(null);
     },
     answerOnce: async () => err({ kind: "unknown", message: "The saver only saves." }),

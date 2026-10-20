@@ -43,6 +43,7 @@ export {
 } from "./lib/changes.ts";
 export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
 export {
+  BuilderStatus,
   BuildIssue,
   buildable,
   GitHubLink,
@@ -51,6 +52,7 @@ export {
   LEAD_WINDOW_BY_DEFAULT,
   LeadAllowAll,
   LeadBuilder,
+  LeadBuilderStatus,
   LeadHeldBack,
   LeadMerge,
   LeadMergeRequest,

@@ -8,6 +8,7 @@ import {
   LEAD_WINDOW_BY_DEFAULT,
   type LeadAllowAll,
   type LeadBuilder,
+  type LeadBuilderStatus,
   LeadHeldBack,
   type LeadMerge,
   type LeadMergeRequest,
@@ -35,6 +36,7 @@ import {
   RUN_BUILD_ORDER_MESSAGE,
 } from "../../prompts/index.ts";
 import type { ToolReply } from "../../providers/index.ts";
+import type { Builders } from "../builders/index.ts";
 import type { NextUp } from "../next-up/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../workspaces/index.ts";
@@ -310,6 +312,8 @@ export const createLead = (options: {
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
   /** Whether an Update waits to run (#186): meanwhile no builder starts. */
   updating?: () => boolean;
+  /** Each builder's status, as the worker recorded it (#590). */
+  builders?: Pick<Builders, "statusOf">;
   /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
   notify: (session: SessionId, need: string) => void;
   now: () => number;
@@ -547,12 +551,24 @@ export const createLead = (options: {
     const allowing = allowAllUntilOf(kept);
     const merge = mergeOf(kept?.merge, listed);
     const wakes = kept?.state === "resting" ? openWindowOf(kept) : undefined;
+    const statuses: LeadBuilderStatus[] = [];
+    for (const { session, issue } of kept?.built ?? []) {
+      const status = await options.builders?.statusOf(session);
+      if (status === undefined) continue;
+      statuses.push({
+        session,
+        title: listed.get(session)?.title ?? `Build #${issue}`,
+        issue,
+        status,
+      });
+    }
     return {
       state: kept?.state ?? "not-started",
       ...(kept === undefined ? {} : { session: kept.session }),
       ...(kept?.why === undefined ? {} : { why: kept.why }),
       builders: kept?.builders ?? LEAD_BUILDERS.byDefault,
       building,
+      statuses,
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),

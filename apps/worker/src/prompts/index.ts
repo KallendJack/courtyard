@@ -1761,6 +1761,13 @@ export const frictionMessage = (report: FrictionReport & { picture: boolean }) =
 };
 
 /**
+ * What the worker sends a Lead's builder whose turn ended with no pull request and no question
+ * (#590; docs/ai-conduct.md, Coding), once.
+ */
+export const BUILDER_CARRY_ON_MESSAGE =
+  "Carry on with your issue: your turn ended without a pull request or a question for the owner. Finish the work and open its pull request, or ask the owner what you need to know.";
+
+/**
  * What Continue sends (#186; docs/ai-conduct.md, Every turn): the turn before was cut off by a
  * restart, and the model carries on from where it was, checking what already happened first.
  */

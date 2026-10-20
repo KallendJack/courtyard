@@ -761,17 +761,28 @@ describe("watching its builders (#347)", () => {
       state: "running",
       why: "Which session waits waits on your decision.",
     });
-    for (const waiting of (await sessionsOf(request)).filter(
-      (each) => each.now.kind === "needs-you",
-    )) {
-      if (waiting.now.kind !== "needs-you") continue;
-      await postJson(request, `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`, {
-        answer: "deny",
-      });
-    }
+    // Each approval its builders ask is denied, including those a builder told to carry on asks
+    // again (#590), until both are stuck and nothing runs.
     await expect
-      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
-      .toHaveLength(0);
+      .poll(
+        async () => {
+          const sessions = await sessionsOf(request);
+          for (const waiting of sessions) {
+            if (waiting.now.kind !== "needs-you") continue;
+            await postJson(
+              request,
+              `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`,
+              { answer: "deny" },
+            );
+          }
+          const stuck = (await leadOf(request)).statuses.filter(
+            (each) => each.status.kind === "stuck",
+          );
+          return sessions.filter((each) => each.busy).length === 0 && stuck.length === 2;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     await runJobs();
 
     expect((await leadOf(request)).why).toBeUndefined();
@@ -1034,6 +1045,9 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       await expect
         .poll(async () => (await eventsSoFar(request, builder.id)).at(-1)?.type)
         .toBe("task-ended");
+      // Told of it, and to carry on (#590): the owner sees what it said.
+      await settled(request);
+      await see(request, builder.id);
       await runJobs();
       clock.now += 19 * MINUTE;
       await runJobs();
@@ -1072,6 +1086,12 @@ describe("while Courtyard waits to update (#186)", () => {
     expect(lead.why).toBe("Courtyard waits to update, so the next builder starts after it.");
   });
 });
+
+/**
+ * What its turns answer: asking the owner something, so a builder waits on them rather than being
+ * told to carry on (#590).
+ */
+const ASKS = { codes: true, answer: "Which screen should it go on?" };
 
 describe("talking to the Lead (#347)", () => {
   /** Waits until no turn runs in the workspace, so the next one the provider sees is the Lead's. */
@@ -1174,7 +1194,7 @@ describe("talking to the Lead (#347)", () => {
   it("skips an issue when the owner asks: its builder stops, its claim is released, and the next starts", async () => {
     const saver = savingProvider(
       [[], [], [], [{ call: "build_order", input: { action: "skip", issue: 22 } }]],
-      { codes: true },
+      ASKS,
     );
     const { github, request } = await signedInWith(ISSUES, { providers: [saver.provider] });
     await run(request, SAVING_MODEL);
@@ -1209,7 +1229,7 @@ describe("talking to the Lead (#347)", () => {
         [],
         [{ call: "build_order", input: { action: "pause" } }],
       ],
-      { codes: true },
+      ASKS,
     );
     const four = [...ISSUES, { number: 25, title: "Fourth", milestone: "4 · Code workspaces" }];
     const { github, request } = await signedInWith(four, { providers: [saver.provider] });

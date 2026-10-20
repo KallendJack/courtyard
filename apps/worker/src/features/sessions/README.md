@@ -8,7 +8,8 @@ Claude, and every page that has the session open gets the answer as it's written
 - **Uses:** `providers/`, `prompts/`, `code/`, `tasks/` (a code session's long commands, #182), `saves/`, `documents/`, `things/`, `attachments/`,
   `suggested-replies/`, `skills/`, `matt-skills/`, `waiting/`, `allow-all/`, `paper/`, `github/`,
   `context-folder/`, `owner-context/`, `workspaces/`; and, handed in by `worker.ts`, `notifications/`
-  (`notify`) and `next-up/`'s claims (`named`, `claim`, `release`).
+  (`notify`), `next-up/`'s claims (`named`, `claim`, `release`) and `builders/` (#590: told what happens in a
+  Lead builder's session as it happens; it starts the builder's one carry-on).
 - **Used by:** `worker.ts`, `pull-requests/`, `next-up/`, `lead/`, `changes/`, `fresh-start/`, `matt-skills/`,
   `live/` (`midTurn`); in the web app, [`features/sessions/`](../../../../web/src/features/sessions/README.md).
 
