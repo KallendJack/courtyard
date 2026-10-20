@@ -119,6 +119,11 @@ export const Composer = memo(function Composer(props: {
   /** What shows for now in the box's place, while step by step reads aloud (#241). */
   standIn?: StandIn;
   /**
+   * Out of sight on a tablet too until Talk, Type or a draft opens it, as on the cover screen (a
+   * planning workspace's Home, #565).
+   */
+  tucked?: boolean;
+  /**
    * What shows above the box, in the page's foot, given the provider the message goes to and a
    * way to switch the box's model: a session's warning before a limit (#66).
    */
@@ -317,6 +322,7 @@ export const Composer = memo(function Composer(props: {
   const hasSkills = skills !== undefined;
   const answering = props.stop !== undefined;
   const steers = answering && props.steers === true;
+  const tucked = props.tucked === true;
   // Words taken back to edit go in the box, once each, and it opens to them (#252); so do photos
   // given it, such as one picked from a planning workspace's photo (#481).
   const { draft, onDrafted } = props;
@@ -344,6 +350,7 @@ export const Composer = memo(function Composer(props: {
         ...(choosing === undefined ? {} : { choosing }),
         answering,
         ...(steers ? { steers: true } : {}),
+        ...(tucked ? { tucked: true } : {}),
         dictate: (listener) => {
           const typed = textNow.current;
           dictating.current = listener;
@@ -367,7 +374,7 @@ export const Composer = memo(function Composer(props: {
           };
         },
       }),
-    [dock, model, hasSkills, choosing, answering, steers, standing],
+    [dock, model, hasSkills, choosing, answering, steers, standing, tucked],
   );
 
   const label = props.submitLabel ?? "Send";
@@ -591,9 +598,10 @@ export const Composer = memo(function Composer(props: {
 
   // The box is the frame's: it waits for the dock (#359), shown in the page first, it would move
   // into the dock as the frame arrives, and the keyboard would lose it mid-word. On a tablet,
-  // until it docks, its room in the dock is kept here, so the swap moves nothing (#283).
+  // until it docks, its room in the dock is kept here, so the swap moves nothing (#283); tucked
+  // away, it takes none.
   if (dock === undefined)
-    return <div aria-hidden className={layout === "tablet" ? DOCK_ROOM : FOOT_GAP} />;
+    return <div aria-hidden className={layout === "tablet" && !tucked ? DOCK_ROOM : FOOT_GAP} />;
   const line = standIn?.line(typeReply);
   const docked = line !== undefined && layout === "tablet" ? line : messageBox;
   return (

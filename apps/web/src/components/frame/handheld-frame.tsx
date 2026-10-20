@@ -42,7 +42,8 @@ const INSETS = ["--frame-left", "--frame-right", "--frame-bar", "--frame-bottom"
  * on a thumb rail down the left, and down the right labelled buttons (Model, Skills, and a
  * quieter Settings), then room, and the Talk key in the bottom corner (the sessions list there,
  * #492, came out in #521); the page's message box, the Reply box,
- * is always there at the foot of the page between them. On a phone or the folded Fold: tiles
+ * is always there at the foot of the page between them, unless the page tucks it away until it's
+ * opened (a planning workspace's Home, #565). On a phone or the folded Fold: tiles
  * across the top, and the buttons in a row above Type and the talk strip, Type opening the
  * message box above the bar. The key and the strip listen (talk-strip.tsx, #79). Loaded only on
  * a touch screen.
@@ -364,8 +365,13 @@ export default function HandheldFrame(props: {
         )}
       </div>
       <div ref={bottom} data-frame-bottom="">
-        {/* On a tablet the box is always there, on a page that has one; on the cover screen, once opened. */}
-        <div ref={props.dockRef} data-dock={layout} hidden={tablet ? undefined : !boxOpen} />
+        {/* On a tablet the box is always there, on a page that has one, unless it's tucked away (#565);
+            on the cover screen, once opened. */}
+        <div
+          ref={props.dockRef}
+          data-dock={layout}
+          hidden={tablet && box?.tucked !== true ? undefined : !boxOpen}
+        />
         {!tablet && !reading && (
           <div data-handheld="" className="contents">
             <div
