@@ -212,6 +212,56 @@ export const LeadBuilder = z.object({
 });
 export type LeadBuilder = z.infer<typeof LeadBuilder>;
 
+/**
+ * Where a Lead's builder stands (#590, ADR 0031), as the worker records it as things happen, each
+ * with when it began: the model working (`building`); a check running, or waiting `ahead` for its
+ * place in the machine's builds lock (`checking`); waiting on the owner's answer, to its approval
+ * (by event number) or to a question it asked (`waiting-on-you`); at the usage limit until
+ * `resetAt` (`waiting-for-limit`); its pull request's checks running (`in-ci`); ready for the
+ * owner's review (`ready-for-review`); `merged`; or `stuck`, Courtyard having given up, saying why.
+ * A failing check is `building` again, as the builder fixes it.
+ */
+export const BuilderStatus = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("building"), since: z.iso.datetime() }),
+  z.object({
+    kind: z.literal("checking"),
+    since: z.iso.datetime(),
+    command: z.string(),
+    ahead: z.number().int().positive().optional(),
+  }),
+  z.object({
+    kind: z.literal("waiting-on-you"),
+    since: z.iso.datetime(),
+    approval: z.number().int().positive().optional(),
+  }),
+  z.object({
+    kind: z.literal("waiting-for-limit"),
+    since: z.iso.datetime(),
+    resetAt: z.iso.datetime().optional(),
+  }),
+  z.object({
+    kind: z.literal("in-ci"),
+    since: z.iso.datetime(),
+    pullRequest: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal("ready-for-review"),
+    since: z.iso.datetime(),
+    pullRequest: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal("merged"),
+    since: z.iso.datetime(),
+    pullRequest: z.number().int().positive(),
+  }),
+  z.object({ kind: z.literal("stuck"), since: z.iso.datetime(), reason: z.string() }),
+]);
+export type BuilderStatus = z.infer<typeof BuilderStatus>;
+
+/** One of the Lead's builders with its status (#590), while the Lead keeps it. */
+export const LeadBuilderStatus = LeadBuilder.extend({ status: BuilderStatus });
+export type LeadBuilderStatus = z.infer<typeof LeadBuilderStatus>;
+
 /** A builder's pull request that's ready to merge (#347): checks passed, no conflict. */
 export const LeadReady = LeadBuilder.extend({ pullRequest: z.number().int().positive() });
 export type LeadReady = z.infer<typeof LeadReady>;
@@ -259,6 +309,11 @@ export const LeadStatus = z.object({
   why: z.string().optional(),
   builders: z.number().int().min(LEAD_BUILDERS.atLeast).max(LEAD_BUILDERS.atMost),
   building: z.array(LeadBuilder),
+  /**
+   * Each builder the Lead keeps, with its status as the worker recorded it (#590): one it started
+   * before statuses were kept has none until something happens in it.
+   */
+  statuses: z.array(LeadBuilderStatus),
   next: z.array(NextUpIssue),
   ready: z.array(LeadReady),
   /** Until when the builders it starts allow all (#428), while that's still ahead. */

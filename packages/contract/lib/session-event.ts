@@ -164,6 +164,11 @@ export const SessionEvent = z.discriminatedUnion("type", [
      * and the message tells the model so.
      */
     tasksEnded: z.array(TaskId).min(1).optional(),
+    /**
+     * Sent by the worker, not the owner, to a Lead's builder (#590): its turn ended with no pull
+     * request and no question, and the message tells it to carry on, once.
+     */
+    carriesOn: z.literal(true).optional(),
   }),
   /**
    * The model started a long command as a task (#182): it runs on after the turn, its output kept

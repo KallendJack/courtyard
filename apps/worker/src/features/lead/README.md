@@ -5,7 +5,8 @@ A code workspace's Lead (#347): runs builders in the milestone's order, and merg
 **Example:** you tap Run the build order. The Lead starts a builder on the first ready issue, holds back the next one
 because it changes the same file, and starts it once the first one's PR merges.
 
-- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`, `markStalled`), `allow-all/`,
+- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`, `markStalled`), `builders/`
+  (each builder's status, served as `LeadStatus.statuses`), `allow-all/`,
   `prompts/`, `providers/`, `workspaces/`; `code/`'s `changedFiles`.
 - **Used by:** `worker.ts` (one of its repeating jobs); `live/`'s `holding()` stops it starting new builders.
 

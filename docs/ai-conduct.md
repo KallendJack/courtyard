@@ -349,6 +349,14 @@ server, a slow test run)", since its checks run in its turn, and after the house
 > does a test run naming no file. A command still running after 10 minutes is ended: when a check is ended for
 > running too long, narrow it (fewer files, one spec), and never run it again as a task.
 
+A builder's turn that ends with no pull request and no question for the owner (its answer ending in a question mark)
+is told once, in a turn of its own started by the worker (#590):
+
+> Carry on with your issue: your turn ended without a pull request or a question for the owner. Finish the work
+> and open its pull request, or ask the owner what you need to know.
+
+Ending so again, it's Stuck, and Courtyard says so where the owner sees it, rather than telling it a third time.
+
 Courtyard stops no check of its own: the provider's command tool ends any command at 10 minutes (Claude Code's
 `Bash`, Codex's and Courtyard's coding tools), and a builder can't run a check as a task, which has no such limit.
 

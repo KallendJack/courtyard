@@ -78,6 +78,7 @@ import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
   BLOCK_SHOP_TOOL_NAME,
+  BUILDER_CARRY_ON_MESSAGE,
   blockShopReply,
   bringUpToDateMessage,
   CONTINUE_MESSAGE,
@@ -136,6 +137,7 @@ import {
   keepImage,
   type PreparedAttachment,
 } from "../attachments/index.ts";
+import type { Builders, TurnEnding } from "../builders/index.ts";
 import {
   allowlistFor,
   alwaysRule,
@@ -654,6 +656,11 @@ type RunningSession = {
   cutOffByRestart: boolean;
   /** Its Allow all for this task (#428), from its event log once recovered, then as each is written. */
   allowAll: AllowAll;
+  /**
+   * It's one of a Lead's builders (#590), whose status `builders/` keeps: read from its file the
+   * first time an event is written once the file is there.
+   */
+  builder: boolean | undefined;
 };
 
 /**
@@ -780,6 +787,8 @@ export const createSessions = (options: {
   claims?: ClaimHooks;
   /** Code sessions' previews (#183): each closes as its task ends, and takes the model's screenshots. */
   previews?: PreviewHooks;
+  /** Each Lead builder's status (#590), told what happens in its session as it happens. */
+  builders?: Builders;
   /**
    * The wanted list (#245): each wanted Thing's picks, which a turn's Things show, and a shop a
    * model blocked, whose picks it finds again elsewhere.
@@ -838,6 +847,7 @@ export const createSessions = (options: {
       seen: undefined,
       cutOffByRestart: false,
       allowAll: NO_ALLOW_ALL,
+      builder: undefined,
     };
     running.set(id, created);
     // The first step in the queue of every session this worker touches, before anything else.
@@ -919,8 +929,41 @@ export const createSessions = (options: {
     if (numbered.data.type === "pull-request") pullRequests.set(id, numbered.data.pullRequest);
     session.answered = answeredAfter(session.answered, numbered.data);
     session.allowAll = allowAllAfter(session.allowAll, numbered.data);
+    if (session.builder === undefined) {
+      const file = await readJsonFile(sessionFilePath(id), SessionFile);
+      if (file.ok && file.value !== undefined) session.builder = file.value.byLead === true;
+    }
+    if (session.builder === true) await builderHeardOf(id, numbered.data);
     for (const listener of session.listeners) listener(numbered.data);
     return ok(numbered.data);
+  };
+
+  /**
+   * Tells `builders/` what a Lead builder's event says has happened (#590): a turn starting, an
+   * approval asked or answered, its pull request heard of, a turn a restart cut off. A turn's own
+   * end is told once its pull request has been looked at (`builderTurnEnded`), and its checks as
+   * they wait, start and end.
+   */
+  const builderHeardOf = async (id: SessionId, event: SessionEvent) => {
+    const { builders } = options;
+    if (builders === undefined) return;
+    if (event.type === "owner-message") await builders.heard(id, { kind: "turn-started" });
+    if (event.type === "approval-requested") {
+      await builders.heard(id, { kind: "approval-asked", approval: event.seq });
+    }
+    if (event.type === "approval-answered") {
+      await builders.heard(id, { kind: "approval-answered", approval: event.approval });
+    }
+    if (event.type === "pull-request") {
+      await builders.heard(id, { kind: "pull-request", pullRequest: event.pullRequest });
+    }
+    if (event.type === "turn-failed" && event.reason.kind === "interrupted") {
+      await builders.heard(id, {
+        kind: "turn-ended",
+        ending: { kind: "failed", reason: event.reason },
+        asked: false,
+      });
+    }
   };
 
   const append = (id: SessionId, event: NewEvent) => {
@@ -1440,14 +1483,20 @@ export const createSessions = (options: {
           const activity = decided.value;
           const told = reportAs(helper);
           if (activity.kind === "ran-command" && isBuild(activity.command)) {
+            const { command } = activity;
             const started = await options.code.builds.start({
               id: turn.id,
-              command: activity.command,
+              command,
               signal: stopper.signal,
-              ahead: (ahead) => void told({ kind: "waiting-for-build", ahead }),
+              ahead: (ahead) => {
+                void told({ kind: "waiting-for-build", ahead });
+                if (builder)
+                  void options.builders?.heard(turn.id, { kind: "check-waiting", command, ahead });
+              },
               task: by.asTask === true,
             });
             if (!started) return err(codeRefusalReason({ kind: "stopped" }));
+            if (builder) await options.builders?.heard(turn.id, { kind: "check-started", command });
           }
           if (by.asTask === true) return ok(null);
           await told(activity, allowedAll);
@@ -1666,7 +1715,12 @@ export const createSessions = (options: {
               });
             },
             run: (asked, why) => command(asked, why, false),
-            ran: (asked) => options.code.builds.ended(turn.id, asked),
+            ran: (asked) => {
+              options.code.builds.ended(turn.id, asked);
+              if (builder && isBuild(asked)) {
+                void options.builders?.heard(turn.id, { kind: "check-ended", command: asked });
+              }
+            },
             // Only the model's own (#182): a helper works inside the turn.
             task: async (asked, why) => {
               if (helper !== undefined) return err(HELPER_NO_TASKS);
@@ -1939,6 +1993,14 @@ export const createSessions = (options: {
     // What the turn did to its pull request shows at once, the PR it opened, say (#172), and its
     // notification then says when the PR's checks still fail (story 31).
     if (turn.coding) await followPullRequest(turn.id);
+    // A builder's status moves on once its pull request has been looked at (#590); a turn with
+    // nothing to show is told to carry on, once.
+    const builderEnding: TurnEnding = stopped
+      ? { kind: "stopped" }
+      : failure
+        ? { kind: "failed", reason: failure }
+        : { kind: "completed" };
+    const carriesOn = builder && ended.ok && (await builderTurnEnded(turn.id, builderEnding));
     // Stopped or failed before its pull request, it lets its issue go (#324).
     if (turn.coding && ending.type !== "turn-completed") {
       await releaseClaim(turn.id, (branch) =>
@@ -1977,6 +2039,47 @@ export const createSessions = (options: {
         ),
       );
     }
+    // Told to carry on (#590), unless the owner's queued message or a task's news went instead.
+    if (carriesOn && !queuedGoes && !tasksTold) {
+      const carried = await startTurn({
+        id: turn.id,
+        workspaceId: turn.workspaceId,
+        provider: turn.provider,
+        message: {
+          text: BUILDER_CARRY_ON_MESSAGE,
+          model: { provider: turn.provider.id, model: turn.model },
+          ...(turn.effort === undefined ? {} : { effort: turn.effort }),
+        },
+        since: freshStarts,
+        coding: turn.coding,
+        placeless: turn.placeless,
+        carriesOn: true,
+      });
+      if (!carried.ok) console.error(`Builder ${turn.id} couldn't carry on`, carried.error);
+    }
+  };
+
+  /**
+   * Tells `builders/` how a Lead builder's turn ended (#590), once its pull request has been
+   * looked at, and whether its answer asked the owner something (it ends in a question mark).
+   * Says whether it's to be told to carry on.
+   */
+  const builderTurnEnded = async (id: SessionId, ending: TurnEnding) => {
+    if (options.builders === undefined) return false;
+    const events = await readEvents(id);
+    const turnStart = events.ok
+      ? events.value.findLastIndex((event) => event.type === "owner-message")
+      : -1;
+    const answer = (events.ok ? events.value.slice(turnStart + 1) : [])
+      .map((event) => (event.type === "text-delta" ? event.text : ""))
+      .join("")
+      .trim();
+    const heard = await options.builders.heard(id, {
+      kind: "turn-ended",
+      ending,
+      asked: answer.endsWith("?"),
+    });
+    return heard.carryOn;
   };
 
   /**
@@ -2081,6 +2184,8 @@ export const createSessions = (options: {
     continues?: { turn: number };
     /** Sent by the worker because these tasks ended while no turn ran (#182). */
     tasksEnded?: [TaskId, ...TaskId[]];
+    /** Sent by the worker to a Lead's builder whose turn had nothing to show (#590). */
+    carriesOn?: true;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -2146,6 +2251,7 @@ export const createSessions = (options: {
       ...(start.runsBuildOrder === true ? { runsBuildOrder: true } : {}),
       ...(start.continues === undefined ? {} : { continues: start.continues }),
       ...(start.tasksEnded === undefined ? {} : { tasksEnded: start.tasksEnded }),
+      ...(start.carriesOn === true ? { carriesOn: true } : {}),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the

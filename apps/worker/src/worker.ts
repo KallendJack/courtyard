@@ -37,6 +37,7 @@ import { loginRoutes, ownerLoggedIn, requireLogin, sameSiteJsonOnly } from "./au
 import { createSignIns } from "./auth/sign-ins/index.ts";
 import { signInRoutes } from "./auth/sign-ins/routes.ts";
 import { type Environment, readSettings } from "./config/settings.ts";
+import { createBuilders } from "./features/builders/index.ts";
 import { changeRoutes } from "./features/changes/routes.ts";
 import { allowsOf, createCode, namedAs } from "./features/code/index.ts";
 import { createConnections, makePaperFile } from "./features/connections/index.ts";
@@ -390,7 +391,10 @@ export const createWorker = (options: {
       nextUp: (workspaceId) => nextUp.shown(workspaceId),
     },
   });
+  // Each Lead builder's status (#590), kept as things happen in its session.
+  const builders = createBuilders({ dataDir, now });
   const sessions = createSessions({
+    builders,
     dataDir,
     providers,
     contextDir,
@@ -463,6 +467,7 @@ export const createWorker = (options: {
     contextDir,
     dataDir,
     sessions,
+    builders,
     nextUp,
     mainRed: async (workspaceId) => {
       const main = await workspaceMain.of(workspaceId);
