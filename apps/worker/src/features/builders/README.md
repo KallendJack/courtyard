@@ -9,8 +9,10 @@ holds the machine's builds lock. It's **Checking**, one ahead, since it asked; s
 **Building** again once it ends. Its turn ends with its pull request open and CI running: **In CI**.
 
 - **Uses:** the contract (`BuilderStatus`), `lib/files.ts`.
-- **Used by:** `sessions/`, which tells it what happens in a builder's session and starts the one carry-on; `lead/`,
-  which serves each builder's status (`LeadStatus.statuses`). Made in `worker.ts`.
+- **Used by:** `sessions/`, which tells it what happens in a builder's session and starts each carry-on, and lists a
+  stuck builder as waiting on the owner, saying why; `lead/`, which decides from each builder's status and serves
+  it (`LeadStatus.statuses`); `worker.ts`, which carries on a builder a restart cut off (`carriesOnAfterRestart`)
+  and runs `sessions/`' `carryOnAtReset` as one of its jobs.
 
 ## API
 
@@ -29,9 +31,16 @@ None of its own: `GET /api/workspaces/:id/lead` gives each builder's status (`st
     **Ready for review** once they pass, **Building** when they fail or it conflicts (its session fixes it),
     **Merged**, or **Stuck** when it's closed without merging;
   - a turn ending, once its pull request has been looked at: as its pull request says; **Waiting on you** when its
-    answer ends in a question mark, or a restart cut it off (it waits for Continue); **Waiting for the limit** at a
+    answer ends in a question mark (the worker's test for a question, for now), or a restart cut it off; **Waiting for the limit** at a
     usage limit, with its reset; **Stuck** when it failed (saying why) or was stopped.
 - **One carry-on:** a turn that ends with no pull request and no question is **Building**, and `sessions/` starts a
   turn telling it to carry on (`carriesOn` on its message; docs/ai-conduct.md, Coding). Ending so again, it's
   **Stuck**.
+- **At the limit** (#610): Waiting for the limit, until the reset its provider gave (or an hour on, when it gave
+  none); then `dueAtReset` names it, and `sessions/`' `carryOnAtReset` (a repeating job) starts a turn of the
+  worker's on the same model (`afterLimit` on its message).
+- **After a restart** (#610): a turn any restart cut off (an Update, a crash, the PC restarting) is **Waiting on
+  you** and carries on by itself once, with Continue's message; cut off again before a turn of its ends otherwise,
+  it's **Stuck**.
+- **A task's end** always reaches its builder, even while an Update waits (`sessions/`' `tellTasks`).
 - **Merged** is where a builder ends: nothing moves it on.

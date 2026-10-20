@@ -169,6 +169,11 @@ export const SessionEvent = z.discriminatedUnion("type", [
      * request and no question, and the message tells it to carry on, once.
      */
     carriesOn: z.literal(true).optional(),
+    /**
+     * Sent by the worker, not the owner, to a Lead's builder (#610): the usage limit its last turn
+     * met has reset, and the message tells it to carry on.
+     */
+    afterLimit: z.literal(true).optional(),
   }),
   /**
    * The model started a long command as a task (#182): it runs on after the turn, its output kept

@@ -79,6 +79,7 @@ import { err, ok, type Result } from "../../lib/result.ts";
 import {
   BLOCK_SHOP_TOOL_NAME,
   BUILDER_CARRY_ON_MESSAGE,
+  BUILDER_LIMIT_RESET_MESSAGE,
   blockShopReply,
   bringUpToDateMessage,
   CONTINUE_MESSAGE,
@@ -322,11 +323,6 @@ const SessionFile = z.object({
    * claim stands: it's released when the session stops before a pull request.
    */
   claim: z.object({ issue: z.number().int().positive(), standing: z.boolean() }).optional(),
-  /**
-   * A Lead's builder its Lead found stalled (#474), at its latest event then: it waits on the
-   * owner as stalled until anything new happens in it.
-   */
-  stalled: z.object({ seq: z.number().int().nonnegative() }).optional(),
 });
 type SessionFile = z.infer<typeof SessionFile>;
 
@@ -1043,7 +1039,7 @@ export const createSessions = (options: {
    */
   const updateFile = (
     id: SessionId,
-    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt" | "claim" | "stalled">>,
+    change: Partial<Pick<SessionFile, "title" | "titledBy" | "updatedAt" | "claim">>,
   ) =>
     inOrder(runningSession(id), async (): Promise<Result<SessionFile, SessionError>> => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
@@ -2186,6 +2182,8 @@ export const createSessions = (options: {
     tasksEnded?: [TaskId, ...TaskId[]];
     /** Sent by the worker to a Lead's builder whose turn had nothing to show (#590). */
     carriesOn?: true;
+    /** Sent by the worker to a Lead's builder once its usage limit has reset (#610). */
+    afterLimit?: true;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -2252,6 +2250,7 @@ export const createSessions = (options: {
       ...(start.continues === undefined ? {} : { continues: start.continues }),
       ...(start.tasksEnded === undefined ? {} : { tasksEnded: start.tasksEnded }),
       ...(start.carriesOn === true ? { carriesOn: true } : {}),
+      ...(start.afterLimit === true ? { afterLimit: true } : {}),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the
@@ -2503,7 +2502,7 @@ export const createSessions = (options: {
     return session === undefined ? undefined : allowingAllAt(session.allowAll, options.now());
   };
 
-  const summaryOf = ({ titledBy: _, stalled: _stalled, ...file }: SessionFile): SessionSummary => {
+  const summaryOf = ({ titledBy: _, ...file }: SessionFile): SessionSummary => {
     const allowingAll = allowingAllOf(file.id);
     return {
       ...file,
@@ -2629,26 +2628,6 @@ export const createSessions = (options: {
     });
   };
 
-  /** A session's latest event number, 0 before its first. */
-  const lastSeqOf = async (
-    id: SessionId,
-    session: RunningSession,
-  ): Promise<Result<number, SessionError>> => {
-    if (session.nextSeq !== undefined) return ok(session.nextSeq - 1);
-    const events = await readEvents(id);
-    return events.ok ? ok(events.value.length) : events;
-  };
-
-  /** Whether a builder its Lead found stalled (#474) still is: nothing has happened in it since. */
-  const stillStalled = async (
-    file: SessionFile,
-    session: RunningSession,
-  ): Promise<Result<boolean, SessionError>> => {
-    if (file.stalled === undefined) return ok(false);
-    const last = await lastSeqOf(file.id, session);
-    return last.ok ? ok(last.value === file.stalled.seq) : last;
-  };
-
   /**
    * A workspace's sessions, most recently active first, each with whose turn it is, whether it's
    * waiting for a code session to end, and what it waits on the owner for (#334).
@@ -2673,8 +2652,10 @@ export const createSessions = (options: {
       const session = runningSession(file.value.id);
       const seen = await seenOf(file.value.id, session);
       if (!seen.ok) return seen;
-      const stalled = await stillStalled(file.value, session);
-      if (!stalled.ok) return stalled;
+      // A Lead's builder that's stuck waits on the owner, saying why (#590).
+      const status =
+        file.value.byLead === true ? await options.builders?.statusOf(file.value.id) : undefined;
+      const stuck = status?.kind === "stuck" ? status.reason : undefined;
       summaries.push({
         ...summaryOf(file.value),
         now: now.value,
@@ -2684,12 +2665,13 @@ export const createSessions = (options: {
           pullRequest,
           answer: session.answered.answer,
           cutOff: session.answered.cutOff,
-          stalled: stalled.value,
+          stuck: stuck !== undefined,
           seen: seen.value,
           clock: options.now(),
         }),
         queued,
         ...(pullRequest === undefined ? {} : { pullRequest }),
+        ...(stuck === undefined ? {} : { stuck }),
       });
     }
     // The Lead is pinned at the top (#347).
@@ -3099,8 +3081,9 @@ export const createSessions = (options: {
    * started.
    */
   const tellTasks = async (id: SessionId): Promise<boolean> => {
-    if (holding()) return false;
     const session = running.get(id);
+    // A Lead's builder is told whatever waits (#610): an Update holds back only the owner's.
+    if (holding() && session?.builder !== true) return false;
     if (session === undefined || session.turn.kind !== "idle") return false;
     const [events, file] = await Promise.all([
       readEvents(id),
@@ -3175,7 +3158,48 @@ export const createSessions = (options: {
     await tellTasks(id);
   };
 
+  /**
+   * Carries on each Lead builder waiting for the usage limit once its reset has come (#610): a turn
+   * of the worker's on the model its limited turn was on, telling it so. One whose turn is running,
+   * or whose last turn didn't end on the limit after all, is left.
+   */
+  const carryOnAtReset = async () => {
+    const since = freshStarts;
+    for (const id of (await options.builders?.dueAtReset()) ?? []) {
+      if (running.get(id)?.turn.kind === "running") continue;
+      const [events, file] = await Promise.all([
+        readEvents(id),
+        readJsonFile(sessionFilePath(id), SessionFile),
+      ]);
+      if (!events.ok || !file.ok || file.value === undefined) continue;
+      const last = events.value.findLast((event) => event.type === "owner-message");
+      const limited = last === undefined ? undefined : limitedTurn(events.value, last.seq);
+      if (limited === undefined) continue;
+      const message: NewMessage = {
+        text: BUILDER_LIMIT_RESET_MESSAGE,
+        model: limited.model,
+        ...(limited.effort === undefined ? {} : { effort: limited.effort }),
+      };
+      const provider = await providerIn(file.value.workspaceId, message);
+      if (!provider.ok) continue;
+      const started = await startTurn({
+        id,
+        workspaceId: file.value.workspaceId,
+        provider: provider.value.provider,
+        message,
+        since,
+        coding: file.value.branch !== undefined,
+        placeless: file.value.placeless === true,
+        afterLimit: true,
+      });
+      if (!started.ok) console.error(`Builder ${id} couldn't carry on at the reset`, started.error);
+    }
+  };
+
   return {
+    /** For the worker's repeating jobs (#610): carries on each builder whose usage limit has reset. */
+    carryOnAtReset,
+
     /** A code session's tasks still running (#182), oldest first, each with its last line. */
     runningTasks: async (rawId: string): Promise<Result<RunningTasks, SessionError>> => {
       const found = await findSession(rawId);
@@ -4162,15 +4186,6 @@ export const createSessions = (options: {
       if (session?.turn.kind !== "running") return;
       session.turn.stopper.abort();
       await session.ended;
-    },
-
-    /**
-     * Marks a Lead's builder stalled (#474), at its latest event `seq` as the Lead last saw it: it
-     * waits on the owner as stalled until anything new happens in it. Nothing is stopped.
-     */
-    markStalled: async (id: SessionId, seq: number): Promise<Result<null, SessionError>> => {
-      const marked = await updateFile(id, { stalled: { seq } });
-      return marked.ok ? ok(null) : marked;
     },
 
     /**

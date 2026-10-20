@@ -530,6 +530,13 @@ Where the rest fits:
   whole suite (`ci-runs-it`: `checksEverything`, a `verify` script, or a `test` or `e2e` script, `vitest` or
   `playwright test` naming no test file), each refusal saying why; and its framing tells it so (`prompts/`). The
   owner's own sessions are unchanged.
+- **A Lead's builder's status** (#590, #610, ADR 0031). `sessions/` tells `builders/` what happens in a builder's
+  session as it's written (a turn starting, an approval, its pull request), as its checks wait, start and end, and
+  as a turn ends once its pull request has been looked at; `builders/` keeps one of eight statuses with since when
+  in `builders.json`. The Lead decides from it alone (Stuck frees a slot), `sessions/` lists a Stuck builder as
+  waiting on the owner with why (Needs you, the Home tile), and the waits end on their own: one carry-on for a turn
+  with nothing to show, a turn of the worker's at the usage limit's reset (`carryOnAtReset`), Continue by itself
+  once after any restart (`worker.ts`), and a task's end told even while an Update waits.
 - **Helpers** (#117, ADR 0027). A code turn's model can start helpers, its provider's own sub-agents, through
   `CodeTurn.helper`: `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
   running (recording it as `waiting` until then, and again once it has one), and hands back a `HelperTurn`, the
@@ -807,7 +814,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
   - The fake echoes, and saves, saves a document or a Thing, loads a skill, suggests replies or acts out a web search when a test scripts it, or
     says which attachments it was given ("please look"). In a code session it edits a file ("edit file …") and runs
     a command ("run command: …") when the worker allows, and says why when it doesn't, and updates its task list
-    ("update the task list"); Fake two doesn't code. With
+    ("update the task list"); a Lead's builder's first message ("Build issue #…") it answers by asking which part to
+    start with, so the builder waits on the owner rather than going Stuck (#610). Fake two doesn't code. With
     Paper, it plays Paper ("paper <tool> {…}"), so the browser tests never start the real app.
 - **`apps/worker/eval/`:** the context eval runs invented conversations against real Claude or Codex and scores
   their saves, documents and Things, the skills they load, the replies they suggest and whether they search the web. It runs on demand,

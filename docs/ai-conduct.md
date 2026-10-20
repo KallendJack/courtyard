@@ -357,6 +357,14 @@ is told once, in a turn of its own started by the worker (#590):
 
 Ending so again, it's Stuck, and Courtyard says so where the owner sees it, rather than telling it a third time.
 
+A builder whose turn met the usage limit waits for it, then carries on by itself once the limit has reset (at the
+reset its provider gave, or an hour on when it gave none; #610), on the same model, told in a turn of the worker's:
+
+> The usage limit your last turn met has reset. Carry on with your issue from where you were.
+
+One a restart cut off, whatever restarted (an Update, a crash, the PC restarting), is sent Continue's message by
+itself, once (#610); cut off again before a turn of its ends otherwise, it's Stuck.
+
 Courtyard stops no check of its own: the provider's command tool ends any command at 10 minutes (Claude Code's
 `Bash`, Codex's and Courtyard's coding tools), and a builder can't run a check as a task, which has no such limit.
 

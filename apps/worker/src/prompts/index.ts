@@ -1768,6 +1768,13 @@ export const BUILDER_CARRY_ON_MESSAGE =
   "Carry on with your issue: your turn ended without a pull request or a question for the owner. Finish the work and open its pull request, or ask the owner what you need to know.";
 
 /**
+ * What the worker sends a Lead's builder once the usage limit its last turn met has reset (#610;
+ * docs/ai-conduct.md, Coding).
+ */
+export const BUILDER_LIMIT_RESET_MESSAGE =
+  "The usage limit your last turn met has reset. Carry on with your issue from where you were.";
+
+/**
  * What Continue sends (#186; docs/ai-conduct.md, Every turn): the turn before was cut off by a
  * restart, and the model carries on from where it was, checking what already happened first.
  */

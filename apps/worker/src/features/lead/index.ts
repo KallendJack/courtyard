@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import {
-  BUILDER_STALLS_AFTER_MINUTES,
+  type BuilderStatus,
   buildable,
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
@@ -19,7 +19,6 @@ import {
   type NextUpIssue,
   type SessionEvent,
   SessionId,
-  tasksIn,
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -100,19 +99,11 @@ const wakesUntilOf = (window: LeadWindow, now: number) => {
 /** A builder's title starts with this when it fixes a red main (#355's issue). */
 const MAIN_FIX = /^Main fails:/;
 
-/** How long a builder may be silent before it's stalled (#474). */
-const STALLS_AFTER_MS = BUILDER_STALLS_AFTER_MINUTES * 60 * 1000;
-
-/**
- * A builder the Lead started, the code files its issue named then (#423), and since when it has
- * been silent (#474): its latest event then, and when the Lead began counting, which waiting on
- * the owner or for a place starts again.
- */
+/** A builder the Lead started, and the code files its issue named then (#423). */
 const Builder = z.object({
   session: SessionId,
   issue: z.number().int().positive(),
   files: z.array(z.string()).default([]),
-  quiet: z.object({ seq: z.number().int().nonnegative(), since: z.iso.datetime() }).optional(),
 });
 
 /**
@@ -178,32 +169,6 @@ export type LeadProblem =
 
 type Listed = CodeSessionList["sessions"][number];
 
-/**
- * What a builder with no pull request has done, as the Lead reads it each look (#474): its latest
- * event, whether its last turn failed or was stopped, how many approvals it waits on that Allow
- * all would allow (#551), and whether something of the machine's is in hand for it (#574).
- */
-type Heard = {
-  readonly seq: number;
-  readonly stopped: boolean;
-  readonly allowable: number;
-  readonly inHand: boolean;
-};
-
-/**
- * Whether something of the machine's is in hand for a session (#574): a task the model started
- * still runs, or its latest event is a command it's running or one waiting for the build turn,
- * which nothing has followed yet.
- */
-const inHandIn = (events: readonly SessionEvent[]) => {
-  const last = events.at(-1);
-  return (
-    (last?.type === "activity" &&
-      (last.activity.kind === "ran-command" || last.activity.kind === "waiting-for-build")) ||
-    tasksIn(events).some((task) => !task.preview && task.ended === undefined)
-  );
-};
-
 /** How many approvals a session waits on that Allow all covers (#551): asked, not yet answered. */
 const allowableIn = (events: readonly SessionEvent[]) => {
   const answered = new Set(
@@ -216,39 +181,23 @@ const allowableIn = (events: readonly SessionEvent[]) => {
 };
 
 /**
- * Whether a session's last turn failed or was stopped (#474); one cut off by a restart waits for
- * Continue (#186) instead.
+ * Where a builder stands: still building; stuck (#590), as its status says, taking no slot until
+ * it carries on; its pull request ready to merge; or done with.
  */
-const endedBadly = (events: readonly SessionEvent[]) => {
-  const last = events.findLast(
-    (event) =>
-      event.type === "owner-message" ||
-      event.type === "turn-completed" ||
-      event.type === "turn-stopped" ||
-      event.type === "turn-failed",
-  );
-  return (
-    last?.type === "turn-stopped" ||
-    (last?.type === "turn-failed" && last.reason.kind !== "interrupted")
-  );
-};
-
-/**
- * Where a builder stands: still building; with no pull request, its last turn failed or stopped,
- * or stalled (#474), neither taking a slot until it carries on; its pull request ready to merge;
- * or done with.
- */
-const standingOf = (listed: Listed | undefined, heard?: Heard) => {
+const standingOf = (listed: Listed | undefined, status?: BuilderStatus) => {
   const pullRequest = listed?.pullRequest;
-  if (listed === undefined || (pullRequest !== undefined && pullRequest.state !== "open")) {
+  if (
+    listed === undefined ||
+    status?.kind === "merged" ||
+    (pullRequest !== undefined && pullRequest.state !== "open")
+  ) {
     return "ended" as const;
   }
-  if (pullRequest === undefined) {
-    if (listed.waiting === "stalled") return "stalled" as const;
-    if (heard?.stopped === true && listed.now.kind === "your-turn" && !listed.queued) {
-      return "stopped" as const;
-    }
+  if (status !== undefined) {
+    if (status.kind === "stuck") return "stuck" as const;
+    return status.kind === "ready-for-review" ? ("ready" as const) : ("building" as const);
   }
+  // One started before statuses were kept, until something happens in it.
   return pullRequest?.checks.kind === "passed" && pullRequest.conflicts !== true
     ? ("ready" as const)
     : ("building" as const);
@@ -301,7 +250,6 @@ export const createLead = (options: {
     | "stopBuilding"
     | "mergePullRequest"
     | "events"
-    | "markStalled"
     | "allowAllFromLead"
     | "allowAllOffFromLead"
   >;
@@ -358,36 +306,45 @@ export const createLead = (options: {
     return new Map((listed.ok ? listed.value : []).map((session) => [session.id, session]));
   };
 
-  /** What each of the Lead's builders with no pull request has done (#474), read now. */
-  const heardOf = async (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) => {
-    const heard = new Map<SessionId, Heard>();
+  /**
+   * How many approvals each of the Lead's builders with no pull request waits on that Allow all
+   * would answer (#551), read now.
+   */
+  const approvalsOf = async (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) => {
+    const approvals = new Map<SessionId, number>();
     for (const { session } of kept?.built ?? []) {
       const each = listed.get(session);
-      if (each === undefined || each.pullRequest !== undefined) continue;
+      // Only while its turn waits on one: a turn that ended asks nothing any more.
+      if (each === undefined || each.pullRequest !== undefined || each.waiting !== "approval") {
+        continue;
+      }
       const events = await sessions.events(session);
-      if (!events.ok) continue;
-      heard.set(session, {
-        seq: events.value.at(-1)?.seq ?? 0,
-        stopped: endedBadly(events.value),
-        // Only while its turn waits on one: a turn that ended asks nothing any more.
-        allowable: each.waiting === "approval" ? allowableIn(events.value) : 0,
-        inHand: inHandIn(events.value),
-      });
+      if (events.ok) approvals.set(session, allowableIn(events.value));
     }
-    return heard;
+    return approvals;
   };
 
-  /** Where the Lead's builders stand, from the sessions listed now and what they've done. */
+  /** Each of the Lead's builders' status, as the worker recorded it (#590). */
+  const statusesOf = async (kept: Kept | undefined) => {
+    const statuses = new Map<SessionId, BuilderStatus>();
+    for (const { session } of kept?.built ?? []) {
+      const status = await options.builders?.statusOf(session);
+      if (status !== undefined) statuses.set(session, status);
+    }
+    return statuses;
+  };
+
+  /** Where the Lead's builders stand, from the sessions listed now and their statuses. */
   const buildersOf = (
     kept: Kept | undefined,
     listed: ReadonlyMap<SessionId, Listed>,
-    heard: ReadonlyMap<SessionId, Heard> = new Map(),
+    statuses: ReadonlyMap<SessionId, BuilderStatus>,
   ) => {
     const building: LeadBuilder[] = [];
     const ready: LeadReady[] = [];
     for (const { session, issue } of kept?.built ?? []) {
       const each = listed.get(session);
-      const standing = standingOf(each, heard.get(session));
+      const standing = standingOf(each, statuses.get(session));
       if (each === undefined || standing === "ended") continue;
       if (standing === "building") building.push({ session, title: each.title, issue });
       else if (each.pullRequest !== undefined) {
@@ -414,12 +371,12 @@ export const createLead = (options: {
   const reachOf = (
     kept: Kept | undefined,
     listed: ReadonlyMap<SessionId, Listed>,
-    heard: ReadonlyMap<SessionId, Heard>,
+    waiting: ReadonlyMap<SessionId, number>,
   ) => {
     const builders = allowableOf(kept, listed);
     const approvals = builders
       .filter((builder) => listed.get(builder.session)?.allowingAll === undefined)
-      .reduce((sum, builder) => sum + (heard.get(builder.session)?.allowable ?? 0), 0);
+      .reduce((sum, builder) => sum + (waiting.get(builder.session) ?? 0), 0);
     return { builders: builders.length, approvals };
   };
 
@@ -546,14 +503,17 @@ export const createLead = (options: {
     kept: Kept | undefined,
   ): Promise<LeadStatus> => {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
-    const heard = await heardOf(kept, listed);
-    const { building, ready } = buildersOf(kept, listed, heard);
+    const [approvals, statusesNow] = await Promise.all([
+      approvalsOf(kept, listed),
+      statusesOf(kept),
+    ]);
+    const { building, ready } = buildersOf(kept, listed, statusesNow);
     const allowing = allowAllUntilOf(kept);
     const merge = mergeOf(kept?.merge, listed);
     const wakes = kept?.state === "resting" ? openWindowOf(kept) : undefined;
     const statuses: LeadBuilderStatus[] = [];
     for (const { session, issue } of kept?.built ?? []) {
-      const status = await options.builders?.statusOf(session);
+      const status = statusesNow.get(session);
       if (status === undefined) continue;
       statuses.push({
         session,
@@ -572,7 +532,7 @@ export const createLead = (options: {
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
       ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
-      allowAllReaches: reachOf(kept, listed, heard),
+      allowAllReaches: reachOf(kept, listed, approvals),
       ...(wakes === undefined ? {} : { wakesUntil: wakes }),
       ...(merge === undefined ? {} : { merge }),
       ...(kept?.heldBack === undefined || kept.state !== "running"
@@ -589,6 +549,7 @@ export const createLead = (options: {
   const watchBuilders = async (
     kept: Kept,
     listed: ReadonlyMap<SessionId, Listed>,
+    statuses: ReadonlyMap<SessionId, BuilderStatus>,
   ): Promise<Kept> => {
     let now = kept;
     const tellOnce = async (about: string, text: string) => {
@@ -599,7 +560,7 @@ export const createLead = (options: {
       const each = listed.get(session);
       const pullRequest = each?.pullRequest;
       const name = nameOf(each, issue);
-      if (pullRequest?.state === "open" && standingOf(each) === "ready") {
+      if (pullRequest?.state === "open" && standingOf(each, statuses.get(session)) === "ready") {
         const about = `ready:${session}:${pullRequest.head}`;
         if (!now.told.includes(about)) options.notify(session, "Ready to merge");
         await tellOnce(about, `${name} is ready for you to merge (#${pullRequest.number}).`);
@@ -616,56 +577,13 @@ export const createLead = (options: {
     }
     const done = (builder: z.infer<typeof Builder>) => {
       const each = listed.get(builder.session);
-      if (standingOf(each) !== "ended") return false;
+      if (standingOf(each, statuses.get(builder.session)) !== "ended") return false;
       // A merged one stays until the Lead has been told.
       return (
         each?.pullRequest?.state !== "merged" || now.told.includes(`merged:${builder.session}`)
       );
     };
     return { ...now, built: now.built.filter((builder) => !done(builder)) };
-  };
-
-  /**
-   * Watches its builders' silence (#474): one still building with no pull request, silent (no
-   * turn, commit or event) for `STALLS_AFTER_MS`, is stalled. Its session is marked so, which
-   * waits on the owner and frees its slot, the owner is told, and its session is kept, its claim
-   * standing, for the owner to look at. Time it waits on the owner or for a place doesn't count,
-   * nor time something of the machine's is in hand for it (#574): its silence starts again once
-   * that ends. One with a pull request waits on the owner or CI, so never stalls.
-   */
-  const watchQuiet = async (
-    was: Kept,
-    listed: ReadonlyMap<SessionId, Listed>,
-    heard: ReadonlyMap<SessionId, Heard>,
-  ) => {
-    let kept = was;
-    let stalled = false;
-    const built: z.infer<typeof Builder>[] = [];
-    const at = new Date(options.now()).toISOString();
-    for (const builder of was.built) {
-      const each = listed.get(builder.session);
-      const latest = heard.get(builder.session);
-      const { quiet, ...unwatched } = builder;
-      if (each === undefined || latest === undefined || standingOf(each, latest) !== "building") {
-        built.push(unwatched);
-        continue;
-      }
-      if (each.waiting !== "nothing" || each.queued || latest.inHand || quiet?.seq !== latest.seq) {
-        built.push({ ...unwatched, quiet: { seq: latest.seq, since: at } });
-        continue;
-      }
-      built.push(builder);
-      if (options.now() - Date.parse(quiet.since) < STALLS_AFTER_MS) continue;
-      const marked = await sessions.markStalled(builder.session, latest.seq);
-      if (!marked.ok) continue;
-      stalled = true;
-      options.notify(builder.session, "Stalled");
-      kept = await noted(
-        kept,
-        `${nameOf(each, builder.issue)} stalled: silent ${BUILDER_STALLS_AFTER_MINUTES} min, so its slot is free.`,
-      );
-    }
-    return { kept: { ...kept, built }, stalled };
   };
 
   /**
@@ -686,19 +604,16 @@ export const createLead = (options: {
    * it may.
    */
   const look = async (workspaceId: WorkspaceId, was: Kept): Promise<Kept> => {
-    let listed = await listedIn(workspaceId);
-    const heard = await heardOf(was, listed);
-    const watched = await watchQuiet(await watchBuilders(was, listed), listed, heard);
-    // One just found stalled is listed so from now on.
-    if (watched.stalled) listed = await listedIn(workspaceId);
-    let kept = await mergeStep(watched.kept, listed);
+    const listed = await listedIn(workspaceId);
+    const statuses = await statusesOf(was);
+    let kept = await mergeStep(await watchBuilders(was, listed, statuses), listed);
     const woke = await wakes(workspaceId, kept);
     if (woke) {
       const { why: _, heldBack: _held, ...rest } = kept;
       kept = { ...rest, state: "running" };
     }
     if (kept.state !== "running") return kept;
-    const { building, ready } = buildersOf(kept, listed, heard);
+    const { building, ready } = buildersOf(kept, listed, statuses);
     const deciding = building.find(
       (builder) => listed.get(builder.session)?.waiting === "approval",
     );
@@ -730,7 +645,10 @@ export const createLead = (options: {
       // worktree changes; those it starts now join it.
       const changing = await Promise.all(
         kept.built
-          .filter((builder) => standingOf(listed.get(builder.session)) !== "ended")
+          .filter(
+            (builder) =>
+              standingOf(listed.get(builder.session), statuses.get(builder.session)) !== "ended",
+          )
           .map(async (builder) => ({
             issue: builder.issue,
             files: [
@@ -1000,7 +918,7 @@ export const createLead = (options: {
       changing(rawId, async (workspaceId, kept) => {
         if (kept === undefined) return err({ kind: "session", error: { kind: "not-found" } });
         const listed = await listedIn(workspaceId);
-        const ready = buildersOf(kept, listed).ready.filter((each) =>
+        const ready = buildersOf(kept, listed, await statusesOf(kept)).ready.filter((each) =>
           request.pullRequests.includes(each.pullRequest),
         );
         if (ready.length === 0) return err({ kind: "nothing-to-merge" });

@@ -127,7 +127,9 @@ const buildsOne = async (request: Requester) => {
   });
   expect(response.status).toBe(200);
   await expect
-    .poll(async () => (await sessionsOf(request)).find((each) => each.byLead === true)?.busy)
+    .poll(async () => (await sessionsOf(request)).find((each) => each.byLead === true)?.busy, {
+      timeout: 15_000,
+    })
     .toBe(false);
   await settled(request);
   const builder = (await sessionsOf(request)).find((each) => each.byLead === true);
@@ -136,7 +138,9 @@ const buildsOne = async (request: Requester) => {
 };
 
 const settled = (request: Requester) =>
-  expect.poll(async () => (await sessionsOf(request)).filter((each) => each.busy)).toHaveLength(0);
+  expect
+    .poll(async () => (await sessionsOf(request)).filter((each) => each.busy), { timeout: 15_000 })
+    .toHaveLength(0);
 
 /** An owner's own session in Side project, on the coder, once its turn has ended. */
 const ownSession = async (request: Requester) => {

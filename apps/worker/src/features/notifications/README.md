@@ -25,7 +25,7 @@ title and "needs your approval"; a tap opens the session.
   (#356; its `notify` option). An approval, a finished turn, a failed one and checks failing again each send one
   notification, carrying only the session's title, what it needs and the session's id.
 - **Notify me** (#493) decides which go, by the session's workspace: Everything; Only what needs me (approvals,
-  failures, checks failing, a PR ready to merge, a builder stalled, usage nearing its limit, and a finished turn only
+  failures, checks failing, a PR ready to merge, usage nearing its limit, and a finished turn only
   when its answer ends asking the owner something: replies were suggested, or its last words end in "?"); or
   Nothing. Code workspaces start on Everything, planning ones on Only what needs me. After a restart, the one
   notification names only the cut-off turns of workspaces not on Nothing.

@@ -301,7 +301,7 @@ export const createNotifications = (options: {
 
     /**
      * Sends a notification saying what a session needs, with no event of its own: a Lead's
-     * builder's pull request ready to merge or stalled (#347), or a plan's usage nearing its
+     * builder's pull request ready to merge (#347), or a plan's usage nearing its
      * limit (#66). Each needs the owner, so a workspace on Nothing alone hears none.
      */
     needs: (session: SessionId, says: string) =>

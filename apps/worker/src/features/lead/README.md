@@ -5,8 +5,8 @@ A code workspace's Lead (#347): runs builders in the milestone's order, and merg
 **Example:** you tap Run the build order. The Lead starts a builder on the first ready issue, holds back the next one
 because it changes the same file, and starts it once the first one's PR merges.
 
-- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`, `markStalled`), `builders/`
-  (each builder's status, served as `LeadStatus.statuses`), `allow-all/`,
+- **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`), `builders/` (each
+  builder's status, which it decides from and serves as `LeadStatus.statuses`), `allow-all/`,
   `prompts/`, `providers/`, `workspaces/`; `code/`'s `changedFiles`.
 - **Used by:** `worker.ts` (one of its repeating jobs); `live/`'s `holding()` stops it starting new builders.
 
@@ -35,15 +35,13 @@ because it changes the same file, and starts it once the first one's PR merges.
 - **Brakes** (#457): no new builder while 2 of its builders' PRs wait on the owner's review (holding back, carrying on
   as they merge), and at most 4 builders a Run, after which it rests ("Built 4 this run · tap Run for more"), its
   window closed.
-- **Builders that stop, fail or go quiet** (#474): one whose last turn failed or was stopped (not cut off by a
-  restart, which waits for Continue) leaves Building at once, its slot free. One with no pull request silent for 20
-  minutes (`BUILDER_STALLS_AFTER_MINUTES`: no turn, commit or event; time waiting on the owner or for a place doesn't
-  count, nor, #574, time a task the model started still runs, or its latest event is a command running or waiting
-  for the build turn; its silence starts again once that ends) is stalled: `sessions/`' `markStalled` marks its session, which then waits on the owner as `stalled` (Needs
-  you's "Stalled · silent 20 min · its slot is free", with Open), the owner is notified once, and its slot is free.
-  Its session is kept and its claim stands; nothing is posted on the issue. Either counts as Building again once its
-  session carries on, and neither has its issue started afresh. One with a pull request waits on the owner or CI, so
-  never stalls.
+- **Each builder's status** (#590, `builders/`): it decides from that alone, never from a session's event log. A
+  Stuck builder (its turn failed or was stopped, it ended two turns with nothing to show, a restart cut it off twice,
+  or its pull request was closed) leaves Building, its slot free; its session is kept and its claim stands, and it
+  waits in Needs you saying why (`waiting/`). A Merged one is done with once the Lead has been told. Ready for
+  review is its pull request ready to merge; every other status is Building and holds its slot. One started before
+  statuses were kept is read from its pull request until something happens in it. Nothing stalls: there's no
+  timer.
 - **Allow all:** it keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
   order with it on) and starts each builder with it until then. The owner can switch it from the Lead's row while it
   runs, is paused or rests (#551): on gives it, for 12 hours, to its builders still building (no pull request yet) and

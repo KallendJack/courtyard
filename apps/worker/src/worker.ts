@@ -520,8 +520,16 @@ export const createWorker = (options: {
   background(
     (async () => {
       const byUpdate = await live.restartedByUpdate();
-      const cutOff = await sessions.recoverAll();
-      if (!byUpdate) return notifications.restarted(cutOff);
+      const recovered = await sessions.recoverAll();
+      // A Lead's builder cut off by any restart carries on by itself, once (#610).
+      const carries = await Promise.all(
+        recovered.map(
+          async (session) => byUpdate || (await builders.carriesOnAfterRestart(session.id)),
+        ),
+      );
+      const cutOff = recovered.filter((_, at) => carries[at] === true);
+      const waiting = recovered.filter((_, at) => carries[at] !== true);
+      if (waiting.length > 0) await notifications.restarted(waiting);
       for (const session of cutOff) {
         const continued = await sessions.continueLast(session.id);
         if (!continued.ok)
@@ -540,6 +548,8 @@ export const createWorker = (options: {
   repeat(WATCH_MAIN_EVERY_MS, versionBumps.watch);
   // Each code workspace's Lead runs its build order (#347).
   repeat(WATCH_LEADS_EVERY_MS, lead.watch);
+  // A Lead's builder at the usage limit carries on at its reset (#610).
+  repeat(WATCH_LEADS_EVERY_MS, sessions.carryOnAtReset);
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
   repeat(READ_USAGE_EVERY_MS, () => usage.read());

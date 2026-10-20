@@ -282,14 +282,10 @@ as things happen in its session: **Building** (the model is working), **Checking
 in the builds lock), **Waiting on you** (an approval, a question it asked, or Continue after a restart), **Waiting
 for the limit** (until its reset), **In CI** (its pull request's checks run), **Ready for review**, **Merged**, and
 **Stuck** (Courtyard gave up, saying why). A failing check is Building again. A turn that ends with no pull request
-and no question is told once to **carry on**; ending so again, it's Stuck.
-_Avoid_: state, phase, health
-
-**Stalled**:
-A Lead's builder with no pull request that has been silent (no turn, commit or event) for 20 minutes, not counting
-time waiting on the owner or for a place (#474). It leaves Running, its slot free, and waits in Needs you with Open;
-its session is kept, so the owner reads what happened and carries it on there if it should go on.
-_Avoid_: stuck, hung, dead, idle
+and no question is told once to **carry on**; ending so again, it's Stuck. One at the limit carries on at the
+reset, and one a restart cut off carries on by itself once (cut off again, it's Stuck). A Stuck one waits in Needs
+you, saying why, its slot free.
+_Avoid_: state, phase, health, stalled, hung, idle
 
 **Roadmap**:
 A code workspace's tab of the whole plan (#532): every open milestone in the roadmap's order, Later last, with its

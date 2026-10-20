@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -6,11 +6,9 @@ import {
   GitHubConnection,
   LeadStatus,
   NeedsYou,
-  RunningTasks,
   SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ok } from "../src/lib/result.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { Provider } from "../src/providers/index.ts";
 import {
@@ -742,7 +740,7 @@ describe("watching its builders (#347)", () => {
     ).toEqual([`Which session waits merged (#${number}).`]);
   });
 
-  it("holds back while a builder waits on the owner's decision, and carries on once it's answered", async () => {
+  it("holds back while a builder waits on the owner's decision, and starts the next once both are Stuck", async () => {
     const { github, request } = await signedInWith(ISSUES, {
       providers: [codingProvider([{ run: "pnpm add left-pad" }]).provider],
     });
@@ -761,33 +759,37 @@ describe("watching its builders (#347)", () => {
       state: "running",
       why: "Which session waits waits on your decision.",
     });
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
     // Each approval its builders ask is denied, including those a builder told to carry on asks
-    // again (#590), until both are stuck and nothing runs.
-    await expect
-      .poll(
-        async () => {
-          const sessions = await sessionsOf(request);
-          for (const waiting of sessions) {
-            if (waiting.now.kind !== "needs-you") continue;
-            await postJson(
-              request,
-              `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`,
-              { answer: "deny" },
+    // again (#590), until those `count` builders are stuck and nothing runs.
+    const denyUntilStuck = (count: number) =>
+      expect
+        .poll(
+          async () => {
+            const sessions = await sessionsOf(request);
+            for (const waiting of sessions) {
+              if (waiting.now.kind !== "needs-you") continue;
+              await postJson(
+                request,
+                `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`,
+                { answer: "deny" },
+              );
+            }
+            const stuck = (await leadOf(request)).statuses.filter(
+              (each) => each.status.kind === "stuck",
             );
-          }
-          const stuck = (await leadOf(request)).statuses.filter(
-            (each) => each.status.kind === "stuck",
-          );
-          return sessions.filter((each) => each.busy).length === 0 && stuck.length === 2;
-        },
-        { timeout: 30_000 },
-      )
-      .toBe(true);
+            return sessions.filter((each) => each.busy).length === 0 && stuck.length === count;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+    await denyUntilStuck(2);
     await runJobs();
 
-    expect((await leadOf(request)).why).toBeUndefined();
-    expect(await notesIn(request)).toContain("Carrying on.");
-    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+    // Both Stuck, their places are free: the next issue starts, and its builder asks too.
+    expect(await notesIn(request)).toContain("Started building Nothing jumps in (#24).");
+    expect(github.commentsOn(onGitHub, 24)).toEqual([expect.stringMatching(/^Building this/)]);
+    await denyUntilStuck(3);
   });
 
   it("starts only main's fix while main is red", async () => {
@@ -818,8 +820,8 @@ describe("watching its builders (#347)", () => {
   });
 });
 
-describe("builders that stop, fail or go quiet (#474)", () => {
-  const MINUTE = 60 * 1000;
+describe("builders that fail or go Stuck (#474, #590)", () => {
+  const _MINUTE = 60 * 1000;
 
   /** Waits until no turn runs in the workspace. */
   const settled = async (request: Requester) =>
@@ -828,7 +830,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       .toHaveLength(0);
 
   /** The owner opens a session's page, which shows them all of it. */
-  const see = async (request: Requester, sessionId: string) => {
+  const _see = async (request: Requester, sessionId: string) => {
     const response = await postJson(request, `/api/sessions/${sessionId}/seen`, { upTo: 1000 });
     expect(response.status).toBe(204);
   };
@@ -852,210 +854,63 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     ]);
   });
 
-  it("marks a builder silent for 20 minutes Stalled: Needs you, the owner told once, its slot free, its session kept", async () => {
-    const push = createFakePush();
-    const clock = { now: Date.parse("2026-10-17T09:00:00") };
-    const { github, request } = await signedInWith(ISSUES, {
-      sendPush: push.send,
-      now: () => clock.now,
+  it("takes a builder that ends two turns with nothing to show off Building: Stuck in Needs you saying why, its slot free, its session kept", async () => {
+    const { github, request } = await signedInWith(ISSUES.slice(0, 1), {
+      providers: [codingProvider([]).provider],
     });
-    await postJson(request, "/api/notifications/on", {
-      endpoint: "https://push.example/fold",
-      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
-    });
-    await run(request);
+    await run(request, CODING_MODEL);
+    await expect
+      .poll(async () => (await builderOf(request, 22)).waiting, { timeout: 15_000 })
+      .toBe("stuck");
     await settled(request);
-    await runJobs();
-    // The owner has read #22's builder's answer; #23's waits on them, which isn't silence.
-    const quiet = await builderOf(request, 22);
-    await see(request, quiet.id);
-
-    clock.now += 19 * MINUTE;
-    await runJobs();
-    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
-
-    clock.now += 2 * MINUTE;
-    await runJobs();
     await runJobs();
 
     const lead = await leadOf(request);
-    expect(lead.building.map((each) => each.issue)).toEqual([23, 24]);
-    expect(lead.next.map((issue) => issue.number)).toEqual([]);
-    expect((await builderOf(request, 22)).waiting).toBe("stalled");
-    expect((await builderOf(request, 23)).waiting).toBe("reply");
+    expect(lead.building).toEqual([]);
+    expect(lead.statuses.map((each) => each.status)).toMatchObject([
+      {
+        kind: "stuck",
+        reason: "It ended two turns in a row with no pull request and no question.",
+      },
+    ]);
+    const stuck = await builderOf(request, 22);
     const needs = NeedsYou.parse(await (await request("/api/needs-you")).json()).needs;
-    expect(needs[0]).toMatchObject({ kind: "stalled", session: { id: quiet.id } });
-    await expect
-      .poll(() => push.sent.map(({ payload }) => payload))
-      .toContainEqual({ title: quiet.title, body: "Stalled", session: quiet.id });
-    expect(
-      push.sent.filter(
-        ({ payload }) =>
-          typeof payload === "object" &&
-          payload !== null &&
-          "body" in payload &&
-          payload.body === "Stalled",
-      ),
-    ).toHaveLength(1);
-    expect(await notesIn(request)).toContain(
-      "Which session waits stalled: silent 20 min, so its slot is free.",
-    );
+    expect(needs[0]).toMatchObject({
+      kind: "stuck",
+      session: { id: stuck.id },
+      reason: "It ended two turns in a row with no pull request and no question.",
+    });
     // Nothing is posted on the issue: its claim stands, so nobody else starts it.
     expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
   });
 
-  it("counts a stalled builder as Building again once its session carries on", async () => {
-    const clock = { now: Date.parse("2026-10-17T09:00:00") };
-    const { request } = await signedInWith(ISSUES.slice(0, 2), { now: () => clock.now });
-    await run(request);
+  it("starts the next issue in a Stuck builder's place, and counts it as Building again once its session carries on", async () => {
+    // The coder's builders answer "Done.", so each goes Stuck; the owner's message goes to the fake.
+    const { request } = await signedInWith(ISSUES, {
+      providers: [codingProvider([]).provider, createFakeProvider({ delayMs: 0 })],
+    });
+    await run(request, CODING_MODEL);
+    await expect
+      .poll(async () => (await builderOf(request, 22)).waiting, { timeout: 15_000 })
+      .toBe("stuck");
     await settled(request);
     await runJobs();
-    const quiet = await builderOf(request, 22);
-    await see(request, quiet.id);
-    clock.now += 21 * MINUTE;
-    await runJobs();
-    expect((await builderOf(request, 22)).waiting).toBe("stalled");
+    // Each of the fake's builders goes Stuck in turn, its place taken by the next.
+    await expect
+      .poll(async () => (await leadOf(request)).statuses.map((each) => each.issue))
+      .toEqual([22, 23, 24]);
+    await settled(request);
 
-    await postJson(request, `/api/sessions/${quiet.id}/messages`, {
-      text: "Carry on",
+    const stuck = await builderOf(request, 22);
+    await postJson(request, `/api/sessions/${stuck.id}/messages`, {
+      text: "Carry on, then ask me which screen?",
       model: FAKE_MODEL,
     });
     await settled(request);
     await runJobs();
 
-    expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+    expect((await builderOf(request, 22)).waiting).not.toBe("stuck");
     expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
-  });
-
-  describe("while something of the machine's is in hand for it (#574)", () => {
-    /** Issues whose builders run a heavy check, the second waiting for the first's build turn. */
-    const CHECKS: readonly FakeIssue[] = [
-      { number: 22, title: "Runs its tests", milestone: "4 · Code workspaces" },
-      { number: 23, title: "Waits its turn", milestone: "4 · Code workspaces" },
-    ];
-
-    /** The check each builder runs: its own test file, as a builder may (#589). */
-    const CHECK = "pnpm -C apps/worker exec vitest run test/lead.test.ts";
-
-    /**
-     * A provider whose builders each run `CHECK`, held until the test lets them end, or, for an
-     * issue titled "Starts a task", start a task that runs on; the Lead's turns just answer.
-     */
-    const checking = () => {
-      const { provider: coder } = codingProvider([]);
-      const held: (() => void)[] = [];
-      const provider: Provider = {
-        ...coder,
-        runTurn: async (input) => {
-          const { code } = input;
-          if (code === null || !input.framing.newMessage.startsWith("Build issue")) {
-            await input.emit("Done.");
-            return ok(null);
-          }
-          if (input.framing.newMessage.includes("Starts a task")) {
-            const started = await code.task("node scripts/serve.mjs");
-            await input.emit(started.ok ? started.value : started.error);
-            return ok(null);
-          }
-          if (!(await code.run(CHECK)).ok) return ok(null);
-          await new Promise<void>((end) => {
-            held.push(end);
-            input.signal.addEventListener("abort", () => end(), { once: true });
-          });
-          code.ran(CHECK);
-          await input.emit("Done.");
-          return ok(null);
-        },
-      };
-      return {
-        provider,
-        holding: () => held.length,
-        endAll: () => {
-          for (const end of held.splice(0)) end();
-        },
-      };
-    };
-
-    /** The kind of a session's latest activity, once it has one. */
-    const latestActivity = async (request: Requester, sessionId: string) => {
-      const last = (await eventsSoFar(request, sessionId)).at(-1);
-      return last?.type === "activity" ? last.activity.kind : undefined;
-    };
-
-    it("doesn't stall a builder whose command runs 20+ minutes, nor one waiting that long for the build turn", async () => {
-      const clock = { now: Date.parse("2026-10-17T09:00:00") };
-      const { provider, holding, endAll } = checking();
-      const { request } = await signedInWith(CHECKS, {
-        providers: [provider],
-        now: () => clock.now,
-      });
-      await run(request, CODING_MODEL);
-      const running = await builderOf(request, 22);
-      const waiting = await builderOf(request, 23);
-      await expect.poll(() => latestActivity(request, running.id)).toBe("ran-command");
-      await expect.poll(() => latestActivity(request, waiting.id)).toBe("waiting-for-build");
-      await runJobs();
-
-      clock.now += 21 * MINUTE;
-      await runJobs();
-      clock.now += 21 * MINUTE;
-      await runJobs();
-
-      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
-      expect((await builderOf(request, 23)).waiting).not.toBe("stalled");
-      expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
-      // The second gets the build turn once the first's check ends.
-      endAll();
-      await expect.poll(holding).toBe(1);
-      endAll();
-      await settled(request);
-    });
-
-    it("doesn't stall a builder waiting 20+ minutes on its own task, and counts its silence from when the task ends", async () => {
-      await mkdir(join(repo, "scripts"));
-      await writeFile(join(repo, "scripts", "serve.mjs"), "setInterval(() => {}, 1000);\n");
-      await gitIn(repo, "add", ".");
-      await gitIn(repo, "commit", "--quiet", "-m", "Scripts");
-      await gitIn(repo, "push", "--quiet", "origin", "main");
-      const clock = { now: Date.parse("2026-10-17T09:00:00") };
-      const { request } = await signedInWith(
-        [{ number: 22, title: "Starts a task", milestone: "4 · Code workspaces" }],
-        { providers: [checking().provider], now: () => clock.now },
-      );
-      await run(request, CODING_MODEL);
-      await settled(request);
-      const builder = await builderOf(request, 22);
-      await see(request, builder.id);
-      const tasks = RunningTasks.parse(
-        await (await request(`/api/sessions/${builder.id}/tasks`)).json(),
-      ).tasks;
-      expect(tasks).toHaveLength(1);
-      await runJobs();
-
-      clock.now += 21 * MINUTE;
-      await runJobs();
-      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
-
-      const stopped = await postJson(
-        request,
-        `/api/sessions/${builder.id}/tasks/${tasks[0]?.task}/stop`,
-        {},
-      );
-      expect(stopped.status).toBe(204);
-      await expect
-        .poll(async () => (await eventsSoFar(request, builder.id)).at(-1)?.type)
-        .toBe("task-ended");
-      // Told of it, and to carry on (#590): the owner sees what it said.
-      await settled(request);
-      await see(request, builder.id);
-      await runJobs();
-      clock.now += 19 * MINUTE;
-      await runJobs();
-      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
-      clock.now += 2 * MINUTE;
-      await runJobs();
-      expect((await builderOf(request, 22)).waiting).toBe("stalled");
-    });
   });
 });
 
@@ -1117,7 +972,7 @@ describe("talking to the Lead (#347)", () => {
   };
 
   it("tells its turns the build order and offers its tool, and a builder's neither", async () => {
-    const saver = savingProvider([], { codes: true });
+    const saver = savingProvider([], ASKS);
     const { request } = await signedInWith(ISSUES, { providers: [saver.provider] });
     await run(request, SAVING_MODEL);
     await settled(request);
@@ -1145,7 +1000,7 @@ describe("talking to the Lead (#347)", () => {
   });
 
   it("gives its turns only its latest ten exchanges, while its chat keeps them all (#518)", async () => {
-    const saver = savingProvider([], { codes: true });
+    const saver = savingProvider([], ASKS);
     const { request } = await signedInWith(ISSUES, { providers: [saver.provider] });
     await run(request, SAVING_MODEL);
     await settled(request);
@@ -1170,7 +1025,7 @@ describe("talking to the Lead (#347)", () => {
   });
 
   it("keeps an issue's title inside the build order's markers, however a closing marker is spelt", async () => {
-    const saver = savingProvider([], { codes: true });
+    const saver = savingProvider([], ASKS);
     const { request } = await signedInWith(
       [
         {
