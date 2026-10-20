@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { CodeSessionList, LeadStatus } from "../packages/contract/index.ts";
+import { LeadStatus } from "../packages/contract/index.ts";
 
 // A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, Lead
 // running, the Lead's chat, Lead resting), on start-worker.mjs's Toolshed: three ready issues on
@@ -41,30 +41,18 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   const dialog = page.getByRole("dialog", { name: "Run the build order" });
   await expect(dialog).toContainText("The Lead runs the build order");
   await expect(dialog).toContainText("beginning with #31 Hooks on the pegboard");
-  // Allow all for builders (#428), off unless the owner turns it on.
-  const allowAll = dialog.getByRole("switch", { name: "Allow all for builders" });
-  await expect(allowAll).toHaveAttribute("aria-checked", "false");
-  // How long it keeps going (#457): 4 hours unless the owner says.
-  const keepGoing = dialog.getByRole("group", { name: "Keep going" });
-  await expect(keepGoing.getByRole("radio", { name: "4 hours" })).toBeChecked();
-  await expect(keepGoing.getByRole("radio")).toHaveCount(3);
-  await keepGoing.getByText("Until tonight").click();
-  await expect(keepGoing.getByRole("radio", { name: "Until tonight" })).toBeChecked();
-  await keepGoing.getByText("4 hours").click();
+  // Every builder allows all until its PR opens, and it keeps going through the night (#591).
+  await expect(dialog).toContainText("allows all until its PR opens");
+  await expect(dialog).toContainText("pauses itself while 4 PRs wait for your review");
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
   await shot(page, "lead-confirm");
-  await allowAll.click();
-  await expect(allowAll).toHaveAttribute("aria-checked", "true");
-  await shot(page, "lead-confirm-allow-all");
   await dialog.getByRole("button", { name: "Run the build order" }).click();
   await expect(dialog).toBeHidden();
 
   const running = page.getByRole("region", { name: "Running" });
   await expect(running).toContainText("Lead");
   await expect(running.getByRole("listitem")).toHaveCount(3);
-  // Its builders allow all, each marked, and the Lead's row says for how long.
-  await expect(running.getByRole("listitem", { name: "Lead" })).toContainText(
-    /Builders allowed all · 1[12] h left/,
-  );
+  // Its builders allow all, each marked (#591).
   await expect(running.getByText("Allowing all", { exact: true })).toHaveCount(2);
   await shot(page, "lead-running");
 });
@@ -113,68 +101,12 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await page.goto(HOME);
   const lead = running.getByRole("listitem").first();
   await expect(lead).toContainText("Paused");
-  // Its builders allow all, as the first test turned on: in gold, in place of "Builders carry on"
-  // (#551).
-  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
+  await expect(lead).toContainText("Builders carry on · nothing new starts");
   await shot(page, "lead-paused");
 
   await lead.getByRole("button", { name: "Run" }).click();
-  // Woken, its builders still allow all (#428): that's still its line.
   await expect(lead).toContainText("building");
-  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
-});
-
-// Allow all for builders from the Lead's row (#551; Paper, "Lead row: Allow all for builders, off",
-// "Allow all sheet" and "on"), on since the first test.
-test("Allow all for builders is switched off and on again from the Lead's row", async ({
-  page,
-  request,
-}) => {
-  /** How many of the Lead's builders allow all, as the worker lists them. */
-  const allowing = async () =>
-    CodeSessionList.parse(await (await request.get(`/api${HOME}/sessions`)).json()).sessions.filter(
-      (session) => session.byLead === true && session.allowingAll !== undefined,
-    ).length;
-  await page.goto(HOME);
-  const running = page.getByRole("region", { name: "Running" });
-  const lead = running.getByRole("listitem", { name: "Lead" });
-  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
-  expect(await allowing()).toBe(2);
-
-  await lead.getByRole("button", { name: "Turn off" }).click();
-
-  await expect(lead).toContainText("Running the build order");
-  expect(await allowing()).toBe(0);
-  await shot(page, "tablet-lead-row-allow-all-off");
-
-  await lead.getByRole("button", { name: "Allow all for builders…" }).click();
-  const sheet = page.getByRole("dialog", { name: "Allow all for builders" });
-  await expect(sheet).toContainText("2 builders now, and any it starts");
-  await expect(sheet).toContainText("or as each one's PR opens");
-  await shot(page, "tablet-lead-row-allow-all-sheet");
-  await sheet.getByRole("button", { name: "Turn on for 12 hours" }).click();
-
-  await expect(sheet).toBeHidden();
-  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
-  expect(await allowing()).toBe(2);
-  await shot(page, "tablet-lead-row-allow-all-on");
-
-  // On the Fold's cover screen the sheet rises from the bottom.
-  await page.setViewportSize({ width: 400, height: 900 });
-  await lead.scrollIntoViewIfNeeded();
-  await shot(page, "cover-lead-row-allow-all-on");
-  await lead.getByRole("button", { name: "Turn off" }).click();
-  await expect(lead.getByRole("button", { name: "Allow all for builders…" })).toBeVisible();
-  await shot(page, "cover-lead-row-allow-all-off");
-  await lead.getByRole("button", { name: "Allow all for builders…" }).click();
-  await expect(sheet).toBeVisible();
-  const box = await sheet.boundingBox();
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeCloseTo(900, 0);
-  await shot(page, "cover-lead-row-allow-all-sheet");
-  await sheet.getByRole("button", { name: "Turn on for 12 hours" }).click();
-  await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
-  await page.setViewportSize({ width: 950, height: 712 });
 });
 
 // Merge in order and holding back (#423; Paper, "Code Home, Merge in order", "Lead chat, merging
@@ -264,15 +196,15 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-// Resting within its window (#457): the e2e issues never become buildable later, so the Lead's
-// status is given here as the worker would give it.
-test("a resting Lead's row says until when it wakes for new work", async ({ page, request }) => {
+// Paused with merges to tidy (#591): the e2e builders open no pull requests, so the Lead's status
+// is given here as the worker would give it.
+test("a paused Lead's row says how many merges it tidies up once it runs again", async ({
+  page,
+  request,
+}) => {
   const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
-  const wakesUntil = new Date(2026, 9, 17, 22, 0).toISOString();
-  // Without Allow all for builders, whose time left would take its second line (#551).
-  const { buildersAllowedAll: _, ...resting } = real;
   await page.route(`**/api${HOME}/lead`, (route) =>
-    route.fulfill({ json: { ...resting, state: "resting", building: [], wakesUntil } }),
+    route.fulfill({ json: { ...real, state: "paused", toTidy: 2 } }),
   );
 
   await page.goto(HOME);
@@ -280,9 +212,9 @@ test("a resting Lead's row says until when it wakes for new work", async ({ page
   const lead = page
     .getByRole("region", { name: "Running" })
     .getByRole("listitem", { name: "Lead" });
-  await expect(lead).toContainText("Resting");
-  // As the device's clock shows it: 22:00, or 10:00 PM.
-  await expect(lead).toContainText(/Wakes for new work until (22:00|10:00\sPM)/);
+  await expect(lead).toContainText("Paused");
+  await expect(lead).toContainText("Builders carry on · 2 merges to tidy");
   await expect(lead.getByRole("button", { name: "Run" })).toBeVisible();
+  await shot(page, "tablet-lead-row-paused-to-tidy");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

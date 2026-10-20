@@ -124,7 +124,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`tasks/`](../apps/worker/src/features/tasks/README.md): a code session's long commands, run on after its turn, its model told when one ends.
 - [`preview/`](../apps/worker/src/features/preview/README.md): a code session's running app on a port of the worker's own, behind the login, and its screenshots.
 - [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
-- [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, and Merge in order.
+- [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, 2 at a time through the night
+  within a review budget (#591), and Merge in order.
 - [`builders/`](../apps/worker/src/features/builders/README.md): each Lead builder's status, recorded as things
   happen in its session, and its one carry-on.
 - [`next-up/`](../apps/worker/src/features/next-up/README.md): ready issues in order, Build, Grill and claims, and the Roadmap.

@@ -169,40 +169,15 @@ export const BuildIssue = z.object({ model: ModelRef, effort: Effort.optional() 
 export type BuildIssue = z.infer<typeof BuildIssue>;
 
 /**
- * How long the Lead keeps going once the owner runs the order (#457): within it, a resting Lead
- * wakes for an issue made buildable. Just what's ready now (it never wakes), 4 hours (the
- * default), or until tonight, 22:00 on the worker's clock.
- */
-export const LeadWindow = z.enum(["ready-now", "4-hours", "tonight"]);
-export type LeadWindow = z.infer<typeof LeadWindow>;
-
-/** The window the Run sheet starts on (#457). */
-export const LEAD_WINDOW_BY_DEFAULT: LeadWindow = "4-hours";
-
-/**
  * Run the build order (#347): the Lead starts, or wakes, on this model, and its builders start on
- * the model its own conversation last used. With Allow all for builders (#428), off unless the
- * owner turns it on, each builder it starts for the next `ALLOW_ALL_MOST_HOURS` allows all until
- * its pull request opens; `false` turns it off, and a wake that leaves it out keeps it as it was.
- * Its window (#457) says how long it keeps going: a wake that leaves it out keeps the window still
- * open, or opens the default one.
+ * the model its own conversation last used, each allowing all until its pull request opens
+ * (#428, #591). It keeps going until the owner pauses it (#591).
  */
-export const LeadRun = BuildIssue.extend({
-  allowAll: z.boolean().optional(),
-  window: LeadWindow.optional(),
-});
+export const LeadRun = BuildIssue;
 export type LeadRun = z.infer<typeof LeadRun>;
 
-/**
- * Allow all for builders, switched from the Lead's row (#551) while it runs, is paused or rests:
- * on for the next `ALLOW_ALL_MOST_HOURS`, for its builders still building and any it starts; off
- * takes it from the builders it gave it to.
- */
-export const LeadAllowAll = z.object({ on: z.boolean() });
-export type LeadAllowAll = z.infer<typeof LeadAllowAll>;
-
-/** How many builders the Lead runs at once (#347): 2 unless the owner says, 1 to 3. */
-export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 3 } as const;
+/** How many builders the Lead runs at once (#347, #591): 2 unless the owner says 1. */
+export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 2 } as const;
 
 /** A builder the Lead started (#347): its session, its title, and the issue it builds. */
 export const LeadBuilder = z.object({
@@ -299,8 +274,9 @@ export type LeadMerge = z.infer<typeof LeadMerge>;
 /**
  * A code workspace's Lead (#347), as its Home's Running row and its chat's strip show it: not
  * started yet; running the build order (`why` saying what it waits for while it holds itself back:
- * a red main, the machine busy with the owner's own sessions, a decision only they can make);
- * paused by the owner; or resting, with nothing ready to build (`why` says so). Its builders still
+ * 4 pull requests waiting for the owner's review, a model at its usage limit, a red main, the
+ * machine busy with the owner's own sessions; #591); paused by the owner; or resting, with nothing
+ * ready to build in a numbered milestone (`why` says so), until something is. Its builders still
  * building, the next issues it starts, and the pull requests ready to merge.
  */
 export const LeadStatus = z.object({
@@ -316,18 +292,11 @@ export const LeadStatus = z.object({
   statuses: z.array(LeadBuilderStatus),
   next: z.array(NextUpIssue),
   ready: z.array(LeadReady),
-  /** Until when the builders it starts allow all (#428), while that's still ahead. */
-  buildersAllowedAll: z.iso.datetime().optional(),
   /**
-   * Who Allow all for builders reaches if it's switched on now (#551): its builders still
-   * building (no pull request yet), and the approvals they wait on that it would allow at once.
+   * Its builders' pull requests merged that it hasn't tidied up after yet (#591): a paused Lead
+   * takes no turn of its own, so it does once it runs again.
    */
-  allowAllReaches: z.object({
-    builders: z.number().int().nonnegative(),
-    approvals: z.number().int().nonnegative(),
-  }),
-  /** Until when a resting Lead wakes for new work (#457), while that's still ahead. */
-  wakesUntil: z.iso.datetime().optional(),
+  toTidy: z.number().int().nonnegative(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: LeadMerge.optional(),
   /**

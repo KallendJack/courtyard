@@ -7,20 +7,16 @@ import {
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { doingWords } from "@/components/chat/session-state";
-import { AllowAllMark, timeLeft } from "@/components/code/allowing-all";
+import { AllowAllMark } from "@/components/code/allowing-all";
 import { ByLead, LeadMark } from "@/components/code/lead-mark";
 import { FormError } from "@/components/forms/form-error";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
-import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
-import { AllowAllBuilders } from "./allow-all-builders.tsx";
-import { allowAllForBuilders, pauseLead, runLead } from "./api.ts";
+import { pauseLead, runLead } from "./api.ts";
 
 type Listed = CodeSessionList["sessions"][number];
 
@@ -138,44 +134,26 @@ const leadTitle = (lead: LeadStatus) => {
 };
 
 /**
- * The line under it: what it's doing, or why it holds back, rests or is paused; resting within its
- * window (#457), until when it wakes for new work (its chat says why it rests).
+ * The line under it: what it's doing, or why it holds back, rests or is paused; paused, the merges
+ * it tidies up once it runs again (#591).
  */
 const leadLine = (lead: LeadStatus) => {
-  if (lead.state === "resting" && lead.wakesUntil !== undefined) {
-    return `Wakes for new work until ${clockWords(lead.wakesUntil)}`;
-  }
   switch (lead.state) {
     case "running":
       return lead.why === undefined ? "Running the build order" : `Holding back: ${lead.why}`;
     case "paused":
-      return "Builders carry on · nothing new starts";
+      return lead.toTidy === 0
+        ? "Builders carry on · nothing new starts"
+        : `Builders carry on · ${lead.toTidy} ${lead.toTidy === 1 ? "merge" : "merges"} to tidy`;
     default:
       return lead.why ?? "Nothing ready to build";
   }
 };
 
 /**
- * Its two lines (#551; Paper, "Lead row: Allow all for builders, on"): while Allow all for
- * builders is on, how long it has left takes the second, in gold, and a reason it holds back, if
- * it does, the first.
- */
-const leadLines = (lead: LeadStatus) => {
-  if (lead.buildersAllowedAll === undefined) {
-    return { first: leadTitle(lead), second: leadLine(lead), allowing: false };
-  }
-  const left = timeLeft({ until: lead.buildersAllowedAll, now: Date.now(), roughly: true });
-  return {
-    first: lead.state === "running" && lead.why !== undefined ? leadLine(lead) : leadTitle(lead),
-    second: `Builders allowed all · ${left} left`,
-    allowing: true,
-  };
-};
-
-/**
  * The Lead's row (#347): its mark, how many build and how many pull requests are ready, a tap to
- * its chat, and, on a line of their own under it (#551), Allow all for builders… (Turn off while
- * it's on) and a quiet Pause while it runs, or Run, which wakes it, while it rests or is paused.
+ * its chat, and, on a line of its own under it, a quiet Pause while it runs, or Run, which wakes
+ * it, while it rests or is paused.
  */
 function LeadRow(props: {
   workspaceId: WorkspaceId;
@@ -186,7 +164,6 @@ function LeadRow(props: {
 }) {
   const { lead } = props;
   const running = lead.state === "running";
-  const [asking, setAsking] = useState(false);
   const act = useAction(async () => {
     const model = props.providers === undefined ? undefined : codingModelIn(props.providers);
     const done = running
@@ -199,15 +176,6 @@ function LeadRow(props: {
     props.onLead(done.data);
     return undefined;
   });
-  /** Allow all for builders switched on (from its sheet) or off. */
-  const allowAll = async (on: boolean) => {
-    const done = await allowAllForBuilders(props.workspaceId, on);
-    if (done.kind !== "loaded") return describeProblem(done).body;
-    props.onLead(done.data);
-    return undefined;
-  };
-  const turnOff = useAction(() => allowAll(false));
-  const lines = leadLines(lead);
   return (
     <li
       aria-label="Lead"
@@ -220,52 +188,22 @@ function LeadRow(props: {
       >
         <LeadMark />
         <span className="flex min-w-0 grow flex-col gap-px">
-          <span className="truncate text-sm/4.5 font-bold">{lines.first}</span>
-          <span
-            className={classes(
-              "truncate text-meta",
-              lines.allowing ? "font-semibold text-warning" : "font-medium text-primary-text",
-            )}
-          >
-            {lines.second}
-          </span>
+          <span className="truncate text-sm/4.5 font-bold">{leadTitle(lead)}</span>
+          <span className="truncate text-meta font-medium text-primary-text">{leadLine(lead)}</span>
         </span>
       </Link>
       <div className="flex flex-wrap justify-end gap-2">
-        {lines.allowing ? (
-          <Button
-            variant="needsOutline"
-            size="xs"
-            busy={turnOff.busy}
-            busyLabel="Turning off…"
-            waiting={act.busy}
-            onClick={() => void turnOff.run()}
-          >
-            Turn off
-          </Button>
-        ) : (
-          <Button variant="outline" size="xs" waiting={act.busy} onClick={() => setAsking(true)}>
-            Allow all for builders…
-          </Button>
-        )}
         <Button
           variant="outline"
           size="xs"
           busy={act.busy}
           busyLabel={running ? "Pausing…" : "Waking…"}
-          waiting={turnOff.busy}
           onClick={() => void act.run()}
         >
           {running ? "Pause" : "Run"}
         </Button>
       </div>
-      <FormError message={act.error ?? turnOff.error} />
-      <AllowAllBuilders
-        open={asking}
-        onClose={() => setAsking(false)}
-        reaches={lead.allowAllReaches}
-        onTurnOn={() => allowAll(true)}
-      />
+      <FormError message={act.error} />
     </li>
   );
 }
