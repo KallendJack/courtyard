@@ -26,6 +26,18 @@ export const NotificationsOff = z.object({ endpoint: z.url() });
 export type NotificationsOff = z.infer<typeof NotificationsOff>;
 
 /**
+ * What a workspace notifies the owner of (#493), picked in its ⋯'s Notify me: everything; only
+ * what needs them (an approval, a failure, a pull request ready to merge, a question to answer);
+ * or nothing. A code workspace starts on everything, a planning one on what needs them.
+ */
+export const NotifyMe = z.enum(["everything", "needs-me", "nothing"]);
+export type NotifyMe = z.infer<typeof NotifyMe>;
+
+/** A workspace's Notify me, as its sheet reads it and picks it. */
+export const NotifyMeSetting = z.object({ notify: NotifyMe });
+export type NotifyMeSetting = z.infer<typeof NotifyMeSetting>;
+
+/**
  * What a notification carries, and all it carries, since it shows on a locked screen: the
  * session's title, what it needs, and which session a tap opens.
  */

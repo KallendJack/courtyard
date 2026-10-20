@@ -4,6 +4,7 @@ import {
   BlockedShop,
   type ContextFile,
   type NewWorkspace,
+  NotifyMe,
   SessionId,
   WorkspaceIcon,
   WorkspaceId,
@@ -102,6 +103,8 @@ const WorkspaceConfig = z
     icon: z.optional(WorkspaceIcon),
     /** The shops a planning workspace's owner said not to use for its wanted list (#245). */
     blockedShops: z.array(BlockedShop).optional(),
+    /** What it notifies the owner of (#493), once they've picked. */
+    notify: NotifyMe.optional(),
   })
   .refine((config) => config.mode !== "code" || config.repoPath !== undefined, {
     message: "is required for a code workspace",
@@ -121,6 +124,7 @@ type Config =
       readonly paper?: PaperSettings;
       readonly preview?: string;
       readonly blockedShops?: readonly BlockedShop[];
+      readonly notify?: NotifyMe;
     }
   | { readonly kind: "ignored"; readonly problem: string };
 
@@ -144,6 +148,11 @@ export type Workspace = {
   readonly preview: string | null;
   /** The shops its owner blocked for the wanted list (#245): none in a code workspace. */
   readonly blockedShops: readonly BlockedShop[];
+  /**
+   * What it notifies the owner of (#493): as they picked, else everything in a code workspace and
+   * only what needs them in a planning one.
+   */
+  readonly notify: NotifyMe;
 };
 
 /** Why a workspace couldn't be read, added or changed. */
@@ -180,12 +189,23 @@ const readConfig = async (folder: string): Promise<Config> => {
     const reasons = parsed.error.issues.map((i) => `${i.path.join(".") || "it"} ${i.message}`);
     return { kind: "ignored", problem: `${CONFIG_FILE} was ignored: ${reasons.join("; ")}.` };
   }
-  const { name, mode, description, icon, repoPath, allowlist, connections, preview, blockedShops } =
-    parsed.data;
+  const {
+    name,
+    mode,
+    description,
+    icon,
+    repoPath,
+    allowlist,
+    connections,
+    preview,
+    blockedShops,
+    notify,
+  } = parsed.data;
   return {
     kind: "read",
     mode,
     ...(blockedShops === undefined ? {} : { blockedShops }),
+    ...(notify === undefined ? {} : { notify }),
     ...(name === undefined ? {} : { name }),
     ...(description === undefined ? {} : { description }),
     ...(icon === undefined ? {} : { icon }),
@@ -241,6 +261,7 @@ const readWorkspace = async (
     paper: valid?.mode === "code" ? (valid.paper ?? null) : null,
     preview: valid?.mode === "code" ? (valid.preview ?? null) : null,
     blockedShops: code ? [] : (valid?.blockedShops ?? []),
+    notify: valid?.notify ?? (code ? "everything" : "needs-me"),
   });
 };
 
@@ -878,6 +899,25 @@ export const unblockShop = (
       read !== undefined && sameShop(read.shop, unblocking.shop) ? [] : [entry],
     ),
   );
+
+/**
+ * Keeps what a workspace notifies the owner of (#493), from its Notify me, in its config beside
+ * whatever else is there. Refuses a config that was ignored, which is left for the owner to fix.
+ */
+export const keepNotify = async (
+  contextDir: string,
+  keep: { id: string; notify: NotifyMe },
+): Promise<Result<Workspace, WorkspaceError>> => {
+  const workspace = await getWorkspace(contextDir, keep.id);
+  if (!workspace.ok) return workspace;
+  const { summary } = workspace.value;
+  if (summary.configProblem !== undefined) {
+    return err({ kind: "conflict", message: `${summary.configProblem} Fix it, then try again.` });
+  }
+  const kept = await keepInConfig(workspace.value, () => ({ notify: keep.notify }));
+  if (!kept.ok) return kept;
+  return readWorkspace(contextDir, summary.id);
+};
 
 /**
  * Archives a workspace: its folder moves into the archived folder, so it leaves every list but

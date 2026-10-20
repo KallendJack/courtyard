@@ -12,45 +12,73 @@ import { useDialog } from "./use-dialog.ts";
  */
 export function DialogCard(props: {
   title: string;
+  /** Whose it is, in a word or two over the title: the workspace whose Notify me it is (#493). */
+  over?: string;
   /** What it does, in a line under the title. */
-  says: ReactNode;
+  says?: ReactNode;
   open: boolean;
   onClose: () => void;
   children?: ReactNode;
-  /** Its actions, at the foot: Cancel, then the one it's for. */
-  actions: ReactNode;
+  /** Its actions, at the foot: Cancel, then the one it's for. None when a tap on a choice is all. */
+  actions?: ReactNode;
   /**
    * On a narrow screen it rises from the bottom instead, full width, its actions one under the
-   * other, the one it's for first (#551; Paper, "Cover · Lead row: Allow all sheet").
+   * other, the one it's for first (#551; Paper, "Cover · Lead row: Allow all sheet"). `always`
+   * rises on every screen, at the bottom's middle on a wide one (#493; Paper, "Notify me").
    */
-  rises?: boolean;
+  rises?: boolean | "always";
 }) {
   const dialog = useDialog(props.open, props.onClose);
-  const rises = props.rises === true;
+  const always = props.rises === "always";
+  const rises = props.rises === true || always;
   return (
     <dialog
       {...dialog}
-      aria-label={props.title}
+      aria-label={props.over === undefined ? props.title : `${props.title} · ${props.over}`}
       className={classes(
-        "m-auto w-[min(30rem,calc(100vw-2rem))] max-w-none rounded-tile border border-input bg-popover text-popover-foreground shadow-raised backdrop:bg-card/60",
-        rises && "max-md:mx-0 max-md:mb-0 max-md:w-full max-md:rounded-b-none max-md:border-b-0",
+        "max-w-none rounded-tile border border-input bg-popover text-popover-foreground shadow-raised backdrop:bg-card/60",
+        always
+          ? "mx-auto mt-auto mb-0 w-[min(33.75rem,100vw)] rounded-b-none border-b-0"
+          : "m-auto w-[min(30rem,calc(100vw-2rem))]",
+        props.rises === true &&
+          "max-md:mx-0 max-md:mb-0 max-md:w-full max-md:rounded-b-none max-md:border-b-0",
       )}
     >
       {props.open && (
-        <div className={classes("flex flex-col gap-4 p-5", rises && "max-md:pt-2.5")}>
+        <div
+          className={classes(
+            "flex flex-col gap-4 p-5",
+            always ? "pt-2.5" : rises && "max-md:pt-2.5",
+          )}
+        >
           {rises && (
-            <span aria-hidden className="h-1 w-9 self-center rounded-full bg-border md:hidden" />
+            <span
+              aria-hidden
+              className={classes(
+                "h-1 w-9 self-center rounded-full bg-border",
+                !always && "md:hidden",
+              )}
+            />
           )}
           <div className="flex flex-col gap-1.5">
+            {props.over !== undefined && (
+              <span className="truncate text-meta font-semibold text-primary-text">
+                {props.over}
+              </span>
+            )}
             <h2 className="display-section text-card-title tracking-[-0.015em] text-foreground">
               {props.title}
             </h2>
-            <p className="text-meta text-muted-foreground">{props.says}</p>
+            {props.says !== undefined && (
+              <p className="text-meta text-muted-foreground">{props.says}</p>
+            )}
           </div>
           {props.children}
-          <div className={classes("flex gap-2.5", rises && "max-md:flex-col-reverse")}>
-            {props.actions}
-          </div>
+          {props.actions !== undefined && (
+            <div className={classes("flex gap-2.5", rises && "max-md:flex-col-reverse")}>
+              {props.actions}
+            </div>
+          )}
         </div>
       )}
     </dialog>
