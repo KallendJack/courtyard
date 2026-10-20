@@ -299,7 +299,9 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       const dialog = page.getByRole("dialog", { name: "Run the build order" });
       await expect(dialog).toContainText("beginning with #197 The rail on desktop");
       await expect(dialog).toContainText("Issues that need grilling wait for you.");
-      await expect(dialog.getByRole("switch", { name: "Allow all for builders" })).toBeVisible();
+      // Every builder allows all until its PR opens (#591): there's no switch for it.
+      await expect(dialog).toContainText("allows all until its PR opens");
+      await expect(dialog.getByRole("switch")).toHaveCount(0);
       await shot(page, "tablet-code-home-grill-on-top-run-the-build-order");
       await dialog.getByRole("button", { name: "Cancel" }).click();
       await expect(dialog).toBeHidden();
