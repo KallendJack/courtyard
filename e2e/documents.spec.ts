@@ -124,9 +124,9 @@ test("a document's tables sort on its page, as in an answer", async ({ page }) =
   const notes = page.getByRole("list", { name: "Documents saved" });
   await expect(notes).toContainText("Saved document");
   await notes.getByRole("link", { name: "Open" }).click();
-  // On the document's page: until then the table is the answer's, which may still be streaming
-  // in, so a sort tapped there is lost when the page changes.
-  await expect(page).toHaveURL(/\/documents\/[^/]+$/);
+  // On the document's page, its title showing: until then the table is the answer's, which may
+  // still be streaming in, so a sort tapped there is lost when the page changes.
+  await expect(page.getByRole("heading", { level: 1, name: "Which padel racket?" })).toBeVisible();
 
   const table = page.getByRole("main").getByRole("table");
   const price = table.getByRole("columnheader", { name: "Price" });
@@ -156,7 +156,7 @@ test("a document's charts are drawn on its page, as in an answer", async ({ page
   const notes = page.getByRole("list", { name: "Documents saved" });
   await expect(notes).toContainText("Saved document");
   await notes.getByRole("link", { name: "Open" }).click();
-  await expect(page).toHaveURL(/\/documents\/[^/]+$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Bike costs" })).toBeVisible();
 
   const drawn = page.getByRole("main").getByRole("figure", { name: "Spent on the bike, by month" });
   await expect(drawn.locator("svg [data-series]")).toHaveCount(3);
