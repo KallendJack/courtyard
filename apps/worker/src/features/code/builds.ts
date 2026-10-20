@@ -138,9 +138,15 @@ export const createBuildsQueue = (lock: BuildsLock) => {
       });
     },
 
-    /** Frees a build of a session's that has ended, by its command, starting the next waiting. */
+    /**
+     * Frees a build of a session's that has ended, by its command, starting the next waiting.
+     * Only one that has started: a build still taking its place can't have ended, so an end heard
+     * twice (or of a call of the same command that never ran) never lets it go (#575).
+     */
     ended: (id: SessionId, command: string) => {
-      const build = running.find((build) => build.id === id && build.command === command);
+      const build = running.find(
+        (build) => build.id === id && build.command === command && build.place !== null,
+      );
       if (build === undefined) return;
       free(build);
       moveOn();

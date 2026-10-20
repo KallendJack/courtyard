@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { takePlace } from "@courtyard/builds";
 import type { SessionEvent } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { err, ok, type Result } from "../src/lib/result.ts";
 import type { Provider } from "../src/providers/index.ts";
 import type { Environment } from "../src/worker.ts";
 import {
@@ -177,6 +178,36 @@ describe("the builds queue (#281)", () => {
       "waiting-for-build",
     );
     builds[0]?.finish();
+  });
+
+  it("runs a session's second build of the same command when its first ends, even when that end is heard twice (#575)", async () => {
+    const { provider: coder } = codingProvider([]);
+    const answers: Result<null, string>[] = [];
+    const provider: Provider = {
+      ...coder,
+      runTurn: async (input) => {
+        const { code } = input;
+        if (code === null) return err({ kind: "unknown", message: "Only builds." });
+        expect(await code.run("pnpm verify")).toEqual(ok(null));
+        const second = code.run("pnpm verify").then((answer) => answers.push(answer));
+        await vi.waitFor(() => expect(waitingSeen).toBe(true));
+        // The first ends, and is heard ended again (a provider's hooks, a refused call of the
+        // same command), while the second is still taking its place.
+        code.ran("pnpm verify");
+        code.ran("pnpm verify");
+        await second;
+        code.ran("pnpm verify");
+        return ok(null);
+      },
+    };
+    let waitingSeen = false;
+    const request = await start([provider]);
+    const id = await startCoding(request, "Talk into the box", CODING_MODEL);
+    await waitingWith(request, id, 1);
+    waitingSeen = true;
+
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    expect(answers).toEqual([ok(null)]);
   });
 
   it("runs as many builds at once as the worker's setting allows", async () => {
