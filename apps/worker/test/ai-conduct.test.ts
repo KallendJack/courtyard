@@ -387,18 +387,54 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).toContain(await quotedInGuide("When numbers compare or change"));
   });
 
-  it("asks for a diagram for steps or how parts connect, text first, in the kinds that read best (ADR 0021)", async () => {
-    const { framing } = await firstTurn();
+  it("asks a code session for a diagram for steps or how parts connect, text first, in the kinds that read best, and for no floor plan (ADR 0021, #599)", async () => {
+    await asCode();
 
-    expect(framing.instructions).toContain(await quotedInGuide("A `mermaid` block"));
+    const { instructions } = (await firstTurn(CODES)).framing;
+
+    expect(instructions).toContain(
+      `${await quotedInGuide("When numbers compare or change")}\n\n${await quotedInGuide("A `mermaid` block")}`,
+    );
+    expect(instructions).not.toContain("`plan`");
+    expect(instructions).not.toContain(await quotedInGuide("A room's layout"));
   });
 
-  it("asks for a floor plan block for a room's layout, never letters and dashes (#257)", async () => {
-    const { framing } = await firstTurn();
+  it("asks a planning turn for a floor plan block for a room's layout, never letters and dashes, and for no diagram unless the owner asks (#257, #599)", async () => {
+    const { instructions } = (await firstTurn()).framing;
 
-    expect(framing.instructions).toContain(
-      `${await quotedInGuide("A `mermaid` block")}\n\n${await quotedInGuide("A room's layout")}`,
+    expect(instructions).toContain(
+      `${await quotedInGuide("When numbers compare or change")}\n\n${await quotedInGuide("A room's layout")}`,
     );
+    expect(instructions).not.toContain(await quotedInGuide("A `mermaid` block"));
+  });
+
+  it("tells a planning turn how to help there: brief, one step at a time, asking, real products, what's saved, a pro (ADR 0032, #599)", async () => {
+    const planning = await quotedInGuide("The owner often reads your answers on their phone");
+
+    const { instructions } = (await firstTurn()).framing;
+
+    expect(instructions).toContain(`${await quotedInGuide("A room's layout")}\n\n${planning}`);
+    for (const rule of [
+      "Keep answers brief",
+      "one short step at a time",
+      "wait for them to say it's done or send a photo",
+      "Never assume the owner has a tool",
+      "check what's saved here",
+      "each linked",
+      "say so rather than",
+      "needs a pro",
+      "Draw no diagram unless the owner asks for one",
+    ]) {
+      expect(planning).toContain(rule);
+    }
+  });
+
+  it("tells a code session nothing of how to help in planning (#599)", async () => {
+    await asCode();
+
+    const { instructions } = (await firstTurn(CODES)).framing;
+
+    expect(instructions).not.toContain("The owner often reads your answers on their phone");
   });
 
   it("sends the owner's new message on its own for a session's first turn", async () => {
@@ -1069,6 +1105,19 @@ describe("getting to know a workspace (#127)", () => {
     expect(owner).toContain(`\n${await quotedInGuide("# Get to know me")}\n</skill>`);
   });
 
+  it("asks Get to know for at most five quick questions, each with answers to tap, then to learn as it goes (#599)", async () => {
+    const { start, turns } = await gettingToKnow();
+
+    await start("/api/workspaces/garage-gym/get-to-know");
+
+    const skill = await quotedInGuide("# Get to know");
+    expect(turns[0]?.framing.instructions).toContain(skill);
+    expect(skill).toContain("at most five questions");
+    expect(skill).toContain("answers the owner can tap");
+    expect(skill).toContain("picked up as you go");
+    expect(skill).not.toMatch(/topics/i);
+  });
+
   it("gives Get to know what a new workspace is for, from What's it for?, to plan its topics from", async () => {
     const { provider, turns } = recorder(READS_FILES);
     const request = await asOwner(testWorker({ root, providers: [provider] }));
@@ -1377,9 +1426,12 @@ describe("documents (#145, ADR 0020)", () => {
     ]);
     expect(tool?.description).toBe(await quotedInGuide("Saves a document in this workspace"));
     expect(inputsOf(tool)).toBe(await quotedInGuide("- text: The document's whole text"));
-    expect(framing?.instructions).toContain(
-      await quotedInGuide("Longer things the owner wants to keep"),
-    );
+    const rule = await quotedInGuide("Documents in this workspace are reference");
+    expect(framing?.instructions).toContain(rule);
+    // Reference the owner looks up, never a walkthrough or a plan to track (ADR 0032, #599).
+    for (const words of ["one screen", "tables first", "no emoji", "never a walkthrough"]) {
+      expect(rule).toContain(words);
+    }
   });
 
   it("refuses a document with the guide's reasons", async () => {
@@ -1517,7 +1569,7 @@ describe("Things (#149, ADR 0020)", () => {
     expect(offered?.description).toBe(await quotedInGuide("Adds, changes or removes one of"));
     expect(inputsOf(offered)).toBe(await quotedInGuide("- thing: To change or remove a Thing"));
     expect(framing?.instructions).toContain(
-      `${await quotedInGuide("Longer things the owner wants to keep")}\n\n${await quotedInGuide("The owner's kit for this workspace")}`,
+      `${await quotedInGuide("Documents in this workspace are reference")}\n\n${await quotedInGuide("The owner's kit for this workspace")}`,
     );
   });
 
