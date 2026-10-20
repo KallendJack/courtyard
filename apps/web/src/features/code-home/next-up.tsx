@@ -1,9 +1,7 @@
 import {
   buildable,
   type GitHubUnread,
-  LEAD_WINDOW_BY_DEFAULT,
   type LeadStatus,
-  type LeadWindow,
   type NextUp as NextUpAnswer,
   type NextUpIssue,
   type ProviderList,
@@ -11,11 +9,9 @@ import {
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Clock, Flame, Play, Zap } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
-import { Switch } from "@/components/forms/switch";
 import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { PlaceholderRows } from "@/components/layout/kept";
@@ -25,13 +21,6 @@ import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { runLead, startOnIssue } from "./api.ts";
-
-/** How long the Lead keeps going (#457), as the Run sheet offers it. */
-const WINDOWS: readonly { value: LeadWindow; label: string }[] = [
-  { value: "ready-now", label: "Just what's ready now" },
-  { value: "4-hours", label: "4 hours" },
-  { value: "tonight", label: "Until tonight" },
-];
 
 /** How many titles the Then line names. */
 const THEN = 3;
@@ -244,11 +233,6 @@ function StartOnIssue(props: {
   const [confirming, setConfirming] = useState(false);
   /** Run the build order, tapped: what starts shows first, in a dialog, with Run the build order. */
   const [running, setRunning] = useState(false);
-  /** Allow all for builders (#428), off unless the owner turns it on. */
-  const [allowAll, setAllowAll] = useState(false);
-  const allowAllName = useId();
-  /** How long it keeps going (#457), 4 hours unless the owner says. */
-  const [keepGoing, setKeepGoing] = useState<LeadWindow>(LEAD_WINDOW_BY_DEFAULT);
   const leading = props.lead?.status.state === "running";
   /** Start and Cancel, brought into view when they open in a column too short for them (#335). */
   const choices = useRef<HTMLDivElement>(null);
@@ -273,11 +257,7 @@ function StartOnIssue(props: {
   });
   const runOrder = useAction(async () => {
     if (model === undefined) return "No model that codes is available right now.";
-    const started = await runLead(props.workspaceId, {
-      model: model.ref,
-      allowAll,
-      window: keepGoing,
-    });
+    const started = await runLead(props.workspaceId, { model: model.ref });
     if (started.kind !== "loaded") return describeProblem(started).body;
     setRunning(false);
     props.lead?.onLead(started.data);
@@ -412,14 +392,13 @@ function StartOnIssue(props: {
         ))
       )}
       {props.lead !== undefined && (
-        // Run the build order, tapped: what starts, and Allow all for builders (#428; Paper, "Run
-        // the build order: Allow all for builders"), off unless the owner turns it on.
+        // Run the build order, tapped: what starts, and how it runs (#591).
         <DialogCard
           title="Run the build order"
           says={
             model === undefined
               ? "No model that codes is available right now."
-              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}.${props.small ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue, and it tells you what's ready to merge. Merging stays yours.`
+              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}.${props.small ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue and allows all until its PR opens, still asking before anything outside its own branch. It keeps going through the night, and pauses itself while 4 PRs wait for your review. Merging stays yours.`
           }
           open={running}
           onClose={() => setRunning(false)}
@@ -447,40 +426,6 @@ function StartOnIssue(props: {
             </>
           }
         >
-          {/* How long it keeps going (#457), in the same row style as Allow all for builders. */}
-          <div className="flex flex-col gap-2.5 rounded-row bg-secondary px-4 py-3">
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-interface font-bold text-foreground">Keep going</p>
-              <p className="text-meta text-muted-foreground">
-                Within it, a resting Lead wakes for new work. It builds 4 at most each run, and none
-                while 2 PRs wait on your review.
-              </p>
-            </div>
-            <SegmentedChoice
-              label="Keep going"
-              look="apart"
-              options={WINDOWS}
-              value={keepGoing}
-              onChange={setKeepGoing}
-            />
-          </div>
-          <div className="flex items-center gap-3 rounded-row bg-secondary px-4 py-3">
-            <div className="flex min-w-0 grow flex-col gap-0.5">
-              <p id={`${allowAllName}-name`} className="text-interface font-bold text-foreground">
-                Allow all for builders
-              </p>
-              <p id={`${allowAllName}-more`} className="text-meta text-muted-foreground">
-                For 12 hours, or until each builder's PR opens. Each one still asks before anything
-                outside its own branch.
-              </p>
-            </div>
-            <Switch
-              on={allowAll}
-              onChange={setAllowAll}
-              labelledBy={`${allowAllName}-name`}
-              describedBy={`${allowAllName}-more`}
-            />
-          </div>
           <FormError message={runOrder.error} />
         </DialogCard>
       )}

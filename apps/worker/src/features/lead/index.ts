@@ -5,8 +5,6 @@ import {
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
   LEAD_BUILDERS,
-  LEAD_WINDOW_BY_DEFAULT,
-  type LeadAllowAll,
   type LeadBuilder,
   type LeadBuilderStatus,
   LeadHeldBack,
@@ -15,9 +13,7 @@ import {
   type LeadReady,
   type LeadRun,
   type LeadStatus,
-  type LeadWindow,
   type NextUpIssue,
-  type SessionEvent,
   SessionId,
   WorkspaceId,
 } from "@courtyard/contract";
@@ -46,8 +42,10 @@ import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../worksp
  * it starts a builder session for each next free issue in Next up, a set number at a time, and
  * watches them: it notes in the Lead's chat what it did, tells the owner when a builder's pull
  * request is ready to merge, sends the Lead a turn when one merges (to move its boards and keep the
- * plan current), holds itself back while main is red, the machine is busy with the owner's own
- * sessions, or a builder waits on the owner's decision, and rests when nothing is ready to build.
+ * plan current), and holds itself back while 4 pull requests wait for the owner's review, its model
+ * is at its usage limit, main is red, or the machine is busy with the owner's own sessions (#591);
+ * what waits on the owner holds back only its own builder. It rests while nothing in a numbered
+ * milestone is ready to build, and starts again as soon as something is.
  * The Lead's model talks with the owner and changes how the order runs with its build order tool.
  * Merging, Update, reordering and filing issues stay the owner's.
  */
@@ -61,40 +59,11 @@ const NOTES_KEPT = 10;
 /** The title the Lead's session has. */
 const LEAD_TITLE = "Lead";
 
-/** How long the 4 hours window lasts (#457). */
-const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+/** It holds back (#591) while this many of its builders' pull requests wait for the owner's review. */
+const REVIEWS_AT_MOST = 4;
 
-/** The hour Until tonight ends at, on the worker's clock (#457). */
-const TONIGHT_AT = 22;
-
-/** The brakes on a Run (#457): it starts no builder while this many PRs wait on the owner. */
-const REVIEWS_WAITING_AT_MOST = 2;
-
-/** The brakes on a Run (#457): it rests once it has started this many builders. */
-const BUILDS_PER_RUN = 4;
-
-/** Why it rests once a Run has started all it may (#457). */
-const BUILT_ALL_THIS_RUN = `Built ${BUILDS_PER_RUN} this run · tap Run for more`;
-
-/**
- * Until when a Run keeps the Lead going (#457), or `undefined` for just what's ready now. Until
- * tonight, once 22:00 has passed, lasts 4 hours, as tomorrow's 22:00 would be far too long.
- */
-const wakesUntilOf = (window: LeadWindow, now: number) => {
-  switch (window) {
-    case "ready-now":
-      return undefined;
-    case "4-hours":
-      return new Date(now + FOUR_HOURS_MS).toISOString();
-    case "tonight": {
-      const tonight = new Date(now);
-      tonight.setHours(TONIGHT_AT, 0, 0, 0);
-      return tonight.getTime() > now
-        ? tonight.toISOString()
-        : new Date(now + FOUR_HOURS_MS).toISOString();
-    }
-  }
-};
+/** A numbered milestone's title ("4 · Code workspaces"): Later, or none, is never built (#591). */
+const NUMBERED = /^\d/;
 
 /** A builder's title starts with this when it fixes a red main (#355's issue). */
 const MAIN_FIX = /^Main fails:/;
@@ -131,7 +100,12 @@ const Kept = z.object({
   state: z.enum(["running", "paused", "resting"]),
   /** Why it's holding back while running, why it's resting. */
   why: z.string().optional(),
-  builders: z.number().int().min(LEAD_BUILDERS.atLeast).max(LEAD_BUILDERS.atMost),
+  // One kept with more than it may now runs as many as it may (#591).
+  builders: z
+    .number()
+    .int()
+    .min(LEAD_BUILDERS.atLeast)
+    .transform((count) => Math.min(count, LEAD_BUILDERS.atMost)),
   /** The builders it started whose pull requests haven't merged or closed yet. */
   built: z.array(Builder),
   /** Issues the owner skipped for now, until they run the order again. */
@@ -140,19 +114,10 @@ const Kept = z.object({
   told: z.array(z.string()),
   /** The worker's latest notes in its chat, oldest first. */
   notes: z.array(z.string()),
-  /**
-   * Until when the builders it starts allow all (#428), when the owner ran the order with Allow
-   * all for builders: each allows all until its pull request opens, until then at most.
-   */
-  allowAllUntil: z.iso.datetime().optional(),
   /** Merge in order (#423), while it's merging or stopped. */
   merge: Merge.optional(),
   /** The ready issues it held back last time round (#423). */
   heldBack: z.array(LeadHeldBack).optional(),
-  /** Until when it wakes from a rest for new work (#457), from the owner's latest Run. */
-  wakesUntil: z.iso.datetime().optional(),
-  /** How many builders it has started since the owner's latest Run (#457). */
-  startedThisRun: z.number().int().min(0).default(0),
 });
 type Kept = z.infer<typeof Kept>;
 
@@ -168,17 +133,6 @@ export type LeadProblem =
   | { readonly kind: "nothing-to-merge" };
 
 type Listed = CodeSessionList["sessions"][number];
-
-/** How many approvals a session waits on that Allow all covers (#551): asked, not yet answered. */
-const allowableIn = (events: readonly SessionEvent[]) => {
-  const answered = new Set(
-    events.flatMap((event) => (event.type === "approval-answered" ? [event.approval] : [])),
-  );
-  return events.filter(
-    (event) =>
-      event.type === "approval-requested" && event.all === true && !answered.has(event.seq),
-  ).length;
-};
 
 /**
  * Where a builder stands: still building; stuck (#590), as its status says, taking no slot until
@@ -202,6 +156,26 @@ const standingOf = (listed: Listed | undefined, status?: BuilderStatus) => {
     ? ("ready" as const)
     : ("building" as const);
 };
+
+/**
+ * Until when its model is at its usage limit (#591), as its builders waiting for it say: the
+ * latest reset still ahead, or `undefined` when none waits. One whose limit gave no reset holds
+ * back an hour, as it waits.
+ */
+const limitOf = (statuses: ReadonlyMap<SessionId, BuilderStatus>, now: number) => {
+  const resets = [...statuses.values()].flatMap((status) => {
+    if (status.kind !== "waiting-for-limit") return [];
+    const at =
+      Date.parse(status.resetAt ?? status.since) + (status.resetAt === undefined ? HOUR : 0);
+    return at > now ? [at] : [];
+  });
+  return resets.length === 0 ? undefined : Math.max(...resets);
+};
+
+const HOUR = 60 * 60 * 1000;
+
+/** A time on the worker's clock, as a holding-back line says it: "10:00". */
+const clockOf = (at: number) => new Date(at).toTimeString().slice(0, 5);
 
 /** A builder by what it builds, in a few words, as the owner reads it (#361). */
 const nameOf = (listed: Listed | undefined, issue: number) =>
@@ -250,16 +224,12 @@ export const createLead = (options: {
     | "stopBuilding"
     | "mergePullRequest"
     | "events"
-    | "allowAllFromLead"
-    | "allowAllOffFromLead"
   >;
   nextUp: Pick<NextUp, "list" | "fresh" | "build" | "filesNamed">;
   /** The files a builder's worktree changes (#423), by its workspace and session. */
   changedFiles: (workspaceId: WorkspaceId, session: SessionId) => Promise<readonly string[]>;
   /** Whether a code workspace's main is red now (#355), by its id. */
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
-  /** Whether an Update waits to run (#186): meanwhile no builder starts. */
-  updating?: () => boolean;
   /** Each builder's status, as the worker recorded it (#590). */
   builders?: Pick<Builders, "statusOf">;
   /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
@@ -306,24 +276,6 @@ export const createLead = (options: {
     return new Map((listed.ok ? listed.value : []).map((session) => [session.id, session]));
   };
 
-  /**
-   * How many approvals each of the Lead's builders with no pull request waits on that Allow all
-   * would answer (#551), read now.
-   */
-  const approvalsOf = async (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) => {
-    const approvals = new Map<SessionId, number>();
-    for (const { session } of kept?.built ?? []) {
-      const each = listed.get(session);
-      // Only while its turn waits on one: a turn that ended asks nothing any more.
-      if (each === undefined || each.pullRequest !== undefined || each.waiting !== "approval") {
-        continue;
-      }
-      const events = await sessions.events(session);
-      if (events.ok) approvals.set(session, allowableIn(events.value));
-    }
-    return approvals;
-  };
-
   /** Each of the Lead's builders' status, as the worker recorded it (#590). */
   const statusesOf = async (kept: Kept | undefined) => {
     const statuses = new Map<SessionId, BuilderStatus>();
@@ -354,52 +306,15 @@ export const createLead = (options: {
     return { building, ready };
   };
 
-  /** Until when the builders the Lead starts now allow all (#428), while that's still ahead. */
-  const allowAllUntilOf = (kept: Kept | undefined) => {
-    const until = kept?.allowAllUntil;
-    return until !== undefined && Date.parse(until) > options.now() ? until : undefined;
-  };
-
-  /** Its builders still building with no pull request yet, which Allow all for builders reaches (#551). */
-  const allowableOf = (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) =>
-    (kept?.built ?? []).filter((builder) => {
-      const each = listed.get(builder.session);
-      return each !== undefined && each.pullRequest === undefined;
-    });
-
-  /** Who Allow all for builders reaches if it's switched on now (#551). */
-  const reachOf = (
-    kept: Kept | undefined,
-    listed: ReadonlyMap<SessionId, Listed>,
-    waiting: ReadonlyMap<SessionId, number>,
-  ) => {
-    const builders = allowableOf(kept, listed);
-    const approvals = builders
-      .filter((builder) => listed.get(builder.session)?.allowingAll === undefined)
-      .reduce((sum, builder) => sum + (waiting.get(builder.session) ?? 0), 0);
-    return { builders: builders.length, approvals };
-  };
-
-  /** Until when a resting Lead wakes for new work (#457), while that's still ahead. */
-  const openWindowOf = (kept: Kept | undefined) => {
-    const until = kept?.wakesUntil;
-    return until !== undefined && Date.parse(until) > options.now() ? until : undefined;
-  };
-
   /**
-   * The window a Run opens (#457): the one it names, or, when it names none (the Running row's
-   * Run, or the Lead's tool), the one still open, else the default.
+   * The next ready issues the Lead would start, in numbered milestones only (#591), leaving out
+   * what it builds and what's skipped.
    */
-  const windowFrom = (kept: Kept | undefined, window: LeadWindow | undefined) =>
-    window !== undefined
-      ? wakesUntilOf(window, options.now())
-      : (openWindowOf(kept) ?? wakesUntilOf(LEAD_WINDOW_BY_DEFAULT, options.now()));
-
-  /** The next ready issues the Lead would start, leaving out what it builds and what's skipped. */
   const nextOf = (kept: Kept | undefined, issues: readonly NextUpIssue[]) =>
     issues.filter(
       (issue) =>
         buildable(issue) &&
+        NUMBERED.test(issue.milestone ?? "") &&
         !(kept?.heldBack ?? []).some((held) => held.issue === issue.number) &&
         !(kept?.skipped ?? []).includes(issue.number) &&
         !(kept?.built ?? []).some((builder) => builder.issue === issue.number),
@@ -498,19 +413,22 @@ export const createLead = (options: {
     }
   };
 
+  /** Its builders whose pull requests merged and that it hasn't yet tidied up after (#591). */
+  const toTidyOf = (kept: Kept, listed: ReadonlyMap<SessionId, Listed>) =>
+    kept.built.filter(
+      ({ session }) =>
+        listed.get(session)?.pullRequest?.state === "merged" &&
+        !kept.told.includes(`merged:${session}`),
+    );
+
   const statusOf = async (
     workspaceId: WorkspaceId,
     kept: Kept | undefined,
   ): Promise<LeadStatus> => {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
-    const [approvals, statusesNow] = await Promise.all([
-      approvalsOf(kept, listed),
-      statusesOf(kept),
-    ]);
+    const statusesNow = await statusesOf(kept);
     const { building, ready } = buildersOf(kept, listed, statusesNow);
-    const allowing = allowAllUntilOf(kept);
     const merge = mergeOf(kept?.merge, listed);
-    const wakes = kept?.state === "resting" ? openWindowOf(kept) : undefined;
     const statuses: LeadBuilderStatus[] = [];
     for (const { session, issue } of kept?.built ?? []) {
       const status = statusesNow.get(session);
@@ -531,9 +449,7 @@ export const createLead = (options: {
       statuses,
       next: nextOf(kept, issues.ok ? issues.value : []).slice(0, 2),
       ready,
-      ...(allowing === undefined ? {} : { buildersAllowedAll: allowing }),
-      allowAllReaches: reachOf(kept, listed, approvals),
-      ...(wakes === undefined ? {} : { wakesUntil: wakes }),
+      toTidy: kept === undefined ? 0 : toTidyOf(kept, listed).length,
       ...(merge === undefined ? {} : { merge }),
       ...(kept?.heldBack === undefined || kept.state !== "running"
         ? {}
@@ -565,7 +481,12 @@ export const createLead = (options: {
         if (!now.told.includes(about)) options.notify(session, "Ready to merge");
         await tellOnce(about, `${name} is ready for you to merge (#${pullRequest.number}).`);
       }
-      if (pullRequest?.state === "merged" && !now.told.includes(`merged:${session}`)) {
+      // Paused, it takes no turn of its own (#591): it tidies up once it runs again.
+      if (
+        kept.state !== "paused" &&
+        pullRequest?.state === "merged" &&
+        !now.told.includes(`merged:${session}`)
+      ) {
         // Sent only while the Lead is free: otherwise it's tried again next time round.
         const told = await sessions.tellMerged(now.session, {
           pullRequest: pullRequest.number,
@@ -587,21 +508,20 @@ export const createLead = (options: {
   };
 
   /**
-   * Whether a resting Lead wakes now (#457): while its window is open, once an issue it would
-   * start is buildable (made ready, its claim freed, its blocker closed, its clash merged).
+   * Whether a resting Lead wakes now (#591): once an issue it would start is buildable (made
+   * ready, its claim freed, its blocker closed, its clash merged).
    */
   const wakes = async (workspaceId: WorkspaceId, kept: Kept) => {
-    if (kept.state !== "resting" || openWindowOf(kept) === undefined) return false;
+    if (kept.state !== "resting") return false;
     const issues = await nextUp.fresh(workspaceId);
     const { heldBack: _, ...unheld } = kept;
     return issues.ok && nextOf(unheld, issues.value).length > 0;
   };
 
   /**
-   * One look at a Lead: what's new about its builders; then, resting within its window, whether it
-   * wakes for new work (#457); then, running, whether it holds back, then a builder for each next
-   * free issue up to its number, or a rest when nothing is ready to build or its Run has built all
-   * it may.
+   * One look at a Lead: what's new about its builders; then, resting, whether it wakes for new
+   * work; then, running, whether it holds back (#591), then a builder for each next free issue up
+   * to its number, or a rest when nothing is ready to build.
    */
   const look = async (workspaceId: WorkspaceId, was: Kept): Promise<Kept> => {
     const listed = await listedIn(workspaceId);
@@ -614,26 +534,21 @@ export const createLead = (options: {
     }
     if (kept.state !== "running") return kept;
     const { building, ready } = buildersOf(kept, listed, statuses);
-    const deciding = building.find(
-      (builder) => listed.get(builder.session)?.waiting === "approval",
-    );
-    // The owner's reviews are a brake (#457): no new builder while too many wait on them.
-    const reviewing = ready.length >= REVIEWS_WAITING_AT_MOST;
-    const red = deciding === undefined && !reviewing && (await options.mainRed(workspaceId));
-    const updating = options.updating?.() === true;
-    let why =
-      deciding !== undefined
-        ? `${nameOf(listed.get(deciding.session), deciding.issue)} waits on your decision.`
-        : updating
-          ? "Courtyard waits to update, so the next builder starts after it."
-          : reviewing
-            ? `${ready.length} PRs wait on your review, so the next builder starts once one merges.`
-            : red
-              ? "main is red, so only its fix starts."
-              : undefined;
+    // What waits on the owner holds back only its own builder (#591); the Lead holds back while
+    // the owner's reviews pile up, or its model is at its usage limit, until its reset.
+    const reviewing = ready.length >= REVIEWS_AT_MOST;
+    const limited = limitOf(statuses, options.now());
+    const red = !reviewing && limited === undefined && (await options.mainRed(workspaceId));
+    let why = reviewing
+      ? `${ready.length} pull requests wait for your review, so the next builder starts once one merges.`
+      : limited !== undefined
+        ? `its model is at its usage limit until ${clockOf(limited)}, so the next builder starts after it.`
+        : red
+          ? "main is red, so only its fix starts."
+          : undefined;
     let started = 0;
     let free = kept.builders - building.length;
-    if (deciding === undefined && !updating && !reviewing && free > 0) {
+    if (!reviewing && limited === undefined && free > 0) {
       // What's held back is worked out afresh each time a builder could start.
       const { heldBack: _held, ...unheld } = kept;
       kept = unheld;
@@ -659,7 +574,7 @@ export const createLead = (options: {
       );
       const heldBack: LeadHeldBack[] = [];
       for (const issue of next) {
-        if (free === 0 || kept.startedThisRun >= BUILDS_PER_RUN) break;
+        if (free === 0) break;
         const files = [...(named.get(issue.number) ?? [])];
         // Main's fix is never held back: nothing goes green while main is red.
         const clash = (MAIN_FIX.test(issue.title) ? [] : changing)
@@ -686,11 +601,11 @@ export const createLead = (options: {
         }
         const model = await sessions.lastModelOf(kept.session);
         if (model === undefined) break;
-        const allowAllUntil = allowAllUntilOf(kept);
+        // Every builder allows all until its pull request opens (#591), covering what it always has.
         const built = await nextUp.build(workspaceId, issue.number, {
           ...model,
           byLead: true,
-          ...(allowAllUntil === undefined ? {} : { allowAllUntil }),
+          allowAllUntil: allowAllUntil("task", options.now()),
         });
         if (!built.ok) {
           // Claimed by someone else meanwhile, or blocked by an open issue (#377): the next one, then.
@@ -702,7 +617,6 @@ export const createLead = (options: {
           {
             ...kept,
             built: [...kept.built, { session: built.value.id, issue: issue.number, files }],
-            startedThisRun: kept.startedThisRun + 1,
           },
           woke && started === 0
             ? `Woke: #${issue.number} is ready, started building.`
@@ -713,14 +627,6 @@ export const createLead = (options: {
         free -= 1;
       }
       if (heldBack.length > 0) kept = { ...kept, heldBack };
-      // A Run builds so many at most (#457): then it rests, its window closed, until the next.
-      if (kept.startedThisRun >= BUILDS_PER_RUN) {
-        const { why: _, wakesUntil: _until, heldBack: _held, ...rest } = kept;
-        return noted(
-          { ...rest, state: "resting", why: BUILT_ALL_THIS_RUN },
-          `${BUILT_ALL_THIS_RUN}.`,
-        );
-      }
       if (
         !red &&
         building.length === 0 &&
@@ -780,20 +686,13 @@ export const createLead = (options: {
   };
 
   /**
-   * Running again: woken, its skips and its count of builds forgotten, its window (#457) opened
-   * afresh, and a look straight away.
+   * Running again: woken, its skips forgotten, and a look straight away, which tidies up after the
+   * merges it left while paused (#591).
    */
-  const runAgain = async (workspaceId: WorkspaceId, kept: Kept, window?: LeadWindow) => {
-    const wakesUntil = windowFrom(kept, window);
-    const { why: _, wakesUntil: _was, ...rest } = kept;
+  const runAgain = async (workspaceId: WorkspaceId, kept: Kept) => {
+    const { why: _, ...rest } = kept;
     const woken = kept.state === "running" ? rest : await noted(rest, "Running the build order.");
-    return look(workspaceId, {
-      ...woken,
-      state: "running",
-      skipped: [],
-      startedThisRun: 0,
-      ...(wakesUntil === undefined ? {} : { wakesUntil }),
-    });
+    return look(workspaceId, { ...woken, state: "running", skipped: [] });
   };
 
   /** Pausing: builders carry on, nothing new starts. */
@@ -862,23 +761,9 @@ export const createLead = (options: {
      * message, or wakes, and it looks at once.
      */
     run: (rawId: string, run: LeadRun) =>
-      changing(rawId, async (workspaceId, was) => {
-        // Allow all for builders (#428), when this tap says: on for the next 12 hours, or off. A
-        // wake that doesn't say (the Running row's Run) leaves it as it was.
-        const allowing =
-          run.allowAll === true
-            ? allowAllUntil("task", options.now())
-            : run.allowAll === false
-              ? undefined
-              : was?.allowAllUntil;
-        const allowingFrom = ({ allowAllUntil: _, ...rest }: Kept): Kept =>
-          allowing === undefined ? rest : { ...rest, allowAllUntil: allowing };
-        const kept = was === undefined ? undefined : allowingFrom(was);
+      changing(rawId, async (workspaceId, kept) => {
         const there = kept === undefined ? undefined : await sessions.get(kept.session);
-        if (kept !== undefined && there?.ok === true) {
-          return ok(await runAgain(workspaceId, kept, run.window));
-        }
-        const wakesUntil = windowFrom(kept, run.window);
+        if (kept !== undefined && there?.ok === true) return ok(await runAgain(workspaceId, kept));
         const created = await sessions.create({
           workspaceId,
           message: {
@@ -898,9 +783,6 @@ export const createLead = (options: {
           skipped: [],
           told: kept?.told ?? [],
           notes: [],
-          ...(allowing === undefined ? {} : { allowAllUntil: allowing }),
-          ...(wakesUntil === undefined ? {} : { wakesUntil }),
-          startedThisRun: 0,
         };
         // Kept at once, so its first turn is told it's the Lead.
         const recorded = await keep(workspaceId, started);
@@ -931,40 +813,6 @@ export const createLead = (options: {
           `Merging in order: ${order}.`,
         );
         return ok(await mergeStep(merging, listed));
-      }),
-
-    /**
-     * Allow all for builders from the Lead's row (#551), while it runs, is paused or rests. On:
-     * for the next 12 hours, its builders still building (no pull request yet) allow all until
-     * each one's pull request opens, as do any it starts; one allowing all already keeps its own
-     * end, and the approvals they wait on that it covers are allowed at once. Off: the builders it
-     * gave it to ask again, those the owner switched on themselves don't, and new ones start
-     * asking.
-     */
-    allowAll: (rawId: string, request: LeadAllowAll) =>
-      changing(rawId, async (workspaceId, was) => {
-        if (was === undefined) return err({ kind: "session", error: { kind: "not-found" } });
-        const { allowAllUntil: _, ...kept } = was;
-        const builders = allowableOf(was, await listedIn(workspaceId));
-        if (!request.on) {
-          for (const { session } of was.built) {
-            const ended = await sessions.allowAllOffFromLead(session);
-            if (!ended.ok)
-              console.error("The Lead couldn't end a builder's Allow all", ended.error);
-          }
-          return ok(await noted(kept, "Allow all for builders is off: its builders ask again."));
-        }
-        const until = allowAllUntil("12h", options.now());
-        for (const { session } of builders) {
-          const allowed = await sessions.allowAllFromLead(session, until);
-          if (!allowed.ok) console.error("The Lead couldn't allow a builder all", allowed.error);
-        }
-        return ok(
-          await noted(
-            { ...kept, allowAllUntil: until },
-            `Allow all for builders is on for 12 hours: ${plural(builders.length, "builder", "builders")} now, and any it starts.`,
-          ),
-        );
       }),
 
     /** Pause (#347): builders already running carry on, and nothing new starts. */

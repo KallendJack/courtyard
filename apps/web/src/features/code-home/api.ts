@@ -1,6 +1,5 @@
 import {
   type BuildIssue,
-  type LeadAllowAll,
   type LeadRun,
   LeadStatus,
   NextUp,
@@ -71,17 +70,6 @@ export const mergeInOrder = (workspaceId: WorkspaceId, pullRequests: readonly nu
 /** Pause the Lead (#347): its builders carry on, and nothing new starts. */
 export const pauseLead = (workspaceId: WorkspaceId) =>
   sendJson({ path: `${workspacePath(workspaceId)}/lead/pause`, body: {}, schema: LeadStatus });
-
-/**
- * Allow all for builders, switched from the Lead's row (#551): on for 12 hours for its builders
- * still building and any it starts, or off for those it gave it to.
- */
-export const allowAllForBuilders = (workspaceId: WorkspaceId, on: LeadAllowAll["on"]) =>
-  sendJson({
-    path: `${workspacePath(workspaceId)}/lead/allow-all`,
-    body: { on } satisfies LeadAllowAll,
-    schema: LeadStatus,
-  });
 
 /** The workspace's main: its newest commit and that commit's build (#301's Main row). */
 export const loadMain = (workspaceId: WorkspaceId) =>

@@ -3975,29 +3975,6 @@ export const createSessions = (options: {
       return ok(summaryOf(found.value));
     },
 
-    /**
-     * Allow all for builders, switched on from the Lead's row (#551): one of its builders allows
-     * all until its pull request opens, until `until` at most, marked the Lead's. One allowing all
-     * already keeps its own; `false` says nothing changed.
-     */
-    allowAllFromLead: async (
-      builder: SessionId,
-      until: string,
-    ): Promise<Result<boolean, SessionError>> => {
-      const found = await findSession(builder);
-      if (!found.ok) return found;
-      if (found.value.byLead !== true) return err({ kind: "not-code-session" });
-      const started = await startAllowingAll(found.value, { until, task: true, byLead: true });
-      if (!started.ok) return started.error.kind === "allowing-all" ? ok(false) : started;
-      return ok(true);
-    },
-
-    /**
-     * Allow all for builders, switched off from the Lead's row (#551): a builder's Allow all ends
-     * if the Lead gave it; one the owner turned on themselves stays on.
-     */
-    allowAllOffFromLead: (builder: SessionId) => stopAllowingAll(builder, { byLead: true }),
-
     /** One of the session's attachments (#78) and its bytes, by its id. */
     attachment: async (
       rawId: string,

@@ -99,6 +99,8 @@ const TEST_TOOLS: readonly Pick<CommandRule, "words" | "never" | "runsFrom">[] =
   },
   { words: ["tsc", "--noEmit"], never: [/^--watch/, /^-w$/] },
   { words: ["biome", "check"], never: [] },
+  // Formatting the worktree's files, as check --write does (#591).
+  { words: ["biome", "format"], never: [] },
 ];
 /** What runs them as the repository installed them: never npx, which can fetch any package. */
 const TOOL_RUNNERS = [["pnpm"], ["pnpm", "exec"]];
@@ -318,6 +320,8 @@ const GH_LOOKS = [
   ["issue", "list"],
   ["run", "view"],
   ["run", "list"],
+  // Watching a run's checks until they end, which only looks (#591).
+  ["run", "watch"],
   ["repo", "view"],
   ["repo", "list"],
 ];
