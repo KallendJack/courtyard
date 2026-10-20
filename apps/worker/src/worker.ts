@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   type AllowedCommand,
   AllowedCommandRemoval,
@@ -249,6 +250,11 @@ const repeatForever: Repeat = (everyMs, job) => {
 export const createWorker = (options: {
   env: Environment;
   now?: () => number;
+  /**
+   * Resolves once `ms` have passed, the clock's waits: how long a turn waits for its workspace's
+   * session notes (#601). Tests pass their own, which they let pass.
+   */
+  wait?: (ms: number) => Promise<void>;
   /** The providers to offer. Tests pass their own; otherwise the settings decide. */
   providers?: readonly Provider[];
   /** Starts an update of the live copy. Tests watch it; otherwise Task Scheduler runs it. */
@@ -300,6 +306,8 @@ export const createWorker = (options: {
     previewPorts,
   } = settings.value;
   const now = options.now ?? Date.now;
+  // A wait that never keeps the process alive on its own.
+  const wait = options.wait ?? ((ms: number) => sleep(ms, undefined, { ref: false }));
   const background = options.background ?? (() => {});
   const owner = createOwner({ dataDir, now });
   // Claude first, so a new session starts on its default wherever it's available. Each provider's
@@ -397,6 +405,7 @@ export const createWorker = (options: {
     code,
     connectionsOf: connections.of,
     now,
+    wait,
     notify: (session, event, pullRequest) => {
       background(
         notifications

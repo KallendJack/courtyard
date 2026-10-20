@@ -46,14 +46,24 @@ afterEach(async () => {
  * A worker on the fake, on the test's clock, with the owner logged in: what each turn was told,
  * and each note the errand model was asked for.
  */
-const start = async () => {
+const start = async (
+  options: {
+    /** Each note is written only once this resolves. */
+    notesHeld?: Promise<void>;
+    /** The worker's waits, which the test lets pass. */
+    wait?: (ms: number) => Promise<void>;
+  } = {},
+) => {
   const framings: Framing[] = [];
   const asked: OneOffInput[] = [];
   const fake = createFakeProvider({ delayMs: 0, framed: (framing) => framings.push(framing) });
   const watched: Provider = {
     ...fake,
     answerOnce: async (input) => {
-      if (input.purpose === "session-note") asked.push(input);
+      if (input.purpose === "session-note") {
+        asked.push(input);
+        await options.notesHeld;
+      }
       return fake.answerOnce(input);
     },
   };
@@ -61,6 +71,7 @@ const start = async () => {
     testWorker({
       root,
       now: () => now,
+      ...(options.wait === undefined ? {} : { wait: options.wait }),
       providers: [watched],
       repeat: (_everyMs, job) => {
         jobs.push(job);
@@ -170,6 +181,49 @@ describe("a planning session's note", () => {
     expect(asked).toHaveLength(1);
     expect(notesIn(framings.at(-1))).toContain(
       `(session ${first.id}):\n  Decided: flooring is 18 mm rubber`,
+    );
+  });
+
+  it("waits at most 10 seconds for it: past that, the new session answers without it, and its next turn has it", async () => {
+    let release = () => {};
+    const notesHeld = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waits: number[] = [];
+    let passTime = () => {};
+    let waited = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      waited = resolve;
+    });
+    const { request, framings } = await start({
+      notesHeld,
+      wait: (ms) =>
+        new Promise((resolve) => {
+          waits.push(ms);
+          passTime = resolve;
+          waited();
+        }),
+    });
+    const first = await startSession(request, "decided: rack by the window");
+
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
+      text: "Where were we?",
+      model: FAKE_MODEL,
+    });
+    const second = { id: SessionSummary.parse(await response.json()).id, events: [] };
+    await waiting;
+    expect(waits).toEqual([10_000]);
+    passTime();
+    const answered = await followSession(request, {
+      sessionId: second.id,
+      until: "turn-completed",
+    });
+    expect(notesIn(framings.at(-1))).toBeUndefined();
+
+    release();
+    await send(request, { id: second.id, events: answered }, "And now?");
+    expect(notesIn(framings.at(-1))).toContain(
+      `(session ${first.id}):\n  Decided: rack by the window`,
     );
   });
 

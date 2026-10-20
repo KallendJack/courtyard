@@ -31,6 +31,12 @@ export const NOTES_GIVEN = 5;
 /** The longest a line of a note is kept. */
 const NOTE_LINE_MAX_CHARACTERS = 200;
 
+/**
+ * The longest a turn waits for the notes being written in its workspace: past it, it answers
+ * without them, and they're there for the next turn.
+ */
+export const NOTES_WAIT_MS = 10 * 1000;
+
 /** How long the errand model may take over a note: a few lines shouldn't take long. */
 const NOTE_TIMEOUT_MS = 60 * 1000;
 
@@ -80,6 +86,8 @@ export const createSessionNotes = (options: {
   busy: (id: SessionId) => boolean;
   /** Runs work nobody waits for: the notes another session's start asks for. */
   background: (work: Promise<void>) => void;
+  /** Resolves once `ms` have passed: the clock a turn's wait for notes is timed by. */
+  wait: (ms: number) => Promise<void>;
 }) => {
   const noteOf = async (id: SessionId) => {
     const kept = await readJsonFile(join(options.folderOf(id), NOTE_FILE), SessionNote);
@@ -218,10 +226,13 @@ export const createSessionNotes = (options: {
 
     /**
      * The notes a turn in the session is given: its workspace's latest besides its own, newest
-     * first, once the notes being written there are.
+     * first, once the notes being written there are, or after 10 seconds without them.
      */
     forTurn: async (workspaceId: WorkspaceId, session: SessionId): Promise<FramedNote[]> => {
-      await Promise.all([...(inWorkspace.get(workspaceId) ?? [])]);
+      const writing = [...(inWorkspace.get(workspaceId) ?? [])];
+      if (writing.length > 0) {
+        await Promise.race([Promise.all(writing), options.wait(NOTES_WAIT_MS)]);
+      }
       const notes: FramedNote[] = [];
       for (const each of await planningIn(workspaceId)) {
         if (each.id === session) continue;

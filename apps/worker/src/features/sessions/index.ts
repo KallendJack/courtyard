@@ -718,6 +718,8 @@ export const createSessions = (options: {
   /** A code workspace's connections (#308), which each of its turns is told. */
   connectionsOf: (workspace: Workspace) => Promise<WorkspaceConnections>;
   now: () => number;
+  /** Resolves once `ms` have passed: how long a turn waits for its workspace's notes is timed by it (#601). */
+  wait: (ms: number) => Promise<void>;
   /**
    * Told of an approval asked for, of each turn's end, and of a pull request's checks failing again
    * after a re-run (#356), once recorded, with a code session's pull request as it is then, for the
@@ -835,6 +837,7 @@ export const createSessions = (options: {
     events: (id) => readEvents(id),
     busy: (id) => (running.get(id)?.turn.kind ?? "idle") !== "idle",
     background: options.background,
+    wait: options.wait,
   });
 
   /** The event number the owner has seen a session up to (#334), read from its folder once. */

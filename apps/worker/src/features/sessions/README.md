@@ -49,7 +49,8 @@ Claude, and every page that has the session open gets the answer as it's written
   (`writeQuietNotes`, every five minutes) once the session has been quiet for 30 minutes, or as soon as another
   session starts in its workspace, whichever is first; again once a turn completes after it, from the note so far.
   Only each workspace's latest six sessions are looked at. Every planning turn is given the workspace's latest five
-  notes besides its own session's, a new session's first turn once the notes its start asked for are written, and
+  notes besides its own session's, a new session's first turn once the notes its start asked for are written (at
+most 10 seconds, timed by the `wait` the worker is given; past that it answers without them), and
   the `read_session` tool, which opens an earlier session of the same workspace (its owner messages and answers,
   never another workspace's). What a model is told is in docs/ai-conduct.md, Session notes.
 

@@ -1439,7 +1439,8 @@ another session starts in the workspace, whichever comes first, and written agai
 quiet again, from its note so far. Only a workspace's latest six sessions are looked at, enough for five besides the
 session asking; a session none of whose turns completed leaves none, and a code session never does. The note is kept
 with its session in the data folder (`note.json` beside `session.json`), never in the context folder: it's Courtyard's
-own memory, not the owner's to edit. A new session's first turn waits for the notes its start asked for.
+own memory, not the owner's to edit. A turn waits for the notes being written in its workspace (a new session's first
+turn for those its start asked for) at most 10 seconds; past that it answers without them, and the next turn has them.
 
 The model writing it is told, as a one-off question with no tools:
 
