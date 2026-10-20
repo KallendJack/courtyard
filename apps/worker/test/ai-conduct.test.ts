@@ -1536,6 +1536,42 @@ describe("Things (#149, ADR 0020)", () => {
     );
   });
 
+  it("lists a part's upcoming one, with its price, shop, link and why (#602)", async () => {
+    await withThings();
+    await writeFile(
+      join(things(), "pull-up-bar.md"),
+      "---\nname: Pull-up bar\nstatus: replace\ncondition: Bent\npart of: power-rack\nupcoming: Rogue bar\nupcoming price: £85\nupcoming shop: Rogue\nupcoming link: https://rogue.example/bar\nupcoming why: Fits the rack\n---\n",
+    );
+
+    const { framing } = await firstTurn();
+
+    expect(framing.instructions).toContain(
+      "[T2] Pull-up bar, replace, condition Bent, upcoming Rogue bar (price £85, shop Rogue, link https://rogue.example/bar, why Fits the rack), part of [T1] (things/pull-up-bar.md)",
+    );
+  });
+
+  it("refuses a new part for a part's place, fitting with nothing upcoming, and an upcoming one with no name (#602)", async () => {
+    await withThings();
+    const saver = await savingTurns([
+      [
+        tool({ name: "Rogue pull-up bar", status: "want", part_of: "T1" }),
+        tool({ thing: "T1", fitted: true }),
+        tool({ thing: "T2", upcoming_price: "£85" }),
+      ],
+    ]);
+
+    const reasons = saver.replies.flat().map(({ reply }) => reply.split("\n\n")[0]);
+    expect(reasons).toEqual([
+      await quotedInGuide("<thing> has <part> already", {
+        thing: "[T1] Power rack",
+        part: "[T2] Pull-up bar",
+        label: "T2",
+      }),
+      await quotedInGuide("<thing> has nothing upcoming to fit", { thing: "[T1] Power rack" }),
+      await quotedInGuide("Give the upcoming part's name first."),
+    ]);
+  });
+
   it("tells a provider that reads no files to ask, and says when there are none yet", async () => {
     await withThings();
     const { framing } = await firstTurn({ ...READS_FILES, readsFiles: false });

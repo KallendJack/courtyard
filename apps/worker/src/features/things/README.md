@@ -14,7 +14,10 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - `GET`, `POST /api/workspaces/:id/things/:slug/photo`: its photo.
 - `PUT /api/workspaces/:id/things/:slug/pin`: a part's pin, where the owner dragged it on its Thing's photo (#208).
 - `PUT /api/workspaces/:id/things/:slug/mark`: a part's card on Home (#481), `ThingMark`: `done` clears what it
-  needs and has it again, its history saying "Done: …"; `wanted` makes one the owner has one to replace.
+  needs and has it again, its history saying "Done: …"; `wanted` makes one the owner has one to replace; `fitted` swaps its upcoming one in (#602), the one
+  it had going to its history.
+- `PUT /api/workspaces/:id/things/:slug/upcoming`: a pick from an answer's options (#602), `ThingUpcoming`, kept as
+  the Thing's upcoming one, its history saying "Picked … as upcoming".
 
 ## How it works
 
@@ -25,7 +28,13 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
   (its next step) are kept by the owner's form as they are; a pin goes when its part moves to another Thing or none.
 - Adds, changes and removes one as one change through `context-folder/`, its photo with it.
 - Keeps a photo resized with `sharp` (`keptPhoto`).
-- One turn's Things tool labels the Things as the turn showed them and refuses a change to one changed since.
+- A Thing's **upcoming** one (#602) is its `upcoming …` lines: a new name replaces the last whole, and a Thing the
+  owner has with one coming is one to replace. Fitted (`fitted` on a save) swaps it in: its name as the brand, its
+  price and shop, bought today, had again, and a history line for the one it had ("Fitted DMR V8, replacing Wellgo
+  alloy flats (bought 2025-04)"), all one change with one Undo.
+- One turn's Things tool labels the Things as the turn showed them and refuses a change to one changed since, and a
+  new part whose name ends with that of a part of the same Thing (`oneForEachPlace`: "DMR V8 pedals" beside "Pedals"):
+  a new one of a part that's there is upcoming on it.
 - Add Thing and Edit send a photo picked in the form with the fields, as one multipart form, so both are one change
   with one Undo. These and the photo's route are the only multipart requests besides a message's
   (`THING_PHOTO_ROUTES`).

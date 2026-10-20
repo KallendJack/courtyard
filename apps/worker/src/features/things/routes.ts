@@ -12,6 +12,7 @@ import {
   ThingMark,
   ThingPinMove,
   ThingSlug,
+  ThingUpcoming,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody, readWithFiles } from "../../lib/http.ts";
@@ -37,6 +38,7 @@ const ROUTES = {
   photo: "/workspaces/:id/things/:slug/photo",
   pin: "/workspaces/:id/things/:slug/pin",
   mark: "/workspaces/:id/things/:slug/mark",
+  upcoming: "/workspaces/:id/things/:slug/upcoming",
 } as const;
 
 /**
@@ -99,6 +101,16 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
       return apiError(c, {
         status: 400,
         error: "Only a part has a pin: it marks where the part is on its Thing's photo.",
+      });
+    case "nothing-upcoming":
+      return apiError(c, {
+        status: 409,
+        error: `${refusal.name} has nothing upcoming to fit: pick one first.`,
+      });
+    case "place-taken":
+      return apiError(c, {
+        status: 409,
+        error: "A part like that is there already: pick a new one as upcoming on it.",
       });
     case "changed-since":
       return apiError(c, {
@@ -263,8 +275,35 @@ export const thingRoutes = (
             fields: { status: "have", needs: null },
             ...(needs === undefined ? {} : { history: `Done: ${needs}` }),
           }
-        : { slug: named.slug, fields: { status: "replace" } };
+        : body.value.mark === "fitted"
+          ? { slug: named.slug, fitted: true }
+          : { slug: named.slug, fields: { status: "replace" } };
     return changed(c, named.workspace, await saveThing(named.workspace, edit, { now: now() }), 200);
+  });
+
+  // A pick from Find a replacement's options (#602): the part's upcoming one, its history saying so.
+  routes.put(ROUTES.upcoming, async (c) => {
+    const named = thingIn(c);
+    if (named === undefined) return noSuchThing(c);
+    const body = await readBody(c, ThingUpcoming);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const { name, price, shop, link, why } = body.value;
+    const saved = await saveThing(
+      named.workspace,
+      {
+        slug: named.slug,
+        fields: {
+          upcoming: name,
+          upcomingPrice: price ?? null,
+          upcomingShop: shop ?? null,
+          upcomingLink: link ?? null,
+          upcomingWhy: why ?? null,
+        },
+        history: `Picked ${name} as upcoming`,
+      },
+      { now: now() },
+    );
+    return changed(c, named.workspace, saved, 200);
   });
 
   routes.get(ROUTES.photo, async (c) => {
