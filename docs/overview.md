@@ -79,11 +79,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 
 ### 🗂️ What Courtyard knows
 
-**Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` · `wanted` ·
+**Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` ·
 `status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` · `tidy` · `changes` ·
 `attachments`
 
-**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `wanted` · `status-line` · `documents` ·
+**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `status-line` · `documents` ·
 `changes` · `tidy` · `settings`
 
 You say "swapped the chain today":
@@ -96,8 +96,6 @@ the chain  a time            changed                   Undo
 
 - **Every change to the context folder** goes through `context-folder`, so each one is a commit you can undo.
 - **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
-- **`wanted`** keeps the wanted list: up to three picks for each Thing wanted, found and priced on the web by a short
-  background turn on a cheap model, and the shops you blocked.
 - **`status-line`** builds the line under a code workspace's name, ✓ just done · ● now · ○ next, from its pull
   requests and issues.
 

@@ -17,7 +17,7 @@ photo: "RockShox · 120 mm", with Open and Ask about it.
 
 ## Screens
 
-- **Its header:** the name with its ⋯ (Rename, Change icon, What Courtyard knows, Allowed commands, Notify me, Blocked shops, Archive), the
+- **Its header:** the name with its ⋯ (What Courtyard knows, Rename, Change icon, Notify me, Archive), the
   workspace's photo top right (`header-photo.tsx`: its main Thing's, opening its card; with none, the workspace's icon
   in the same ring, offering to take or pick one), and the pills: + New · History · Things · Docs, each tab once it has
   something, with its count, by the address's hash. The chosen pill leads back to Home.

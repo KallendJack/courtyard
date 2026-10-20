@@ -99,8 +99,6 @@ import { createTidying } from "./features/tidy/index.ts";
 import { tidyRoutes } from "./features/tidy/routes.ts";
 import { createVersionBumps } from "./features/version-bumps/index.ts";
 import { waitingRoutes } from "./features/waiting/routes.ts";
-import { createWanted } from "./features/wanted/index.ts";
-import { wantedRoutes } from "./features/wanted/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
 import {
   archiveWorkspace,
@@ -376,8 +374,6 @@ export const createWorker = (options: {
     paperCommand,
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github, connections });
-  // The wanted list (#245): its picks show in a turn's Things, and a shop blocked finds them again.
-  const wanted = createWanted({ contextDir, dataDir, providers, now, background });
   // The status line under a code workspace's name (#256).
   // Its code lines come from the sessions and Next up, made below.
   const statusLines = createStatusLine({
@@ -395,7 +391,6 @@ export const createWorker = (options: {
     providers,
     contextDir,
     contextFolder,
-    wanted,
     houseSkills,
     matt,
     code,
@@ -614,7 +609,6 @@ export const createWorker = (options: {
       lastQuestion: sessions.lastQuestion,
     }),
   );
-  api.route("/", wantedRoutes({ wanted, contextDir, contextFolder }));
   api.route("/", statusLineRoutes(statusLines));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));

@@ -174,6 +174,7 @@ export {
   PreviewSize,
   StartPreview,
 } from "./lib/preview.ts";
+export { ProductBlock } from "./lib/product.ts";
 export {
   BumpStanding,
   ChangedFile,
@@ -333,20 +334,6 @@ export {
   UsageWindow,
   usageWindowWords,
 } from "./lib/usage.ts";
-export {
-  BlockedShop,
-  BlockedShops,
-  PICK_KINDS,
-  PICKS_MAX,
-  PickKind,
-  ProductBlock,
-  poundsOf,
-  ShopName,
-  ShopUnblock,
-  WantedList,
-  WantedPick,
-  WantedRow,
-} from "./lib/wanted.ts";
 export {
   CONTEXT_FILE_LONG_CHARACTERS,
   CONTEXT_LINE_MAX_CHARACTERS,

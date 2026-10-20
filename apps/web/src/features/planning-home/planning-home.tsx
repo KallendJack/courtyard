@@ -33,7 +33,6 @@ import { Composer } from "../sessions/composer/composer.tsx";
 import { sendMessage, startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
 import { ThingsSection } from "../things/things-section.tsx";
-import { WantedList } from "../wanted/wanted-list.tsx";
 import { KEPT_HOME, loadKeptHome } from "./api.ts";
 import { HeaderPhoto } from "./header-photo.tsx";
 import { HomeNow } from "./home-now.tsx";
@@ -333,18 +332,15 @@ export default function PlanningHome(props: {
           ) : offline !== undefined && (place === "things" || place === "docs") ? (
             <NotKept />
           ) : place === "things" ? (
-            <>
-              <WantedList workspaceId={workspace.id} />
-              {things.kind === "loaded" && (
-                <ThingsSection
-                  workspaceId={workspace.id}
-                  list={things.data}
-                  {...(deleted?.kind === "thing" ? { deleted } : {})}
-                  onUndone={props.onUndone}
-                  adding={addingThing}
-                />
-              )}
-            </>
+            things.kind === "loaded" && (
+              <ThingsSection
+                workspaceId={workspace.id}
+                list={things.data}
+                {...(deleted?.kind === "thing" ? { deleted } : {})}
+                onUndone={props.onUndone}
+                adding={addingThing}
+              />
+            )
           ) : place === "docs" ? (
             documents.kind === "loaded" && (
               <DocumentsSection

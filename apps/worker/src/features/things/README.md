@@ -5,8 +5,7 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 **Example:** you add "Chain" with a photo. It's one file and its resized photo in one change, with one Undo.
 
 - **Uses:** `context-folder/` (each change), `planning-files/`, `attachments/` (a photo from a turn).
-- **Used by:** `sessions/` (the Things tool), `prompts/`, `changes/`, `wanted/` (the Things wanted or to replace),
-  `worker.ts`; in the web app, `features/things/`.
+- **Used by:** `sessions/` (the Things tool), `prompts/`, `changes/`, `worker.ts`; in the web app, `features/things/`.
 
 ## API
 

@@ -81,7 +81,7 @@ const CAPABILITIES: Capabilities = {
 const LABEL = "Claude";
 /** Claude's own default (Opus 5.5 today) at High, as the owner chose it (#247). */
 const STARTING_DEFAULT = { model: ModelId.parse("default"), effort: Effort.parse("high") };
-/** Sonnet at Low, for a short errand such as checking the wanted list's prices (#245). */
+/** Sonnet at Low, for a short errand such as the note a session leaves (#601, ADR 0032). */
 const ERRAND = { model: ModelId.parse("sonnet"), effort: Effort.parse("low") };
 
 /**

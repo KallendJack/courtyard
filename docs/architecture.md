@@ -104,8 +104,6 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`owner-context/`](../apps/worker/src/features/owner-context/README.md): `OWNER.md`.
 - [`workspaces/`](../apps/worker/src/features/workspaces/README.md): the workspaces, their icons and order.
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
-- [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
-  provider's errand model, and blocked shops (#245).
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
   name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
@@ -218,8 +216,6 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled), no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
-  - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one
-    button (#245).
   - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
     name (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
@@ -458,12 +454,6 @@ Where the rest fits:
   (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
   workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
-- **The wanted list** (#245). A planning turn's Things show each wanted one's ★ pick, and its model blocks a shop
-  with the block shop tool, a change to `workspace.json`, after which `wanted/` finds new picks elsewhere. Picks are
-  found and priced outside any session: `wanted/` runs one turn through the provider seam on the first provider's
-  `errand` model (its cheap model and effort: Claude's Sonnet at Low), with web search and only the picks tool, in
-  the background, when the owner taps Find picks, opens the list with prices over a week old (once a day), or blocks
-  a shop.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
@@ -656,8 +646,7 @@ things live only in the worker's memory and go when it restarts.
   ones and code ones each keep their own group.
 - `<workspace>/CONTEXT.md`: a planning workspace's context file; a code workspace has none (ADR 0026).
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
-  `description`, allowlist changes and Paper connection, with the file's name once connected from its page; a
-  planning workspace's blocked shops for its wanted list, #245).
+  `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
@@ -691,8 +680,6 @@ things live only in the worker's memory and go when it restarts.
   resets.
 - `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
   it's there.
-- `wanted/<workspace>.json`: a planning workspace's wanted list's picks, by each Thing's file name, and the day its
-  prices were last checked (#245). Found again on the web, so no change to the context folder.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
