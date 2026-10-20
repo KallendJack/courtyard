@@ -363,11 +363,16 @@ export const createLive = (options: {
           await removeFile(restartFile);
         }
       }
-      if (waiting === undefined) return;
+      const held = waiting;
+      if (held === undefined) return;
+      // Cancelled, run or tapped again while main was read (#586): this look is for an Update
+      // no longer waiting, so it leaves the one there now to the next look.
+      const stillHeld = () => waiting === held;
       const main = await mainNow();
-      if (waiting.kind === "dropped") {
+      if (!stillHeld()) return;
+      if (held.kind === "dropped") {
         // Main has moved on from the build that failed: nothing more to say.
-        if (main.newest?.commit !== waiting.commit) await keepWaiting(undefined);
+        if (main.newest?.commit !== held.commit) await keepWaiting(undefined);
         return;
       }
       // Updated meanwhile (from the PC, say): nothing left to wait for.
@@ -379,8 +384,9 @@ export const createLive = (options: {
           details: main.build.details,
         });
       }
-      if ((await waitingNow(main)) !== null) return;
+      if ((await waitingNow(main)) !== null || !stillHeld()) return;
       const last = await lastUpdate();
+      if (!stillHeld()) return;
       if (last.ok && last.value?.outcome === "running") return keepWaiting(undefined);
       await keepWaiting(undefined);
       const started = await start();
