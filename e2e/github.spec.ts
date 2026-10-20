@@ -381,3 +381,124 @@ for (const [device, viewport] of [
     });
   });
 }
+
+test.describe("New workspace on the unfolded Fold", () => {
+  test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
+
+  // A code workspace from the app (#258, #264; Paper, "Tablet · New workspace, Code"): Code lists
+  // the repos Courtyard's GitHub App reaches, and the one picked comes onto the worker machine.
+  test("New workspace opens with nothing focused, and Code makes a workspace on a picked repo, its name filled in", async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+    await page.goto("/new-workspace");
+    await expect(page.getByRole("heading", { level: 1, name: "New workspace" })).toBeVisible();
+    // On a touch screen the keyboard waits for a tap, so nothing is focused.
+    await expect(page.getByRole("textbox", { name: "Name" })).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
+    const kind = page.getByRole("group", { name: "Kind" });
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    const repos = page.getByRole("group", { name: "Repo" });
+    // Side project's repo is a code workspace's already: greyed, and it can't be picked.
+    await expect(repos.getByRole("radio", { name: /^side-project/ })).toBeDisabled();
+    await expect(repos.locator("label", { hasText: "side-project" })).toContainText("Added");
+    await repos.locator("label", { hasText: "garrett-kitchens" }).click();
+
+    await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Garrett Kitchens");
+    await expect(page.getByRole("textbox", { name: "What's it for?" })).toHaveValue(
+      "Website for a kitchen fitter: reconnect with the client and try new designs",
+    );
+    await page.getByRole("button", { name: "Create Garrett Kitchens" }).click();
+
+    await expect(page).toHaveURL(/\/workspaces\/garrett-kitchens#connections$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Garrett Kitchens" })).toBeVisible();
+    // Its Connections sheet offers Paper right away, its file of the same name picked (#308), and
+    // Close skips it, leaving the workspace with no Paper file.
+    const sheet = page.getByRole("dialog", { name: "Connections" });
+    await expect(
+      sheet
+        .getByRole("group", { name: "Paper file" })
+        .getByRole("radio", { name: "Garrett Kitchens" }),
+    ).toBeChecked();
+    await sheet.getByRole("button", { name: "Close" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page).toHaveURL(/\/workspaces\/garrett-kitchens$/);
+    await expect(page.getByRole("button", { name: /No Paper file/ })).toContainText(
+      "No Paper file",
+    );
+    await page.goto("/new-workspace");
+    await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+    await expect(repos.getByRole("radio", { name: /^garrett-kitchens/ })).toBeDisabled();
+
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+});
+
+// New repo (#391; Paper, "Tablet · New workspace, Code: New repo"): it heads the repo list, and its
+// card fills in what it can: the repo's name from what it's for, private, the owner's account and
+// a Paper file, then what it starts with. Only the tablet's makes one, so the rest stay as they are.
+for (const [device, viewport] of [
+  ["tablet", { width: 950, height: 712 }],
+  ["cover", { width: 400, height: 900 }],
+  ["desktop", { width: 1440, height: 900 }],
+] as const) {
+  test.describe(`New repo on the ${device}`, () => {
+    test.use({ viewport, ...(device === "desktop" ? {} : { hasTouch: true, isMobile: true }) });
+
+    test(
+      device === "tablet"
+        ? "fills in what it can from what it's for, and Create makes the repo and its workspace"
+        : "fills in what it can from what it's for, all of it shown before Create",
+      async ({ page, request }) => {
+        await signIn(request);
+        await page.goto("/new-workspace");
+        const kind = page.getByRole("group", { name: "Kind" });
+        await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+        const repos = page.getByRole("group", { name: "Repo" });
+        const newRepo = repos.locator("label").first();
+        await expect(newRepo).toContainText("New repo");
+        await expect(newRepo).toContainText("On the house standard");
+        await newRepo.click();
+
+        await page
+          .getByRole("textbox", { name: "What's it for?" })
+          .fill("Track servicing for both bikes: parts, intervals and shop visits");
+        const name = page.getByRole("textbox", { name: "Repo name" });
+        await expect(name).toHaveValue("servicing-bikes");
+        await name.fill("bike-servicing");
+        const card = page.getByRole("region", { name: "New repo" });
+        await expect(card.getByRole("button", { name: "Private" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(card).toContainText("octo-owner");
+        await expect(card.getByRole("button", { name: "Paper file · 4 pages" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(card).toContainText("No stack yet: Grill on Next up picks it");
+        const create = page.getByRole("button", { name: "Create bike-servicing" });
+        await expect(create).toBeVisible();
+        await shot(page, `${device}-new-repo`);
+        expect(await pageScrollsSideways(page)).toBe(false);
+
+        if (device === "tablet") {
+          await create.click();
+          await expect(page).toHaveURL(/\/workspaces\/bike-servicing$/);
+          await expect(
+            page.getByRole("heading", { level: 1, name: "Bike Servicing" }),
+          ).toBeVisible();
+          // Its Paper file was made and connected with it.
+          await expect(page.getByRole("button", { name: /Paper · Bike Servicing/ })).toBeVisible();
+          await page.goto("/new-workspace");
+          await kind.locator("label", { has: page.getByRole("radio", { name: "Code" }) }).click();
+          await expect(repos.getByRole("radio", { name: /^bike-servicing/ })).toBeDisabled();
+        }
+
+        await request.post("/api/github/sign-out", { data: {} });
+      },
+    );
+  });
+}
