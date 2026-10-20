@@ -1112,7 +1112,9 @@ With some of the answer written:
 
 Whatever a model writes after that is kept, starting a new paragraph (a recommendation after the question, Get to
 know me's first question after "Anything to add or drop?"), apart from any line that repeats one the answer had already
-written: Claude often writes its whole answer again even so (#127), and the worker drops the repeat (#133).
+written: Claude often writes its whole answer again even so (#127), and the worker drops the repeat (#133). It drops a
+line that says it again in other words too (#613): one whose words, three or more of four letters and over, are mostly
+the answer's already, past the small words every line has. A new line shares few, so it stays.
 
 A refusal shows nothing to the owner, and the model can put it right and call again. The replies show under the
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their

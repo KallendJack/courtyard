@@ -15,4 +15,5 @@ None: the replies reach the browser as an event in the session's stream.
 ## How it works
 
 - Two or three, each a few words on one line, all different, one set per answer.
-- Once they're taken, keeps what the answer writes after them apart from lines it repeats.
+- Once they're taken, keeps what the answer writes after them apart from lines it repeats, word for word or in
+  other words (#613).
