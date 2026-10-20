@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   type AllowedCommand,
   AllowedCommandRemoval,
@@ -217,6 +218,9 @@ const KEEP_UP_EVERY_MS = 10 * 60 * 1000;
 /** How often each provider's plan usage is read while no turn ends (#66), so Home's line stays fresh. */
 const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
 
+/** How often planning sessions are looked at for one quiet long enough to leave its note (#601). */
+const WRITE_NOTES_EVERY_MS = 5 * 60 * 1000;
+
 /** Runs a job now and every `everyMs`, never overlapping itself. */
 export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
 
@@ -246,6 +250,11 @@ const repeatForever: Repeat = (everyMs, job) => {
 export const createWorker = (options: {
   env: Environment;
   now?: () => number;
+  /**
+   * Resolves once `ms` have passed, the clock's waits: how long a turn waits for its workspace's
+   * session notes (#601). Tests pass their own, which they let pass.
+   */
+  wait?: (ms: number) => Promise<void>;
   /** The providers to offer. Tests pass their own; otherwise the settings decide. */
   providers?: readonly Provider[];
   /** Starts an update of the live copy. Tests watch it; otherwise Task Scheduler runs it. */
@@ -297,6 +306,8 @@ export const createWorker = (options: {
     previewPorts,
   } = settings.value;
   const now = options.now ?? Date.now;
+  // A wait that never keeps the process alive on its own.
+  const wait = options.wait ?? ((ms: number) => sleep(ms, undefined, { ref: false }));
   const background = options.background ?? (() => {});
   const owner = createOwner({ dataDir, now });
   // Claude first, so a new session starts on its default wherever it's available. Each provider's
@@ -394,6 +405,7 @@ export const createWorker = (options: {
     code,
     connectionsOf: connections.of,
     now,
+    wait,
     notify: (session, event, pullRequest) => {
       background(
         notifications
@@ -539,6 +551,8 @@ export const createWorker = (options: {
   // An Update tapped before it could run runs itself once main has passed and sessions are free (#186).
   repeat(WATCH_UPDATE_EVERY_MS, live.watch);
   repeat(READ_USAGE_EVERY_MS, () => usage.read());
+  // Each planning session quiet for half an hour leaves its note for the next ones (#601).
+  repeat(WRITE_NOTES_EVERY_MS, sessions.writeQuietNotes);
 
   /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {

@@ -1666,6 +1666,59 @@ describe("Courtyard's tools on a Codex turn", () => {
     ]);
   });
 
+  it("opens an earlier session of the workspace through the worker, and no other workspace's (#601)", async () => {
+    await mkdir(join(root, "context", "padel"), { recursive: true });
+    const sessions: Record<string, string> = {};
+    const answers: Message[] = [];
+    const codex = standIn({
+      turn: async (turn) => {
+        for (const session of [sessions.earlier, sessions.elsewhere]) {
+          answers.push(await turn.call("read_session", { session }));
+        }
+        delta(turn, "Done.");
+        turn.complete("completed");
+      },
+    });
+    const provider = createCodexProvider({
+      dataDir: join(root, "data"),
+      startAppServer: codex.startAppServer,
+    });
+    // The fake writes each session's note, on its errand model: Codex has none.
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 }), provider] }),
+    );
+    const startIn = async (workspace: string, text: string, model: unknown) => {
+      const response = await postJson(request, `/api/workspaces/${workspace}/sessions`, {
+        text,
+        model,
+      });
+      const { id } = SessionSummary.parse(await response.json());
+      await followSession(request, { sessionId: id, until: "turn-completed" });
+      return id;
+    };
+    const FAKE = { provider: "fake", model: "echo" };
+    sessions.earlier = await startIn("garage-gym", "decided: rack by the window", FAKE);
+    sessions.elsewhere = await startIn("padel", "decided: lessons on Thursdays", FAKE);
+
+    await startIn("garage-gym", "Where did the rack go?", {
+      provider: "codex",
+      model: "gpt-6.1-sol",
+    });
+
+    expect(answerOf(answers[0])).toMatchObject({
+      success: true,
+      text: expect.stringContaining(
+        "<conversation>\nOwner: decided: rack by the window\n\nYou: You said: decided: rack by the window\n</conversation>",
+      ),
+    });
+    const refused = `There's no earlier session "${sessions.elsewhere}" in this workspace: the session notes give their ids.`;
+    expect(answerOf(answers[1])).toEqual({
+      success: false,
+      text: refused,
+      items: [{ type: "inputText", text: refused }],
+    });
+  });
+
   it("refuses a call for a turn or a thread it doesn't recognise, and a tool it didn't offer", async () => {
     const { answers, events } = await turnCalling([
       { tool: "read_file", args: { path: "notes/rack.md" }, ids: { turnId: "another-turn" } },

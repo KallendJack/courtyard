@@ -473,6 +473,13 @@ _Avoid_: unread, notification, new message
 The complete, ordered record of a session's events, which is only ever added to.
 _Avoid_: history, transcript
 
+**Session note**:
+The few lines a planning session leaves for the next sessions in its workspace (#601, ADR 0032): what was done, what
+was decided, and what's next. Written by a cheap model once the session has been quiet for half an hour or another
+session starts, and again if it carries on; kept with the session in the data folder, never in the context folder.
+Every planning turn gets the workspace's latest five.
+_Avoid_: summary, memory, recap, the Lead's notes (its lines in the Lead's chat)
+
 **Rich block**:
 A table, chart, diagram or floor plan in an answer or a document that Courtyard draws itself from what the model
 wrote, never HTML from a model (ADR 0021).

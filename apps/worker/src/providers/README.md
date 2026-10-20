@@ -30,8 +30,8 @@ None of its own: its models show on `sessions/`' `GET /api/providers`.
   they can't be used for a few seconds, the last good one through a check that gets no answer in time, and a
   finished turn counts as a good check.
 - **Errands** (#245): a provider names its cheap model and effort for a short background errand (`errand`), such
-  as the note a session leaves (#601, ADR 0032): Claude's Sonnet at Low, the fake's own model at Low; Codex has none.
-  Nothing runs on it since the wanted list's price checks went (#600).
+  as the note a planning session leaves (#601, ADR 0032): Claude's Sonnet at Low, the fake's own model at Low; Codex
+  has none, so a worker with only Codex writes no notes.
 - **Plan usage** (#66): Claude reads it with the Agent SDK's experimental usage call (checked with Zod, as it may
   change) and hears each `rate_limit_event` a turn sees; Codex reads its rate limits and hears
   `account/rateLimits/updated`. A sign-in without plan limits (an API key) reads as none.

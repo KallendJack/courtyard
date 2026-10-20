@@ -43,6 +43,16 @@ Claude, and every page that has the session open gets the answer as it's written
 - **Whose turn.** Its list of a workspace's sessions says whose turn it is in each (#179), and puts `waiting/`'s say
   on each one (`waiting`), keeping each session's latest answer in memory (from its event log once recovered, then
   as each is written).
+- **Session notes** (#601, ADR 0032; `notes.ts`). Each planning session leaves a note for the next ones in its
+  workspace, done · decided · next, kept beside its `session.json` as `note.json`, never in the context folder. It's
+  one question to the first errand model with room (`providers/`' `errandModel`), asked by the worker's repeating job
+  (`writeQuietNotes`, every five minutes) once the session has been quiet for 30 minutes, or as soon as another
+  session starts in its workspace, whichever is first; again once a turn completes after it, from the note so far.
+  Only each workspace's latest six sessions are looked at. Every planning turn is given the workspace's latest five
+  notes besides its own session's, a new session's first turn once the notes its start asked for are written (at
+most 10 seconds, timed by the `wait` the worker is given; past that it answers without them), and
+  the `read_session` tool, which opens an earlier session of the same workspace (its owner messages and answers,
+  never another workspace's). What a model is told is in docs/ai-conduct.md, Session notes.
 
 ### A session's pull request
 

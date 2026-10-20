@@ -48,6 +48,11 @@ export type ExpectedSave =
 export type Turn = {
   /** What the owner says. */
   readonly say: string;
+  /**
+   * It starts a new session in the workspace, as the owner coming back another day (#601), so
+   * the session before it leaves its note; otherwise it carries on the scenario's session.
+   */
+  readonly newSession?: true;
   /** The saves this message should end with; none means it saves nothing. */
   readonly expect: readonly ExpectedSave[];
   /** The answer should ask the owner something rather than guess: a question with these words. */
@@ -513,6 +518,26 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Pumping the tyres up for tomorrow's ride. What should I put in them?",
         expect: [],
         says: ["21", "23"],
+        avoids: PRESSURE_ASKED,
+      },
+    ],
+  },
+  {
+    name: "planning-earlier-session",
+    rule: "a tyre pressure decided in one session, its save undone so only the session's note has it, is used in the next session, not asked again (#601)",
+    ...TRAIL_BIKE,
+    turns: [
+      {
+        say: "Did a few test laps today and settled the tyres: 19 psi front and 21 rear from now on. The old 22/24 felt skittish on the roots.",
+        expect: [{ action: "add", section: ["facts", "plans"], words: ["19", "21"] }],
+        // Only the note keeps it now, as a decision the owner never had saved would be.
+        undoSaves: true,
+      },
+      {
+        say: "Pumping the tyres up for tomorrow's ride. What should I put in them?",
+        newSession: true,
+        expect: [],
+        says: ["19", "21"],
         avoids: PRESSURE_ASKED,
       },
     ],

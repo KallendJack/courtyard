@@ -19,6 +19,7 @@ import {
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
   PREVIEW_TOOL_NAME,
+  READ_SESSION_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   THING_TOOL_NAME,
@@ -298,6 +299,49 @@ const scriptedTitle = (message: string): Result<{ title: string }, FailureReason
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
   return ok({ title });
+};
+
+const NOTE_LINE = /\b(done|decided|next): ([^;\n]+)/gi;
+
+/**
+ * The note a session's conversation scripts (#601): each line as the message last names it,
+ * "done: …", "decided: …" and "next: …" ending at a semicolon or the line's end, so the
+ * conversation's words win over the note it carries on from; empty for one it doesn't name. "no
+ * note please" fails on purpose.
+ */
+const scriptedNote = (message: string): Result<Record<string, string>, FailureReason> => {
+  if (/no note please/i.test(message)) {
+    return err({
+      kind: "unknown",
+      message: "The fake didn't write a note, because it was asked not to.",
+    });
+  }
+  const note: Record<string, string> = { done: "", decided: "", next: "" };
+  for (const [, line = "", text = ""] of message.matchAll(NOTE_LINE)) {
+    note[line.toLowerCase()] = text.trim();
+  }
+  return ok(note);
+};
+
+const READ_SESSION = /^read session: (\S+)$/i;
+
+/**
+ * What a message scripts the read session tool doing (#601), one per line: "read session: <id>".
+ * Each reply's words go in its answer, "Session: <reply>", so what the model was told can be seen.
+ */
+const scriptedSessionReads = async (
+  message: string,
+  callTool: TurnInput["callTool"],
+): Promise<string> => {
+  const said: string[] = [];
+  for (const line of message.split("\n")) {
+    const [, session] = READ_SESSION.exec(line.trim()) ?? [];
+    if (session === undefined) continue;
+    const reply = await callTool({ name: READ_SESSION_TOOL_NAME, input: { session } });
+    const words = reply.content.flatMap((part) => (part.kind === "text" ? [part.text] : []));
+    said.push(`Session: ${words.join(" ")}\n\n`);
+  }
+  return said.join("");
 };
 
 const POINT_AT = /point at (\S+) line (\d+)/gi;
@@ -680,7 +724,9 @@ const pause = (ms: number, signal: AbortSignal) =>
  * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`), and "preview
  * screenshot: <path> <size>" looks at the session's preview (see `scriptedPreview`). To a Lead,
- * "pause" pauses the build order (see `scriptedBuildOrder`).
+ * "pause" pauses the build order (see `scriptedBuildOrder`). "read session: <id>" opens an
+ * earlier session (see `scriptedSessionReads`), and a session's note follows its conversation
+ * (see `scriptedNote`).
  */
 export const createFakeProvider = (
   options: {
@@ -803,6 +849,9 @@ export const createFakeProvider = (
       const looked = framing.tools.some((tool) => tool.name === PREVIEW_TOOL_NAME)
         ? await scriptedPreview(last, callTool)
         : "";
+      const opened = framing.tools.some((tool) => tool.name === READ_SESSION_TOOL_NAME)
+        ? await scriptedSessionReads(last, callTool)
+        : "";
       // "wait for more" waits for what the owner adds while it answers (#252).
       if (added !== null && /^wait for more$/im.test(last)) {
         const more = await added.next();
@@ -814,7 +863,9 @@ export const createFakeProvider = (
       // builder does that needs them, so it waits on them rather than going Stuck.
       const asks = /^Build issue #/.test(last) ? " Which part should I start with?" : "";
       const said = last === "" ? "" : `You said: ${last}${asks}`;
-      for (const word of `${coded}${drew}${looked}${saw}${said}`.trimEnd().split(/(?<= )/)) {
+      for (const word of `${coded}${drew}${looked}${opened}${saw}${said}`
+        .trimEnd()
+        .split(/(?<= )/)) {
         if (delayMs > 0) await pause(delayMs, signal);
         if (signal.aborted) return ok(null);
         if (added !== null) await noted({ added, taken: added.waiting(), emit });
@@ -837,6 +888,8 @@ export const createFakeProvider = (
           return scriptedTitle(message);
         case "quick-question":
           return scriptedQuickAnswer(message);
+        case "session-note":
+          return scriptedNote(message);
       }
     },
   };

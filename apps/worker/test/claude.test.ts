@@ -2521,6 +2521,47 @@ describe("the save tool on a Claude turn", () => {
     expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: stale }] });
   });
 
+  it("hands the read session tool's call over by name, and gives Claude the session the worker opened (#601)", async () => {
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    const handed: unknown[] = [];
+    const READ_SESSION: TurnTool = {
+      name: "read_session",
+      description: "Opens an earlier session.",
+      input: { session: z.string() },
+    };
+    const opened =
+      'The session "Rack position", last used Monday, 19 October 2026: what the owner said and your answers, oldest first.\n\n<conversation>\nOwner: Rack by the window.\n\nYou: Good spot.\n</conversation>';
+
+    await runTurn(claudeCode, {
+      framing: framingWith([SAVE_TOOL, READ_SESSION]),
+      callTool: async (call) => {
+        handed.push(call);
+        return { ok: true, content: [{ kind: "text", text: opened }] };
+      },
+    });
+
+    const options = runs[0]?.options;
+    const server = options?.mcpServers?.courtyard;
+    if (!options || server?.type !== "sdk") throw new Error("no in-process server");
+    expect(
+      await preToolUse(options, { name: "mcp__courtyard__read_session", input: {} }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverSide);
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(clientSide);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual([
+      "save_to_context",
+      "read_session",
+    ]);
+    const input = { session: "6f1c2c8e-5f4b-4b39-9d8e-1a2b3c4d5e6f" };
+    const result = await client.callTool({ name: "read_session", arguments: input });
+    await client.close();
+
+    expect(handed).toEqual([{ name: "read_session", input }]);
+    expect(result).toMatchObject({ isError: false, content: [{ type: "text", text: opened }] });
+  });
+
   it("hands a Thing save over as Claude sent it, photo number and all, and gives back the worker's answer", async () => {
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
     const handed: unknown[] = [];
