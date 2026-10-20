@@ -78,10 +78,11 @@ Three places only (see the spec's testing decisions): the worker's API in-proces
 against a real worker running the fake provider. Test behaviour through those; never import a module's internals.
 Real temporary folders and real git, not mocks of them. Write the failing test first when fixing a bug.
 
-Before pushing, run `pnpm check`, `pnpm typecheck`, `pnpm test` and the e2e specs for what you changed
-(`pnpm exec playwright test e2e/<spec>.spec.ts`); the full e2e suite runs in CI on every PR, across four shards, so
-don't run it locally (it takes about 8 minutes of the machine's one build turn). `pnpm verify` stays for a full local
-run when you need one.
+Before pushing, run `pnpm check`, `pnpm typecheck` and the unit test files and e2e specs for what you changed, naming
+each (`pnpm -C apps/worker exec vitest run test/<file>.test.ts`, `pnpm exec playwright test e2e/<spec>.spec.ts`).
+CI runs the full unit and e2e suites on every PR, across four shards, so don't run them locally: they take the
+machine's one build turn for many minutes, and a Lead's builder is refused them (#589). `pnpm verify` stays for a
+full local run when the owner asks for one.
 
 ## Safety
 

@@ -923,9 +923,12 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       { number: 23, title: "Waits its turn", milestone: "4 · Code workspaces" },
     ];
 
+    /** The check each builder runs: its own test file, as a builder may (#589). */
+    const CHECK = "pnpm -C apps/worker exec vitest run test/lead.test.ts";
+
     /**
-     * A provider whose builders each run `pnpm verify`, held until the test lets them end, or,
-     * for an issue titled "Starts a task", start a task that runs on; the Lead's turns just answer.
+     * A provider whose builders each run `CHECK`, held until the test lets them end, or, for an
+     * issue titled "Starts a task", start a task that runs on; the Lead's turns just answer.
      */
     const checking = () => {
       const { provider: coder } = codingProvider([]);
@@ -943,12 +946,12 @@ describe("builders that stop, fail or go quiet (#474)", () => {
             await input.emit(started.ok ? started.value : started.error);
             return ok(null);
           }
-          if (!(await code.run("pnpm verify")).ok) return ok(null);
+          if (!(await code.run(CHECK)).ok) return ok(null);
           await new Promise<void>((end) => {
             held.push(end);
             input.signal.addEventListener("abort", () => end(), { once: true });
           });
-          code.ran("pnpm verify");
+          code.ran(CHECK);
           await input.emit("Done.");
           return ok(null);
         },

@@ -149,9 +149,12 @@ const contained = (text: string) => text.replace(CLOSING_MARKER, "<\\/$1>");
 /** A name on one line, in quotes it can't close. */
 const quoted = (name: string) => JSON.stringify(name.replace(/\s+/g, " ").trim());
 
-/** What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007). */
-const CODING_ACCESS =
-  "You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and biome check (with pnpm exec, never npx), the repository's own scripts and tests with node (node <script>, node --test naming its test files), git and gh commands that only look, gh run download with -D naming a folder in your working directory that git ignores, adding and committing on your branch, fetching origin and merging its branches into yours (git merge origin/main), pushing it (git push -u origin HEAD), opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish, unless it should outlive your turn (a dev server, a slow test run): run that in the background, and Courtyard runs it as a task, at most three at once, and tells you when it finishes; the dev and start scripts run only that way. A command may go over several lines. Give a pull request's or issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $ stay as written (--body '...', each ' in it written '\\''), never through $(...) or a heredoc, which never run.";
+/**
+ * What a model in a code session may do (docs/ai-conduct.md, Coding; ADR 0007), saying what runs
+ * in the background: a Lead's builder runs its checks in its turn (#589).
+ */
+const codingAccess = (builder: boolean) =>
+  `You're working on your own session branch of this workspace's repository, checked out in its own folder: your working directory. Read, change and add files there as the work needs, and run the commands this workspace allows without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit and biome check (with pnpm exec, never npx), the repository's own scripts and tests with node (node <script>, node --test naming its test files), git and gh commands that only look, gh run download with -D naming a folder in your working directory that git ignores, adding and committing on your branch, fetching origin and merging its branches into yours (git merge origin/main), pushing it (git push -u origin HEAD), opening or updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a time, since a command that chains or substitutes another never runs, and run each in the foreground, waiting for it to finish, unless it should outlive your turn ${builder ? "(a dev server or a preview)" : "(a dev server, a slow test run)"}: run that in the background, and Courtyard runs it as a task, at most three at once, and tells you when it finishes; the dev and start scripts run only that way. A command may go over several lines. Give a pull request's or issue's body, or a commit message, as one quoted argument, line breaks and all, in single quotes so backticks and $ stay as written (--body '...', each ' in it written '\\''), never through $(...) or a heredoc, which never run.`;
 
 /**
  * How a model in a code session works, the house process (docs/ai-conduct.md, Coding; #205),
@@ -160,10 +163,24 @@ const CODING_ACCESS =
 const HOUSE_PROCESS =
   "Work the way this repository does: its own instructions (its AGENTS.md or CLAUDE.md) win where they say more than this. Every change works from an issue: when the owner asks for one without an issue, file it first where the repository's docs/agents/issue-tracker.md says its work lives; where it says nothing, with gh issue create, in a milestone, with a category label and one triage label (the repository's docs/agents/ say which). Have the pull request close it, or mark it done in that tracker. When a claim on an issue names your session branch, it was made for you, and it's released for you if the session stops before its pull request, so don't claim that issue again or say Stopped on it. Build test first with the tdd skill, or with diagnosing-bugs for a bug whose cause you don't know yet. Run the narrowest check that proves a change first (one test file, one spec, one test by its name), and before you push for a pull request, the quick checks (lint, types, unit tests) and the browser tests for what you changed: the full browser suite runs in CI on every pull request (where a repository has no CI, run everything once instead). When a check fails in CI, read its results first (gh run view --log-failed, or gh run download into a folder git ignores) rather than running everything again. Hand parts of the work to helpers (sub-agents) only when a skill you're using calls for them or the owner asks: they work in your working directory under these same rules, at most three at once, and your turn goes on once they've all reported back. Give each helper that writes code a worktree and branch of its own (an isolated worktree) so they don't edit over each other: it starts from your branch's last commit, so commit first, and its branch is merged back into yours when it finishes. Base a pull request on the default branch, never on another pull request's branch. Before you open or update one, load the pr skill and write its description with it. You needn't wait on its checks: when one fails, you're told which, so you can fix it on your branch. When you tell the owner about issues or pull requests, name each by what it is in a few words (\"the PR page refreshes itself\"), with its number after it only where a link helps; never a bare list of numbers.";
 
-/** What a model may do with the workspace, and in a code session how it works there too. */
-const accessFor = (capabilities: Capabilities, mode: WorkspaceMode) => {
+/**
+ * What a Lead's builder is told of its checks (docs/ai-conduct.md, Coding; #589, ADR 0031), after
+ * the house process.
+ */
+const BUILDER_CHECKS =
+  "You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time: the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each file. CI runs the full suite, the full browser suite and verify on your pull request, so they don't run here, nor does a test run naming no file. A command still running after 10 minutes is stopped, so narrow a check that slow to fewer files.";
+
+/**
+ * What a model may do with the workspace, and in a code session how it works there too; a Lead's
+ * builder is told how it checks (#589).
+ */
+const accessFor = (capabilities: Capabilities, mode: WorkspaceMode, builder: boolean) => {
   // Only a provider that codes works in a code workspace (ADR 0007).
-  if (mode === "code" && capabilities.codes) return [CODING_ACCESS, HOUSE_PROCESS];
+  if (mode === "code" && capabilities.codes) {
+    return builder
+      ? [codingAccess(true), HOUSE_PROCESS, BUILDER_CHECKS]
+      : [codingAccess(false), HOUSE_PROCESS];
+  }
   return [
     capabilities.readsFiles
       ? "You can read and search the files in this workspace's folder, your working directory, images included. You can't change anything or run commands. Read files when they help you answer."
@@ -737,7 +754,7 @@ const WAITS_FOR_THE_OWNER =
 /**
  * Courtyard's coding tools as a model reads them (docs/ai-conduct.md, Courtyard's coding tools;
  * #248), for a provider that codes through Courtyard: what each does, and what waits for the
- * owner. The access line (`CODING_ACCESS`) says which commands run without asking.
+ * owner. The access line (`codingAccess`) says which commands run without asking.
  */
 const CODE_TOOLS: Omit<CodeTools, "helperInstructions"> = {
   run: {
@@ -1013,6 +1030,8 @@ const instructionsFor = (turn: {
   documents: boolean;
   things: boolean;
   lead: LeadBrief | undefined;
+  /** It's one of the Lead's builders (#589). */
+  builder: boolean;
   /** It offers the preview screenshot tool (#183). */
   previews: boolean;
 }) => {
@@ -1022,7 +1041,7 @@ const instructionsFor = (turn: {
   const hasSections = workspace.contextFile !== null || fromOwner.shared === "all";
   return [
     `You're helping the owner of Courtyard with one area of their life: their ${quoted(workspace.name)} workspace.`,
-    ...accessFor(capabilities, workspace.mode),
+    ...accessFor(capabilities, workspace.mode, turn.builder),
     todayIs(turn.now),
     `When you don't know something about the owner's life or this workspace, say so and ask, rather than guessing. ${ANSWER_FORMAT}`,
     RICH_BLOCKS,
@@ -1510,6 +1529,8 @@ export const framingFor = (turn: {
   now: number;
   /** In a code workspace's Lead (#347), the build order as the worker has it. */
   lead?: LeadBrief;
+  /** It's one of the Lead's builders, which checks only what it changed (#589). */
+  builder?: boolean;
 }): Framing => {
   const said = conversationOf(turn.events);
   const newest = said.at(-1);
@@ -1529,6 +1550,7 @@ export const framingFor = (turn: {
   const instructions = instructionsFor({
     ...turn,
     lead: turn.lead,
+    builder: turn.builder === true,
     saves,
     previews,
     suggests,
@@ -1890,6 +1912,10 @@ export const codeRefusalReason = (refusal: CodeRefusal) => {
       return "That command couldn't be read: check its quotes close.";
     case "task-only":
       return "Run it as a task: the dev and start scripts run on after your turn, so start one in the background and you'll be told when it finishes.";
+    case "check-in-turn":
+      return "Run your checks in your turn, in the foreground, where you'll see how they went: only a dev server or a preview runs in the background.";
+    case "ci-runs-it":
+      return "CI runs the full suite on your pull request, so the full test run, the full browser suite and verify don't run here. Run the repository's lint and type checks and the test files and specs for what you changed, naming each file.";
     case "off-branch":
       return `Committing, pushing and opening your pull request work only on your session branch, ${refusal.branch}, and the worktree isn't on it now, so that didn't run.`;
     case "unfiled": {

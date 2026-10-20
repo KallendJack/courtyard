@@ -24,7 +24,9 @@ the Reply box with its last line, and if it crashes, a turn starts telling Claud
   with its output going straight to `tasks/<task>.log` in the session's folder. It ends the command's whole process
   tree when told "stop", or when the worker goes (its input closes), so no task outlives the worker.
 - **At most three** run in a session at once (`TASKS_AT_ONCE`); a fourth isn't started.
-- **Its environment** is a code session's command's, without the builds lock's "held" mark: a heavy check run as a
-  task takes its own place in the machine's builds lock.
+- **Its environment** is a code session's command's. A heavy check run as a task has taken its place in the builds
+  queue first (#589, `code/builds.ts`), kept until it ends, so it has the builds lock's "held" mark; anything else
+  hasn't, so a heavy check it runs takes its own place.
+- **A Lead's builder** runs only dev servers and previews as tasks: its checks run in its turn (#589).
 - **How it ended** is passed (exit code 0), failed (its exit code), or stopped: by the owner, as its session ended
   (its pull request merged or closed, deleted, a fresh start), or by a restart, which the next worker records.

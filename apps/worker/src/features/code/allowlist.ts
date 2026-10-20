@@ -224,6 +224,73 @@ export const isBuild = (command: string) => {
   return BUILD_SCRIPTS.has(first ?? "") || startsBuildTool(picked);
 };
 
+/** A test file, as a test tool or a package's test script is given one: `test/live.test.ts`. */
+const TEST_FILE = /\.(?:[cm]?[jt]sx?)$/;
+/** The test tools' options that take a value, which is never a test file of the run's. */
+const TAKES_VALUE = new Set([
+  "--config",
+  "-c",
+  "--project",
+  "--reporter",
+  "--root",
+  "--dir",
+  "--shard",
+  "--workers",
+  "-j",
+  "-t",
+  "--testNamePattern",
+  "--grep",
+  "-g",
+]);
+
+/** Whether a check's words name a test file to run, past its options and their values. */
+const namesTestFiles = (words: readonly string[]) => {
+  for (let at = 0; at < words.length; at += 1) {
+    const word = words[at] ?? "";
+    if (word.startsWith("-")) {
+      if (TAKES_VALUE.has(word)) at += 1;
+      continue;
+    }
+    if (TEST_FILE.test(word)) return true;
+  }
+  return false;
+};
+
+/** Whether a package script checks everything: `verify`, or `test` or `e2e` naming no file. */
+const scriptChecksEverything = (script: string, rest: readonly string[]) =>
+  script === "verify" || ((script === "test" || script === "e2e") && !namesTestFiles(rest));
+
+/** Whether a test tool's run checks everything: `vitest` or `playwright test` naming no file. */
+const toolChecksEverything = (words: readonly string[]) => {
+  const [tool, mode, ...rest] = words;
+  if (tool === "vitest") return !namesTestFiles(mode === "run" ? rest : words.slice(1));
+  return tool === "playwright" && mode === "test" && !namesTestFiles(rest);
+};
+
+/**
+ * Whether a heavy check runs a whole suite (#589): a `verify` package script, or a `test` or `e2e`
+ * one, or `vitest` or `playwright test`, that names no test file, at the root or in any package
+ * pnpm's workspace options pick. A Lead's builder leaves those to CI.
+ */
+export const checksEverything = (command: string) => {
+  const read = wordsOf(command);
+  if (!read.ok || !isBuild(command)) return false;
+  const [runner, ...rest] = read.value;
+  if (runner === "npm") {
+    const [first, ...after] = rest;
+    if (first === "test") return scriptChecksEverything("test", after);
+    return first === "run" && scriptChecksEverything(after[0] ?? "", after.slice(1));
+  }
+  if (runner === "npx") return toolChecksEverything(rest);
+  if (runner !== "pnpm") return toolChecksEverything(read.value);
+  const picked = pickedCommand(rest)?.slice(1) ?? rest;
+  const [first, ...after] = picked;
+  if (first === "exec") return toolChecksEverything(after);
+  if (first === "run") return scriptChecksEverything(after[0] ?? "", after.slice(1));
+  if (BUILD_SCRIPTS.has(first ?? "")) return scriptChecksEverything(first ?? "", after);
+  return toolChecksEverything(picked);
+};
+
 /** Git's commands that only look. */
 const GIT_LOOKS = [
   "status",

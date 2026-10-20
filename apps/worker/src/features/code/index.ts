@@ -23,7 +23,9 @@ import {
   allowsAll,
   alwaysOffer,
   type CommandRule,
+  checksEverything,
   type IssueGap,
+  isBuild,
   issueGapsIn,
   isTaskOnly,
   reachesOut,
@@ -147,6 +149,10 @@ export type CodeRefusal =
   | { readonly kind: "off-branch"; readonly branch: string }
   /** The dev or start script, run in the foreground: it runs only as a task (#182). */
   | { readonly kind: "task-only" }
+  /** A Lead's builder's heavy check asked to run as a task: it runs in the turn (#589). */
+  | { readonly kind: "check-in-turn" }
+  /** A Lead's builder's check of a whole suite, which CI runs (#589). */
+  | { readonly kind: "ci-runs-it" }
   /** The owner denied the approval it needed (#171). */
   | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" }
   /** `gh issue create` filing an issue without a milestone, a category or one triage label (#324). */
@@ -181,11 +187,20 @@ export const commandAllowed = async (
     readonly allowlist: readonly CommandRule[];
     /** The command is to run as a task (#182), so the dev and start scripts may. */
     readonly asTask?: boolean;
+    /**
+     * It's a Lead's builder (#589): it runs its heavy checks in the turn, and none of a whole
+     * suite, which CI runs.
+     */
+    readonly builder?: boolean;
   },
   command: string,
 ): Promise<Result<null, CodeRefusal | CommandApproval>> => {
   const words = wordsOf(command);
   if (!words.ok) return err({ kind: words.error });
+  if (session.builder === true && isBuild(command)) {
+    if (session.asTask === true) return err({ kind: "check-in-turn" });
+    if (checksEverything(command)) return err({ kind: "ci-runs-it" });
+  }
   const [gap, ...gaps] = issueGapsIn(words.value);
   if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
   const work = { branch: session.branch, pullRequest: session.pullRequest };

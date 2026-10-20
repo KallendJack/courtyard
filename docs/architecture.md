@@ -519,7 +519,15 @@ Where the rest fits:
   builds on the machine. The build at the queue's front waits for a place in the lock before it starts, still
   `waiting-for-build` (with how many places others hold) while a build outside Courtyard, such as a helper's
   `pnpm verify`, holds them all. A session's commands get `COURTYARD_BUILD_HELD=1`, since each of its builds runs only
-  once it holds a place, so the repo's own scripts it runs go straight through rather than wait on that place.
+  once it holds a place, so the repo's own scripts it runs go straight through rather than wait on that place. A
+  heavy check run as a task takes its place the same way before it starts (#589), at the root or in a package, and
+  keeps it until the task ends, its commands told it's held; so no check from anywhere gets round the lock.
+- **A Lead's builder checks only what it changed** (#589, ADR 0031). Its session's `byLead` mark tells `code/`'s
+  command check (`commandAllowed`'s `builder`) to refuse, before anyone is asked, a heavy check asked for as a task
+  (`check-in-turn`: checks run in the turn, where the provider's own 10-minute limit on a command holds) and one of a
+  whole suite (`ci-runs-it`: `checksEverything`, a `verify` script, or a `test` or `e2e` script, `vitest` or
+  `playwright test` naming no test file), each refusal saying why; and its framing tells it so (`prompts/`). The
+  owner's own sessions are unchanged.
 - **Helpers** (#117, ADR 0027). A code turn's model can start helpers, its provider's own sub-agents, through
   `CodeTurn.helper`: `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
   running (recording it as `waiting` until then, and again once it has one), and hands back a `HelperTurn`, the

@@ -12,6 +12,8 @@ export const BUILD_HELD_ENV = HELD_ENV;
 type Build = {
   readonly id: SessionId;
   readonly command: string;
+  /** It runs as a task (#589), so it keeps its place past its turn, until the task ends. */
+  readonly task: boolean;
   /** Its place in the machine's lock, once taken. */
   place: Place | null;
   /** Ends its wait for a place, when it leaves the queue before it has one. */
@@ -22,6 +24,7 @@ type Build = {
 type Waiting = {
   readonly id: SessionId;
   readonly command: string;
+  readonly task: boolean;
   readonly signal: AbortSignal;
   readonly start: (started: boolean) => void;
   readonly ahead: (ahead: number) => void;
@@ -78,6 +81,7 @@ export const createBuildsQueue = (lock: BuildsLock) => {
       const build: Build = {
         id: next.id,
         command: next.command,
+        task: next.task,
         place: null,
         cancel: new AbortController(),
       };
@@ -111,12 +115,15 @@ export const createBuildsQueue = (lock: BuildsLock) => {
       command: string;
       signal: AbortSignal;
       ahead: (ahead: number) => void;
+      /** It runs as a task (#589): it keeps its place until `taskEnded`, not its turn's end. */
+      task?: boolean;
     }): Promise<boolean> => {
       if (build.signal.aborted) return Promise.resolve(false);
       return new Promise<boolean>((resolve) => {
         const entry: Waiting = {
           id: build.id,
           command: build.command,
+          task: build.task === true,
           signal: build.signal,
           start: resolve,
           ahead: build.ahead,
@@ -145,7 +152,18 @@ export const createBuildsQueue = (lock: BuildsLock) => {
      */
     ended: (id: SessionId, command: string) => {
       const build = running.find(
-        (build) => build.id === id && build.command === command && build.place !== null,
+        (build) =>
+          build.id === id && build.command === command && !build.task && build.place !== null,
+      );
+      if (build === undefined) return;
+      free(build);
+      moveOn();
+    },
+
+    /** Frees a session's build run as a task (#589), once the task has ended, however it ended. */
+    taskEnded: (id: SessionId, command: string) => {
+      const build = running.find(
+        (build) => build.id === id && build.command === command && build.task,
       );
       if (build === undefined) return;
       free(build);
@@ -154,10 +172,11 @@ export const createBuildsQueue = (lock: BuildsLock) => {
 
     /**
      * Frees every build a session holds and takes it out of the queue, once its turn has ended
-     * (completed, stopped or failed), so no build outlives its turn.
+     * (completed, stopped or failed), so no build outlives its turn; one running as a task keeps
+     * its place until the task ends (#589).
      */
     leave: (id: SessionId) => {
-      for (const build of running.filter((build) => build.id === id)) free(build);
+      for (const build of running.filter((build) => build.id === id && !build.task)) free(build);
       for (let at = waiting.length - 1; at >= 0; at -= 1) {
         const build = waiting[at];
         if (build?.id !== id) continue;
