@@ -390,7 +390,7 @@ the web app parses every answer with these schemas.
   it's done.
 - **`scripts/builds/`:** the machine's builds lock for the repo's own heavy scripts (see `packages/builds`).
 - **`.github/workflows/ci.yml`:** what `pnpm verify` runs, on every pull request and every push to `main`, split into
-  jobs side by side (Checks, Unit tests, E2E in four shards) so a run takes about 3 minutes; `.github/actions/setup`
+  jobs side by side (Checks, Unit tests, E2E in five shards, #587) so a run takes about 5 minutes; `.github/actions/setup`
   is the setup they share.
 - **`.github/workflows/roadmap.yml`:** files an issue that comes in without a milestone into `Later` (with
   `needs-triage` when it has no triage label), on filing and once a day, so the milestones stay the whole roadmap.

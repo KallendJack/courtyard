@@ -30,8 +30,11 @@ const port = 8799 + portShift;
 /** A second worker, for the one test that clears everything: a fresh start. */
 const freshStartPort = 8798 + portShift;
 
-/** The tests that sign in to the worker's fake GitHub and out again (#419). */
-const GITHUB_SPECS = /(github|layout-shift|lead|roomy-fold)\.spec\.ts$/;
+/**
+ * The tests that sign in to the worker's fake GitHub and out again (#419): `github.spec.ts`, the
+ * `github-*.spec.ts` beside it, and these.
+ */
+const GITHUB_SPECS = /(github(-[a-z-]+)?|layout-shift|lead|roomy-fold)\.spec\.ts$/;
 
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
@@ -54,6 +57,9 @@ export default defineConfig({
   // On CI, a failed test is also an annotation on its job, which names it when the worker files a
   // red main (#355).
   reporter: process.env.CI ? [["dot"], ["github"]] : "list",
+  // On CI, each shard's log ends with its slowest spec files and their times, so a shard that
+  // runs long shows what to move (#587).
+  reportSlowTests: process.env.CI ? { max: 10, threshold: 30_000 } : { max: 5, threshold: 300_000 },
   // Every change commits to git, one command at a time, and each command is a new process. On
   // Windows those are slow to start, and slower still with another copy's tests running, so a
   // session's saves can take 20 seconds: a check waits up to 30, and a test up to a minute.
@@ -70,7 +76,8 @@ export default defineConfig({
     },
     {
       // The worker's fake GitHub has one sign-in, which these tests sign in and out of: one at a
-      // time, so one never signs out under another (#419).
+      // time, so one never signs out under another (#419). One at a time is slow, so CI gives them
+      // shards of their own, each with its own worker (#587).
       name: "github",
       use: { ...devices["Desktop Chrome"], storageState: OWNER_LOGIN },
       dependencies: ["setup"],

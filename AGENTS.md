@@ -79,7 +79,7 @@ against a real worker running the fake provider. Test behaviour through those; n
 Real temporary folders and real git, not mocks of them. Write the failing test first when fixing a bug.
 
 Before pushing, run `pnpm check`, `pnpm typecheck`, `pnpm test` and the e2e specs for what you changed
-(`pnpm exec playwright test e2e/<spec>.spec.ts`); the full e2e suite runs in CI on every PR, across four shards, so
+(`pnpm exec playwright test e2e/<spec>.spec.ts`); the full e2e suite runs in CI on every PR, across five shards, so
 don't run it locally (it takes about 8 minutes of the machine's one build turn). `pnpm verify` stays for a full local
 run when you need one.
 

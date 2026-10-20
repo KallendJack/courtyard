@@ -40,7 +40,7 @@ test.describe("on the unfolded Fold", () => {
   }) => {
     await page.goto("/workspaces/workbench");
     await expect(title(page)).toHaveText("Workbench");
-    // Its tabs, whichever it has: github.spec.ts may have merged its pull request.
+    // Its tabs, whichever it has: github-code-home.spec.ts may have merged its pull request.
     await expect(tabs(page).getByRole("link", { name: "Home" })).toBeVisible();
     // The title's row holds the name and the tabs, the connections line under the name.
     const line = page.getByRole("main").getByRole("button", { name: /octo-owner\/workbench/ });
