@@ -346,8 +346,11 @@ server, a slow test run)", since its checks run in its turn, and after the house
 > You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time:
 > the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each
 > file. CI runs the full suite, the full browser suite and verify on your pull request, so they don't run here, nor
-> does a test run naming no file. A command still running after 10 minutes is stopped, so narrow a check that slow
-> to fewer files.
+> does a test run naming no file. A command still running after 10 minutes is ended: when a check is ended for
+> running too long, narrow it (fewer files, one spec), and never run it again as a task.
+
+Courtyard stops no check of its own: the provider's command tool ends any command at 10 minutes (Claude Code's
+`Bash`, Codex's and Courtyard's coding tools), and a builder can't run a check as a task, which has no such limit.
 
 Numbers are hard to know (#361), so a session leads with what an issue or pull request is whenever it tells the owner
 about one (an order, a status, what it built, what's next). Issue bodies, commit messages and a milestone's `Build

@@ -168,7 +168,7 @@ const HOUSE_PROCESS =
  * the house process.
  */
 const BUILDER_CHECKS =
-  "You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time: the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each file. CI runs the full suite, the full browser suite and verify on your pull request, so they don't run here, nor does a test run naming no file. A command still running after 10 minutes is stopped, so narrow a check that slow to fewer files.";
+  "You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time: the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each file. CI runs the full suite, the full browser suite and verify on your pull request, so they don't run here, nor does a test run naming no file. A command still running after 10 minutes is ended: when a check is ended for running too long, narrow it (fewer files, one spec), and never run it again as a task.";
 
 /**
  * What a model may do with the workspace, and in a code session how it works there too; a Lead's
