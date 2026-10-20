@@ -19,7 +19,8 @@ const needsLine = (part: Pick<PinnedPart, "needs" | "status">) =>
 /**
  * A part's card at the foot of the Breakdown view, opened from its label or its pin (#565; Paper,
  * "Tablet · Planning Home: the bike, part by part (#565)"): the part's name, what's fitted (its
- * brand and size), the rest of its details, what it needs in gold when it needs something, and
+ * brand and size), the rest of its details, its upcoming one in violet (#602), what it needs in
+ * gold when it needs something, and
  * for one with no pin yet, how to place it. Open goes to its whole card, Ask about it starts a session about it, and Done it is for one that
  * needs something.
  */
@@ -49,6 +50,7 @@ export function PartCard(props: {
     thing?.where,
   ].filter((detail) => detail !== undefined);
   const needs = needsLine(part);
+  const upcoming = thing?.upcoming;
 
   return (
     <section
@@ -62,6 +64,12 @@ export function PartCard(props: {
         </p>
         {details.length > 0 && (
           <p className="text-meta text-muted-foreground">{details.join(" · ")}</p>
+        )}
+        {upcoming !== undefined && (
+          <p className="text-meta font-semibold text-primary-text">
+            Upcoming:{" "}
+            {[upcoming.name, upcoming.price].filter((said) => said !== undefined).join(" · ")}
+          </p>
         )}
         {needs !== "" && <p className="text-meta font-semibold text-warning">{needs}</p>}
         {props.placing && (

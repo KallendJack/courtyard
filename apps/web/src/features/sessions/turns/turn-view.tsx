@@ -293,6 +293,20 @@ const OWNER_BUBBLE =
   "ml-auto flex w-fit max-w-[85%] flex-col gap-1.5 rounded-bubble rounded-br-sm bg-accent px-4 py-2.5 text-accent-foreground";
 
 /**
+ * The owner's words in their bubble: a message they added, or one filled in for them to send, as
+ * Find a replacement's (#602).
+ */
+export function OwnerWords(props: { children: ReactNode }) {
+  return (
+    <div className={OWNER_BUBBLE}>
+      <p className="text-message whitespace-pre-wrap wrap-anywhere md:text-base/6.25">
+        {props.children}
+      </p>
+    </div>
+  );
+}
+
+/**
  * A message the owner added while it answered (#252), where they sent it, the answer carrying on
  * below it, with one muted line: added while answering; going in after the approval waiting
  * now; or, once the turn ended before the model read it, not read, and going next unless the
@@ -309,11 +323,7 @@ function AddedMessage(props: { added: Extract<AnswerPart, { kind: "added" }>; tu
       : "Added while answering";
   return (
     <div className="flex flex-col items-end gap-1.5">
-      <div className={OWNER_BUBBLE}>
-        <p className="text-message whitespace-pre-wrap wrap-anywhere md:text-base/6.25">
-          {added.text}
-        </p>
-      </div>
+      <OwnerWords>{added.text}</OwnerWords>
       <p className="text-meta font-semibold text-muted-foreground">{note}</p>
     </div>
   );

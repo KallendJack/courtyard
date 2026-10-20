@@ -51,6 +51,7 @@ const FENCED_KINDS = new Map<string, FencedKind>([
   ["chart", { noun: "chart", load: () => import("./chart.tsx") }],
   ["mermaid", { noun: "diagram", load: () => import("./mermaid.tsx") }],
   ["product", { noun: "product", load: () => import("./product.tsx") }],
+  ["options", { noun: "list of options", load: () => import("./options.tsx") }],
   ["plan", { noun: "floor plan", load: () => import("./floor-plan.tsx") }],
 ]);
 

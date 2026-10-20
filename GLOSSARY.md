@@ -177,6 +177,18 @@ a few words ("Pump it up before Saturday"), until it's done: the only part of it
 status (#208, #220).
 _Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
 
+**Upcoming**:
+What a Thing holds as coming next in its place (#602, ADR 0032): one replacement, its name, price, shop, link and why,
+shown on its card beside what's fitted. A new one of a part that's there is always upcoming on it, never a Thing of
+its own. Once it's bought or **fitted** it's swapped in, the old one going to the Thing's history, with Undo.
+_Avoid_: next part, planned part, wishlist item, a new Thing for it
+
+**Find a replacement**:
+On every Thing the owner has (#602): a session filled in with the Thing and what's fitted, and budgets to tap (or a
+budget talked), which the model answers with real options side by side in an **options block**, each with **Pick**,
+a pick becoming the Thing's upcoming one.
+_Avoid_: shop for, search, compare (that's a table)
+
 **Wanted list**:
 A planning workspace's Things wanted or to replace (#245): Things like any other, with the status Want or Replace,
 added by a model, by the owner, or from a product named in an answer (+ Add to wanted). Its picks, price checks and

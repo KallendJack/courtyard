@@ -1,12 +1,12 @@
-import { ProductBlock as Product, type ThingList, WorkspaceId } from "@courtyard/contract";
+import { ProductBlock as Product, WorkspaceId } from "@courtyard/contract";
 import { useParams } from "@tanstack/react-router";
 import { Check, Plus } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
-import { createKept, useKept } from "@/components/layout/kept";
+import { useKept } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
-import { addThing, loadThings } from "../../features/things/api.ts";
+import { addThing, KEPT_THINGS, loadKeptThings, loadThings } from "../../features/things/api.ts";
 import { describeProblem } from "../layout/problems.tsx";
 import type { DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";
@@ -20,9 +20,6 @@ const productFrom = (source: string) => {
     return undefined;
   }
 };
-
-/** Each workspace's Things, as last known, so every product in an answer knows what's wanted. */
-const THINGS = createKept<ThingList>();
 
 const sameName = (a: string, b: string) =>
   a.trim().localeCompare(b.trim(), "en-GB", { sensitivity: "base" }) === 0;
@@ -38,7 +35,7 @@ export default function ProductCard(props: DrawingProps) {
   const params = useParams({ strict: false });
   const named = WorkspaceId.safeParse(params.workspaceId);
   const workspaceId = named.success ? named.data : undefined;
-  const things = useKept(THINGS, {
+  const things = useKept(KEPT_THINGS, {
     key: workspaceId ?? "",
     asking: workspaceId !== undefined && product !== undefined,
     load: async () => {
@@ -51,8 +48,7 @@ export default function ProductCard(props: DrawingProps) {
     if (workspaceId === undefined) return undefined;
     const added = await addThing(workspaceId, { name, status: "want" });
     if (added.kind !== "loaded") return describeProblem(added).body;
-    const loaded = await loadThings(workspaceId);
-    if (loaded.kind === "loaded") THINGS.set(workspaceId, loaded.data);
+    await loadKeptThings(workspaceId);
     return undefined;
   });
   if (product === undefined) return props.fallback;
