@@ -125,6 +125,92 @@ const unrepeated = (written: string) => {
   };
 };
 
+/** Short words every line has, which say nothing about whether a line repeats another. */
+const SMALL_WORDS = new Set([
+  "that",
+  "this",
+  "with",
+  "your",
+  "then",
+  "when",
+  "what",
+  "they",
+  "them",
+  "have",
+  "from",
+  "just",
+  "into",
+  "onto",
+  "will",
+  "would",
+  "there",
+  "their",
+  "than",
+  "it's",
+  "you're",
+]);
+
+/** A text's words that say something: four letters or more, lowercased, once each. */
+const wordsOf = (text: string) =>
+  new Set(
+    (text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).filter(
+      (word) => word.length >= 4 && !SMALL_WORDS.has(word),
+    ),
+  );
+
+/** How much of a line's words the answer has already used before it's taken as said again. */
+const SAID_AGAIN = 0.6;
+
+/**
+ * What a model writes after its replies are taken, less any line that says again in other words
+ * what its answer had already written (#613): Claude often rewords its whole answer after the call,
+ * which an exact repeat (`unrepeated`) misses. A line is held back until it ends, then dropped when
+ * most of its words (three or more) are the answer's already; a new line, a recommendation after
+ * the question say, shares few. The line breaks before a dropped line go with it.
+ */
+const unsaid = (written: string) => {
+  const said = wordsOf(written);
+  const saidAgain = (line: string) => {
+    const words = [...wordsOf(line)];
+    return (
+      words.length >= 3 &&
+      words.filter((word) => said.has(word)).length >= SAID_AGAIN * words.length
+    );
+  };
+  /** The line under way, held back until it ends. */
+  let line = "";
+  /** Line breaks not yet passed on, which go before the next line kept. */
+  let breaks = "";
+  /** Whether the last line ended was dropped, so the breaks after it go too. */
+  let dropped = false;
+  const ended = () => {
+    const whole = line;
+    line = "";
+    if (whole.trim() === "") return "";
+    if (saidAgain(whole)) {
+      dropped = true;
+      return "";
+    }
+    dropped = false;
+    const out = breaks + whole;
+    breaks = "";
+    return out;
+  };
+  return {
+    take: (text: string) => {
+      let out = "";
+      for (const piece of text.split(/(\n)/)) {
+        if (piece === "\n") {
+          out += ended();
+          if (!dropped) breaks += "\n";
+        } else line += piece;
+      }
+      return out;
+    },
+    end: () => ended(),
+  };
+};
+
 /**
  * The suggest replies tool for one turn (docs/ai-conduct.md, Suggested replies), with the answer's
  * text passing through it: it checks each call's replies and records the first set accepted,
@@ -138,7 +224,13 @@ export const createTurnReplies = (turn: {
 }) => {
   /** The answer as written before its replies were taken. */
   let written = "";
-  let after: ReturnType<typeof unrepeated> | undefined;
+  /** Once replies are taken: what follows, less exact repeats, then less lines said again (#613). */
+  let after:
+    | {
+        readonly exact: ReturnType<typeof unrepeated>;
+        readonly reworded: ReturnType<typeof unsaid>;
+      }
+    | undefined;
   return {
     /** A call's replies, recorded once taken, with what the answer had written by then. */
     suggest: async (
@@ -148,17 +240,18 @@ export const createTurnReplies = (turn: {
       if (after !== undefined) return err({ kind: "already" });
       const checked = checkReplies(input);
       if (!checked.ok) return checked;
-      after = unrepeated(written);
+      after = { exact: unrepeated(written), reworded: unsaid(written) };
       await turn.record(checked.value);
       return ok({ written });
     },
     /** What of the next piece of the answer is kept. */
     kept: (text: string) => {
-      if (after !== undefined) return after.take(text);
+      if (after !== undefined) return after.reworded.take(after.exact.take(text));
       written += text;
       return text;
     },
     /** What's left to keep once the answer is done. */
-    end: () => after?.end() ?? "",
+    end: () =>
+      after === undefined ? "" : after.reworded.take(after.exact.end()) + after.reworded.end(),
   };
 };

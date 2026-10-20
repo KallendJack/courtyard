@@ -110,6 +110,53 @@ describe("what a model writes after its replies are taken (#133)", () => {
     );
   });
 
+  it("is dropped where it repeats the answer in other words, so a brief answer stays brief (#613)", async () => {
+    // As Claude wrote it in the #599 eval: the step, the replies, then the step again reworded.
+    const step =
+      "Start by taking the old right-hand pedal off (the chain side). Turn the cranks so that crank points forwards and sits level.\nFit the pedal spanner on the flats of the pedal axle, then push down firmly until it gives. Tell me once it's off.";
+    const { events } = await turnSuggesting([
+      { write: step },
+      suggest(["It's off", "It won't budge"]),
+      {
+        write:
+          "Start with the old right-hand pedal, the one on the chain side. Turn the cranks so that crank points forwards and sits level.\n",
+      },
+      {
+        write:
+          "Fit the pedal spanner on the flat part of the pedal axle, then push down firmly until it gives. Tell me when it's off.",
+      },
+    ]);
+
+    expect(answerIn(events)).toBe(step);
+  });
+
+  it("is dropped where it asks the question again in other words, keeping one question (#613)", async () => {
+    const question =
+      "**Question 1: Where's the garage door, and is the left wall the one on your left as you stand at the door looking in?**\n\n**My recommendation:** the garage door is on one of the 3 m ends, so the left wall is a 5 m long side.";
+    const { events } = await turnSuggesting([
+      { write: question },
+      suggest(["Door on a 3 m end", "Door on a 5 m side"]),
+      {
+        write:
+          '\n\n**Question 1: Where\'s the garage door, and is the "left wall" the one on your left when you stand at the door looking in?**\n\n**My recommendation:** the garage door is on one of the 3 m ends, which makes the left wall a 5 m long side.',
+      },
+    ]);
+
+    expect(answerIn(events)).toBe(question);
+  });
+
+  it("is kept where it's new, though it shares a word or two with the answer (#613)", async () => {
+    const { events } = await turnSuggesting([
+      { write: "- Work\n- Health\n- Plans\n\nAnything to add or drop?" },
+      suggest(["Looks good", "Drop health"]),
+      { write: "First, work: are you employed, self-employed, studying or retired?" },
+    ]);
+
+    expect(answerIn(events)).toBe(
+      "- Work\n- Health\n- Plans\n\nAnything to add or drop?\n\nFirst, work: are you employed, self-employed, studying or retired?",
+    );
+  });
+
   it("is kept after a question mark that wasn't a question, such as in a link", async () => {
     const { events } = await turnSuggesting([
       { write: "The plan is at https://gym.example/?week=2." },
