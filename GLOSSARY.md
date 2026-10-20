@@ -280,6 +280,11 @@ time waiting on the owner or for a place (#474). It leaves Running, its slot fre
 its session is kept, so the owner reads what happened and carries it on there if it should go on.
 _Avoid_: stuck, hung, dead, idle
 
+**Stopped, no PR**:
+A Lead's builder whose turn ended with no pull request, no task running and no question for the owner, after the Lead
+told it once to carry on (#572). It waits on the owner, who is notified once.
+_Avoid_: idle, finished, done
+
 **Roadmap**:
 A code workspace's tab of the whole plan (#532): every open milestone in the roadmap's order, Later last, with its
 progress, the current one open; inside, its issues in its Build order, each in one plain state: **Building**,

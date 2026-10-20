@@ -43,6 +43,12 @@ because it changes the same file, and starts it once the first one's PR merges.
   Its session is kept and its claim stands; nothing is posted on the issue. Either counts as Building again once its
   session carries on, and neither has its issue started afresh. One with a pull request waits on the owner or CI, so
   never stalls.
+- **Builders that stop to report progress** (#572): a builder whose turn completed with no pull request, no task
+  running and no question for the owner is told to carry on (`sessions/`' `tellToCarryOn`, `CARRY_ON_MESSAGE`,
+  marked `carryOn` on its message), once until the owner's own next message. Its question is told apart by its
+  suggested replies: a Lead's builder is offered the suggest replies tool and told to ask that way, and one that asks
+  waits on the owner, never answered by the Lead. Stopping again with no question, it waits on the owner: notified
+  "Stopped, no PR" once a stop, and noted in the Lead's chat.
 - **Allow all:** it keeps the end of Allow all for builders (`allowAllUntil`, 12 hours from the owner's Run the build
   order with it on) and starts each builder with it until then. The owner can switch it from the Lead's row while it
   runs, is paused or rests (#551): on gives it, for 12 hours, to its builders still building (no pull request yet) and

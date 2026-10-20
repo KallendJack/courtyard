@@ -4,6 +4,7 @@ import {
   buildable,
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
+  endsTurn,
   LEAD_BUILDERS,
   LEAD_WINDOW_BY_DEFAULT,
   type LeadAllowAll,
@@ -27,6 +28,7 @@ import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
 import { createOneAtATime } from "../../lib/one-at-a-time.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
+  CARRY_ON_MESSAGE,
   type LeadBrief,
   type LeadToolDone,
   type LeadToolRefusal,
@@ -186,6 +188,40 @@ type Heard = {
   readonly stopped: boolean;
   readonly allowable: number;
   readonly inHand: boolean;
+  /** How its last turn ended of itself (#572), when it completed. */
+  readonly ended: Ended | undefined;
+};
+
+/**
+ * A builder's last turn, completed (#572): its end, whether it asked the owner a question with
+ * set choices (suggested replies), and whether the Lead has told it to carry on since the owner's
+ * own last message.
+ */
+type Ended = { readonly seq: number; readonly asked: boolean; readonly toldToCarryOn: boolean };
+
+/** Whether a message in a session is the worker's (a failed check, a task's end), not the owner's. */
+const fromWorker = (event: Extract<SessionEvent, { type: "owner-message" }>) =>
+  event.checksFailed !== undefined ||
+  event.conflicted !== undefined ||
+  event.merged !== undefined ||
+  event.continues !== undefined ||
+  event.tasksEnded !== undefined ||
+  event.carryOn === true;
+
+/** How a session's last turn ended, when it completed (#572). */
+const endedIn = (events: readonly SessionEvent[]): Ended | undefined => {
+  const last = events.findLast((event) => event.type === "owner-message" || endsTurn(event));
+  if (last?.type !== "turn-completed") return undefined;
+  const since = events.findLast((event) => event.type === "owner-message")?.seq ?? 0;
+  const owners = events.findLast((event) => event.type === "owner-message" && !fromWorker(event));
+  return {
+    seq: last.seq,
+    asked: events.some((event) => event.type === "suggested-replies" && event.seq > since),
+    toldToCarryOn: events.some(
+      (event) =>
+        event.type === "owner-message" && event.carryOn === true && event.seq > (owners?.seq ?? 0),
+    ),
+  };
 };
 
 /**
@@ -296,6 +332,7 @@ export const createLead = (options: {
     | "codeRunning"
     | "note"
     | "tellMerged"
+    | "tellToCarryOn"
     | "stopBuilding"
     | "mergePullRequest"
     | "events"
@@ -368,6 +405,7 @@ export const createLead = (options: {
         // Only while its turn waits on one: a turn that ended asks nothing any more.
         allowable: each.waiting === "approval" ? allowableIn(events.value) : 0,
         inHand: inHandIn(events.value),
+        ended: endedIn(events.value),
       });
     }
     return heard;
@@ -653,6 +691,52 @@ export const createLead = (options: {
   };
 
   /**
+   * Watches its builders' stops (#572): one whose turn completed with no pull request, nothing of
+   * the machine's in hand and no question for the owner (no suggested replies) is told to carry
+   * on, once until the owner's own next message, and the Lead's chat says so. Stopping again like
+   * that, it waits on the owner: they're told "Stopped, no PR", once a stop. One asking the owner
+   * a question waits on them as it is; the Lead never answers it.
+   */
+  const watchStops = async (
+    was: Kept,
+    listed: ReadonlyMap<SessionId, Listed>,
+    heard: ReadonlyMap<SessionId, Heard>,
+  ) => {
+    let kept = was;
+    for (const builder of was.built) {
+      const each = listed.get(builder.session);
+      const ended = heard.get(builder.session)?.ended;
+      if (
+        each === undefined ||
+        ended === undefined ||
+        ended.asked ||
+        each.pullRequest !== undefined ||
+        each.now.kind !== "your-turn" ||
+        each.queued ||
+        each.waiting === "stalled" ||
+        heard.get(builder.session)?.inHand === true
+      ) {
+        continue;
+      }
+      const name = nameOf(each, builder.issue);
+      if (!ended.toldToCarryOn) {
+        // Refused while a turn runs there or an Update waits: it's tried again next time round.
+        const told = await sessions.tellToCarryOn(builder.session, CARRY_ON_MESSAGE);
+        if (told.ok) kept = await noted(kept, `Told ${name} to carry on: it stopped with no PR.`);
+        continue;
+      }
+      const about = `stopped:${builder.session}:${ended.seq}`;
+      if (kept.told.includes(about)) continue;
+      options.notify(builder.session, "Stopped, no PR");
+      kept = await noted(
+        { ...kept, told: [...kept.told, about] },
+        `${name} stopped again with no PR, so it waits on you.`,
+      );
+    }
+    return kept;
+  };
+
+  /**
    * Whether a resting Lead wakes now (#457): while its window is open, once an issue it would
    * start is buildable (made ready, its claim freed, its blocker closed, its clash merged).
    */
@@ -675,7 +759,7 @@ export const createLead = (options: {
     const watched = await watchQuiet(await watchBuilders(was, listed), listed, heard);
     // One just found stalled is listed so from now on.
     if (watched.stalled) listed = await listedIn(workspaceId);
-    let kept = await mergeStep(watched.kept, listed);
+    let kept = await mergeStep(await watchStops(watched.kept, listed, heard), listed);
     const woke = await wakes(workspaceId, kept);
     if (woke) {
       const { why: _, heldBack: _held, ...rest } = kept;

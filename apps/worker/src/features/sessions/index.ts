@@ -1208,6 +1208,7 @@ export const createSessions = (options: {
           events.value,
           framingFor({
             ...(brief === undefined ? {} : { lead: brief }),
+            builder: file.value?.byLead === true,
             workspace: workspace.value,
             capabilities: turn.provider.capabilities,
             events: events.value,
@@ -2062,6 +2063,8 @@ export const createSessions = (options: {
     continues?: { turn: number };
     /** Sent by the worker because these tasks ended while no turn ran (#182). */
     tasksEnded?: [TaskId, ...TaskId[]];
+    /** Sent by the worker to a Lead's builder that stopped with no pull request (#572). */
+    carryOn?: boolean;
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -2127,6 +2130,7 @@ export const createSessions = (options: {
       ...(start.runsBuildOrder === true ? { runsBuildOrder: true } : {}),
       ...(start.continues === undefined ? {} : { continues: start.continues }),
       ...(start.tasksEnded === undefined ? {} : { tasksEnded: start.tasksEnded }),
+      ...(start.carryOn === true ? { carryOn: true } : {}),
     };
     const { fromQueue } = start;
     // A queued message goes only while it's still queued: checked in the session's queue, so the
@@ -2819,6 +2823,44 @@ export const createSessions = (options: {
       since: freshStarts,
       coding: true,
       conflicted: { pullRequest: pullRequest.number, head: pullRequest.head },
+    });
+  };
+
+  /**
+   * Sends a session the worker's message for a code workspace's Lead (#347, #572), marked as
+   * `marked` says, on the model its conversation last used. Refused, as `busy`, while a turn runs
+   * there or an Update waits (#186), so the worker tries again later rather than queueing it as
+   * the owner's.
+   */
+  const sendFromLead = async (
+    id: SessionId,
+    text: string,
+    marked: { merged: { pullRequest: number } } | { carryOn: true },
+  ): Promise<Result<null, SessionError>> => {
+    if (holding()) return err({ kind: "busy" });
+    const found = await findSession(id);
+    if (!found.ok) return found;
+    const events = await readEvents(id);
+    if (!events.ok) return events;
+    const last = events.value.findLast((event) => event.type === "owner-message");
+    if (last?.type !== "owner-message") return err({ kind: "not-found" });
+    const message: NewMessage = {
+      text,
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerIn(found.value.workspaceId, message);
+    if (!provider.ok) return provider;
+    await settled(id);
+    return startTurn({
+      id,
+      workspaceId: found.value.workspaceId,
+      provider: provider.value.provider,
+      message,
+      since: freshStarts,
+      coding: found.value.branch !== undefined,
+      placeless: found.value.placeless === true,
+      ...marked,
     });
   };
 
@@ -3995,37 +4037,14 @@ export const createSessions = (options: {
      * merged (#347), on the model its conversation last used. Refused, as `busy`, while a turn
      * runs there, so the worker tries again later rather than queueing it as the owner's.
      */
-    tellMerged: async (
-      id: SessionId,
-      merged: { pullRequest: number; text: string },
-    ): Promise<Result<null, SessionError>> => {
-      // While an Update waits, the Lead is told later (#186): it asks again next time round.
-      if (holding()) return err({ kind: "busy" });
-      const found = await findSession(id);
-      if (!found.ok) return found;
-      const events = await readEvents(id);
-      if (!events.ok) return events;
-      const last = events.value.findLast((event) => event.type === "owner-message");
-      if (last?.type !== "owner-message") return err({ kind: "not-found" });
-      const message: NewMessage = {
-        text: merged.text,
-        model: last.model,
-        ...(last.effort === undefined ? {} : { effort: last.effort }),
-      };
-      const provider = await providerIn(found.value.workspaceId, message);
-      if (!provider.ok) return provider;
-      await settled(id);
-      return startTurn({
-        id,
-        workspaceId: found.value.workspaceId,
-        provider: provider.value.provider,
-        message,
-        since: freshStarts,
-        coding: found.value.branch !== undefined,
-        placeless: found.value.placeless === true,
-        merged: { pullRequest: merged.pullRequest },
-      });
-    },
+    tellMerged: (id: SessionId, merged: { pullRequest: number; text: string }) =>
+      sendFromLead(id, merged.text, { merged: { pullRequest: merged.pullRequest } }),
+
+    /**
+     * Sends a Lead's builder the worker's message to carry on (#572), its turn having ended with
+     * no pull request and no question for the owner, refused as `busy` as `tellMerged` is.
+     */
+    tellToCarryOn: (id: SessionId, text: string) => sendFromLead(id, text, { carryOn: true }),
 
     /**
      * Stops a session building its issue (the Lead's skip, #347): its claim released, saying why
@@ -4083,7 +4102,8 @@ export const createSessions = (options: {
             event.merged === undefined &&
             event.runsBuildOrder === undefined &&
             event.continues === undefined &&
-            event.tasksEnded === undefined,
+            event.tasksEnded === undefined &&
+            event.carryOn === undefined,
         );
         if (asked?.type !== "owner-message") continue;
         const replies = events.value.findLast(

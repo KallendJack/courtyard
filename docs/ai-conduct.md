@@ -111,7 +111,7 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 7. The context file between its markers, each line with its label, saying it wins where it differs from the owner
    context, or a line saying there isn't one yet. A code workspace has none (#301): in its place, one line naming its
    connections and what's missing (Connections, below). In a code workspace's Lead, on a provider that takes
-   Courtyard's tools, its part and the build order follow (The Lead, below).
+   Courtyard's tools, its part and the build order follow; in a builder the Lead started, its part (The Lead, below).
 8. In a planning workspace: its documents between `<documents>` markers, or a line saying it has none yet
    (Documents, below), then its Things between `<things>` markers, one labelled line each, or a line saying it
    has none yet (Things, below).
@@ -656,6 +656,28 @@ owner's:
 > replace to Archive. If the repository keeps a plan issue or notes beside its build order, bring them up to date with
 > gh. Then say in a line or two what merged and what the order does next.
 
+A builder the Lead started is told, on a provider that takes Courtyard's tools, to carry on to its pull request
+(#572), after its connections (Every turn, item 7), and is offered the suggest replies tool for its questions to the
+owner (Suggested replies, below):
+
+> You're a builder the Lead started: your work on this issue ends with its pull request open. Don't stop before that
+> to report progress or to ask whether to go on; carry on. Stop only when something truly needs the owner to decide:
+> then end your answer with one clear question, and offer two or three likely answers with the suggest_replies tool,
+> so the owner can answer with a tap.
+
+Telling a question from a progress report is the worker's call, made once, from the builder's suggested replies: a
+turn that completes with no pull request, no task running and no suggested replies is a progress report. The worker
+sends that builder this message, once until the owner's own next message (the chat shows it as the worker's), and
+notes "Told <name> to carry on: it stopped with no PR." in the Lead's chat:
+
+> Your turn ended without a pull request and without a question for the owner. Carry on building the issue until its
+> pull request is open, without stopping to report progress or to ask whether to go on. If something truly needs the
+> owner to decide, ask them one clear question instead, and offer its likely answers with the suggest_replies tool.
+
+A builder that stops like that again waits on the owner: they're notified "Stopped, no PR", once a stop, and the
+Lead's chat notes "<name> stopped again with no PR, so it waits on you." A question with suggested replies waits on
+the owner at once; the Lead never answers it.
+
 The Lead takes a turn after every merge, so its turns are given only its latest ten exchanges (#518), each an owner
 or worker message and the answer to it, as a quick question keeps its last ten. Once older ones are left out, the
 conversation opens "Earlier in this session, its latest exchanges only (older ones are left out):" in place of
@@ -951,7 +973,9 @@ Built with #126 (ADR 0017). When a model asks the owner a question with a few li
 three of them as **suggested replies**: buttons under its answer that send one as the owner's reply with a tap. It
 offers them through Courtyard's `suggest_replies` tool, never in its own text, so they look and work the same on
 every model. The tool is offered beside the save tool in a planning workspace, on a turn whose provider takes
-Courtyard's tools (today, every one that saves). A code workspace's models aren't offered it.
+Courtyard's tools (today, every one that saves). In a code workspace, only a builder the Lead started is offered it
+(#572), so its question to the owner tells itself apart from a progress report (The Lead, above); the owner's own code
+sessions and the Lead aren't.
 
 What a model is told (Every turn, item 14), on a turn that offers the tool:
 

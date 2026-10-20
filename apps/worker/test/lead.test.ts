@@ -12,7 +12,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ok } from "../src/lib/result.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
-import type { Provider } from "../src/providers/index.ts";
+import type { Framing, Provider, ToolReply } from "../src/providers/index.ts";
 import {
   asOwner,
   CODING_MODEL,
@@ -761,14 +761,21 @@ describe("watching its builders (#347)", () => {
       state: "running",
       why: "Which session waits waits on your decision.",
     });
-    for (const waiting of (await sessionsOf(request)).filter(
-      (each) => each.now.kind === "needs-you",
-    )) {
-      if (waiting.now.kind !== "needs-you") continue;
-      await postJson(request, `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`, {
-        answer: "deny",
-      });
-    }
+    /** Denies what every turn running waits on, once each asks. */
+    const denyAll = async () => {
+      await expect
+        .poll(async () =>
+          (await sessionsOf(request)).filter((each) => each.busy && each.now.kind !== "needs-you"),
+        )
+        .toHaveLength(0);
+      for (const waiting of await sessionsOf(request)) {
+        if (waiting.now.kind !== "needs-you") continue;
+        await postJson(request, `/api/sessions/${waiting.id}/approvals/${waiting.now.approval}`, {
+          answer: "deny",
+        });
+      }
+    };
+    await denyAll();
     await expect
       .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
       .toHaveLength(0);
@@ -777,6 +784,11 @@ describe("watching its builders (#347)", () => {
     expect((await leadOf(request)).why).toBeUndefined();
     expect(await notesIn(request)).toContain("Carrying on.");
     expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+    // Each stopped with no pull request, so it was told to carry on (#572), and asks again.
+    await denyAll();
+    await expect
+      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
+      .toHaveLength(0);
   });
 
   it("starts only main's fix while main is red", async () => {
@@ -822,6 +834,16 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     expect(response.status).toBe(204);
   };
 
+  /**
+   * The Lead's looks until its builders, stopped with no pull request, have been told to carry
+   * on and stopped again (#572), so their silence starts.
+   */
+  const carriedOn = async (request: Requester) => {
+    await runJobs();
+    await settled(request);
+    await runJobs();
+  };
+
   it("takes a builder whose turn failed off Building at once, and starts the next issue in its slot", async () => {
     const { github, request } = await signedInWith([
       { number: 22, title: "please fail", milestone: "4 · Code workspaces" },
@@ -854,7 +876,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     });
     await run(request);
     await settled(request);
-    await runJobs();
+    await carriedOn(request);
     // The owner has read #22's builder's answer; #23's waits on them, which isn't silence.
     const quiet = await builderOf(request, 22);
     await see(request, quiet.id);
@@ -891,6 +913,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     );
     // Nothing is posted on the issue: its claim stands, so nobody else starts it.
     expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
+    await settled(request);
   });
 
   it("counts a stalled builder as Building again once its session carries on", async () => {
@@ -898,7 +921,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     const { request } = await signedInWith(ISSUES.slice(0, 2), { now: () => clock.now });
     await run(request);
     await settled(request);
-    await runJobs();
+    await carriedOn(request);
     const quiet = await builderOf(request, 22);
     await see(request, quiet.id);
     clock.now += 21 * MINUTE;
@@ -914,6 +937,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
 
     expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
     expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
+    await settled(request);
   });
 
   describe("while something of the machine's is in hand for it (#574)", () => {
@@ -1031,7 +1055,8 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       await expect
         .poll(async () => (await eventsSoFar(request, builder.id)).at(-1)?.type)
         .toBe("task-ended");
-      await runJobs();
+      await carriedOn(request);
+      await see(request, builder.id);
       clock.now += 19 * MINUTE;
       await runJobs();
       expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
@@ -1039,6 +1064,141 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       await runJobs();
       expect((await builderOf(request, 22)).waiting).toBe("stalled");
     });
+  });
+});
+
+describe("builders that stop to report progress (#572)", () => {
+  /** Waits until no turn runs in the workspace. */
+  const settled = async (request: Requester) =>
+    expect
+      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
+      .toHaveLength(0);
+
+  /**
+   * A provider whose builders end each turn with a progress report, or, building an issue titled
+   * "Asks which way", with a question with set choices; the Lead's turns just answer.
+   */
+  const reporting = () => {
+    const saver = savingProvider([], { codes: true });
+    const framings: Framing[] = [];
+    const provider: Provider = {
+      ...saver.provider,
+      runTurn: async (input) => {
+        framings.push(input.framing);
+        if (input.framing.newMessage.includes("Asks which way")) {
+          await input.emit("Should the list sort by name or by date?");
+          await input.callTool({
+            name: "suggest_replies",
+            input: { replies: ["By name", "By date"] },
+          });
+          return ok(null);
+        }
+        await input.emit("Here's where I've got to: the tests pass. Shall I carry on?");
+        return ok(null);
+      },
+    };
+    return { provider, framings };
+  };
+
+  /** The worker's carry-on messages in a builder's session. */
+  const carryOnsIn = async (request: Requester, sessionId: string) =>
+    (await eventsSoFar(request, sessionId)).filter(
+      (event) => event.type === "owner-message" && event.carryOn === true,
+    );
+
+  it("tells a builder that stopped with no PR and no question to carry on, once; a second stop goes to the owner", async () => {
+    const push = createFakePush();
+    const { provider } = reporting();
+    const { request } = await signedInWith(ISSUES.slice(0, 1), {
+      providers: [provider],
+      sendPush: push.send,
+    });
+    await postJson(request, "/api/notifications/on", {
+      endpoint: "https://push.example/fold",
+      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+    });
+    await run(request, SAVING_MODEL);
+    await settled(request);
+    const builder = await builderOf(request, 22);
+
+    await runJobs();
+    await settled(request);
+
+    const told = await carryOnsIn(request, builder.id);
+    expect(told).toHaveLength(1);
+    expect(told[0]?.type === "owner-message" && told[0].text).toBe(
+      await quotedInGuide("Your turn ended without a pull request"),
+    );
+    expect(await notesIn(request)).toContain(
+      "Told Which session waits to carry on: it stopped with no PR.",
+    );
+
+    await runJobs();
+    await runJobs();
+
+    expect(await carryOnsIn(request, builder.id)).toHaveLength(1);
+    expect(await notesIn(request)).toContain(
+      "Which session waits stopped again with no PR, so it waits on you.",
+    );
+    await expect
+      .poll(() => push.sent.map(({ payload }) => payload))
+      .toContainEqual({ title: builder.title, body: "Stopped, no PR", session: builder.id });
+    expect(
+      push.sent.filter(
+        ({ payload }) =>
+          typeof payload === "object" &&
+          payload !== null &&
+          "body" in payload &&
+          payload.body === "Stopped, no PR",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("tells it to carry on once again after the owner's own reply", async () => {
+    const { provider } = reporting();
+    const { request } = await signedInWith(ISSUES.slice(0, 1), { providers: [provider] });
+    await run(request, SAVING_MODEL);
+    await settled(request);
+    const builder = await builderOf(request, 22);
+    await runJobs();
+    await settled(request);
+    await runJobs();
+
+    await postJson(request, `/api/sessions/${builder.id}/messages`, {
+      text: "Sounds good",
+      model: SAVING_MODEL,
+    });
+    await settled(request);
+    await runJobs();
+    await settled(request);
+
+    expect(await carryOnsIn(request, builder.id)).toHaveLength(2);
+  });
+
+  it("sends no carry-on to a builder that asked the owner a question with set choices", async () => {
+    const { provider, framings } = reporting();
+    const { request } = await signedInWith(
+      [{ number: 22, title: "Asks which way", milestone: "4 · Code workspaces" }],
+      { providers: [provider] },
+    );
+    await run(request, SAVING_MODEL);
+    await settled(request);
+    const builder = await builderOf(request, 22);
+
+    await runJobs();
+    await runJobs();
+
+    expect(await carryOnsIn(request, builder.id)).toEqual([]);
+    expect(
+      (await eventsSoFar(request, builder.id)).find((event) => event.type === "suggested-replies"),
+    ).toMatchObject({ replies: ["By name", "By date"] });
+    // A builder is offered the tool, and told to carry on to its pull request; the Lead neither.
+    const asked = framings.find((framing) => framing.newMessage.startsWith("Build issue"));
+    expect(asked?.tools.map((tool) => tool.name)).toContain("suggest_replies");
+    expect(asked?.instructions).toContain(await quotedInGuide("You're a builder the Lead started"));
+    const lead = framings.find((framing) => framing.newMessage === "Run the build order.");
+    expect(lead?.tools.map((tool) => tool.name)).not.toContain("suggest_replies");
+    expect(lead?.instructions).not.toContain("You're a builder the Lead started");
   });
 });
 
@@ -1197,19 +1357,26 @@ describe("talking to the Lead (#347)", () => {
   });
 
   it("pauses, and runs three builders, when the owner asks", async () => {
-    const saver = savingProvider(
-      [
-        [],
-        [],
-        [],
-        [{ call: "build_order", input: { action: "builders", count: 3 } }],
-        [],
-        [{ call: "build_order", input: { action: "pause" } }],
-      ],
-      { codes: true },
-    );
+    // Scripted by what the Lead is told, since its builders' turns (a carry-on, #572) come between.
+    const calls: Readonly<Record<string, unknown>> = {
+      "Run three at once.": { action: "builders", count: 3 },
+      "Pause the order.": { action: "pause" },
+    };
+    const replies: ToolReply[] = [];
+    const saver = savingProvider([], { codes: true });
+    const provider: Provider = {
+      ...saver.provider,
+      runTurn: async (input) => {
+        const call = calls[input.framing.newMessage];
+        if (call !== undefined) {
+          replies.push(await input.callTool({ name: "build_order", input: call }));
+        }
+        await input.emit("Done.");
+        return ok(null);
+      },
+    };
     const four = [...ISSUES, { number: 25, title: "Fourth", milestone: "4 · Code workspaces" }];
-    const { github, request } = await signedInWith(four, { providers: [saver.provider] });
+    const { github, request } = await signedInWith(four, { providers: [provider] });
     await run(request, SAVING_MODEL);
     await settled(request);
 
@@ -1219,11 +1386,15 @@ describe("talking to the Lead (#347)", () => {
 
     expect((await leadOf(request)).builders).toBe(3);
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23, 24]);
-    expect(saver.replies.at(-1)?.[0]?.reply).toBe(
-      "Paused: builders already running carry on, and nothing new starts until the owner runs the order again.",
-    );
+    expect(replies.at(-1)?.content).toEqual([
+      {
+        kind: "text",
+        text: "Paused: builders already running carry on, and nothing new starts until the owner runs the order again.",
+      },
+    ]);
     expect((await leadOf(request)).state).toBe("paused");
     expect(github.commentsOn(onGitHub, 25)).toEqual([]);
+    await settled(request);
   });
 
   it("asks the owner before it files an issue", async () => {

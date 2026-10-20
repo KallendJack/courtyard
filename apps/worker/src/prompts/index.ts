@@ -1012,6 +1012,8 @@ const instructionsFor = (turn: {
   documents: boolean;
   things: boolean;
   lead: LeadBrief | undefined;
+  /** It's a builder the Lead started (#572), told to carry on to its pull request. */
+  builder: boolean;
   /** It offers the preview screenshot tool (#183). */
   previews: boolean;
 }) => {
@@ -1044,6 +1046,8 @@ const instructionsFor = (turn: {
         ]),
     // A code workspace's Lead (#347), on a provider that takes Courtyard's tools.
     ...(turn.lead !== undefined && turn.saves ? [leadPart(turn.lead)] : []),
+    // A Lead's builder (#572), on a provider that takes Courtyard's tools.
+    ...(turn.builder && turn.saves ? [BUILDER_PART] : []),
     ...(workspace.mode === "planning"
       ? [
           documentsPart(workspace.documents, capabilities.readsFiles),
@@ -1509,6 +1513,8 @@ export const framingFor = (turn: {
   now: number;
   /** In a code workspace's Lead (#347), the build order as the worker has it. */
   lead?: LeadBrief;
+  /** It's a builder the Lead started (#572). */
+  builder?: boolean;
 }): Framing => {
   const said = conversationOf(turn.events);
   const newest = said.at(-1);
@@ -1516,8 +1522,10 @@ export const framingFor = (turn: {
   const saves = turn.capabilities.savesContext;
   const offersSkillTool = saves && (turn.skills.offered.length > 0 || turn.skills.inUse.length > 0);
   const startedNow = newest?.speaker === "owner" ? newest.skill : undefined;
-  // Offered beside the save tool in a planning workspace (ADR 0017).
-  const suggests = saves && turn.workspace.mode === "planning";
+  // Offered beside the save tool in a planning workspace (ADR 0017), and to a Lead's builder, so
+  // its question to the owner tells itself apart from a progress report (#572).
+  const builder = turn.builder === true && turn.lead === undefined;
+  const suggests = saves && (turn.workspace.mode === "planning" || builder);
   // In every workspace, on a provider that searches (ADR 0019): a code session's helpers too.
   const searches = turn.capabilities.searchesWeb;
   // Beside the save tool, in a planning workspace (ADR 0020).
@@ -1528,6 +1536,7 @@ export const framingFor = (turn: {
   const instructions = instructionsFor({
     ...turn,
     lead: turn.lead,
+    builder,
     saves,
     previews,
     suggests,
@@ -1730,6 +1739,19 @@ export const RUN_BUILD_ORDER_MESSAGE = "Run the build order.";
  */
 export const leadMergedMessage = (merged: { pullRequest: number; issue: number; title: string }) =>
   `The pull request #${merged.pullRequest} that builds issue #${merged.issue}, ${quoted(merged.title)}, has merged. If its description lists boards ("Boards: … → Live"), move them in Paper as the Paper rules say: from Agreed to Live, and the Live boards they replace to Archive. If the repository keeps a plan issue or notes beside its build order, bring them up to date with gh. Then say in a line or two what merged and what the order does next.`;
+
+/**
+ * What a builder the Lead started is told every turn (#572; docs/ai-conduct.md, The Lead): carry
+ * on to the pull request, and ask the owner only a clear question, its answers offered as buttons.
+ */
+const BUILDER_PART = `You're a builder the Lead started: your work on this issue ends with its pull request open. Don't stop before that to report progress or to ask whether to go on; carry on. Stop only when something truly needs the owner to decide: then end your answer with one clear question, and offer two or three likely answers with the ${SUGGEST_REPLIES_TOOL_NAME} tool, so the owner can answer with a tap.`;
+
+/**
+ * What the worker sends a Lead's builder whose turn ended with no pull request, no task running
+ * and no question for the owner (#572; docs/ai-conduct.md, The Lead), once until the owner's own
+ * next message.
+ */
+export const CARRY_ON_MESSAGE = `Your turn ended without a pull request and without a question for the owner. Carry on building the issue until its pull request is open, without stopping to report progress or to ask whether to go on. If something truly needs the owner to decide, ask them one clear question instead, and offer its likely answers with the ${SUGGEST_REPLIES_TOOL_NAME} tool.`;
 
 /** The build order tool's name, as the Lead's model calls it (#347). */
 export const LEAD_TOOL_NAME = "build_order" satisfies TurnToolName;
