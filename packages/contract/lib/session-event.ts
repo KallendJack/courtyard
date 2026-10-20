@@ -108,6 +108,12 @@ export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
 /** The longest suggested reply: a few words, on one line on a phone. */
 export const SUGGESTED_REPLY_MAX_CHARACTERS = 60;
 
+/** How many choices a code session's question offers the owner, when it offers any (#541). */
+export const OWNER_QUESTION_CHOICES = { atLeast: 2, atMost: 3 } as const;
+
+/** The longest question a code session asks the owner (#541): one line on a Needs you row. */
+export const OWNER_QUESTION_MAX_CHARACTERS = 120;
+
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
@@ -339,6 +345,17 @@ export const SessionEvent = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
   z.object({ ...eventBase, type: z.literal("suggested-replies"), replies: z.array(z.string()) }),
+  /**
+   * A code session's model asked the owner a question it can't go on without (#541), with the
+   * ask owner tool: in a line, with the choices it offers, the one it would pick first, or none
+   * for one that needs the owner's words. It waits on the owner until they send a message.
+   */
+  z.object({
+    ...eventBase,
+    type: z.literal("owner-asked"),
+    question: z.string(),
+    choices: z.array(z.string()),
+  }),
   /** The web pages the answer used, listed under it as its Sources (ADR 0019). */
   z.object({
     ...eventBase,

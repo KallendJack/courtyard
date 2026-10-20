@@ -8,6 +8,7 @@ import {
   type DocumentSummary,
   hasLines,
   LinePlace,
+  OWNER_QUESTION_MAX_CHARACTERS,
   type OwnerContextShared,
   OwnerSection,
   PickKind,
@@ -52,7 +53,7 @@ import { type DocumentToolRefusal, documentPath } from "../features/documents/in
 import type { SaveRefusal } from "../features/saves/index.ts";
 import type { UseSkillAnswer, UseSkillRefusal } from "../features/skills/index.ts";
 import { linksIn } from "../features/sources/index.ts";
-import type { RepliesRefusal } from "../features/suggested-replies/index.ts";
+import type { QuestionRefusal, RepliesRefusal } from "../features/suggested-replies/index.ts";
 import {
   type LabelledThing,
   labelledThings,
@@ -934,6 +935,59 @@ export const suggestRepliesReply = (
     ? textReply(true, repliesTaken(shown.value.written))
     : textReply(false, repliesRefusalReason(shown.error));
 
+/** The ask owner tool's name, as a model calls it (#541). */
+export const ASK_OWNER_TOOL_NAME = "ask_owner" satisfies TurnToolName;
+
+/** When a code session asks the owner (docs/ai-conduct.md, Asking the owner; Every turn, item 14). */
+const ASKING = `When you can't go on without the owner (a choice only they can make, something only they know, or a fault you can't get past), call the ${ASK_OWNER_TOOL_NAME} tool with your question in a line, then end your turn: Courtyard shows it to the owner as waiting on them until they answer. When it has a few likely answers, give two or three as choices, the one you'd pick first, each a few words as the owner would say it, so they can answer with a tap; leave the choices out when only their own words will do. Ask only what you need to carry on: never to report progress, and never once the work is done, when you open the pull request instead.`;
+
+/** The ask owner tool as a model reads it: what it does, and that the rule is elsewhere. */
+const ASK_OWNER_TOOL: TurnTool = {
+  name: ASK_OWNER_TOOL_NAME,
+  description:
+    "Asks the owner a question you can't go on without, shown to them as waiting on them until they answer, with any choices as buttons that answer with a tap. Follow the rule for asking the owner in your instructions.",
+  input: {
+    question: z
+      .string()
+      .describe(`Your question, in one line (at most ${OWNER_QUESTION_MAX_CHARACTERS} characters).`),
+    choices: z
+      .array(z.string())
+      .optional()
+      .describe(
+        `Two or three different answers the owner can tap, the one you'd pick first, each a few words on one line (at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters). Leave them out when only the owner's own words will do.`,
+      ),
+  },
+};
+
+/** Why a question was refused, in the model's terms. */
+const questionRefusalReason = (refusal: QuestionRefusal) => {
+  switch (refusal.kind) {
+    case "malformed":
+      return "That input doesn't fit this tool: it takes a question, and choices, a list of two or three texts, or none.";
+    case "not-a-line":
+      return `Put your question in one line, at most ${OWNER_QUESTION_MAX_CHARACTERS} characters.`;
+    case "count":
+      return `Give two or three choices, or none, not ${refusal.count}.`;
+    case "not-short":
+      return `Each choice is a few words on one line, at most ${SUGGESTED_REPLY_MAX_CHARACTERS} characters.`;
+    case "repeated":
+      return "Two of those choices are the same: make each one different.";
+    case "already":
+      return "You've already asked the owner a question in this turn.";
+    case "stopped":
+      return "The owner stopped this turn, so your question isn't shown.";
+  }
+};
+
+/** What a model is told about the question it asked: that it waits on the owner, or why not. */
+export const askOwnerReply = (asked: Result<unknown, QuestionRefusal>): ToolReply =>
+  asked.ok
+    ? textReply(
+        true,
+        "The owner sees your question as waiting on them, below what you've written. If you haven't said why you're asking, say it now in a sentence or two, without asking again; then end your turn, and carry on once they answer.",
+      )
+    : textReply(false, questionRefusalReason(asked.error));
+
 /** The skills a turn's framing needs: those a model may load, and those in use in the session. */
 export type FramingSkills = {
   /** Each skill a model may load, by name with what it's for: none only the owner starts. */
@@ -1008,6 +1062,7 @@ const instructionsFor = (turn: {
   offersSkillTool: boolean;
   startedNow: SkillName | undefined;
   suggests: boolean;
+  asks: boolean;
   searches: boolean;
   documents: boolean;
   things: boolean;
@@ -1068,6 +1123,7 @@ const instructionsFor = (turn: {
         ]
       : []),
     ...(turn.suggests ? [SUGGESTING] : []),
+    ...(turn.asks ? [ASKING] : []),
     ...(turn.searches ? [SEARCHING] : []),
     ...(turn.capabilities.steers ? [STEERING] : []),
   ].join("\n\n");
@@ -1129,6 +1185,12 @@ type SaidDocument = { readonly save: DocumentSave; undone: boolean };
 type SaidThing = { readonly save: ThingSave; undone: boolean };
 
 type ModelSaid = Extract<Said, { speaker: "model" }>;
+
+/** A question the model asked the owner (#541), as a later turn reads it in the conversation. */
+const askedLine = (asked: { readonly question: string; readonly choices: readonly string[] }) =>
+  asked.choices.length === 0
+    ? `You asked the owner: ${asked.question}`
+    : `You asked the owner: ${asked.question} (choices: ${asked.choices.join(" / ")})`;
 
 /** The session so far, from its events: each owner message and the answer to it. */
 const conversationOf = (events: readonly SessionEvent[]) => {
@@ -1278,6 +1340,10 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         if (saved) saved.undone = true;
         break;
       }
+      // What the owner's reply answers (docs/ai-conduct.md, Asking the owner).
+      case "owner-asked":
+        said.push({ speaker: "courtyard", text: askedLine(event) });
+        break;
       case "session-titled":
       // The owner's reply follows, as written (docs/ai-conduct.md, Suggested replies).
       case "suggested-replies":
@@ -1518,6 +1584,8 @@ export const framingFor = (turn: {
   const startedNow = newest?.speaker === "owner" ? newest.skill : undefined;
   // Offered beside the save tool in a planning workspace (ADR 0017).
   const suggests = saves && turn.workspace.mode === "planning";
+  // In its place in a code session, never the Lead's, whose turns report to the owner (#541).
+  const asks = saves && turn.workspace.mode === "code" && turn.lead === undefined;
   // In every workspace, on a provider that searches (ADR 0019): a code session's helpers too.
   const searches = turn.capabilities.searchesWeb;
   // Beside the save tool, in a planning workspace (ADR 0020).
@@ -1531,6 +1599,7 @@ export const framingFor = (turn: {
     saves,
     previews,
     suggests,
+    asks,
     searches,
     documents,
     things: documents,
@@ -1563,6 +1632,7 @@ export const framingFor = (turn: {
       ...(documents ? [DOCUMENT_TOOL, THING_TOOL, BLOCK_SHOP_TOOL] : []),
       ...(offersSkillTool ? [USE_SKILL_TOOL] : []),
       ...(suggests ? [SUGGEST_REPLIES_TOOL] : []),
+      ...(asks ? [ASK_OWNER_TOOL] : []),
       ...(saves && turn.lead !== undefined ? [LEAD_TOOL] : []),
       ...(previews ? [PREVIEW_TOOL] : []),
     ],
@@ -1715,6 +1785,10 @@ export const grillIssueMessage = (issue: { number: number; title: string }) =>
  * What Continue sends (#186; docs/ai-conduct.md, Every turn): the turn before was cut off by a
  * restart, and the model carries on from where it was, checking what already happened first.
  */
+/** Continue after a builder's turn failed (#541), in the owner's place. */
+export const CONTINUE_AFTER_FAILURE_MESSAGE =
+  "Your last turn failed partway through, on an error that wasn't yours. Carry on from where you were. First check what already happened, since a command you ran may or may not have finished and a change may or may not have been made, saved or pushed. Then finish what I asked, without doing again what's already done.";
+
 export const CONTINUE_MESSAGE =
   "Courtyard restarted while you were working on your last turn and cut it off partway through. Carry on from where you were. First check what already happened, since a command you ran may or may not have finished and a change may or may not have been made, saved or pushed. Then finish what I asked, without doing again what's already done.";
 

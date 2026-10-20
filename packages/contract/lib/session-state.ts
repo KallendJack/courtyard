@@ -44,12 +44,45 @@ export type TurnNow = z.infer<typeof TurnNow>;
 /**
  * What a session waits on the owner for (#334; AGENTS.md), decided once, by the worker, so every
  * screen and device agrees: the approval its turn asked for; its last turn, cut off by a restart in
- * the last day, for Continue (#186); a Lead's builder stalled, silent for
- * `BUILDER_STALLS_AFTER_MINUTES` with nothing waiting on the owner or CI (#474), until it carries
- * on; a new reply, an answer from the last day that the owner hasn't seen; or nothing.
+ * the last day, for Continue (#186); a question it asked the owner (#541); a builder's last turn
+ * failed (not at a usage limit), for Continue, or a builder stopped with no pull request and no
+ * question (#541), each until the owner answers, however long and whatever they've read; a Lead's
+ * builder stalled, silent for `BUILDER_STALLS_AFTER_MINUTES` with nothing waiting on the owner or
+ * CI (#474), until it carries on; a new reply, an answer from the last day that the owner hasn't
+ * seen; or nothing.
  */
-export const SessionWaiting = z.enum(["approval", "cut-off", "stalled", "reply", "nothing"]);
+export const SessionWaiting = z.enum([
+  "approval",
+  "cut-off",
+  "asked",
+  "turn-failed",
+  "stopped",
+  "stalled",
+  "reply",
+  "nothing",
+]);
 export type SessionWaiting = z.infer<typeof SessionWaiting>;
+
+/**
+ * A question a code session asked the owner (#541): in a line, the choices it offers (the one it
+ * would pick first; none when it needs the owner's words), and its event number, which answers it.
+ */
+export const OwnerQuestion = z.object({
+  text: z.string(),
+  choices: z.array(z.string()),
+  asked: z.number().int().positive(),
+});
+export type OwnerQuestion = z.infer<typeof OwnerQuestion>;
+
+/**
+ * Answering a session's question with one of its choices (#541), from a list: the question by its
+ * event number, so a tap that arrives once it's answered sends nothing, and the choice by its place.
+ */
+export const QuestionAnswer = z.object({
+  asked: z.number().int().positive(),
+  choice: z.number().int().nonnegative(),
+});
+export type QuestionAnswer = z.infer<typeof QuestionAnswer>;
 
 /**
  * How long a Lead's builder may be silent (no turn, commit or event) before it's stalled (#474):
@@ -59,9 +92,15 @@ export const BUILDER_STALLS_AFTER_MINUTES = 20;
 
 /**
  * A session as a workspace's lists show it: its summary, whose turn it is, and what it waits on
- * the owner for.
+ * the owner for: while that's its question (#541), the question; and while it waits until answered
+ * (asked, failed or stopped), `seen` once the owner has read it, which never clears it.
  */
-export const ListedSession = SessionSummary.extend({ now: TurnNow, waiting: SessionWaiting });
+export const ListedSession = SessionSummary.extend({
+  now: TurnNow,
+  waiting: SessionWaiting,
+  question: OwnerQuestion.optional(),
+  seen: z.literal(true).optional(),
+});
 export type ListedSession = z.infer<typeof ListedSession>;
 
 export const SessionList = z.object({ sessions: z.array(ListedSession) });
@@ -69,16 +108,26 @@ export type SessionList = z.infer<typeof SessionList>;
 
 /**
  * One thing waiting on the owner (#492), in any workspace: a session's approval, its turn cut off
- * by a restart, its builder stalled (#474), or its new reply; or its pull request's failing
- * checks, merge or conflict. Each names its workspace and session, so a row or the Next pill opens
- * it in one tap.
+ * by a restart, its question (#541), its builder's turn failed or stopped with no pull request
+ * (#541), its builder stalled (#474), or its new reply; or its pull request's failing checks,
+ * merge or conflict. Each names its workspace and session, so a row or the Next pill opens it in
+ * one tap; one that waits until answered says whether the owner has `seen` it.
  */
 export const NeedYou = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.enum(["approval", "cut-off", "stalled", "reply"]),
+    kind: z.enum(["approval", "cut-off", "turn-failed", "stopped", "stalled", "reply"]),
     workspace: z.object({ id: WorkspaceId, name: z.string() }),
     session: z.object({ id: SessionId, title: z.string() }),
     since: z.iso.datetime(),
+    seen: z.literal(true).optional(),
+  }),
+  z.object({
+    kind: z.literal("asked"),
+    workspace: z.object({ id: WorkspaceId, name: z.string() }),
+    session: z.object({ id: SessionId, title: z.string() }),
+    since: z.iso.datetime(),
+    question: OwnerQuestion,
+    seen: z.literal(true).optional(),
   }),
   z.object({
     kind: z.enum(["failed", "merge", "conflict"]),

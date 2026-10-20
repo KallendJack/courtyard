@@ -1294,6 +1294,60 @@ describe("suggested replies (#126, ADR 0017)", () => {
   });
 });
 
+describe("asking the owner (#541)", () => {
+  it("offers the tool in a code session, with when to use it", async () => {
+    await asCode();
+    const saver = await savingTurns([[]]);
+    const framing = saver.framings[0];
+
+    const tool = framing?.tools.find((offered) => offered.name === "ask_owner");
+    expect(tool?.description).toBe(await quotedInGuide("Asks the owner a question you can't"));
+    expect(inputsOf(tool)).toBe(await quotedInGuide("- question: Your question, in one line"));
+    expect(framing?.instructions).toContain(
+      await quotedInGuide("When you can't go on without the owner"),
+    );
+  });
+
+  it("offers it in no planning workspace", async () => {
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.tools.map((tool) => tool.name)).not.toContain("ask_owner");
+    expect(saver.framings[0]?.instructions).not.toMatch(/ask_owner/);
+  });
+
+  it("takes one question a turn, refusing with the guide's reasons, and a later turn reads it", async () => {
+    await asCode();
+    const ask = (input: unknown) => ({ call: "ask_owner", input });
+    const saver = await savingTurns([
+      [
+        ask({ question: "" }),
+        ask({ question: "Which?\nOr which?" }),
+        ask({ question: "Which?", choices: ["One"] }),
+        ask({ question: "Which?", choices: ["One", "Two\nlines"] }),
+        ask({ question: "Which?", choices: ["Not yet", "not  yet"] }),
+        ask({ choices: ["One", "Two"] }),
+        ask({ question: "How should I rerun the tests?", choices: ["In my folder", "Skip them"] }),
+        ask({ question: "And another?" }),
+      ],
+      [],
+    ]);
+
+    expect(saver.replies[0]).toEqual([
+      { ok: false, reply: await quotedInGuide("Put your question in one line") },
+      { ok: false, reply: await quotedInGuide("Put your question in one line") },
+      { ok: false, reply: await quotedInGuide("Give two or three choices", { count: "1" }) },
+      { ok: false, reply: await quotedInGuide("Each choice is a few words") },
+      { ok: false, reply: await quotedInGuide("Two of those choices are the same") },
+      { ok: false, reply: await quotedInGuide("That input doesn't fit this tool: it takes a question") },
+      { ok: true, reply: await quotedInGuide("The owner sees your question as waiting") },
+      { ok: false, reply: await quotedInGuide("You've already asked the owner") },
+    ]);
+    expect(saver.framings[1]?.message).toContain(
+      "You asked the owner: How should I rerun the tests? (choices: In my folder / Skip them)",
+    );
+  });
+});
+
 /** The framings and replies a provider that saves is given, one per turn, as `turns` script. */
 const savingTurns = async (turns: Parameters<typeof savingProvider>[0]) => {
   // It codes, so it can work in a code workspace too (ADR 0007).

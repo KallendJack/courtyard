@@ -123,7 +123,8 @@ instructions, as Claude does (ADR 0015). The instructions, in order:
 12. When the workspace has skills a model may load: how to use them, then each one's name and description between
    `<skills>` markers (Skills, below), the same on every turn for every provider.
 13. When skills are in use in the session: each one's text between `<skill>` markers (Skills, below).
-14. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below).
+14. When the turn offers the suggest replies tool: when to suggest replies (Suggested replies, below). In a code
+    session, the ask owner tool in its place: when to ask the owner (Asking the owner, below).
 15. When the turn offers web search: when to search, and how to use what's found (Web search, below).
 16. On a provider that steers (#252), what to do with what the owner adds while it answers (Steering, below).
 
@@ -163,6 +164,13 @@ in the owner's place, is:
 > Courtyard restarted while you were working on your last turn and cut it off partway through. Carry on from where
 > you were. First check what already happened, since a command you ran may or may not have finished and a change may
 > or may not have been made, saved or pushed. Then finish what I asked, without doing again what's already done.
+
+The owner's Continue also carries on a turn that failed other than at a usage limit (a provider error, a setup fault;
+#541), from a builder's row in Needs you, the same way, its message:
+
+> Your last turn failed partway through, on an error that wasn't yours. Carry on from where you were. First check
+> what already happened, since a command you ran may or may not have finished and a change may or may not have been
+> made, saved or pushed. Then finish what I asked, without doing again what's already done.
 
 ## Attachments
 
@@ -1018,6 +1026,73 @@ A refusal shows nothing to the owner, and the model can put it right and call ag
 latest answer only, once its turn has completed, and go once the owner has replied, by tapping one or typing their
 own. Tapping one sends it as the owner's message with the model and effort of the turn it answers. The conversation a
 later turn gets leaves suggested replies out: the owner's reply is there, as written.
+
+## Asking the owner
+
+Built with #541. A code session's model that can't go on without the owner asks them through Courtyard's
+`ask_owner` tool: its question in a line, and, when it has a few likely answers, two or three choices. The worker
+records it, and the session waits on the owner, gold in Needs you and pinned above the session's reply box, until
+they answer: a tap on a choice, from Needs you or the session, sends it as their message on the model and effort they
+last sent with; or their own reply. Reading it never clears it. It's offered in its place of suggested replies, in a
+code session on a turn whose provider takes Courtyard's tools, never in the Lead's.
+
+What a model is told (Every turn, item 14), on a turn that offers the tool:
+
+> When you can't go on without the owner (a choice only they can make, something only they know, or a fault you
+> can't get past), call the ask_owner tool with your question in a line, then end your turn: Courtyard shows it to
+> the owner as waiting on them until they answer. When it has a few likely answers, give two or three as choices, the
+> one you'd pick first, each a few words as the owner would say it, so they can answer with a tap; leave the choices
+> out when only their own words will do. Ask only what you need to carry on: never to report progress, and never once
+> the work is done, when you open the pull request instead.
+
+The tool's description says what it does and points to that rule:
+
+> Asks the owner a question you can't go on without, shown to them as waiting on them until they answer, with any
+> choices as buttons that answer with a tap. Follow the rule for asking the owner in your instructions.
+
+Its inputs (`OWNER_QUESTION_MAX_CHARACTERS`, 120, and `SUGGESTED_REPLY_MAX_CHARACTERS`, 60, are in the contract):
+
+> - question: Your question, in one line (at most 120 characters).
+> - choices: Two or three different answers the owner can tap, the one you'd pick first, each a few words on one
+>   line (at most 60 characters). Leave them out when only the owner's own words will do.
+
+The worker checks it and refuses, saying why, when:
+
+- **the input isn't a question and a list of texts:**
+
+  > That input doesn't fit this tool: it takes a question, and choices, a list of two or three texts, or none.
+
+- **the question is empty, more than one line, or too long:**
+
+  > Put your question in one line, at most 120 characters.
+
+- **there are choices, but not two or three:**
+
+  > Give two or three choices, or none, not <count>.
+
+- **a choice is empty, more than one line, or too long:**
+
+  > Each choice is a few words on one line, at most 60 characters.
+
+- **two choices are the same,** ignoring case and spacing:
+
+  > Two of those choices are the same: make each one different.
+
+- **the turn has asked already,** one question per turn, the first that's accepted:
+
+  > You've already asked the owner a question in this turn.
+
+- **the owner stopped the turn:**
+
+  > The owner stopped this turn, so your question isn't shown.
+
+A question it takes is answered:
+
+> The owner sees your question as waiting on them, below what you've written. If you haven't said why you're asking,
+> say it now in a sentence or two, without asking again; then end your turn, and carry on once they answer.
+
+A later turn reads the question in the conversation where it was asked, so it knows what the owner's message answers:
+`You asked the owner: <question>`, with ` (choices: <first> / <second>)` after it when it offered choices.
 
 ## Web search
 

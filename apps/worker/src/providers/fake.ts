@@ -16,6 +16,7 @@ import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
 import { err, ok, type Result } from "../lib/result.ts";
 import {
+  ASK_OWNER_TOOL_NAME,
   BLOCK_SHOP_TOOL_NAME,
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
@@ -126,6 +127,20 @@ const scriptedReplies = (message: string): { replies: string[] }[] =>
   message.split("\n").flatMap((line) => {
     const [, replies] = SUGGEST_REPLIES.exec(line.trim()) ?? [];
     return replies === undefined ? [] : [{ replies: replies.split("|").map((r) => r.trim()) }];
+  });
+
+const ASK_OWNER = /^ask owner: (.+)$/i;
+
+/**
+ * The question a code session's message scripts asking the owner (#541), on a line "ask owner:
+ * How should I rerun the tests? | In my folder | Skip it", its choices after the question, if any.
+ */
+const scriptedQuestions = (message: string): { question: string; choices?: string[] }[] =>
+  message.split("\n").flatMap((line) => {
+    const [, asked] = ASK_OWNER.exec(line.trim()) ?? [];
+    if (asked === undefined) return [];
+    const [question = "", ...choices] = asked.split("|").map((part) => part.trim());
+    return [choices.length === 0 ? { question } : { question, choices }];
   });
 
 const SAVE_DOCUMENT = /^save document:?$/i;
@@ -301,8 +316,8 @@ const scriptedBuildOrder = (message: string): Record<string, unknown>[] =>
 
 /**
  * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
- * skills loaded first, then saves, documents and Things, then suggested replies, then the Lead's
- * build order tool.
+ * skills loaded first, then saves, documents and Things, then suggested replies, then a code
+ * session's question, then the Lead's build order tool.
  */
 const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
   [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
@@ -311,6 +326,7 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [THING_TOOL_NAME, scriptedThings],
   [BLOCK_SHOP_TOOL_NAME, scriptedBlocks],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
+  [ASK_OWNER_TOOL_NAME, scriptedQuestions],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
   [PICKS_TOOL_NAME, scriptedPicks],
 ];
@@ -798,7 +814,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * hours on, so overflow can be seen and tested, and "use 82% of Fake's week" (or "5-hour") fills
  * its pretend plan (see `pretendPlan`, #66). "please look", or a message of no words, says
  * which attachments it was given (see `seen`). In a code session, "edit file …" and "run command: …" edit and run, as the worker
- * allows (see `scriptedCoding`), and "helper …: …" starts a helper (see `scriptedHelpers`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
+ * allows (see `scriptedCoding`), "helper …: …" starts a helper (see `scriptedHelpers`), and "ask owner: …" asks the owner a question (see `scriptedQuestions`); Fake two doesn't code. With Paper, "paper <tool> {…}" calls one of
  * Paper's tools as the worker allows, the fake playing Paper (see `scriptedPaper`), and "preview
  * screenshot: <path> <size>" looks at the session's preview (see `scriptedPreview`). To a Lead,
  * "pause" pauses the build order (see `scriptedBuildOrder`).

@@ -1,4 +1,9 @@
-import { SUGGESTED_REPLIES, SUGGESTED_REPLY_MAX_CHARACTERS } from "@courtyard/contract";
+import {
+  OWNER_QUESTION_CHOICES,
+  OWNER_QUESTION_MAX_CHARACTERS,
+  SUGGESTED_REPLIES,
+  SUGGESTED_REPLY_MAX_CHARACTERS,
+} from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok, type Result } from "../../lib/result.ts";
 
@@ -34,6 +39,72 @@ export const checkReplies = (input: unknown): Result<string[], RepliesRefusal> =
   if (!replies.every(short)) return err({ kind: "not-short" });
   if (new Set(replies.map(sameness)).size < replies.length) return err({ kind: "repeated" });
   return ok(replies);
+};
+
+/** Why the worker won't put a code session's question to the owner (#541; docs/ai-conduct.md). */
+export type QuestionRefusal =
+  | { readonly kind: "malformed" }
+  /** The question isn't one line, short enough for a row. */
+  | { readonly kind: "not-a-line" }
+  | { readonly kind: "count"; readonly count: number }
+  | { readonly kind: "not-short" }
+  | { readonly kind: "repeated" }
+  /** The turn has asked already: one question per turn. */
+  | { readonly kind: "already" }
+  | { readonly kind: "stopped" };
+
+const QuestionInput = z.object({
+  question: z.string(),
+  choices: z.array(z.string()).optional(),
+});
+
+/** A question a code session puts to the owner (#541), as the worker records it. */
+export type CheckedQuestion = { readonly question: string; readonly choices: readonly string[] };
+
+/**
+ * A code session's question as the owner sees it, trimmed (#541): one line, short enough for a
+ * row, with no choices (it needs the owner's words) or two or three, each a few words on one line,
+ * all different, the one the model would pick first. Or why not, for the model to put right.
+ */
+export const checkQuestion = (input: unknown): Result<CheckedQuestion, QuestionRefusal> => {
+  const parsed = QuestionInput.safeParse(input);
+  if (!parsed.success) return err({ kind: "malformed" });
+  const question = parsed.data.question.trim();
+  if (question === "" || /[\r\n]/.test(question) || question.length > OWNER_QUESTION_MAX_CHARACTERS) {
+    return err({ kind: "not-a-line" });
+  }
+  const choices = (parsed.data.choices ?? []).map((choice) => choice.trim());
+  if (choices.length === 0) return ok({ question, choices });
+  const { atLeast, atMost } = OWNER_QUESTION_CHOICES;
+  if (choices.length < atLeast || choices.length > atMost) {
+    return err({ kind: "count", count: choices.length });
+  }
+  const short = (choice: string) =>
+    choice !== "" && !/[\r\n]/.test(choice) && choice.length <= SUGGESTED_REPLY_MAX_CHARACTERS;
+  if (!choices.every(short)) return err({ kind: "not-short" });
+  if (new Set(choices.map(sameness)).size < choices.length) return err({ kind: "repeated" });
+  return ok({ question, choices });
+};
+
+/**
+ * The ask owner tool for one turn (#541): it checks each call's question and records the first
+ * accepted, refusing any after it, and any once the turn is stopped.
+ */
+export const createTurnQuestion = (turn: {
+  /** Whether the turn is stopped, or can't record any more. */
+  stopped: () => boolean;
+  record: (question: CheckedQuestion) => Promise<void>;
+}) => {
+  let asked = false;
+  return async (input: unknown): Promise<Result<CheckedQuestion, QuestionRefusal>> => {
+    if (turn.stopped()) return err({ kind: "stopped" });
+    if (asked) return err({ kind: "already" });
+    const checked = checkQuestion(input);
+    if (!checked.ok) return checked;
+    asked = true;
+    await turn.record(checked.value);
+    return checked;
+  };
 };
 
 /**

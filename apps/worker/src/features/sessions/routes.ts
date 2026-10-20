@@ -13,6 +13,7 @@ import {
   type ProviderList,
   PullRequestMerging,
   type PullRequestReview,
+  QuestionAnswer,
   SaveAsDocument,
   SaveEdit,
   SessionChange,
@@ -154,6 +155,15 @@ export const sessionError = (c: Context, error: SessionError) => {
         status: 409,
         error: "Only the session's last turn can continue, once a restart has cut it off.",
       });
+    case "question-answered":
+      return apiError(c, { status: 409, error: "That question has been answered already." });
+    case "question-needs-words":
+      return apiError(c, {
+        status: 409,
+        error: "That question needs your own words: reply in its session.",
+      });
+    case "no-such-choice":
+      return apiError(c, { status: 400, error: "That question has no such choice." });
     case "no-overflow":
       return apiError(c, { status: 409, error: noOverflow(error.overflow) });
     case "save-not-found":
@@ -509,6 +519,17 @@ export const sessionRoutes = (options: {
     if (!request.ok) return apiError(c, { status: 400, error: "Say which turn to continue" });
     const continued = await sessions.continue(c.req.param("id"), request.value);
     if (!continued.ok) return sessionError(c, continued.error);
+    return c.body(null, 202);
+  });
+
+  // A tap on one of a question's choices (#541): it goes as the owner's message.
+  routes.post("/sessions/:id/answer", async (c) => {
+    const request = await readBody(c, QuestionAnswer);
+    if (!request.ok) {
+      return apiError(c, { status: 400, error: "Say which question, and which choice" });
+    }
+    const answered = await sessions.answer(c.req.param("id"), request.value);
+    if (!answered.ok) return sessionError(c, answered.error);
     return c.body(null, 202);
   });
 

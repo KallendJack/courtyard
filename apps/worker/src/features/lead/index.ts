@@ -103,15 +103,24 @@ const STALLS_AFTER_MS = BUILDER_STALLS_AFTER_MINUTES * 60 * 1000;
 
 /**
  * A builder the Lead started, the code files its issue named then (#423), and since when it has
- * been silent (#474): its latest event then, and when the Lead began counting, which waiting on
- * the owner or for a place starts again.
+ * been silent (#474): its latest event then, and when the Lead began counting, which waiting for
+ * a place starts again; and, waiting on the owner that long (#541), that its slot is `freed`.
  */
 const Builder = z.object({
   session: SessionId,
   issue: z.number().int().positive(),
   files: z.array(z.string()).default([]),
-  quiet: z.object({ seq: z.number().int().nonnegative(), since: z.iso.datetime() }).optional(),
+  quiet: z
+    .object({
+      seq: z.number().int().nonnegative(),
+      since: z.iso.datetime(),
+      freed: z.literal(true).optional(),
+    })
+    .optional(),
 });
+
+/** What a builder waits on the owner for until they answer (#541): never stalled for it. */
+const HELD: readonly Listed["waiting"][] = ["asked", "stopped"];
 
 /**
  * Merge in order (#423), as kept: merging the builders' pull requests in this order, first first,
@@ -381,11 +390,13 @@ export const createLead = (options: {
   ) => {
     const building: LeadBuilder[] = [];
     const ready: LeadReady[] = [];
-    for (const { session, issue } of kept?.built ?? []) {
+    for (const { session, issue, quiet } of kept?.built ?? []) {
       const each = listed.get(session);
       const standing = standingOf(each, heard.get(session));
       if (each === undefined || standing === "ended") continue;
-      if (standing === "building") building.push({ session, title: each.title, issue });
+      // Waiting on the owner past its time, its slot is the next builder's (#541).
+      const freed = quiet?.freed === true && HELD.includes(each.waiting);
+      if (standing === "building" && !freed) building.push({ session, title: each.title, issue });
       else if (each.pullRequest !== undefined) {
         ready.push({ session, title: each.title, issue, pullRequest: each.pullRequest.number });
       }
@@ -611,7 +622,9 @@ export const createLead = (options: {
 
   /**
    * Watches its builders' silence (#474): one still building with no pull request, silent (no
-   * turn, commit or event) for `STALLS_AFTER_MS`, is stalled. Its session is marked so, which
+   * turn, commit or event) for `STALLS_AFTER_MS`, is stalled. One waiting on the owner until they
+   * answer (#541) never is: that long on, its slot is freed for the next builder, and it stays
+   * waiting on them. Its session is marked so, which
    * waits on the owner and frees its slot, the owner is told, and its session is kept, its claim
    * standing, for the owner to look at. Time it waits on the owner or for a place doesn't count,
    * nor time something of the machine's is in hand for it (#574): its silence starts again once
@@ -632,6 +645,23 @@ export const createLead = (options: {
       const { quiet, ...unwatched } = builder;
       if (each === undefined || latest === undefined || standingOf(each, latest) !== "building") {
         built.push(unwatched);
+        continue;
+      }
+      // Waiting on the owner (#541) is never stalled, but past its time its slot is freed; not
+      // while its own task runs, which counts again from the task's end (#574).
+      if (HELD.includes(each.waiting) && !each.queued) {
+        if (latest.inHand || quiet?.seq !== latest.seq) {
+          built.push({ ...unwatched, quiet: { seq: latest.seq, since: at } });
+          continue;
+        }
+        const due = options.now() - Date.parse(quiet.since) >= STALLS_AFTER_MS;
+        if (due && quiet.freed !== true) {
+          built.push({ ...builder, quiet: { ...quiet, freed: true } });
+          kept = await noted(
+            kept,
+            `${nameOf(each, builder.issue)} waits on you: ${BUILDER_STALLS_AFTER_MINUTES} min on, its slot is free.`,
+          );
+        } else built.push(builder);
         continue;
       }
       if (each.waiting !== "nothing" || each.queued || latest.inHand || quiet?.seq !== latest.seq) {

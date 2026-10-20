@@ -3,6 +3,7 @@ import {
   type CodeSessionList,
   type NeedsYou,
   type NeedYou,
+  type OwnerQuestion,
   overflowFrom,
   type PlanUsage,
   type ProviderId,
@@ -29,84 +30,127 @@ import {
 /** How long a session's answer counts as a new reply, waiting on the owner (#301). */
 const NEW_REPLY_MS = 24 * 60 * 60 * 1000;
 
-/** A session's latest answer: the event that ended its turn, completed or failed, by number and time. */
-export type Answer = { readonly seq: number; readonly at: string };
+/**
+ * A session's latest answer: the event that ended its turn, completed or failed, by number and
+ * time, and how it ended: completed; failed at a usage limit, which the Lead carries on (#570);
+ * cut off by a restart (#186), which waits for Continue; or failed otherwise (#541).
+ */
+export type Answer = {
+  readonly seq: number;
+  readonly at: string;
+  readonly ended: "completed" | "limited" | "cut-off" | "failed";
+};
 
 /**
  * The answer an event is, when it ends its turn completed or failed; a stopped turn is the
  * owner's own doing, so it's no reply.
  */
-export const answerOf = (event: SessionEvent): Answer | undefined =>
-  event.type === "turn-completed" || event.type === "turn-failed"
-    ? { seq: event.seq, at: event.at }
-    : undefined;
+const answerOf = (event: SessionEvent): Answer | undefined => {
+  if (event.type === "turn-completed") return { seq: event.seq, at: event.at, ended: "completed" };
+  if (event.type !== "turn-failed") return undefined;
+  const { kind } = event.reason;
+  const ended = kind === "interrupted" ? "cut-off" : kind === "rate-limited" ? "limited" : "failed";
+  return { seq: event.seq, at: event.at, ended };
+};
 
 /**
- * A session's latest answer as its events come, one at a time: `answer`, and whether its turn
- * now is a code workspace's Lead reporting (#347), started by the owner's tap on Run the build
- * order or by the worker when a builder's pull request merged: its answer is a report on Home's
- * Running row, not a reply the owner waits for.
+ * A session's latest answer as its events come, one at a time: `answer`, whether its turn now is
+ * a code workspace's Lead reporting (#347), started by the owner's tap on Run the build order or
+ * by the worker when a builder's pull request merged: its answer is a report on Home's Running
+ * row, not a reply the owner waits for; and the question its model asked the owner since their
+ * last message (#541), until they send another.
  */
 export type Answered = {
   readonly answer: Answer | undefined;
   readonly reporting: boolean;
-  /** Its latest answer is a turn cut off by a restart (#186), which waits for Continue. */
-  readonly cutOff: boolean;
+  readonly asked: OwnerQuestion | undefined;
 };
+
+/** A session with no answer yet. */
+export const NOT_ANSWERED: Answered = { answer: undefined, reporting: false, asked: undefined };
 
 export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
   if (event.type === "owner-message") {
     return {
-      ...was,
+      // A message answers a turn cut off or failed, even one whose own answer is a Lead's report.
+      answer: was.answer === undefined ? undefined : { ...was.answer, ended: "completed" },
       reporting: event.merged !== undefined || event.runsBuildOrder === true,
-      cutOff: false,
+      asked: undefined,
+    };
+  }
+  if (event.type === "owner-asked") {
+    return {
+      ...was,
+      asked: { text: event.question, choices: event.choices, asked: event.seq },
     };
   }
   const answer = was.reporting ? undefined : answerOf(event);
-  if (answer === undefined) return was;
-  const cutOff = event.type === "turn-failed" && event.reason.kind === "interrupted";
-  return { ...was, answer, cutOff };
+  return answer === undefined ? was : { ...was, answer };
+};
+
+/**
+ * What a session waits on the owner for, and while that's until they answer (#541), whether they
+ * have seen it and the question it asked.
+ */
+export type Waiting = {
+  readonly waiting: SessionWaiting;
+  readonly question?: OwnerQuestion;
+  readonly seen?: true;
 };
 
 /**
  * What a session waits on the owner for: the approval its turn waits on; else its last turn, cut
- * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else a
- * Lead's builder its Lead found stalled (#474), until anything new happens in it; else its
- * latest answer, while the owner hasn't seen it (`seen`, the event number its page last showed up
- * to, on any device), it's under a day old, no turn runs or waits for a slot, and it has no pull
- * request (whose own rows say what waits); else nothing.
+ * off by a restart under a day ago (#186), until Continue or a new message, seen or not. Else,
+ * with no turn running or waiting for a slot and its pull request not ended, until the owner
+ * answers however long it takes and whatever they've read (#541): the question its model asked
+ * them; a builder's (a session started on an issue) last turn, failed other than at a usage limit;
+ * or a builder stopped with neither a pull request nor a question. Else a Lead's builder its Lead
+ * found stalled (#474), until anything new happens in it; else its latest answer, while the owner
+ * hasn't seen it (`seen`, the event number its page last showed up to, on any device), it's under
+ * a day old, no turn runs or waits for a slot, and it has no pull request (whose own rows say what
+ * waits); else nothing.
  */
 export const sessionWaiting = (session: {
   now: TurnNow;
   queued: boolean;
   pullRequest: PullRequest | undefined;
-  answer: Answer | undefined;
-  cutOff: boolean;
+  answered: Answered;
+  /** It was started on an issue, to build it (#324, #347). */
+  builder: boolean;
   /** Its Lead found it stalled, and nothing has happened in it since (#474). */
   stalled: boolean;
   seen: number;
   clock: number;
-}): SessionWaiting => {
-  if (session.now.kind === "needs-you") return "approval";
-  const { answer } = session;
+}): Waiting => {
+  if (session.now.kind === "needs-you") return { waiting: "approval" };
+  const { answer, asked } = session.answered;
   const recent = answer !== undefined && session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
   const free = session.now.kind === "your-turn" && !session.queued;
-  if (free && recent && session.cutOff) return "cut-off";
-  if (session.stalled) return "stalled";
+  if (free && recent && answer.ended === "cut-off") return { waiting: "cut-off" };
+  const { pullRequest } = session;
+  if (free && answer !== undefined && (pullRequest === undefined || pullRequest.state === "open")) {
+    const seen = answer.seq <= session.seen ? { seen: true as const } : {};
+    if (asked !== undefined) return { waiting: "asked", question: asked, ...seen };
+    if (session.builder && answer.ended === "failed") return { waiting: "turn-failed", ...seen };
+    if (session.builder && answer.ended === "completed" && pullRequest === undefined) {
+      return { waiting: "stopped", ...seen };
+    }
+  }
+  if (session.stalled) return { waiting: "stalled" };
   const newReply =
-    free &&
-    recent &&
-    session.pullRequest === undefined &&
-    answer !== undefined &&
-    answer.seq > session.seen;
-  return newReply ? "reply" : "nothing";
+    free && recent && pullRequest === undefined && answer !== undefined && answer.seq > session.seen;
+  return { waiting: newReply ? "reply" : "nothing" };
 };
 
 /**
- * Needs you's order (#301): stalled builders (#474), approvals, turns cut off, failing checks,
- * replies, merges, conflicts.
+ * Needs you's order (#301): builders waiting on the owner, by question, failed turn and stop
+ * (#541), then stalled (#474), approvals, turns cut off, failing checks, replies, merges,
+ * conflicts.
  */
 const NEEDS_ORDER: readonly NeedYou["kind"][] = [
+  "asked",
+  "turn-failed",
+  "stopped",
   "stalled",
   "approval",
   "cut-off",
@@ -134,8 +178,16 @@ export const needsYouOf = (
         session: { id: session.id, title: session.title },
       };
       const since = session.now.kind === "needs-you" ? session.now.since : session.updatedAt;
+      const seen = session.seen === undefined ? {} : { seen: session.seen };
+      const { waiting, question } = session;
       const own: NeedYou[] =
-        session.waiting === "nothing" ? [] : [{ kind: session.waiting, ...where, since }];
+        waiting === "nothing"
+          ? []
+          : waiting === "asked"
+            ? question === undefined
+              ? []
+              : [{ kind: "asked", ...where, since, question, ...seen }]
+            : [{ kind: waiting, ...where, since, ...seen }];
       const { pullRequest } = session;
       const pull = pullRequest === undefined ? "nothing" : pullRequestWaiting(pullRequest, session);
       if (pullRequest === undefined || pull === "nothing") return own;

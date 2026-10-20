@@ -841,10 +841,30 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     ]);
   });
 
+  /**
+   * A provider whose builders' turns go silent, running until they're stopped, as a model that
+   * hangs does; the Lead's turns just answer.
+   */
+  const silent = (): Provider => {
+    const { provider: coder } = codingProvider([]);
+    return {
+      ...coder,
+      runTurn: async (input) => {
+        if (input.code !== null && input.framing.newMessage.startsWith("Build issue")) {
+          await new Promise((end) => input.signal.addEventListener("abort", end, { once: true }));
+          return ok(null);
+        }
+        await input.emit("Done.");
+        return ok(null);
+      },
+    };
+  };
+
   it("marks a builder silent for 20 minutes Stalled: Needs you, the owner told once, its slot free, its session kept", async () => {
     const push = createFakePush();
     const clock = { now: Date.parse("2026-10-17T09:00:00") };
-    const { github, request } = await signedInWith(ISSUES, {
+    const { github, request } = await signedInWith(ISSUES.slice(0, 1), {
+      providers: [silent()],
       sendPush: push.send,
       now: () => clock.now,
     });
@@ -852,26 +872,20 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       endpoint: "https://push.example/fold",
       keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
     });
-    await run(request);
-    await settled(request);
-    await runJobs();
-    // The owner has read #22's builder's answer; #23's waits on them, which isn't silence.
+    await run(request, CODING_MODEL);
     const quiet = await builderOf(request, 22);
-    await see(request, quiet.id);
+    await runJobs();
 
     clock.now += 19 * MINUTE;
     await runJobs();
-    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22]);
 
     clock.now += 2 * MINUTE;
     await runJobs();
     await runJobs();
 
-    const lead = await leadOf(request);
-    expect(lead.building.map((each) => each.issue)).toEqual([23, 24]);
-    expect(lead.next.map((issue) => issue.number)).toEqual([]);
+    expect((await leadOf(request)).building).toEqual([]);
     expect((await builderOf(request, 22)).waiting).toBe("stalled");
-    expect((await builderOf(request, 23)).waiting).toBe("reply");
     const needs = NeedsYou.parse(await (await request("/api/needs-you")).json()).needs;
     expect(needs[0]).toMatchObject({ kind: "stalled", session: { id: quiet.id } });
     await expect
@@ -891,28 +905,66 @@ describe("builders that stop, fail or go quiet (#474)", () => {
     );
     // Nothing is posted on the issue: its claim stands, so nobody else starts it.
     expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
+    // Anything new in it (the owner's Stop, here) and it's no longer stalled.
+    await postJson(request, `/api/sessions/${quiet.id}/stop`, { turn: 1 });
+    await settled(request);
+    expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
   });
 
-  it("counts a stalled builder as Building again once its session carries on", async () => {
+  it("never marks a builder waiting on you Stalled: 20 minutes on, its slot goes to the next issue and it stays waiting (#541)", async () => {
+    const push = createFakePush();
+    const clock = { now: Date.parse("2026-10-17T09:00:00") };
+    const { request } = await signedInWith(ISSUES, { sendPush: push.send, now: () => clock.now });
+    await postJson(request, "/api/notifications/on", {
+      endpoint: "https://push.example/fold",
+      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+    });
+    await run(request);
+    await settled(request);
+    await runJobs();
+    // Both stopped with no pull request: the owner has read #22's, which never clears it.
+    const read = await builderOf(request, 22);
+    await see(request, read.id);
+
+    clock.now += 19 * MINUTE;
+    await runJobs();
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
+
+    clock.now += 2 * MINUTE;
+    await runJobs();
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([24]);
+    expect(await builderOf(request, 22)).toMatchObject({ waiting: "stopped", seen: true });
+    expect((await builderOf(request, 23)).waiting).toBe("stopped");
+    const needs = NeedsYou.parse(await (await request("/api/needs-you")).json()).needs;
+    expect(needs.map((need) => need.kind)).not.toContain("stalled");
+    expect(push.sent.map(({ payload }) => payload)).not.toContainEqual(
+      expect.objectContaining({ body: "Stalled" }),
+    );
+    expect(await notesIn(request)).toContain(
+      "Which session waits waits on you: 20 min on, its slot is free.",
+    );
+  });
+
+  it("counts a builder waiting on you as Building again once the owner answers", async () => {
     const clock = { now: Date.parse("2026-10-17T09:00:00") };
     const { request } = await signedInWith(ISSUES.slice(0, 2), { now: () => clock.now });
     await run(request);
     await settled(request);
     await runJobs();
-    const quiet = await builderOf(request, 22);
-    await see(request, quiet.id);
+    const waiting = await builderOf(request, 22);
     clock.now += 21 * MINUTE;
     await runJobs();
-    expect((await builderOf(request, 22)).waiting).toBe("stalled");
+    expect((await leadOf(request)).building.map((each) => each.issue)).not.toContain(22);
 
-    await postJson(request, `/api/sessions/${quiet.id}/messages`, {
+    await postJson(request, `/api/sessions/${waiting.id}/messages`, {
       text: "Carry on",
       model: FAKE_MODEL,
     });
     await settled(request);
     await runJobs();
 
-    expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
     expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
   });
 
@@ -997,7 +1049,7 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       await settled(request);
     });
 
-    it("doesn't stall a builder waiting 20+ minutes on its own task, and counts its silence from when the task ends", async () => {
+    it("keeps the slot of a builder waiting 20+ minutes on its own task, and counts from when the task ends", async () => {
       await mkdir(join(repo, "scripts"));
       await writeFile(join(repo, "scripts", "serve.mjs"), "setInterval(() => {}, 1000);\n");
       await gitIn(repo, "add", ".");
@@ -1034,10 +1086,12 @@ describe("builders that stop, fail or go quiet (#474)", () => {
       await runJobs();
       clock.now += 19 * MINUTE;
       await runJobs();
-      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+      expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22]);
       clock.now += 2 * MINUTE;
       await runJobs();
-      expect((await builderOf(request, 22)).waiting).toBe("stalled");
+      // Stopped with no pull request, it waits on the owner (#541): its slot free, never stalled.
+      expect((await builderOf(request, 22)).waiting).toBe("stopped");
+      expect((await leadOf(request)).building).toEqual([]);
     });
   });
 });
@@ -1114,7 +1168,10 @@ describe("talking to the Lead (#347)", () => {
     for (const builder of builders) {
       expect(builder.tools.map((tool) => tool.name)).not.toContain("build_order");
       expect(builder.instructions).not.toContain("<build_order>");
+      // A builder asks the owner what it can't go on without (#541); the Lead reports instead.
+      expect(builder.tools.map((tool) => tool.name)).toContain("ask_owner");
     }
+    expect(lead?.tools.map((tool) => tool.name)).not.toContain("ask_owner");
     // Its very first turn, the owner's tap, knows it's the Lead too.
     const first = saver.framings.find((framing) => framing.newMessage === "Run the build order.");
     expect(first?.tools.map((tool) => tool.name)).toContain("build_order");

@@ -26,6 +26,7 @@ import {
   type NewMessage,
   type Overflow,
   overflowFrom,
+  type QuestionAnswer,
   type PlacedLine,
   type ProviderId,
   type PullRequest,
@@ -77,9 +78,12 @@ import {
 import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
+  ASK_OWNER_TOOL_NAME,
+  askOwnerReply,
   BLOCK_SHOP_TOOL_NAME,
   blockShopReply,
   bringUpToDateMessage,
+  CONTINUE_AFTER_FAILURE_MESSAGE,
   CONTINUE_MESSAGE,
   checksFailedMessage,
   codeRefusalReason,
@@ -182,7 +186,7 @@ import {
   type WorkspaceSkills,
   workspaceSkills,
 } from "../skills/index.ts";
-import { createTurnReplies } from "../suggested-replies/index.ts";
+import { createTurnQuestion, createTurnReplies } from "../suggested-replies/index.ts";
 import { createTasks, type TaskRefusal } from "../tasks/index.ts";
 import {
   createTurnThings,
@@ -191,7 +195,12 @@ import {
   type ThingUndoRefusal,
   undoThingChange,
 } from "../things/index.ts";
-import { type Answered, answeredAfter, sessionWaiting } from "../waiting/index.ts";
+import {
+  type Answered,
+  answeredAfter,
+  NOT_ANSWERED,
+  sessionWaiting,
+} from "../waiting/index.ts";
 import {
   allowAlways,
   blockShop,
@@ -228,6 +237,12 @@ export type SessionError =
   | { readonly kind: "nothing-to-carry-on" }
   /** Continue named a turn that isn't the last one, or wasn't cut off by a restart (#186). */
   | { readonly kind: "nothing-to-continue" }
+  /** A tap answered a question (#541) a message had answered already, or one there isn't. */
+  | { readonly kind: "question-answered" }
+  /** A tap answered a question with no choices, which needs the owner's words (#541). */
+  | { readonly kind: "question-needs-words" }
+  /** A tap named a choice the question doesn't offer (#541). */
+  | { readonly kind: "no-such-choice" }
   /** There's no other provider to carry on with right now, and why. */
   | {
       readonly kind: "no-overflow";
@@ -500,19 +515,31 @@ const limitedTurn = (events: readonly SessionEvent[], turn: number) => {
 };
 
 /**
- * The owner's message numbered `turn`, when it's the session's last and a restart cut its turn off
- * (#186): the only turn Continue can take on. `undefined` otherwise.
+ * The owner's message numbered `turn`, when it's the session's last and its turn was cut off by a
+ * restart (#186, `cutOff`) or failed other than at a usage limit (#541): the only turn Continue
+ * can take on. `undefined` otherwise.
  */
-const cutOffTurn = (events: readonly SessionEvent[], turn: number) => {
+const cutOffTurn =(events: readonly SessionEvent[], turn: number) => {
   const message = events.findLast((event) => event.type === "owner-message");
   const ending = events.findLast(endsTurn);
   return message?.type === "owner-message" &&
     message.seq === turn &&
     ending?.type === "turn-failed" &&
     ending.seq > message.seq &&
-    ending.reason.kind === "interrupted"
-    ? message
+    ending.reason.kind !== "rate-limited"
+    ? { message, cutOff: ending.reason.kind === "interrupted" }
     : undefined;
+};
+
+/**
+ * The question numbered `asked` a session's model put to the owner (#541), while no message has
+ * answered it since.
+ */
+const openQuestion = (events: readonly SessionEvent[], asked: number) => {
+  const question = events.find((event) => event.seq === asked);
+  if (question?.type !== "owner-asked") return undefined;
+  const answered = events.some((event) => event.type === "owner-message" && event.seq > asked);
+  return answered ? undefined : question;
 };
 
 /**
@@ -834,7 +861,7 @@ export const createSessions = (options: {
       queues: false,
       ended: Promise.resolve(),
       paperMade: new Set(),
-      answered: { answer: undefined, reporting: false, cutOff: false },
+      answered: NOT_ANSWERED,
       seen: undefined,
       cutOffByRestart: false,
       allowAll: NO_ALLOW_ALL,
@@ -1339,6 +1366,17 @@ export const createSessions = (options: {
             if (!recorded.ok) recordingLost = true;
           },
         });
+        const askOwner = createTurnQuestion({
+          stopped: () => stopper.signal.aborted || recordingLost,
+          record: async ({ question, choices }) => {
+            const recorded = await append(turn.id, {
+              type: "owner-asked",
+              question,
+              choices: [...choices],
+            });
+            if (!recorded.ok) recordingLost = true;
+          },
+        });
         /** The shops blocked: as the turn read them, then each this turn blocks. */
         const blockedNow = (workspace.value.blockedShops ?? []).map(({ shop }) => shop);
         /** Blocks a shop the owner said not to use (#245), as a change to the workspace's settings. */
@@ -1381,6 +1419,7 @@ export const createSessions = (options: {
           [USE_SKILL_TOOL_NAME]: async (input) => useSkillReply(await useSkill(input)),
           [SUGGEST_REPLIES_TOOL_NAME]: async (input) =>
             suggestRepliesReply(await replies.suggest(input)),
+          [ASK_OWNER_TOOL_NAME]: async (input) => askOwnerReply(await askOwner(input)),
           [LEAD_TOOL_NAME]: async (input) =>
             (await options.lead?.tool(turn.id, input)) ?? notOfferedReply(LEAD_TOOL_NAME),
           // Each screenshot shows in the chat too (#183), as Paper's do.
@@ -2062,6 +2101,11 @@ export const createSessions = (options: {
     continues?: { turn: number };
     /** Sent by the worker because these tasks ended while no turn ran (#182). */
     tasksEnded?: [TaskId, ...TaskId[]];
+    /**
+     * A tap answering the question numbered `asked` (#541): checked again once the session is
+     * this turn's, in case a message answered it meanwhile, from another device say.
+     */
+    answers?: { asked: number };
   }): Promise<Result<null, SessionError>> => {
     if (settingAside || start.since !== freshStarts) return err({ kind: "starting-fresh" });
     const session = runningSession(start.id);
@@ -2091,6 +2135,13 @@ export const createSessions = (options: {
       if (!events.ok || cutOffTurn(events.value, start.continues.turn) === undefined) {
         session.turn = { kind: "idle" };
         return err(events.ok ? { kind: "nothing-to-continue" } : events.error);
+      }
+    }
+    if (start.answers) {
+      const events = await readEvents(start.id);
+      if (!events.ok || openQuestion(events.value, start.answers.asked) === undefined) {
+        session.turn = { kind: "idle" };
+        return err(events.ok ? { kind: "question-answered" } : events.error);
       }
     }
     if (start.carryingOn) {
@@ -2553,12 +2604,12 @@ export const createSessions = (options: {
       summaries.push({
         ...summaryOf(file.value),
         now: now.value,
-        waiting: sessionWaiting({
+        ...sessionWaiting({
           now: now.value,
           queued,
           pullRequest,
-          answer: session.answered.answer,
-          cutOff: session.answered.cutOff,
+          answered: session.answered,
+          builder: file.value.claim !== undefined || file.value.byLead === true,
           stalled: stalled.value,
           seen: seen.value,
           clock: options.now(),
@@ -2841,10 +2892,11 @@ export const createSessions = (options: {
     const events = await readEvents(id);
     if (!events.ok) return events;
     const turn = asked ?? events.value.findLast((event) => event.type === "owner-message")?.seq;
-    const cut = turn === undefined ? undefined : cutOffTurn(events.value, turn);
-    if (cut === undefined) return err({ kind: "nothing-to-continue" });
+    const ended = turn === undefined ? undefined : cutOffTurn(events.value, turn);
+    if (ended === undefined) return err({ kind: "nothing-to-continue" });
+    const cut = ended.message;
     const message: NewMessage = {
-      text: CONTINUE_MESSAGE,
+      text: ended.cutOff ? CONTINUE_MESSAGE : CONTINUE_AFTER_FAILURE_MESSAGE,
       model: cut.model,
       ...(cut.effort === undefined ? {} : { effort: cut.effort }),
       ...(cut.skill === undefined ? {} : { skill: cut.skill }),
@@ -2860,6 +2912,51 @@ export const createSessions = (options: {
       coding: found.value.branch !== undefined,
       placeless: found.value.placeless === true,
       continues: { turn: cut.seq },
+    });
+  };
+
+  /**
+   * A tap on one of a question's choices (#541), from Needs you or the session page: the choice
+   * goes as the owner's message, on the model and effort they last sent with, while no message has
+   * answered the question yet.
+   */
+  const answerQuestion = async (
+    rawId: string,
+    answer: QuestionAnswer,
+  ): Promise<Result<null, SessionError>> => {
+    const since = freshStarts;
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const { id, workspaceId } = found.value;
+    if (await isArchived(options.contextDir, workspaceId)) {
+      return err({ kind: "workspace-archived" });
+    }
+    await settled(id);
+    const events = await readEvents(id);
+    if (!events.ok) return events;
+    const question = openQuestion(events.value, answer.asked);
+    if (question === undefined) return err({ kind: "question-answered" });
+    if (question.choices.length === 0) return err({ kind: "question-needs-words" });
+    const choice = question.choices[answer.choice];
+    const last = events.value.findLast((event) => event.type === "owner-message");
+    if (choice === undefined) return err({ kind: "no-such-choice" });
+    if (last?.type !== "owner-message") return err({ kind: "question-answered" });
+    const message: NewMessage = {
+      text: choice,
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerIn(workspaceId, message);
+    if (!provider.ok) return provider;
+    return startTurn({
+      id,
+      workspaceId,
+      provider: provider.value.provider,
+      message,
+      since,
+      coding: found.value.branch !== undefined,
+      placeless: found.value.placeless === true,
+      answers: { asked: answer.asked },
     });
   };
 
@@ -3648,6 +3745,9 @@ export const createSessions = (options: {
      * turn's model, effort and skill. The owner's tap, or the worker's after an Update now.
      */
     continue: (rawId: string, request: ContinueRequest) => continueTurn(rawId, request.turn),
+
+    /** A tap on one of the question's choices (#541): it goes as the owner's message. */
+    answer: answerQuestion,
 
     /**
      * Continue the session's last turn, cut off by an update the worker started itself (#186):
