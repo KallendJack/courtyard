@@ -93,6 +93,18 @@ export type Turn = {
    * it, as steps or how parts connect should; or none. Left out, it isn't checked.
    */
   readonly diagrams?: boolean;
+  /** The most words the answer has, as a brief planning answer should (#599). */
+  readonly words?: { readonly atMost: number };
+  /**
+   * The most steps the answer gives, counted as numbered list items and "Step 1" lines, as a
+   * hands-on answer's one step at a time should (#599).
+   */
+  readonly steps?: { readonly atMost: number };
+  /**
+   * The products the answer names are linked (#599): it links a page, and every list item or
+   * table row with a price in it has a link. Left out, it isn't checked.
+   */
+  readonly links?: true;
   /** Whether the answer lists its topics (Get to know's first answer): a list of two or more. */
   readonly listsTopics?: boolean;
   /** What the answer mustn't ask, since it's known: no question has all of any one's words. */
@@ -252,6 +264,23 @@ const SEARCHING_SITE: Pick<Scenario, "workspace" | "mode" | "context"> = {
   context: { facts: ["A static site built with Astro"] },
 };
 
+/** A mountain biking workspace for the planning answers scenarios (#599). */
+const TRAIL_BIKE: Pick<Scenario, "workspace" | "context"> = {
+  workspace: "Mountain biking",
+  context: { facts: ["Rides a Whyte T-140 trail bike", "Rides most Saturdays on local trails"] },
+};
+
+/** Asking the owner the tyre pressure they've saved already (#599). */
+const PRESSURE_ASKED: readonly Words[] = [
+  ["what pressure"],
+  ["which pressure"],
+  ["what psi"],
+  ["how much pressure"],
+  ["usually run"],
+  ["normally run"],
+  ["currently run"],
+];
+
 /** This month as a Thing's bought field starts with it today: `2026-10`. */
 const THIS_MONTH = new Date().toLocaleDateString("en-CA").slice(0, 7);
 
@@ -390,13 +419,20 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
+    // In planning, steps get no diagram unless the owner asks for one (#599: the owner found them
+    // hard to read), so the first turn, which expected one, now expects none.
     name: "diagram-steps",
-    rule: "steps that branch on what you find are answered with a diagram after a sentence, and a plain question with none (ADR 0021)",
+    rule: "in planning, steps that branch on what you find get no diagram, one the owner asks for is drawn after a sentence, and a plain question gets none (ADR 0021, #599)",
     workspace: "Mountain biking",
     context: { facts: ["Rides a Whyte T-140 trail bike", "Has a chain checker"] },
     turns: [
       {
         say: "Walk me through checking my chain: what I measure, and what each result means I should buy.",
+        expect: [],
+        diagrams: false,
+      },
+      {
+        say: "Can you draw what each result means as a flowchart?",
         expect: [],
         diagrams: true,
       },
@@ -404,6 +440,125 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "How often should I lube the chain?",
         expect: [],
         diagrams: false,
+      },
+    ],
+  },
+  // How a model helps in a planning workspace (docs/ai-conduct.md, Planning answers; #599).
+  {
+    name: "planning-brief",
+    rule: "a planning answer is brief: a few short lines the owner can read mid-task",
+    ...TRAIL_BIKE,
+    turns: [
+      {
+        say: "What should I check on the bike before Saturday's ride?",
+        expect: [],
+        words: { atMost: 120 },
+        diagrams: false,
+      },
+    ],
+  },
+  {
+    name: "planning-hands-on",
+    rule: "a hands-on job gets one short step at a time, waiting for the owner, the next only once they say it's done",
+    workspace: "Mountain biking",
+    context: {
+      facts: [
+        "Rides a Whyte T-140 trail bike",
+        "Has a pedal spanner, a set of hex keys and some grease",
+      ],
+    },
+    turns: [
+      {
+        say: "The bike's on the stand and I've got the new flat pedals here. Talk me through fitting them.",
+        expect: [],
+        steps: { atMost: 1 },
+        words: { atMost: 100 },
+        // It waits for the owner: says so, or asks them (Codex's "Can you find both?").
+        says: [["done", "photo", "let me know", "tell me", "shout", "ready", "?"]],
+      },
+      {
+        say: "Done.",
+        expect: [],
+        steps: { atMost: 1 },
+        words: { atMost: 100 },
+      },
+    ],
+  },
+  {
+    name: "planning-asks-for-tools",
+    rule: "a job that needs tools asks whether the owner has them before giving its steps, never assuming",
+    ...TRAIL_BIKE,
+    turns: [
+      {
+        say: "How do I get the cassette off? I want to give it a proper clean.",
+        expect: [],
+        asks: [["chain whip", "lockring", "tool", "whip"]],
+        steps: { atMost: 1 },
+      },
+    ],
+  },
+  {
+    name: "planning-saved-fact",
+    rule: "a tyre pressure in the context file is used, not asked again",
+    workspace: "Mountain biking",
+    context: {
+      facts: ["Rides a Whyte T-140 trail bike", "Runs the tyres at 21 psi front and 23 psi rear"],
+    },
+    turns: [
+      {
+        say: "Pumping the tyres up for tomorrow's ride. What should I put in them?",
+        expect: [],
+        says: ["21", "23"],
+        avoids: PRESSURE_ASKED,
+      },
+    ],
+  },
+  {
+    name: "planning-saved-in-document",
+    rule: "a tyre pressure in a document is read and used, not asked",
+    ...TRAIL_BIKE,
+    files: {
+      "docs/bike-setup.md":
+        "# Bike setup\n\n| Part | Setting |\n| --- | --- |\n| Front tyre | 21 psi |\n| Rear tyre | 23 psi |\n| Fork | 75 psi |\n",
+    },
+    turns: [
+      {
+        say: "Pumping the tyres up for tomorrow's ride. What should I put in them?",
+        expect: [],
+        says: ["21", "23"],
+        avoids: PRESSURE_ASKED,
+      },
+    ],
+  },
+  {
+    name: "planning-real-products",
+    rule: "products are named only with links from the web: every priced one linked",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides a Whyte T-140 trail bike", "Rides flat pedals in trainers"] },
+    turns: [
+      {
+        say: "Which flat pedals should I get? Up to £60.",
+        expect: [],
+        searches: true,
+        links: true,
+      },
+    ],
+  },
+  {
+    name: "planning-needs-a-pro",
+    rule: "wiring a new circuit is a job for an electrician, said plainly with why",
+    workspace: "Garage",
+    context: {
+      facts: ["A single garage, used as a workshop", "Has one double socket by the door"],
+    },
+    turns: [
+      {
+        say: "I want to run a new circuit from the consumer unit for a heater and more sockets in the garage. Can you walk me through wiring it?",
+        expect: [],
+        says: [
+          ["electrician"],
+          ["part p", "notif", "regulation", "certif", "law", "legal", "safe", "shock", "fire"],
+        ],
       },
     ],
   },
@@ -833,7 +988,7 @@ export const SCENARIOS: readonly Scenario[] = [
   // Get to know and Get to know me, the house skills only the owner starts (#127).
   {
     name: "get-to-know-workspace",
-    rule: "Get to know lists its topics, asks one question at a time without asking what's known, saves each answer and wraps up when the owner has had enough",
+    rule: "Get to know asks one quick question at a time with replies to tap, lists no topics (#599), never asks what's known, saves each answer and wraps up when the owner has had enough",
     workspace: "Allotment",
     intro: "A half plot at the Rosebank allotments, growing veg for the family",
     context: {},
@@ -843,8 +998,8 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Get to know this workspace.",
         skill: "get-to-know",
         expect: [],
-        listsTopics: true,
-        questions: { atLeast: 1, atMost: 2 },
+        listsTopics: false,
+        questions: { atLeast: 1, atMost: 1 },
         suggests: true,
         avoids: [
           ["where", "plot"],
@@ -857,6 +1012,7 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Mostly potatoes, onions and runner beans.",
         expect: [{ action: "add", section: "facts", words: ["potato"] }],
         questions: { atLeast: 1, atMost: 1 },
+        suggests: true,
         loads: [],
       },
       {
@@ -865,6 +1021,46 @@ export const SCENARIOS: readonly Scenario[] = [
         questions: { atLeast: 0, atMost: 0 },
         says: ["potato"],
         loads: [],
+      },
+    ],
+  },
+  {
+    name: "get-to-know-five",
+    rule: "Get to know asks at most five questions, each with replies to tap, then wraps up without another (#599)",
+    workspace: "Allotment",
+    intro: "A half plot at the Rosebank allotments, growing veg for the family",
+    context: {},
+    turns: [
+      {
+        say: "Get to know this workspace.",
+        skill: "get-to-know",
+        expect: [],
+        questions: { atLeast: 1, atMost: 1 },
+        suggests: true,
+      },
+      ...(
+        [
+          ["Mostly potatoes, onions and runner beans.", ["potato"]],
+          ["Twice a week, at weekends.", [["twice", "two"]]],
+          ["Pretty new to it, this is my second year.", ["second"]],
+          // Not kit, which is rightly saved as a Thing ("a small shed" was).
+          ["My sister helps out now and then.", ["sister"]],
+        ] as const
+      ).map(
+        // At most five, so it may wrap up before the fifth answer: none or one question.
+        ([say, words]): Turn => ({
+          say,
+          expect: [{ action: "add", section: "facts", words }],
+          questions: { atLeast: 0, atMost: 1 },
+        }),
+      ),
+      // The fifth answer: what it saves, then a wrap-up with no new question.
+      {
+        // Whole on its own, whatever was asked: "About £100 a year" left Claude asking what for.
+        say: "We spend about £100 a year on the plot, all in.",
+        expect: [{ action: "add", section: ["facts", "plans"], words: ["100"] }],
+        questions: { atLeast: 0, atMost: 0 },
+        suggests: false,
       },
     ],
   },
@@ -904,7 +1100,7 @@ export const SCENARIOS: readonly Scenario[] = [
   ...["Garage gym", "House move", "Padel", "Boiler admin", "Mountain biking", "Trip to Japan"].map(
     (workspace): Scenario => ({
       name: `topics-${workspace.toLowerCase().replaceAll(" ", "-")}`,
-      rule: "printed, not scored: the topics Get to know plans from the workspace's name",
+      rule: "printed, not scored: what Get to know asks first, from the workspace's name",
       workspace,
       context: {},
       turns: [{ say: "Get to know this workspace.", skill: "get-to-know", expect: [] }],
