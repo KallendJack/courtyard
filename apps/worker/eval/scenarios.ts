@@ -473,7 +473,8 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: [],
         steps: { atMost: 1 },
         words: { atMost: 100 },
-        says: [["done", "photo", "let me know", "tell me", "shout", "ready", "is it"]],
+        // It waits for the owner: says so, or asks them (Codex's "Can you find both?").
+        says: [["done", "photo", "let me know", "tell me", "shout", "ready", "?"]],
       },
       {
         say: "Done.",
