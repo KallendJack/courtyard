@@ -193,6 +193,14 @@ export const LeadRun = BuildIssue.extend({
 });
 export type LeadRun = z.infer<typeof LeadRun>;
 
+/**
+ * Allow all for builders, switched from the Lead's row (#551) while it runs, is paused or rests:
+ * on for the next `ALLOW_ALL_MOST_HOURS`, for its builders still building and any it starts; off
+ * takes it from the builders it gave it to.
+ */
+export const LeadAllowAll = z.object({ on: z.boolean() });
+export type LeadAllowAll = z.infer<typeof LeadAllowAll>;
+
 /** How many builders the Lead runs at once (#347): 2 unless the owner says, 1 to 3. */
 export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 3 } as const;
 
@@ -255,6 +263,14 @@ export const LeadStatus = z.object({
   ready: z.array(LeadReady),
   /** Until when the builders it starts allow all (#428), while that's still ahead. */
   buildersAllowedAll: z.iso.datetime().optional(),
+  /**
+   * Who Allow all for builders reaches if it's switched on now (#551): its builders still
+   * building (no pull request yet), and the approvals they wait on that it would allow at once.
+   */
+  allowAllReaches: z.object({
+    builders: z.number().int().nonnegative(),
+    approvals: z.number().int().nonnegative(),
+  }),
   /** Until when a resting Lead wakes for new work (#457), while that's still ahead. */
   wakesUntil: z.iso.datetime().optional(),
   /** Merge in order (#423), while it's merging or stopped. */

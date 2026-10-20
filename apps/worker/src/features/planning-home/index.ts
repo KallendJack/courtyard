@@ -7,7 +7,6 @@ import {
   type PlanningHome,
   type ThingSlug,
   type ThingSummary,
-  type WantedItem,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -21,8 +20,6 @@ import { err, ok, type Result } from "../../lib/result.ts";
 
 /** A Thing's photo view's id. */
 const pictureOf = (slug: ThingSlug) => HomeViewId.parse(`picture:${slug}`);
-
-const WANTED = HomeViewId.parse("wanted");
 
 /** Whether a Thing needs something: to get, to replace, or a next step. */
 const needsSomething = (thing: ThingSummary) =>
@@ -41,17 +38,6 @@ const partOn = (part: ThingSummary): PinnedPart => ({
   flagged: needsSomething(part),
 });
 
-const wantedItem = (thing: ThingSummary & { status: WantedItem["status"] }): WantedItem => ({
-  thing: thing.slug,
-  name: thing.name,
-  status: thing.status,
-  ...(thing.price === undefined ? {} : { price: thing.price }),
-  ...(thing.needs === undefined ? {} : { needs: thing.needs }),
-});
-
-const isWanted = (thing: ThingSummary): thing is ThingSummary & { status: WantedItem["status"] } =>
-  thing.status !== "have";
-
 /** Each Thing that isn't a part, with its parts, in list order. */
 const withParts = (things: readonly ThingSummary[]) => {
   const slugs = new Set(things.map(({ slug }) => slug));
@@ -61,10 +47,14 @@ const withParts = (things: readonly ThingSummary[]) => {
 };
 
 /**
- * Home's views from a workspace's Things, in list order: each Thing's photo that has parts, its
- * parts that need something first, then the wanted list once anything is wanted.
+ * Home's views from a workspace's Things and its saved floor plans, in list order: each Thing with
+ * a photo and parts, broken down into every part, those that need something first; then each
+ * room's plan, newest first. The wanted list is the Things tab's (#565).
  */
-export const homeViews = (things: readonly ThingSummary[]): HomeView[] => {
+export const homeViews = (
+  things: readonly ThingSummary[],
+  plans: readonly HomeView[] = [],
+): HomeView[] => {
   const pictures = withParts(things).flatMap(({ top, parts }): HomeView[] =>
     top.photo && parts.length > 0
       ? [
@@ -82,21 +72,7 @@ export const homeViews = (things: readonly ThingSummary[]): HomeView[] => {
         ]
       : [],
   );
-  const wanted = things.filter(isWanted);
-  return [
-    ...pictures,
-    ...(wanted.length === 0
-      ? []
-      : [
-          {
-            kind: "wanted" as const,
-            id: WANTED,
-            title: "Wanted",
-            changedAt: latest(wanted.map(({ updatedAt }) => updatedAt)),
-            items: wanted.map(wantedItem),
-          },
-        ]),
-  ];
+  return [...pictures, ...plans];
 };
 
 /** The workspace's photo: its main Thing's, the one with a photo and the most parts. */
@@ -112,8 +88,10 @@ const mainPhoto = (things: readonly ThingSummary[]) =>
 export const homeOf = (
   things: readonly ThingSummary[],
   pick: HomeViewId | undefined,
+  /** Its saved floor plans' views (#257). */
+  plans: readonly HomeView[] = [],
 ): Omit<PlanningHome, "question"> => {
-  const views = homeViews(things);
+  const views = homeViews(things, plans);
   const picked = views.find(({ id }) => id === pick);
   const lastChanged = views.reduce<HomeView | undefined>(
     (last, view) => (last === undefined || view.changedAt > last.changedAt ? view : last),

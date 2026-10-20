@@ -90,6 +90,8 @@ import { repoProblem, repoRoutes } from "./features/repos/routes.ts";
 import { type Background, createSessions } from "./features/sessions/index.ts";
 import { MESSAGE_ROUTES, sessionRoutes } from "./features/sessions/routes.ts";
 import { skillList, workspaceSkills } from "./features/skills/index.ts";
+import { createStatusLine } from "./features/status-line/index.ts";
+import { statusLineRoutes } from "./features/status-line/routes.ts";
 import { taskRoutes } from "./features/tasks/routes.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createTidying } from "./features/tidy/index.ts";
@@ -367,12 +369,26 @@ export const createWorker = (options: {
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github, connections });
   // The wanted list (#245): its picks show in a turn's Things, and a shop blocked finds them again.
   const wanted = createWanted({ contextDir, dataDir, providers, now, background });
+  // The status line under a workspace's name (#256).
+  // Its code lines come from the sessions and Next up, made below.
+  const statusLines = createStatusLine({
+    contextDir,
+    dataDir,
+    providers,
+    now,
+    background,
+    code: {
+      sessions: (workspaceId) => sessions.list(workspaceId),
+      nextUp: (workspaceId) => nextUp.shown(workspaceId),
+    },
+  });
   const sessions = createSessions({
     dataDir,
     providers,
     contextDir,
     contextFolder,
     wanted,
+    statusLine: statusLines,
     houseSkills,
     matt,
     code,
@@ -581,6 +597,7 @@ export const createWorker = (options: {
     }),
   );
   api.route("/", wantedRoutes({ wanted, contextDir, contextFolder }));
+  api.route("/", statusLineRoutes(statusLines));
   const tidying = createTidying({ contextDir, contextFolder, providers, now });
   api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(

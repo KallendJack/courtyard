@@ -164,6 +164,7 @@ import {
   saveNewDocument,
   undoDocumentChange,
 } from "../documents/index.ts";
+import { savePlansFrom } from "../floor-plans/index.ts";
 import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import {
@@ -422,6 +423,27 @@ const firstAnswer = (events: readonly SessionEvent[]) => {
     }
   }
   return undefined;
+};
+
+/** How many of a session's latest exchanges its workspace's status line is moved along from (#256). */
+const STATUS_EXCHANGES = 3;
+
+/** A session's latest messages and their answers, oldest first: each turn that completed. */
+const latestExchanges = (events: readonly SessionEvent[]) => {
+  const exchanges: { message: string; answer: string }[] = [];
+  let message: string | undefined;
+  let answer = "";
+  for (const event of events) {
+    if (event.type === "owner-message") {
+      message = event.text;
+      answer = "";
+    }
+    if (event.type === "text-delta") answer += event.text;
+    if (event.type === "turn-completed" && message !== undefined) {
+      exchanges.push({ message, answer });
+    }
+  }
+  return exchanges.slice(-STATUS_EXCHANGES);
 };
 
 const STORAGE_ERROR: SessionError = {
@@ -688,6 +710,18 @@ export type WantedHooks = {
   readonly shopBlocked: (workspaceId: WorkspaceId, shop: string) => Promise<void>;
 };
 
+/**
+ * What planning sessions' turns tell the status line (#256): a turn completed with nothing more
+ * queued, with the session's latest messages, so the line under the workspace's name moves along.
+ */
+export type StatusLineHooks = {
+  readonly turnEnded: (ended: {
+    workspaceId: WorkspaceId;
+    session: SessionId;
+    conversation: readonly { message: string; answer: string }[];
+  }) => void;
+};
+
 /** A shop a model blocks, as the block shop tool is sent it (#245). */
 const BlockShopInput = z.object({ shop: ShopName, said: z.string().trim().max(200).optional() });
 
@@ -751,6 +785,8 @@ export const createSessions = (options: {
    * model blocked, whose picks it finds again elsewhere.
    */
   wanted?: WantedHooks;
+  /** The status line under a workspace's name (#256), moved along as a planning session's turn ends. */
+  statusLine?: StatusLineHooks;
   /**
    * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
    * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
@@ -1838,6 +1874,8 @@ export const createSessions = (options: {
         message: "Part of the answer couldn't be saved, so it stopped.",
       };
     }
+    // Each room's plan in a finished answer is saved straight away (#257), its note under it.
+    if (!failure && !stopper.signal.aborted && !turn.coding) await savePlans(turn);
 
     // How the turn ended is decided now: a stop arriving from here on finds nothing to stop, so
     // it can't turn a completed or failed turn into a stopped one.
@@ -1900,6 +1938,18 @@ export const createSessions = (options: {
         options.notify?.(turn.id, ended.value, pullRequest);
       }
     }
+    // A planning session that's had its say, with nothing more to send, moves its workspace's
+    // status line along (#256).
+    if (ended.ok && !turn.coding && !queuedGoes && ending.type === "turn-completed") {
+      const events = await readEvents(turn.id);
+      if (events.ok) {
+        options.statusLine?.turnEnded({
+          workspaceId: turn.workspaceId,
+          session: turn.id,
+          conversation: latestExchanges(events.value),
+        });
+      }
+    }
     if (!ended.ok) console.error(`Session ${turn.id}: the end of a turn couldn't be recorded.`);
     else if (turn.firstTurn && ending.type === "turn-completed") {
       options.background(
@@ -1907,6 +1957,27 @@ export const createSessions = (options: {
           console.error(`Session ${turn.id}: titling it crashed`, error),
         ),
       );
+    }
+  };
+
+  /**
+   * Saves each room's plan in the answer just written as that room's document (#257), recorded
+   * like a document the model saved, so its note shows under the answer with Undo.
+   */
+  const savePlans = async (turn: { id: SessionId; workspaceId: WorkspaceId }) => {
+    const events = await readEvents(turn.id);
+    if (!events.ok) return;
+    const asked = events.value.findLastIndex((event) => event.type === "owner-message");
+    const answer = events.value
+      .slice(asked + 1)
+      .map((event) => (event.type === "text-delta" ? event.text : ""))
+      .join("");
+    for (const { save, change } of await savePlansFrom(targetOf(turn), answer)) {
+      await append(turn.id, {
+        type: "document-saved",
+        save,
+        ...(change === undefined ? {} : { change }),
+      });
     }
   };
 
@@ -2360,6 +2431,77 @@ export const createSessions = (options: {
       pullRequests.set(file.id, known);
     }
     return known ?? undefined;
+  };
+
+  /**
+   * Turns on Allow all for this task (#428) for a code session: recorded, so it survives a
+   * restart, and each approval its turn waits on that it covers is allowed at once. One already on
+   * is never extended, and one whose pull request has merged or closed is refused.
+   */
+  const startAllowingAll = (
+    file: SessionFile,
+    on: { until: string; task: boolean; byLead: boolean },
+  ) => {
+    const { id } = file;
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const pullRequest = await lastPullRequestOf(file);
+      if (pullRequestEnded(pullRequest)) {
+        return err({ kind: "pull-request-ended", state: pullRequest.state });
+      }
+      if (allowingAllAt(session.allowAll, options.now()) !== undefined) {
+        return err({ kind: "allowing-all" });
+      }
+      const recorded = await writeEvent({
+        id,
+        session,
+        event: {
+          type: "allow-all-started",
+          until: on.until,
+          task: on.task,
+          ...(on.byLead ? { byLead: true as const } : {}),
+        },
+      });
+      if (!recorded.ok) return recorded;
+      const events = await readEvents(id);
+      if (!events.ok) return events;
+      const answered = new Set(
+        events.value.flatMap((event) =>
+          event.type === "approval-answered" ? [event.approval] : [],
+        ),
+      );
+      for (const event of events.value) {
+        if (event.type !== "approval-requested" || event.all !== true) continue;
+        const waiting = session.approvals.get(event.seq);
+        if (waiting === undefined || answered.has(event.seq)) continue;
+        const given: GivenAnswer = { answer: "allow", allowedAll: true };
+        const allowed = await writeEvent({
+          id,
+          session,
+          event: { type: "approval-answered", approval: event.seq, ...given },
+        });
+        if (!allowed.ok) return allowed;
+        session.approvals.delete(event.seq);
+        waiting(given);
+      }
+      return ok(null);
+    });
+  };
+
+  /**
+   * Turns Allow all for this task off (#428), at once: any, or, `byLead`, only one the Lead gave
+   * (#551). One that's off already stays off.
+   */
+  const stopAllowingAll = (id: SessionId, which: { byLead: boolean }) => {
+    const session = runningSession(id);
+    return inOrder(session, async (): Promise<Result<null, SessionError>> => {
+      const on = allowingAllAt(session.allowAll, options.now());
+      if (on === undefined || (which.byLead && session.allowAll.on?.byLead !== true)) {
+        return ok(null);
+      }
+      const recorded = await writeEvent({ id, session, event: { type: "allow-all-ended" } });
+      return recorded.ok ? ok(null) : recorded;
+    });
   };
 
   /** A session's latest event number, 0 before its first. */
@@ -3329,6 +3471,7 @@ export const createSessions = (options: {
               type: "allow-all-started",
               until: start.allowAllUntil,
               task: true,
+              byLead: true,
             })
           : written;
       const started =
@@ -3657,7 +3800,7 @@ export const createSessions = (options: {
     ): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id, workspaceId } = found.value;
+      const { workspaceId } = found.value;
       // A code session's own: never the Lead's, whose builders are allowed all by its order.
       if (found.value.branch === undefined || found.value.lead === true) {
         return err({ kind: "not-code-session" });
@@ -3665,47 +3808,10 @@ export const createSessions = (options: {
       if (await isArchived(options.contextDir, workspaceId)) {
         return err({ kind: "workspace-archived" });
       }
-      const session = runningSession(id);
-      const started = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        const pullRequest = await lastPullRequestOf(found.value);
-        if (pullRequestEnded(pullRequest)) {
-          return err({ kind: "pull-request-ended", state: pullRequest.state });
-        }
-        if (allowingAllAt(session.allowAll, options.now()) !== undefined) {
-          return err({ kind: "allowing-all" });
-        }
-        const recorded = await writeEvent({
-          id,
-          session,
-          event: {
-            type: "allow-all-started",
-            until: allowAllUntil(lasts, options.now()),
-            task: lasts === "task",
-          },
-        });
-        if (!recorded.ok) return recorded;
-        const events = await readEvents(id);
-        if (!events.ok) return events;
-        const answered = new Set(
-          events.value.flatMap((event) =>
-            event.type === "approval-answered" ? [event.approval] : [],
-          ),
-        );
-        for (const event of events.value) {
-          if (event.type !== "approval-requested" || event.all !== true) continue;
-          const waiting = session.approvals.get(event.seq);
-          if (waiting === undefined || answered.has(event.seq)) continue;
-          const given: GivenAnswer = { answer: "allow", allowedAll: true };
-          const allowed = await writeEvent({
-            id,
-            session,
-            event: { type: "approval-answered", approval: event.seq, ...given },
-          });
-          if (!allowed.ok) return allowed;
-          session.approvals.delete(event.seq);
-          waiting(given);
-        }
-        return ok(null);
+      const started = await startAllowingAll(found.value, {
+        until: allowAllUntil(lasts, options.now()),
+        task: lasts === "task",
+        byLead: false,
       });
       if (!started.ok) return started;
       return ok(summaryOf(found.value));
@@ -3715,16 +3821,33 @@ export const createSessions = (options: {
     allowAllOff: async (rawId: string): Promise<Result<SessionSummary, SessionError>> => {
       const found = await findSession(rawId);
       if (!found.ok) return found;
-      const { id } = found.value;
-      const session = runningSession(id);
-      const ended = await inOrder(session, async (): Promise<Result<null, SessionError>> => {
-        if (allowingAllAt(session.allowAll, options.now()) === undefined) return ok(null);
-        const recorded = await writeEvent({ id, session, event: { type: "allow-all-ended" } });
-        return recorded.ok ? ok(null) : recorded;
-      });
+      const ended = await stopAllowingAll(found.value.id, { byLead: false });
       if (!ended.ok) return ended;
       return ok(summaryOf(found.value));
     },
+
+    /**
+     * Allow all for builders, switched on from the Lead's row (#551): one of its builders allows
+     * all until its pull request opens, until `until` at most, marked the Lead's. One allowing all
+     * already keeps its own; `false` says nothing changed.
+     */
+    allowAllFromLead: async (
+      builder: SessionId,
+      until: string,
+    ): Promise<Result<boolean, SessionError>> => {
+      const found = await findSession(builder);
+      if (!found.ok) return found;
+      if (found.value.byLead !== true) return err({ kind: "not-code-session" });
+      const started = await startAllowingAll(found.value, { until, task: true, byLead: true });
+      if (!started.ok) return started.error.kind === "allowing-all" ? ok(false) : started;
+      return ok(true);
+    },
+
+    /**
+     * Allow all for builders, switched off from the Lead's row (#551): a builder's Allow all ends
+     * if the Lead gave it; one the owner turned on themselves stays on.
+     */
+    allowAllOffFromLead: (builder: SessionId) => stopAllowingAll(builder, { byLead: true }),
 
     /** One of the session's attachments (#78) and its bytes, by its id. */
     attachment: async (

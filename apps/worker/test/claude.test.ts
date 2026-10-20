@@ -140,7 +140,11 @@ const turnOn = async (provider: Provider, overrides: Partial<TurnInput> = {}) =>
 };
 
 /** The PreToolUse hook the adapter gave Claude Code, called the way Claude Code would. */
-const preToolUse = async (options: Options, tool: { name: string; input: unknown }) => {
+const preToolUse = async (
+  options: Options,
+  tool: { name: string; input: unknown },
+  session: { id: string; transcript: string } = { id: "s", transcript: "" },
+) => {
   const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
   if (!hook) throw new Error("no PreToolUse hook");
   return hook(
@@ -149,8 +153,8 @@ const preToolUse = async (options: Options, tool: { name: string; input: unknown
       tool_name: tool.name,
       tool_input: tool.input,
       tool_use_id: "tool-1",
-      session_id: "s",
-      transcript_path: "",
+      session_id: session.id,
+      transcript_path: session.transcript,
       cwd: folder,
     },
     "tool-1",
@@ -920,6 +924,52 @@ describe("after the security review", () => {
 
       expect(viaLink).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
       expect(inside).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lets a session read the output Claude Code saved for its own commands, and no other session's", async () => {
+    const root = await mkdtemp(join(tmpdir(), "courtyard-"));
+    try {
+      // Where Claude Code keeps a session: its transcript, and beside it a folder of the session's
+      // own, whose tool-results hold each output too long to hand over inline.
+      const project = join(root, "claude", "projects", "a-project");
+      const saved = (session: string) => join(project, session, "tool-results", "b1.txt");
+      await mkdir(join(project, "mine", "tool-results"), { recursive: true });
+      await mkdir(join(project, "theirs", "tool-results"), { recursive: true });
+      await writeFile(saved("mine"), "the test report");
+      await writeFile(saved("theirs"), "another session's report");
+      await writeFile(join(project, "mine", "notes.txt"), "not saved output");
+      const mine = { id: "mine", transcript: join(project, "mine.jsonl") };
+      const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+      await runTurn(claudeCode);
+      const options = runs[0]?.options;
+      if (!options) throw new Error("no turn ran");
+      const read = (path: string) =>
+        preToolUse(options, { name: "Read", input: { file_path: path } }, mine);
+
+      // A helper's transcript is in the session's own folder, its saved output in the same place.
+      const helper = {
+        id: "mine",
+        transcript: join(project, "mine", "subagents", "agent-1.jsonl"),
+      };
+
+      expect(await read(saved("mine"))).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "allow" },
+      });
+      expect(
+        await preToolUse(options, { name: "Read", input: { file_path: saved("mine") } }, helper),
+      ).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+      for (const elsewhere of [
+        saved("theirs"),
+        join(project, "mine", "notes.txt"),
+        mine.transcript,
+      ]) {
+        expect(await read(elsewhere)).toMatchObject({
+          hookSpecificOutput: { permissionDecision: "deny" },
+        });
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   createSdkMcpServer,
@@ -1207,6 +1207,28 @@ const reachOf = (tool: string, input: unknown) => {
   }
 };
 
+/** A session id as Claude Code makes one: never a path of its own. */
+const CLAUDE_SESSION_ID = /^[\w-]+$/;
+
+/**
+ * Where Claude Code saved this session's tool output too long to hand over inline (#568): the
+ * `tool-results` folder in the session's own folder, beside its transcript. Named by the
+ * session's id, so no other session's saved output is in reach. A helper's transcript sits in
+ * `<session>/subagents/`, and its output is saved in the same place.
+ */
+const savedOutputOf = (session: { session_id: string; transcript_path: string }) => {
+  const id = session.session_id;
+  if (!CLAUDE_SESSION_ID.test(id) || !isAbsolute(session.transcript_path)) return undefined;
+  const transcriptFolder = dirname(session.transcript_path);
+  const own =
+    basename(session.transcript_path) === `${id}.jsonl`
+      ? join(transcriptFolder, id)
+      : basename(transcriptFolder) === "subagents" && basename(dirname(transcriptFolder)) === id
+        ? dirname(transcriptFolder)
+        : undefined;
+  return own === undefined ? undefined : join(own, "tool-results");
+};
+
 const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
@@ -1254,8 +1276,9 @@ const startHelper = async (start: {
 /**
  * Checked before every tool call, and the only way one is allowed: none are pre-approved, so
  * anything this doesn't allow is refused, including when it fails. Only the planning tools, only
- * inside the workspace folder once symlinks are followed, and Courtyard's own tools offered this
- * turn, which touch nothing themselves. In a code session, edits and commands too, each as the
+ * inside the workspace folder once symlinks are followed (and reading the output Claude Code saved
+ * for this session's own calls), and Courtyard's own tools offered this turn, which touch nothing
+ * themselves. In a code session, edits and commands too, each as the
  * worker says (ADR 0007). On a turn with web search, searches, and reading only a page from the
  * turn's search results or a link the owner sent (ADR 0019). Each file read, search and page read
  * is reported.
@@ -1343,6 +1366,18 @@ const confineTo =
             ? skillFileIn(plugin, reach.readsFile)
             : undefined;
         if (file !== undefined) await report({ kind: "skill-file-read", ...file });
+        return decision(true);
+      }
+
+      // A command's output too long to hand over is read from where Claude Code saved it (#568).
+      const saved = savedOutputOf(input);
+      if (
+        saved !== undefined &&
+        "readsFile" in reach &&
+        reach.readsFile !== undefined &&
+        isAbsolute(reach.readsFile) &&
+        (await staysInside(saved, reach))
+      ) {
         return decision(true);
       }
 

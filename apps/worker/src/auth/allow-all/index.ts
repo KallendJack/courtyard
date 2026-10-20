@@ -28,8 +28,8 @@ export const allowAllUntil = (lasts: AllowAllLasts, now: number) =>
 
 /**
  * A session's Allow all as its events come, one at a time: its pull request as last recorded, and,
- * while it's turned on, until when, whether until the task is done, and the pull request it had
- * then (a new one opening is the task done).
+ * while it's turned on, until when, whether until the task is done, the pull request it had then
+ * (a new one opening is the task done), and whether the Lead gave it (#551).
  */
 export type AllowAll = {
   readonly pullRequest: { readonly number: number; readonly open: boolean } | undefined;
@@ -38,6 +38,7 @@ export type AllowAll = {
         readonly until: string;
         readonly task: boolean;
         readonly pullRequest: number | undefined;
+        readonly byLead: boolean;
       }
     | undefined;
 };
@@ -49,7 +50,12 @@ export const allowAllAfter = (was: AllowAll, event: SessionEvent): AllowAll => {
     case "allow-all-started":
       return {
         ...was,
-        on: { until: event.until, task: event.task, pullRequest: was.pullRequest?.number },
+        on: {
+          until: event.until,
+          task: event.task,
+          pullRequest: was.pullRequest?.number,
+          byLead: event.byLead === true,
+        },
       };
     case "allow-all-ended":
       return { ...was, on: undefined };

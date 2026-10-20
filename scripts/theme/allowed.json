@@ -18,5 +18,10 @@
     "file": "components/code/lead-mark.tsx",
     "value": "uppercase",
     "reason": "The Lead's mark, LEAD in a violet pill before its row: a mark, not a section's label."
+  },
+  {
+    "file": "components/rich-blocks/floor-plan.tsx",
+    "value": "uppercase",
+    "reason": "Words drawn on a floor plan (its Front marker, what's beyond a wall), SVG text where CapsLabel can't go: marks on a drawing, not a section's label."
   }
 ]

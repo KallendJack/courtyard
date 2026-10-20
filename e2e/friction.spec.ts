@@ -41,7 +41,7 @@ const filesInWorkbench = (page: Page) =>
 
 /** The report a File it sent, and its screen, read from its multipart form. */
 const reportIn = async (request: Request) => {
-  const form = await new Response(request.postDataBuffer(), {
+  const form = await new Response(Uint8Array.from(request.postDataBuffer() ?? []), {
     headers: { "content-type": request.headers()["content-type"] ?? "" },
   }).formData();
   const message = form.get(MESSAGE_FIELD);

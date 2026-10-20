@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -6,9 +6,11 @@ import {
   GitHubConnection,
   LeadStatus,
   NeedsYou,
+  RunningTasks,
   SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ok } from "../src/lib/result.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { Provider } from "../src/providers/index.ts";
 import {
@@ -327,6 +329,159 @@ describe("Run the build order (#347)", () => {
 
     expect((await leadOf(request)).state).toBe("resting");
     expect((await sessionsOf(request)).filter((session) => session.lead === true)).toHaveLength(1);
+  });
+});
+
+describe("Allow all for builders from the Lead's row (#551)", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  /** Allow all for builders switched on or off, as the Lead's row does. */
+  const allowAllForBuilders = async (request: Requester, on: boolean) => {
+    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
+      on,
+    });
+    expect(response.status).toBe(200);
+    return LeadStatus.parse(await response.json());
+  };
+
+  it("turns on for 12 hours for the builders still building, those it starts later, and says so in its chat", async () => {
+    const { request } = await signedInWith(ISSUES);
+    await run(request);
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 0 });
+
+    const lead = await allowAllForBuilders(request, true);
+
+    const until = lead.buildersAllowedAll;
+    if (until === undefined) throw new Error("builders aren't allowed all");
+    expect(Date.parse(until) - Date.now()).toBeGreaterThan(11.9 * HOUR);
+    expect(Date.parse(until) - Date.now()).toBeLessThanOrEqual(12 * HOUR);
+    for (const issue of [22, 23]) {
+      expect((await builderOf(request, issue)).allowingAll).toEqual({ until, task: true });
+    }
+    expect(
+      (await sessionsOf(request)).find((session) => session.lead === true)?.allowingAll,
+    ).toBeUndefined();
+    expect(await notesIn(request)).toContain(
+      "Allow all for builders is on for 12 hours: 2 builders now, and any it starts.",
+    );
+  });
+
+  it("can be switched on while the Lead is paused", async () => {
+    const { request } = await signedInWith(ISSUES);
+    await run(request);
+    await postJson(request, "/api/workspaces/side-project/lead/pause", {});
+
+    const lead = await allowAllForBuilders(request, true);
+
+    expect(lead.state).toBe("paused");
+    expect(lead.buildersAllowedAll).toBeDefined();
+    expect((await builderOf(request, 22)).allowingAll).toBeDefined();
+  });
+
+  it("leaves a builder with an open pull request alone, and one allowed all by hand keeps its own end", async () => {
+    const { github, request } = await signedInWith(ISSUES);
+    await run(request);
+    const withPullRequest = await builderOf(request, 22);
+    github.openPullRequest({
+      repo: onGitHub,
+      branch: withPullRequest.branch ?? "",
+      head: "c0ffee1",
+    });
+    await runJobs();
+    const byHand = await builderOf(request, 23);
+    const handOn = await postJson(request, `/api/sessions/${byHand.id}/allow-all`, { lasts: "1h" });
+    expect(handOn.status).toBe(200);
+    const handUntil = (await builderOf(request, 23)).allowingAll?.until;
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 1, approvals: 0 });
+
+    await allowAllForBuilders(request, true);
+
+    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
+    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
+
+    // Turn off leaves the one switched on by hand on.
+    await allowAllForBuilders(request, false);
+
+    expect((await builderOf(request, 23)).allowingAll).toEqual({ until: handUntil, task: false });
+  });
+
+  it("Turn off takes it from the builders the Lead gave it to, and new builders start without it", async () => {
+    const { github, request } = await signedInWith(ISSUES);
+    await postJson(request, "/api/workspaces/side-project/lead/run", {
+      model: FAKE_MODEL,
+      allowAll: true,
+    });
+    const fromTheRow = await allowAllForBuilders(request, true);
+    expect(fromTheRow.buildersAllowedAll).toBeDefined();
+
+    const lead = await allowAllForBuilders(request, false);
+
+    expect(lead.buildersAllowedAll).toBeUndefined();
+    for (const issue of [22, 23]) {
+      expect((await builderOf(request, issue)).allowingAll).toBeUndefined();
+    }
+    expect(await notesIn(request)).toContain(
+      "Allow all for builders is off: its builders ask again.",
+    );
+    // The next builder starts asking as usual.
+    const first = await builderOf(request, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: first.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    await runJobs();
+    expect((await builderOf(request, 24)).allowingAll).toBeUndefined();
+  });
+
+  it("allows at once the approvals its builders wait on that Allow all covers", async () => {
+    const { request } = await signedInWith(ISSUES, {
+      providers: [codingProvider([{ run: "pnpm add left-pad" }]).provider],
+    });
+    await run(request, CODING_MODEL);
+    await expect
+      .poll(async () =>
+        (await sessionsOf(request)).filter(
+          (each) => each.byLead === true && each.waiting === "approval",
+        ),
+      )
+      .toHaveLength(2);
+    expect((await leadOf(request)).allowAllReaches).toEqual({ builders: 2, approvals: 2 });
+
+    await allowAllForBuilders(request, true);
+
+    await expect
+      .poll(async () =>
+        (await sessionsOf(request)).filter(
+          (each) => each.byLead === true && each.waiting === "approval",
+        ),
+      )
+      .toHaveLength(0);
+    const builder = await builderOf(request, 22);
+    expect(
+      (await eventsSoFar(request, builder.id)).find((event) => event.type === "approval-answered"),
+    ).toMatchObject({ answer: "allow", allowedAll: true });
+    // The Lead itself isn't allowed all: it still asks.
+    const lead = (await sessionsOf(request)).find((each) => each.lead === true);
+    if (lead?.now.kind === "needs-you") {
+      await postJson(request, `/api/sessions/${lead.id}/approvals/${lead.now.approval}`, {
+        answer: "deny",
+      });
+    }
+    await expect
+      .poll(async () => (await sessionsOf(request)).filter((each) => each.busy))
+      .toHaveLength(0);
+  });
+
+  it("is for a Lead that has run: before that there's nothing to switch", async () => {
+    const { request } = await signedInWith(ISSUES);
+
+    const response = await postJson(request, "/api/workspaces/side-project/lead/allow-all", {
+      on: true,
+    });
+
+    expect(response.status).toBe(404);
   });
 });
 
@@ -759,6 +914,131 @@ describe("builders that stop, fail or go quiet (#474)", () => {
 
     expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
     expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
+  });
+
+  describe("while something of the machine's is in hand for it (#574)", () => {
+    /** Issues whose builders run a heavy check, the second waiting for the first's build turn. */
+    const CHECKS: readonly FakeIssue[] = [
+      { number: 22, title: "Runs its tests", milestone: "4 · Code workspaces" },
+      { number: 23, title: "Waits its turn", milestone: "4 · Code workspaces" },
+    ];
+
+    /**
+     * A provider whose builders each run `pnpm verify`, held until the test lets them end, or,
+     * for an issue titled "Starts a task", start a task that runs on; the Lead's turns just answer.
+     */
+    const checking = () => {
+      const { provider: coder } = codingProvider([]);
+      const held: (() => void)[] = [];
+      const provider: Provider = {
+        ...coder,
+        runTurn: async (input) => {
+          const { code } = input;
+          if (code === null || !input.framing.newMessage.startsWith("Build issue")) {
+            await input.emit("Done.");
+            return ok(null);
+          }
+          if (input.framing.newMessage.includes("Starts a task")) {
+            const started = await code.task("node scripts/serve.mjs");
+            await input.emit(started.ok ? started.value : started.error);
+            return ok(null);
+          }
+          if (!(await code.run("pnpm verify")).ok) return ok(null);
+          await new Promise<void>((end) => {
+            held.push(end);
+            input.signal.addEventListener("abort", () => end(), { once: true });
+          });
+          code.ran("pnpm verify");
+          await input.emit("Done.");
+          return ok(null);
+        },
+      };
+      return {
+        provider,
+        holding: () => held.length,
+        endAll: () => {
+          for (const end of held.splice(0)) end();
+        },
+      };
+    };
+
+    /** The kind of a session's latest activity, once it has one. */
+    const latestActivity = async (request: Requester, sessionId: string) => {
+      const last = (await eventsSoFar(request, sessionId)).at(-1);
+      return last?.type === "activity" ? last.activity.kind : undefined;
+    };
+
+    it("doesn't stall a builder whose command runs 20+ minutes, nor one waiting that long for the build turn", async () => {
+      const clock = { now: Date.parse("2026-10-17T09:00:00") };
+      const { provider, holding, endAll } = checking();
+      const { request } = await signedInWith(CHECKS, {
+        providers: [provider],
+        now: () => clock.now,
+      });
+      await run(request, CODING_MODEL);
+      const running = await builderOf(request, 22);
+      const waiting = await builderOf(request, 23);
+      await expect.poll(() => latestActivity(request, running.id)).toBe("ran-command");
+      await expect.poll(() => latestActivity(request, waiting.id)).toBe("waiting-for-build");
+      await runJobs();
+
+      clock.now += 21 * MINUTE;
+      await runJobs();
+      clock.now += 21 * MINUTE;
+      await runJobs();
+
+      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+      expect((await builderOf(request, 23)).waiting).not.toBe("stalled");
+      expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
+      // The second gets the build turn once the first's check ends.
+      endAll();
+      await expect.poll(holding).toBe(1);
+      endAll();
+      await settled(request);
+    });
+
+    it("doesn't stall a builder waiting 20+ minutes on its own task, and counts its silence from when the task ends", async () => {
+      await mkdir(join(repo, "scripts"));
+      await writeFile(join(repo, "scripts", "serve.mjs"), "setInterval(() => {}, 1000);\n");
+      await gitIn(repo, "add", ".");
+      await gitIn(repo, "commit", "--quiet", "-m", "Scripts");
+      await gitIn(repo, "push", "--quiet", "origin", "main");
+      const clock = { now: Date.parse("2026-10-17T09:00:00") };
+      const { request } = await signedInWith(
+        [{ number: 22, title: "Starts a task", milestone: "4 · Code workspaces" }],
+        { providers: [checking().provider], now: () => clock.now },
+      );
+      await run(request, CODING_MODEL);
+      await settled(request);
+      const builder = await builderOf(request, 22);
+      await see(request, builder.id);
+      const tasks = RunningTasks.parse(
+        await (await request(`/api/sessions/${builder.id}/tasks`)).json(),
+      ).tasks;
+      expect(tasks).toHaveLength(1);
+      await runJobs();
+
+      clock.now += 21 * MINUTE;
+      await runJobs();
+      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+
+      const stopped = await postJson(
+        request,
+        `/api/sessions/${builder.id}/tasks/${tasks[0]?.task}/stop`,
+        {},
+      );
+      expect(stopped.status).toBe(204);
+      await expect
+        .poll(async () => (await eventsSoFar(request, builder.id)).at(-1)?.type)
+        .toBe("task-ended");
+      await runJobs();
+      clock.now += 19 * MINUTE;
+      await runJobs();
+      expect((await builderOf(request, 22)).waiting).not.toBe("stalled");
+      clock.now += 2 * MINUTE;
+      await runJobs();
+      expect((await builderOf(request, 22)).waiting).toBe("stalled");
+    });
   });
 });
 
