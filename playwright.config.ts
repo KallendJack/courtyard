@@ -30,8 +30,11 @@ const port = 8799 + portShift;
 /** A second worker, for the one test that clears everything: a fresh start. */
 const freshStartPort = 8798 + portShift;
 
-/** The tests that sign in to the worker's fake GitHub and out again (#419). */
-const GITHUB_SPECS = /(github|layout-shift|lead|roomy-fold)\.spec\.ts$/;
+/**
+ * The tests that sign in to the worker's fake GitHub and out again (#419): `github.spec.ts`, the
+ * `github-*.spec.ts` beside it, and these.
+ */
+const GITHUB_SPECS = /(github(-[a-z-]+)?|layout-shift|lead|roomy-fold)\.spec\.ts$/;
 
 /** What both workers share: the fake providers, and never the real Claude Code or Codex. */
 const providers = {
@@ -70,7 +73,8 @@ export default defineConfig({
     },
     {
       // The worker's fake GitHub has one sign-in, which these tests sign in and out of: one at a
-      // time, so one never signs out under another (#419).
+      // time, so one never signs out under another (#419). One at a time is slow, so CI gives them
+      // shards of their own, each with its own worker (#587).
       name: "github",
       use: { ...devices["Desktop Chrome"], storageState: OWNER_LOGIN },
       dependencies: ["setup"],

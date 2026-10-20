@@ -5,7 +5,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 // its name with one quiet ⋯ beside it, then its connections line and its tabs. No line under the
 // name, no caps line, and rename, the icon and archive are behind the ⋯. Nothing here changes
 // Side project, which other tests use: each step is cancelled. Not Workbench: opened signed out,
-// its Main row would be kept as having no build, which github.spec.ts's Home checks.
+// its Main row would be kept as having no build, which github-code-home.spec.ts checks.
 
 const NAME = "Side project";
 
