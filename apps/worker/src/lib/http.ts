@@ -60,7 +60,7 @@ export const readMessage = async <T>(
   return read.ok ? ok({ message: read.value.body, files: read.value.files }) : read;
 };
 
-/** Why Get to know or Tidy, with no model named, found none to ask. */
+/** Why Get to know, with no model named, found none to ask. */
 export const NO_SAVING_MODEL =
   "No model that saves to context is available. Check the providers' settings.";
 

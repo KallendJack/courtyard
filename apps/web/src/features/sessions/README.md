@@ -8,8 +8,7 @@ even pace, and the box at the foot takes your next message.
 
 - **Uses:** `components/` (chat, frame, sheets, rich blocks), `features/documents/`, `features/things/`,
   `features/code-home/`.
-- **Used by:** `routes/` (the session page, a workspace's page, a document's page), `features/step-by-step/`,
-  `features/planning-home/`, `features/code-home/`, `features/home/`, `features/pull-requests/`,
+- **Used by:** `routes/` (the session page, a workspace's page, a document's page), `features/planning-home/`, `features/code-home/`, `features/home/`, `features/pull-requests/`,
   `features/settings/`, `features/things/`; `components/` (the frame, the recent sessions sheet, rich blocks).
 
 ## Screens
@@ -28,7 +27,7 @@ The session page (`routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx`)
   (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code block, each language's
   grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts` finds and rewrites them,
   `maths-plugins.ts` is loaded only when an answer has maths, and maths keeps its room unseen until its formulas can
-  be drawn), an answer's Sources (`sources.tsx`), and the numbered steps step by step offers (`steps.ts`).
+  be drawn), and an answer's Sources (`sources.tsx`).
 - **`composer/`:** the message box (`composer.tsx`) with its model, effort and skill pickers (`model-pickers.tsx`,
   `models.ts`, `limits.ts`; the frame's Skills and Model sheets are `handheld-choices.tsx`) and its attachments
   (`attaching.ts` shrinks photos to JPEG and checks each file). `messages.ts` sends a message with its files, beside

@@ -92,9 +92,7 @@ test.describe("on the unfolded Fold", () => {
       "What Courtyard knowsFacts, plans, ideas and skills",
       "Rename",
       "Change icon",
-      "Allowed commandsWhat sessions run without asking",
       "Notify meWhich notifications you get",
-      "Blocked shopsShops the wanted list skips",
       "ArchiveHidden, never deleted",
     ]);
   });

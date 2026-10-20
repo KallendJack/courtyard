@@ -4,13 +4,12 @@ import { listFolder } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
 import type { Sessions } from "../sessions/index.ts";
-import type { Tidying } from "../tidy/index.ts";
 import { countWorkspaces, getWorkspace } from "../workspaces/index.ts";
 
 /**
  * Fresh start (spec stories 105-107): clears everything from trying Courtyard out, so it starts as
  * on its first run. The context folder is cleared by one change, so its history keeps every file;
- * the sessions move to a dated folder in the data folder; tidies waiting for review are dropped.
+ * the sessions move to a dated folder in the data folder.
  * The owner's login, sign-ins and the usage limits remembered stay.
  */
 
@@ -19,7 +18,6 @@ export type FreshStartTarget = {
   readonly dataDir: string;
   readonly contextFolder: ContextFolder;
   readonly sessions: Sessions;
-  readonly tidying: Tidying;
   readonly now: () => number;
 };
 
@@ -89,7 +87,6 @@ export const createFreshStart = (target: FreshStartTarget) => {
       return ok({
         workspaces: workspaces.value,
         sessions: sessions.value,
-        tidies: target.tidying.waiting(),
         running: busy.value === undefined ? null : await named(target.contextDir, busy.value),
         folder: folder.value,
       });
@@ -111,7 +108,6 @@ export const createFreshStart = (target: FreshStartTarget) => {
                   message: "The context folder couldn't be cleared, so nothing was.",
                 });
           }
-          target.tidying.dropAll();
           return ok({ moveTo: join(target.dataDir, folder.value) });
         },
       });

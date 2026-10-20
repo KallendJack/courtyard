@@ -18,7 +18,7 @@ export const openTab = (page: Page, name: "Home" | "History" | "Things" | "Docs"
 export const fromWorkspaceMenu = async (
   page: Page,
   name: string,
-  choice: "Rename" | "Change icon" | "Archive" | "Blocked shops",
+  choice: "Rename" | "Change icon" | "Archive",
 ) => {
   await page.getByRole("button", { name: "Workspace options" }).click();
   await page

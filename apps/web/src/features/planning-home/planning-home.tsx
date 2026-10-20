@@ -32,9 +32,7 @@ import { DocumentsSection } from "../documents/documents-section.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
 import { sendMessage, startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
-import { WorkspaceStatusLine } from "../status-line/status-line.tsx";
 import { ThingsSection } from "../things/things-section.tsx";
-import { WantedList } from "../wanted/wanted-list.tsx";
 import { KEPT_HOME, loadKeptHome } from "./api.ts";
 import { HeaderPhoto } from "./header-photo.tsx";
 import { HomeNow } from "./home-now.tsx";
@@ -149,8 +147,6 @@ export default function PlanningHome(props: {
         ? asked
         : "";
   const empty = tabs.length === 0 && (contextFile === null || !hasLines(contextFile));
-  /** Changes as a session starts or a turn ends, when the status line may have moved along (#256). */
-  const turnsEnded = `${list.sessions.length}-${list.sessions.filter(({ busy }) => busy).length}`;
   // Add Thing's form opens once, from Add: back on another tab, it's closed.
   useEffect(() => {
     if (place !== "things") setAddingThing(false);
@@ -236,29 +232,24 @@ export default function PlanningHome(props: {
           : {
               under: (
                 <div data-planning-home="">
-                  {offline === undefined && (
-                    <WorkspaceStatusLine workspaceId={workspace.id} again={turnsEnded} />
-                  )}
-                  <div className="mt-3">
-                    <WorkspaceTabs
-                      workspaceId={workspace.id}
-                      tabs={tabs}
-                      chosen={place === "knows" ? "" : place}
-                      pills={{
-                        action: {
-                          label: "+ New",
-                          onClick: () => {
-                            startWith("");
-                            void navigate({
-                              to: "/workspaces/$workspaceId",
-                              params: { workspaceId: workspace.id },
-                              hash: "new",
-                            });
-                          },
+                  <WorkspaceTabs
+                    workspaceId={workspace.id}
+                    tabs={tabs}
+                    chosen={place === "knows" ? "" : place}
+                    pills={{
+                      action: {
+                        label: "+ New",
+                        onClick: () => {
+                          startWith("");
+                          void navigate({
+                            to: "/workspaces/$workspaceId",
+                            params: { workspaceId: workspace.id },
+                            hash: "new",
+                          });
                         },
-                      }}
-                    />
-                  </div>
+                      },
+                    }}
+                  />
                 </div>
               ),
             }),
@@ -341,18 +332,15 @@ export default function PlanningHome(props: {
           ) : offline !== undefined && (place === "things" || place === "docs") ? (
             <NotKept />
           ) : place === "things" ? (
-            <>
-              <WantedList workspaceId={workspace.id} />
-              {things.kind === "loaded" && (
-                <ThingsSection
-                  workspaceId={workspace.id}
-                  list={things.data}
-                  {...(deleted?.kind === "thing" ? { deleted } : {})}
-                  onUndone={props.onUndone}
-                  adding={addingThing}
-                />
-              )}
-            </>
+            things.kind === "loaded" && (
+              <ThingsSection
+                workspaceId={workspace.id}
+                list={things.data}
+                {...(deleted?.kind === "thing" ? { deleted } : {})}
+                onUndone={props.onUndone}
+                adding={addingThing}
+              />
+            )
           ) : place === "docs" ? (
             documents.kind === "loaded" && (
               <DocumentsSection

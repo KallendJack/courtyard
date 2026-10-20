@@ -94,9 +94,8 @@ export type CourtyardTool = {
 /**
  * The name a model calls each of Courtyard's tools that a turn can offer, and the worker answers:
  * the save tool (ADR 0013), the document and Things tools (ADR 0020), the use skill tool (ADR 0016),
- * the suggest replies tool (ADR 0017), a code workspace's Lead's build order tool (#347), a
- * code session's preview screenshot tool (#183), and the wanted list's picks tool, which only its
- * price checks offer, and block shop tool (#245).
+ * the suggest replies tool (ADR 0017), a code workspace's Lead's build order tool (#347),
+ * and a code session's preview screenshot tool (#183).
  */
 export type TurnToolName =
   | "save_to_context"
@@ -105,9 +104,7 @@ export type TurnToolName =
   | "use_skill"
   | "suggest_replies"
   | "build_order"
-  | "preview_screenshot"
-  | "save_picks"
-  | "block_shop";
+  | "preview_screenshot";
 
 /** One of Courtyard's tools that a turn can offer. */
 export type TurnTool = CourtyardTool & { readonly name: TurnToolName };
@@ -375,11 +372,11 @@ export type AddedMessages = {
 
 /**
  * A one-off question outside any session, answered once in the shape `schema` describes, such as
- * a tidy's proposed changes. No tools, no files: the model has only what it's told.
+ * a session's title. No tools, no files: the model has only what it's told.
  */
 export type OneOffInput = {
   /** What it's for, so the fake can script its answer. */
-  readonly purpose: "tidy" | "title" | "quick-question" | "status-line";
+  readonly purpose: "title" | "quick-question";
   readonly model: ModelId;
   /** One of the levels of effort the model takes; left out for the model's default. */
   readonly effort?: Effort;
@@ -420,8 +417,8 @@ export type Provider = {
    */
   readonly startingDefault?: ModelDefault;
   /**
-   * The cheap model and effort it runs a short background errand on (#245), such as checking the
-   * wanted list's prices on the web; a provider without one runs none.
+   * The cheap model and effort it runs a short background errand on (#245), such as the note a
+   * session leaves (#601, ADR 0032); a provider without one runs none.
    */
   readonly errand?: ModelDefault;
   readonly status: () => Promise<ProviderStatus>;
@@ -489,7 +486,7 @@ export const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly 
 
 /**
  * The first model on offer whose provider saves to context and isn't at its usage limit (the first
- * that saves, when every one is): what Get to know and Tidy use when no model is named.
+ * that saves, when every one is): what Get to know uses when no model is named.
  * `undefined` when no provider that saves is available.
  */
 export const firstSavingModel = async (

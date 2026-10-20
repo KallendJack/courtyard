@@ -104,17 +104,14 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`owner-context/`](../apps/worker/src/features/owner-context/README.md): `OWNER.md`.
 - [`workspaces/`](../apps/worker/src/features/workspaces/README.md): the workspaces, their icons and order.
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
-- [`wanted/`](../apps/worker/src/features/wanted/README.md): the wanted list's picks, their price checks on a
-  provider's errand model, and blocked shops (#245).
-- [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a workspace's name,
-  ✓ just done · ● now · ○ next (#256): a planning one's kept and moved along, a code one's built from its data.
+- [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
+  name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`floor-plans/`](../apps/worker/src/features/floor-plans/README.md): each room's last floor plan from an answer,
   saved as its document once the answer ends, and Home's plan views (#257).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
   showing, and its latest session's next steps, which History shows.
-- [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -209,7 +206,6 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   what it does, one example, what it uses, what uses it, and its screens.
   - [`sessions/`](../apps/web/src/features/sessions/README.md): the session page, in parts: `turns/`, `answer/`,
     `composer/` and `notes/`.
-  - [`step-by-step/`](../apps/web/src/features/step-by-step/README.md): an answer's steps one at a time, read aloud.
   - [`limits/`](../apps/web/src/features/limits/README.md): usage at a glance (#66): the Model sheet's plan meters,
     the warning above the Reply box and Home's usage lines.
   - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's
@@ -219,13 +215,10 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled), no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
-  - [`wanted/`](../apps/web/src/features/wanted/README.md): the wanted list, each Thing's picks and its shop's one
-    button (#245).
-  - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a workspace's name,
-    and the card an item opens: Done, Edit, Remove (#256).
+  - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
+    name (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
-  - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
   - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
   - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
     up, Main, and its Roadmap tab.
@@ -264,7 +257,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
   are in the first load's stylesheet. It holds a code workspace's Home blocks and PRs list, Home's tile lines and
   foot rows, the recent sessions sheet, Recent changes, Settings' Connections and backup, and a pull request's
-  page; a page that waits as a whole (a pull request's, Tidy) shows the rows in its own shape under its title. A
+  page; a page that waits as a whole (a pull request's) shows the rows in its own shape under its title. A
   session's conversation is kept the same way in `sessions/turns/events.ts` (faint rows until its events have come,
   and its stream carries on after what was shown); a diagram once drawn is kept by its source, a drawing still to
   load keeps a faint place rather than showing its code (`components/rich-blocks/fenced.tsx`), and maths keeps its room
@@ -379,7 +372,7 @@ topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for 
 is in each session a list shows and what it waits on the owner for, with what the session page has shown the
 owner, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
+usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, the offline copy
 (`offline-copy.ts`, #106), health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
@@ -459,16 +452,8 @@ Where the rest fits:
   (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
   workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
-- **The wanted list** (#245). A planning turn's Things show each wanted one's ★ pick, and its model blocks a shop
-  with the block shop tool, a change to `workspace.json`, after which `wanted/` finds new picks elsewhere. Picks are
-  found and priced outside any session: `wanted/` runs one turn through the provider seam on the first provider's
-  `errand` model (its cheap model and effort: Claude's Sonnet at Low), with web search and only the picks tool, in
-  the background, when the owner taps Find picks, opens the list with prices over a week old (once a day), or blocks
-  a shop.
-- **The status line** (#256). As a planning session's turn completes with nothing more queued, `sessions/` hands its
-  last exchanges to `status-line/`, which asks the first provider's `errand` model one one-off question (no tools) in
-  the background and keeps the line it gives, unless the owner changed it meanwhile. A code workspace's line is built
-  from `sessions/`' list and `next-up/` when asked, with no model.
+- **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
+  no model. A planning workspace has none (#600).
 - **Suggested replies.** The model calls the suggest replies tool its framing offered (planning workspaces only).
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
@@ -613,8 +598,8 @@ Where the rest fits:
   page has shown the owner its answer, on any device.
 - **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`
   remembers that until the reset, and the model pickers show it. Nothing switches model by itself, but whatever has
-  no model named avoids one at its limit: a new session, Get to know, Tidy and a session's title each go to the first
-  model with room (for Get to know and Tidy, the first that saves to context). The worker picks it, not the browser.
+  no model named avoids one at its limit: a new session, Get to know and a session's title each go to the first
+  model with room (for Get to know, the first that saves to context). The worker picks it, not the browser.
   A session whose provider shows as unavailable keeps its model in the picker, and Send waits until the provider is
   back or the owner picks another (#299).
 - **Usage at a glance** (#66). Each provider's `readUsage` reads its plan's 5-hour and weekly windows (Claude
@@ -659,8 +644,7 @@ things live only in the worker's memory and go when it restarts.
   ones and code ones each keep their own group.
 - `<workspace>/CONTEXT.md`: a planning workspace's context file; a code workspace has none (ADR 0026).
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
-  `description`, allowlist changes and Paper connection, with the file's name once connected from its page; a
-  planning workspace's blocked shops for its wanted list, #245).
+  `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
@@ -694,10 +678,6 @@ things live only in the worker's memory and go when it restarts.
   resets.
 - `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
   it's there.
-- `wanted/<workspace>.json`: a planning workspace's wanted list's picks, by each Thing's file name, and the day its
-  prices were last checked (#245). Found again on the web, so no change to the context folder.
-- `status-line/<workspace>.json`: a planning workspace's status line (#256), ✓ just done, ● now and ○ next, each
-  with the session that put it there or marked the owner's own words.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
@@ -710,8 +690,7 @@ things live only in the worker's memory and go when it restarts.
   `sign-ins.json`: the providers the owner said Not now to.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
 
-**Only in the worker's memory:** usage limits and each plan's usage as last read, tidies waiting for review, and
-which turns are running.
+**Only in the worker's memory:** usage limits and each plan's usage as last read, and which turns are running.
 
 **On a device that keeps an offline copy** (#106, [ADR 0030](adr/0030-the-web-app-may-keep-a-read-only-copy.md)):
 the copy the worker gave it (`GET /api/offline-copy`), whole and read-only, in the browser's IndexedDB (`courtyard`,
@@ -726,7 +705,7 @@ can't be reached, the root route reads it (its context's `reading`) and the page
 [`.env.example`](../.env.example) explains the ones an owner sets.
 
 **A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
-moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
+moves every session to `fresh-starts/<date>/`. It keeps the owner's password and
 device logins, the sign-ins (the Codex home, Not now and GitHub's) and the usage limits. The README says how to bring things
 back.
 
@@ -786,7 +765,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
-- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
+- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools and
   titling. A planning turn's framing and a code turn's differ on purpose (ADR 0032): planning gets its own way of
   answering (Planning answers in the guide) and floor plans; a code turn gets diagrams and the house process. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.

@@ -9,7 +9,7 @@ import {
   wordsOf,
 } from "@courtyard/contract";
 import { ArrowRightLeft, X } from "lucide-react";
-import { memo, type ReactNode, useMemo, useState } from "react";
+import { memo, type ReactNode, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { CopyButton } from "@/components/buttons/copy-button";
 import { ApprovalCard, approvalWords } from "@/components/chat/approval-card";
@@ -27,7 +27,6 @@ import { describeProblem } from "../../../components/layout/problems.tsx";
 import { TaskEndedLine } from "../../tasks/task-lines.tsx";
 import { Answer } from "../answer/answer.tsx";
 import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
-import { type Steps, stepsIn } from "../answer/steps.ts";
 import { answerApproval, attachmentUrl } from "../composer/messages.ts";
 import { answeringWith, availableModels } from "../composer/models.ts";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "../notes/documents.tsx";
@@ -284,24 +283,6 @@ export const describeFailure = (reason: FailureReason) => {
   }
 };
 
-/** Step by step's mark (#241), as drawn: the lines of a list, and an arrow on past them. */
-function StepsGlyph() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 4H9M3 8H11M3 12H7" />
-      <path d="M12 10L14.5 12L12 14" />
-    </svg>
-  );
-}
-
 /** A line about where a turn stands, under the owner's message: waiting, or stopped. */
 function TurnNote(props: { children: ReactNode }) {
   return <p className="border-l-2 pl-3 text-sm text-muted-foreground">{props.children}</p>;
@@ -449,8 +430,6 @@ export const TurnView = memo(function TurnView(props: {
   documents?: DocumentsHere;
   /** It's the session's latest turn, so its end is marked once it ends (#179). */
   latest?: boolean;
-  /** Starts step by step on its answer's steps (#241), in a planning workspace only. */
-  onStepByStep?: (turn: Turn, steps: Steps) => void;
   /** The owner's messages waiting for it to end (#177), on the latest turn only, and removing one. */
   queued?: {
     readonly messages: readonly Queued[];
@@ -464,13 +443,6 @@ export const TurnView = memo(function TurnView(props: {
   const { sessionId, turn, providers, onRetry, onCarryOn, onContinue, onReply } = props;
   const { workspaceId, documents } = props;
   const latest = props.latest === true;
-  const { onStepByStep } = props;
-  const done = turn.state.kind === "done";
-  /** A finished answer's numbered steps, which it offers to take one at a time (#241). */
-  const steps = useMemo(
-    () => (onStepByStep !== undefined && done ? stepsIn(turn.answer) : undefined),
-    [onStepByStep, done, turn.answer],
-  );
 
   return (
     <div className="space-y-4">
@@ -518,12 +490,6 @@ export const TurnView = memo(function TurnView(props: {
         );
       })}
       {turn.images.length > 0 && <ShownImages sessionId={sessionId} images={turn.images} />}
-      {steps !== undefined && onStepByStep !== undefined && (
-        <Button variant="soft" size="md" onClick={() => onStepByStep(turn, steps)}>
-          <StepsGlyph />
-          Step by step · all {steps.steps.length}
-        </Button>
-      )}
       {/*
         While it runs, what it's doing now (#179), or that it waits for a place (#362); an approval
         it waits on says so itself.

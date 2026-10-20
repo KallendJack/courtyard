@@ -16,10 +16,8 @@ import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
 import { err, ok, type Result } from "../lib/result.ts";
 import {
-  BLOCK_SHOP_TOOL_NAME,
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
-  PICKS_TOOL_NAME,
   PREVIEW_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
@@ -196,67 +194,6 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     return [input];
   });
 
-const WANTED_LINE = /^\[(W\d+)\] ([^,]+),/;
-const BLOCKED_SHOPS = /^Leave out these shops, which the owner blocked: (.+)\.$/;
-
-/** The shops the fake picks from, in order, leaving out any the owner blocked. */
-const FAKE_SHOPS = ["Tredz", "Halfords", "Wiggle", "Sigma"];
-
-/**
- * The picks a price check's message gets from the fake (#245): for each Thing it lists ("[W1]
- * Lights, to get"), a best-value pick at £55 (usually £72), a cheapest at £38 and one worth
- * stretching for at £150, from the first shops the owner hasn't blocked, in that order.
- */
-const scriptedPicks = (message: string): Record<string, unknown>[] => {
-  const lines = message.split("\n").map((line) => line.trim());
-  const blocked = lines
-    .flatMap((line) => BLOCKED_SHOPS.exec(line)?.[1]?.split(", ") ?? [])
-    .map((shop) => shop.toLowerCase());
-  const shops = FAKE_SHOPS.filter((shop) => !blocked.includes(shop.toLowerCase()));
-  return lines.flatMap((line) => {
-    const [, label, name] = WANTED_LINE.exec(line) ?? [];
-    if (label === undefined || name === undefined) return [];
-    const page = (shop: string) =>
-      `https://${shop.toLowerCase()}.example/${name.toLowerCase().replace(/\W+/g, "-")}`;
-    const kinds = [
-      {
-        kind: "best-value",
-        words: "best value",
-        why: "Does the job well for the money",
-        price: 55,
-      },
-      { kind: "cheapest", words: "cheapest", why: "Does the job, no more", price: 38 },
-      { kind: "stretch", words: "worth stretching for", why: "Lasts twice as long", price: 150 },
-    ];
-    const picks = kinds.flatMap(({ kind, words, why, price }, at) => {
-      const shop = shops[at];
-      return shop === undefined
-        ? []
-        : [
-            {
-              kind,
-              product: `${name}, ${words}`,
-              why,
-              price,
-              ...(kind === "best-value" ? { usual_price: 72 } : {}),
-              shop,
-              url: page(shop),
-            },
-          ];
-    });
-    return [{ thing: label, picks }];
-  });
-};
-
-const BLOCK_SHOP = /^block shop: ([^|]+?)(?: \| (.+))?$/i;
-
-/** The shops a message scripts blocking (#245), one per line: "block shop: Tredz | not from Tredz". */
-const scriptedBlocks = (message: string): Record<string, string>[] =>
-  message.split("\n").flatMap((line) => {
-    const [, shop, said] = BLOCK_SHOP.exec(line.trim()) ?? [];
-    return shop === undefined ? [] : [{ shop, ...(said === undefined ? {} : { said }) }];
-  });
-
 const PREVIEW_SHOT = /^preview screenshot: (\S+)(?: (\S+))?$/i;
 
 /**
@@ -309,10 +246,8 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
-  [BLOCK_SHOP_TOOL_NAME, scriptedBlocks],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
-  [PICKS_TOOL_NAME, scriptedPicks],
 ];
 
 const SEARCH = /^search the web for: (.+)$/i;
@@ -340,39 +275,6 @@ const scriptedWeb = (message: string) => {
     activities,
     sources: turnSources({ answer: cited.join("\n"), read: [], searches: [] }),
   };
-};
-
-/** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
-const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
-
-/**
- * The tidy a file scripts, by markers at the end of its lines: "(stale)" is removed, "(long)" is
- * shortened to the line without the marker, the lines of a section ending "(merge)" are merged
- * into one, and "(adds)" is shortened to "A sauna", a change that adds something new.
- */
-const scriptedTidy = (message: string) => {
-  const changes: Record<string, unknown>[] = [];
-  const merging = new Map<string, { labels: string[]; texts: string[] }>();
-  for (const line of message.split("\n")) {
-    const [, letters, number, text] = LABELLED.exec(line.trim()) ?? [];
-    if (letters === undefined || text === undefined) continue;
-    const label = `${letters}${number}`;
-    const marked = /^(.*) \((stale|long|merge|adds)\)$/.exec(text);
-    const [, words = text, marker] = marked ?? [];
-    if (marker === "stale") changes.push({ kind: "remove", labels: [label], why: "It's stale." });
-    if (marker === "long") changes.push({ kind: "shorten", labels: [label], text: words });
-    if (marker === "adds") changes.push({ kind: "shorten", labels: [label], text: "A sauna" });
-    if (marker === "merge") {
-      const merge = merging.get(letters) ?? { labels: [], texts: [] };
-      merge.labels.push(label);
-      merge.texts.push(words);
-      merging.set(letters, merge);
-    }
-  }
-  for (const { labels, texts } of merging.values()) {
-    if (labels.length > 1) changes.push({ kind: "merge", labels, text: texts.join(", ") });
-  }
-  return { changes };
 };
 
 /** How many words of the owner's first message a scripted title keeps. */
@@ -417,28 +319,6 @@ const scriptedQuickAnswer = (message: string): Result<unknown, FailureReason> =>
     line: Number(line),
   }));
   return ok({ answer: `You asked: ${question}`, lines });
-};
-
-const STATUS_ITEM = /\b(just done|now|next): ([^;\n]+)/gi;
-
-/**
- * The status line a message scripts (#256): each place as the message last names it, "just done:
- * …", "now: …" and "next: …" ending at a semicolon or the line's end, so the session's words
- * win over the line it was given; "none" for none, and the owner's own words without saying so.
- */
-const scriptedStatusLine = (message: string) => {
-  const line: Record<"done" | "now" | "next", string | null> = {
-    done: null,
-    now: null,
-    next: null,
-  };
-  for (const [, place = "", text = ""] of message.matchAll(STATUS_ITEM)) {
-    const words = text.replace(" (the owner's own words)", "").trim();
-    line[
-      place.toLowerCase() === "just done" ? "done" : place.toLowerCase() === "now" ? "now" : "next"
-    ] = words === "none" ? null : words;
-  }
-  return line;
 };
 
 /**
@@ -791,8 +671,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * document …" saves a document (see `scriptedDocuments`) when it offers the document tool, after
  * any "read file: …" it acts out reading, between any "write: …" it writes (see `scriptedWork`), and "thing add: …" or "thing T2:
  * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
- * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
- * (see `scriptedTidy`), a session's title its first message (see `scriptedTitle`), and a quick
+ * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A session's title follows its first message (see `scriptedTitle`), and a quick
  * question's answer the question (see `scriptedQuickAnswer`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested, and "use 82% of Fake's week" (or "5-hour") fills
@@ -849,7 +728,7 @@ export const createFakeProvider = (
   return {
     id,
     capabilities,
-    // Its own model at Low, so a price check's model and effort can be seen (#245).
+    // Its own model at Low, so an errand's model and effort can be seen (#245).
     errand: { model: ModelId.parse("echo"), effort: Effort.parse("low") },
     ...(options.signIn === undefined ? {} : { signIn: fakeSignIn(options.signIn) }),
     ...(plan === undefined ? {} : { readUsage: async () => plan.reading() }),
@@ -954,14 +833,10 @@ export const createFakeProvider = (
       if (delayMs > 0) await pause(delayMs * 10, signal);
       if (signal.aborted) return err({ kind: "unknown", message: "Stopped." });
       switch (purpose) {
-        case "tidy":
-          return ok(scriptedTidy(message));
         case "title":
           return scriptedTitle(message);
         case "quick-question":
           return scriptedQuickAnswer(message);
-        case "status-line":
-          return ok(scriptedStatusLine(message));
       }
     },
   };

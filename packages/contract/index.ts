@@ -171,6 +171,7 @@ export {
   PreviewSize,
   StartPreview,
 } from "./lib/preview.ts";
+export { ProductBlock } from "./lib/product.ts";
 export {
   BumpStanding,
   ChangedFile,
@@ -269,10 +270,7 @@ export {
 export {
   STATUS_ITEM_MAX_LENGTH,
   StatusItem,
-  StatusItemText,
   StatusLine,
-  StatusLineChange,
-  StatusPlace,
 } from "./lib/status-line.ts";
 export {
   RunningTask,
@@ -312,14 +310,6 @@ export {
   ThingSummary,
 } from "./lib/things.ts";
 export {
-  TidyChange,
-  TidyChangeKind,
-  TidyId,
-  TidyProposal,
-  TidyRequest,
-  TidySave,
-} from "./lib/tidy.ts";
-export {
   ModelUsageMeter,
   PlanUsage,
   ProviderUsage,
@@ -333,20 +323,6 @@ export {
   UsageWindow,
   usageWindowWords,
 } from "./lib/usage.ts";
-export {
-  BlockedShop,
-  BlockedShops,
-  PICK_KINDS,
-  PICKS_MAX,
-  PickKind,
-  ProductBlock,
-  poundsOf,
-  ShopName,
-  ShopUnblock,
-  WantedList,
-  WantedPick,
-  WantedRow,
-} from "./lib/wanted.ts";
 export {
   CONTEXT_FILE_LONG_CHARACTERS,
   CONTEXT_LINE_MAX_CHARACTERS,

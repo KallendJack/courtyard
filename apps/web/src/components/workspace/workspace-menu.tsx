@@ -1,23 +1,21 @@
 import type { WorkspaceIcon as Icon, WorkspaceId, WorkspaceMode } from "@courtyard/contract";
-import { Archive, Ban, Bell, BookOpen, Pencil, SquareTerminal } from "lucide-react";
+import { Archive, Bell, BookOpen, Pencil, SquareTerminal } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { OptionsMenu } from "../buttons/options-menu.tsx";
 import { useAnchorName } from "../layout/place-under.ts";
 import { WorkspaceIcon } from "./workspace-icon.tsx";
 
-// Loaded when the owner first picks Change icon, Allowed commands, Notify me or Blocked shops.
+// Loaded when the owner first picks Change icon, Allowed commands or Notify me.
 const IconSheet = lazy(() => import("../sheets/icon-sheet.tsx"));
 const AllowedCommandsSheet = lazy(() => import("../sheets/allowed-commands-sheet.tsx"));
-const BlockedShopsSheet = lazy(() => import("../sheets/blocked-shops-sheet.tsx"));
 const NotifyMeSheet = lazy(() => import("../sheets/notify-me-sheet.tsx"));
 
 /**
- * One quiet ⋯ beside a code workspace's name (#333; Paper, "Tablet · Workspace ⋯: rename, icon,
+ * One quiet ⋯ beside a workspace's name (#333; Paper, "Tablet · Workspace ⋯: rename, icon,
  * archive"), opening a small sheet under it: a planning workspace's What Courtyard knows (#481),
- * Rename, Change icon (the Icon sheet), Allowed commands (what the owner allowed always, #185),
- * Notify me (what its notifications tell of, #493), in a planning workspace Blocked shops (its
- * wanted list's, #245), and Archive, so the title area keeps
- * only the name while nothing the page could do goes away. `choose` returns an error to show, or
+ * Rename, Change icon (the Icon sheet), a code workspace's Allowed commands (what the owner
+ * allowed always, #185; a planning workspace runs no commands, #600), Notify me (what its
+ * notifications tell of, #493), and Archive, so the title area keeps only the name while nothing the page could do goes away. `choose` returns an error to show, or
  * nothing once the icon is kept.
  */
 export function WorkspaceMenu(props: {
@@ -35,11 +33,9 @@ export function WorkspaceMenu(props: {
   const [picking, setPicking] = useState<boolean>();
   /** Whether Allowed commands is open, or has never been, so it isn't loaded until it's wanted. */
   const [allowed, setAllowed] = useState<boolean>();
-  /** Whether Blocked shops is open, or has never been, so it isn't loaded until it's wanted. */
-  const [blocked, setBlocked] = useState<boolean>();
   /** Whether Notify me is open, or has never been, so it isn't loaded until it's wanted. */
   const [notifying, setNotifying] = useState<boolean>();
-  /** The ⋯'s, so Allowed commands and Blocked shops open under it, where the menu was. */
+  /** The ⋯'s, so Allowed commands opens under it, where the menu was. */
   const anchor = useAnchorName();
   return (
     <>
@@ -65,28 +61,22 @@ export function WorkspaceMenu(props: {
             name: "Change icon",
             onPick: () => setPicking(true),
           },
-          {
-            icon: <SquareTerminal />,
-            name: "Allowed commands",
-            note: "What sessions run without asking",
-            onPick: () => setAllowed(true),
-          },
+          ...(props.mode === "code"
+            ? [
+                {
+                  icon: <SquareTerminal />,
+                  name: "Allowed commands",
+                  note: "What sessions run without asking",
+                  onPick: () => setAllowed(true),
+                },
+              ]
+            : []),
           {
             icon: <Bell />,
             name: "Notify me",
             note: "Which notifications you get",
             onPick: () => setNotifying(true),
           },
-          ...(props.mode === "planning"
-            ? [
-                {
-                  icon: <Ban />,
-                  name: "Blocked shops",
-                  note: "Shops the wanted list skips",
-                  onPick: () => setBlocked(true),
-                },
-              ]
-            : []),
           {
             icon: <Archive />,
             name: "Archive",
@@ -103,17 +93,6 @@ export function WorkspaceMenu(props: {
             anchor={anchor}
             open={allowed}
             onClose={() => setAllowed(false)}
-          />
-        </Suspense>
-      )}
-      {blocked !== undefined && (
-        <Suspense>
-          <BlockedShopsSheet
-            workspaceId={props.workspaceId}
-            workspaceName={props.workspaceName}
-            anchor={anchor}
-            open={blocked}
-            onClose={() => setBlocked(false)}
           />
         </Suspense>
       )}

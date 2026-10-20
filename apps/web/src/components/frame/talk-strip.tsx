@@ -420,8 +420,7 @@ export function TalkBar(props: {
   talker: RefObject<(() => void) | undefined>;
 }) {
   const cancelKey = useRef<HTMLButtonElement>(null);
-  const where = props.box?.hint ?? props.where;
-  const talk = useTalk({ ...props, where, says: STRIP_SAYS, cancelKey, holdKeys: true });
+  const talk = useTalk({ ...props, says: STRIP_SAYS, cancelKey, holdKeys: true });
   const { listening, held } = talk;
 
   return (
@@ -530,8 +529,7 @@ export function TalkKey(props: {
 }) {
   // With a mouse, there's a keyboard: Space is the way to talk, and the key says so (#197).
   const how = useFinePointer() ? "Hold Space" : "Hold to speak";
-  const where = props.box?.hint ?? how;
-  const talk = useTalk({ ...props, says: KEY_SAYS, where, holdKeys: true });
+  const talk = useTalk({ ...props, says: KEY_SAYS, where: how, holdKeys: true });
   const { listening, showing } = talk;
   const quiet = showing === "answering";
 

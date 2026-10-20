@@ -1,7 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { READING_SESSION_ID } from "./long-session.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
-import { openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // Every screen is a pinned header, one scrolling middle and a pinned footer (#339): from a tablet
 // up, a screen's title and its main action stay in view however long what's between them is.
@@ -201,21 +200,6 @@ const screens = () => {
       .click();
     await expect(title(page)).toHaveText("Lawnmower");
     await keepsPinned(page, [page.getByRole("link", { name: /^Back to/ }), title(page)]);
-  });
-
-  test("Tidy keeps its title, and Save and Cancel", async ({ page }) => {
-    const name = `Attic ${Date.now()}`;
-    await newWorkspace(page, name);
-    // Markers at the ends of lines script the fake's tidy.
-    await startSaving(
-      page,
-      ["save fact: Pitched roof (merge)", "save fact: The roof is pitched (merge)"].join("\n"),
-    );
-    await page.getByRole("link", { name: `Back to ${name}` }).click();
-    await openWhatCourtyardKnows(page);
-    await page.getByRole("link", { name: "Tidy", exact: true }).click();
-    await expect(page.getByRole("list", { name: "Proposed changes" })).toBeVisible();
-    await keepsPinned(page, [title(page), button(page, /^Save \d/), button(page, "Cancel")]);
   });
 
   test("Recent changes keeps its back link and title", async ({ page }) => {

@@ -113,8 +113,13 @@ export const loadWorkspacePage = async (
       // A planning workspace's Home (#481) comes with the page, so its view never jumps in; a code
       // workspace has none, and its answer is passed over.
       workspaceId.success ? loadHome(workspaceId.data) : NOT_FOUND,
-      // The status line under its name (#256), so it never jumps in either.
-      workspaceId.success ? loadStatusLine(workspaceId.data) : NOT_FOUND,
+      // A code workspace's status line under its name (#256), so it never jumps in either; a
+      // planning workspace has none (#600).
+      detailAndHome.then(({ detail }) =>
+        workspaceId.success && detail.kind === "loaded" && detail.data.workspace.mode === "code"
+          ? loadStatusLine(workspaceId.data)
+          : NOT_FOUND,
+      ),
     ]);
   if (planningHome.kind === "loaded" && workspaceId.success) {
     KEPT_HOME.set(workspaceId.data, planningHome.data);

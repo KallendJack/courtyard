@@ -7,7 +7,7 @@ out: it never touches the disk.
 a model names a line to change.
 
 - **Uses:** nothing but the contract.
-- **Used by:** `saves/`, `owner-context/`, `workspaces/` (each `CONTEXT.md`), `tidy/`, `changes/`, `prompts/`,
+- **Used by:** `saves/`, `owner-context/`, `workspaces/` (each `CONTEXT.md`), `changes/`, `prompts/`,
   `worker.ts`.
 
 ## API

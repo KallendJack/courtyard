@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import { usePageScroll } from "@/components/layout/page-scroll";
-import type { Steps } from "../answer/steps.ts";
 import type { DocumentsHere } from "../notes/documents.tsx";
 import type { QueuedMessage, Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
@@ -59,8 +58,6 @@ export function SessionTurns(props: {
   workspaceId: WorkspaceId;
   /** Where Save as document saves; left out where answers can't be saved as documents. */
   documents?: DocumentsHere;
-  /** Starts step by step on an answer's steps (#241); left out where answers don't offer it. */
-  onStepByStep?: (turn: Turn, steps: Steps) => void;
   /** The owner's messages waiting for the running turn to end (#177), shown under the latest. */
   queuedMessages: readonly QueuedMessage[];
   /** Removes a queued message: what went wrong, or nothing once it's removed. */
@@ -74,7 +71,7 @@ export function SessionTurns(props: {
 }) {
   const { sessionId, turns, providers, onRetry, onCarryOn, onContinue, onReply } = props;
   const { workspaceId, documents } = props;
-  const { onStepByStep, onAllowAll } = props;
+  const { onAllowAll } = props;
   const { queuedMessages, onRemoveQueued, onEditQueued } = props;
   const queued = useMemo(
     () => ({
@@ -241,7 +238,6 @@ export function SessionTurns(props: {
               providers={providers}
               workspaceId={workspaceId}
               {...(documents === undefined ? {} : { documents })}
-              {...(onStepByStep === undefined ? {} : { onStepByStep })}
               // Only the last turn can be retried, carried on, continued or replied to, so only it
               // gets the handlers.
               {...(props.offline === true ? { offline: true } : {})}

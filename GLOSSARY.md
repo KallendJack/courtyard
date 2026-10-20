@@ -122,7 +122,7 @@ removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:
-One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, a workspace added,
+One committed difference to the context folder: a save, an undo, an edit, a hand edit, a past tidy, a workspace added,
 renamed or archived in the app, or a fresh start. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
@@ -130,11 +130,6 @@ _Avoid_: commit (that's how it's kept), revision, update
 The list of changes to a workspace's context file or the owner context, newest first, each with Undo, on a page of
 its own linked from **What Courtyard knows** (and Settings).
 _Avoid_: history, log, activity (that's a model's doing in a session)
-
-**Tidy**:
-The owner asking a model for a shorter context file. Unlike a save, it's proposed first: each change it proposes is
-ticked by default, and the owner unticks any they don't want.
-_Avoid_: compact, clean up, summarise
 
 **Get to know**:
 A house skill only the owner starts, from the Skill picker or a button in **What Courtyard knows** while the
@@ -183,22 +178,10 @@ status (#208, #220).
 _Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
 
 **Wanted list**:
-A planning workspace's Things wanted or to replace (#245), each with up to three **picks** chosen for value: **★ Best
-value** (the one to buy), **Cheapest that does the job** and **Worth stretching for** (only when the extra money buys
-something real), each with one line of why, its price, how fresh that is, and its shop's one button. A sale shows only
-inside a pick's line; nothing nags.
+A planning workspace's Things wanted or to replace (#245): Things like any other, with the status Want or Replace,
+added by a model, by the owner, or from a product named in an answer (+ Add to wanted). Its picks, price checks and
+blocked shops are gone (#600); a buying decision starts from the part instead (ADR 0032).
 _Avoid_: shopping list, basket, cart, recommendations, deals
-
-**Price check**:
-The short background turn that finds a wanted Thing's picks or checks their prices on the web (#245), on a provider's
-**errand model** (its cheap model and effort for errands, Claude's Sonnet at Low): when the owner taps Find picks,
-opens the list with prices over a week old (at most once a day), or blocks a shop.
-_Avoid_: scrape, price watch, alert
-
-**Blocked shop**:
-A shop the owner said not to use for a workspace's wanted list ("not from Tredz"), kept in its `workspace.json`;
-picks and price checks leave it out until the owner unblocks it from the workspace's ⋯ (#245).
-_Avoid_: banned shop, blacklist
 
 **Pin**:
 Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, or by the
@@ -248,8 +231,8 @@ _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:
 The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts, plans
-and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes,
-Tidy and its skills.
+and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes
+and its skills.
 _Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:
@@ -450,12 +433,6 @@ _Avoid_: file (on its own), upload, document (that's kept in a workspace)
 A short reply a model offers under its question, two or three at a time, which the owner taps to send as their next
 message (ADR 0017).
 _Avoid_: quick reply, chip, option, tap answer
-
-**Step by step**:
-An answer's numbered steps one at a time, in a planning workspace (#241): each step's title and its line, read aloud,
-with Back and Next, and "next", "back" and "repeat" said while holding Talk. It starts only from the Step by step
-button under the answer, and Full answer goes back.
-_Avoid_: walkthrough, guided mode, wizard
 
 **Stop**:
 The owner ending a running turn early. Whatever the model wrote so far stays, and the turn is

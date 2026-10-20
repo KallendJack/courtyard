@@ -8,7 +8,7 @@ labels, its documents and Things, the skills list and the conversation so far, a
 
 - **Uses:** `context-file/`, `saves/`, `documents/`, `things/`, `skills/`, `sources/`, `suggested-replies/`,
   `attachments/`, `code/`, `workspace-files/`, `providers/` (types).
-- **Used by:** `sessions/`, `providers/`, `tidy/`, `quick-questions/`, `pull-requests/`, `next-up/`, `lead/`,
+- **Used by:** `sessions/`, `providers/`, `quick-questions/`, `pull-requests/`, `next-up/`, `lead/`,
   `paper/`, `worker.ts`.
 
 ## API
@@ -23,5 +23,5 @@ None.
   to help there (brief, one step at a time, asking, real products, what's saved, a pro, diagrams only when asked); a
   code turn gets diagrams and the house process.
 - **The replies** to Courtyard's tools.
-- **The text for** Tidy, titling a session, a pull request's quick questions, and the worker's own messages (Build's
+- **The text for** titling a session, a pull request's quick questions, and the worker's own messages (Build's
   and Grill's first message, checks failing, Bring up to date).

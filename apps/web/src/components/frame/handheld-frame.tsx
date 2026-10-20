@@ -81,8 +81,6 @@ export default function HandheldFrame(props: {
   box: MessageBox | undefined;
   /** A field to talk into, on a page without a message box (#264). */
   field: TalkTarget | undefined;
-  /** What the page listens for while the owner steers it by voice (step by step, #241). */
-  commands: TalkTarget | undefined;
   /** The page's Add, under Skills on a tablet's rail (#481), when it offers one. */
   add: (() => void) | undefined;
   boxOpen: boolean;
@@ -192,11 +190,10 @@ export default function HandheldFrame(props: {
   }, []);
 
   /**
-   * Where talking goes: Something's off's sheet while it's open (#554), else what the page listens
-   * for while the owner steers it by voice (#241), else the page's message box, or else the field
-   * it offers (#264).
+   * Where talking goes: Something's off's sheet while it's open (#554), else the page's message
+   * box, or else the field it offers (#264).
    */
-  const talkTo = reportTalk ?? props.commands ?? box ?? props.field;
+  const talkTo = reportTalk ?? box ?? props.field;
   /**
    * Opens the box with the keyboard in it, while the tap is still the browser's to act on; or puts
    * the keyboard in the sheet's or the page's field.

@@ -1207,9 +1207,9 @@ describe("getting to know a workspace (#127)", () => {
   });
 });
 
-describe("tidying a context file (#52)", () => {
-  it("tells the model what the guide says, and gives it the file with its labels and today's date", async () => {
-    await contextFile("## Facts\n\n- Double garage\n\n## Ideas\n\n- A rowing machine\n");
+describe("Tidy is gone (#600)", () => {
+  it("asks no model to tidy a context file, a workspace's or the owner's", async () => {
+    await contextFile("## Facts\n\n- Double garage\n- A double garage\n");
     const told: OneOffInput[] = [];
     const { provider } = recorder(READS_FILES);
     const request = await asOwner(
@@ -1227,17 +1227,11 @@ describe("tidying a context file (#52)", () => {
       }),
     );
 
-    await postJson(request, "/api/workspaces/garage-gym/tidy", { model: MODEL });
+    const workspace = await postJson(request, "/api/workspaces/garage-gym/tidy", { model: MODEL });
+    const owner = await postJson(request, "/api/owner-context/tidy", { model: MODEL });
 
-    expect(told[0]?.purpose).toBe("tidy");
-    expect(told[0]?.instructions).toBe(await quotedInGuide("You tidy one context file"));
-    expect(told[0]?.message).toMatch(/^Today is \w+day, \d+ \w+ \d{4}\./);
-    expect(told[0]?.message).toContain("- [F1] Double garage");
-    expect(told[0]?.message).toContain("- [I1] A rowing machine");
-    // Every field there, empty (null) where a change doesn't use it, as the guide says.
-    const remove = { kind: "remove", labels: ["I1"], why: "Dropped." };
-    expect(told[0]?.schema.safeParse({ changes: [{ ...remove, text: null }] }).success).toBe(true);
-    expect(told[0]?.schema.safeParse({ changes: [remove] }).success).toBe(false);
+    expect([workspace.status, owner.status]).toEqual([404, 404]);
+    expect(told).toEqual([]);
   });
 });
 
@@ -1430,7 +1424,6 @@ describe("documents (#145, ADR 0020)", () => {
       "save_to_context",
       "save_document",
       "save_thing",
-      "block_shop",
       "use_skill",
       "suggest_replies",
     ]);
@@ -1649,8 +1642,9 @@ describe("Things (#149, ADR 0020)", () => {
   });
 });
 
-describe("the wanted list (#245)", () => {
+describe("the wanted list, without picks or blocked shops (#600)", () => {
   const things = () => join(root, "context", "garage-gym", "things");
+  /** A Thing to replace, with picks and a blocked shop left by Courtyard before #600. */
   const withWanted = async () => {
     await mkdir(things(), { recursive: true });
     await writeFile(join(things(), "power-rack.md"), "---\nname: Power rack\nstatus: have\n---\n");
@@ -1685,101 +1679,28 @@ describe("the wanted list (#245)", () => {
     );
   };
 
-  it("shows each wanted Thing's ★ pick on its line, and the shops the owner blocked", async () => {
+  it("shows a wanted Thing's line with no pick, and no blocked shops, even with ones kept from before", async () => {
     await withWanted();
 
     const { framing } = await firstTurn();
 
     expect(framing.instructions).toContain(
-      "[T2] Pull-up bar, replace, Titan, size 1.2 m, ★ pick Rogue bar £85 at Rogue Fitness, part of [T1] (things/pull-up-bar.md)\n</things>\n\nThe owner blocked these shops for the wanted list: Tredz.",
+      "[T2] Pull-up bar, replace, Titan, size 1.2 m, part of [T1] (things/pull-up-bar.md)\n</things>",
     );
+    expect(framing.instructions).not.toMatch(/★|blocked|price check/i);
   });
 
-  it("offers the block shop tool beside the Things tool, with the rule for the wanted list", async () => {
-    const saver = await savingTurns([[]]);
+  it("offers no block shop tool, and keeps the rule for what's wanted and bought", async () => {
+    const saver = await savingTurns([[{ call: "block_shop", input: { shop: "Tredz" } }]]);
     const framing = saver.framings[0];
 
-    const offered = framing?.tools.find((one) => one.name === "block_shop");
-    expect(offered?.description).toBe(await quotedInGuide("Blocks a shop the owner said"));
-    expect(inputsOf(offered)).toBe(await quotedInGuide("- shop: The shop, by the name"));
+    expect(framing?.tools.map((one) => one.name)).not.toContain("block_shop");
     expect(framing?.instructions).toContain(
       `${await quotedInGuide("The owner's kit for this workspace")}\n\n${await quotedInGuide("The Things the owner wants or means to replace")}`,
     );
-  });
-
-  it("tells a model the shop it blocked, with the guide's words", async () => {
-    const saver = await savingTurns([
-      [
-        { call: "block_shop", input: { shop: "Tredz", said: "not from Tredz" } },
-        { call: "block_shop", input: { shop: "Tredz" } },
-        { call: "block_shop", input: { name: "Tredz" } },
-      ],
-    ]);
-
+    expect(framing?.instructions).not.toMatch(/block_shop|price check|★/i);
     expect(saver.replies[0]?.map(({ reply }) => reply)).toEqual([
-      await quotedInGuide("Blocked <shop>: picks and price checks", { shop: "Tredz" }),
-      "Tredz is blocked already.",
-      "That input doesn't fit this tool: it takes the shop's name, and what the owner said.",
-    ]);
-  });
-
-  it("gives a price check's model its instructions, the Things, the blocked shops and the picks tool, as the guide says", async () => {
-    await withWanted();
-    const saver = savingProvider([
-      [
-        { call: "save_picks", input: { thing: "W2", picks: [] } },
-        {
-          call: "save_picks",
-          input: {
-            thing: "W1",
-            picks: [
-              {
-                kind: "cheapest",
-                product: "Bar",
-                why: "Cheap",
-                price: 20,
-                shop: "Halfords",
-                url: "https://halfords.example/bar",
-              },
-            ],
-          },
-        },
-      ],
-    ]);
-    const now = Date.parse("2026-10-19T09:00:00.000Z");
-    const request = await asOwner(
-      testWorker({
-        root,
-        now: () => now,
-        providers: [
-          {
-            ...saver.provider,
-            errand: { model: ModelId.parse("one") },
-            capabilities: { ...saver.provider.capabilities, searchesWeb: true },
-          },
-        ],
-      }),
-    );
-
-    await postJson(request, "/api/workspaces/garage-gym/wanted/pull-up-bar/find", {});
-    await expect.poll(() => saver.replies[0]?.length ?? 0).toBe(2);
-
-    const [framing] = saver.framings;
-    expect(framing?.instructions).toBe(
-      await quotedInGuide("You find picks and check prices", {
-        workspace: '"garage-gym"',
-        today: "Monday, 19 October 2026",
-      }),
-    );
-    expect(framing?.newMessage).toBe(
-      `${await quotedInGuide("The Things to find picks for")}\n\n<wanted>\n[W1] Pull-up bar, to replace, now Titan, size 1.2 m, picks now: best-value Rogue bar £85 at Rogue Fitness (https://rogue.example/bar)\n</wanted>\n\n${await quotedInGuide("Leave out these shops", { shops: "Tredz" })}`,
-    );
-    const [tool] = framing?.tools ?? [];
-    expect(tool?.description).toBe(await quotedInGuide("Saves the picks for one Thing"));
-    expect(inputsOf(tool)).toBe(await quotedInGuide("- thing: The Thing's label, such as W1."));
-    expect(saver.replies[0]?.map(({ reply }) => reply.split("\n\n")[0])).toEqual([
-      await quotedInGuide("That input doesn't fit this tool: it takes a Thing's label and up"),
-      await quotedInGuide("A Thing's picks always have a best-value one"),
+      await quotedInGuide("This turn has no tool called <name>.", { name: "block_shop" }),
     ]);
   });
 });
