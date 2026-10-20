@@ -60,7 +60,7 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 **Worker features:** `sessions` · `saves` · `suggested-replies` · `quick-questions` · `sources` · `limits` ·
 `model-defaults` · `waiting`
 
-**Web features:** `sessions` · `step-by-step` · `limits` · `waiting`
+**Web features:** `sessions` · `limits` · `waiting`
 
 You ask "which tyres for winter?":
 

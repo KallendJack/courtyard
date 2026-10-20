@@ -4,11 +4,10 @@ import { type Busy, useBusy } from "./button.tsx";
 
 /**
  * The Paper boards' thumb-sized buttons (Handheld · 16, 17, 18), side by side at the bottom of a
- * card, in thumb reach: Deny and Allow on an approval, Merge and Close PR on a review, Back and
- * Next in step by step (#241); or one at the end of a row that needs the owner (a code workspace's
- * Needs you, #301). Its classes are off the first load: they're in the stylesheets of the pieces
- * that use it (approval-card.css, review.css, code-home.css, step-by-step.css), and apply only
- * inside those pieces.
+ * card, in thumb reach: Deny and Allow on an approval, Merge and Close PR on a review; or one at
+ * the end of a row that needs the owner (a code workspace's Needs you, #301). Its classes are off
+ * the first load: they're in the stylesheets of the pieces that use it (approval-card.css,
+ * review.css, code-home.css), and apply only inside those pieces.
  */
 const BASE =
   "flex items-center justify-center gap-2 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px [&_svg]:size-[18px] [&_svg]:shrink-0";
@@ -24,11 +23,6 @@ const LOOKS = {
   /** The one big action of a screen, in violet: Merge (#240). Greyed out the same way. */
   primary:
     "bg-primary font-bold text-primary-foreground hover:bg-primary/85 disabled:bg-surface disabled:text-muted-foreground disabled:ring-1 disabled:ring-border disabled:ring-inset aria-disabled:bg-surface aria-disabled:text-muted-foreground aria-disabled:ring-1 aria-disabled:ring-border aria-disabled:ring-inset",
-  /** Outlined, the way back: step by step's Back (#241). */
-  outline:
-    "bg-surface font-semibold text-foreground/70 ring-1 ring-input ring-inset hover:bg-muted disabled:opacity-40",
-  /** On a violet wash, the way on: step by step's Next (#241). */
-  soft: "bg-primary-text/15 font-bold text-foreground ring-1 ring-primary-text/50 ring-inset hover:bg-primary-text/20",
   /** In gold, as what needs the owner: Approve on a row of Needs you (#301). */
   needs: "bg-warning font-bold text-background hover:bg-warning/85 disabled:opacity-50",
   /** Ringed in gold, a quieter choice that needs the owner: an approval's Allow always (#185). */

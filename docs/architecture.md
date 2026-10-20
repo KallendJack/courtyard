@@ -206,7 +206,6 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   what it does, one example, what it uses, what uses it, and its screens.
   - [`sessions/`](../apps/web/src/features/sessions/README.md): the session page, in parts: `turns/`, `answer/`,
     `composer/` and `notes/`.
-  - [`step-by-step/`](../apps/web/src/features/step-by-step/README.md): an answer's steps one at a time, read aloud.
   - [`limits/`](../apps/web/src/features/limits/README.md): usage at a glance (#66): the Model sheet's plan meters,
     the warning above the Reply box and Home's usage lines.
   - [`waiting/`](../apps/web/src/features/waiting/README.md): what waits everywhere, for the mark's count, Home's

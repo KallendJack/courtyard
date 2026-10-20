@@ -71,18 +71,6 @@ const pastesFiles = (clipboard: DataTransfer) => {
 const SLASH = /^\/(\S*)$/;
 
 /**
- * What shows for now instead of the Reply box (step by step's reading line, #241): in its place in
- * the dock on a tablet, and in the page's foot on the cover screen, where the box opens above the
- * bar with Type. The box keeps what's in it.
- */
-export type StandIn = {
-  /** What shows, given the way back to the box, with the keyboard in it (Type a reply). */
-  readonly line: (typeReply: () => void) => ReactNode;
-  /** Told as the box comes back, so the stand-in goes. */
-  readonly leave: () => void;
-};
-
-/**
  * The Reply box (#251, Paper board "Component · Reply box keeps one shape"), the same on every
  * screen, docked in the Handheld frame: one rounded box that only grows upward with the words, to
  * six lines, then scrolls. + on the left adds a photo or a file; on the right the mic talks, and
@@ -116,8 +104,6 @@ export const Composer = memo(function Composer(props: {
   skills?: { readonly workspaceName: string; readonly list: readonly SkillSummary[] };
   /** Sends the message with the files attached to it (#78). */
   send: (message: NewMessage, files: readonly File[]) => Promise<string | undefined>;
-  /** What shows for now in the box's place, while step by step reads aloud (#241). */
-  standIn?: StandIn;
   /**
    * Out of sight on a tablet too until Talk, Type or a draft opens it, as on the cover screen (a
    * planning workspace's Home, #565).
@@ -299,19 +285,6 @@ export const Composer = memo(function Composer(props: {
   const sendNow = useRef(sendText);
   sendNow.current = sendText;
 
-  const { standIn } = props;
-  /** Back to the box from its stand-in, while the tap is still the browser's to open the keyboard. */
-  const typeReply = () => {
-    flushSync(() => {
-      standIn?.leave();
-      dock?.open();
-    });
-    box.current?.focus();
-  };
-  const typeReplyNow = useRef(typeReply);
-  typeReplyNow.current = typeReply;
-  const standing = standIn !== undefined;
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     await sendText(text, text);
@@ -343,7 +316,7 @@ export const Composer = memo(function Composer(props: {
   useEffect(
     () =>
       dock?.offer({
-        focus: () => (standing ? typeReplyNow.current() : box.current?.focus()),
+        focus: () => box.current?.focus(),
         chooseModel: () => setChoosing("model"),
         ...(hasSkills ? { chooseSkill: () => setChoosing("skill") } : {}),
         model,
@@ -374,7 +347,7 @@ export const Composer = memo(function Composer(props: {
           };
         },
       }),
-    [dock, model, hasSkills, choosing, answering, steers, standing, tucked],
+    [dock, model, hasSkills, choosing, answering, steers, tucked],
   );
 
   const label = props.submitLabel ?? "Send";
@@ -602,8 +575,6 @@ export const Composer = memo(function Composer(props: {
   // away, it takes none.
   if (dock === undefined)
     return <div aria-hidden className={layout === "tablet" && !tucked ? DOCK_ROOM : FOOT_GAP} />;
-  const line = standIn?.line(typeReply);
-  const docked = line !== undefined && layout === "tablet" ? line : messageBox;
   return (
     <>
       {props.above?.({
@@ -623,8 +594,7 @@ export const Composer = memo(function Composer(props: {
           pick={pick}
         />
       </Suspense>
-      {createPortal(docked, dock.element)}
-      {line !== undefined && layout === "cover" && line}
+      {createPortal(messageBox, dock.element)}
       <div aria-hidden className={FOOT_GAP} />
     </>
   );

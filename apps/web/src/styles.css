@@ -11,11 +11,10 @@
  * screen loads, and New workspace's form with the repo picker (new-workspace.css), and a code
  * workspace's Home with its tabs, connections line and radio rows (code-home.css), a planning
  * workspace's Home (planning-home.css), both with Home's blocks, the home page's tile lines and
- * foot rows (home.css), and step by step's (step-by-step.css).
+ * foot rows (home.css).
  */
 @source not "./components/rich-blocks";
 @source not "./features/things";
-@source not "./features/step-by-step";
 @source not "./features/pull-requests";
 @source not "./components/buttons/sort-button.tsx";
 @source not "./components/chat/approval-card.tsx";
@@ -117,10 +116,6 @@
   --text-talk--line-height: 20px;
   --text-card-title: 19px; /* an approval card's question */
   --text-card-title--line-height: 24px;
-  --text-step: 30px; /* a step's title, in step by step (#241) */
-  --text-step--line-height: 38px;
-  --text-step-detail: 17px; /* the line under it */
-  --text-step-detail--line-height: 26px;
   --text-sheet-title: 22px;
   --text-sheet-title--line-height: 28px;
   --text-sign-in-code: 28px; /* the code a sign-in shows, to type elsewhere */

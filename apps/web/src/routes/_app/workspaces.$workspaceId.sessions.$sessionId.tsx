@@ -34,8 +34,7 @@ import {
   PreviewPanel,
   usePreview,
 } from "../../features/preview/preview.tsx";
-import type { Steps } from "../../features/sessions/answer/steps.ts";
-import { Composer, type StandIn } from "../../features/sessions/composer/composer.tsx";
+import { Composer } from "../../features/sessions/composer/composer.tsx";
 import {
   allowAll,
   allowAllOff,
@@ -57,8 +56,6 @@ import { NextPill } from "../../features/waiting/next-pill.tsx";
 const Review = lazy(() => import("../../features/pull-requests/review.tsx"));
 /** A code workspace's Lead's strip (#347), loaded only on its chat. */
 const LeadStrip = lazy(() => import("../../features/sessions/turns/lead-strip.tsx"));
-/** An answer's steps one at a time, in place of the conversation (#241): loaded only then. */
-const StepByStep = lazy(() => import("../../features/step-by-step/step-by-step.tsx"));
 /** Allow all for this task's choice of how long (#428): loaded when it first opens. */
 const AllowAllSheet = lazy(() => import("../../components/sheets/allow-all-sheet.tsx"));
 
@@ -102,7 +99,6 @@ function SessionPage() {
             },
           }
         : {})}
-      stepByStep={workspace?.mode === "planning"}
       providers={providers.kind === "loaded" ? providers.data.providers : []}
       {...(skills.kind === "loaded"
         ? {
@@ -122,8 +118,6 @@ function Session(props: {
   skills?: { workspaceName: string; list: readonly SkillSummary[] };
   /** Where Save as document saves: a planning workspace that isn't archived. */
   documents?: DocumentsHere;
-  /** Its answers with steps offer them one at a time: a planning workspace's (#241). */
-  stepByStep: boolean;
 }) {
   const { session } = props;
   const {
@@ -202,16 +196,11 @@ function Session(props: {
   const follow = useRef<() => void>(null);
   const toLatest = useCallback(() => follow.current?.(), []);
 
-  /** The steps the owner is taking one at a time (#241), in place of the conversation. */
-  const [stepping, setStepping] = useState<Steps>();
-  const stepByStep = useCallback((_turn: Turn, steps: Steps) => setStepping(steps), []);
-
   const send = useCallback(
     async (message: NewMessage, files: readonly File[]) => {
       const sent = await sendMessage({ sessionId: session.id, message, files });
       if (sent.kind !== "loaded") return describeProblem(sent).body;
-      // What the owner just sent is at the end, so that's where they go, out of step by step.
-      setStepping(undefined);
+      // What the owner just sent is at the end, so that's where they go.
       toLatest();
       return undefined;
     },
@@ -553,19 +542,17 @@ function Session(props: {
   /** The session can be sent a message: a warning before a limit shows above its box (#66). */
   const takesMessages = problem === undefined && !session.workspaceArchived && ended === undefined;
 
-  /** The page's foot: the Reply box, or what stands in for it (step by step's reading line, #241). */
-  const footer = (standIn?: StandIn) => (
+  /** The page's foot: the Reply box. */
+  const footer = (
     <div className="pt-2 pb-3 md:pb-6">
-      {away && standIn === undefined && problem === undefined && (
-        <JumpToLatest answering={running} onJump={toLatest} />
-      )}
+      {away && problem === undefined && <JumpToLatest answering={running} onJump={toLatest} />}
       {sendProblem && (
         <div className="mb-3">
           <FormError message={sendProblem} />
         </div>
       )}
       {/* A code session's tasks still running (#182), above the Reply box. */}
-      {standIn === undefined && <RunningTaskRows sessionId={session.id} tasks={tasks} />}
+      <RunningTaskRows sessionId={session.id} tasks={tasks} />
       <Composer
         providers={props.providers}
         {...(last ? { initialModel: last.model } : {})}
@@ -587,14 +574,13 @@ function Session(props: {
         }
         {...(props.skills === undefined ? {} : { skills: props.skills })}
         send={send}
-        {...(standIn === undefined ? {} : { standIn })}
         {...(takesMessages ? { above: usageWarning } : {})}
       />
     </div>
   );
 
   const conversation = (
-    <Page header={header} footer={footer()}>
+    <Page header={header} footer={footer}>
       {problem ? (
         <div className="mt-6">
           <Notice>{problem}</Notice>
@@ -625,13 +611,12 @@ function Session(props: {
           onEditQueued={editQueuedMessage}
           onAway={setAway}
           follow={follow}
-          {...(props.stepByStep ? { onStepByStep: stepByStep } : {})}
         />
       )}
     </Page>
   );
 
-  if (besideChat !== undefined && stepping === undefined) {
+  if (besideChat !== undefined) {
     // The preview beside the chat (#183), on the unfolded Fold and a desktop.
     return (
       <div className="flex h-full min-h-0">
@@ -640,15 +625,5 @@ function Session(props: {
       </div>
     );
   }
-  if (stepping === undefined) return conversation;
-  return (
-    <Suspense fallback={conversation}>
-      <StepByStep
-        steps={stepping}
-        header={header}
-        footer={footer}
-        onFullAnswer={() => setStepping(undefined)}
-      />
-    </Suspense>
-  );
+  return conversation;
 }

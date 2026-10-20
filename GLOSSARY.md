@@ -439,12 +439,6 @@ A short reply a model offers under its question, two or three at a time, which t
 message (ADR 0017).
 _Avoid_: quick reply, chip, option, tap answer
 
-**Step by step**:
-An answer's numbered steps one at a time, in a planning workspace (#241): each step's title and its line, read aloud,
-with Back and Next, and "next", "back" and "repeat" said while holding Talk. It starts only from the Step by step
-button under the answer, and Full answer goes back.
-_Avoid_: walkthrough, guided mode, wizard
-
 **Stop**:
 The owner ending a running turn early. Whatever the model wrote so far stays, and the turn is
 recorded as stopped, apart from failures.

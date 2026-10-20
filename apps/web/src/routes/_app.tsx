@@ -75,12 +75,6 @@ function LoggedIn() {
     setField(offered);
     return () => setField((now) => (now === offered ? undefined : now));
   }, []);
-  /** What the page listens for while the owner steers it by voice (step by step, #241). */
-  const [commands, setCommands] = useState<TalkTarget>();
-  const offerCommands = useCallback((offered: TalkTarget) => {
-    setCommands(offered);
-    return () => setCommands((now) => (now === offered ? undefined : now));
-  }, []);
   /** The page's Add, for the rail (a planning workspace's: a Thing, a photo or a doc, #481). */
   const [add, setAdd] = useState<() => void>();
   const offerAdd = useCallback((offered: () => void) => {
@@ -104,14 +98,13 @@ function LoggedIn() {
             element: dockElement,
             offer,
             offerField,
-            offerCommands,
             offerAdd,
             open,
             close,
             talk,
             chooseModel,
           },
-    [dockElement, offer, offerField, offerCommands, offerAdd, open, close, talk, chooseModel],
+    [dockElement, offer, offerField, offerAdd, open, close, talk, chooseModel],
   );
 
   return (
@@ -134,7 +127,6 @@ function LoggedIn() {
               dockRef={setDockElement}
               box={box}
               field={field}
-              commands={commands}
               add={add}
               boxOpen={boxOpen}
               setBoxOpen={setBoxOpen}

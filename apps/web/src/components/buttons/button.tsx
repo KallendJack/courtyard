@@ -199,8 +199,6 @@ const ICON_LOOKS = {
   badge: "border-2 border-field bg-foreground text-background",
   /** On a charcoal wash: what it does has just been done (Copied). */
   done: "bg-accent text-primary-text",
-  /** On a lilac disc: what's playing now (step by step's Pause, while a step is read aloud, #241). */
-  playing: "bg-primary-text text-secondary hover:bg-primary-text/85",
   /** Filled violet: the main action, as an icon (↑, sending what was said). */
   primary: "bg-primary text-primary-foreground hover:bg-primary/80",
 } as const;

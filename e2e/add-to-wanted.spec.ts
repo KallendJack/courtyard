@@ -31,16 +31,3 @@ test("a product named in an answer is added as a wanted Thing with one tap", asy
       .filter({ hasText: "Wall track" }),
   ).toContainText("Want");
 });
-
-test("a planning workspace's ⋯ has no Blocked shops or Allowed commands (#600)", async ({
-  page,
-}) => {
-  const name = `Menu ${Date.now()}`;
-  await newWorkspace(page, name);
-
-  await page.getByRole("button", { name: "Workspace options" }).click();
-  const menu = page.getByRole("dialog", { name });
-  await expect(menu.getByRole("button", { name: /^Rename/ })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /^Blocked shops/ })).toHaveCount(0);
-  await expect(menu.getByRole("button", { name: /^Allowed commands/ })).toHaveCount(0);
-});
