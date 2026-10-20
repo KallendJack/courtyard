@@ -14,8 +14,6 @@ import {
   followSession,
   gitIn,
   postJson,
-  quotedInGuide,
-  type Requester,
   removeTestFolder,
   startSession,
   testWorker,
@@ -37,8 +35,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await removeTestFolder(root);
 });
-
-const owner = () => asOwner(testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }));
 
 /** The fake, with each one-off question it's asked kept. */
 const watchedFake = () => {
