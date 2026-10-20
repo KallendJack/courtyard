@@ -2721,12 +2721,12 @@ describe("steering a Claude turn (#252)", () => {
   });
 });
 
-describe("a one-off question to Claude (a tidy, a session's title)", () => {
+describe("a one-off question to Claude (a session's title)", () => {
   const Answer = z.object({ changes: z.array(z.object({ kind: z.string() })) });
 
   const ask = (claudeCode: ClaudeCode, options: { effort?: Effort } = {}) =>
     createClaudeProvider({ claudeCode }).answerOnce({
-      purpose: "tidy",
+      purpose: "title",
       model: ModelId.parse("sonnet"),
       ...options,
       instructions: "The tidy's instructions.",

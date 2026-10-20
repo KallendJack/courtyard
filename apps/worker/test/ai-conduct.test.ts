@@ -1207,9 +1207,9 @@ describe("getting to know a workspace (#127)", () => {
   });
 });
 
-describe("tidying a context file (#52)", () => {
-  it("tells the model what the guide says, and gives it the file with its labels and today's date", async () => {
-    await contextFile("## Facts\n\n- Double garage\n\n## Ideas\n\n- A rowing machine\n");
+describe("Tidy is gone (#600)", () => {
+  it("asks no model to tidy a context file, a workspace's or the owner's", async () => {
+    await contextFile("## Facts\n\n- Double garage\n- A double garage\n");
     const told: OneOffInput[] = [];
     const { provider } = recorder(READS_FILES);
     const request = await asOwner(
@@ -1227,17 +1227,11 @@ describe("tidying a context file (#52)", () => {
       }),
     );
 
-    await postJson(request, "/api/workspaces/garage-gym/tidy", { model: MODEL });
+    const workspace = await postJson(request, "/api/workspaces/garage-gym/tidy", { model: MODEL });
+    const owner = await postJson(request, "/api/owner-context/tidy", { model: MODEL });
 
-    expect(told[0]?.purpose).toBe("tidy");
-    expect(told[0]?.instructions).toBe(await quotedInGuide("You tidy one context file"));
-    expect(told[0]?.message).toMatch(/^Today is \w+day, \d+ \w+ \d{4}\./);
-    expect(told[0]?.message).toContain("- [F1] Double garage");
-    expect(told[0]?.message).toContain("- [I1] A rowing machine");
-    // Every field there, empty (null) where a change doesn't use it, as the guide says.
-    const remove = { kind: "remove", labels: ["I1"], why: "Dropped." };
-    expect(told[0]?.schema.safeParse({ changes: [{ ...remove, text: null }] }).success).toBe(true);
-    expect(told[0]?.schema.safeParse({ changes: [remove] }).success).toBe(false);
+    expect([workspace.status, owner.status]).toEqual([404, 404]);
+    expect(told).toEqual([]);
   });
 });
 

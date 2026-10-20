@@ -122,7 +122,7 @@ removes. Never stored in the file.
 _Avoid_: line number, id, index
 
 **Change**:
-One committed difference to the context folder: a save, an undo, an edit, a hand edit, a tidy, a workspace added,
+One committed difference to the context folder: a save, an undo, an edit, a hand edit, a past tidy, a workspace added,
 renamed or archived in the app, or a fresh start. The worker makes them one at a time.
 _Avoid_: commit (that's how it's kept), revision, update
 
@@ -130,11 +130,6 @@ _Avoid_: commit (that's how it's kept), revision, update
 The list of changes to a workspace's context file or the owner context, newest first, each with Undo, on a page of
 its own linked from **What Courtyard knows** (and Settings).
 _Avoid_: history, log, activity (that's a model's doing in a session)
-
-**Tidy**:
-The owner asking a model for a shorter context file. Unlike a save, it's proposed first: each change it proposes is
-ticked by default, and the owner unticks any they don't want.
-_Avoid_: compact, clean up, summarise
 
 **Get to know**:
 A house skill only the owner starts, from the Skill picker or a button in **What Courtyard knows** while the
@@ -236,8 +231,8 @@ _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:
 The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts, plans
-and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes,
-Tidy and its skills.
+and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes
+and its skills.
 _Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:

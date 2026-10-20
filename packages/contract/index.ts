@@ -313,14 +313,6 @@ export {
   ThingSummary,
 } from "./lib/things.ts";
 export {
-  TidyChange,
-  TidyChangeKind,
-  TidyId,
-  TidyProposal,
-  TidyRequest,
-  TidySave,
-} from "./lib/tidy.ts";
-export {
   ModelUsageMeter,
   PlanUsage,
   ProviderUsage,

@@ -5,7 +5,6 @@ import {
 } from "@courtyard/contract";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/buttons/button";
-import { ButtonLink } from "@/components/buttons/button-link";
 import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { StatusPill } from "@/components/layout/notice";
@@ -76,13 +75,7 @@ export function OwnerContextPanel(props: {
         <>
           {ownerContext.characters > OWNER_CONTEXT_LONG_CHARACTERS && (
             <div className="mt-3">
-              <StatusPill
-                action={
-                  <ButtonLink size="sm" to="/tidy">
-                    Tidy
-                  </ButtonLink>
-                }
-              >
+              <StatusPill>
                 Getting long: it goes with every message in every workspace, so keep it to what's
                 true everywhere.
               </StatusPill>
@@ -105,14 +98,6 @@ export function OwnerContextPanel(props: {
             <Link to="/changes" className="text-foreground underline">
               recent changes
             </Link>
-            {hasLines(ownerContext) && ownerContext.characters <= OWNER_CONTEXT_LONG_CHARACTERS && (
-              <>
-                {" or "}
-                <Link to="/tidy" className="text-foreground underline">
-                  tidy it
-                </Link>
-              </>
-            )}
             .
           </p>
         </>

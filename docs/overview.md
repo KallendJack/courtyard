@@ -80,11 +80,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` ·
-`status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` · `tidy` · `changes` ·
+`status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` · `changes` ·
 `attachments`
 
 **Web features:** `home` · `planning-home` · `new-workspace` · `things` · `status-line` · `documents` ·
-`changes` · `tidy` · `settings`
+`changes` · `settings`
 
 You say "swapped the chain today":
 

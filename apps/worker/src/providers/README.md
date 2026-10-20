@@ -6,7 +6,7 @@ The provider seam: Claude, Codex and the fakes look the same to the rest of the 
 only the adapter knows how its provider is signed in or billed (ADR 0003).
 
 - **Uses:** `prompts/`, `code/` (`CodeTurn`), `workspace-files/`, `sources/`.
-- **Used by:** `sessions/`, `limits/` (wraps each one), `tidy/`, `quick-questions/`, `lead/`, `attachments/`,
+- **Used by:** `sessions/`, `limits/` (wraps each one), `quick-questions/`, `lead/`, `attachments/`,
   `paper/`, `sign-ins/`, `worker.ts`.
 
 ## API

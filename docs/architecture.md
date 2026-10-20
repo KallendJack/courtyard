@@ -112,7 +112,6 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
   showing, and its latest session's next steps, which History shows.
-- [`tidy/`](../apps/worker/src/features/tidy/README.md): a shorter context file, saved as ticked.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -219,7 +218,6 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     name (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
   - [`changes/`](../apps/web/src/features/changes/README.md): Recent changes, and Undo after a delete.
-  - [`tidy/`](../apps/web/src/features/tidy/README.md): a tidy's review.
   - [`settings/`](../apps/web/src/features/settings/README.md): Settings' backup, owner context and log out others.
   - [`code-home/`](../apps/web/src/features/code-home/README.md): a code workspace's page: Needs you, Running, Next
     up, Main, and its Roadmap tab.
@@ -258,7 +256,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
   are in the first load's stylesheet. It holds a code workspace's Home blocks and PRs list, Home's tile lines and
   foot rows, the recent sessions sheet, Recent changes, Settings' Connections and backup, and a pull request's
-  page; a page that waits as a whole (a pull request's, Tidy) shows the rows in its own shape under its title. A
+  page; a page that waits as a whole (a pull request's) shows the rows in its own shape under its title. A
   session's conversation is kept the same way in `sessions/turns/events.ts` (faint rows until its events have come,
   and its stream carries on after what was shown); a diagram once drawn is kept by its source, a drawing still to
   load keeps a faint place rather than showing its code (`components/rich-blocks/fenced.tsx`), and maths keeps its room
@@ -373,7 +371,7 @@ topic in `lib/`: login, workspaces, sessions and their events (`session.ts` for 
 is in each session a list shows and what it waits on the owner for, with what the session page has shown the
 owner, which only the pages listing sessions parse), attachments (an event's in `attachment.ts`,
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
-tidies, usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
+usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, the offline copy
 (`offline-copy.ts`, #106), health and errors, and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
@@ -599,8 +597,8 @@ Where the rest fits:
   page has shown the owner its answer, on any device.
 - **Usage limits.** A provider fails the turn as rate-limited, with its reset time when it knows it. `limits/`
   remembers that until the reset, and the model pickers show it. Nothing switches model by itself, but whatever has
-  no model named avoids one at its limit: a new session, Get to know, Tidy and a session's title each go to the first
-  model with room (for Get to know and Tidy, the first that saves to context). The worker picks it, not the browser.
+  no model named avoids one at its limit: a new session, Get to know and a session's title each go to the first
+  model with room (for Get to know, the first that saves to context). The worker picks it, not the browser.
   A session whose provider shows as unavailable keeps its model in the picker, and Send waits until the provider is
   back or the owner picks another (#299).
 - **Usage at a glance** (#66). Each provider's `readUsage` reads its plan's 5-hour and weekly windows (Claude
@@ -691,8 +689,7 @@ things live only in the worker's memory and go when it restarts.
   `sign-ins.json`: the providers the owner said Not now to.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
 
-**Only in the worker's memory:** usage limits and each plan's usage as last read, tidies waiting for review, and
-which turns are running.
+**Only in the worker's memory:** usage limits and each plan's usage as last read, and which turns are running.
 
 **On a device that keeps an offline copy** (#106, [ADR 0030](adr/0030-the-web-app-may-keep-a-read-only-copy.md)):
 the copy the worker gave it (`GET /api/offline-copy`), whole and read-only, in the browser's IndexedDB (`courtyard`,
@@ -707,7 +704,7 @@ can't be reached, the root route reads it (its context's `reading`) and the page
 [`.env.example`](../.env.example) explains the ones an owner sets.
 
 **A fresh start** clears the context folder as one change, so its history and the backup still have every file. It
-moves every session to `fresh-starts/<date>/` and drops any tidy waiting for review. It keeps the owner's password and
+moves every session to `fresh-starts/<date>/`. It keeps the owner's password and
 device logins, the sign-ins (the Codex home, Not now and GitHub's) and the usage limits. The README says how to bring things
 back.
 
@@ -767,7 +764,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
 
 - **[`docs/ai-conduct.md`](ai-conduct.md):** the rules for everything a model is told. Read it before changing any of
   it.
-- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools, Tidy and
+- **`apps/worker/src/prompts/`** builds it: each turn's framing, the replies to Courtyard's tools and
   titling. A planning turn's framing and a code turn's differ on purpose (ADR 0032): planning gets its own way of
   answering (Planning answers in the guide) and floor plans; a code turn gets diagrams and the house process. Get to know and Get to know me are house skills in `packages/skills`.
   `context-file/` adds the line labels, and `saves/` checks what the save tool is sent.

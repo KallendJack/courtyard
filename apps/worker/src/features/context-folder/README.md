@@ -7,7 +7,7 @@ pushed to the backup, and listed in Recent changes with Undo.
 
 - **Uses:** `owner-context/`, `workspaces/`, and `lib/git.ts`.
 - **Used by:** every module that changes the context folder: `saves/`, `documents/`, `things/`, `planning-files/`,
-  `tidy/`, `changes/`, `connections/`, `fresh-start/`, `sessions/`, `worker.ts`.
+  `changes/`, `connections/`, `fresh-start/`, `sessions/`, `worker.ts`.
 
 ## API
 

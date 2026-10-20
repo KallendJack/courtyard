@@ -277,39 +277,6 @@ const scriptedWeb = (message: string) => {
   };
 };
 
-/** A labelled line as a model reads it: `- [F2] The ceiling is 2.3 m`. */
-const LABELLED = /\[([A-Z]+)(\d+)\] (.+)$/;
-
-/**
- * The tidy a file scripts, by markers at the end of its lines: "(stale)" is removed, "(long)" is
- * shortened to the line without the marker, the lines of a section ending "(merge)" are merged
- * into one, and "(adds)" is shortened to "A sauna", a change that adds something new.
- */
-const scriptedTidy = (message: string) => {
-  const changes: Record<string, unknown>[] = [];
-  const merging = new Map<string, { labels: string[]; texts: string[] }>();
-  for (const line of message.split("\n")) {
-    const [, letters, number, text] = LABELLED.exec(line.trim()) ?? [];
-    if (letters === undefined || text === undefined) continue;
-    const label = `${letters}${number}`;
-    const marked = /^(.*) \((stale|long|merge|adds)\)$/.exec(text);
-    const [, words = text, marker] = marked ?? [];
-    if (marker === "stale") changes.push({ kind: "remove", labels: [label], why: "It's stale." });
-    if (marker === "long") changes.push({ kind: "shorten", labels: [label], text: words });
-    if (marker === "adds") changes.push({ kind: "shorten", labels: [label], text: "A sauna" });
-    if (marker === "merge") {
-      const merge = merging.get(letters) ?? { labels: [], texts: [] };
-      merge.labels.push(label);
-      merge.texts.push(words);
-      merging.set(letters, merge);
-    }
-  }
-  for (const { labels, texts } of merging.values()) {
-    if (labels.length > 1) changes.push({ kind: "merge", labels, text: texts.join(", ") });
-  }
-  return { changes };
-};
-
 /** How many words of the owner's first message a scripted title keeps. */
 const TITLE_WORDS = 5;
 
@@ -704,8 +671,7 @@ const pause = (ms: number, signal: AbortSignal) =>
  * document …" saves a document (see `scriptedDocuments`) when it offers the document tool, after
  * any "read file: …" it acts out reading, between any "write: …" it writes (see `scriptedWork`), and "thing add: …" or "thing T2:
  * …" saves a Thing (see `scriptedThings`) when it offers the Things tool. On a turn with web search, "search the
- * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A tidy follows markers in the file
- * (see `scriptedTidy`), a session's title its first message (see `scriptedTitle`), and a quick
+ * web for: …", "read page: …" and "cite: …" act out a search (see `scriptedWeb`). A session's title follows its first message (see `scriptedTitle`), and a quick
  * question's answer the question (see `scriptedQuickAnswer`). "please hit
  * Fake's limit" (or "Fake two's", for the second fake) acts out a usage limit that resets two
  * hours on, so overflow can be seen and tested, and "use 82% of Fake's week" (or "5-hour") fills
@@ -867,8 +833,6 @@ export const createFakeProvider = (
       if (delayMs > 0) await pause(delayMs * 10, signal);
       if (signal.aborted) return err({ kind: "unknown", message: "Stopped." });
       switch (purpose) {
-        case "tidy":
-          return ok(scriptedTidy(message));
         case "title":
           return scriptedTitle(message);
         case "quick-question":

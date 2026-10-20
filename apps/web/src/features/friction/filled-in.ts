@@ -15,7 +15,6 @@ const PAGES: Readonly<Record<string, string>> = {
   "/settings": "Settings",
   "/changes": "Recent changes",
   "/fresh-start": "Fresh start",
-  "/tidy": "Tidy",
   "/new-workspace": "New workspace",
 };
 

@@ -95,8 +95,6 @@ import { createStatusLine } from "./features/status-line/index.ts";
 import { statusLineRoutes } from "./features/status-line/routes.ts";
 import { taskRoutes } from "./features/tasks/routes.ts";
 import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
-import { createTidying } from "./features/tidy/index.ts";
-import { tidyRoutes } from "./features/tidy/routes.ts";
 import { createVersionBumps } from "./features/version-bumps/index.ts";
 import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
@@ -610,13 +608,9 @@ export const createWorker = (options: {
     }),
   );
   api.route("/", statusLineRoutes(statusLines));
-  const tidying = createTidying({ contextDir, contextFolder, providers, now });
-  api.route("/", tidyRoutes({ contextDir, tidying }));
   api.route(
     "/",
-    freshStartRoutes(
-      createFreshStart({ contextDir, dataDir, contextFolder, sessions, tidying, now }),
-    ),
+    freshStartRoutes(createFreshStart({ contextDir, dataDir, contextFolder, sessions, now })),
   );
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
   api.route("/", gitHubRoutes(github));

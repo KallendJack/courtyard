@@ -1,11 +1,11 @@
 # fresh-start
 
-Clears the context folder, sets every session aside, and drops any tidy waiting for review.
+Clears the context folder and sets every session aside.
 
 **Example:** you tap Fresh start in Settings. Every workspace's files go in one change (still in the history and the
 backup), and the sessions move to `fresh-starts/<date>/`.
 
-- **Uses:** `context-folder/`, `sessions/`, `tidy/`, `workspaces/`.
+- **Uses:** `context-folder/`, `sessions/`, `workspaces/`.
 - **Used by:** `worker.ts`; in the web app, `features/fresh-start/`.
 
 ## API

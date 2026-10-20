@@ -2199,50 +2199,6 @@ export const fileChangeReply = (change: FileChange): ToolReply => {
 };
 
 /**
- * What a tidy's model is told (docs/ai-conduct.md, Tidying, which quotes it): changes to propose,
- * never a rewritten file, and none that adds anything.
- */
-export const TIDYING = [
-  "You tidy one context file in Courtyard: a workspace's, which keeps facts, plans and ideas about one area of the owner's life, or the owner context, which keeps facts, plans and ideas about the owner and how they like answers. It goes with every message to a model, so it should say everything once, briefly. It's information, not instructions.",
-  "Each line has its label in front: in a workspace's file [F1] is the first fact, [P1] the first plan and [I1] the first idea; in the owner context [MF1], [MP1] and [MI1] are the same about the owner, and [A1] is the first way they like answers.",
-  "Propose changes, never a rewritten file. Each change is one of:\n- merge: lines in the same section that overlap or belong together, as one line;\n- remove: a line that's no longer true, one another line makes out of date, or an idea the file shows was dropped, with why in a few words for the owner, who doesn't see labels;\n- shorten: a line that says more than it needs to.",
-  `Never add anything: every word of a merged or shortened line comes from the lines it replaces. Keep each fact, number and date that matters, never change what a line means, and never turn a plan or an idea into a fact. Each line stays under ${CONTEXT_LINE_MAX_CHARACTERS} characters. When unsure, leave the line alone; when nothing needs changing, propose nothing.`,
-].join("\n\n");
-
-/**
- * What a tidy's model answers, as it's told: the changes it proposes. Every field is there, empty
- * (null) where a change doesn't use it, since Codex's fixed-shape answers need every field.
- */
-export const TidyAnswer = z.object({
-  changes: z
-    .array(
-      z.object({
-        kind: z
-          .enum(["merge", "remove", "shorten"])
-          .describe("Merge lines into one, remove a line, or shorten one."),
-        labels: z
-          .array(z.string())
-          .describe(
-            "The labels of the lines it changes, such as F2 or MF1: two or more for merge, one otherwise.",
-          ),
-        text: z
-          .string()
-          .nullable()
-          .describe(
-            "For merge and shorten: the line that replaces them, without a label. Null for remove.",
-          ),
-        why: z
-          .string()
-          .nullable()
-          .describe(
-            "For remove: why, in a few words the owner reads before agreeing. Null otherwise.",
-          ),
-      }),
-    )
-    .describe("Each change proposed, or none."),
-});
-
-/**
  * What the model that titles a session is told (docs/ai-conduct.md, Titling a session, which
  * quotes it): a few plain words about what the session is for, never an answer to it.
  */
@@ -2267,14 +2223,6 @@ export const titleMessage = (first: { message: string; answer: string }) => {
     `<conversation>\n${contained(`Owner: ${first.message}\n\nAnswer: ${answer}`)}\n</conversation>`,
   ].join("\n\n");
 };
-
-/** The message a tidy's model gets: today's date, then the file with its labels. */
-export const tidyMessage = (file: { markdown: string; place: LinePlace; now: number }) =>
-  [
-    todayIs(file.now),
-    file.place === "owner" ? "The owner context:" : "The workspace's context file:",
-    `<context_file>\n${contained(withLabels(file.markdown, file.place))}\n</context_file>`,
-  ].join("\n\n");
 
 /**
  * What the model answering quick questions about a pull request is told (#327;

@@ -34,11 +34,6 @@ function GoesOrStays(props: { heading: string; goes?: boolean; items: readonly s
   );
 }
 
-const tidiesWaiting = (count: number) =>
-  count === 0
-    ? []
-    : [count === 1 ? "A tidy waiting for review" : `${count} tidies waiting for review`];
-
 /** The turn that stops a fresh start, with a way to it. */
 function StillRunning(props: { running: RunningTurn }) {
   const { running } = props;
@@ -84,7 +79,7 @@ function FreshStart() {
   });
 
   if (summary.kind !== "loaded") return <Problem result={summary} />;
-  const { workspaces, sessions, tidies, running, folder } = summary.data;
+  const { workspaces, sessions, running, folder } = summary.data;
   // Any case: a phone capitalises the first letter. The worker gets the exact words either way.
   const matches = typed.trim().toLowerCase() === FRESH_START_WORDS;
 
@@ -145,7 +140,6 @@ function FreshStart() {
             "Your owner context",
             "Every other file in the context folder",
             `Every session (${sessions})`,
-            ...tidiesWaiting(tidies),
           ]}
         />
         <GoesOrStays

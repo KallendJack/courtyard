@@ -7,7 +7,6 @@ import {
   ProviderList,
   RecentChanges,
   SignInList,
-  TidyProposal,
   WorkspaceList,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -98,7 +97,6 @@ describe("what a fresh start would clear", () => {
     expect(await summaryOf(request)).toEqual({
       workspaces: 2,
       sessions: 2,
-      tidies: 0,
       running: null,
       folder: "fresh-starts/2026-10-08",
     });
@@ -184,25 +182,6 @@ describe("a fresh start", () => {
     const { providers } = ProviderList.parse(await (await request("/api/providers")).json());
     const fakeTwo = providers.find((provider) => provider.id === "fake-two");
     expect(fakeTwo?.available && fakeTwo.models[0]?.limit).toBeDefined();
-  });
-
-  it("drops a tidy waiting for review", async () => {
-    await writeFile(
-      join(contextDir(), "garage-gym", "CONTEXT.md"),
-      GARAGE_GYM.replace("- Single garage.", "- Double garage (merge)\n- 5.4 m by 5.1 m (merge)"),
-    );
-    const request = await start();
-    const proposed = await postJson(request, "/api/workspaces/garage-gym/tidy", {
-      model: FAKE_MODEL,
-    });
-    const tidy = TidyProposal.parse(await proposed.json());
-    expect((await summaryOf(request)).tidies).toBe(1);
-
-    await startFresh(request);
-
-    expect((await summaryOf(request)).tidies).toBe(0);
-    const saved = await postJson(request, `/api/tidies/${tidy.id}/save`, { keep: [0] });
-    expect(saved.status).toBe(404);
   });
 
   it("is refused while a turn is running, naming the session, and clears nothing", async () => {

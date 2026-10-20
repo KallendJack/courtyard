@@ -21,14 +21,13 @@ export const RunningTurn = z.object({
 export type RunningTurn = z.infer<typeof RunningTurn>;
 
 /**
- * What a fresh start would clear now: how many workspaces (archived ones too), sessions and tidies
- * waiting for review; the session whose turn is running, which stops it; and the folder in the data
- * folder the sessions would move to.
+ * What a fresh start would clear now: how many workspaces (archived ones too) and sessions; the
+ * session whose turn is running, which stops it; and the folder in the data folder the sessions
+ * would move to.
  */
 export const FreshStartSummary = z.object({
   workspaces: z.number().int().nonnegative(),
   sessions: z.number().int().nonnegative(),
-  tidies: z.number().int().nonnegative(),
   running: RunningTurn.nullable(),
   folder: z.string(),
 });

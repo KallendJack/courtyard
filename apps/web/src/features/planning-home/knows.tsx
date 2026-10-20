@@ -10,7 +10,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button, IconButton } from "@/components/buttons/button";
-import { ButtonLink } from "@/components/buttons/button-link";
 import { FormError } from "@/components/forms/form-error";
 import { EmptyState, StatusPill } from "@/components/layout/notice";
 import { CARD, SectionTitle } from "@/components/layout/page";
@@ -24,8 +23,7 @@ import { GrillablePlan } from "../sessions/notes/grill-plan.tsx";
 
 /**
  * What Courtyard knows (#300): the workspace's Facts, Plans and Ideas, each line with Fix (and each
- * plan with Grill this plan), what else its models read, and the ways to look after it (Recent
- * changes, Tidy); then its skills. Opened from the one row at the foot of Home.
+ * plan with Grill this plan), what else its models read, and Recent changes; then its skills. Opened from the one row at the foot of Home.
  */
 export function WhatCourtyardKnows(props: {
   workspaceId: WorkspaceId;
@@ -71,13 +69,7 @@ export function WhatCourtyardKnows(props: {
           <>
             {contextFile.characters > CONTEXT_FILE_LONG_CHARACTERS && (
               <div className="mt-3">
-                <StatusPill
-                  action={
-                    <ButtonLink size="sm" to="/tidy" search={{ workspace: workspaceId }}>
-                      Tidy
-                    </ButtonLink>
-                  }
-                >
+                <StatusPill>
                   Getting long: it goes with every message, so keep it to what matters.
                 </StatusPill>
               </div>
@@ -126,20 +118,6 @@ export function WhatCourtyardKnows(props: {
             Recent changes
           </Link>
           , with Undo
-          {contextFile !== null &&
-            hasLines(contextFile) &&
-            contextFile.characters <= CONTEXT_FILE_LONG_CHARACTERS && (
-              <>
-                {" · "}
-                <Link
-                  to="/tidy"
-                  search={{ workspace: workspaceId }}
-                  className="text-foreground underline"
-                >
-                  Tidy
-                </Link>
-              </>
-            )}
         </p>
       </section>
       {props.skills !== undefined && <Skills skills={props.skills} />}

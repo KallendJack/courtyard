@@ -372,11 +372,11 @@ export type AddedMessages = {
 
 /**
  * A one-off question outside any session, answered once in the shape `schema` describes, such as
- * a tidy's proposed changes. No tools, no files: the model has only what it's told.
+ * a session's title. No tools, no files: the model has only what it's told.
  */
 export type OneOffInput = {
   /** What it's for, so the fake can script its answer. */
-  readonly purpose: "tidy" | "title" | "quick-question";
+  readonly purpose: "title" | "quick-question";
   readonly model: ModelId;
   /** One of the levels of effort the model takes; left out for the model's default. */
   readonly effort?: Effort;
@@ -486,7 +486,7 @@ export const firstWithRoom = <T extends { model: ModelInfo }>(offered: readonly 
 
 /**
  * The first model on offer whose provider saves to context and isn't at its usage limit (the first
- * that saves, when every one is): what Get to know and Tidy use when no model is named.
+ * that saves, when every one is): what Get to know uses when no model is named.
  * `undefined` when no provider that saves is available.
  */
 export const firstSavingModel = async (
