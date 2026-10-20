@@ -476,9 +476,13 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       expect(await onScreen(page.getByRole("region", { name: "Main" }), boxTop)).toBe(true);
       expect(await onScreen(box, height)).toBe(true);
 
-      // Needs you's rows scroll inside its card, under its heading, which stays put.
+      // Needs you's rows scroll inside its card, under its heading, which stays put. Under the
+      // Builders board it may be only a row or so tall (#592), with Matt's setup line after the
+      // rows, so the last row is scrolled to rather than the card's end.
       expect((await rowsScroll(needsYou)).overflows).toBe(true);
-      await expect(needsYou.getByRole("listitem", { name: /Ready 6/ })).toBeInViewport();
+      const last = needsYou.getByRole("listitem", { name: /Ready 6/ });
+      await last.scrollIntoViewIfNeeded();
+      await expect(last).toBeInViewport();
       await expect(needsYou.getByRole("heading", { name: /Needs you/ })).toBeInViewport();
       await homeFitsOneScreen(page);
       await shot(page, "tablet-home-long-needs-you");
