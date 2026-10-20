@@ -134,6 +134,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`workspace-main/`](../apps/worker/src/features/workspace-main/README.md): a code workspace's main, for Home's Main row.
 - [`skills/`](../apps/worker/src/features/skills/README.md): a workspace's skills, the more specific winning.
 - [`connections/`](../apps/worker/src/features/connections/README.md): a code workspace's GitHub and Paper file.
+- [`friction/`](../apps/worker/src/features/friction/README.md): Something's off (#554), friction reported from
+  any screen, filed by a session in the code workspace on the live copy's repository.
 
 *Running Courtyard* (`features/`)
 
@@ -230,6 +232,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     the chat.
   - [`pull-requests/`](../apps/web/src/features/pull-requests/README.md): the PRs list and a pull request's page.
   - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
+  - [`friction/`](../apps/web/src/features/friction/README.md): Something's off (#554): what it fills in at the
+    tap, the screen taken in the browser (its code loaded only then), and filing it.
   - [`live/`](../apps/web/src/features/live/README.md): Update, and main's build.
   - [`notifications/`](../apps/web/src/features/notifications/README.md): this device's notifications toggle.
   - [`offline-copy/`](../apps/web/src/features/offline-copy/README.md): Read offline (#106): this device's switch, its
@@ -271,7 +275,10 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   `frame/handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
   the folded Fold. It is the Reply box (#251), the same on every screen: + for a photo or file, a mic that talks as the Talk key does
   (the dock's `talk`) and becomes Send, and the model and effort as quiet text; it opens its Skills and Model sheets
-  from the frame's buttons, or Skills from a `/` in the empty box. The talk strip and
+  from the frame's buttons, or Skills from a `/` in the empty box. Something's off (#554) sits in the right rail's
+  free space above Talk, or left of Skills on the cover screen; its sheet (`sheets/friction-sheet.tsx`, loaded when
+  first opened) isn't modal, so the Talk key, the talk strip, Space and Type go into its You said box while it's
+  open, ahead of the page's box, and on the cover screen it floats above the talk row (`--frame-talk`). The talk strip and
   the Talk key (`frame/talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
   browser's own speech recognition (`frame/speech.ts`, which also vibrates for it) and put the words in the box as they are
   heard (#198), for the owner to send, or to queue while a turn runs. Holding Space (outside a field) or the

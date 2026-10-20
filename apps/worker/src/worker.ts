@@ -50,6 +50,8 @@ import {
 import { documentRoutes } from "./features/documents/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
 import { freshStartRoutes } from "./features/fresh-start/routes.ts";
+import { createFriction } from "./features/friction/index.ts";
+import { FRICTION_ROUTE, frictionRoutes } from "./features/friction/routes.ts";
 import { createLead } from "./features/lead/index.ts";
 import { leadRoutes } from "./features/lead/routes.ts";
 import { rememberingLimits } from "./features/limits/index.ts";
@@ -160,11 +162,11 @@ const pathOf = (route: string) => new RegExp(`^/api${route.replace(/:[^/]+/g, "[
 /** A request a multipart form may be sent with: its method, and its path as a pattern. */
 type FormRequest = { readonly method: string; readonly path: RegExp };
 
-/** The requests that take a message. */
-const MESSAGE_REQUESTS: readonly FormRequest[] = Object.values(MESSAGE_ROUTES).map((route) => ({
-  method: "POST",
-  path: pathOf(route),
-}));
+/** The requests that take a message, and Something's off's report with its screen (#554). */
+const MESSAGE_REQUESTS: readonly FormRequest[] = [
+  ...Object.values(MESSAGE_ROUTES),
+  FRICTION_ROUTE,
+].map((route) => ({ method: "POST", path: pathOf(route) }));
 
 /** The requests that may send a Thing's photo (ADR 0020). */
 const THING_PHOTO_REQUESTS: readonly FormRequest[] = THING_PHOTO_ROUTES.map(
@@ -625,6 +627,12 @@ export const createWorker = (options: {
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(nextUp));
   api.route("/", leadRoutes(lead));
+  api.route(
+    "/",
+    frictionRoutes(
+      createFriction({ contextDir, liveCopy, liveRepo: workspaceMain.liveRepo, code, sessions }),
+    ),
+  );
   api.get("/workspaces/:id/main", async (c) => {
     const main = await workspaceMain.of(c.req.param("id"));
     if (main.ok) return c.json(main.value satisfies WorkspaceMain);
