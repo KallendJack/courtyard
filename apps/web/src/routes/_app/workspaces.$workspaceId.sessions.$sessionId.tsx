@@ -36,6 +36,7 @@ import {
 } from "../../features/preview/preview.tsx";
 import type { Steps } from "../../features/sessions/answer/steps.ts";
 import { Composer, type StandIn } from "../../features/sessions/composer/composer.tsx";
+import { PinnedQuestion } from "../../features/sessions/composer/pinned-question.tsx";
 import {
   allowAll,
   allowAllOff,
@@ -563,6 +564,16 @@ function Session(props: {
         <div className="mb-3">
           <FormError message={sendProblem} />
         </div>
+      )}
+      {/* The question its model asked, until the owner sends a message (#541). */}
+      {standIn === undefined && takesMessages && !running && last?.asked !== undefined && (
+        <PinnedQuestion
+          sessionId={session.id}
+          title={session.title}
+          asked={last.asked}
+          // The choice's turn comes in on the session's events, which take the question away.
+          onAnswered={() => {}}
+        />
       )}
       {/* A code session's tasks still running (#182), above the Reply box. */}
       {standIn === undefined && <RunningTaskRows sessionId={session.id} tasks={tasks} />}

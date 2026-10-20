@@ -620,6 +620,8 @@ export const TurnView = memo(function TurnView(props: {
           ))}
         </section>
       )}
+      {/* The question it asked (#541): pinned above the reply box until answered, then kept here. */}
+      {turn.asked !== undefined && <TurnNote>Asked you: {turn.asked.question}</TurnNote>}
       {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
       {/* The latest turn's end, so a finished session never looks like one still working (#179). */}
       {latest && (turn.state.kind === "done" || turn.state.kind === "stopped") && (

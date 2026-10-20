@@ -20,6 +20,8 @@
 @source not "./components/buttons/sort-button.tsx";
 @source not "./components/chat/approval-card.tsx";
 @source not "./components/buttons/thumb-button.tsx";
+@source not "./components/buttons/choice-buttons.tsx";
+@source not "./features/sessions/composer/pinned-question.tsx";
 @source not "./components/code/file-tree.tsx";
 @source not "./components/code/ask-line.tsx";
 @source not "./components/chat/session-state.tsx";

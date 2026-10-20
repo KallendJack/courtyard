@@ -4,6 +4,7 @@ import {
   type ContinueRequest,
   type NewWorkspace,
   type PasswordForm,
+  type QuestionAnswer,
   type SaveEdit,
   type SessionId,
   type StopRequest,
@@ -227,6 +228,17 @@ export const continueTurn = (sessionId: SessionId, turn?: number) =>
   sendJson({
     path: `/sessions/${encodeURIComponent(sessionId)}/continue`,
     body: (turn === undefined ? {} : { turn }) satisfies ContinueRequest,
+    schema: z.unknown(),
+  });
+
+/**
+ * Answers a session's question with one of its choices (#541), from Needs you or the session's
+ * page: it goes as the owner's message.
+ */
+export const answerQuestion = (sessionId: SessionId, answer: QuestionAnswer) =>
+  sendJson({
+    path: `/sessions/${encodeURIComponent(sessionId)}/answer`,
+    body: answer,
     schema: z.unknown(),
   });
 

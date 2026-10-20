@@ -21,6 +21,7 @@ import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { AllowAllBuilders } from "./allow-all-builders.tsx";
 import { allowAllForBuilders, pauseLead, runLead } from "./api.ts";
+import { waitsUntilAnswered } from "./needs.ts";
 
 type Listed = CodeSessionList["sessions"][number];
 
@@ -45,7 +46,8 @@ const placesAhead = (session: Listed) => {
 };
 
 /**
- * Running (#301; Paper, "Code workspace Home"): the workspace's sessions working now, every one,
+ * Running (#301; Paper, "Code workspace Home"): the workspace's sessions working now, every one
+ * (never one waiting on the owner, which Needs you shows, #541),
  * each with what it's doing and for how long, and how many of the worker's slots are taken. Those
  * running come first, then those waiting for a place, the next to start first (#362). Once the
  * owner has run the build order, its Lead's row comes first (#347; Paper, "Code Home, Lead
@@ -84,6 +86,10 @@ export function Running(props: {
         lead={lead}
         session={lead.session}
         providers={props.providers}
+        waitOnYou={
+          props.sessions.filter((session) => session.byLead === true && waitsUntilAnswered(session))
+            .length
+        }
         onLead={props.onLead}
       />
     ) : undefined;
@@ -129,12 +135,16 @@ export function Running(props: {
   );
 }
 
-/** "2 building · 1 PR ready", or where the Lead stands when it isn't running. */
-const leadTitle = (lead: LeadStatus) => {
+/**
+ * "2 building · 1 PR ready", with "· 2 wait on you" while builders wait until the owner answers
+ * (#541), or where the Lead stands when it isn't running.
+ */
+const leadTitle = (lead: LeadStatus, waitOnYou: number) => {
   if (lead.state === "paused") return "Paused";
   if (lead.state === "resting") return "Resting";
   const ready = lead.ready.length;
-  return `${lead.building.length} building · ${ready} ${ready === 1 ? "PR" : "PRs"} ready`;
+  const waits = waitOnYou === 0 ? "" : ` · ${waitOnYou} ${waitOnYou === 1 ? "waits" : "wait"} on you`;
+  return `${lead.building.length} building · ${ready} ${ready === 1 ? "PR" : "PRs"} ready${waits}`;
 };
 
 /**
@@ -160,13 +170,16 @@ const leadLine = (lead: LeadStatus) => {
  * builders is on, how long it has left takes the second, in gold, and a reason it holds back, if
  * it does, the first.
  */
-const leadLines = (lead: LeadStatus) => {
+const leadLines = (lead: LeadStatus, waitOnYou: number) => {
   if (lead.buildersAllowedAll === undefined) {
-    return { first: leadTitle(lead), second: leadLine(lead), allowing: false };
+    return { first: leadTitle(lead, waitOnYou), second: leadLine(lead), allowing: false };
   }
   const left = timeLeft({ until: lead.buildersAllowedAll, now: Date.now(), roughly: true });
   return {
-    first: lead.state === "running" && lead.why !== undefined ? leadLine(lead) : leadTitle(lead),
+    first:
+      lead.state === "running" && lead.why !== undefined
+        ? leadLine(lead)
+        : leadTitle(lead, waitOnYou),
     second: `Builders allowed all · ${left} left`,
     allowing: true,
   };
@@ -182,6 +195,8 @@ function LeadRow(props: {
   lead: LeadStatus;
   session: NonNullable<LeadStatus["session"]>;
   providers: ProviderList["providers"] | undefined;
+  /** How many of its builders wait until the owner answers (#541). */
+  waitOnYou: number;
   onLead: (lead: LeadStatus) => void;
 }) {
   const { lead } = props;
@@ -207,7 +222,7 @@ function LeadRow(props: {
     return undefined;
   };
   const turnOff = useAction(() => allowAll(false));
-  const lines = leadLines(lead);
+  const lines = leadLines(lead, props.waitOnYou);
   return (
     <li
       aria-label="Lead"

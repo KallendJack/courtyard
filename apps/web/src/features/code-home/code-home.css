@@ -12,6 +12,7 @@
 @source "../../components/layout/home-block.tsx";
 @source "../../components/code/connections-line.tsx";
 @source "../../components/buttons/thumb-button.tsx";
+@source "../../components/buttons/choice-buttons.tsx";
 @source "../../components/buttons/row-button.tsx";
 
 :where([data-code-home]) {

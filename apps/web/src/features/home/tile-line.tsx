@@ -40,6 +40,7 @@ const counted = (count: number, one: string, more: string) =>
 const needsWords = (needs: readonly Need[], short: boolean) => {
   const of = (kind: Need["kind"]) => needs.filter((need) => need.kind === kind).length;
   return [
+    [of("asked") + of("turn-failed") + of("stopped"), "waiting on you", "waiting on you"],
     [of("stalled"), "stalled", "stalled"],
     [of("approval"), "to approve", "to approve"],
     [of("cut-off"), "cut off", "cut off"],
@@ -52,6 +53,9 @@ const needsWords = (needs: readonly Need[], short: boolean) => {
 
 /** How a tile names what a session waits on the owner for. */
 const NAMED: Readonly<Record<SessionNeed["kind"], string>> = {
+  asked: "Asks",
+  "turn-failed": "Failed",
+  stopped: "Stopped, no PR",
   approval: "Approve",
   "cut-off": "Cut off",
   stalled: "Stalled",

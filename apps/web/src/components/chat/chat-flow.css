@@ -1,7 +1,7 @@
 /*
  * The classes of the pieces that say whose turn it is and keep a session's flow (#179, #177,
- * #168): the Working line, the Your turn mark, queued messages, Jump to latest, and each session's
- * state in its workspace's lists. Tailwind puts every class it finds into the first load's
+ * #168): the Working line, the Your turn mark, queued messages, Jump to latest, each session's
+ * state in its workspace's lists, and a question pinned above the reply box with its choices (#541). Tailwind puts every class it finds into the first load's
  * stylesheet, even one only lazily loaded code uses, so styles.css leaves these pieces out and
  * this stylesheet, loaded with the pages that show them, has their classes instead. The theme is
  * by reference: its names, nothing of its own. They apply only inside a `ChatFlowScope`
@@ -12,6 +12,9 @@
 @source "./working-line.tsx";
 @source "./queued-message.tsx";
 @source "./jump-to-latest.tsx";
+@source "../../features/sessions/composer/pinned-question.tsx";
+@source "../buttons/choice-buttons.tsx";
+@source "../buttons/thumb-button.tsx";
 
 :where([data-chat-flow]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

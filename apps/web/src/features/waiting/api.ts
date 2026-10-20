@@ -31,9 +31,13 @@ export const useNeedsYou = (again?: unknown, asking = true) =>
 
 /**
  * What the owner does about it, in a word or two: Needs you's label, and the Next pill's. A
- * stalled builder (#474) is only to look at, so it says what it is.
+ * stalled builder (#474) is only to look at, so it says what it is, as does one stopped with no
+ * pull request (#541).
  */
 export const NEED_WORDS: Readonly<Record<NeedYou["kind"], string>> = {
+  asked: "Answer",
+  "turn-failed": "Continue",
+  stopped: "Stopped, no PR",
   approval: "Approve",
   "cut-off": "Continue",
   stalled: "Stalled",
@@ -51,13 +55,17 @@ const PULL_WORDS = {
 } as const;
 
 /**
- * What's waiting, in a few words: the session's title, or its pull request's number and title and
- * how it stands ("PR #412 · Quick questions, checks passed").
+ * What's waiting, in a few words: the session's title, with the question it asked (#541); or its
+ * pull request's number and title and how it stands ("PR #412 · Quick questions, checks passed").
  */
-export const needTitle = (need: NeedYou) =>
-  "pullRequest" in need
-    ? `PR #${need.pullRequest.number} · ${need.pullRequest.title ?? need.session.title}, ${PULL_WORDS[need.kind]}`
+export const needTitle = (need: NeedYou) => {
+  if ("pullRequest" in need) {
+    return `PR #${need.pullRequest.number} · ${need.pullRequest.title ?? need.session.title}, ${PULL_WORDS[need.kind]}`;
+  }
+  return need.kind === "asked"
+    ? `${need.session.title}: ${need.question.text}`
     : need.session.title;
+};
 
 /**
  * Where a tap on it goes: its session's page, or for its pull request, the session's review of it.

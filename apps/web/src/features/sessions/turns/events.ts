@@ -200,6 +200,14 @@ export type Turn = {
   readonly things: readonly ThingNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
+  /**
+   * The question a code session's model asked the owner (#541), by its event number, with its
+   * choices (none when it needs their words); `undefined` when it asked none. The owner's next
+   * message answers it.
+   */
+  readonly asked:
+    | { readonly seq: number; readonly question: string; readonly choices: readonly string[] }
+    | undefined;
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
   readonly sources: readonly Source[];
   /**
@@ -356,6 +364,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             documents: [],
             things: [],
             replies: [],
+            asked: undefined,
             sources: [],
             images: [],
             approval: undefined,
@@ -551,6 +560,10 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
     }
     case "suggested-replies":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, replies: event.replies }) });
+    case "owner-asked": {
+      const asked = { seq, question: event.question, choices: event.choices };
+      return withLastTurn(log, { seq, change: (turn) => ({ ...turn, asked }) });
+    }
     case "sources":
       return withLastTurn(log, { seq, change: (turn) => ({ ...turn, sources: event.sources }) });
     case "image-shown": {

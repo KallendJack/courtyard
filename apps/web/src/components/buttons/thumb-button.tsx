@@ -46,6 +46,7 @@ export function ThumbButton({
   low = false,
   fit = false,
   row = false,
+  pill = false,
   type = "button",
   busy = false,
   busyLabel,
@@ -69,6 +70,8 @@ export function ThumbButton({
     fit?: boolean;
     /** A pill at the end of a row, the same width on every row (Needs you's Merge, Approve, #301). */
     row?: boolean;
+    /** A small pill as wide as its words, one of a few side by side (a question's choices, #541). */
+    pill?: boolean;
   }) {
   const { working, attributes } = useBusy({ busy, busyLabel, onClick });
   return (
@@ -79,7 +82,9 @@ export function ThumbButton({
         LOOKS[look],
         row
           ? "h-9 min-w-24 shrink-0 rounded-full px-4 text-sm/4.5"
-          : fit
+          : pill
+            ? "min-h-7.5 max-w-full rounded-full px-3.5 py-1.5 text-meta/4"
+            : fit
             ? "h-12 shrink-0 rounded-lg px-5 text-base/5"
             : low
               ? classes("h-11 basis-0 rounded-card text-sm/4.5", GROW[grow])

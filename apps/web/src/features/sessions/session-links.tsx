@@ -12,13 +12,14 @@ import { ListedSessionText } from "@/components/chat/session-state";
 import { SuggestedReplies } from "@/components/chat/suggested-replies";
 import { ByLead, LeadMark } from "@/components/code/lead-mark";
 import { FormError } from "@/components/forms/form-error";
+import { CapsLabel } from "@/components/layout/caps-label";
 import { CARD, LIST_ROW, SectionTitle } from "@/components/layout/page";
 import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
 import { deleteSession, markAllRead } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { describeWhen } from "../../lib/when.ts";
-import { waitingFirst } from "../code-home/needs.ts";
+import { heldWords, waitingFirst, waitsUntilAnswered } from "../code-home/needs.ts";
 import { KEPT_SESSIONS, loadSessions } from "./kept-sessions.ts";
 
 type Listed = CodeSessionList["sessions"][number];
@@ -61,11 +62,14 @@ export function SessionLinks(props: {
   // A session whose pull request was merged or closed has ended: it leaves the sessions for
   // History, so its place is free for a new one (#278).
   const open = sessions.filter((session) => !sessionEnded(session));
-  // A code workspace's Lead stays pinned at the top (#347).
-  const current = [
-    ...open.filter((session) => session.lead === true),
-    ...waitingFirst(open.filter((session) => session.lead !== true)),
-  ];
+  // A code workspace's Lead stays pinned at the top (#347), then those waiting on the owner until
+  // they answer in a gold group of their own (#541).
+  const leads = open.filter((session) => session.lead === true);
+  const held = open.filter((session) => session.lead !== true && waitsUntilAnswered(session));
+  const rest = waitingFirst(
+    open.filter((session) => session.lead !== true && !waitsUntilAnswered(session)),
+  );
+  const current = [...leads, ...held, ...rest];
   const history = sessions.filter(sessionEnded);
   const replies = current.some((session) => session.waiting === "reply");
   return (
@@ -83,11 +87,35 @@ export function SessionLinks(props: {
               {replies && <MarkAllRead workspaceId={sessions[0]?.workspaceId} />}
             </div>
           </div>
-          <SessionList
-            sessions={current}
-            kept={kept}
-            {...(nextSteps === undefined ? {} : { nextSteps })}
-          />
+          {held.length > 0 && kept === undefined ? (
+            <>
+              {leads.length > 0 && <SessionList sessions={leads} kept={kept} />}
+              <section aria-label="Waiting on you" className="mt-3 flex flex-col">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <CapsLabel tone="warning" heading={{ level: 3 }}>
+                    Waiting on you · {held.length}
+                  </CapsLabel>
+                  <span className="text-meta text-muted-foreground">
+                    Stay until you answer · Mark all read leaves them
+                  </span>
+                </div>
+                <SessionList sessions={held} kept={kept} />
+              </section>
+              {rest.length > 0 && (
+                <SessionList
+                  sessions={rest}
+                  kept={kept}
+                  {...(nextSteps === undefined ? {} : { nextSteps })}
+                />
+              )}
+            </>
+          ) : (
+            <SessionList
+              sessions={current}
+              kept={kept}
+              {...(nextSteps === undefined ? {} : { nextSteps })}
+            />
+          )}
         </section>
       )}
       {history.length > 0 && (
@@ -149,6 +177,7 @@ function SessionRow(props: { session: Listed; kept: ReadonlySet<SessionId> | und
           now={session.now}
           updatedAt={session.updatedAt}
           when={describeWhen}
+          held={heldWords(session)}
           {...(kept === undefined ? {} : { offline: kept.has(session.id) ? "kept" : "not-kept" })}
         />
         {session.lead === true && <LeadMark />}
@@ -176,7 +205,9 @@ function WaitingMark(props: { on: Exclude<Listed["waiting"], "nothing"> }) {
             ? "Cut off"
             : props.on === "stalled"
               ? "Stalled"
-              : "Needs you"
+              : props.on === "approval"
+                ? "Needs you"
+                : "Waiting on you"
       }
       className={classes(
         "flex h-7.5 w-11.5 shrink-0 items-center justify-center self-center rounded-row",

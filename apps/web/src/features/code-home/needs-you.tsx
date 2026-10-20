@@ -4,11 +4,13 @@ import {
   type CodeSessionList,
   type MattSetup,
   type OpenPullRequest,
+  type OwnerQuestion,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
+import { ChoiceButtons } from "@/components/buttons/choice-buttons";
 import { ThumbButton } from "@/components/buttons/thumb-button";
 import { FormError } from "@/components/forms/form-error";
 import { Block, BlockEmpty, BlockRow, BlockRows } from "@/components/layout/home-block";
@@ -51,7 +53,8 @@ const pullTitle = (pull: OpenPullRequest) =>
   `#${pull.pullRequest.number} ${pull.pullRequest.title ?? pull.branch}`.trim();
 
 /**
- * Needs you (#301; Paper, "Code workspace Home"): every builder stalled (#474), approval, turn cut
+ * Needs you (#301; Paper, "Code workspace Home"): every session waiting until the owner answers
+ * (#541: its question, with its choices to tap; a failed turn, Continue; a stop, Open), builder stalled (#474), approval, turn cut
  * off by a restart (#186), failing check, new reply, pull request ready to merge (the Lead's, in build order, with
  * Merge in order, #423), conflict, and Matt's setup offer,
  * each a row with its one-tap action: Approve, Continue, Review, Open, Merge, Bring up to date. It takes the height the page leaves it, its rows
@@ -118,6 +121,9 @@ export function NeedsYou(props: {
 
 const keyOf = (need: Need) => {
   switch (need.kind) {
+    case "asked":
+    case "turn-failed":
+    case "stopped":
     case "stalled":
     case "approval":
     case "cut-off":
@@ -159,6 +165,54 @@ function NeedRow(props: {
     </Link>
   );
   switch (need.kind) {
+    case "asked": {
+      const { session } = need;
+      const { question } = session;
+      if (question === undefined) return null;
+      // A question that needs words is answered in its session, its question pinned (#541).
+      if (question.choices.length === 0) {
+        return (
+          <BlockRow
+            label={question.text}
+            title={sessionLink(session, session.title)}
+            sub={`Asks: ${question.text}${seenWords(session)}`}
+            tone="needs"
+            lead={<GoldDot />}
+            action={<OpenSession workspaceId={workspaceId} session={session} label="Reply" />}
+          />
+        );
+      }
+      return (
+        <QuestionRow
+          workspaceId={workspaceId}
+          session={session}
+          question={question}
+          onChanged={props.onChanged}
+        />
+      );
+    }
+    case "turn-failed":
+      return (
+        <BlockRow
+          label={need.session.title}
+          title={sessionLink(need.session, need.session.title)}
+          sub={`Failed · ${clockWords(need.session.updatedAt)}${seenWords(need.session)}`}
+          tone="needs"
+          lead={<GoldDot />}
+          action={<Continue session={need.session} look="ringed" onChanged={props.onChanged} />}
+        />
+      );
+    case "stopped":
+      return (
+        <BlockRow
+          label={need.session.title}
+          title={sessionLink(need.session, need.session.title)}
+          sub={`Stopped, no PR · ${clockWords(need.session.updatedAt)}${seenWords(need.session)}`}
+          tone="needs"
+          lead={<GoldDot />}
+          action={<OpenSession workspaceId={workspaceId} session={need.session} />}
+        />
+      );
     case "stalled":
       // Open only opens the kept session: the owner reads what happened and taps Continue there
       // if it should go on (#474, #186).
@@ -308,6 +362,56 @@ function NeedRow(props: {
   }
 }
 
+/** " · seen" once the owner has read what waits until they answer, which never clears it (#541). */
+const seenWords = (session: Listed) => (session.seen === true ? " · seen" : "");
+
+/** The gold dot before a row that waits on the owner until they answer (#541). */
+function GoldDot() {
+  return <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />;
+}
+
+/**
+ * A question with set choices (#541; Paper, "Tablet · Code Home: builders wait until answered"):
+ * who asks and when, the question, and its choices, one tap answering it; Open opens its session.
+ */
+function QuestionRow(props: {
+  workspaceId: WorkspaceId;
+  session: Listed;
+  question: OwnerQuestion;
+  onChanged: () => void;
+}) {
+  const { session, question } = props;
+  return (
+    <li
+      aria-label={question.text}
+      className="flex flex-col gap-2 rounded-row border border-warning/25 bg-warning/10 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-label font-semibold text-warning">
+          {builderTitle(session)} asks · {clockWords(session.updatedAt)}
+          {seenWords(session)}
+        </p>
+        <Link
+          to="/workspaces/$workspaceId/sessions/$sessionId"
+          params={{ workspaceId: props.workspaceId, sessionId: session.id }}
+          aria-label={`Open ${session.title}`}
+          className="shrink-0 text-label font-semibold text-muted-foreground hover:underline"
+        >
+          Open ›
+        </Link>
+      </div>
+      <p className="text-interface/5 font-bold">{question.text}</p>
+      <ChoiceButtons
+        sessionId={session.id}
+        asked={question.asked}
+        choices={question.choices}
+        about={session.title}
+        onAnswered={props.onChanged}
+      />
+    </li>
+  );
+}
+
 /** A row's link to a pull request's page, where what happens next is shown first. */
 function RowLink(props: { pull: OpenPullRequest; workspaceId: WorkspaceId; label: string }) {
   return (
@@ -324,17 +428,18 @@ function RowLink(props: { pull: OpenPullRequest; workspaceId: WorkspaceId; label
   );
 }
 
-/** Open: a row's link to its session's page. */
-function OpenSession(props: { workspaceId: WorkspaceId; session: Listed }) {
+/** Open, or what opening it is for (Reply): a row's link to its session's page. */
+function OpenSession(props: { workspaceId: WorkspaceId; session: Listed; label?: string }) {
+  const label = props.label ?? "Open";
   return (
     <ButtonLink
       to="/workspaces/$workspaceId/sessions/$sessionId"
       params={{ workspaceId: props.workspaceId, sessionId: props.session.id }}
       variant="outline"
       size="md"
-      aria-label={`Open ${props.session.title}`}
+      aria-label={`${label} ${props.session.title}`}
     >
-      Open
+      {label}
     </ButtonLink>
   );
 }
@@ -382,8 +487,11 @@ function Approve(props: {
   );
 }
 
-/** Continue (#186): the session's last turn, cut off by a restart, carries on, in one tap. */
-function Continue(props: { session: Listed; onChanged: () => void }) {
+/**
+ * Continue (#186): the session's last turn, cut off by a restart or failed (#541, ringed in gold),
+ * carries on, in one tap.
+ */
+function Continue(props: { session: Listed; look?: "ringed"; onChanged: () => void }) {
   const go = useAction(async () => {
     const continued = await continueTurn(props.session.id);
     if (continued.kind !== "loaded") return describeProblem(continued).body;
@@ -393,7 +501,7 @@ function Continue(props: { session: Listed; onChanged: () => void }) {
   return (
     <>
       <ThumbButton
-        look="primary"
+        look={props.look ?? "primary"}
         row
         aria-label={`Continue ${props.session.title}`}
         busy={go.busy}

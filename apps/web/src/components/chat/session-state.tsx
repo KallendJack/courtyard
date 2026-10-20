@@ -81,13 +81,23 @@ const NAMES = { working: "Working", "needs-you": "Needs you", "your-turn": "Your
 
 /**
  * A listed session's dot, as the worker says it waits (#492): gold while it needs the owner (an
- * approval, a turn cut off by a restart, or a builder stalled, #474), violet while it's working or
- * has a new reply; none otherwise. Its word, for a list with room to say it: Approve, Continue,
+ * approval, its question, a failed turn or a stop until they answer, #541, a turn cut off by a
+ * restart, or a builder stalled, #474), violet while it's working or has a new reply; none
+ * otherwise. Its word, for a list with room to say it: Approve, Answer, Continue, Stopped,
  * Stalled, Running, New reply.
  */
 export const waitingMark = (session: { now: TurnNow; waiting: SessionWaiting }) => {
   if (session.waiting === "approval") {
     return { tone: "needs-you", name: "Needs you", word: "Approve" } as const;
+  }
+  if (session.waiting === "asked") {
+    return { tone: "needs-you", name: "Waiting on you", word: "Answer" } as const;
+  }
+  if (session.waiting === "turn-failed") {
+    return { tone: "needs-you", name: "Waiting on you", word: "Continue" } as const;
+  }
+  if (session.waiting === "stopped") {
+    return { tone: "needs-you", name: "Waiting on you", word: "Stopped" } as const;
   }
   if (session.waiting === "cut-off") {
     return { tone: "needs-you", name: "Needs you", word: "Continue" } as const;
@@ -149,6 +159,11 @@ export function ListedSessionText(props: {
    * it was last active, and, when the copy doesn't keep its conversation, faint, saying so.
    */
   offline?: "kept" | "not-kept";
+  /**
+   * What it waits on the owner for until they answer (#541), in a few words ("Asks: which
+   * search?"): its state is Waiting on you, in gold, with these words under it, never Your turn.
+   */
+  held?: string | undefined;
 }) {
   const { now } = props;
   if (props.offline !== undefined) {
@@ -168,6 +183,8 @@ export function ListedSessionText(props: {
       </span>
     );
   }
+  const { held } = props;
+  const tone = held === undefined ? now.kind : "needs-you";
   return (
     <ChatFlowScope grows>
       <span className="flex min-w-0 flex-col gap-1">
@@ -176,18 +193,24 @@ export function ListedSessionText(props: {
           <span
             className={classes(
               "flex shrink-0 items-center gap-1.5 text-meta font-bold",
-              TONES[now.kind].text,
+              TONES[tone].text,
             )}
           >
             <span
               aria-hidden
-              className={classes("size-1.75 shrink-0 rounded-full", TONES[now.kind].dot)}
+              className={classes("size-1.75 shrink-0 rounded-full", TONES[tone].dot)}
             />
-            {NAMES[now.kind]}
+            {held === undefined ? NAMES[now.kind] : "Waiting on you"}
           </span>
         </span>
-        <span className="truncate font-mono text-caption/3.75 text-muted-foreground">
-          {now.kind === "your-turn" ? props.when(props.updatedAt) : <Ticking now={now} />}
+        <span
+          className={classes(
+            "truncate font-mono text-caption/3.75",
+            held === undefined ? "text-muted-foreground" : "text-warning",
+          )}
+        >
+          {held ??
+            (now.kind === "your-turn" ? props.when(props.updatedAt) : <Ticking now={now} />)}
         </span>
       </span>
     </ChatFlowScope>
