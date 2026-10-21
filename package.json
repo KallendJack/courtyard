@@ -2,7 +2,7 @@
   "name": "courtyard",
   "private": true,
   "description": "Self-hosted planning and coding with AI models, one workspace per area of your life",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "engines": {
