@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlanningHome } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createFakeProvider } from "../src/providers/index.ts";
 import { asOwner, type Requester, removeTestFolder, testWorker } from "./testing.ts";
 
 // A planning workspace's Home (#603): its main subject, a Thing drawn as its kind of thing with
@@ -132,7 +133,10 @@ describe("a planning workspace's Home (#603)", () => {
       "condition: Pins short and domed; slippy",
       "where: On the bike",
     );
-    const request = await asOwner(testWorker({ root }));
+    // A wanted Thing is a move, so Home writes the move review in the background (#603).
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
+    );
 
     expect((await home(request)).subject).toMatchObject({
       placed: [
