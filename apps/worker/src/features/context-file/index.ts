@@ -5,9 +5,11 @@ import {
   type OwnerContext,
   OwnerSection,
   type PlacedLine,
+  type SavedOwnerSection,
+  type SavedSection,
 } from "@courtyard/contract";
 
-type Section = ContextSection | "other";
+type Section = SavedSection | "other";
 
 const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
@@ -15,7 +17,11 @@ const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
 const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const CONTINUATION = /^\s+\S/;
 
-const sectionNamed = (heading: string): ContextSection | undefined => {
+/**
+ * The section a heading begins. Plans is still found (#603): its lines are kept as written, with
+ * no labels, so a model reads them but can't save there, and the move review can take them out.
+ */
+const sectionNamed = (heading: string): SavedSection | undefined => {
   const word = /^(facts|plans|ideas)\b/i.exec(heading)?.[1]?.toLowerCase();
   return word === "facts" || word === "plans" || word === "ideas" ? word : undefined;
 };
@@ -51,7 +57,7 @@ type Scanned = {
   readonly title: string | undefined;
   readonly intro: string;
   readonly other: string;
-  readonly sections: Record<ContextSection, { heading: number | undefined; lines: Located[] }>;
+  readonly sections: Record<SavedSection, { heading: number | undefined; lines: Located[] }>;
 };
 
 const splitLines = (markdown: string) => markdown.replace(/\r\n?/g, "\n").split("\n");
@@ -80,6 +86,8 @@ const scan = (markdown: string): Scanned => {
         section = named;
         sections[named].heading ??= index;
         continuing = false;
+        // A Plans section from before projects (#603) is kept as written, as any other section is.
+        if (named === "plans") other.push(line);
         continue;
       }
       if (section === undefined && level === 1 && title === undefined && intro.join("") === "") {
@@ -108,6 +116,7 @@ const scan = (markdown: string): Scanned => {
       continue;
     }
 
+    if (section === "plans") other.push(line);
     continuing = addLine(sections[section].lines, { line, index, continuing });
   }
 
@@ -116,7 +125,8 @@ const scan = (markdown: string): Scanned => {
 
 /**
  * Reads a context file's Markdown into its sections. A heading at any level that starts with
- * Facts, Plans or Ideas begins that section. Each list item there is one line; a plain line counts
+ * Facts or Ideas begins that section; one starting Plans, from before projects (#603), is kept as
+ * written with the other sections. Each list item there is one line; a plain line counts
  * as one too, and an indented line carries on the item above it. Text above the first section is
  * the intro, a first-level heading at the top is the title, and any other section is kept as
  * written. Nothing in a context file is an error: missing sections are just empty.
@@ -128,15 +138,21 @@ export const parseContextFile = (markdown: string): ContextFile => {
     ...(title === undefined ? {} : { title }),
     intro,
     facts: texts("facts"),
-    plans: texts("plans"),
     ideas: texts("ideas"),
     other,
     characters: markdown.length,
   };
 };
 
+/**
+ * The lines of a context file's Plans section, from before projects (#603), as written: what the
+ * move review offers to move into projects.
+ */
+export const plansLines = (markdown: string) =>
+  scan(markdown).sections.plans.lines.map((line) => line.text);
+
 /** Where one section's lines are written in a file: its heading's line, when it has one, and its lines. */
-type SectionAt = Scanned["sections"][ContextSection];
+type SectionAt = Scanned["sections"][SavedSection];
 
 /** A file read for the lines it holds: its lines, where each section is, and how to add one it lacks. */
 type Layout<S extends string> = {
@@ -164,7 +180,7 @@ const inserted = (lines: readonly string[], at: number, block: readonly string[]
   return out;
 };
 
-const workspaceLayout = (markdown: string): Layout<ContextSection> => {
+const workspaceLayout = (markdown: string): Layout<SavedSection> => {
   const { lines, sections } = scan(markdown);
   return {
     lines,
@@ -231,11 +247,11 @@ const scanOwner = (markdown: string) => {
     }
   }
 
-  const sections: Record<OwnerSection, SectionAt> = { facts, plans, ideas, answers };
+  const sections: Record<SavedOwnerSection, SectionAt> = { facts, plans, ideas, answers };
   return { lines, parts, only, sections };
 };
 
-const ownerLayout = (markdown: string): Layout<OwnerSection> => {
+const ownerLayout = (markdown: string): Layout<SavedOwnerSection> => {
   const { lines, parts, sections } = scanOwner(markdown);
   return {
     lines,
@@ -276,11 +292,10 @@ const find = (markdown: string, placed: PlacedLine): Found =>
 /** A line with its place and its line label: `F1` for the workspace's first fact, `MF1`, `A2`. */
 export type LabelledLine = PlacedLine & { readonly label: string };
 
-const WORKSPACE_LABELS: Record<ContextSection, string> = { facts: "F", plans: "P", ideas: "I" };
+const WORKSPACE_LABELS: Record<ContextSection, string> = { facts: "F", ideas: "I" };
 /** The owner context's labels, which can't clash with a workspace's (ADR 0013). */
 const OWNER_LABELS: Record<OwnerSection, string> = {
   facts: "MF",
-  plans: "MP",
   ideas: "MI",
   answers: "A",
 };
@@ -416,87 +431,6 @@ export const replaceContextLine = (
   return joined(markdown, lines);
 };
 
-const MONTHS: readonly string[] = [
-  "jan",
-  "feb",
-  "mar",
-  "apr",
-  "may",
-  "jun",
-  "jul",
-  "aug",
-  "sep",
-  "oct",
-  "nov",
-  "dec",
-];
-const MONTH = String.raw`(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
-const ORDINAL = String.raw`(\d{1,2})(?:st|nd|rd|th)?`;
-/** `2026-10-18`. */
-const ISO_DAY = /\b(\d{4})-(\d{2})-(\d{2})\b/;
-/** `18 October`, `18th Oct 2026`. */
-const DAY_MONTH = new RegExp(String.raw`\b${ORDINAL}\s+${MONTH}(?:\s+(\d{4}))?\b`, "i");
-/** `October 18`, `Oct 18th, 2026`. */
-const MONTH_DAY = new RegExp(String.raw`\b${MONTH}\s+${ORDINAL}(?:,?\s+(\d{4}))?\b`, "i");
-
-/** A day of the calendar, with no time or time zone: `month` counts from 0, as `Date` does. */
-export type Day = { readonly year: number; readonly month: number; readonly day: number };
-
-const dayNumber = (day: Day) => Date.UTC(day.year, day.month, day.day) / 86_400_000;
-const isoOf = (day: Day) => new Date(dayNumber(day) * 86_400_000).toISOString().slice(0, 10);
-
-/** The day a date written without its year means: the next one from `today` on. */
-const nextOccurrence = (today: Day, month: number, day: number): Day => {
-  const thisYear = { year: today.year, month, day };
-  return dayNumber(thisYear) >= dayNumber(today) ? thisYear : { ...thisYear, year: today.year + 1 };
-};
-
-/** A real day of the calendar, or `undefined` for one such as 31 June. */
-const realDay = (day: Day): Day | undefined => {
-  const date = new Date(Date.UTC(day.year, day.month, day.day));
-  return date.getUTCMonth() === day.month && date.getUTCDate() === day.day ? day : undefined;
-};
-
-/** The day a plan names, when it names one: written as `2026-10-18`, `18 Oct` or `Oct 18th`. */
-const dayIn = (plan: string, today: Day): Day | undefined => {
-  const iso = ISO_DAY.exec(plan);
-  if (iso) return realDay({ year: Number(iso[1]), month: Number(iso[2]) - 1, day: Number(iso[3]) });
-  const dayMonth = DAY_MONTH.exec(plan);
-  const monthDay = MONTH_DAY.exec(plan);
-  const [day, monthName, year] = dayMonth
-    ? [dayMonth[1], dayMonth[2], dayMonth[3]]
-    : monthDay
-      ? [monthDay[2], monthDay[1], monthDay[3]]
-      : [];
-  if (day === undefined || monthName === undefined) return undefined;
-  const month = MONTHS.indexOf(monthName.toLowerCase().slice(0, 3));
-  if (month === -1) return undefined;
-  const named =
-    year === undefined
-      ? nextOccurrence(today, month, Number(day))
-      : { year: Number(year), month, day: Number(day) };
-  return realDay(named);
-};
-
-/** How many days on from today a plan's day can be and still be Next up (#300). */
-const DUE_WITHIN_DAYS = 7;
-
-/**
- * The plans that name a day from `today` to `DUE_WITHIN_DAYS` on, soonest first, each with its
- * day as `2026-10-18`, for a planning workspace's Next up (#300). A day written without its year
- * is the next one to come, so a plan whose day has gone isn't listed.
- */
-export const plansDue = (plans: readonly string[], today: Day) =>
-  plans
-    .flatMap((plan) => {
-      const day = dayIn(plan, today);
-      if (day === undefined) return [];
-      const away = dayNumber(day) - dayNumber(today);
-      return away >= 0 && away <= DUE_WITHIN_DAYS ? [{ plan, day }] : [];
-    })
-    .sort((a, b) => dayNumber(a.day) - dayNumber(b.day))
-    .map(({ plan, day }) => ({ plan, due: isoOf(day) }));
-
 /** The owner context as read (ADR 0010). */
 export type ReadOwnerContext = {
   readonly ownerContext: OwnerContext;
@@ -506,7 +440,7 @@ export type ReadOwnerContext = {
 
 /**
  * Reads the owner context's Markdown (see `scanOwner` for its parts). About me reads like a
- * context file (Facts, Plans and Ideas under it); How to answer me is one preference per line, by
+ * context file (Facts and Ideas under it); How to answer me is one preference per line, by
  * the same line rules. A first-level heading at the top is the title.
  */
 export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
@@ -516,7 +450,6 @@ export const parseOwnerContext = (markdown: string): ReadOwnerContext => {
     ownerContext: {
       intro: only("intro").join("\n").trim(),
       facts: texts("facts"),
-      plans: texts("plans"),
       ideas: texts("ideas"),
       answers: texts("answers"),
       characters: markdown.length,

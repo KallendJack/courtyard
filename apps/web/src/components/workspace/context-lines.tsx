@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 /**
  * One section of a context file or the owner context: its lines, or a note that there are none.
- * `line` shows each line, when it's more than its text (a plan with Grill this plan).
+ * `line` shows each line, when it's more than its text (a line with Fix).
  */
 export function ContextLines(props: {
   title: string;
@@ -32,12 +32,11 @@ export function ContextLines(props: {
 }
 
 /**
- * Facts, Plans and Ideas, each with what it means; `line` shows each line, when it's more than its
- * text (a plan with Grill this plan, any line with Fix).
+ * Facts and Ideas, each with what it means; `line` shows each line, when it's more than its text
+ * (any line with Fix). Plans went with projects (#603).
  */
-export function FactsPlansIdeas(props: {
+export function FactsAndIdeas(props: {
   facts: readonly string[];
-  plans: readonly string[];
   ideas: readonly string[];
   line?: (line: string, section: ContextSection) => ReactNode;
 }) {
@@ -47,12 +46,6 @@ export function FactsPlansIdeas(props: {
   return (
     <>
       <ContextLines title="Facts" hint="True now" lines={props.facts} line={shown("facts")} />
-      <ContextLines
-        title="Plans"
-        hint="Decided, not done"
-        lines={props.plans}
-        line={shown("plans")}
-      />
       <ContextLines
         title="Ideas"
         hint="Being considered"

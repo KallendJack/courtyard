@@ -6,6 +6,8 @@ import {
   ContextLine,
   ContextSection,
   OwnerSection,
+  SavedOwnerSection,
+  SavedSection,
   WorkspaceId,
 } from "./workspace.ts";
 
@@ -183,12 +185,6 @@ export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 export const AllowingAll = z.object({ until: z.iso.datetime(), task: z.boolean() });
 export type AllowingAll = z.infer<typeof AllowingAll>;
 
-/** Grill this plan: a new session grilling one of a workspace's plans, answered as Get to know is. */
-export const GrillRequest = GetToKnowRequest.extend({
-  plan: MessageWords.min(1, "Write something first"),
-});
-export type GrillRequest = z.infer<typeof GrillRequest>;
-
 export const SessionSummary = z.object({
   id: SessionId,
   workspaceId: WorkspaceId,
@@ -250,10 +246,10 @@ export type LinePlace = z.infer<typeof LinePlace>;
 export const PlacedLine = z.union([
   z.object({
     place: z.literal("workspace").default("workspace"),
-    section: ContextSection,
+    section: SavedSection,
     line: z.string(),
   }),
-  z.object({ place: z.literal("owner"), section: OwnerSection, line: z.string() }),
+  z.object({ place: z.literal("owner"), section: SavedOwnerSection, line: z.string() }),
 ]);
 export type PlacedLine = z.infer<typeof PlacedLine>;
 

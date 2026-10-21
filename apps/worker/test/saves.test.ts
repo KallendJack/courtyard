@@ -127,14 +127,14 @@ describe("a save during a turn", () => {
   it("changes a line named by its label: in place, or moved when its section changes", async () => {
     const { events } = await sessionSaving([
       { section: "facts", action: "change", label: "F1", text: "Single garage, 5.2 m deep." },
-      { section: "facts", action: "change", label: "P1", text: "Bought a second-hand rack." },
+      { section: "facts", action: "change", label: "I1", text: "Bought a cable machine." },
     ]);
 
     const file = await contextFile();
     expect(file).toContain(
-      "- Single garage, 5.2 m deep.\n- The ceiling is 2.3 m.\n- Bought a second-hand rack.\n",
+      "- Single garage, 5.2 m deep.\n- The ceiling is 2.3 m.\n- Bought a cable machine.\n",
     );
-    expect(file).not.toContain("Buy a second-hand rack.");
+    expect(file).not.toContain("A cable machine in the corner.");
     expect(savesIn(events).map((event) => event.save)).toEqual([
       {
         action: "change",
@@ -143,10 +143,21 @@ describe("a save during a turn", () => {
       },
       {
         action: "change",
-        saved: { place: "workspace", section: "facts", line: "Bought a second-hand rack." },
-        replaced: { place: "workspace", section: "plans", line: "Buy a second-hand rack." },
+        saved: { place: "workspace", section: "facts", line: "Bought a cable machine." },
+        replaced: { place: "workspace", section: "ideas", line: "A cable machine in the corner." },
       },
     ]);
+  });
+
+  it("can't save to Plans, which went with projects (#603): its lines have no labels", async () => {
+    const { events, replies } = await sessionSaving([
+      { section: "plans", action: "add", text: "Paint the floor." },
+      { section: "facts", action: "remove", label: "P1" },
+    ]);
+
+    expect(replies().map(({ ok }) => ok)).toEqual([false, false]);
+    expect(savesIn(events)).toEqual([]);
+    expect(await contextFile()).toBe(CONTEXT);
   });
 
   it("removes a line named by its label", async () => {
@@ -162,12 +173,12 @@ describe("a save during a turn", () => {
   it("starts a workspace's missing context file from the starter, then saves into it", async () => {
     await rm(contextPath());
 
-    await sessionSaving([{ section: "plans", action: "add", text: "Paint the floor." }]);
+    await sessionSaving([{ section: "ideas", action: "add", text: "Paint the floor." }]);
 
     const file = await contextFile();
     expect(file.startsWith("# garage-gym\n")).toBe(true);
-    expect(file).toContain("## Plans\n\n- Paint the floor.\n");
-    expect(file).toContain("## Ideas");
+    expect(file).toContain("## Ideas\n\n- Paint the floor.\n");
+    expect(file).not.toContain("## Plans");
   });
 
   it("stays when the turn is stopped afterwards", async () => {
@@ -187,16 +198,19 @@ describe("a save during a turn", () => {
 
 describe("a save the worker refuses", () => {
   it("is refused when its label is out of date, with the lines as they are now", async () => {
-    const byHand = CONTEXT.replace("Buy a second-hand rack.", "Buy a rack from the gym sale.");
+    const byHand = CONTEXT.replace(
+      "A cable machine in the corner.",
+      "A cable machine by the door.",
+    );
     const { events, replies } = await sessionSaving([
       () => writeFile(contextPath(), byHand),
-      { section: "facts", action: "change", label: "P1", text: "Bought a rack." },
+      { section: "facts", action: "change", label: "I1", text: "Bought a cable machine." },
     ]);
 
     const reply = replies()[0];
     expect(reply?.ok).toBe(false);
     expect(reply?.reply).toMatch(/changed since/i);
-    expect(reply?.reply).toContain("[P1] Buy a rack from the gym sale.");
+    expect(reply?.reply).toContain("[I1] A cable machine by the door.");
     expect(savesIn(events)).toEqual([]);
     expect(await contextFile()).toBe(byHand);
   });
@@ -266,12 +280,12 @@ describe("Undo", () => {
 
   it("puts a changed line back as it was, where it was", async () => {
     const { request, session, events } = await sessionSaving([
-      { section: "facts", action: "change", label: "P1", text: "Bought a second-hand rack." },
+      { section: "facts", action: "change", label: "I1", text: "Bought a cable machine." },
     ]);
 
     await undo(request, session.id, onlySave(events).seq);
 
-    expect(await contextFile()).toContain("## Plans\n\n- Buy a second-hand rack.\n");
+    expect(await contextFile()).toContain("## Ideas\n\n- A cable machine in the corner.\n");
     expect(await contextFile()).not.toContain("Bought");
   });
 
@@ -320,7 +334,7 @@ describe("Edit", () => {
 
     const edited = await edit(request, session.id, save, {
       place: "workspace",
-      section: "plans",
+      section: "ideas",
       line: "Padel lessons, Tuesdays 7pm until Christmas.",
     });
 
@@ -328,7 +342,7 @@ describe("Edit", () => {
     const file = await contextFile();
     expect(file).not.toContain("Padel lessons on Tuesdays.");
     expect(file).toContain(
-      "- Buy a second-hand rack.\n- Padel lessons, Tuesdays 7pm until Christmas.\n",
+      "- A cable machine in the corner.\n- Padel lessons, Tuesdays 7pm until Christmas.\n",
     );
     expect((await latestChange())?.trailers[0]).toBe("Courtyard-Change: edit");
     const recorded = await next(request, {
@@ -340,7 +354,7 @@ describe("Edit", () => {
       save,
       now: {
         place: "workspace",
-        section: "plans",
+        section: "ideas",
         line: "Padel lessons, Tuesdays 7pm until Christmas.",
       },
     });
@@ -394,8 +408,6 @@ const OWNER = [
   "",
   "- Lives in Leeds.",
   "",
-  "### Plans",
-  "",
   "### Ideas",
   "",
   "## How to answer me",
@@ -415,7 +427,7 @@ describe("a save to the owner context", () => {
       { action: "add", place: "owner", section: "facts", text: "Has a bad left knee." },
     ]);
 
-    expect(await ownerFile()).toContain("- Lives in Leeds.\n- Has a bad left knee.\n\n### Plans");
+    expect(await ownerFile()).toContain("- Lives in Leeds.\n- Has a bad left knee.\n\n### Ideas");
     expect(await contextFile()).toBe(CONTEXT);
     expect(onlySave(events).save).toEqual({
       action: "add",
@@ -453,12 +465,13 @@ describe("a save to the owner context", () => {
     await rm(ownerPath());
 
     await sessionSaving([
-      { action: "add", place: "owner", section: "plans", text: "Moving house in spring." },
+      { action: "add", place: "owner", section: "ideas", text: "Moving house one day." },
     ]);
 
     const file = await ownerFile();
     expect(file.startsWith("# Owner context\n")).toBe(true);
-    expect(file).toContain("### Plans\n\n- Moving house in spring.\n");
+    expect(file).toContain("### Ideas\n\n- Moving house one day.\n");
+    expect(file).not.toContain("### Plans");
     expect(file).toContain("## How to answer me");
   });
 

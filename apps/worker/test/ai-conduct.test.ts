@@ -340,20 +340,26 @@ describe("what every turn tells a model", () => {
     expect(framing.instructions).not.toMatch(/read and search/i);
   });
 
-  it("gives the context file, and says how to read its Facts, Plans and Ideas", async () => {
-    await contextFile("# Garage gym\n\n## Facts\n- Single garage.\n\n## Plans\n- A rack.\n");
+  it("gives the context file, and says how to read its Facts and Ideas, and Plans from before projects", async () => {
+    await contextFile(
+      "# Garage gym\n\n## Facts\n- Single garage.\n\n## Plans\n- A rack.\n\n## Ideas\n- Mats.\n",
+    );
 
     const { framing } = await firstTurn();
 
-    // Each line with its label, so a save can name it (ADR 0013).
+    // Each line with its label, so a save can name it (ADR 0013); Plans went with projects (#603),
+    // so its lines are given as written, with none.
     expect(framing.instructions).toContain("- [F1] Single garage.");
-    expect(framing.instructions).toContain("- [P1] A rack.");
+    expect(framing.instructions).toContain("## Plans\n- A rack.\n");
+    expect(framing.instructions).toContain("- [I1] Mats.");
     expect(framing.instructions).toMatch(/Facts are true now/);
-    expect(framing.instructions).toMatch(/Plans are decided but not done/);
     expect(framing.instructions).toMatch(/Ideas are only being considered/);
-    // A plan described as done is the mistake Courtyard exists to prevent (ADR 0005).
     expect(framing.instructions).toMatch(
-      /never describe a plan or an idea as something that has already happened/i,
+      /Lines under a Plans heading are from before projects: plans the owner had decided then, not done/,
+    );
+    // An idea described as done is the mistake Courtyard exists to prevent (ADR 0005).
+    expect(framing.instructions).toMatch(
+      /never describe an idea as something that has already happened/i,
     );
   });
 
@@ -862,7 +868,9 @@ describe("the owner context every turn carries (ADR 0010)", () => {
     expect(instructions).toContain("<owner_context>");
     // Each line with its label, which can't clash with the context file's (ADR 0013).
     expect(instructions).toContain("- [MF1] Lives in the UK.");
-    expect(instructions).toContain("- [MP1] Moving house in spring.");
+    // Plans went with projects (#603): a line left there is given as written.
+    expect(instructions).toContain("### Plans\n- Moving house in spring.");
+    expect(instructions).not.toContain("[MP1]");
     expect(instructions).toContain("- [MI1] An allotment.");
     expect(instructions).toContain("- [A1] Metric units and pounds.");
     expect(instructions).toContain("- [F1] Single garage.");
@@ -971,7 +979,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
 
     const instructions = saver.framings[0]?.instructions ?? "";
     expect(instructions).toMatch(
-      /About me \(place "owner", section facts, plans or ideas\), when it's true across the owner's life or matters to more than one workspace/,
+      /About me \(place "owner", section facts or ideas\), when it's true across the owner's life or matters to more than one workspace/,
     );
     expect(instructions).toMatch(
       /How to answer me \(place "owner", section answers\), when it's a preference about answers that the owner states as lasting/,
@@ -1010,7 +1018,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     const saver = savingProvider([
       [
         { section: "facts", action: "add", text: "Padel lessons on Tuesdays." },
-        { section: "plans", action: "add", text: "Gym on Monday and Thursday." },
+        { section: "ideas", action: "add", text: "Gym on Monday and Thursday." },
         { section: "ideas", action: "add", text: "A rowing machine." },
         { section: "answers", action: "add", text: "Distances in km." },
       ],
@@ -1021,7 +1029,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
     await postJson(request, `/api/sessions/${sessionId}/saves/${padel}/undo`, {});
     await postJson(request, `/api/sessions/${sessionId}/saves/${gym}/edit`, {
       place: "workspace",
-      section: "plans",
+      section: "facts",
       line: "Gym on Monday and Thursday evenings.",
     });
 
@@ -1041,7 +1049,7 @@ describe("saving context as a model answers (ADR 0013)", () => {
       '- Added to Facts: "Padel lessons on Tuesdays." (the owner undid this)',
     );
     expect(message).toContain(
-      '- Added to Plans: "Gym on Monday and Thursday." (the owner edited it to Plans: "Gym on Monday and Thursday evenings.")',
+      '- Added to Ideas: "Gym on Monday and Thursday." (the owner edited it to Facts: "Gym on Monday and Thursday evenings.")',
     );
     expect(message).toContain('- Added to Ideas: "A rowing machine." (kept)');
     expect(message).toContain(

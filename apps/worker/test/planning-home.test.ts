@@ -59,7 +59,7 @@ describe("a planning workspace's Home (#603)", () => {
     await thing("helmet", "name: Helmet", "status: have");
     const request = await asOwner(testWorker({ root }));
 
-    expect(await home(request)).toEqual({ subject: null, projects: [] });
+    expect(await home(request)).toEqual({ subject: null, projects: [], review: null });
   });
 
   it("draws the Thing whose parts fit the mountain bike, each part on its place by name, an upcoming one with it, and lists the rest under it", async () => {

@@ -223,14 +223,16 @@ test("+ New opens the box to start another session", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(2);
 });
 
-test("What Courtyard knows holds the facts, plans and ideas, and a line is fixed by starting a session on it", async ({
+test("What Courtyard knows holds the facts and ideas, and a line is fixed by starting a session on it", async ({
   page,
 }) => {
   await page.goto("/workspaces/garage-gym");
   await openWhatCourtyardKnows(page);
 
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("up-and-over door");
-  await expect(page.getByRole("region", { name: "Plans" })).toContainText("squat rack");
+  // Plans went with projects (#603): a Plans section from before is kept as written, with no Fix.
+  await expect(page.getByRole("region", { name: "Plans" })).toHaveCount(0);
+  await expect(page.getByText("A squat rack on the left wall.")).toBeVisible();
   await expect(page.getByRole("region", { name: "Ideas" })).toContainText("Rubber flooring");
   await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
 

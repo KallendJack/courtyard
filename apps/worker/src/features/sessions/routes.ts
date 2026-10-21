@@ -7,7 +7,6 @@ import {
   type DocumentChanged,
   FirstMessage,
   GetToKnowRequest,
-  GrillRequest,
   NewMessage,
   type Overflow,
   type ProviderList,
@@ -41,12 +40,8 @@ import { thingError } from "../things/routes.ts";
 import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
 import type { NoteAct, SessionError, Sessions } from "./index.ts";
 
-/**
- * The house skills a button starts (docs/ai-conduct.md): Grill this plan, and Get to know a
- * workspace or the owner.
- */
+/** The house skills a button starts (docs/ai-conduct.md): Get to know a workspace or the owner. */
 const HOUSE_SKILLS = {
-  grilling: SkillName.parse("grilling"),
   getToKnow: SkillName.parse("get-to-know"),
   getToKnowMe: SkillName.parse("get-to-know-me"),
 };
@@ -342,7 +337,7 @@ export const sessionRoutes = (options: {
 
   /**
    * Starts a session from a button, with a first message the owner didn't type (Get to know's
-   * starter, a plan to grill) and the skill it starts, titled by that message's first line. It's
+   * starter) and the skill it starts, titled by that message's first line. It's
    * answered by the model named, or else the first that saves to context and isn't at its limit.
    */
   const startSaving = async (
@@ -389,31 +384,6 @@ export const sessionRoutes = (options: {
     }
     return workspace;
   };
-
-  // Grill this plan (docs/ai-conduct.md, Grilling): one of the workspace's plans, as the first
-  // message of a session that starts the Grilling skill.
-  routes.post("/workspaces/:id/grill", async (c) => {
-    const workspace = await planningWorkspace(c, {
-      id: c.req.param("id"),
-      cannot: "its plans can't be grilled",
-    });
-    if (!workspace.ok) return workspace.error;
-    const { summary, contextFile } = workspace.value;
-    const body = await readBody(c, GrillRequest);
-    if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const { plan, ...rest } = body.value;
-    if (!contextFile?.plans.includes(plan)) {
-      return apiError(c, {
-        status: 409,
-        error:
-          "That plan isn't in the context file any more. Reload the page to see it as it is now.",
-      });
-    }
-    return startSaving(c, {
-      workspaceId: summary.id,
-      message: { text: plan, skill: HOUSE_SKILLS.grilling, ...rest },
-    });
-  });
 
   routes.post("/workspaces/:id/get-to-know", async (c) => {
     const workspace = await planningWorkspace(c, {

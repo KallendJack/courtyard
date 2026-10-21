@@ -19,8 +19,8 @@ Claude, and every page that has the session open gets the answer as it's written
 - `GET /api/workspaces/:id/sessions`, `POST` the same with a first message: a workspace's sessions, and a new one;
   a first message naming a `project` (#603) starts one that belongs to that project.
 - `POST /api/workspaces/:id/seen`: Mark all read (#345).
-- `POST /api/workspaces/:id/grill`, `…/get-to-know`, `POST /api/owner-context/get-to-know`: Grill this plan, and Get
-  to know (a session started with its house skill).
+- `POST /api/workspaces/:id/get-to-know`, `POST /api/owner-context/get-to-know`: Get to know (a session started with
+  its house skill).
 - `GET`, `PATCH` (rename), `DELETE /api/sessions/:id`; `GET /api/sessions/:id/events?after=N`: the event stream.
 - `POST /api/sessions/:id/messages`: the next message, JSON or a multipart form with its files.
 - `DELETE /api/sessions/:id/queued/:queued`: remove a queued message.

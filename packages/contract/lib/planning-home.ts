@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { DocumentSlug } from "./documents.ts";
 import { FloorPlan } from "./floor-plan.ts";
+import { MoveReview } from "./move-review.ts";
 import { Project } from "./projects.ts";
 import { ThingSlug } from "./things.ts";
 
-// A planning workspace's Home (#208, #603): its main subject, then its projects, and nothing else:
+// A planning workspace's Home (#208, #603): its main subject, then its projects (or, once, its move
+// review), and nothing else:
 // no chat. The subject is general, filled from any workspace's data, never made for one workspace:
 // a Thing drawn as its kind of thing, or a room's floor plan.
 
@@ -69,5 +71,10 @@ export const PlanningHome = z.object({
    * its steps and decisions, which its page shows.
    */
   projects: z.array(Project),
+  /**
+   * Its move review (#603), while it waits on the owner: shown in place of the subject and the
+   * projects until it's done.
+   */
+  review: MoveReview.nullable(),
 });
 export type PlanningHome = z.infer<typeof PlanningHome>;

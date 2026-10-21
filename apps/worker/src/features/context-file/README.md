@@ -12,11 +12,10 @@ a model names a line to change.
 
 ## API
 
-None of its own: `duePlans` is on `GET /api/workspaces/:id` (in `worker.ts`).
+None of its own.
 
 ## How it works
 
-- Puts line labels on a file for a model.
-- Picks out the plans that name a day from today to 7 days on (`plansDue`: `2026-10-18`, `18 Oct` or `Oct 18th`, a
-  day without its year being the next to come), which a planning workspace's answer gives as `duePlans` for its
-  Home's Next up (#300), today being the worker's clock's.
+- Puts line labels on a file for a model: Facts and Ideas, and How to answer me in the owner context.
+- A Plans section, from before projects (#603), is kept as written with no labels, so models read it but can't save
+  there; `plansLines` gives its lines to the move review, and a save recorded in it still undoes.

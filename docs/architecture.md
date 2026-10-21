@@ -106,6 +106,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
 - [`projects/`](../apps/worker/src/features/projects/README.md): a planning workspace's projects (#603): steps,
   decisions and history, a file each, kept by the model's project tool; a session started from one belongs to it.
+- [`move-review/`](../apps/worker/src/features/move-review/README.md): once, a planning workspace's moves into
+  what it keeps now (#603), written by a model, kept in the data folder, each ticked move one change with Undo.
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
   name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
@@ -219,6 +221,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`projects/`](../apps/web/src/features/projects/README.md): Home's Projects, a project's page and Carry on
+    (#603).
+  - [`move-review/`](../apps/web/src/features/move-review/README.md): the move review on Home, its moves ticked
     (#603).
   - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
     name (#256).

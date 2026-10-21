@@ -75,7 +75,7 @@ end of its group. The owner arranges it by holding a workspace on a tablet's rai
 _Avoid_: sort order, ranking, position, pinning
 
 **Context file**:
-A planning workspace's `CONTEXT.md`: its key facts, plans and ideas, which every model reads first. A code
+A planning workspace's `CONTEXT.md`: its key facts and ideas, which every model reads first. A code
 workspace has none (#301): what it knows lives in its repository.
 _Avoid_: system prompt, memory, notes
 
@@ -97,7 +97,8 @@ A line in a context file's Facts section: something true now.
 _Avoid_: truth, state
 
 **Plan**:
-A line in a context file's Plans section: something decided but not done yet.
+Something the owner has decided to do: a project's step (#603, ADR 0032). Before projects it was a line in a context
+file's Plans section, which went: one still in a file is kept as written, with no label, for the **move review**.
 _Avoid_: decision, todo, goal
 
 **Idea**:
@@ -106,7 +107,7 @@ _Avoid_: maybe, wish
 
 **Save**:
 A model adding, changing or removing one line of a context file or the owner context during a turn, through the
-worker. It names its section (fact, plan or idea, or a preference) and is committed at once; the owner undoes or
+worker. It names its section (fact or idea, or a preference) and is committed at once; the owner undoes or
 edits it afterwards (ADR 0013).
 _Avoid_: suggestion (that was ADR 0005's tick-first way), memory, update, write
 
@@ -192,7 +193,7 @@ _Avoid_: shop for, search, compare (that's a table)
 What the owner carries on over days and sessions in a planning workspace (#603, ADR 0032), such as turning the garage
 into an office: a file with its goal, its **steps**, its **decisions** and a dated history, kept by a model's project
 tool with Undo. Its first step that isn't decided is **what's next**, which Home lists with **Carry on**.
-_Avoid_: plan (that's a context line), task, goal (that's the line saying what it's for), todo list
+_Avoid_: task, goal (that's the line saying what it's for), todo list
 
 **Step**:
 One thing to do in a project, marked by what it asks of the owner: **you can do this** (with what it takes),
@@ -256,9 +257,8 @@ projects, or one quiet line; an empty workspace only its name, one line and the 
 _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:
-The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts, plans
-and ideas (each line with Fix, which starts a session on it, and each plan with Grill this plan), Recent changes
-and its skills.
+The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts and
+ideas (each line with Fix, which starts a session on it), Recent changes and its skills.
 _Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:
@@ -326,8 +326,8 @@ a session with the grilling skill on that issue, which ends with it marked ready
 with a small Build. A grill claims nothing and takes no builder's place. A ready issue blocked by an open
 one (GitHub's blocked by) gets no Build until that closes (#377). Under the cards, one faint **Then** line names the
 next few titles, and **Whole roadmap · N more** opens the **Roadmap**. A planning workspace's (#300): the session to
-pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the
-next 7 days, soonest first; with neither, it keeps its place with one quiet line, "Nothing to pick up".
+pick up again (one waiting on the owner, else the last used in the past week); with none, it keeps its place with
+one quiet line, "Nothing to pick up". Its plans due went with the Plans section (#603).
 _Avoid_: backlog, queue, roadmap (that's the milestones)
 
 **Connections line**:
@@ -428,10 +428,11 @@ A house skill: a model stress-tests a plan or an idea one question at a time, re
 each decision as the owner agrees it, and ends with a wrap-up of the decisions and the questions still open.
 _Avoid_: interview, review, critique
 
-**Grill this plan**:
-The flame button beside each Plan line on a planning workspace's page. It starts a new session grilling that plan:
-the first message is the plan line with the Grilling tag, and the session is titled after it.
-_Avoid_: challenge, stress test (as a button name)
+**Move review**:
+Once, a planning workspace's moves into what it keeps now (#603, ADR 0032): its guides to projects or one screen, its
+Plans and Ideas lines to projects' steps, a done guide to the archive, wanted Things onto their parts as upcoming.
+A model proposes them, Home shows them ticked, and only the ticked ones move, each with Undo.
+_Avoid_: migration, tidy (that went with #600), clean-up
 
 **Continue**:
 Carrying on a turn a restart cut off (an Update, a crash, the PC restarting): a new turn on the same model, told it was

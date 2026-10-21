@@ -51,7 +51,7 @@ export function WorkspaceMenu(props: {
                 {
                   icon: <BookOpen />,
                   name: "What Courtyard knows",
-                  note: "Facts, plans, ideas and skills",
+                  note: "Facts, ideas and skills",
                   onPick: props.onKnows,
                 },
               ]),

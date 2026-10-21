@@ -90,7 +90,7 @@ test.describe("on the unfolded Fold", () => {
     }
     await more.click();
     await expect(page.getByRole("dialog", { name: "Garage gym" }).getByRole("button")).toHaveText([
-      "What Courtyard knowsFacts, plans, ideas and skills",
+      "What Courtyard knowsFacts, ideas and skills",
       "Rename",
       "Change icon",
       "Notify meWhich notifications you get",

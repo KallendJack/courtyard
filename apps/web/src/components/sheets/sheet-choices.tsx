@@ -14,7 +14,7 @@ import { nameOf, usable, whyUnusable } from "../workspace/skill-list.tsx";
  */
 
 /**
- * A skill's mark, as the skill gives it: the flame (Grilling, as Grill this plan has), a person
+ * A skill's mark, as the skill gives it: the flame (Grilling), a person
  * (Get to know), else the book every skill has elsewhere.
  */
 function SkillMark(props: { icon: SkillIcon | undefined }) {

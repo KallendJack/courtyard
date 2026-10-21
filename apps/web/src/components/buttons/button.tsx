@@ -203,7 +203,7 @@ const ICON_LOOKS = {
   pressed: "bg-muted text-foreground",
   /** Ringed in violet, while the menu it opened is open over the page (a workspace's ⋯). */
   open: "bg-muted text-foreground ring-stroke ring-primary-text",
-  /** On a disc in violet: an action beside each line of a list (Grill this plan). */
+  /** On a disc in violet: an action beside each line of a list (Fix). */
   filled: "bg-background text-primary-text hover:bg-accent",
   /** In the colour of the pill it's inside (a skill's tag). */
   inPill: "text-current hover:bg-primary/10",

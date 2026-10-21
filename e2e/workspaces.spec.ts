@@ -15,9 +15,7 @@ test("the owner sees every workspace and switches between them in one tap", asyn
   await expect(page.getByRole("region", { name: "Facts" })).toContainText(
     "The garage is single, with an up-and-over door.",
   );
-  await expect(page.getByRole("region", { name: "Plans" })).toContainText(
-    "A squat rack on the left wall.",
-  );
+  await expect(page.getByRole("region", { name: "Ideas" })).toContainText("Rubber flooring.");
 
   await switcher.getByRole("link", { name: "office" }).click();
   await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();

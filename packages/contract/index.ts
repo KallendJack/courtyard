@@ -146,6 +146,15 @@ export {
   setupLines,
 } from "./lib/matt-setup.ts";
 export {
+  MOVE_STEPS_MAX,
+  MOVES_MAX,
+  Move,
+  MoveReview,
+  MoveShown,
+  MovesMade,
+  MoveTicks,
+} from "./lib/move-review.ts";
+export {
   NotificationSubscription,
   NotificationsOff,
   NotificationsStatus,
@@ -226,7 +235,6 @@ export {
   EffortInfo,
   FirstMessage,
   GetToKnowRequest,
-  GrillRequest,
   LinePlace,
   MAX_MESSAGE_LENGTH,
   ModelDefault,
@@ -348,7 +356,6 @@ export {
   ContextFile,
   ContextLine,
   ContextSection,
-  DuePlan,
   hasLines,
   NewWorkspace,
   OWNER_CONTEXT_LONG_CHARACTERS,
@@ -356,6 +363,8 @@ export {
   OwnerContextDetail,
   OwnerContextShared,
   OwnerSection,
+  SavedOwnerSection,
+  SavedSection,
   WORKSPACE_NAME_MAX_LENGTH,
   WorkspaceChange,
   WorkspaceDetail,

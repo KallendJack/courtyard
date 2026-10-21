@@ -236,9 +236,9 @@ export type Scenario = {
   readonly workspace: string;
   /** The context file's intro line, what the workspace is for (What's it for?), when it has one. */
   readonly intro?: string;
-  readonly context: { facts?: string[]; plans?: string[]; ideas?: string[] };
+  readonly context: { facts?: string[]; ideas?: string[] };
   /** A starting owner context, when there is one. */
-  readonly owner?: { facts?: string[]; plans?: string[]; ideas?: string[]; answers?: string[] };
+  readonly owner?: { facts?: string[]; ideas?: string[]; answers?: string[] };
   /** A code workspace, whose models save only to How to answer me; planning unless it says. */
   readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
@@ -266,12 +266,30 @@ const PACKING_LIST: ScenarioSkill = {
 /** A grilling's answer recommends an answer to its question (docs/ai-conduct.md, Grilling). */
 const RECOMMENDS: Words = [["recommend", "suggest", "i'd ", "i’d ", "i would", "my pick"]];
 
-/** The garage gym a grilling questions: a plan to grill, and facts it shouldn't ask about. */
-const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
+/**
+ * The garage gym a grilling questions: a project whose steps are the plan to grill (#603), and
+ * facts it shouldn't ask about.
+ */
+const GRILLED_GYM: Pick<Scenario, "workspace" | "context" | "files"> = {
   workspace: "Garage gym",
-  context: {
-    facts: ["The garage is 5 m by 3 m", "The ceiling is 2.4 m high"],
-    plans: ["Put the squat rack on the left wall", "Buy a second-hand barbell by November"],
+  context: { facts: ["The garage is 5 m by 3 m", "The ceiling is 2.4 m high"] },
+  files: {
+    "projects/set-up-the-garage-gym.md": [
+      "---",
+      "name: Set up the garage gym",
+      "status: active",
+      "---",
+      "",
+      "## Steps",
+      "",
+      "- [you can do this] Put the squat rack on the left wall",
+      "- [you can do this] Buy a second-hand barbell by November",
+      "",
+      "## History",
+      "",
+      "- 2026-10-12: Started",
+      "",
+    ].join("\n"),
   },
 };
 
@@ -279,8 +297,11 @@ const GRILLED_GYM: Pick<Scenario, "workspace" | "context"> = {
 const SEARCHING_GYM: Pick<Scenario, "workspace" | "context"> = {
   workspace: "Garage gym",
   context: {
-    facts: ["The garage is 5 m by 3 m", "Trains three mornings a week"],
-    plans: ["Buy a 20 kg Olympic barbell this month"],
+    facts: [
+      "The garage is 5 m by 3 m",
+      "Trains three mornings a week",
+      "Is buying a 20 kg Olympic barbell this month",
+    ],
   },
 };
 
@@ -564,7 +585,7 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Did a few test laps today and settled the tyres: 19 psi front and 21 rear from now on. The old 22/24 felt skittish on the roots.",
-        expect: [{ action: "add", section: ["facts", "plans"], words: ["19", "21"] }],
+        expect: [{ action: "add", section: "facts", words: ["19", "21"] }],
         // Only the note keeps it now, as a decision the owner never had saved would be.
         undoSaves: true,
       },
@@ -630,7 +651,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "grill-a-plan",
-    rule: "Grill this plan asks one question with a recommendation and suggested replies, saves an agreed decision to the plan's line, and its wrap-up saves nothing",
+    rule: "Grilling a project's plan asks one question with a recommendation and suggested replies, records an agreed decision on the project (#603), and its wrap-up saves nothing",
     ...GRILLED_GYM,
     turns: [
       {
@@ -643,14 +664,8 @@ export const SCENARIOS: readonly Scenario[] = [
       },
       {
         say: "I've decided: the rack goes on the back wall instead. I haven't decided yet whether to bolt it to the floor.",
-        expect: [
-          {
-            action: "change",
-            was: "Put the squat rack on the left wall",
-            section: "plans",
-            words: ["back wall"],
-          },
-        ],
+        expect: [],
+        projects: [{ action: "change", name: ["gym"], words: ["back wall"] }],
       },
       {
         say: "That's enough for now, wrap it up.",
@@ -691,14 +706,15 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
-    name: "plan-is-a-plan",
-    rule: "a plan is saved as a plan, not a fact",
+    name: "plan-is-no-line",
+    rule: "what the owner means to do is never a context line, and no project is started unasked (#603)",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
       {
         say: "I'm going to put rubber flooring down across the whole garage. How thick should it be for deadlifts?",
-        expect: [{ action: "add", section: "plans", words: [["rubber", "floor"]] }],
+        expect: [],
+        projects: [],
       },
     ],
   },
@@ -715,8 +731,8 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
-    name: "plan-or-idea-asks",
-    rule: "unclear between plan and idea gets a question, then a save once the owner says",
+    name: "decided-or-idea-asks",
+    rule: "unclear between decided and an idea gets a question, then a save as a fact once the owner says it's decided (#603)",
     workspace: "House",
     context: { facts: ["The hallway is painted magnolia"] },
     turns: [
@@ -727,35 +743,44 @@ export const SCENARIOS: readonly Scenario[] = [
       },
       {
         say: "It's decided, I'm doing it.",
-        expect: [{ action: "add", section: "plans", words: ["green"] }],
+        expect: [{ action: "add", section: "facts", words: ["green"] }],
       },
     ],
   },
   {
-    name: "done-plan-becomes-fact",
-    rule: '"I\'ve done it" changes the plan into a fact, by label',
+    name: "done-step-leaves-project",
+    rule: "\"I've done it\" marks the project's step done, not a context line (#603)",
     workspace: "Garage gym",
-    context: {
-      facts: ["The garage is 5 m by 3 m"],
-      plans: ["Fit a pull-up bar on the back wall"],
+    context: { facts: ["The garage is 5 m by 3 m"] },
+    files: {
+      "projects/set-up-the-garage-gym.md": [
+        "---",
+        "name: Set up the garage gym",
+        "status: active",
+        "---",
+        "",
+        "## Steps",
+        "",
+        "- [you can do this] Fit a pull-up bar on the back wall",
+        "- [you can do this] Lay rubber mats",
+        "",
+        "## History",
+        "",
+        "- 2026-10-12: Started",
+        "",
+      ].join("\n"),
     },
     turns: [
       {
         say: "Finished fitting the pull-up bar on the back wall yesterday! What should a first pull-up programme look like?",
-        expect: [
-          {
-            action: "change",
-            was: "Fit a pull-up bar on the back wall",
-            section: "facts",
-            words: ["pull-up"],
-          },
-        ],
+        expect: [],
+        projects: [{ action: "change", name: ["gym"], words: ["done:", "pull-up"] }],
       },
     ],
   },
   {
-    name: "idea-becomes-plan",
-    rule: "an idea the owner decides on changes into a plan, by label",
+    name: "idea-becomes-fact",
+    rule: "an idea the owner decides on changes into a fact, by label (#603)",
     workspace: "Allotment",
     context: {
       facts: ["The plot is a half plot with four raised beds"],
@@ -768,7 +793,7 @@ export const SCENARIOS: readonly Scenario[] = [
           {
             action: "change",
             was: "Put a small greenhouse at the back of the plot",
-            section: "plans",
+            section: "facts",
             words: ["greenhouse"],
           },
         ],
@@ -844,14 +869,14 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "suggestion-agreed",
-    rule: "a suggestion the owner agrees to is saved",
+    rule: "a suggestion the owner agrees to do isn't saved as a line: what they mean to do is a project's (#603)",
     workspace: "House",
     context: { facts: ["The bathroom has no window", "The bathroom extractor fan is really loud"] },
     turns: [
       { say: "What could I do about the noisy extractor fan?", expect: [] },
       {
         say: "Good shout on cleaning it first. I'll do that this weekend.",
-        expect: [{ action: "add", section: "plans", words: ["clean"] }],
+        expect: [],
       },
     ],
   },
@@ -902,7 +927,7 @@ export const SCENARIOS: readonly Scenario[] = [
     turns: [
       {
         say: "Got a quote for a new boiler: £2,400 fitted, valid until the end of November. Is that a fair price?",
-        expect: [{ action: "add", section: ["facts", "plans"], words: [["2,400", "2400"], "nov"] }],
+        expect: [{ action: "add", section: "facts", words: [["2,400", "2400"], "nov"] }],
       },
     ],
   },
@@ -943,14 +968,14 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "two-things-at-once",
-    rule: "a decision and an idea in one message become a plan and an idea",
+    rule: "a decision and an idea in one message become a fact and an idea",
     workspace: "Running",
     context: { facts: ["Runs about 25 km a week"] },
     turns: [
       {
         say: "I've entered a half marathon in April, it's happening! And maybe one day I'd like to try an ultra.",
         expect: [
-          { action: "add", section: ["plans", "facts"], words: ["half"] },
+          { action: "add", section: "facts", words: ["half"] },
           { action: "add", section: "ideas", words: ["ultra"] },
         ],
       },
@@ -1105,7 +1130,7 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         // Whole on its own, whatever was asked: "About £100 a year" left Claude asking what for.
         say: "We spend about £100 a year on the plot, all in.",
-        expect: [{ action: "add", section: ["facts", "plans"], words: ["100"] }],
+        expect: [{ action: "add", section: "facts", words: ["100"] }],
         questions: { atLeast: 0, atMost: 0 },
         suggests: false,
       },
@@ -1176,7 +1201,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "skill-fits-a-request",
     rule: "a plain-words request that fits a skill's description loads it",
     workspace: "Camping",
-    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    context: { facts: ["Is camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
     skills: [PACKING_LIST],
     turns: [
       {
@@ -1189,8 +1214,7 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     name: "skill-house-grilling",
     rule: "a request to stress-test a plan loads the house Grilling",
-    workspace: "Garage gym",
-    context: { plans: ["Put the squat rack against the back wall"] },
+    ...GRILLED_GYM,
     skills: [PACKING_LIST],
     turns: [
       {
@@ -1204,7 +1228,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "skill-unrelated-question",
     rule: "an unrelated question loads no skill",
     workspace: "Camping",
-    context: { plans: ["Camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
+    context: { facts: ["Is camping in the Lake District, 14-16 Nov 2026, two nights in the tent"] },
     skills: [PACKING_LIST],
     turns: [
       {
@@ -1274,7 +1298,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "replies-which-day",
     rule: "a question with a few likely answers comes with two or three suggested replies",
     workspace: "Running",
-    context: { plans: ["A long run once a week, building up to a half marathon in Apr 2027"] },
+    context: { facts: ["Does a long run once a week, building up to a half marathon in Apr 2027"] },
     turns: [
       {
         say: "Help me pick a day for the weekly long run. Ask me first which days I'm free.",
@@ -1288,7 +1312,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "replies-check-a-plan",
     rule: "checking a plan one question at a time suggests replies to the question",
     workspace: "Garden",
-    context: { plans: ["Paint the shed this weekend"] },
+    context: { facts: ["Is painting the shed this weekend"] },
     turns: [
       {
         say: "Check my plan to paint the shed with me, one question at a time.",
@@ -1315,7 +1339,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "replies-none-for-an-open-question",
     rule: "a question only the owner can answer in their own words comes with no suggested replies",
     workspace: "Family",
-    context: { plans: ["Give a short toast at my sister Amy's wedding on 12 Dec 2026"] },
+    context: { facts: ["Is giving a short toast at their sister Amy's wedding on 12 Dec 2026"] },
     turns: [
       {
         say: "Help me write a short toast for Amy's wedding. First, ask me for a favourite memory of her.",
@@ -1330,8 +1354,11 @@ export const SCENARIOS: readonly Scenario[] = [
     rule: "a model offers to save a longer answer as a document, but saves it only once the owner asks",
     workspace: "Padel",
     context: {
-      facts: ["Plays padel on Tuesdays and Saturdays", "Has a weak left knee"],
-      plans: ["Play the club tournament on 14 November"],
+      facts: [
+        "Plays padel on Tuesdays and Saturdays",
+        "Has a weak left knee",
+        "Is playing the club tournament on 14 November",
+      ],
     },
     turns: [
       {
@@ -1507,13 +1534,12 @@ const section = (heading: string, lines: readonly string[] = []) => [
 
 /** A starting context file, as the owner would have written it. */
 export const contextFileFor = (scenario: Scenario) => {
-  const { facts, plans, ideas } = scenario.context;
+  const { facts, ideas } = scenario.context;
   return [
     `# ${scenario.workspace}`,
     "",
     ...(scenario.intro === undefined ? [] : [scenario.intro, ""]),
     ...section("## Facts", facts),
-    ...section("## Plans", plans),
     ...section("## Ideas", ideas),
   ].join("\n");
 };
@@ -1521,14 +1547,13 @@ export const contextFileFor = (scenario: Scenario) => {
 /** A starting owner context, as the owner would have written it, or `undefined` for none. */
 export const ownerContextFor = (scenario: Scenario) => {
   if (scenario.owner === undefined) return undefined;
-  const { facts, plans, ideas, answers } = scenario.owner;
+  const { facts, ideas, answers } = scenario.owner;
   return [
     "# Owner context",
     "",
     "## About me",
     "",
     ...section("### Facts", facts),
-    ...section("### Plans", plans),
     ...section("### Ideas", ideas),
     ...section("## How to answer me", answers),
   ].join("\n");

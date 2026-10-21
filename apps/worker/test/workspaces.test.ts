@@ -124,7 +124,7 @@ const openWorkspace = async (id: string) => {
 };
 
 describe("opening a workspace", () => {
-  it("reads its context file into facts, plans and ideas, keeping the text above them", async () => {
+  it("reads its context file into facts and ideas, keeping the text above them and Plans as written", async () => {
     await workspace("garage-gym", {
       "CONTEXT.md": [
         "# Garage gym",
@@ -154,9 +154,9 @@ describe("opening a workspace", () => {
       title: "Garage gym",
       intro: "Single garage, shared with the bikes.",
       facts: ["The garage isn't cleared out yet.", "Budget is £1,200."],
-      plans: ["Squat rack on the left wall."],
       ideas: ["Rubber flooring."],
-      other: "",
+      // Plans went with projects (#603): a Plans section is kept as written, for the move review.
+      other: "## Plans\n\n- Squat rack on the left wall.",
       characters: expect.any(Number),
     });
   });
@@ -174,11 +174,11 @@ describe("opening a workspace", () => {
 
     const { contextFile } = await openWorkspace("office");
 
-    expect(contextFile).toMatchObject({ facts: [], plans: [], ideas: ["A standing desk."] });
+    expect(contextFile).toMatchObject({ facts: [], ideas: ["A standing desk."] });
     expect(contextFile?.title).toBeUndefined();
   });
 
-  it("joins an item's wrapped lines, keeps plain lines, and keeps other sections as written", async () => {
+  it("joins an item's wrapped lines, keeps plain lines, and keeps other sections as written, Plans among them (#603)", async () => {
     await workspace("allotment", {
       "CONTEXT.md": [
         "## Facts",
@@ -201,8 +201,9 @@ describe("opening a workspace", () => {
       "The plot is ten metres long and faces south.",
       "The shed has one window.",
     ]);
-    expect(contextFile?.plans).toEqual(["Build two raised beds."]);
-    expect(contextFile?.other).toBe("## Links\n\nSee the seed catalogue.");
+    expect(contextFile?.other).toBe(
+      "## Links\n\nSee the seed catalogue.\n\n## plans (decided, not done)\n1. Build two raised beds.",
+    );
   });
 
   it("recognises sections at any heading level, and skips subheadings inside them", async () => {
@@ -222,40 +223,10 @@ describe("opening a workspace", () => {
     expect(contextFile).toMatchObject({
       title: "Office",
       facts: ["The desk is 140 cm wide."],
-      plans: ["Move the desk under the window."],
+      ideas: [],
+      // Plans went with projects (#603): its lines are kept as written, not as facts.
+      other: "### Plans\n- Move the desk under the window.",
     });
-  });
-
-  it("lists the plans dated in the next 7 days, soonest first, for Home's Next up (#300)", async () => {
-    // Monday 12 October 2026, mid-morning.
-    const now = () => new Date(2026, 9, 12, 10).getTime();
-    const other = join(root, "on-12-october");
-    await mkdir(join(other, "context", "garage"), { recursive: true });
-    request = await asOwner(testWorker({ root: other, now }));
-    await writeFile(
-      join(other, "context", "garage", "CONTEXT.md"),
-      [
-        "# Garage",
-        "",
-        "## Plans",
-        "",
-        "- Fit the Remootio sensor magnet by 18 October.",
-        "- Pick shelving that fits the back wall.",
-        "- Skip day on 2026-10-12, today.",
-        "- Bin day Oct 14th",
-        "- Service the car on 20 Oct, past next week.",
-        "- Clear the loft by 5 October, so already gone.",
-        "",
-      ].join("\n"),
-    );
-
-    const { duePlans } = await openWorkspace("garage");
-
-    expect(duePlans).toEqual([
-      { plan: "Skip day on 2026-10-12, today.", due: "2026-10-12" },
-      { plan: "Bin day Oct 14th", due: "2026-10-14" },
-      { plan: "Fit the Remootio sensor magnet by 18 October.", due: "2026-10-18" },
-    ]);
   });
 
   it("says when a workspace has no context file yet", async () => {
@@ -319,7 +290,7 @@ const renameWorkspace = (id: string, name: unknown) => changeWorkspace(id, { nam
 const archive = (id: string) => postJson(request, `/api/workspaces/${id}/archive`, {});
 
 describe("adding a workspace", () => {
-  it("makes its folder and a starter context file with empty facts, plans and ideas", async () => {
+  it("makes its folder and a starter context file with empty facts and ideas", async () => {
     const workspace = await added("Garage gym");
 
     expect(workspace).toMatchObject({
@@ -336,10 +307,11 @@ describe("adding a workspace", () => {
       title: "Garage gym",
       intro: "",
       facts: [],
-      plans: [],
       ideas: [],
+      other: "",
     });
     expect(markdown).not.toContain("one line");
+    expect(markdown).not.toContain("Plans");
   });
 
   it("reads a context file whose intro line is still the old starter hint as having none", async () => {
@@ -373,7 +345,6 @@ describe("adding a workspace", () => {
       title: "Garage gym",
       intro: "Turning the garage into a home gym by Christmas",
       facts: [],
-      plans: [],
       ideas: [],
     });
   });
