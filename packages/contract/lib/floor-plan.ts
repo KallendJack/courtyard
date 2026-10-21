@@ -125,9 +125,9 @@ export const FloorPlan = z
     /** Back wall to front wall, in cm. */
     depth: Length,
     /**
-     * Whether the width and depth were measured (#661): the owner's own measurement of the room, or
-     * one saved as its size. Only then are they shown as sizes; an outline drawn from its rooms'
-     * sizes is drawn to scale without them.
+     * Whether the width and depth are the room's known size (#661, #668): measured by the owner, or
+     * from a plan's room table (a developer's size). Only then are they shown as sizes; an outline
+     * added up from its rooms' sizes is drawn to scale without them.
      */
     measured: z.boolean().optional(),
     /** What's at the front, such as the garage door, under the plan's Front marker. */

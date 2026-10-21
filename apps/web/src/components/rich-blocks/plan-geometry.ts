@@ -183,6 +183,10 @@ export const SIDES: readonly (PlanWall | "middle")[] = ["left", "back", "right",
 /** Centimetres as metres to one place: `3.0 m`. */
 export const metres = (cm: number) => `${(cm / 100).toFixed(1)} m`;
 
+/** A room's (a zone's) size in metres to two places, width by depth: `3.07 × 4.46` (#668). */
+export const roomSize = (zone: { width: number; depth: number }) =>
+  `${(zone.width / 100).toFixed(2)} × ${(zone.depth / 100).toFixed(2)}`;
+
 /**
  * A thing's size in words: its longer side first, `120 × 60 cm`; a wall's thing, its length; only
  * the side that was given, `13 cm wide`; or none, when no size was given (#661).

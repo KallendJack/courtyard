@@ -17,6 +17,7 @@ import {
   layoutOf,
   metres,
   PAD,
+  roomSize,
   runsAround,
   SIDES,
   sideName,
@@ -87,7 +88,7 @@ const STRIP = 7;
 /**
  * A `plan` block (#257; Paper, "Tablet · Floor plan in an answer (#257)" and its Cover board): a
  * room drawn top-down and to scale from the model's JSON, seen from the front of the house with
- * the front at the bottom, its doors, windows, zones and measured sizes on it (#661: only what was
+ * the front at the bottom, its doors, windows, zones (each with its size, #668) and known sizes on it (#661: only what was
  * given, a thing with no size a dot where it is); what you have solid and what
  * you want dashed. Beside it on a wide screen, under it on a narrow one, what's in it by side: a
  * tap on a thing or its row lights both up in violet and shows its size and why it's there. In an
@@ -106,7 +107,10 @@ export default function FloorPlanBlock(props: DrawingProps) {
   const choose = (index: number) => setChosen((was) => (was === index ? undefined : index));
   const name = `${plan.room} floor plan`;
 
-  const list = <ThingsList plan={plan} chosen={chosen} choose={choose} />;
+  const layout = layoutOf(plan, room !== undefined ? fitIn(room) : onHome ? FIT_ON_HOME : FIT);
+  const rooms = zonesOf(plan, layout);
+
+  const list = <ThingsList plan={plan} rooms={rooms} chosen={chosen} choose={choose} />;
   return (
     <RichBlock fill={fills}>
       <figure
@@ -141,12 +145,7 @@ export default function FloorPlanBlock(props: DrawingProps) {
             onHome && "min-h-0 grow md:flex-nowrap",
           )}
         >
-          <Drawing
-            plan={plan}
-            layout={layoutOf(plan, room !== undefined ? fitIn(room) : onHome ? FIT_ON_HOME : FIT)}
-            chosen={chosen}
-            choose={choose}
-          />
+          <Drawing plan={plan} layout={layout} rooms={rooms} chosen={chosen} choose={choose} />
           {onHome ? (
             <Scroller from="tablet" fadeEnd className="min-w-56 basis-64 grow md:h-full">
               {list}
@@ -214,6 +213,7 @@ function SavedOnHome(props: { plan: FloorPlan }) {
 type Drawn = {
   plan: FloorPlan;
   layout: Layout;
+  rooms: readonly Room[];
   chosen: number | undefined;
   choose: (index: number) => void;
 };
@@ -241,7 +241,7 @@ function Drawing(props: Drawn) {
       className="block h-auto max-w-full shrink-0 font-sans text-caption select-none"
     >
       <rect data-plan-part="room" {...room} className="fill-surface" />
-      {zonesOf(plan, layout).map(({ box }, index) => (
+      {props.rooms.map(({ box }, index) => (
         <rect
           // biome-ignore lint/suspicious/noArrayIndexKey: zones are in the model's order
           key={index}
@@ -254,22 +254,43 @@ function Drawing(props: Drawn) {
       <Things {...props} />
       <Partitions plan={plan} layout={layout} />
       <Walls plan={plan} layout={layout} />
-      {/* Over what's in the room, ringed in the floor's colour, so a name stays readable. */}
-      {zonesOf(plan, layout).map(({ name, box }, index) => (
-        <text
-          // biome-ignore lint/suspicious/noArrayIndexKey: zones are in the model's order
-          key={index}
-          data-plan-part="zone"
-          x={box.x + box.width / 2}
-          y={box.y + box.height / 2 + 4}
-          textAnchor="middle"
-          strokeWidth={4}
-          paintOrder="stroke"
-          className="pointer-events-none fill-muted-foreground stroke-surface text-label font-medium"
-        >
-          {name}
-        </text>
-      ))}
+      {/*
+        Over what's in the room, ringed in the floor's colour, so a name stays readable: each
+        room's name, and its size under it, smaller and muted, where both fit (#668).
+      */}
+      {props.rooms.map(({ name, size, fits, box }, index) => {
+        const x = box.x + box.width / 2;
+        const middle = box.y + box.height / 2;
+        return (
+          <g
+            // biome-ignore lint/suspicious/noArrayIndexKey: zones are in the model's order
+            key={index}
+            textAnchor="middle"
+            strokeWidth={4}
+            paintOrder="stroke"
+            className="pointer-events-none stroke-surface"
+          >
+            <text
+              data-plan-part="zone"
+              x={x}
+              y={fits ? middle - 2 : middle + 4}
+              className="fill-foreground/90 text-caption font-bold"
+            >
+              {name}
+            </text>
+            {fits && (
+              <text
+                data-plan-part="zone-size"
+                x={x}
+                y={middle + 11}
+                className="fill-muted-foreground text-rail font-medium"
+              >
+                {size}
+              </text>
+            )}
+          </g>
+        );
+      })}
       <Outside plan={plan} layout={layout} />
     </svg>
   );
@@ -302,12 +323,22 @@ const useWhole = (svg: SVGSVGElement | null, layout: Layout): Box => {
   return { x: left, y: top, width: right - left, height: bottom - top };
 };
 
-/** Each zone's name and where it's drawn. */
+/** The room a room's two lines need on the plan, in pixels: its size's letters, and its height. */
+const LETTER = 5.5;
+const TWO_LINES = 30;
+
+/**
+ * Each zone: its name, its size (always a known one, #661), where it's drawn, and whether its size
+ * fits under its name there; a room too small for both lists its size instead (#668).
+ */
 const zonesOf = (plan: FloorPlan, layout: Layout) =>
-  (plan.zones ?? []).map((zone) => ({
-    name: zone.name,
-    box: layout.box(zone.fromLeft, zone.fromBack, zone.width, zone.depth),
-  }));
+  (plan.zones ?? []).map((zone) => {
+    const box = layout.box(zone.fromLeft, zone.fromBack, zone.width, zone.depth);
+    const size = roomSize(zone);
+    const fits = box.width >= size.length * LETTER + 8 && box.height >= TWO_LINES;
+    return { name: zone.name, size, box, fits };
+  });
+type Room = ReturnType<typeof zonesOf>[number];
 
 /**
  * Each thing in the room: a box or round on the floor, a strip on a wall, or a dot where it is when
@@ -532,7 +563,7 @@ const INTO_THE_ROOM: Record<Edge, string> = { bottom: "▲", top: "▼", left: "
 
 /**
  * What's outside the room: the front, marked, and what's beyond each wall, near it; its width
- * across the top and its depth down the right, each with its sizes, once they were measured (#661).
+ * across the top and its depth down the right, each with its sizes, once they're known (#661, #668).
  */
 function Outside(props: { plan: FloorPlan; layout: Layout }) {
   const { plan, layout } = props;
@@ -611,13 +642,18 @@ function Measure(props: { at: { x: number; y: number; upright: boolean }; childr
   );
 }
 
-/** What's in the room, by the side it's on: a tap on a row chooses it, as on the plan. */
+/**
+ * What's in the room, by the side it's on: a tap on a row chooses it, as on the plan. Last, the
+ * rooms too small on the plan for their size under their name, each with it (#668).
+ */
 function ThingsList(props: {
   plan: FloorPlan;
+  rooms: readonly Room[];
   chosen: number | undefined;
   choose: (index: number) => void;
 }) {
   const { plan } = props;
+  const unsized = props.rooms.filter((room) => !room.fits);
   const items = (plan.items ?? []).map((item, index) => ({
     item,
     index,
@@ -627,7 +663,7 @@ function ThingsList(props: {
     const on = items.filter((each) => each.side === side);
     return on.length === 0 ? [] : [{ side, on }];
   });
-  if (items.length === 0) return null;
+  if (items.length === 0 && unsized.length === 0) return null;
   return (
     <ul
       aria-label={`What's in the ${plan.room.toLowerCase()}`}
@@ -651,6 +687,28 @@ function ThingsList(props: {
           </ul>
         </li>
       ))}
+      {unsized.length > 0 && (
+        <li className="flex flex-col gap-1">
+          <CapsLabel tone="muted" className="px-3">
+            Rooms
+          </CapsLabel>
+          <ul
+            aria-label={`Rooms in the ${plan.room.toLowerCase()}`}
+            className="flex flex-col gap-0.5"
+          >
+            {unsized.map((room, index) => (
+              <li
+                // biome-ignore lint/suspicious/noArrayIndexKey: zones are in the model's order, and may share a name
+                key={index}
+                className="flex items-baseline justify-between gap-3 px-3 py-2"
+              >
+                <span className="text-interface font-semibold text-foreground/90">{room.name}</span>
+                <span className="shrink-0 text-meta text-muted-foreground">{room.size}</span>
+              </li>
+            ))}
+          </ul>
+        </li>
+      )}
     </ul>
   );
 }
