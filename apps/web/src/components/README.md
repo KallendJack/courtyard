@@ -8,7 +8,7 @@ never style a raw `<button>`, `<input>` or error line themselves (AGENTS.md).
 |---|---|
 | `layout/` | Every page's shape: `page.tsx` (pinned header, one scrolling middle, pinned footer), `scroller.tsx`, `kept.tsx` (nothing jumps in), `caps-label.tsx`, notices, problems, Home's blocks, dialogs |
 | `buttons/` | Buttons, links, copy, thumb and sort buttons, a row as a button, the ⋯ menu |
-| `drawings/` | Kinds of things Courtyard draws itself, never a model: a mountain bike, with the places its parts go (#603) |
+| `drawings/` | Kinds of things Courtyard draws itself, never a model: a mountain bike, with the places its parts go (#603), and its labels kept apart (`labels-apart.ts`, #657) |
 | `forms/` | Text fields, file pickers, error lines, selects, switches, tick boxes, segmented choices |
 | `sheets/` | Sheets and what opens in them: Skills and Model, Allow all, Allowed commands, Notify me, Icon, recent sessions, Something's off |
 | `frame/` | The Handheld frame round every page: its layout, rails (the right one listing the open workspace's sessions, #492), talk strip and Talk key, arranging workspaces |
