@@ -510,3 +510,8 @@ data folder as it is, and sign in to Claude Code on the new machine.
   [`docs/spec.md`](docs/spec.md) is the original spec, frozen.
 - **Why it's built this way:** [`docs/adr/`](docs/adr/). **Its words:** [`GLOSSARY.md`](GLOSSARY.md).
 - **What its models are told:** [`docs/ai-conduct.md`](docs/ai-conduct.md).
+
+## Licence
+
+[PolyForm Noncommercial 1.0.0](LICENSE): free to read, learn from and run for yourself; any commercial use needs the
+owner's permission.
