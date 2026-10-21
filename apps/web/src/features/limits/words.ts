@@ -28,6 +28,20 @@ export const resetsWords = (resetAt: string | undefined, options: { first?: bool
 export const warningWords = (warning: UsageWarning) =>
   `${warning.label}: ${percent(warning.used)} of ${usageWindowWords(warning.window)}`;
 
+/**
+ * A warning as Home's usage line says it (#646; Paper, "Tablet · Code Home: one usage line"):
+ * "Codex at its limit", "Claude 83% this week"; with its reset when it leads the line,
+ * "Codex at its limit · back 13:50", "Claude 83% this week · resets Sat 03:59".
+ */
+export const usageLineWords = (warning: UsageWarning, options: { reset: boolean }) => {
+  const full = standingOf(warning.used) === "full";
+  const words = full
+    ? `${warning.label} at its limit`
+    : `${warning.label} ${percent(warning.used)} ${warning.window === "weekly" ? "this week" : `of ${usageWindowWords(warning.window)}`}`;
+  if (!options.reset || warning.resetAt === undefined) return words;
+  return `${words} · ${full ? "back" : "resets"} ${resetsShort(warning.resetAt)}`;
+};
+
 /** Switch's words: "Switch to Codex", with its own window when that's nearly full too. */
 export const switchWords = (switchTo: NonNullable<UsageWarning["switchTo"]>) =>
   switchTo.fullest === undefined

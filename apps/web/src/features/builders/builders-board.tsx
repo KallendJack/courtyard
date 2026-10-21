@@ -187,12 +187,23 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
       }
     >
       <div className="flex shrink-0 flex-col gap-0.5 px-0.5 pb-1.5">
-        <p className="text-interface/5 font-bold">{header.title}</p>
-        <p className="line-clamp-2 text-label font-medium text-primary-text">{header.reasons}</p>
+        {header.title !== undefined && <p className="text-interface/5 font-bold">{header.title}</p>}
+        <p
+          className={classes(
+            "line-clamp-2 text-label font-medium",
+            header.stopped ? "text-muted-foreground" : "text-primary-text",
+          )}
+        >
+          {header.reasons}
+        </p>
         <FormError message={act.error ?? merge.error} />
       </div>
-      {rows.length === 0 ? (
-        <BlockEmpty>No builders right now</BlockEmpty>
+      {/* Paused with no builders, nothing runs: its one line says so (#646). Too short for its
+          empty line, the board scrolls it inside, as it would a row. */}
+      {header.stopped ? null : rows.length === 0 ? (
+        <BlockRows>
+          <BlockEmpty>No builders right now</BlockEmpty>
+        </BlockRows>
       ) : (
         <BlockRows>
           <ul className="flex flex-col gap-1.5">

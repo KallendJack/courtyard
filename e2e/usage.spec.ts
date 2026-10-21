@@ -108,8 +108,9 @@ test("near a limit, a code workspace's Home has a gold usage line above Main, wh
   await page.goto("/workspaces/side-project");
 
   const line = page.getByRole("region", { name: "Usage" });
-  await expect(line).toContainText("Fake: 82% of this week");
-  await expect(line).toContainText(/resets/);
+  // One row (#646), the fullest provider first with when its window resets.
+  await expect(line).toHaveCount(1);
+  await expect(line).toContainText(/Fake 82% this week · resets \S/);
   // The frame, with its Model sheet, comes in after the page.
   await expect(page.getByRole("button", { name: /^Model: / })).toBeEnabled();
 

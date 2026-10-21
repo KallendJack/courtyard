@@ -21,7 +21,9 @@ book is "Checking · 2 min", history.test.ts 2nd in line; Notify me is "Ready fo
 - **The header:** how many build of how many may, and how many pull requests wait for review of the 4 that hold the
   Lead back; under it every reason it starts no more, never only the first ("Not starting more: the usage limit,
   until 18:10 · Pin to Home waits for Journey book to merge"), or what it starts next; paused, that builders carry on.
-  Pause while it runs, Run while it's paused or resting, and Merge in order once more than one is ready.
+  With nothing building or for review it has no counts; paused with no builders, nothing runs, so its one quiet line
+  says "Not running · Run starts the next issue" (#646). Pause while it runs, Run while it's paused or resting, and
+  Merge in order once more than one is ready.
 - **A row per builder** (`builders-board.tsx`): its issue's name, one of the eight statuses and since when, and what
   it's doing now (what its model does, the check and its place in line, what it asks, when it carries on, why it's
   stuck). A button only when it acts: **Allow** (an approval) or **Answer** (a question, in its session) while

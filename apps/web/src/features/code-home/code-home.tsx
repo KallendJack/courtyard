@@ -13,6 +13,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { ConnectionsLine } from "@/components/code/connections-line";
+import { BlockColumn } from "@/components/layout/home-block";
 import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
 import { InfoBox } from "@/components/layout/notice";
 import { Page, type TitleBeside } from "@/components/layout/page";
@@ -304,7 +305,7 @@ export default function CodeHome(props: {
           // rows than fit scrolls inside its card (#335, #283).
           <div className="mt-4 flex flex-col gap-3 md:min-h-0 md:flex-1">
             <div className="flex flex-col items-stretch gap-3.5 md:min-h-0 md:flex-1 md:flex-row">
-              <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
+              <BlockColumn>
                 <BuildersBoard
                   workspaceId={workspace.id}
                   inView={builderIn(props.hash)}
@@ -324,7 +325,7 @@ export default function CodeHome(props: {
                   onChanged={changed}
                   {...(boardNeedsYou ? { nothing: "Nothing else needs you" } : {})}
                 />
-              </div>
+              </BlockColumn>
               {providers.kind === "loaded" && (
                 <NextUp
                   workspaceId={workspace.id}

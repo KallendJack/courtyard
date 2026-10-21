@@ -128,13 +128,30 @@ export const behindName = (lead: LeadStatus, issue: number) => {
   return builder === undefined ? `#${issue}` : builderName(builder.title);
 };
 
+/** What the board's header says (#592): its counts, if any, and the reasons line under them. */
+export type HeaderWords = {
+  /** "1 of 2 building · 0 of 4 for review"; none with nothing building or for review (#646). */
+  title: string | undefined;
+  reasons: string;
+  /** Paused with no builders: nothing is running, so the reasons line is all the board says. */
+  stopped: boolean;
+};
+
 /**
  * The board's header (#592; Paper, "Tablet · Builders board"): how many build of how many may, and
  * how many pull requests wait for review of the 4 that pause it, then, under it, every reason it
- * starts no more, never only the first, or what it starts next.
+ * starts no more, never only the first, or what it starts next. With nothing building and nothing
+ * for review it has no counts, and paused with no builders it says only that nothing runs (#646).
  */
-export const headerWords = (lead: LeadStatus, issues: readonly NextUpIssue[], reviews: number) => {
-  const title = `${lead.building.length} of ${lead.builders} building · ${lead.ready.length} of ${reviews} for review`;
+export const headerWords = (
+  lead: LeadStatus,
+  issues: readonly NextUpIssue[],
+  reviews: number,
+): HeaderWords => {
+  const title =
+    lead.building.length === 0 && lead.ready.length === 0
+      ? undefined
+      : `${lead.building.length} of ${lead.builders} building · ${lead.ready.length} of ${reviews} for review`;
   const titleOf = (issue: number) =>
     issues.find((each) => each.number === issue)?.title ?? `#${issue}`;
   const held = (lead.heldBack ?? []).map((each) =>
@@ -148,26 +165,44 @@ export const headerWords = (lead: LeadStatus, issues: readonly NextUpIssue[], re
             ? `Merging #${lead.merge.pullRequest} in order`
             : `Merge in order stopped at #${lead.merge.pullRequest}: ${lead.merge.why}`,
         ];
+  const tidy =
+    lead.toTidy === 0 ? [] : [`${lead.toTidy} ${lead.toTidy === 1 ? "merge" : "merges"} to tidy`];
   switch (lead.state) {
-    case "paused":
+    case "paused": {
+      // With no builders on the board, nothing carries on: nothing is running at all.
+      if (!lead.statuses.some(({ status }) => shownToday(status))) {
+        return {
+          title,
+          reasons: ["Not running · Run starts the next issue", ...tidy, ...merging].join(" · "),
+          stopped: true,
+        };
+      }
       return {
         title,
         reasons: [
           lead.toTidy === 0
             ? "Paused · builders carry on, nothing new starts"
-            : `Paused · builders carry on · ${lead.toTidy} ${lead.toTidy === 1 ? "merge" : "merges"} to tidy`,
+            : "Paused · builders carry on",
+          ...tidy,
           ...merging,
         ].join(" · "),
+        stopped: false,
       };
+    }
     case "resting":
     case "not-started":
-      return { title, reasons: [lead.why ?? "Nothing ready to build", ...merging].join(" · ") };
+      return {
+        title,
+        reasons: [lead.why ?? "Nothing ready to build", ...merging].join(" · "),
+        stopped: false,
+      };
     case "running": {
       const holding = (lead.holding ?? []).map(holdingWords);
       if (holding.length > 0) {
         return {
           title,
           reasons: `Not starting more: ${[...holding, ...held, ...merging].join(" · ")}`,
+          stopped: false,
         };
       }
       const [next] = lead.next;
@@ -176,7 +211,11 @@ export const headerWords = (lead: LeadStatus, issues: readonly NextUpIssue[], re
         next === undefined
           ? []
           : [full ? `${next.title} starts when a place frees` : `${next.title} starts next`];
-      return { title, reasons: ["Runs all night", ...nextWords, ...held, ...merging].join(" · ") };
+      return {
+        title,
+        reasons: ["Runs all night", ...nextWords, ...held, ...merging].join(" · "),
+        stopped: false,
+      };
     }
   }
 };
