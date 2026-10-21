@@ -67,6 +67,15 @@ const SCRATCH = ".scratch/";
 const HAS_SECTION = /^## Agent skills\s*$/m;
 
 /**
+ * Claude's import of AGENTS.md (#642): Claude Code reads only a project's CLAUDE.md (ADR 0022), so
+ * a CLAUDE.md of this line, or one with it, gives Claude the same rules Codex reads.
+ */
+const CLAUDE = "CLAUDE.md";
+const POINTER = "@AGENTS.md";
+/** How a CLAUDE.md is known to point at AGENTS.md already. */
+const POINTS = /(?<![\w@])@(\.\/)?AGENTS\.md(?![\w.-])/;
+
+/**
  * The house standard's labels: GitHub's two categories, and the five default triage labels, with
  * Courtyard's own colours and his meanings.
  */
@@ -111,6 +120,8 @@ type Checked = {
   readonly base: string;
   readonly tracking: string;
   readonly templates: string;
+  /** Its rules are (or will be) in AGENTS.md, and its CLAUDE.md, if any, doesn't point there. */
+  readonly pointClaude: boolean;
 };
 
 /** The owner's choices on a card, each line's answer or what it recommends. */
@@ -168,10 +179,10 @@ export const createMattSetup = (options: {
     const files: string[] = [];
     for (const path of FILES) if ((await at(path)) === undefined) files.push(path);
     const agents = await at("AGENTS.md");
-    const claude = await at("CLAUDE.md");
+    const claude = await at(CLAUDE);
     const instructions = [agents, claude].flatMap((text) => (text === undefined ? [] : [text]));
     // AGENTS.md, which every model reads, unless there's only a CLAUDE.md; never both.
-    const sectionFile = agents === undefined && claude !== undefined ? "CLAUDE.md" : "AGENTS.md";
+    const sectionFile = agents === undefined && claude !== undefined ? CLAUDE : "AGENTS.md";
     const hasSection = instructions.some((text) => HAS_SECTION.test(text));
     const tracked = await at(ISSUE_TRACKER);
     // Where its work lives is its answer already once docs/agents/ says; else its own tracker.
@@ -209,6 +220,8 @@ export const createMattSetup = (options: {
       base: fresh.value.branch,
       tracking: fresh.value.tracking,
       templates: setupSkill.folder,
+      // Only where the rules are in AGENTS.md: a CLAUDE.md that holds them stays as it is.
+      pointClaude: sectionFile === "AGENTS.md" && (claude === undefined || !POINTS.test(claude)),
     };
   };
 
@@ -316,6 +329,10 @@ export const createMattSetup = (options: {
         text === undefined || text.trim() === "" ? section : `${text.trimEnd()}\n\n${section}`,
       );
     }
+    if (checked.pointClaude) {
+      const text = (await now(CLAUDE))?.trim() ?? "";
+      changes.set(CLAUDE, text === "" ? `${POINTER}\n` : `${POINTER}\n\n${text}\n`);
+    }
     return changes;
   };
 
@@ -382,8 +399,8 @@ export const createMattSetup = (options: {
   return {
     /**
      * The house standard's files for a new repo (#391): Matt's files from his templates, its
-     * AGENTS.md with the house rules and the Agent skills section, its
-     * glossary and its decisions folder, by path.
+     * AGENTS.md with the house rules and the Agent skills section, a CLAUDE.md pointing there
+     * (#642), its glossary and its decisions folder, by path.
      */
     filesForNew: async (repo: {
       name: string;
@@ -402,6 +419,7 @@ export const createMattSetup = (options: {
         );
       }
       files.set("AGENTS.md", houseAgents(repo));
+      files.set(CLAUDE, `${POINTER}\n`);
       files.set(GLOSSARY, houseGlossary(repo.name));
       files.set("docs/adr/README.md", HOUSE_DECISIONS);
       return ok(files);
@@ -496,7 +514,7 @@ export const createMattSetup = (options: {
       const opened = await openPullRequest(
         checked,
         changes,
-        summaryOf(card, choices, moved.value.filed),
+        summaryOf(checked, choices, moved.value.filed),
       );
       if (!opened.ok) return err({ kind: "failed", reason: opened.error });
       await remember(id, "allowed");
@@ -671,7 +689,7 @@ const mattFile = async (
 
 /**
  * A new repo's AGENTS.md (#391): its name, what it's for, the house rules (no stack yet, so the
- * first session picks it and adds CI with it), and the Agent skills section.
+ * first session picks it, and its pull request adds CI, #642), and the Agent skills section.
  */
 const houseAgents = (repo: { name: string; intro: string }) =>
   [
@@ -680,7 +698,8 @@ const houseAgents = (repo: { name: string; intro: string }) =>
     ...(repo.intro === "" ? [] : [repo.intro, ""]),
     "## House rules",
     "",
-    "- **No stack yet.** The first session (Grill on Next up) picks it with the owner and sets it up, and adds CI with it: checks, unit tests, and browser tests if there are any.",
+    "- **No stack yet.** The first session (Grill on Next up) picks it with the owner and sets it up in one pull request.",
+    "- **The first stack's pull request adds CI:** `.github/workflows/ci.yml`, running this repo's own check scripts (lint, typecheck, tests, and browser tests if there are any) on every pull request, each action pinned to a version (`actions/checkout@v7`).",
     "- **Every change works from an issue** in this repo's GitHub issues, in a milestone, with a category label (`bug` or `enhancement`) and one triage label. Its pull request closes it.",
     "- **The order of work is the milestones:** each one's description has a `Build order:` line.",
     "- **Anything the owner sees is designed in this repo's Paper file first,** when it has one: its pages are `1 · Live`, `2 · Agreed`, `3 · Drafts` and `4 · Archive`.",
@@ -744,7 +763,7 @@ const agentSkills = (kept: SetupTracker | null, glossary: string) =>
   ].join("\n");
 
 /** What setting up did, as its pull request lists it. */
-const summaryOf = (card: SetupCard, choices: Choices, filed: number) => [
+const summaryOf = ({ card, pointClaude }: Checked, choices: Choices, filed: number) => [
   ...(card.tracker === null
     ? []
     : choices.moveTracker
@@ -759,6 +778,9 @@ const summaryOf = (card: SetupCard, choices: Choices, filed: number) => [
       : [`Kept \`${card.glossary.path}\` as the glossary, named in \`${DOMAIN}\``]),
   ...card.files.map((path) => `\`${path}\``),
   ...(card.section === null ? [] : [`The Agent skills section in \`${card.section.path}\``]),
+  ...(pointClaude
+    ? [`\`${CLAUDE}\` pointing Claude at \`AGENTS.md\`, so it reads the same rules`]
+    : []),
 ];
 
 /** A GitHub problem in the owner's words. */

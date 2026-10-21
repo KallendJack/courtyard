@@ -133,7 +133,9 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`red-main/`](../apps/worker/src/features/red-main/README.md): a red main after a merge.
 - [`version-bumps/`](../apps/worker/src/features/version-bumps/README.md): Dependabot's bumps, re-run once, then filed for the Lead.
 - [`repos/`](../apps/worker/src/features/repos/README.md): the owner's GitHub repos as code workspaces, and New repo.
-- [`matt-setup/`](../apps/worker/src/features/matt-setup/README.md): the setup check.
+- [`matt-setup/`](../apps/worker/src/features/matt-setup/README.md): the setup check, and a new repo's house
+  standard files. Both give a repo whose rules are in `AGENTS.md` a `CLAUDE.md` pointing there, as Claude reads only
+  `CLAUDE.md` (ADR 0022), and a new repo's house rules say its first stack's pull request adds CI (#642).
 - [`matt-skills/`](../apps/worker/src/features/matt-skills/README.md): Matt Pocock's skills from a pinned copy.
 - [`workspace-main/`](../apps/worker/src/features/workspace-main/README.md): a code workspace's main, for Home's Main row.
 - [`skills/`](../apps/worker/src/features/skills/README.md): a workspace's skills, the more specific winning.

@@ -321,8 +321,13 @@ describe("New repo (#391)", () => {
     expect(agents).toContain("# Bike Servicing");
     expect(agents).toContain(BIKES.intro);
     expect(agents).toContain("## House rules");
-    expect(agents).toContain("adds CI");
+    // Its first stack's pull request adds CI that runs its own checks on every pull request (#642).
+    expect(agents).toContain(
+      "**The first stack's pull request adds CI:** `.github/workflows/ci.yml`, running this repo's own check scripts (lint, typecheck, tests, and browser tests if there are any) on every pull request, each action pinned to a version (`actions/checkout@v7`).",
+    );
     expect(agents).toContain("## Agent skills");
+    // Claude reads the same rules: its adapter loads only CLAUDE.md (#642).
+    expect(await onMain("CLAUDE.md")).toBe("@AGENTS.md");
     expect(await onMain("docs/agents/issue-tracker.md")).toBe("# Issue tracker: GitHub");
     expect(await onMain("docs/agents/triage-labels.md")).toBe("# Triage Labels");
     expect(await onMain("docs/agents/domain.md")).toBe(
